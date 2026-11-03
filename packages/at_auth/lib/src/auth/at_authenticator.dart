@@ -129,7 +129,7 @@ Future<bool> _pkam(
   final keyPair = keys.authenticationKeyPairFor(enrollmentId);
   if (keyPair == null) {
     throw AtKeyNotFoundException('AtKeys holds no authentication keypair for '
-        '${enrollmentId ?? "this atSign's own credential"}, so there is '
+        '${enrollmentId ?? "the primary enrollment"}, so there is '
         'nothing to sign the PKAM challenge with');
   }
   final signingAlgo = keyPair.algorithm;

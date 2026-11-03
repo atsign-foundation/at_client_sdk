@@ -244,7 +244,9 @@ deletable now.
 
 `isLocalStoreRequired` (*"LocalStore is always required"*), `hiveStoragePath`
 (*"Supply an `AtClientStorage` instead"*) and `commitLogPath` (*"Nothing reads
-this; the client is commit-log-free"*), all removed in the next major. Visible
+this; the client is commit-log-free"*). 4.0 removes `isLocalStoreRequired` and
+`commitLogPath`; `hiveStoragePath` stays, deprecated, until 5.0, since
+at_client_flutter's dialogs still read it when given no storage. Visible
 to the analyzer only outside at_client: 12 in `tests/at_functional_test`, 7 in
 `tests/at_end2end_test`, 4 in at_contact's `test_util.dart` and 1 in
 at_client_flutter. Inside at_client the analyzer is silent, and 30 of its
@@ -270,8 +272,8 @@ secret; nothing has read it since 3.0.5 (2021-11-15).
 `decryptPackets`, `tlsKeysSavePath` and `pathToCerts`, all *"The transport is
 the AtLookUpFactory's to configure"*, all removed in 4.0. They arrived
 deprecated with the third leg of the platform bundle: `Atsign.open`,
-`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`, `buildAtClient`
-and `AtServiceFactory.atClient` take `lookUps:`, an at_lookup
+`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs` and `buildAtClient`
+take `lookUps:` (as `AtServiceFactory.atClient` did until 4.0 removed it), an at_lookup
 `AtLookUpFactory`, and the replacement is
 `secureSocketLookUps(config: SecureSocketConfig(...))`. The default factory
 reads the three fields until they go, so a 3.x app sees no change, and every

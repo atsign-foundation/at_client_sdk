@@ -429,8 +429,11 @@ abstract interface class PreparesWrites {
   /// way: a local-first record cannot satisfy a value that went straight to
   /// the atServer, because it does not arrive until the next sync. Null means
   /// the caller expressed no preference and the client default applies.
+  ///
+  /// [sealToNamespace], for a share, is the namespace of the recipient's
+  /// namespace key it must be sealed to, with no other level tried.
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-      {bool? useRemoteAtServer});
+      {bool? useRemoteAtServer, String? sealToNamespace});
 }
 
 /// Implemented by a [CryptoProvider] that can only handle some keys.

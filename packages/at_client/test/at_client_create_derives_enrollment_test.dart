@@ -32,9 +32,8 @@ void main() {
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
 
-  AtClientPreference pref() => AtClientPreference(posture: PqPosture.legacy)
-    ..isLocalStoreRequired = true
-    ..hiveStoragePath = dir.path;
+  AtClientPreference pref() =>
+      AtClientPreference(posture: PqPosture.legacy)..hiveStoragePath = dir.path;
 
   String b64(String s) => base64Encode(utf8.encode(s));
 

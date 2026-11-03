@@ -5,16 +5,21 @@ Feature: CLIBase says why an atServer refused, apart from an outage
   approval), so CLIBase throws it at once with the reason; an atServer not
   reached within maxConnectAttempts is transient, and CLIBase throws a
   different exception, which is the one a retry loop catches. A keyfile still
-  holding only its enrollment request, and an atSign the atDirectory has no
-  atServer for, are neither, and each says so with an exception of its own.
+  holding only its enrollment request is resumed: the program waits for that
+  enrollment's approval, as at_activate does, then runs. An atSign the
+  atDirectory has no atServer for is neither, and says so with an exception
+  of its own.
 
-  Races: none arise; CLIBase opens one client and stops it on any failure, as
-  before.
-  Replay: none arise; the keys authenticate as before, and nothing is issued
-  or accepted.
-  DoS: a refusal, a pending keyfile or an unknown atSign no longer looks like
-  an outage, so a retry loop stops repeating an open that cannot succeed.
-  Forgery and impersonation: none arise; authentication is unchanged, and the
+  Races: CLIBase opens one client and stops it on any failure, as before; a
+  resumed request is waited on, never submitted again.
+  Replay: the resumed wait proves possession of the keypair the request was
+  submitted with, as at_activate's does; nothing new is issued or accepted.
+  DoS: a refusal or an unknown atSign no longer looks like an outage, so a
+  retry loop stops repeating an open that cannot succeed; the wait for
+  approval asks every 10 seconds and ends after at_activate's retries when
+  the atServer is not reached.
+  Forgery and impersonation: authentication is unchanged; a resume names no
+  app or device and takes only the one request its own keyfile holds, and the
   exception names only the atSign and the cause.
 
   Scenario: A refused open throws, naming the cause
@@ -37,10 +42,25 @@ Feature: CLIBase says why an atServer refused, apart from an outage
     When the program calls CLIBase.fromCommandLineArgs
     Then it throws SecondaryServerConnectivityException, and no client is left open
 
-  Scenario: A keyfile still holding only its enrollment request says so
-    Given a keyfile that holds only an enrollment request awaiting approval
-    When the program calls CLIBase.fromCommandLineArgs
-    Then it throws AtEnrollmentPendingException naming the pending enrollment, and no client is opened
+  Scenario: A keyfile still holding only its enrollment request is resumed
+    Given a program built on CLIBase whose keyfile holds only an enrollment awaiting approval
+    When it starts
+    Then it says it is waiting for approval of that enrollment id, and waits as at_activate does; once approved it opens its client and runs, and the request is not submitted again
+
+  Scenario: A denied or expired request ends the program with that reason, and its keys go
+    Given a program built on CLIBase whose keyfile holds only an enrollment awaiting approval
+    When the atServer answers that the request was denied, or has expired
+    Then it ends with AtEnrollmentException, the pending keys are removed, and no client is left open
+
+  Scenario: An atServer not reached for the retry budget ends the program, keeping the request
+    Given a program built on CLIBase whose keyfile holds only an enrollment awaiting approval
+    When its atServer cannot be reached for at_activate's retries
+    Then it ends with that failure, the request stays in the keyfile, and no client is left open
+
+  Scenario: Ctrl-C ends the wait, keeping the request
+    Given a program built on CLIBase waiting for approval of the enrollment its keyfile holds the request for
+    When the user presses Ctrl-C
+    Then the program ends, and the request stays in the keyfile for the next run
 
   Scenario: An atSign the atDirectory has no atServer for is named as such
     Given an atSign the atDirectory has no atServer for

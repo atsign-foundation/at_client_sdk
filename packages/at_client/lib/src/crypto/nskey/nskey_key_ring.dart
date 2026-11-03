@@ -4,6 +4,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_auth/at_auth.dart' show publicKeyKid;
+import 'package:at_commons/atsign.dart' show AtsignString;
 
 /// The version stamped on the nskey advertisement payload.
 ///
@@ -279,6 +280,24 @@ abstract class NskeyKeyRing {
   /// has not reached this client.
   Future<PackageKey?> heldPublic(
       String owner, String namespace, String nskeyKid);
+
+  /// The namespaces of [owner]'s nskeys this client holds a private for,
+  /// spelt as they were filed, answered without a round trip to the atServer.
+  Future<Set<String>> heldNamespaces(String owner);
+}
+
+/// Implemented by an [NskeyKeyRing] that can ask about several of an owner's
+/// namespaces at once, as a share asks about every level of its key's name.
+abstract interface class LooksUpLevelsTogether {
+  /// The first of [namespaces], most specific first, that [owner] advertises a
+  /// verified key in, with that advertisement, or null when none does.
+  /// [missed] is told each namespace found to have none.
+  ///
+  /// Throws, as [NskeyKeyRing.currentPublic] does, when an answer cannot be
+  /// established.
+  Future<({String namespace, NskeyAdvertisement advertisement})?>
+      mostSpecificPublic(String owner, List<String> namespaces,
+          {void Function(String namespace)? missed});
 }
 
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.
@@ -354,4 +373,12 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
   Future<PackageKey?> heldPublic(
           String owner, String namespace, String nskeyKid) async =>
       _public[_generation(owner, namespace, nskeyKid)];
+
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async => {
+        for (final generation in _private.keys)
+          if (generation.split('|') case [final held, final namespace, _]
+              when held.toAtsign() == owner.toAtsign())
+            namespace
+      };
 }

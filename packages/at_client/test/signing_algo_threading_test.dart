@@ -21,8 +21,7 @@ import 'test_utils/mocks.dart';
 /// record-authoritative atServer.
 void main() {
   group('RemoteSecondary', () {
-    test('signs with the algorithm its keys name, whatever it is told',
-        () async {
+    test('signs with the algorithm its keys name', () async {
       const atSign = '@threading';
       const enrollmentId = 'pq-enrollment';
       const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581$atSign'
@@ -35,17 +34,11 @@ void main() {
             publicKey: pqPair.atPublicKey.publicKey,
             privateKey: pqPair.atPrivateKey.privateKey);
       final lookUp = MockAtLookupImpl();
-      RemoteSecondary(
-          atSign,
-          AtClientPreference()
-            // ignore: deprecated_member_use_from_same_package
-            ..signingAlgoType = SigningAlgoType.rsa2048,
+      RemoteSecondary(atSign, AtClientPreference(),
           lookUps: secureSocketLookUps(),
           atLookUp: lookUp,
           atKeysIo: InMemoryAtKeysIo.holding(atSign, keys),
-          enrollmentId: enrollmentId,
-          // ignore: deprecated_member_use_from_same_package
-          signingAlgoType: SigningAlgoType.rsa2048);
+          enrollmentId: enrollmentId);
       final authenticate = verify(() => lookUp.authenticator = captureAny())
           .captured
           .last as AtAuthenticator;
@@ -55,8 +48,7 @@ void main() {
 
       final pkam = executor.sent.last;
       expect(pkam, startsWith('pkam:signingAlgo:mldsa65:'),
-          reason: 'the preference and the parameter both said rsa2048; the '
-              'keys name ML-DSA, and only the keys can sign');
+          reason: 'the keys name ML-DSA, and only the keys can sign');
       expect(pkam, contains(':enrollmentId:$enrollmentId:'));
       expect(
           MlDsa65PureDartAlgo.verifyBytesSync(

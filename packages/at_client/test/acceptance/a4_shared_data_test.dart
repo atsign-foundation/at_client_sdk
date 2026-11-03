@@ -128,8 +128,8 @@ void main() {
       //       report an encryption error. Bob's signing root is not a KEM
       //       target and cannot stand in. A pre-flight capability query answers
       //       the same question before the user composes anything. With the
-      //       legacy fallback opted in (any posture below pqActive) the share
-      //       proceeds with the legacy provider — the invitation path, which
+      //       legacy fallback opted in, at a posture that does not disallow
+      //       legacy encryption, the share proceeds with the legacy provider — the invitation path, which
       //       ends at 5.x, where disallowLegacyEncryption refuses it. Once bob
       //       uses or authorises the namespace his nskey is published and
       //       alice's next ensureCurrent picks it up by plookup.

@@ -547,6 +547,9 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
       logger.shout('*************');
       OnboardingUtil.allowBadCertificates = true;
     }
+    if (settings.preference.cramSecret == null) {
+      OnboardingUtil.usableRegistrarApiKey(settings.registrarApiKey);
+    }
     // if  -y flag is not used and --cramkey is not provided, show back up key warning message
     // --cramkey implies --yes for backwards compatibility with automation scripts
     if (!argResults[AuthCliArgs.argNameYes] &&
@@ -577,8 +580,8 @@ Future<void> activate(String atSign, EnrollerSettings settings,
   final preference = settings.preference;
   final atKeysFilePath = settings.atKeysFilePath;
   AtFileUtil.ensureWritable(File(atKeysFilePath));
-  preference.cramSecret ??=
-      await _cramSecretFromRegistrar(atSign, settings.registrarUrl);
+  preference.cramSecret ??= await _cramSecretFromRegistrar(
+      atSign, settings.registrarUrl, settings.registrarApiKey);
   if (await _isActivated(atSign, settings, atLookUp)) {
     throw AtClientException.message('atsign $atSign is already activated');
   }
@@ -623,10 +626,11 @@ Future<void> awaitStartupTail(AtClient client) async {
 }
 
 /// The CRAM secret for [atSign] from the registrar: it emails a verification
-/// code to the atSign's owner, who types it in here.
+/// code to the atSign's owner, who types it in here. The registrar is asked
+/// with [registrarApiKey], or with the built-in key when that is not set.
 Future<String> _cramSecretFromRegistrar(
-    String atSign, String registrarUrl) async {
-  final util = OnboardingUtil();
+    String atSign, String registrarUrl, String? registrarApiKey) async {
+  final util = OnboardingUtil(registrarApiKey);
   await util.requestAuthenticationOtp(atSign, authority: registrarUrl);
   final otp = util.getVerificationCodeFromUser();
   return util.getCramKey(atSign, otp, authority: registrarUrl);
@@ -1356,24 +1360,28 @@ EnrollerSettings enrollerSettingsFrom(ArgResults ar) {
       atKeysFilePath: ar[AuthCliArgs.argNameAtKeys] ??
           getDefaultAtKeysFilePath(getHomeDirectory(throwIfNull: true)!, atSign),
       passPhrase: ar[AuthCliArgs.argNamePassPhrase],
-      registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn]);
+      registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn],
+      registrarApiKey: Platform.environment[registrarApiKeyVariable]);
 }
 
 /// What `onboard` and `enroll` are told: the preference the client runs
-/// under, the keyfile and its passphrase, the registrar to ask, and where the
-/// client's store is when not where at_activate keeps it.
+/// under, the keyfile and its passphrase, the registrar to ask and the API
+/// key to ask it with, and where the client's store is when not where
+/// at_activate keeps it.
 @visibleForTesting
 class EnrollerSettings {
   final AtClientPreference preference;
   final String atKeysFilePath;
   final String? passPhrase;
   final String registrarUrl;
+  final String? registrarApiKey;
   final String? storagePath;
 
   EnrollerSettings(this.preference,
       {required this.atKeysFilePath,
       this.passPhrase,
       this.registrarUrl = RegistrarApiConstants.apiHostProd,
+      this.registrarApiKey,
       this.storagePath});
 
   /// The keyfile store at [atKeysFilePath].

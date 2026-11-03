@@ -24,7 +24,7 @@ import 'package:at_client/src/crypto/encrypted_send_metadata.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart'
     show collectUnusedOnceCaughtUp;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show parseCkConveyanceKey;
+    show parseCkConveyanceKey, verifiedAdvertisementRecordName;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeedOutcome, NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -332,7 +332,7 @@ class AtClientImpl implements AtClient {
   @override
   SyncService get syncService {
     if (_syncService == null) {
-      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
+      _refuseIfStopped('hand out its sync service');
       throw StateError('SyncService has not yet been set');
     }
     return _syncService!;
@@ -354,7 +354,7 @@ class AtClientImpl implements AtClient {
   @override
   NotificationService get notificationService {
     if (_notificationService == null) {
-      _logger.finer('AtClient ($_atSign) isStopped: $isStopped');
+      _refuseIfStopped('hand out its notification service');
       throw StateError('notificationService has not yet been set');
     }
     return _notificationService!;
@@ -374,6 +374,7 @@ class AtClientImpl implements AtClient {
   @override
   EnrollmentService? get enrollmentService {
     if (_enrollmentService == null) {
+      _refuseIfStopped('hand out its enrollment service');
       throw StateError('EnrollmentService has not yet been set');
     }
     return _enrollmentService;
@@ -404,8 +405,8 @@ class AtClientImpl implements AtClient {
   ///
   /// Resolved from the enrollment's key material at init
   /// ([_resolveSigningAlgoFromKeyMaterial]) — the algorithm is a fact about
-  /// the key you hold, not a preference; the preference's value is the
-  /// fallback for a legacy enrollment with no typed material. Every
+  /// the key you hold, not a preference; rsa2048 is the fallback for a
+  /// legacy enrollment with no typed material. Every
   /// connection the client owns — verb, monitor, sync — must sign with this,
   /// or a reconnect re-authenticates with the wrong routine against the
   /// record-authoritative atServer.
@@ -416,9 +417,9 @@ class AtClientImpl implements AtClient {
   SigningAlgoType get signingAlgoType => resolved_algo.signingAlgoOf(this);
 
   /// The PKAM signing algorithm [atClient]'s connections authenticate with:
-  /// the key-material resolution when one was recorded at init, else the
-  /// preference. For callers holding the [AtClient] interface, which carries
-  /// no such member (see [signingAlgoType]).
+  /// the key-material resolution when one was recorded at init, else
+  /// rsa2048. For callers holding the [AtClient] interface, which carries no
+  /// such member (see [signingAlgoType]).
   static SigningAlgoType signingAlgoOf(AtClient atClient) =>
       resolved_algo.signingAlgoOf(atClient);
 
@@ -569,7 +570,7 @@ class AtClientImpl implements AtClient {
       liveClientsFor(atSign).isNotEmpty;
 
   /// Whether a live client is filed for [atSign] as [enrollmentId], null
-  /// meaning the atSign's own credential; a supersession is followed to the
+  /// meaning the primary enrollment; a supersession is followed to the
   /// client that now runs under it.
   static bool holdsLiveClientAs(String atSign, String? enrollmentId) =>
       atClientInstanceMap.containsKey(_currentInstanceKey(
@@ -629,6 +630,7 @@ class AtClientImpl implements AtClient {
     String? typeTag,
     bool cleanupOrphansOnCreation = false,
   }) async {
+    _refuseIfStopped('hand out the collection $namespace');
     if (!namespace.contains('.')) {
       throw ArgumentError(
         'namespace must be fully qualified — provide the complete namespace '
@@ -697,8 +699,6 @@ class AtClientImpl implements AtClient {
     String currentAtSign,
     String? namespace,
     AtClientPreference preferences, {
-    @Deprecated('no longer needed. will be removed in a future release')
-    AtClientManager? atClientManager,
     RemoteSecondary? remoteSecondary,
     EncryptionService? encryptionService,
     required AtKeysIo atKeysIo,
@@ -709,7 +709,7 @@ class AtClientImpl implements AtClient {
     required AtClientStorage storage,
 
     /// When true, the default, [enrollmentId], or what the keys name, is the
-    /// principal exactly: a null means the atSign's own credential. When
+    /// principal exactly: a null means the primary enrollment. When
     /// false, a caller naming no enrollment is handed the atSign's enrolled
     /// client if exactly one is cached.
     bool exactEnrollment = true,
@@ -723,12 +723,12 @@ class AtClientImpl implements AtClient {
     } on Exception catch (e) {
       logger.warning('Could not read the keys for $currentAtSign, so which '
           'enrollment they authenticate as is unknown; running as '
-          '${enrollmentId ?? "the atSign's own credential"}: $e');
+          '${enrollmentId ?? "the primary enrollment"}: $e');
     }
     if (keys != null && !keys.holdsAuthenticationMaterial) {
       logger.finer('The keys for $currentAtSign hold no authentication '
           'material, so they name no enrollment; running as '
-          '${enrollmentId ?? "the atSign's own credential"}');
+          '${enrollmentId ?? "the primary enrollment"}');
     } else if (keys != null) {
       final derived = keys.enrollmentToAuthenticateAs();
       if (enrollmentId != null && enrollmentId != derived) {
@@ -749,7 +749,7 @@ class AtClientImpl implements AtClient {
       // teardown has already detached from.
       if (atClientImpl!._stopping != null) {
         throw StateError('A client for $currentAtSign as '
-            '${atClientImpl.enrollmentId == null ? "its own credential" : "enrollment ${atClientImpl.enrollmentId}"} '
+            '${atClientImpl.enrollmentId == null ? "the primary enrollment" : "enrollment ${atClientImpl.enrollmentId}"} '
             'is stopping. create() does not restart a client part way through '
             'stop(); await that stop() first.');
       }
@@ -944,7 +944,7 @@ class AtClientImpl implements AtClient {
 
   Future<void> _init({AtLookUp? atLookUp}) async {
     // NOTE: resolved before anything signs, so nothing signs with the
-    // preference's rsa2048 default under an ML-DSA enrollment.
+    // rsa2048 fallback under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
     final storage = _injectedStorage;
     await storage.attach(this);
@@ -1261,6 +1261,15 @@ class AtClientImpl implements AtClient {
   @override
   bool get isStopped => _isStopped;
 
+  /// Throws [StoppedException], naming [what] could not be done, once this
+  /// client has stopped.
+  void _refuseIfStopped(String what) {
+    if (_isStopped) {
+      throw StoppedException('the client for $_atSign has stopped, so it '
+          'cannot $what');
+    }
+  }
+
   /// The teardown in flight, shared by every caller.
   ///
   /// Held so that a second [stop] returns when the teardown has finished
@@ -1427,26 +1436,6 @@ class AtClientImpl implements AtClient {
     return defect;
   }
 
-  @Deprecated(
-    'Commit-log compaction was removed with the commit-log-free keystore; '
-    'this is now a no-op and will be removed in a future major release',
-  )
-  @override
-  Future<void> startCompactionJob({
-    Duration? commitLogCompactionDuration,
-  }) async {
-    // No-op: the commit-log-free client has no commit log to compact.
-  }
-
-  @Deprecated(
-    'Commit-log compaction was removed with the commit-log-free keystore; '
-    'this is now a no-op and will be removed in a future major release',
-  )
-  @override
-  Future<void> stopCompactionJob() async {
-    // No-op: the commit-log-free client has no commit log compaction job.
-  }
-
   @override
   LocalSecondary? getLocalSecondary() {
     return localSecondary;
@@ -1459,8 +1448,7 @@ class AtClientImpl implements AtClient {
 
   /// Builds a [RemoteSecondary] that authenticates as **this client**: the
   /// enrollment id settled at init, and the PKAM signing algorithm resolved
-  /// from that enrollment's key material rather than the preference's
-  /// deprecated default.
+  /// from that enrollment's key material.
   ///
   /// Every site in this class that opens a connection goes through here: one
   /// that builds its own signs the challenge with the wrong routine, which
@@ -1711,10 +1699,13 @@ class AtClientImpl implements AtClient {
     if (scanResult.isNotEmpty) {
       result = List<String>.from(jsonDecode(scanResult));
     }
-    // NOTE: a content key's conveyance is the SDK's own record, kept from an
-    // application like the other reserved ones unless it asks for them.
+    // NOTE: a content key's conveyance and a verified-advertisement record are
+    // the SDK's own records, kept from an application like the other reserved
+    // ones unless it asks for them.
     if (!showHiddenKeys) {
-      result.removeWhere((key) => parseCkConveyanceKey(key) != null);
+      result.removeWhere((key) =>
+          parseCkConveyanceKey(key) != null ||
+          key.startsWith('local:$verifiedAdvertisementRecordName.'));
     }
     return result;
   }
@@ -1868,12 +1859,19 @@ class AtClientImpl implements AtClient {
     // verb builder. A `local:` record is excluded: it is never synced to the
     // atServer, and every post-quantum provider declines a local key.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
-    if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
+    final encrypting =
+        !atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt;
+    if (options.sealToNamespace != null && !encrypting) {
+      throw ArgumentError.value(options.sealToNamespace, 'sealToNamespace',
+          'applies only to a put that is encrypted');
+    }
+    if (encrypting) {
       atKey.metadata = metadataForEncryptedSend(atKey.metadata);
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,
           requestedProviderId: options.cryptoProviderId,
+          sealToNamespace: options.sealToNamespace,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
           useRemoteAtServer:
@@ -2018,8 +2016,8 @@ class AtClientImpl implements AtClient {
 
   /// Resolves this client's PKAM signing algorithm from the enrollment's key
   /// material — the authoritative source; you cannot sign ML-DSA with an RSA
-  /// key. A null resolution (a legacy flat-fields enrollment) leaves the
-  /// preference's value as the fallback.
+  /// key. A null resolution (a legacy flat-fields enrollment) leaves rsa2048
+  /// as the fallback.
   Future<void> _resolveSigningAlgoFromKeyMaterial() async {
     final id = enrollmentId;
     if (id == null || isAtSignCredential(id)) return;
@@ -2030,9 +2028,7 @@ class AtClientImpl implements AtClient {
     } on Exception catch (e) {
       _logger.warning(
           'Could not resolve the signing algorithm for enrollment $id from '
-          'key material: $e. Connections will authenticate with the '
-          // ignore: deprecated_member_use_from_same_package
-          'preference value (${_preference?.signingAlgoType}).');
+          'key material: $e. Its signing algorithm reads as rsa2048.');
     }
   }
 
@@ -2330,82 +2326,5 @@ class AtClientImpl implements AtClient {
   @override
   AtClientPreference? getPreferences() {
     return _preference;
-  }
-
-  ///[Deprecated] Use [AtClient.notificationService]
-  @override
-  @Deprecated('Use AtClient.notificationService')
-  Future<void> startMonitor(
-    String privateKey,
-    Function? notificationCallback, {
-    String? regex,
-  }) async {
-    throw UnimplementedError('AtClient.startMonitor has been deprecated');
-  }
-
-  @override
-  @Deprecated("Use NotificationService")
-  Future<bool> notify(
-    AtKey atKey,
-    String value,
-    OperationEnum operation, {
-    MessageTypeEnum? messageType,
-    PriorityEnum? priority,
-    StrategyEnum? strategy,
-    int? latestN,
-    String? notifier = AtConstants.system,
-  }) async {
-    AtKeyValidators.get().validate(
-      atKey.toString(),
-      ValidationContext()
-        ..atSign = _atSign
-        ..validateOwnership = true,
-    );
-    final notificationParams = NotificationParams.forUpdate(
-      atKey,
-      value: value,
-    );
-    final notifyResult = await notificationService.notify(notificationParams);
-    return notifyResult.notificationStatusEnum ==
-        NotificationStatusEnum.delivered;
-  }
-
-  @override
-  @Deprecated('Use NotificationService')
-  Future<String> notifyAll(
-    AtKey atKey,
-    String value,
-    OperationEnum operation,
-  ) async {
-    var returnMap = {};
-    var sharedWithList = jsonDecode(atKey.sharedWith!);
-    for (var sharedWith in sharedWithList) {
-      atKey.sharedWith = sharedWith;
-      final notificationParams = NotificationParams.forUpdate(
-        atKey,
-        value: value,
-      );
-      final notifyResult = await notificationService.notify(notificationParams);
-      returnMap.putIfAbsent(
-        sharedWith,
-        () => (notifyResult.notificationStatusEnum ==
-            NotificationStatusEnum.delivered),
-      );
-    }
-    return jsonEncode(returnMap);
-  }
-
-  @override
-
-  ///[Deprecated] Use [NotificationService.notify]
-  @Deprecated("Use [NotificationService.notify]")
-  Future<String?> notifyChange(NotificationParams notificationParams) async {
-    NotificationResult result = await notificationService.notify(
-      notificationParams,
-    );
-    if (result.atClientException != null) {
-      throw result.atClientException!;
-    }
-    return result.notificationID;
   }
 }

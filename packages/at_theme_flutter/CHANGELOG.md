@@ -1,3 +1,8 @@
+## 2.0.0
+
+- BREAKING: removed the unused `devAPIKey` constant; an app creates its own
+  API key via the registrar at my.atsign.com.
+
 ## DEPRECATION NOTICE
 - deprecating in favour of using Material3 themes in `at_client_flutter`.
 

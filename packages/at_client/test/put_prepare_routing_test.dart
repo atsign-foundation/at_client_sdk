@@ -19,7 +19,7 @@ class _PreparingProvider extends CryptoProvider implements PreparesWrites {
 
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-      {bool? useRemoteAtServer}) async {
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
     routes.add(useRemoteAtServer);
   }
 

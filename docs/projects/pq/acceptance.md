@@ -451,9 +451,9 @@ per keyfile/install):
     resolved namespace the conveyance lives at.
   - `at/symmetric/AES/GCM` → `{providerId, ckKid, salt, iv, ns, ckNs}` — application
     data AES-256-GCM under a key derived from a CK and the value's own `salt`, the CK
-    cited by `ckKid`. A value with no `salt` is read under the CK itself. `ns` is the value's own full namespace
-    and is what the AAD binds; `ckNs` is where the CK lives, and differs from `ns`
-    whenever resolution walked up.
+    cited by `ckKid`. A value with no `salt` is read under the CK itself. `ns` is the level
+    the write's walk started at, and the AAD binds the value's whole name; `ckNs` is where
+    the CK lives, and differs from `ns` whenever resolution walked up from there.
   The umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey data path**.
 
 **atServer PQ capabilities** (Part A and B both assume `aS = pq` unless stated):
@@ -1085,10 +1085,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      published nskey** under the KEM *bob's* advertisement names — never alice's own
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
      — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
-     sealed to. Seal it again to **alice's own** nskey covering the namespace, as the
+     sealed to. Seal it again to **alice's own** nskey at her own level, the most
+     specific namespace she holds a key for that covers the value, never a
+     reserved one, as the
      **sibling copy** `<ckKid>.__ck.<ckNs>@alice`, which names bob in its
-     `appMetadata`; an alice holding no such key mints one there first, unless
-     `seedNamespaceKeys` is off.
+     `appMetadata`. Nothing is minted for it: an alice holding no key there yet, or
+     whose level does not cover bob's, shares without the copy, with a warning.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
 
   ⛔ **This `put` writes one value, and no copy of it for alice.** Alice's
@@ -1969,8 +1971,10 @@ map and be refused rather than obeyed.
   (`NamespaceKeyUnavailableException(@bob, app_1.my_apps)`), unless the app opted
   into `allowLegacyCryptoFallback` — in which case it goes out **legacy** to bob's
   `publickey` (per-value symmetric key RSA-wrapped inline, the monolithic legacy
-  model), and the *first write after bob's key appears* is PQ with no flag to
-  flip. Never a silent downgrade: the app chose the fallback or the app sees the
+  model), and the *first write after bob's key appears and the 30-second miss
+  window has passed* is PQ with no flag to flip; a program that asks
+  `canSealTo` finds the key at once, which ends the remembered miss, so its
+  next write is PQ. Never a silent downgrade: the app chose the fallback or the app sees the
   refusal. `put` writes no self-copy record; whether alice can write in her own scope
   while bob is unreachable is
   [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists)'s question, not
@@ -2028,8 +2032,11 @@ map and be refused rather than obeyed.
   and the write goes via the **nskey data path** — `at/nskey` conveys the CK
   sealed to bob's published nskey (`recipientKind: nskey`),
   `at/symmetric/AES/GCM` encrypts the data. Cold start (or the fallback, if
-  opted-in) ends for bob **without any action from alice**: the recipient's key
-  appearing is the whole trigger.
+  opted-in) ends for bob **without any action from alice** once the 30-second
+  window in which a share remembers finding nothing has passed: the
+  recipient's key appearing is the trigger. A program that asks `canSealTo`
+  finds the key at once, which ends the remembered miss, so its next share is
+  PQ.
 
 - **Cross-ref:** `design.md` [section 1.6](design.md#16-the-uniform-data-flow--cold-start--resolutionordering) (cold start), [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d) (the two-release model);
   `roadmap.md` (migration philosophy).

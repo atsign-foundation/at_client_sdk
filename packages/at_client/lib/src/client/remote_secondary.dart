@@ -7,7 +7,6 @@ import 'package:at_auth/at_auth.dart'
         authenticatorForCramSecret,
         authenticatorForPrivateKey;
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
@@ -77,9 +76,6 @@ class RemoteSecondary implements Secondary {
       {String? privateKey,
       AtLookUp? atLookUp,
       String? enrollmentId,
-      @Deprecated('Has no effect: the keys name the algorithm they sign with. '
-          'Removed in 5.0.0.')
-      SigningAlgoType? signingAlgoType,
       AtKeysIo? atKeysIo,
       AtConnection? connection,
       SecondaryAddressFinder? secondaryAddressFinder,
@@ -89,7 +85,6 @@ class RemoteSecondary implements Secondary {
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
     _connection = connection;
-    privateKey ??= preference.privateKey;
     _atKeysIo = atKeysIo;
     _privateKey = privateKey;
     _cramSecret = preference.cramSecret;

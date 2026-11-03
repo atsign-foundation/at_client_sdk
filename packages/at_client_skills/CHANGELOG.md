@@ -2,18 +2,73 @@
 
 ## 1.4.0 — 2026-09-13
 
+- A `CLIBase` program whose keyfile holds only an enrollment request waits
+  for its approval rather than throwing (`SKILL.md`; `references/14`).
+- A screen that only closes calls `pending.stop()`, which keeps the request
+  for `resumeEnrollment`; `cancel()` is for a Cancel the user confirms
+  (`references/15`).
+- Once `pending.stop()` or `cancel()` returns, an app whose approval landed
+  first opens the atSign at once (`references/15`).
+- `sync()` calls made while a round runs share one more round once it ends
+  (`references/15`).
+- `resumeEnrollment` refusing several matching requests is in the error
+  table, with what picks one (`references/15`).
+- A program serving a mixed fleet writes post-quantum with
+  `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
+  `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`
+  §11).
+- A share goes to the most specific namespace key the recipient advertises;
+  `sealToNamespace` requires one namespace, and `canSealTo` asks first
+  (`SKILL.md`).
+- A new app names `PqPosture.pqActive`, as every snippet now does, and an
+  app built on 3.x moves to it through `pqReady` in two releases; a table
+  says what each posture writes, reads and needs (`SKILL.md` §11; the
+  references).
+- Offline under `pqActive`: a device's first write in a namespace, and a
+  share with no current copy of the recipient's key, need the atServer;
+  later writes go on offline, across restarts (`SKILL.md` §11;
+  `references/05`).
+- Under `pqActive`, a write right after the client opens waits up to 30
+  seconds for its start-up to publish the namespace key (`SKILL.md` §11).
+- A registrar API key is the app's own, created via the registrar at
+  my.atsign.com (`references/05`); `at_register`, and `at_activate onboard`
+  without `-c`, send `AT_REGISTRAR_API_KEY` when it is set, and otherwise a
+  built-in key (`references/06`).
+- A new agent's atSign is onboarded with `--posture pqActive`, and instances
+  sharing a keyfile retrofit it one at a time (`references/14`).
+- A notification is sent with `idAndNamespace:`, and `subscribe` hands back
+  values still encrypted unless `shouldDecrypt` is true (`SKILL.md` §13;
+  `references/10`, `15`).
+- Keys live in a store that outlives the process (`SKILL.md` §11).
+- `AtClient.notify`, `notifyChange`, `notifyAll` and `startMonitor`,
+  `NotificationParams.forText` and `send(namespace:)` are listed as removed in
+  4.0, with what replaces each (`SKILL.md` §18; `references/01`).
+- `AtClientManager`'s `syncService` and `notificationService`,
+  `sync(onDone:)`, `sync(onError:)`, `setOnDone`, `AtServiceFactory.atClient`
+  and `syncStrategy` are listed as removed in 4.0 (`SKILL.md` §18;
+  `references/01`, `11`, `15`).
+- `AtClientPreference`'s `isLocalStoreRequired`, `privateKey`, `useAtChops`,
+  `signingAlgoType` and `hashingAlgoType`, `RemoteSecondary`'s
+  `signingAlgoType` and `PutRequestOptions.storeSharedKeyEncryptedMetadata`
+  are listed as removed in 4.0 (`SKILL.md` §18; `references/01`).
 - Teaches at_client 4.0: one platform package per app (`at_client_cli` or
   `at_client_flutter`), the storage, transport and atDirectory finder every
   client is opened with, and what 4.0 removed, named as removed.
 - A CLI program takes its `lookUps:` from at_client_cli's
   `lookUpsFor(rootDomain)`, which routes through a proxy when the root domain
   names one (`SKILL.md`; `references/06`, `14`, `15`).
+- `Query.fetch()` is listed as removed in 4.0 (`references/03`).
 - `createAtClient` is at_client_cli's, unchanged, not a removed API
   (`SKILL.md`; `references/01`, `06`).
 - A Flutter app with its own UI calls the verbs through at_client_flutter's
   `AtsignFlows`, and a pending enrollment's client takes its store from
   `storageOrDefault` (`SKILL.md`; `references/01`).
 - A `refused` connection lists `enrollmentDenied` among its causes.
+- The canonical todos examples, CLI and Flutter, run at `PqPosture.pqActive`
+  (`SKILL.md` §19).
+- `pending.cancel()` abandons an enrollment: it ends the wait, which throws
+  `AtEnrollmentCancelledException`, and removes the pending keys
+  (`references/15`).
 - An `AtLookUpFactory` takes no `clientConfig`: a factory of your own drops
   that parameter (`references/15`).
 - Multiple instances of one agent take their lock with
@@ -47,6 +102,12 @@
   logout / switching and the connection state.
 - The connections an `AtLookUpFactory` builds no longer include a file
   stream's: atServers no longer support the stream verb (`references/15`).
+- Under `pqActive`, a collection's namespace ends with `.` and
+  `preference.namespace`, or its first write throws
+  `NamespaceKeyUnavailableException` (`SKILL.md` §3, §11).
+- An agent approves only the enrollment it expects and denies the rest, a
+  subscriber keeps only the sender it trusts, and the receive sample matches
+  what the send sample sends (`SKILL.md` §13; `references/05`, `10`, `14`).
 
 ## 1.3.0 — 2026-07-31
 

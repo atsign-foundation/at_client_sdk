@@ -15,8 +15,8 @@ import 'test_utils.dart';
 /// Asserts the outcome on the atServer rather than that a method was called:
 /// after seeding, the advertisement is fetchable by the exact lookup a sender
 /// would use, and the client holds the matching private. Only an enrollment
-/// whose record carries a key package mints; the atSign's own credential,
-/// `primary`, carries none and mints nothing.
+/// whose record carries a key package mints; the primary enrollment carries
+/// none and mints nothing.
 ///
 /// Catalogue: docs/projects/pq/acceptance.md UC-A3.7
 void main() {

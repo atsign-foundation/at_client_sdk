@@ -39,15 +39,28 @@ void main() {
               'the hatch open the cold write goes out stamped legacy and '
               'carries NO ckKid, which is the monolithic model — the '
               'per-value key rides with the value instead of being conveyed '
-              'as its own record; and the first write after the recipient\'s '
-              'key appears is PQ with no flag to flip, the app having never '
-              'touched the preference again and seen no refusal to react to. '
+              'as its own record; and once canSealTo has found the '
+              'recipient\'s key the next write is PQ with no flag to flip, the '
+              'app having never touched the preference again and seen no '
+              'refusal to react to. '
               'Control: a second write taken before the key exists stays '
               'legacy, so the flip is the key appearing. ⚠️ This row is '
               'pinnable only since 2026-08-27, when the clause stopped '
               'requiring "a PQ self-copy for alice\'s own scope" — a record '
               'put does not write, AtCollection being where that lives',
-          clauses: ['the *first write after bob\'s key appears* is PQ']);
+          clauses: [
+            'the *first write after bob\'s key appears and the 30-second miss '
+                'window has passed* is PQ'
+          ]);
+      provenIn('packages/at_client/test/pq_share_level_test.dart',
+          'A full miss is remembered for 30 seconds',
+          proves: 'the window half of the clause: a share remembers finding '
+              'nothing for its window, and the first share after it asks '
+              'again and is sealed to the key that has appeared',
+          clauses: [
+            'the *first write after bob\'s key appears and the 30-second miss '
+                'window has passed* is PQ'
+          ]);
     });
 
     test('UC-B4.2 · legacy @alice receives from PQ @bob (the interop question)',
@@ -131,12 +144,13 @@ void main() {
               'plookup, sealed to bob\'s advertised generation, and bob opens '
               'it with his own private — the post-flip steady state, live');
       provenIn('tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
-          'UC-B4.4: the recipient publishing is the whole trigger',
+          'UC-B4.4: once the recipient publishes, canSealTo finds the key',
           proves: 'the clause as written, including the transition itself, '
               'which the steady-state citation above cannot reach. The sender '
               'is REFUSED first, so what follows is about a client that has '
-              'already asked and been told no; the recipient then publishes '
-              'and the very next write goes out on the nskey data path, with '
+              'already asked and been told no; the recipient then publishes, '
+              'canSealTo finds the key and ends the remembered miss, and the '
+              'next write goes out on the nskey data path, with '
               'the CK conveyed as its own record — recipientKind nskey, so '
               'addressed to the namespace rather than a device — carrying the '
               'generation the recipient actually advertised, and with no '
@@ -144,19 +158,20 @@ void main() {
               'the recipient over the same connection at the same moment, '
               'separating "they published" from "the sender can see it". '
               'Mutation-proven four times, one per assertion',
-          clauses: ['the recipient\'s key appearing is the whole trigger']);
+          clauses: ['the recipient\'s key appearing is the trigger']);
       provenIn('tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
           'UC-B4.1: with the fallback opted in, the cold write goes legacy',
           proves: 'the parenthetical the citation above does not cover — "or '
               'the fallback, if opted-in". An app that opened the escape hatch '
               'never sees a refusal, so nothing tells it the recipient has '
               'arrived and the write simply has to start going out PQ. It '
-              'does, on the first write after the key appears, with the '
+              'does, on the first write after canSealTo finds the key, with '
+              'the '
               'control (a second write taken BEFORE the key exists, which '
               'stays legacy-encrypted) green — so the flip is the key appearing rather '
               'than the second write. What the fallback already wrote stays '
               'legacy',
-          clauses: ['the recipient\'s key appearing is the whole trigger']);
+          clauses: ['the recipient\'s key appearing is the trigger']);
       provenIn('packages/at_client/test/cold_start_test.dart',
           'says yes once the destination has published a key',
           proves: 'that the readiness query answers yes for a destination that '

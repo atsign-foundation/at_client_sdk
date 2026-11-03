@@ -123,6 +123,11 @@ final todos = await atClient.collection<Todo>(
   eventSource = separate instances
 - **`namespace` must contain `.`** (e.g. `'todos.my_app'`) — throws
   `ArgumentError` otherwise
+- **At `pqActive`, `namespace` ends with `.` and the client's
+  `preference.namespace`** (or a namespace its enrollment is granted):
+  `'todos.my_app'` under `my_app`. In any other namespace the client's
+  start-up publishes no key, and the first write throws
+  `NamespaceKeyUnavailableException`
 - **`typeTag` is mandatory when `fromJson` is supplied** — always a string
   literal, never derived from `T.toString()` (minifier renames types in
   release builds)
@@ -164,6 +169,17 @@ await todos.updateSharedWith(item, {'@alice'.toAtsign(), '@carol'.toAtsign()});
 await todos.delete(item);                    // throws StateError if has sub-items
 await todos.delete(item, cascade: true);     // removes self-owned descendants first
 ```
+
+At `pqActive`, a share is sealed to each recipient's namespace key. A
+recipient that has published none makes `create`, `upsert`, `update` or
+`updateSharedWith` throw `CollectionOpException`, whose failure is a
+`NamespaceKeyUnavailableException` naming them;
+`CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first. A
+share is sealed to the most specific key the recipient advertises for the
+key's whole name; `PutRequestOptions.sealToNamespace` requires one
+namespace, and `CryptoRuntime(atClient).canSealTo(recipient, namespace)`
+asks whether the recipient advertises a key there; it never throws, and
+answers false, with a warning, when it cannot tell.
 
 > **Ownership model:** `AtCollection` is **owner-writes-only** — an atsign can
 > only mutate items it owns. `update` / `updateSharedWith` / `delete` throw
@@ -324,7 +340,8 @@ final atSign = atKeysIo.getAtsign();                            // extensions.da
 final client = await PkamDialog.show(context,
   atSign: atSign,
   keys: atKeysIo,
-  preference: AtClientPreference()..namespace = 'my_namespace',
+  preference: AtClientPreference(posture: PqPosture.pqActive)
+    ..namespace = 'my_app',
   backupKeys: [KeychainAtKeysIo()],   // copies the keys into the keychain for next time
 );
 if (client == null) return;
@@ -341,7 +358,8 @@ final client = await PkamDialog.show(context,
   atSign: selection.atSign,
   rootDomain: selection.rootDomain,
   keys: KeychainAtKeysIo(),
-  preference: AtClientPreference()..namespace = 'my_namespace',
+  preference: AtClientPreference(posture: PqPosture.pqActive)
+    ..namespace = 'my_app',
 );
 if (client == null) return;
 _adopt(client);
@@ -375,20 +393,21 @@ complete code, and what a `PkamDialog` that comes back **offline** means.
 ## 11. AtClient Lifecycle: Open, Own, Stop
 
 `at_client` owns the atSign lifecycle. An app holds an `AtKeysIo` (a `.atKeys`
-file, the keychain, or memory) and asks the atSign for a client; every verb
-hands back an `AtClient` the app **owns and stops**. The Flutter dialogs (§10)
+file or the keychain, never one that dies with the process) and asks the
+atSign for a client; every verb hands back an `AtClient` the app **owns and
+stops**. The Flutter dialogs (§10)
 and `CLIBase` (§16) are these verbs behind UI and argument parsing.
 
 ```dart
 import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
-final preference = AtClientPreference()
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';
+final preference = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';
 final client = await Atsign('@alice').open(
   keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
   preference: preference,
-  storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
+  storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: true),
   lookUps: secureSocketLookUps(),   // how every connection is built
   secondaryAddressFinder: CacheableSecondaryAddressFinder(
       preference.rootDomain, preference.rootPort),   // where the atServer is
@@ -422,6 +441,41 @@ takes `storage: await storageOrDefault(atSign, preference)`. at_client 4.0 remov
 `decryptPackets`, `pathToCerts` and `tlsKeysSavePath`: a `SecureSocketConfig`
 carries them.
 
+**Posture — how far into post-quantum the client runs**, fixed when the
+preference is built. **A new app names `PqPosture.pqActive`** and sets
+`namespace`, as every snippet here does:
+
+| Posture                          | Writes                                  | Reads post-quantum data | Needs                                                                       |
+| -------------------------------- | --------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `PqPosture.legacy` (4.0 default) | legacy encryption                       | no                      | nothing new                                                                 |
+| `PqPosture.pqReady`              | legacy, so every peer can read it       | yes                     | an atServer that verifies ML-DSA-65 signatures                              |
+| `PqPosture.pqActive`             | post-quantum; a legacy write is refused | yes                     | every client of its namespaces on `pqReady` or later first; `namespace` set |
+
+- An app built on 3.x, whose data is legacy-encrypted, moves in two steps:
+  rebuild it with `PqPosture.pqReady` and roll that out to every client, then
+  rebuild it with `PqPosture.pqActive` and roll that out.
+- A preference that names no posture rides the SDK's default: `legacy` in
+  4.0, `pqReady` from a later 4.x and `pqActive` from 5.0.
+- Under `pqActive`, a client whose enrollment is granted `*` holds a
+  namespace key only for `preference.namespace`; with none set it has nothing
+  to write with. A collection's namespace therefore ends with `.` and
+  `preference.namespace`, as §3 says.
+- Under `pqActive`, a device's first write in each namespace needs the
+  atServer (see **offline** below).
+- Under `pqActive`, a write made right after the client opens, before its
+  start-up has published the namespace key, waits up to 30 seconds for it,
+  then throws `NamespaceKeyUnavailableException` naming that key.
+- A program whose peers are a mixed fleet, some advertising a namespace key
+  and some not, builds `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
+  false)` and sets `allowLegacyCryptoFallback`: each send requires the peer's
+  namespace with `sealToNamespace`, and a peer advertising nothing there gets
+  legacy encryption. A `pqReady` client with `allowLegacyCryptoFallback` can
+  instead ask `canSealTo` before each send and request
+  `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where it answers
+  true.
+- The at_client README's "Post-quantum cryptography" section has the full
+  ladder and what each stage switches on.
+
 **Connection state — the client comes back whatever the network did:**
 
 ```dart
@@ -432,7 +486,11 @@ await client.connection.attempt();                  // try again now
 ```
 
 - **offline** (`unreachable`, `noAtServer`): the client serves its local store;
-  writes queue and sync when the atServer is reached.
+  writes queue and sync when the atServer is reached. Under `pqActive`, a
+  device's first write in a namespace needs the atServer, which seeds or
+  conveys that namespace's key, and a share needs it whenever the client
+  holds no current copy of the recipient's key. Once a device has written in
+  a namespace, it goes on writing there offline, across restarts.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
   `enrollmentNotApproved`, `enrollmentDenied`): the atServer rejected the keys
   — the app decides.
@@ -446,8 +504,8 @@ await client.connection.attempt();                  // try again now
 
 - `client.syncService` runs on its own: on every stats notification from the
   atServer and every `syncIntervalMins`. `sync()` expedites a round,
-  `isInSync()` asks the atServer fresh, `addProgressListener` observes. The
-  `AtClientManager` getters for these services are deprecated.
+  `isInSync()` asks the atServer fresh, `addProgressListener` observes.
+  at_client 4.0 removed the `AtClientManager` getters for these services.
 - `client.notificationService.subscribe(regex:, shouldDecrypt:)` — the monitor
   starts on the first `subscribe` (or 30 s after creation) when
   `monitorAutoStart` is true. **`subscribe()` returns before the monitor is
@@ -525,16 +583,23 @@ These patterns are complementary and can coexist in the same app.
 // Send — returns the notification id; body is usually JSON
 await atClient.notificationService.send(
   to: '@bob'.toAtsign(),
-  namespace: 'sample.my_app',
+  idAndNamespace: 'sample.my_app',          // an id, a dot, then the namespace
   body: jsonEncode(payload),
   expiration: const Duration(minutes: 5),   // short TTL for telemetry
 );
 
-// Receive — subscribe to a namespace regex; decrypt encrypted payloads
+// Receive, on @bob's client — only from the senders it accepts
 atClient.notificationService
-    .subscribe(regex: r'sample\..*\.my_app', shouldDecrypt: true)
+    .subscribeFiltered(
+        acceptedSenders: {'@alice'.toAtsign()}, namespace: 'sample.my_app')
     .listen((n) => handle(n.value));
 ```
+
+`subscribeFiltered` matches `sample.my_app` and any id before it, decrypts
+each value, and drops a notification from any other sender. Plain
+`subscribe(regex:, shouldDecrypt:)` takes every sender, and its
+`shouldDecrypt` defaults to `false`, which hands back each value still
+encrypted.
 
 Read [references/10-architecture-guide.md](references/10-architecture-guide.md)
 for the full decision guide and the dockerstats Notifications+SQLite example.
@@ -610,15 +675,20 @@ at_client_cli`):
 import 'package:at_client_cli/at_client_cli.dart';
 
 final AtClient atClient =
-    (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).atClient;
+    (await CLIBase.fromCommandLineArgs(args,
+            namespace: 'my_app',
+            preference: AtClientPreference(posture: PqPosture.pqActive)))
+        .atClient;
 ```
 
 - **`CLIBase` tells a refusal from an outage.** It throws
   `AtCredentialRefusedException` when the atServer refuses the keys,
-  `AtEnrollmentPendingException` when the keyfile holds only an enrollment
-  request, `SecondaryNotFoundException` when the atDirectory has no atServer
-  for the atSign, and `SecondaryServerConnectivityException` only for an
-  outage — the one exception a retry loop should catch.
+  `SecondaryNotFoundException` when the atDirectory has no atServer for the
+  atSign, and `SecondaryServerConnectivityException` only for an outage — the
+  one exception a retry loop should catch. A keyfile holding only an
+  enrollment request is resumed: `CLIBase` waits for its approval, as
+  at_activate does, and throws `AtEnrollmentException` when it is denied or
+  expires.
 - **Every process needs its own storage** (`CliKeys.storageFor(atSign,
   program:, path:)`, a `HiveAtClientStorage(atSign:, storagePath:)`, or
   `CLIBase`'s `-s` flag) — one store is held by one live client and a second
@@ -679,7 +749,20 @@ longer compiles:
 | `AtCollectionModel` / `AtJsonCollectionModel`, their factories and operations                                                                                | `AtCollection<T>` via `atClient.collection(...)` |
 | `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`                                                                                              | `Atsign(a).open(...)` (§11), then `AtClientManager.getInstance().use(client)` only for code that reads the manager |
 | `AtClient.atChops`; the `atChops:` parameters                                                                                                                | The client signs and encrypts with the `AtKeysIo` it was given |
-| `isDedicated:` (on `put`, `get`, `delete`, `notify`, `getMeta`, `notifyList`, `notifyAll`), `sync:` (on `executeVerb`, `executeAndParse`)                  | Delete the argument                              |
+| `isDedicated:` (on `put`, `get`, `delete`, `notify`, `getMeta`, `notifyList`), `sync:` (on `executeVerb`, `executeAndParse`)                               | Delete the argument                              |
+| `atClient.notify(...)`, `notifyChange(...)`, `notifyAll(...)`                                                                                              | `notificationService.notify(...)`, once per recipient |
+| `atClient.startMonitor(...)`                                                                                                                               | `notificationService.subscribe(...)`                  |
+| `startCompactionJob`, `stopCompactionJob`                                                                                                                  | none; they did nothing                                |
+| `NotificationParams.forText(...)`                                                                                                                          | `NotificationParams.forUpdate(...)`; atServers refuse text notifications |
+| `notificationService.send(namespace: ...)`                                                                                                                 | `send(idAndNamespace: ...)`, the same value           |
+| `AtClientManager.getInstance().syncService`, `.notificationService`                                                                                        | `client.syncService`, `client.notificationService`    |
+| `syncService.sync(onDone: ...)`, `setOnDone(...)`                                                                                                          | a `SyncProgressListener` added with `addProgressListener` |
+| `syncService.sync(onError: ...)`                                                                                                                           | a `SyncProgressListener`, which hears each sync that fails |
+| `AtServiceFactory.atClient(...)`                                                                                                                           | `Atsign(a).open(...)` or `buildAtClient(...)`         |
+| `AtClientPreference.syncStrategy`, `SyncStrategy`                                                                                                          | nothing; they did nothing                             |
+| `AtClientPreference.isLocalStoreRequired`, `useAtChops`, `hashingAlgoType`                                                                                 | nothing; they did nothing                             |
+| `AtClientPreference.privateKey`, `signingAlgoType`                                                                                                         | keys in the client's `AtKeysIo`                       |
+| `PutRequestOptions.storeSharedKeyEncryptedMetadata`, `RemoteSecondary(signingAlgoType:)`                                                                   | nothing; they did nothing                             |
 | `AtClientPreference.commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted`, `outboundConnectionTimeout`, `enforceNamespace`                   | Delete the assignment                            |
 | `AtClientPreference.decryptPackets`, `pathToCerts`, `tlsKeysSavePath`                                                                                        | A `SecureSocketConfig` given to `secureSocketLookUps(config:)` |
 | `atClient.stream(...)`, `sendStreamAck`; `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`                                                         | `put` or `notify` the value; file transfer belongs in the app |
@@ -692,8 +775,7 @@ longer compiles:
 | Avoid                                                                                                                                                        | Use instead                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
 | `at_cli_commons`, `at_onboarding_cli` (their last majors re-export `at_client_cli`)                                                                          | `at_client_cli`                                  |
-| `AtClientPreference.hiveStoragePath` (at_client ignores it; at_client_flutter's dialogs read it when given no storage), `isLocalStoreRequired`, `hashingAlgoType`; all removed in 5.0 | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage` |
-| `AtClientManager.getInstance().syncService`, `.notificationService`                                                                                          | `client.syncService`, `client.notificationService` |
+| `AtClientPreference.hiveStoragePath` (at_client ignores it; at_client_flutter's dialogs read it when given no storage); removed in 5.0                       | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage` |
 | `at_common_flutter`                                                                                                                                          | `at_client_flutter`                              |
 | `at_backupkey_flutter`                                                                                                                                       | Copy `at_client_flutter` backup-key snippet      |
 | `at_invitation_flutter`                                                                                                                                      | `AtClientInvitations` in `at_client`             |
@@ -711,7 +793,9 @@ for the full migration table from old `AtCollectionModel` patterns to
 - `packages/at_client/example/bin/collections_domain_objects.dart`
 - `packages/at_client/example/bin/collections_subcollections.dart`
 - `packages/at_client/example/bin/collections_todos.dart` — terminal-UI (TUI)
-  todos app using `AtCollection` + `query().watch()` (Dart/CLI reference)
+  todos app using `AtCollection` + `query().watch()` (Dart/CLI reference); it
+  and the Flutter todos app run at `PqPosture.pqActive` and share todos with
+  each other
 - `packages/at_client/example/bin/notifications.dart` — minimal
   `NotificationService` send/subscribe
 - `packages/at_client_flutter/example/todos/` — canonical Flutter reference app

@@ -122,7 +122,6 @@ class AuthCliArgs {
   static const argAbbrExpiry = 'e';
   static const argNameAutoApproveExisting = 'approve-existing';
   static const argNamePassPhrase = 'passPhrase';
-  static const argNameHashingAlgoType = 'hashingAlgoType';
   static const argNamePosture = 'posture';
   static const argNameKeyExchange = 'key-exchange';
 
@@ -385,7 +384,9 @@ class AuthCliArgs {
       argNameCramSecret,
       aliases: const ['license-key'],
       abbr: 'c',
-      help: 'CRAM key',
+      help: 'CRAM secret. Without it, the registrar emails a verification '
+          'code, asked with the registrar API key in AT_REGISTRAR_API_KEY '
+          'when it is set, or a built-in one',
       mandatory: false,
       hide: !forOnboard,
     );
@@ -395,11 +396,6 @@ class AuthCliArgs {
             'Pass Phrase to encrypt/decrypt the password protected atKeys file',
         mandatory: false,
         hide: hide);
-    p.addOption(argNameHashingAlgoType,
-        help: 'Ignored: a passphrase-protected atKeys file is always '
-            'Argon2id. Accepted so existing scripts still run',
-        mandatory: false,
-        hide: true);
     // NOTE: no defaultsTo. An unset value must stay distinguishable so that
     // postureForEnroller can announce at_client's default when it takes it.
     p.addOption(argNamePosture,

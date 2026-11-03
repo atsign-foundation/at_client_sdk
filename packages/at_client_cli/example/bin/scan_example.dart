@@ -9,8 +9,7 @@ import 'package:at_client_cli/at_client_cli.dart';
 /// Create an atClient and list the identifiers of all the records stored
 /// in its atServer
 Future<void> main(List<String> args) async {
-  final ArgParser parser = CLIBase.createArgsParser(
-      namespace: 'example', addLegacyRootDomainArg: true);
+  final ArgParser parser = CLIBase.createArgsParser(namespace: 'example');
   try {
     var atClient =
         (await CLIBase.fromCommandLineArgs(args, parser: parser)).atClient;

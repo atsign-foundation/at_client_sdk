@@ -107,7 +107,8 @@ abstract class AtClient {
 
   EnrollmentService? get enrollmentService;
 
-  /// Sets the preferences such as sync strategy, storage path etc., for the client.
+  /// Sets the preferences this client reads, such as its namespace and its
+  /// post-quantum posture.
   void setPreferences(AtClientPreference preference);
 
   AtClientPreference? getPreferences();
@@ -142,7 +143,7 @@ abstract class AtClient {
   /// waits until `syncService.isInSync()` answers true.
   ///
   /// After this, a read or write of local storage throws [StoppedException],
-  /// and the services are gone: reading one throws [StateError].
+  /// and the services are gone: reading one throws [StoppedException] too.
   ///
   /// A stopped client cannot be restarted, and the atSign can be opened
   /// again at once: the refusal of a second live client for the same
@@ -200,6 +201,14 @@ abstract class AtClient {
   /// Throws [AtPrivateKeyNotFoundException] if encryption private key is not found
   ///
   /// Throws [AtPublicKeyNotFoundException] if encryption public key is not found
+  ///
+  /// At `PqPosture.pqActive`, a put made right after the client opens, before
+  /// its start-up has published the namespace key the value is sealed to,
+  /// waits for that key, at most 30 seconds, and then throws
+  /// `NamespaceKeyUnavailableException` naming it if it is still not
+  /// published. Start-up publishes that key only after its earlier steps
+  /// finish, so the 30 seconds cover those too. Stopping the client ends the
+  /// wait with [StoppedException].
   Future<bool> put(AtKey key, dynamic value,
       {PutRequestOptions? putRequestOptions});
 
@@ -353,7 +362,9 @@ abstract class AtClient {
   /// ```
   Future<Metadata?> getMeta(AtKey key);
 
-  /// Delete the [key] from user's local secondary and syncs the delete to cloud secondary if client's sync preference is immediate.
+  /// Deletes [key] from local storage, and sync later pushes the removal to
+  /// the atServer; [DeleteRequestOptions.useRemoteAtServer] sends it to the
+  /// atServer directly.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
@@ -444,131 +455,18 @@ abstract class AtClient {
     bool useRemoteAtServer = false,
   });
 
-  /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
-  ///```
-  ///e.g alice is the current atsign
-  /// notify:update:@bob:phone@alice:+1 999 9999
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith='@bob'
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// notify:update:ttl:60000:ttb:30000:@bob:phone@alice:+1 999 9999
-  ///   var metaData = Metadata()..ttl='60000'
-  ///                  ..ttb='30000'
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith='@bob'
-  ///             ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  ///
-  /// var atKey = AtKey()..key = 'phone@alice'
-  ///                    ..sharedWith = '@bob'
-  ///                    ..sharedBy = ‘@alice’
-  /// Sending Notification with Notification Strategy ‘ALL’ and priority low
-  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
-  ///                       priority: PriorityEnum.low,
-  ///                      strategy: StrategyEnum.all);
-  ///
-  /// Sending Notification with Notification Strategy ‘Latest N’ and priority high
-  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
-  ///                       priority: PriorityEnum.high,
-  ///                       strategy: StrategyEnum.latest,
-  ///                       latestN:3,
-  ///                       Notifier: ‘wavi’);
-  ///```
-  ///[Deprecated] Use [AtClient.notificationService]
-  @Deprecated("Use NotificationService")
-  Future<bool> notify(AtKey key, String value, OperationEnum operation,
-      {MessageTypeEnum? messageType,
-      PriorityEnum? priority,
-      StrategyEnum? strategy,
-      int? latestN,
-      String? notifier});
-
-  /// Notifies the [NotificationParams.atKey] to [notificationParams.atKey.sharedWith] user
-  /// of the atSign. Optionally, operation, value and metadata can be set along with key to
-  /// notify.
-  ///
-  ///* Throws [LateInitializationError] when [NotificationParams.atKey] is not initialized
-  ///* Throws [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
-  ///invalid metadata is provided.
-  ///* Throws [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
-  ///* Throws [AtClientException] when keys to encrypt the data are not found.
-  ///* Throws [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
-  ///* Throws [AtClientException] when fails to connect to cloud secondary server.
-  ///
-  ///e.g alice is the current atsign
-  ///
-  /// 1. To notify a update of key to @bob
-  /// ```dart
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.update
-  ///                                                .._messageType = MessageTypeEnum.key;
-  ///   notifyChange(notificationParams);
-  /// ```
-  /// 2. To notify and cache a key - value in @bob
-  /// ```dart
-  ///   var metaData = Metadata()..ttr='6000000';
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///                    ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.update
-  ///                                                .._value = value
-  ///                                                .._messageType = MessageTypeEnum.key;
-  ///   notifyChange(notificationParams);
-  ///```
-  ///3. To notify a deletion of a key to @bob.
-  ///```dart
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.delete
-  ///                                                .._messageType = MessageTypeEnum.key;
-  ///   notifyChange(notificationParams);
-  ///```
-  ///[Deprecated] Use [NotificationService.notify]
-  @Deprecated("Use [NotificationService.notify]")
-  Future<String?> notifyChange(NotificationParams notificationParams);
-
-  /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
-  /// ```
-  /// e.g alice is the current atsign
-  /// notify:all:update:@bob,@colin:phone@alice:+1 999 9999
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith= json.encode(['@bob',@colin])
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// notify:update:ttl:60000:ttb:30000:@bob,@colin:phone@alice:+1 999 9999
-  ///   var metaData = Metadata()..ttl='60000'
-  ///                  ..ttb='30000'
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith= json.encode(['@bob',@colin])
-  ///             ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// ```
-  @Deprecated('Use NotificationService')
-  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation);
-
   ///Returns the status of the notification
   ///```
   ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366
   ///
-  /// var atKey = AtKey()..key = 'phone@bob'
+  /// var atKey = AtKey()..key = 'phone'
   ///                    ..sharedWith = '@alice'
-  ///                    ..sharedBy = ‘@bob’
-  /// Execute the notify verb
-  /// var notificationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
-  ///  Get the status for notificationId
-  ///   notifyStatus(notificationId);
+  ///                    ..sharedBy = '@bob';
+  /// Send the notification
+  /// var result = await atClient.notificationService.notify(
+  ///     NotificationParams.forUpdate(atKey, value: '+1 987 986 2233'));
+  ///  Get the status for its id
+  ///   notifyStatus(result.notificationID);
   ///
   ///```
   Future<String> notifyStatus(String notificationId);
@@ -594,14 +492,6 @@ abstract class AtClient {
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
   ///```
   Future<String> notifyList({String? fromDate, String? toDate, String? regex});
-
-  /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
-  /// the notification on the client.
-  /// Optionally a regular expression and be passed to filter the notifications
-  /// [deprecated] Use [NotificationService.subscribe]
-  @Deprecated("Obsolete. Use the NotificationService")
-  Future<void> startMonitor(String privateKey, Function acceptStream,
-      {String? regex});
 
   static const defaultSppExpiry = Duration(minutes: 5);
 
@@ -637,25 +527,6 @@ abstract class AtClient {
   /// ```
   ///
   Future<AtResponse> getOTP();
-
-  /// No longer does anything; retained for source compatibility.
-  ///
-  /// The client is commit-log-free, so there is no commit log to compact.
-  /// This is now a no-op and will be removed in a future major release.
-  @Deprecated(
-      'Commit-log compaction was removed with the commit-log-free keystore; '
-      'this is now a no-op and will be removed in a future major release')
-  Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
-
-  /// No longer does anything; retained for source compatibility.
-  ///
-  /// The client is commit-log-free, so there is no commit log compaction job
-  /// to stop. This is now a no-op and will be removed in a future major
-  /// release.
-  @Deprecated(
-      'Commit-log compaction was removed with the commit-log-free keystore; '
-      'this is now a no-op and will be removed in a future major release')
-  Future<void> stopCompactionJob();
 
   /// Note - this method name is misleading as 'current' implies the atSign
   /// could change - but an AtClient should only ever have one atSign.
@@ -716,6 +587,8 @@ abstract class AtClient {
   ///   NOT visible on the watch streams.
   /// - [EventSource.both] subscribes to both and emits events from
   ///   each as they arrive — no de-duplication.
+  ///
+  /// Throws [StoppedException] after [stop].
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {

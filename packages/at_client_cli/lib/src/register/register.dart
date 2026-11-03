@@ -20,7 +20,6 @@ class Register {
   /// activation fails.
   Future<void> main(List<String> args) async {
     Map<String, String> params = HashMap<String, String>();
-    OnboardingUtil registerUtil = OnboardingUtil();
 
     final argParser = ArgParser()
       ..addOption('email',
@@ -32,8 +31,11 @@ class Register {
     ArgResults argResults = argParser.parse(args);
 
     if (argResults.wasParsed('help')) {
-      stderr.writeln(
-          '[Usage] dart run register.dart -e email@email.com\n[Options]\n${argParser.usage}');
+      stderr.writeln('[Usage] dart run register.dart -e email@email.com\n'
+          '[Options]\n${argParser.usage}\n'
+          '[Environment]\n$registrarApiKeyVariable  a registrar API key to '
+          'send in place of the built-in one, created via the registrar at '
+          'my.atsign.com');
       exit(0);
     }
 
@@ -42,6 +44,15 @@ class Register {
           '[Unable to run Register CLI] Please enter your email address'
           '\n[Usage] dart run register.dart -e email@email.com\n[Options]\n${argParser.usage}');
       exit(6);
+    }
+
+    final OnboardingUtil registerUtil;
+    try {
+      registerUtil =
+          OnboardingUtil(Platform.environment[registrarApiKeyVariable]);
+    } on AtClientException catch (e) {
+      stderr.writeln('[Unable to run Register CLI] ${e.message}');
+      exit(8);
     }
 
     if (registerUtil.validateEmail(argResults['email'])) {

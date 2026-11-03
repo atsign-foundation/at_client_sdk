@@ -187,7 +187,7 @@ class SigningKeyMinting with ApkamSigning {
 
   /// Which keys this enrollment's own `_apsk` record has a link for that
   /// walks to the root, and which it lists as retired: none of either for the
-  /// atSign's own credential, which takes no link, and null when the record
+  /// primary enrollment, which takes no link, and null when the record
   /// cannot be read.
   Future<({Set<String> anchored, Set<String> listedRetired})?>
       _ownLinkState() async {

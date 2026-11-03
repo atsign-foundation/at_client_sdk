@@ -428,6 +428,9 @@ class _FixedRing implements NskeyKeyRing {
       nskeyKid == _advertised.nskeyKid
           ? _advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
           : null;
+
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async => const {};
 }
 
 /// A ring serving one advertisement carrying MORE THAN ONE key, plus the
@@ -456,4 +459,7 @@ class _WidenedRing implements NskeyKeyRing {
       _privates.containsKey(nskeyKid)
           ? advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
           : null;
+
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async => const {};
 }

@@ -44,8 +44,12 @@ class CryptoRuntime {
   /// [stampProviderId] is false for a caller that may re-route the write to
   /// legacy after the prepare step, because a key stamped with a provider that
   /// then declined would claim a scheme its value was never sealed under.
+  ///
+  /// [sealToNamespace] is the namespace of the recipient's namespace key a
+  /// share is sealed to; see `PutRequestOptions.sealToNamespace`.
   Future<String> prepareWrite(AtKey atKey,
       {String? requestedProviderId,
+      String? sealToNamespace,
       bool? useRemoteAtServer,
       bool stampProviderId = true}) async {
     final providerId =
@@ -54,7 +58,7 @@ class CryptoRuntime {
       atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
     }
     await prepareForPut(atKey, providerId,
-        useRemoteAtServer: useRemoteAtServer);
+        sealToNamespace: sealToNamespace, useRemoteAtServer: useRemoteAtServer);
     return providerId;
   }
 
@@ -66,13 +70,19 @@ class CryptoRuntime {
   /// key's `appMetadata`, because at this point nothing has stamped it yet.
   /// [useRemoteAtServer] carries how this write is being routed, so a provider
   /// writing a record the write will depend on can route it the same way.
+  /// [sealToNamespace] is refused for a provider that prepares nothing, since
+  /// such a provider seals to no namespace key.
   Future<void> prepareForPut(AtKey atKey, String providerId,
-      {bool? useRemoteAtServer}) async {
+      {String? sealToNamespace, bool? useRemoteAtServer}) async {
     final config = CryptoConfig.forClient(_atClient);
     final provider = config.lookup(providerId);
     if (provider is PreparesWrites) {
       await (provider as PreparesWrites).prepareForWrite(_context(), atKey,
+          sealToNamespace: sealToNamespace,
           useRemoteAtServer: useRemoteAtServer);
+    } else if (sealToNamespace != null) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'the $providerId provider seals to no namespace key');
     }
   }
 
@@ -88,6 +98,31 @@ class CryptoRuntime {
   /// advertised key — if what came back cannot be verified as theirs.
   Future<bool> isReadyFor(String atSign, String namespace) => isReadyUnder(
       CryptoConfig.forClient(_atClient).defaultProviderId, atSign, namespace);
+
+  /// Whether [atSign] advertises a namespace key at exactly [namespace] that
+  /// this client can seal to: what a share with that `sealToNamespace` needs.
+  /// A key at a broader namespace does not count.
+  ///
+  /// Asked of the atServer whatever a share found missing, and answered from
+  /// a key found within the key ring's cache. Never throws: false also for a
+  /// client configured with no namespace-key provider, for an advertisement
+  /// that does not verify as [atSign]'s, and when the asking fails, such as
+  /// when [atSign]'s atServer cannot be reached; those last two log a warning
+  /// naming the cause.
+  Future<bool> canSealTo(String atSign, String namespace) async {
+    final ckManager = CryptoConfig.forClient(_atClient).ckManager;
+    if (ckManager == null) return false;
+    try {
+      return await ckManager.resolver.resolveAt(atSign, namespace) != null;
+    } on AtSigningVerificationException catch (e) {
+      _logger.warning('canSealTo answers false for $atSign:$namespace '
+          'because its advertisement there does not verify: $e');
+    } catch (e) {
+      _logger.warning('canSealTo answers false for $atSign:$namespace '
+          'because asking for its key there failed: $e');
+    }
+    return false;
+  }
 
   /// Whether a write to [atSign] in [namespace] can go out under [providerId],
   /// asked as [isReadyFor] asks it of the default scheme. True for a scheme

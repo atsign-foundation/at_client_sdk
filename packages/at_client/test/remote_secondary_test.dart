@@ -42,9 +42,8 @@ void main() {
     test(
         'the lookup it builds is a muxable carrying an authenticator, not a '
         'lookup with credentials parked on it', () async {
-      final preference = AtClientPreference()..privateKey = 'dummy_private_key';
-      final remoteSecondary =
-          RemoteSecondary(atsign, preference, lookUps: secureSocketLookUps());
+      final remoteSecondary = RemoteSecondary(atsign, AtClientPreference(),
+          privateKey: 'dummy_private_key', lookUps: secureSocketLookUps());
 
       expect(remoteSecondary.atLookUp, isA<AtLookupMuxable>(),
           reason: 'withSecureSocket returns the muxable, which is the only '
@@ -140,9 +139,8 @@ void main() {
           lookUps: secureSocketLookUps(),
           atKeysIo:
               keysHoldingApkam(atSign, null, pkamKeyPairFor(atSign, null))),
-      'privateKey': () => RemoteSecondary(
-          atSign, preference()..privateKey = 'unused',
-          lookUps: secureSocketLookUps()),
+      'privateKey': () => RemoteSecondary(atSign, preference(),
+          privateKey: 'unused', lookUps: secureSocketLookUps()),
       'cramSecret': () => RemoteSecondary(
           atSign, preference()..cramSecret = 'unused',
           lookUps: secureSocketLookUps()),

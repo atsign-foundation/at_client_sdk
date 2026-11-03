@@ -181,7 +181,8 @@ atSign, the root domain, the authenticator, an optional address finder and the
 client config and returning an `AtLookupMuxable`, and `secureSocketLookUps`,
 the default that builds through `withSecureSocket` on the TLS transport. The
 verbs (`open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`),
-`buildAtClient` and `AtServiceFactory.atClient` take `lookUps:`; the client
+and `buildAtClient` take `lookUps:`, as `AtServiceFactory.atClient` did until
+at_client 4.0 removed it; the client
 holds it, and the client's own connection, sync's, the monitor's and the
 re-derive after a retrofit all ask it (the file-stream path did too, until
 the stream verb was retired). The Flutter

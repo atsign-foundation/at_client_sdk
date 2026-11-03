@@ -81,7 +81,18 @@ class NskeyPrivateFiling {
   /// across namespaces, the same reason the content-key cache is never keyed
   /// by `ckKid` alone.
   static String keyIdFor(String namespace, String nskeyKid) =>
-      nskeyKeyfileIdFor(namespace, nskeyKid);
+      nskeyKeyfileIdFor(namespace.toLowerCase(), nskeyKid);
+
+  /// What [keys] holds in [role] for `(namespace, nskeyKid)`, however the
+  /// namespace was spelt when it was filed.
+  static CryptographicMaterial? _materialFor(AtKeys keys, String namespace,
+      String nskeyKid, CryptographicMaterialRole role) {
+    final keyId = keyIdFor(namespace, nskeyKid);
+    return keys.getAtSignKey(keyId, role) ??
+        keys.atSignKeys
+            .where((m) => m.role == role && m.keyId.toLowerCase() == keyId)
+            .firstOrNull;
+  }
 
   final AtKeysIo keysIo;
   final String atSign;
@@ -101,10 +112,20 @@ class NskeyPrivateFiling {
   final Future<NskeyAdvertisement?> Function(String namespace, String nskeyKid)?
       publishedGeneration;
 
+  /// How long [filedNamespaces] answers from its last read of the keyfile
+  /// before reading it again.
+  final Duration namespacesReadEvery;
+
+  /// How long [filedNamespaces] answers with a failed read's error before
+  /// reading the keyfile again.
+  final Duration namespacesRetryEvery;
+
   NskeyPrivateFiling({
     required this.keysIo,
     required String atSign,
     this.publishedGeneration,
+    this.namespacesReadEvery = const Duration(minutes: 1),
+    this.namespacesRetryEvery = const Duration(seconds: 10),
   }) : atSign = atSign.toAtsign();
 
   /// A filing that checks each arriving private against the generation
@@ -151,9 +172,18 @@ class NskeyPrivateFiling {
   /// Emitted after the material is readable, never before: a listener that
   /// re-reads on this signal must find what the signal says is there.
   void _announceFiled(String namespace, String nskeyKid) {
+    _namespacesFiledSince.add(namespace);
     if (_filed.isClosed) return;
     _filed.add((owner: atSign, namespace: namespace, nskeyKid: nskeyKid));
   }
+
+  /// The namespaces the keyfile held privates for at [filedNamespaces]'s last
+  /// read that succeeded, and when its last read, failed or not, ended.
+  Set<String> _namespacesOnFile = const {};
+  DateTime? _namespacesReadAt;
+
+  /// The namespaces of every private filed through this filing.
+  final Set<String> _namespacesFiledSince = {};
 
   /// Releases the signal. A filing whose owner is gone announces to nobody.
   Future<void> close() => _filed.close();
@@ -303,6 +333,8 @@ class NskeyPrivateFiling {
       return await keysIo.read(atSign);
     } on AtKeysSourceAbsentException {
       return null;
+    } on StoppedException {
+      rethrow;
     } catch (e) {
       _logger.severe('Cannot read this atSign\'s key source while looking up '
           '$context, so no nskey private can be found — the material may be '
@@ -324,7 +356,7 @@ class NskeyPrivateFiling {
     final keys = await _readSourceOrNull('$namespace:$nskeyKid');
     if (keys == null) return null;
     try {
-      final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
+      final material = _materialFor(keys, namespace, nskeyKid,
           CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
       final keyAlgo = _keyAlgoOf(material);
@@ -359,7 +391,7 @@ class NskeyPrivateFiling {
     final keys = await _readSourceOrNull('$namespace:$nskeyKid');
     if (keys == null) return null;
     try {
-      final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
+      final material = _materialFor(keys, namespace, nskeyKid,
           CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
       return NskeySeed(Uint8List.fromList(material.bytes.bytes));
@@ -390,12 +422,12 @@ class NskeyPrivateFiling {
   Future<List<FiledNskeySeed>> filedFor(String namespace) async {
     final keys = await _readSourceOrNull('every private for $namespace');
     if (keys == null) return const [];
-    final prefix = '$nskeyKeyfileIdPrefix$namespace.';
+    final prefix = '$nskeyKeyfileIdPrefix${namespace.toLowerCase()}.';
     return [
       for (final material in keys.atSignKeys)
         if (material.role == CryptographicMaterialRole.privateDecapsulation &&
             material.status == CryptographicMaterialStatus.active &&
-            material.keyId.startsWith(prefix) &&
+            material.keyId.toLowerCase().startsWith(prefix) &&
             !material.keyId.substring(prefix.length).contains('.'))
           if (_keyAlgoOf(material) case final keyAlgo?)
             (
@@ -404,6 +436,21 @@ class NskeyPrivateFiling {
               keyAlgo: keyAlgo,
               createdAt: material.createdAt,
             )
+    ];
+  }
+
+  /// The kid of every private filed for [namespace], retired ones included,
+  /// whatever algorithm it expands under.
+  Future<List<String>> kidsFiledFor(String namespace) async {
+    final keys = await _readSourceOrNull('the privates filed for $namespace');
+    if (keys == null) return const [];
+    final prefix = '$nskeyKeyfileIdPrefix${namespace.toLowerCase()}.';
+    return [
+      for (final material in keys.atSignKeys)
+        if (material.role == CryptographicMaterialRole.privateDecapsulation &&
+            material.keyId.startsWith(prefix) &&
+            !material.keyId.substring(prefix.length).contains('.'))
+          material.keyId.substring(prefix.length)
     ];
   }
 
@@ -427,6 +474,50 @@ class NskeyPrivateFiling {
       return const {};
     }
     return keys == null ? const {} : _heldIn(keys, (_) => true);
+  }
+
+  /// The namespaces this atSign holds a filed private for, spelt as filed.
+  ///
+  /// The keyfile is read at most once every [namespacesReadEvery], so another
+  /// process's filings show within that window; a call made while it is being
+  /// read waits for that read. A read that fails is thrown to every call for
+  /// [namespacesRetryEvery] after it, rather than answered as holding nothing,
+  /// and then tried again; a keyfile that does not exist holds nothing. Every
+  /// private this filing files or finds already filed is added at once.
+  Future<Set<String>> filedNamespaces() async {
+    final readAt = _namespacesReadAt;
+    final failed = _namespacesReadFailure;
+    final every = failed == null ? namespacesReadEvery : namespacesRetryEvery;
+    if (readAt == null || DateTime.now().difference(readAt) >= every) {
+      await (_namespacesReading ??= _readNamespaces());
+    } else if (failed != null) {
+      Error.throwWithStackTrace(failed.error, failed.stackTrace);
+    }
+    return {..._namespacesOnFile, ..._namespacesFiledSince};
+  }
+
+  Future<void>? _namespacesReading;
+
+  /// How the last read failed, or null when it succeeded.
+  ({Object error, StackTrace stackTrace})? _namespacesReadFailure;
+
+  Future<void> _readNamespaces() async {
+    try {
+      final keys =
+          await _readSourceOrNull('the namespaces of every held private');
+      _namespacesOnFile =
+          keys == null ? {} : _heldIn(keys, (_) => true).keys.toSet();
+      _namespacesReadFailure = null;
+      _namespacesReadAt = DateTime.now();
+    } on StoppedException {
+      rethrow;
+    } catch (e, stackTrace) {
+      _namespacesReadFailure = (error: e, stackTrace: stackTrace);
+      _namespacesReadAt = DateTime.now();
+      rethrow;
+    } finally {
+      _namespacesReading = null;
+    }
   }
 
   /// Every private this client holds in a namespace [include] accepts, grouped
@@ -474,13 +565,10 @@ class NskeyPrivateFiling {
     await io.update(atSign.toAtsign(), (keys) {
       var retired = false;
       for (final nskeyKid in nskeyKids) {
-        final keyId = keyIdFor(namespace, nskeyKid);
-        if (keys.getAtSignKey(
-                keyId, CryptographicMaterialRole.privateDecapsulation) ==
-            null) {
-          continue;
-        }
-        keys.retireAtSignKey(keyId);
+        final private = _materialFor(keys, namespace, nskeyKid,
+            CryptographicMaterialRole.privateDecapsulation);
+        if (private == null) continue;
+        keys.retireAtSignKey(private.keyId);
         retired = true;
       }
       return retired;
@@ -505,14 +593,15 @@ class NskeyPrivateFiling {
     await io.update(atSign.toAtsign(), (keys) {
       var added = false;
       for (final nskeyKid in nskeyKids) {
-        final keyId = keyIdFor(namespace, nskeyKid);
-        final private = keys.getAtSignKey(
-            keyId, CryptographicMaterialRole.privateDecapsulation);
+        final private = _materialFor(keys, namespace, nskeyKid,
+            CryptographicMaterialRole.privateDecapsulation);
         if (private == null) continue;
         owed = true;
-        if (keys.getAtSignKey(keyId, rotationOwedRole) != null) continue;
+        if (_materialFor(keys, namespace, nskeyKid, rotationOwedRole) != null) {
+          continue;
+        }
         keys.addKey(CryptographicMaterial(
-          keyId: keyId,
+          keyId: private.keyId,
           role: rotationOwedRole,
           algorithm: private.algorithm,
           // NOTE: never empty; a keyfile holding a material with no bytes is
@@ -534,8 +623,7 @@ class NskeyPrivateFiling {
     final keys = await _readSourceOrNull('the rotations owed in $namespace');
     if (keys == null) return false;
     return nskeyKids.any((nskeyKid) =>
-        keys.getAtSignKey(keyIdFor(namespace, nskeyKid), rotationOwedRole) !=
-        null);
+        _materialFor(keys, namespace, nskeyKid, rotationOwedRole) != null);
   }
 
   /// Stores an nskey **seed** this client either minted or was conveyed.
@@ -583,11 +671,13 @@ class NskeyPrivateFiling {
     // the signing-root filing writes first — a client's start runs both as
     // sibling unawaited tasks.
     var filed = false;
+    var alreadyFiled = false;
     try {
       await io.update(atSign.toAtsign(), (keys) {
-        if (keys.getAtSignKey(
-                keyId, CryptographicMaterialRole.privateDecapsulation) !=
+        if (_materialFor(keys, namespace, nskeyKid,
+                CryptographicMaterialRole.privateDecapsulation) !=
             null) {
+          alreadyFiled = true;
           return false;
         }
         keys.addKey(CryptographicMaterial(
@@ -606,6 +696,7 @@ class NskeyPrivateFiling {
       return false;
     }
     if (filed) _announceFiled(namespace, nskeyKid);
+    if (alreadyFiled) _namespacesFiledSince.add(namespace);
     return filed;
   }
 }

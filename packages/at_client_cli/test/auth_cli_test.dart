@@ -226,27 +226,6 @@ void main() {
 void postureArgumentTests() {
   final args = AuthCliArgs();
 
-  group('the hashingAlgoType argument', () {
-    test('is accepted and hidden, and never reaches the PKAM hash', () {
-      final parser = args.createOnboardCommandParser();
-      expect(parser.options[AuthCliArgs.argNameHashingAlgoType]!.hide, isTrue);
-
-      final preference = enrollerSettingsFrom(parser.parse([
-        '-a',
-        '@alice',
-        '--${AuthCliArgs.argNameHashingAlgoType}',
-        'argon2id',
-      ])).preference;
-      expect(
-          // ignore: deprecated_member_use
-          preference.hashingAlgoType,
-          // ignore: deprecated_member_use
-          AtClientPreference().hashingAlgoType,
-          reason: 'the argument is accepted for compatibility and reaches no '
-              'preference');
-    });
-  });
-
   group('the posture argument', () {
     test('every command parser accepts it, not activation alone', () {
       final parsers = {

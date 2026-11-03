@@ -15,9 +15,9 @@ opened.
 import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
 final keys = FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys');
-final preference = AtClientPreference()
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';
+final preference = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';
 final storage = HiveAtClientStorage(
     atSign: '@alice', storagePath: dir.path, closedByClient: true);
 final lookUps = secureSocketLookUps();
@@ -38,13 +38,27 @@ final owner = await Atsign('@alice').activate(
 // Enroll this app with an atSign whose keys another device holds. The
 // request is filed in `keys` as pending, so a restart resumes it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
-    device: 'phone', namespaces: {'my_namespace': 'rw'}, keys: keys,
+    device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
 final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
+// pending.cancel() abandons the enrollment: it ends that wait and removes
+// the pending keys from `keys`, as a denial does, so resumeEnrollment finds
+// nothing. It throws when `keys` cannot remove them; call it again. Call it
+// when the user confirms they give up on the request (a Cancel button).
+// pending.stop() ends the wait and keeps the request: call it from a
+// dispose() that only leaves the screen, and resumeEnrollment picks the
+// request up later. The request stays on the atServer until its manager
+// decides it, or it expires, which removes the pending keys as a denial
+// does. Tell the atSign's manager to deny a cancelled request: an approval
+// after cancel creates an enrollment nobody can use, which the manager
+// would then revoke. Both return once any client the wait opened has
+// stopped: when pending.approved says the approval landed first, open the
+// atSign on `keys` at once.
 final resumed = await Atsign('@alice').resumeEnrollment(
     app: 'my_app', device: 'phone', keys: keys, preference: preference,
     lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending
+// With no app or device, it resumes the one pending enrollment `keys` holds.
 
 // Which enrollment a keys store authenticates as, without building a client.
 final principal = await Atsign('@alice').authenticatesAs(keys: keys,
@@ -69,8 +83,11 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
 | `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
+| `AtEnrollmentPendingException`  | `resumeEnrollment` found several pending enrollments matching what it was given                          | Name both `app` and `device`                                  |
 | `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
-| `AtEnrollmentException`         | `pending.client(...)`: the request was denied                                                            | Tell the user; a new `enroll` is a new request                |
+| `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired                                                | Tell the user; a new `enroll` is a new request                |
+| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
+| `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
 | `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
 
 ---
@@ -192,7 +209,7 @@ runs on its own from the moment the client is built:
   moved), and every `AtClientPreference.syncIntervalMins` (default 10) as a
   fallback;
 - `sync()` requests a round now; requests coalesce, so a burst of calls is one
-  round;
+  round, and calls made while a round runs share one more round once it ends;
 - `isInSync()` asks the atServer fresh and answers whether nothing is left to
   push and the local store has everything the client's sync filter admits;
 - `isSyncInProgress`, and `addProgressListener(SyncProgressListener)` for
@@ -203,8 +220,8 @@ Set `AtClientPreference.syncRegex` to your namespace ([11-sync.md](11-sync.md)).
 Reads are local; writes apply locally at once and push in the background, and
 a write made offline pushes when the atServer is reached.
 
-`AtClientManager.getInstance().syncService` is deprecated: the service is the
-client's.
+`AtClientManager.getInstance().syncService` is gone in 4.0: the service is
+the client's.
 
 ---
 
@@ -214,7 +231,7 @@ client's.
 
 ```dart
 final sub = client.notificationService
-    .subscribe(regex: r'\.my_namespace@', shouldDecrypt: true)
+    .subscribe(regex: r'\.my_app@', shouldDecrypt: true)
     .listen((n) => handle(n));
 ```
 
@@ -227,10 +244,11 @@ final sub = client.notificationService
   `currentListenerStateStream` to emit `NotificationListenerState.listening`.
 - The monitor reconnects on its own after a network loss until
   `stopListening()`; `currentListenerState` says where it is.
-- `send(to:, namespace:, body:, expiration:)` for fire-and-forget; `notify(...)`
-  for the full `NotificationParams`. A `notify` that does not wait for the
-  final status (`waitForFinalDeliveryStatus: false`) reports a failure through
-  `onError`; either way, a stop ends the status poll and the result says so.
+- `send(to:, idAndNamespace:, body:, expiration:)` for fire-and-forget;
+  `notify(...)` for the full `NotificationParams`. A `notify` that does not
+  wait for the final status (`waitForFinalDeliveryStatus: false`) reports a
+  failure through `onError`; either way, a stop ends the status poll and the
+  result says so.
 - `stopAllSubscriptions()` cancels every subscription and, by default, the
   monitor. `stop()` on the client does this for you.
 

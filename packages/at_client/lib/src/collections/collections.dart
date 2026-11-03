@@ -3670,11 +3670,6 @@ final class Query<T> {
     return _spec._apply(all);
   }
 
-  /// Deprecated alias for [get] — keeps existing call-sites compiling
-  /// while they migrate. Will be removed in the next minor release.
-  @Deprecated('use get() instead — fetch() will be removed in the next minor')
-  Future<List<CItem<T>>> fetch() => get();
-
   /// One-shot fetch with duplicates removed by [keyFn]. The first
   /// matching item per key is kept; subsequent items mapping to the
   /// same key are dropped. Order is the same first-seen order as

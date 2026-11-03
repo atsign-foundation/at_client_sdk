@@ -139,6 +139,24 @@ AtKey currentCkPointerKey(
       ..sharedBy = sharedBy
       ..metadata = Metadata();
 
+/// The leading segment of a client's record that it verified its own
+/// namespace-key advertisement:
+/// `local:__nskeyverified.<namespace>.<enrollmentId>.a.__e@<atSign>`.
+const String verifiedAdvertisementRecordName = '__nskeyverified';
+
+/// The local at-key holding [enrollmentId]'s record that it verified
+/// [sharedBy]'s advertisement for [namespace]. Local, so it never syncs.
+AtKey verifiedAdvertisementKey(
+        {required String sharedBy,
+        required String enrollmentId,
+        required String namespace}) =>
+    AtKey()
+      ..key = '$verifiedAdvertisementRecordName.$namespace'
+      ..namespace = '$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
+      ..sharedBy = sharedBy
+      ..isLocal = true
+      ..metadata = Metadata();
+
 /// The record name of the atSign's signing root:
 /// `public:pq_signing_root@<atSign>`, no namespace.
 const String pqSigningRootRecordName = 'pq_signing_root';

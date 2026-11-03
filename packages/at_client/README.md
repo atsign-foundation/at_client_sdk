@@ -120,17 +120,20 @@ summary is:
    root of trust — **end users must back them up**, losing them means
    losing the atSign.
 3. **Authenticate** subsequent apps via **APKAM enrollment**: the app
-   requests only the namespaces it needs (e.g. `{'todos': 'rw'}`), the
-   master-keys holder approves, and the atServer issues a new scoped
-   AtKeys set. Scoped keys can be **revoked** at any time; a
-   compromised scoped key can only damage data in its granted
-   namespaces.
+   mints its own keypair and requests only the namespaces it needs (e.g.
+   `{'todos': 'rw'}`), and the master-keys holder approves, sealing the
+   atSign's encryption keys for it; the atServer keeps the sealed copies and
+   the enrollment's public key, and can open none of the secrets. Scoped
+   keys can be **revoked** at any time; a compromised scoped key can
+   only damage data in its granted namespaces.
 
 ### In code: four verbs
 
 `at_client` owns the whole of that lifecycle. An app holds an `AtKeysIo`
-(a `.atKeys` file, the platform keychain, or memory) and asks the atSign
-for a client; every verb hands back an `AtClient` the app owns and stops.
+(a `.atKeys` file or the platform keychain; `activate`, `enroll` and
+`resumeEnrollment` write to it, so they take a `WrittenAtKeysIo`) and asks
+the atSign for a client; every verb hands back an `AtClient` the app owns
+and stops.
 
 ```dart
 import 'package:at_client/at_client_io.dart';
@@ -149,7 +152,7 @@ final atDirectory = CacheableSecondaryAddressFinder('root.atsign.org', 64);
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: storage(),
-    preference: AtClientPreference()..namespace = 'todos',
+    preference: AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos',
     lookUps: lookUps,
     secondaryAddressFinder: atDirectory);
 client.connection.current;                  // online | offline | refused
@@ -189,8 +192,10 @@ AtClientManager.getInstance().use(client);
 
 Four things are the platform's to supply, and every verb takes them the
 same way; at_client_cli and at_client_flutter supply each for their apps.
-**`keys:`** is where the atSign's keys live (`FileAtKeysIo`, the
-Flutter keychain, memory); **`storage:`** is the client's local store, each
+**`keys:`** is where the atSign's keys live (`FileAtKeysIo` or the
+Flutter keychain), and it must outlive the process, since a client files key
+material there that exists nowhere else; **`storage:`** is the client's
+local store, each
 backend from its own import (`HiveAtClientStorage` from
 `package:at_client/hive.dart`, `SqliteAtClientStorage` from
 `package:at_client/sqlite.dart`, `InMemoryAtClientStorage` from
@@ -207,7 +212,7 @@ import 'package:at_client/hive.dart';
 final client = await Atsign('@alice').open(
     keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
     storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir, closedByClient: true),
-    preference: AtClientPreference()..namespace = 'todos',
+    preference: AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos',
     secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64),
     lookUps: secureSocketLookUps(
         config: SecureSocketConfig()..pathToCerts = '/certs',
@@ -272,6 +277,14 @@ await for (final e in todos.updates) {
 }
 ```
 
+A share reads the recipient's key from their atServer whenever this client
+has no current copy of it, so it can need the network when the self copy
+does not. With the atServer out of reach, `create(sharedWith: ...)` writes
+the self copy and then throws a `CollectionOpException` naming each
+recipient's copy it could not write. The item is listed, and nothing sends
+the share later: retry it with `updateSharedWith(item, ...)`, not `create`,
+which would write a second item.
+
 `update` / `delete` / `create` fire `CItemUpdated` / `CItemDeleted`
 on the writing collection's event streams as soon as the local write
 lands — no waiting for the network round-trip — so a UI using
@@ -304,8 +317,8 @@ final openCount = await todos.query().where((t) => !t.obj.done).count();
 final byOwner   = await todos.query().groupBy<Atsign>((t) => t.owner);
 ```
 
-Queries are immutable values — build once, store, pass, fetch or
-watch. `watch()` does incremental delta maintenance for
+Queries are immutable values — build once, store, pass, `get()` or
+`watch()`. `watch()` does incremental delta maintenance for
 non-paginated queries (single-item read on each event, not a full
 re-scan). For ad-hoc pipelines outside the builder's vocabulary,
 `getItemsAsStream().where(...)` remains supported as an escape
@@ -515,9 +528,13 @@ authenticate with a post-quantum signature. It is opt-in per client, through
 the preference's **posture**, which is fixed at construction:
 
 ```dart
-final preference = AtClientPreference(posture: PqPosture.pqReady)
+final preference = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'todos';
 ```
+
+A new app names `pqActive`. An app built on 3.x moves in two steps,
+as [the rollout ladder](#the-rollout-ladder-and-why-it-is-a-ladder)
+describes.
 
 ### The goals
 
@@ -576,8 +593,10 @@ final ready = AtClientPreference(posture: PqPosture.pqReady)..namespace = 'todos
 final active = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos';
 ```
 
-That is the two-release model for an app that wants to lead: ship `pqReady`
-to all of its clients first, then ship `pqActive`. A posture is a floor for
+An app built on 3.x, whose data is legacy-encrypted, takes two steps:
+rebuild it with `PqPosture.pqReady` and roll that out to every client,
+then rebuild it with `PqPosture.pqActive` and roll that out. A new app
+has no legacy readers and starts at `pqActive`. A posture is a floor for
 what a client drives, never a downgrade of what its atSign already holds.
 
 | Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |
@@ -603,9 +622,35 @@ What each posture switches on:
   A write that finds it missing first fetches what was conveyed to this
   client, and only then throws `NskeyPrivateNotHeldException`;
   `ensureReachable` reports `holdsPrivate`.
+- **Sharing.** A share is sealed to the most specific namespace key the
+  recipient advertises for the key's whole name: `x.notes.todos.demos` goes
+  to the recipient's `notes.todos.demos` key if it has one, else its
+  `todos.demos` key, else its `demos` key. The levels are looked up in one
+  batch. A found key is reused for 15 minutes, and a level found missing is
+  not asked about again for 30 seconds. `PutRequestOptions.sealToNamespace`,
+  or `sealToNamespace` on a notification, requires one namespace instead,
+  and `CryptoRuntime(atClient).canSealTo(recipient, namespace)` says whether
+  the recipient advertises a key there, answering false with a warning when
+  it cannot tell. When nothing fits, the share throws
+  `NamespaceKeyUnavailableException`, or uses legacy encryption where
+  `allowLegacyCryptoFallback` allows; it is never sealed to a broader key
+  than a required namespace. A program serving a mixed fleet, such as
+  daemons only some of which advertise `<device>.sshnp`, runs
+  `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` with
+  `allowLegacyCryptoFallback` and requires each daemon's namespace. It can
+  instead run `pqReady` with `allowLegacyCryptoFallback`, ask `canSealTo`,
+  and request `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where
+  the answer is true.
+- **A write right after opening.** A client's start-up publishes its
+  namespace keys after `open` returns. A write to the client's own atSign
+  that finds no key while start-up is still to publish one for its
+  namespace waits for it, up to 30 seconds, then throws
+  `NamespaceKeyUnavailableException` naming the key, with start-up's reason
+  when it could not publish it. A write made with no atServer reachable does
+  not wait, and nor does a share.
 - **Who mints a namespace key.** Only an enrollment carrying a key package
   mints one, and it conveys the private to the namespace's other enrollments
-  before publishing it. A client on the atSign's own credential mints nothing,
+  before publishing it. A client on the primary enrollment mints nothing,
   and `ensureReachable` answers `AtReachability.noKeyPackage`.
 - **Rotation.** A content key is replaced once it is a year old, and a
   namespace key once its generation is a year old; `CryptoConfig`'s
@@ -643,7 +688,14 @@ doesn't check the version.
 
 `pqActive` is for a deployment that controls every client of its
 namespaces and has seeded them: a destination with no published namespace
-key is refused rather than written with the legacy provider. The design,
+key is refused rather than written with the legacy provider. Set
+`preference.namespace` under it: a client whose enrollment is granted `*`
+holds a namespace key only for that namespace, so with none set it has none
+to write with. A device's first write in a namespace needs the atServer,
+which seeds or conveys that namespace's key, and a share needs it whenever
+the client holds no current copy of the recipient's key. Once a device has
+written in a namespace, it goes on writing there offline, across restarts.
+The design,
 the acceptance catalogue and the decision log are under
 [`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
 

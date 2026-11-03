@@ -770,7 +770,7 @@ class PqSigningRoot {
 
     if (await privateHalf(atSign) != null) return 0;
 
-    // NOTE: the atSign's own credential does not ask: it advertises no key
+    // NOTE: the primary enrollment does not ask: it advertises no key
     // package, so no holder could seal the answer to it.
     if (isAtSignCredential(atClient.enrollmentId)) {
       return 0;

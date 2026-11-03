@@ -4,6 +4,8 @@ import 'package:test/test.dart';
 
 /// A registrar that answers every request for a free atSign with an error.
 class _RefusingRegistrar extends OnboardingUtil {
+  _RefusingRegistrar() : super('app-key');
+
   @override
   Future<List<String>> getFreeAtSigns(
           {int amount = 1, String authority = ''}) async =>

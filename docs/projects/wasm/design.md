@@ -624,7 +624,7 @@ tries to open it. The type system never objects.
 **Design, as landed.** The preference stays what it is — serialisable tuning — and the
 platform capabilities travel beside it as named parameters on every entry point
 (`Atsign.open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`,
-`buildAtClient`, `AtServiceFactory.atClient`), held on the client and handed to
+`buildAtClient`), held on the client and handed to
 everything under it. Three legs, the **platform bundle**:
 
 | Leg        | Parameter  | Type                          | Ruled                                                                 | The core's one default seam                                                 |
@@ -642,9 +642,9 @@ will move out. And a platform implementer is three objects handed to the doors, 
 fork of at_client: `at_client_web` is a WebSocket `AtLookupMuxable` behind a factory, a
 SQLite-wasm `AtClientStorage` and an IndexedDB `WrittenAtKeysIo`. The two candidates
 this section once weighed — `CryptoConfig` on the preference, and `AtServiceFactory`
-as the DI hook — were not chosen: `AtServiceFactory.atClient` takes the bundle rather
-than owning it, so its one shipping override keeps working, and the preference carries
-no live object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
+as the DI hook — were not chosen: `AtServiceFactory.atClient` took the bundle rather
+than owning it, until at_client 4.0 removed it, and the preference carries no live
+object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
 D-15 its answers for the two legs that have shipped.
 
 The filesystem paths in the table above are what the legs replace, each deprecated when

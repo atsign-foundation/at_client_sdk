@@ -1273,6 +1273,31 @@ void main() {
     });
 
     test(
+        'Given a client stopped before its services were set, when its '
+        'envelope listener attaches, then it attaches to nothing and warns '
+        'nothing', () async {
+      final syncService = MockSyncService();
+      when(() => syncService.addProgressListener(any())).thenAnswer((_) {});
+      final listeningB =
+          buildSharer('enroll-b', seedB, syncService: syncService);
+      await listeningB.register();
+      final client = listeningB.atClient as MockAtClient;
+      when(() => client.syncService)
+          .thenThrow(StoppedException('the client has stopped'));
+      when(() => client.notificationService)
+          .thenThrow(StoppedException('the client has stopped'));
+
+      await listeningB.startListening();
+      listeningB.attachToServices();
+
+      verifyNever(() => syncService.addProgressListener(any()));
+      expect(logs.at('WARNING').where((m) => m.contains('envelope')), isEmpty,
+          reason: 'a stopped client\'s services read as absent, as before '
+              'they are set');
+      listeningB.stopListening();
+    });
+
+    test(
         'a client holding no key package starts no listener and throws '
         'nothing, however the services arrive', () async {
       final syncService = MockSyncService();

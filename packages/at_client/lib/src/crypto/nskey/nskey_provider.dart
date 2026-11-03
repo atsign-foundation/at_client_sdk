@@ -54,10 +54,14 @@ class NskeyRecipientKind {
 /// anything, and is as current as this is.
 ///
 /// There is no post-quantum fallback to offer: the only atSign-level key is a
-/// signing root, which cannot receive an encapsulation. The escape hatch is the
-/// legacy path, and it is opt-in
-/// ([AtClientPreference.allowLegacyCryptoFallback]) because a silent downgrade
-/// to RSA is exactly what this design exists to stop.
+/// signing root, which cannot receive an encapsulation. Below
+/// `PqPosture.pqActive`, `AtClientPreference.allowLegacyCryptoFallback` sends
+/// such a write by the legacy path instead; at `pqActive` nothing does, since
+/// a silent downgrade to RSA is what that posture refuses.
+///
+/// When this client's own start-up has yet to publish the key, a write waits
+/// for it first, at most 30 seconds; this then says so, and a later write
+/// succeeds once the key is published.
 class NamespaceKeyUnavailableException extends AtEncryptionException {
   /// The atSign whose namespace key is missing — the recipient for a share, or
   /// the writer for self data.
@@ -65,11 +69,13 @@ class NamespaceKeyUnavailableException extends AtEncryptionException {
 
   final String namespace;
 
-  NamespaceKeyUnavailableException(this.atSign, this.namespace)
-      : super('$atSign has no published nskey for "$namespace" — that '
-            'namespace has not been used or authorised there, so there is no '
-            'post-quantum key to seal a content key to. Reaching it needs the '
-            'legacy path, which must be opted into explicitly.');
+  /// [because], when given, says why in place of the usual explanation.
+  NamespaceKeyUnavailableException(this.atSign, this.namespace,
+      {String? because})
+      : super('$atSign has no published nskey for "$namespace" — '
+            '${because ?? 'that namespace has not been used or authorised '
+                'there, so there is no post-quantum key to seal a content key '
+                'to'}.');
 }
 
 /// Layer 2 of the nskey data path: conveys a symmetric content key.
