@@ -20,6 +20,9 @@
   namespace key's private (`SKILL.md`).
 - A client never runs below its posture floor, set by its keyfile's keys and
   its atSign's namespace keys (`SKILL.md`).
+- Sync's fallback is a 30-second timer; `AtClientPreference.syncIntervalMins`,
+  which set nothing, is listed as removed in 4.0 (`SKILL.md`; `references/11`,
+  `15`).
 - A notification a subscription drops, one it cannot decrypt included, is
   logged at warning and emitted on `droppedEvents` (`SKILL.md` §13).
 - An item a collection cannot read yet is a `CItemReadException`, which

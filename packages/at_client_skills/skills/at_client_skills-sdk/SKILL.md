@@ -513,7 +513,7 @@ await client.connection.attempt();                  // try again now
 **Services — both belong to the client, start with it and stop with it:**
 
 - `client.syncService` runs on its own: on every stats notification from the
-  atServer and every `syncIntervalMins`. `sync()` expedites a round,
+  atServer and on a 30-second timer. `sync()` expedites a round,
   `isInSync()` asks the atServer fresh, `addProgressListener` observes.
   at_client 4.0 removed the `AtClientManager` getters for these services.
 - `client.notificationService.subscribe(regex:, shouldDecrypt:)` — the monitor

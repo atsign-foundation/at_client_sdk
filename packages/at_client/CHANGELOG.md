@@ -273,6 +273,8 @@
   `useAtChops`, `signingAlgoType` and `hashingAlgoType` are removed. A client
   is given its storage, and signs with the keys in its `AtKeysIo`, which name
   the algorithm.
+- breaking: `AtClientPreference.syncIntervalMins` is removed; it set nothing,
+  and sync's fallback timer runs every 30 seconds.
 - breaking: `RemoteSecondary`'s `signingAlgoType` parameter and
   `PutRequestOptions.storeSharedKeyEncryptedMetadata`, which had no effect,
   are removed.

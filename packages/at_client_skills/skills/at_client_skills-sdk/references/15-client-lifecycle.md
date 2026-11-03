@@ -207,8 +207,7 @@ the client the app switches to via `AtClientManager.listenToAtSignChange`.
 runs on its own from the moment the client is built:
 
 - a round on every **stats notification** the atServer sends (its commit id
-  moved), and every `AtClientPreference.syncIntervalMins` (default 10) as a
-  fallback;
+  moved), and on a 30-second timer as a fallback;
 - `sync()` requests a round now; requests coalesce, so a burst of calls is one
   round, and calls made while a round runs share one more round once it ends;
 - `isInSync()` asks the atServer fresh and answers whether nothing is left to

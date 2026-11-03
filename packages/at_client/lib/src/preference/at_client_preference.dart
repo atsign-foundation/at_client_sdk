@@ -160,7 +160,6 @@ class AtClientPreference {
       ..namespace = namespace
       ..rootDomain = rootDomain
       ..rootPort = rootPort
-      ..syncIntervalMins = syncIntervalMins
       ..networkTimeout = networkTimeout
       ..maxDataSize = maxDataSize
       ..syncRegex = syncRegex
@@ -306,9 +305,6 @@ class AtClientPreference {
 
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
-
-  /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
-  int syncIntervalMins = 10;
 
   /// The process-wide default network timeout: the maximum wall-clock the SDK
   /// will spend reaching/using the atServer (connect + retries + waiting for a

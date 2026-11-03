@@ -264,6 +264,7 @@ These fields are gone. Delete each assignment:
 | `commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted` | nothing; they were read by nothing |
 | `outboundConnectionTimeout` | nothing |
 | `syncStrategy`, and the `SyncStrategy` enum | nothing; they were read by nothing |
+| `syncIntervalMins` | nothing; it was read by nothing, and sync's fallback timer runs every 30 seconds |
 | `isLocalStoreRequired`, `useAtChops`, `hashingAlgoType` | nothing; they were read by nothing |
 | `privateKey`, `signingAlgoType` | nothing: a client signs with the keys in its `AtKeysIo`, which name the algorithm; a `RemoteSecondary` built without one takes `privateKey:` |
 | `enforceNamespace` | nothing; every key except a `local:` one names a namespace |

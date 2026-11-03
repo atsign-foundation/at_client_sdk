@@ -87,7 +87,6 @@ void main() {
     'namespace': (p) => p.namespace,
     'rootDomain': (p) => p.rootDomain,
     'rootPort': (p) => p.rootPort,
-    'syncIntervalMins': (p) => p.syncIntervalMins,
     'networkTimeout': (p) => p.networkTimeout,
     'maxDataSize': (p) => p.maxDataSize,
     'syncRegex': (p) => p.syncRegex,
@@ -142,7 +141,6 @@ void main() {
         ..namespace = 'n.s'
         ..rootDomain = 'r.example'
         ..rootPort = 6464
-        ..syncIntervalMins = 3
         ..networkTimeout = const Duration(seconds: 7)
         ..maxDataSize = 99
         ..syncRegex = 'sr'
