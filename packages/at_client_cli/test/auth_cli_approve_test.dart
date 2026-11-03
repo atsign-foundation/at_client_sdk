@@ -292,10 +292,13 @@ void main() {
 
       final warned = await approveB();
 
-      expect(
-          warned, contains('will re-enroll itself at its first start and ask'));
+      expect(warned, contains('approving it conveys none of '),
+          reason: 'it says the approval conveys no namespace key');
+      expect(warned,
+          contains('run at pqReady or above, it re-enrolls at its first start'),
+          reason: 'and what the device does at each posture');
       expect(warned, contains('at_activate enroll --posture pqReady'),
-          reason: 'it says how to avoid both');
+          reason: 'and how to convey them now');
       expect(approvals, [b], reason: 'and approves the request as asked');
     });
 

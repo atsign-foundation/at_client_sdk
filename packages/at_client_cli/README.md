@@ -98,10 +98,11 @@ an rsa2048 enrollment with the pq key exchange is refused.
 
 On an atSign that has published any namespace key, enroll a device with
 `--posture pqReady` or above, so its approval conveys the namespace keys. A
-device enrolled at the legacy key exchange re-enrolls itself at its first
-start and asks the atSign's other enrollments for those keys, which only an
-enrollment online at the time can answer. `approve` warns when it approves
-such a request, and approves it as asked.
+device enrolled at the legacy key exchange whose app runs at pqReady or above
+re-enrolls itself at its first start and asks the atSign's other enrollments
+for those keys, which only an enrollment online at the time can answer; one
+whose app runs legacy reads none of the atSign's post-quantum data. `approve`
+warns when it approves such a request, and approves it as asked.
 
 ## APKAM enrollment
 

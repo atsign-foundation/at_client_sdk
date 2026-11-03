@@ -1095,12 +1095,13 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
         ' with appName "${er.appName}"'
         ' and deviceName "${er.deviceName}"');
     if (warnsOfLegacyExchange && _atLegacyKeyExchange(er)) {
-      stderr.writeln('Warning: $eId asks at the legacy key exchange, and '
-          '${atClient.getCurrentAtSign()} publishes a namespace key, so the '
-          'device will re-enroll itself at its first start and ask this '
-          'atSign\'s other enrollments for its namespace keys. Denying it and '
-          'requesting again with `at_activate enroll --posture pqReady` '
-          'avoids both. Approving it as asked.');
+      stderr.writeln('Warning: $eId asks at the legacy key exchange, so '
+          'approving it conveys none of ${atClient.getCurrentAtSign()}\'s '
+          'namespace keys. Run legacy, it reads none of the atSign\'s '
+          'post-quantum data; run at pqReady or above, it re-enrolls at its '
+          'first start and asks for them. To convey them now, deny it and '
+          'request again with `at_activate enroll --posture pqReady`. '
+          'Approving as asked.');
     }
     // NOTE: approving is also when this atSign's secrets are sealed to the new
     // device's key package, which is why it goes through the client.
