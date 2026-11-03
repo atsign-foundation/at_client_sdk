@@ -999,6 +999,11 @@ void main() {
     });
 
     /// Resumes the request in [store] for wavi on phone, over [server].
+    /// The message of a refusal to choose between pending enrollments e-one
+    /// and e-two: it names both and says what picks one.
+    final namesBothAndAsksForNames = allOf(contains('e-one'), contains('e-two'),
+        contains('name both the app and the device'));
+
     Future<PendingEnrollment?> resume(
         InMemoryAtKeysIo store, MockAtLookupImpl server) async {
       final pref = await preference();
@@ -1232,10 +1237,10 @@ void main() {
 
       await expectLater(
           resume(app: 'wavi'),
-          throwsA(isA<AtEnrollmentPendingException>().having(
-              (e) => e.pendingEnrollmentIds,
-              'pendingEnrollmentIds',
-              unorderedEquals(['e-one', 'e-two']))));
+          throwsA(isA<AtEnrollmentPendingException>()
+              .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
+                  unorderedEquals(['e-one', 'e-two']))
+              .having((e) => e.message, 'message', namesBothAndAsksForNames)));
       expect(
           (await resume(app: 'wavi', device: 'e-two'))?.enrollmentId, 'e-two');
       expect((await resume(device: 'e-one'))?.enrollmentId, 'e-one');
@@ -1255,10 +1260,10 @@ void main() {
               preference: pref,
               lookUps: secureSocketLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref)),
-          throwsA(isA<AtEnrollmentPendingException>().having(
-              (e) => e.pendingEnrollmentIds,
-              'pendingEnrollmentIds',
-              unorderedEquals(['e-one', 'e-two']))));
+          throwsA(isA<AtEnrollmentPendingException>()
+              .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
+                  unorderedEquals(['e-one', 'e-two']))
+              .having((e) => e.message, 'message', namesBothAndAsksForNames)));
     });
 
     test('A connection the app supplied is left open', () async {

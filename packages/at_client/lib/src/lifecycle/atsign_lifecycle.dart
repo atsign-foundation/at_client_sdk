@@ -396,8 +396,8 @@ extension AtsignLifecycle on Atsign {
   ///
   /// Each of [app] and [device] that is given narrows the search, and more
   /// than one pending enrollment left after it throws
-  /// [AtEnrollmentPendingException] naming them; with neither, [keys] must
-  /// hold one.
+  /// [AtEnrollmentPendingException.several], naming them and asking for both
+  /// names; with neither, [keys] must hold one.
   ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
   /// the enrollment opens, to the atServer [secondaryAddressFinder] finds,
@@ -428,7 +428,7 @@ extension AtsignLifecycle on Atsign {
           enrollmentId
     ];
     if (matching.length > 1) {
-      throw AtEnrollmentPendingException(this, matching);
+      throw AtEnrollmentPendingException.several(this, matching);
     }
     for (final enrollmentId in matching) {
       final info = stored.enrollmentInfo(enrollmentId);

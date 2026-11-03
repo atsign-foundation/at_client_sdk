@@ -165,4 +165,4 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   Scenario: Resuming by one name refuses a store holding several requests it names
     Given a store holding two pending requests for one app, from two devices
     When the app calls resumeEnrollment with only the app
-    Then it throws AtEnrollmentPendingException naming both, and naming a device as well resumes that one
+    Then it throws AtEnrollmentPendingException naming both and saying to name the app and device, and naming a device as well resumes that one

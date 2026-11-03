@@ -430,7 +430,9 @@ class AtEnrollmentCancelledException extends AtEnrollmentException {
 
 /// `open` was asked to open a keyfile that holds nothing but an enrollment
 /// awaiting approval, so there is no credential to authenticate with yet.
-/// `Atsign.resumeEnrollment` is the way to pick it up.
+/// `Atsign.resumeEnrollment` is the way to pick it up, and throws this too,
+/// from [AtEnrollmentPendingException.several], when more than one pending
+/// enrollment matches what it was given.
 class AtEnrollmentPendingException extends AtException {
   final String atSign;
   final List<String> pendingEnrollmentIds;
@@ -440,4 +442,11 @@ class AtEnrollmentPendingException extends AtException {
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
             '${pendingEnrollmentIds.join(', ')}: resume it with '
             'resumeEnrollment rather than opening it');
+
+  /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
+  /// enrollments of [atSign] matching what it was given.
+  AtEnrollmentPendingException.several(this.atSign, this.pendingEnrollmentIds)
+      : super('$atSign holds several pending enrollments that match: '
+            '${pendingEnrollmentIds.join(', ')}. To resume one, name both the '
+            'app and the device');
 }
