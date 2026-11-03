@@ -91,8 +91,8 @@ class _Client {
   }
 
   /// What start-up does for [namespace]: mints, files and publishes its key.
-  Future<String> seed(String namespace) async {
-    final pair = await XWingKeyPair.generate();
+  Future<String> seed(String namespace, {XWingKeyPair? generated}) async {
+    final pair = generated ?? await XWingKeyPair.generate();
     final kid = ring.seedKeypair(_alice, namespace,
         publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes);
     ring.held.add(namespace);
@@ -513,15 +513,16 @@ void main() {
         'when the wait runs out before seeding finishes, then the write '
         'resolves again and seals at todos.demos once that is published',
         timeout: const Timeout(Duration(seconds: 10)), () async {
-      StartUpSeeding.wait = const Duration(milliseconds: 300);
+      StartUpSeeding.wait = const Duration(seconds: 1);
       final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
       await c.seed('demos');
       wire(c);
+      final generated = await XWingKeyPair.generate();
       final key = AtKey.fromString('x.todos.demos$_alice');
       final writing = write(c, key);
       expect(await _pending(writing), isTrue);
 
-      await c.seed('todos.demos');
+      await c.seed('todos.demos', generated: generated);
       await writing;
 
       expect(stamped(key)['ckNs'], 'todos.demos');
@@ -614,14 +615,15 @@ void main() {
         'when its key is published but the step has not finished as the wait '
         'runs out, then the write goes ahead under that key',
         timeout: const Timeout(Duration(seconds: 10)), () async {
-      StartUpSeeding.wait = const Duration(milliseconds: 300);
+      StartUpSeeding.wait = const Duration(seconds: 1);
       final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
       wire(c);
+      final generated = await XWingKeyPair.generate();
       final key = AtKey.fromString('x.todos.demos$_alice');
       final writing = write(c, key);
       expect(await _pending(writing), isTrue);
 
-      await c.seed('todos.demos');
+      await c.seed('todos.demos', generated: generated);
       await writing;
 
       expect(stamped(key)['ckNs'], 'todos.demos');

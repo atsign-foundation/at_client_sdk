@@ -1364,12 +1364,12 @@ void main() {
         'A key fresh when the walk began seals the share, even if it expires '
         'during the lookup', () async {
       net.records.remove('public:__nskey.todos.demos$_bob');
-      final alice = aliceOver(
-          ttl: const Duration(milliseconds: 400), shareMiss: Duration.zero);
+      const ttl = Duration(seconds: 2);
+      final alice = aliceOver(ttl: ttl, shareMiss: Duration.zero);
       await shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice'));
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      // NOTE: a lookup as long as the window ends it during the lookup.
       net
-        ..batchDelay = const Duration(milliseconds: 400)
+        ..batchDelay = ttl
         ..batches.clear();
 
       final chosen =
