@@ -714,6 +714,13 @@ class CkManager {
                     'published');
           }
         }
+      } else {
+        final failure = startUpSeeding?.failureFor(namespace);
+        if (failure != null) {
+          throw NamespaceKeyUnavailableException(owner, namespace,
+              because: 'this client\'s start-up could not publish it: '
+                  '$failure');
+        }
       }
     } else if (seeding &&
         await _seedingBeyond(holder, valueKey, advertised.namespace)) {

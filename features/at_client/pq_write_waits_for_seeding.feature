@@ -86,6 +86,11 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     When start-up's seeding of todos.demos fails
     Then the write throws NamespaceKeyUnavailableException naming todos.demos and carrying start-up's reason
 
+  Scenario: A start-up that cannot read its grants ends the wait with its reason
+    Given a write waiting for start-up, which has yet to say which namespaces it seeds
+    When start-up cannot read its grants
+    Then the write throws NamespaceKeyUnavailableException carrying start-up's reason
+
   Scenario: A key another enrollment minted first is the one a waiting write seals to
     Given a write waiting for start-up, and another enrollment of alice's publishing todos.demos's key first
     When start-up adopts that key

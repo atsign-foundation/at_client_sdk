@@ -24,6 +24,10 @@ class StartUpSeeding {
   final Completer<void> _stopped = Completer<void>();
   final Map<String, Object> _failures = {};
 
+  /// Why start-up could not seed any namespace, when it failed before it
+  /// could say which it seeds.
+  Object? _failedEverywhere;
+
   /// Start-up seeds [namespaces], as soon as it knows them; a later report,
   /// such as the grants the seeding step reads, replaces an earlier one.
   void seeding(Set<String> namespaces) {
@@ -49,8 +53,10 @@ class StartUpSeeding {
   void failed(String namespace, Object reason) =>
       _failures[namespace.toLowerCase()] = reason;
 
-  /// Start-up could not seed any namespace it said it seeds, for [reason].
+  /// Start-up could not seed any namespace it said it seeds, for [reason], or
+  /// any namespace at all when it has yet to say which it seeds.
   void failedAll(Object reason) {
+    if (!_namespaces.isCompleted) _failedEverywhere = reason;
     for (final namespace in _seeded) {
       failed(namespace, reason);
     }
@@ -70,7 +76,8 @@ class StartUpSeeding {
   bool get isFinished => _finished.isCompleted;
 
   /// Why start-up could not seed [namespace], or null when it did not fail.
-  Object? failureFor(String namespace) => _failures[namespace.toLowerCase()];
+  Object? failureFor(String namespace) =>
+      _failures[namespace.toLowerCase()] ?? _failedEverywhere;
 
   /// The most specific namespace start-up seeds that [name], a key's whole
   /// name, ends with after a dot, once start-up's seeding step has finished.

@@ -356,6 +356,38 @@ void main() {
                 contains('the mint lock is held elsewhere'))));
   });
 
+  test('A start-up that cannot read its grants ends the wait with its reason',
+      () async {
+    final c = _Client(_Ring());
+    wire(c);
+    final writing = write(c, AtKey.fromString('x.todos.demos$_alice'));
+    expect(await _pending(writing), isTrue,
+        reason: 'the premise: it waits for start-up to say what it seeds');
+
+    c.seeding.failedAll('the enrollment could not be read');
+    c.seeding.finish();
+
+    await expectLater(
+        atOnce(writing),
+        throwsA(isA<NamespaceKeyUnavailableException>().having((e) => e.message,
+            'message', contains('the enrollment could not be read'))));
+  });
+
+  test(
+      'Given a start-up that failed to seed the namespaces it named, when a '
+      'write in another namespace finds no key, then its refusal carries no '
+      'reason of start-up\'s', () async {
+    final c = _Client(_Ring())..seeding.seeding({'todos.demos'});
+    wire(c);
+    c.seeding.failedAll('the mint lock is held elsewhere');
+    c.seeding.finish();
+
+    await expectLater(
+        atOnce(write(c, AtKey.fromString('x.other.app$_alice'))),
+        throwsA(isA<NamespaceKeyUnavailableException>().having(
+            (e) => e.message, 'message', isNot(contains('mint lock')))));
+  });
+
   test(
       'A key another enrollment minted first is the one a waiting write seals '
       'to', () async {
