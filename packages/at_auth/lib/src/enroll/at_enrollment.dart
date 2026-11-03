@@ -69,7 +69,8 @@ abstract class AtEnrollment {
   ///                     appName: 'wavi',
   ///                     deviceName: 'my-device',
   ///                     namespaces: {'wavi': 'rw'},
-  ///                     otp: '123');
+  ///                     otp: '123',
+  ///                     signingAlgo: SigningAlgoType.mldsa65); // the APKAM keypair's algorithm
   ///
   ///     AtEnrollmentResponse atEnrollmentResponse =
   ///         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);

@@ -587,6 +587,8 @@ abstract class AtClient {
   ///   NOT visible on the watch streams.
   /// - [EventSource.both] subscribes to both and emits events from
   ///   each as they arrive — no de-duplication.
+  ///
+  /// Throws [StoppedException] after [stop].
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {

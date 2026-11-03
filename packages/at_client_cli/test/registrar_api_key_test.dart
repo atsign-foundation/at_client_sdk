@@ -126,7 +126,7 @@ void main() {
     expect(run.output, isNot(contains(key)));
     expect(run.output, isNot(contains('registrar served')),
         reason: 'nothing is sent to the registrar');
-    expect(run.exitCode, isNot(0));
+    expect(run.exitCode, 8, reason: 'at_register refuses the key with 8');
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(
@@ -201,7 +201,7 @@ void main() {
     expect(run.output, isNot(contains(key)));
     expect(run.output, isNot(contains('registrar served')),
         reason: 'nothing is sent to the registrar');
-    expect(run.exitCode, isNot(0));
+    expect(run.exitCode, 1, reason: 'at_activate fails with 1');
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test('A registrar API key that is set is the one sent', () async {

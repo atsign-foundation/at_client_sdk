@@ -800,7 +800,7 @@ class CkManager {
   Future<String?> _ownGenerationHeld(CryptoContext context, String destination,
       String ckNs, AtKey valueKey) async {
     final sender = context.atClient.getCurrentAtSign();
-    if (sender == null || destination == sender) return null;
+    if (sender == null || !_isShare(destination, sender)) return null;
     try {
       final level = await _ownLevel(sender, valueKey);
       if (level == null || !_covers(level, ckNs)) return null;
@@ -838,7 +838,7 @@ class CkManager {
       String destination, String ckNs, ContentKey ck,
       {required bool useRemoteAtServer}) async {
     final sender = context.atClient.getCurrentAtSign();
-    if (sender == null || destination == sender) return null;
+    if (sender == null || !_isShare(destination, sender)) return null;
     final name = '${valueKey.key}.${valueKey.namespace}';
     final String? level;
     try {

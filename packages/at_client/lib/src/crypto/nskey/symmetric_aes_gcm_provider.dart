@@ -114,7 +114,9 @@ class SymmetricAesGcmProvider
     final owner = _nskeyOwnerOf(atKey);
     // NOTE: the pre-pass's choice, not a second one: what this client holds
     // can grow in between, and only the pre-pass checked the key it chose.
+    // It serves this one write.
     final chosen = _chosen[atKey];
+    _chosen[atKey] = null;
     final namespace = chosen?.namespace ??
         await ckManager?.resolver
             .startLevelOf(context.atClient.getCurrentAtSign(), atKey) ??

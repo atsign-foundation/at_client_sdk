@@ -20,7 +20,8 @@
   `awaitApproval` is in, which throws `AtEnrollmentCancelledException`, and
   removes the enrollment's pending keys; it throws when the key store cannot,
   and a later call tries again. The request stays on the atServer until the
-  atSign's manager decides it.
+  atSign's manager decides it. A cancelled request cannot be resumed, even
+  from the copy a file store keeps beside its keyfile; enroll again.
 - feat: `PendingEnrollment.stop()` ends the wait and keeps the request, which
   `Atsign.resumeEnrollment` picks up again, with no app or device when the
   store holds one pending enrollment. A request that expires has its pending

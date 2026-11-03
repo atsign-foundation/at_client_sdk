@@ -779,6 +779,29 @@ void main() {
   });
 
   test(
+      'Given a key a share prepared at demos, when it is encrypted again '
+      'without its pre-pass, then the earlier choice is not reused', () async {
+    final c = _Client(_Ring());
+    await publish(c.ring, _bob, 'demos');
+    await publish(c.ring, _bob, 'todos.demos');
+    wire(c);
+    final key = AtKey()
+      ..key = 'x'
+      ..namespace = 'todos.demos'
+      ..sharedWith = _bob
+      ..sharedBy = _alice;
+    await write(c, key, sealTo: 'demos');
+    expect(stamped(key)['ckNs'], 'demos', reason: 'the premise');
+
+    await expectLater(
+        c.data.encrypt(context, key, 'memo'),
+        throwsA(isA<AtEncryptionException>().having(
+            (e) => e.message, 'message', contains('$_bob:todos.demos'))),
+        reason: 'it resolves afresh, at todos.demos, where nothing has '
+            'conveyed a content key');
+  });
+
+  test(
       'A required namespace the recipient has not advertised refuses at '
       'pqActive', () async {
     final c = _Client(_Ring());
