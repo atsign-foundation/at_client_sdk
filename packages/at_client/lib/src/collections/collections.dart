@@ -315,6 +315,9 @@ enum EventSource { data, notifs, both }
 ///     cursor, etc.) and must never be confused with collection
 ///     items, even when their tail happens to share the namespace
 ///     shape (the underlying defect behind #1942).
+///   - `(?!(?:cached:)?public:)` rejects a public record, this atSign's
+///     own or one its atServer cached from another atSign. A collection
+///     writes no public record, so none is an item.
 ///   - `(?:[^:]*:){0,2}` tolerates up to two leading wrapper
 ///     segments, covering every local shape a collection item can
 ///     take: none for a self-owned key (`<id>.<ns>@self`), one for
@@ -329,7 +332,8 @@ enum EventSource { data, notifs, both }
 ///     could not absorb the second `@self:` segment the way the
 ///     `[^.]+` wildcard on the unfiltered scan does — the defect
 ///     behind #2032.
-const String _atKeyScanPrefix = r'^(?!local:)(?:[^:]*:){0,2}';
+const String _atKeyScanPrefix =
+    r'^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}';
 
 interface class AtCollection<T> {
   static const String _rr = '__rr';
@@ -619,9 +623,9 @@ interface class AtCollection<T> {
 
     // Broadest possible match for keys at this namespace — used by
     // the bulk-read path. `.*` permits any leading wire shape
-    // (sharedWith prefix, cached prefix, plain self) so long as it
-    // doesn't begin with `local:`.
-    _regexAllStr = '^(?!local:).*\\.$_escapedNamespace@';
+    // (sharedWith prefix, cached prefix, plain self) that
+    // [_atKeyScanPrefix] admits.
+    _regexAllStr = '$_atKeyScanPrefix.*\\.$_escapedNamespace@';
     // Same logical shape as `_directKeyRegex` but with multi-segment
     // ids — matches direct items `<id>.<ns>@` AND any deeper sub-item
     // `<id>.<subName>.<parentId>.…<ns>@`. Used as a cheap filter to
@@ -1217,8 +1221,8 @@ interface class AtCollection<T> {
   // ───────────────────────────────────────────────────────────────────────
   // Regex builders. Three shapes cover every AtKey scan this class
   // emits; they share the [_atKeyScanPrefix] + [_escapedNamespace]
-  // pieces so the "reject `local:` keys, escape namespace dots"
-  // contract (the fix for #1942) lives in one place.
+  // pieces so the "reject `local:` and public keys, escape namespace
+  // dots" contract lives in one place.
 
   /// Regex matching **direct items** at this collection's namespace:
   /// `<prefix><idPattern>.<ns><ownerSuffix>`.
