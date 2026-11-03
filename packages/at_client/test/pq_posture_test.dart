@@ -232,6 +232,125 @@ void main() {
     });
   });
 
+  group('a program can derive a posture with copyWith', () {
+    test('Every axis is copied', () {
+      for (final stage in [
+        PqPosture.legacy,
+        PqPosture.pqReady,
+        PqPosture.pqActive
+      ]) {
+        expect(axesOf(stage.copyWith()), axesOf(stage));
+      }
+    });
+
+    test('An overridden axis changes, and every other axis is kept', () {
+      final noSeeding = PqPosture(
+        authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
+        seedNamespaceKeys: false,
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+        writesPqByDefault: false,
+        configuresPqProviders: true,
+        disallowLegacyEncryption: false,
+        mintLegacyMaterial: true,
+        sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+        keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
+      );
+      final cases =
+          <(String, PqPosture, PqPosture Function(PqPosture), Object)>[
+        (
+          'authenticationKeyAlgorithm',
+          PqPosture.legacy,
+          (p) =>
+              p.copyWith(authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
+          SigningAlgoType.mldsa65
+        ),
+        (
+          'dataSigningKeyAlgorithms',
+          PqPosture.pqReady,
+          (p) => p.copyWith(
+              dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65}),
+          const {SigningAlgoType.mldsa65}
+        ),
+        (
+          'seedNamespaceKeys',
+          PqPosture.pqReady,
+          (p) => p.copyWith(seedNamespaceKeys: false),
+          false
+        ),
+        (
+          'keyExchangeMode',
+          noSeeding,
+          (p) => p.copyWith(keyExchangeMode: EnrollmentKeyExchangeMode.pq),
+          EnrollmentKeyExchangeMode.pq
+        ),
+        (
+          'writesPqByDefault',
+          PqPosture.pqReady,
+          (p) => p.copyWith(writesPqByDefault: true),
+          true
+        ),
+        (
+          'configuresPqProviders',
+          PqPosture.pqReady,
+          (p) => p.copyWith(configuresPqProviders: false),
+          false
+        ),
+        (
+          'disallowLegacyEncryption',
+          PqPosture.pqActive,
+          (p) => p.copyWith(disallowLegacyEncryption: false),
+          false
+        ),
+        (
+          'mintLegacyMaterial',
+          PqPosture.pqActive,
+          (p) => p.copyWith(mintLegacyMaterial: false),
+          false
+        ),
+        (
+          'sealsToKeyAlgorithms',
+          PqPosture.pqActive,
+          (p) => p.copyWith(
+              sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]),
+          const [SecretSharingAlgos.mlKem1024]
+        ),
+        (
+          'keyEstablishmentAlgorithms',
+          PqPosture.pqActive,
+          (p) => p.copyWith(
+              keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]),
+          const [SecretSharingAlgos.mlKem1024]
+        ),
+      ];
+      expect(cases.map((c) => c.$1).toSet(), axesOf(PqPosture.legacy).keys,
+          reason: 'one case per axis');
+
+      for (final (axis, base, copy, value) in cases) {
+        expect(axesOf(copy(base)), {...axesOf(base), axis: value},
+            reason: axis);
+      }
+    });
+
+    test('A combination the constructor refuses is refused', () {
+      expect(
+          () => PqPosture.pqReady.copyWith(disallowLegacyEncryption: true),
+          throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
+              'message', contains('refuses its own writes'))));
+    });
+
+    test('pqActive allowing legacy encryption writes post-quantum by default',
+        () {
+      final mixedFleet =
+          PqPosture.pqActive.copyWith(disallowLegacyEncryption: false);
+
+      expect(mixedFleet.writesPqByDefault, true);
+      expect(mixedFleet.disallowLegacyEncryption, false);
+      expect(PqPosture.pqActive.disallowLegacyEncryption, true,
+          reason: 'the stage it was derived from is unchanged');
+    });
+  });
+
   group('the preference applies the posture at construction', () {
     test('a bare preference runs the legacy posture', () {
       // The shipped default, pinned as a raw expectation rather than derived
@@ -608,3 +727,17 @@ void main() {
 
   // There is one envelope shape, so a posture has nothing to say about it.
 }
+
+/// Every axis of [posture] by name.
+Map<String, Object> axesOf(PqPosture posture) => {
+      'authenticationKeyAlgorithm': posture.authenticationKeyAlgorithm,
+      'dataSigningKeyAlgorithms': posture.dataSigningKeyAlgorithms,
+      'seedNamespaceKeys': posture.seedNamespaceKeys,
+      'keyExchangeMode': posture.keyExchangeMode,
+      'writesPqByDefault': posture.writesPqByDefault,
+      'configuresPqProviders': posture.configuresPqProviders,
+      'disallowLegacyEncryption': posture.disallowLegacyEncryption,
+      'mintLegacyMaterial': posture.mintLegacyMaterial,
+      'sealsToKeyAlgorithms': posture.sealsToKeyAlgorithms,
+      'keyEstablishmentAlgorithms': posture.keyEstablishmentAlgorithms,
+    };

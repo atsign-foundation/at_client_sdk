@@ -271,4 +271,7 @@ class _WidenedRing implements NskeyKeyRing {
       _privates.containsKey(nskeyKid)
           ? advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
           : null;
+
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async => const {};
 }

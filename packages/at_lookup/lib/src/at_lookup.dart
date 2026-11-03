@@ -68,10 +68,10 @@ typedef AtLookUpFactory = AtLookupMuxable Function({
 abstract interface class AtLookUp {
   /// Build a lookup that talks to an atServer over TLS.
   ///
-  /// This is the entry point. Constructing `AtLookupImpl` directly still
-  /// works and is deprecated: it takes a `String, int` root pair rather than
-  /// an [AtRootDomain], it accepts key material this class no longer needs,
-  /// and it hands back a concrete type where callers only need an interface.
+  /// This is the entry point. `AtLookupImpl`'s own constructor is internal to
+  /// this package: it takes a `String, int` root pair rather than an
+  /// [AtRootDomain], and hands back a concrete type where callers only need an
+  /// interface.
   ///
   /// Static, and that is deliberate — statics are not part of the `implements`
   /// contract, so adding this breaks none of the classes that mock

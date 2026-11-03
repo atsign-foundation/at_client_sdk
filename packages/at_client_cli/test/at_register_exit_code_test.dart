@@ -15,12 +15,13 @@ void main() {
   tearDown(() => home.deleteSync(recursive: true));
 
   /// at_register run against the loopback registrar in [mode], with four
-  /// verification codes on its stdin and [home] as its home directory.
+  /// verification codes on its stdin, [home] as its home directory and a
+  /// registrar API key set.
   Future<({int exitCode, String stdout, String stderr})> runAtRegister(
       String mode) async {
     final process = await Process.start(Platform.resolvedExecutable,
         ['test/fixtures/at_register_against_loopback.dart', mode],
-        environment: {'HOME': home.path});
+        environment: {'HOME': home.path, 'AT_REGISTRAR_API_KEY': 'app-key'});
     final stdout = process.stdout.transform(utf8.decoder).join();
     final stderr = process.stderr.transform(utf8.decoder).join();
     process.stdin.write('ABCD\n' * 4);

@@ -76,8 +76,7 @@ Future<AtClient> buildPipelineBackedClient({
   // providers under a posture that configures none. A caller wanting the
   // provider-less stage builds its own preference.
   final preference = AtClientPreference(posture: PqPosture.pqReady)
-    ..hiveStoragePath = storagePath
-    ..isLocalStoreRequired = true;
+    ..hiveStoragePath = storagePath;
   if (crypto != null) preference.crypto = crypto;
 
   return AtClientImpl.create(

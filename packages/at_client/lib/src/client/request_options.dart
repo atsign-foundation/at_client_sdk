@@ -26,11 +26,6 @@ class GetRequestOptions extends RequestOptions {
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.put`
 class PutRequestOptions extends RequestOptions {
-  /// Whether to set the `sharedKeyEnc` and `pubKeyCS` properties on the
-  /// Metadata for this put request
-  @Deprecated('Ignored. Always true.')
-  bool storeSharedKeyEncryptedMetadata = true;
-
   /// Whether to send this update request directly to the remote atServer.
   ///
   /// The default writes to local storage and the record reaches the atServer
@@ -66,6 +61,18 @@ class PutRequestOptions extends RequestOptions {
   ///
   /// Leave null to use [AtClientPreference.crypto]'s default provider.
   String? cryptoProviderId;
+
+  /// For a put shared with another atSign, the namespace of the recipient's
+  /// namespace key it is sealed to: the recipient's key at exactly this
+  /// namespace, with no other tried. The key's name must end with it after a
+  /// dot. Where the recipient advertises none there, the put is refused, or
+  /// falls back to legacy as [AtClientPreference.allowLegacyCryptoFallback]
+  /// allows.
+  ///
+  /// Null seals to the most specific namespace key the recipient advertises
+  /// for the key's name. A put that is not encrypted, or is to this client's
+  /// own atSign, is refused with it set.
+  String? sealToNamespace;
 
   /// Whether the atServer should carry out this operation **without recording
   /// a commit** — an atServer honouring it also purges any commit entry the

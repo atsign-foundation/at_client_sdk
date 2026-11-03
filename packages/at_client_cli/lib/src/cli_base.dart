@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart'
+    show approvalPollInterval;
 import 'package:at_utils/at_utils.dart';
 import 'package:chalkdart/chalk.dart';
 import 'package:logging/logging.dart';
@@ -45,15 +47,9 @@ class CLIBase {
   ///
   /// CLIBase cliBase = await CLIBase.fromCommandLineArgs(args, parser: argsParser);
   /// ```
-  ///
-  /// If [addLegacyRootDomainArg] is true (the default) then an option called
-  /// `legacy-root-domain` is added with the `-d` abbreviation. If it is false
-  /// then the option is added but without the `-d` abbreviation so that `-d`
-  /// can be used by calling programs for different purposes.
   static ArgParser createArgsParser({
     String? namespace,
     Set<String> hide = const {},
-    bool addLegacyRootDomainArg = true,
   }) {
     int? usageLineLength = stdout.hasTerminal ? stdout.terminalColumns : null;
     ArgParser p = ArgParser(usageLineLength: usageLineLength)
@@ -105,12 +101,6 @@ class CLIBase {
               'Pass Phrase to encrypt/decrypt the password protected atKeys file',
           mandatory: false,
           hide: hide.contains('pass-phrase'));
-
-    p.addOption('legacy-root-domain',
-        abbr: addLegacyRootDomainArg ? 'd' : null,
-        mandatory: false,
-        help: 'Deprecated abbreviation option for --root-server',
-        hide: !addLegacyRootDomainArg);
     return p;
   }
 
@@ -141,23 +131,16 @@ class CLIBase {
   ///
   /// If [parser] is not supplied then we will call [createArgsParser] with
   /// the [namespace] and [hide] parameters
-  ///
-  /// See [createArgsParser] for explanation of the `addLegacyRootDomainArg`
-  /// parameter
   static Future<CLIBase> fromCommandLineArgs(
     List<String> args, {
     ArgParser? parser,
     String? namespace,
     Set<String> hide = const {},
-    bool addLegacyRootDomainArg = true,
     AtClientPreference? preference,
     AtLookUpFactory? lookUps,
+    Duration approvalRetryInterval = approvalPollInterval,
   }) async {
-    parser ??= createArgsParser(
-      namespace: namespace,
-      hide: hide,
-      addLegacyRootDomainArg: addLegacyRootDomainArg,
-    );
+    parser ??= createArgsParser(namespace: namespace, hide: hide);
     ArgResults parsedArgs = parser.parse(args);
 
     if (parsedArgs['help'] == true) {
@@ -165,14 +148,7 @@ class CLIBase {
       exit(0);
     }
 
-    String rootDomainString;
-    // root-domain is now an alias of root-server, option abbreviation -r
-    // we also keep optional support for the previous abbreviation, -d
-    if (parsedArgs.wasParsed('legacy-root-domain')) {
-      rootDomainString = parsedArgs['legacy-root-domain'];
-    } else {
-      rootDomainString = parsedArgs['root-server'];
-    }
+    final String rootDomainString = parsedArgs['root-server'];
     try {
       AtRootDomain.parse(rootDomainString);
     } catch (e) {
@@ -195,7 +171,8 @@ class CLIBase {
         maxConnectAttempts: int.parse(parsedArgs['max-connect-attempts']),
         passPhrase: parsedArgs['pass-phrase'],
         preference: preference,
-        lookUps: lookUps);
+        lookUps: lookUps,
+        approvalRetryInterval: approvalRetryInterval);
 
     await cliBase.init();
 
@@ -218,6 +195,10 @@ class CLIBase {
   /// Builds every connection the client opens; with none, TLS on TCP, or the
   /// proxy convention when the root domain names one.
   final AtLookUpFactory? lookUps;
+
+  /// How long [init] waits between asking whether the enrollment a keyfile
+  /// holds only the request for has been approved.
+  final Duration approvalRetryInterval;
 
   /// What [init] builds the client's connections with: [lookUps], else what
   /// [lookUpsFor] picks for the root domain, so a `proxy:` root names the
@@ -266,7 +247,8 @@ class CLIBase {
       this.maxConnectAttempts = defaultMaxConnectAttempts,
       this.passPhrase,
       this.preference,
-      this.lookUps}) {
+      this.lookUps,
+      this.approvalRetryInterval = approvalPollInterval}) {
     this.atSign = AtUtils.fixAtSign(atSign);
     if (homeDir == null) {
       if (atKeysFilePath == null) {
@@ -316,12 +298,19 @@ class CLIBase {
   /// Opens [atClient] on the keyfile and store, and waits for it to come
   /// online.
   ///
+  /// A keyfile holding only an enrollment request is resumed: [init] says it
+  /// is waiting for that enrollment, waits for its approval as at_activate
+  /// does, asking every [approvalRetryInterval], then opens on the keys the
+  /// approval completes.
+  ///
   /// Throws [AtCredentialRefusedException] when the atServer refuses the
-  /// keys, [AtEnrollmentPendingException] when the keyfile holds only an
-  /// enrollment request, [SecondaryNotFoundException] when the atDirectory
-  /// has no atServer for the atSign, and [SecondaryServerConnectivityException]
-  /// when the atServer is not reached within [maxConnectAttempts] tries. No
-  /// client is left open when it throws.
+  /// keys, [AtEnrollmentException] when the request is denied or expires,
+  /// which removes its keys, [SecondaryNotFoundException] when the
+  /// atDirectory has no atServer for the atSign, and the failure when the
+  /// atServer is not reached, within [maxConnectAttempts] tries to open or
+  /// at_activate's retries while waiting for approval
+  /// ([SecondaryServerConnectivityException] for the first). No client is
+  /// left open when it throws.
   Future<void> init() async {
     AtServiceFactory? atServiceFactory;
 
@@ -348,23 +337,30 @@ class CLIBase {
 
     const retryDuration = Duration(seconds: 3);
     stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
-    final AtClient client;
+    final keys = CliKeys.fileFor(atSign,
+        path: atKeysFilePathToUse, passPhrase: passPhrase);
+    Future<AtClient> open() async {
+      try {
+        return await Atsign(atSign).open(
+            keys: keys,
+            preference: config,
+            namespace: nameSpace,
+            storage: CliKeys.storageFor(atSign,
+                program: nameSpace, path: localStoragePathToUse),
+            lookUps: lookUpsToUse,
+            secondaryAddressFinder: _atDirectory(),
+            serviceFactory: atServiceFactory);
+      } on AtOpenRefusedException catch (e) {
+        throw _reported(_openFailure(e.state));
+      }
+    }
+
+    AtClient client;
     try {
-      client = await Atsign(atSign).open(
-          keys: CliKeys.fileFor(atSign,
-              path: atKeysFilePathToUse, passPhrase: passPhrase),
-          preference: config,
-          namespace: nameSpace,
-          storage: CliKeys.storageFor(atSign,
-              program: nameSpace, path: localStoragePathToUse),
-          lookUps: lookUpsToUse,
-          secondaryAddressFinder: CacheableSecondaryAddressFinder(
-              atRootDomain.rootDomain, atRootDomain.rootPort),
-          serviceFactory: atServiceFactory);
-    } on AtOpenRefusedException catch (e) {
-      throw _reported(_openFailure(e.state));
+      client = await open();
     } on AtEnrollmentPendingException catch (e) {
-      throw _reported(e);
+      await _awaitApproval(e, keys, config);
+      client = await open();
     }
     // NOTE: one client, asked again until it is online or the budget is
     // spent; a refusal ends the wait at once, since waiting cannot change it.
@@ -380,6 +376,36 @@ class CLIBase {
     AtClientManager.getInstance().use(client);
     atClient = client;
   }
+
+  /// Waits for the approval of the enrollment request [keys] holds, which
+  /// completes its keys; [pending] is what opening them threw.
+  Future<void> _awaitApproval(AtEnrollmentPendingException pending,
+      WrittenAtKeysIo keys, AtClientPreference config) async {
+    final PendingEnrollment? request;
+    try {
+      request = await Atsign(atSign).resumeEnrollment(
+          keys: keys,
+          preference: config,
+          lookUps: lookUpsToUse,
+          secondaryAddressFinder: _atDirectory());
+    } on AtException catch (e) {
+      throw _reported(e);
+    }
+    if (request == null) throw _reported(pending);
+    stderr.writeln();
+    stderr.writeln(chalk.brightBlue('Waiting for approval of enrollment '
+        '${request.enrollmentId} of $atSign'));
+    try {
+      await request.awaitApproval(
+          retryInterval: approvalRetryInterval,
+          maxRetries: AuthCliArgs.defaultApprovalRetries);
+    } on AtException catch (e) {
+      throw _reported(e);
+    }
+  }
+
+  SecondaryAddressFinder _atDirectory() => CacheableSecondaryAddressFinder(
+      atRootDomain.rootDomain, atRootDomain.rootPort);
 
   /// What an open that ended in [state] throws: the atServer's refusal, an
   /// atSign the atDirectory has no atServer for, or an atServer not reached

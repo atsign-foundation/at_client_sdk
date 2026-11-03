@@ -133,9 +133,13 @@ establishment, and can authenticate with a post-quantum signature. It is
 opt-in per client, through one setting:
 
 ```dart
-final preference = AtClientPreference(posture: PqPosture.pqReady)
+final preference = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'todos';
 ```
+
+A new app names `pqActive`. An app built on 3.x moves in two steps:
+rebuild it with `pqReady` and roll that out, then rebuild it with
+`pqActive` and roll that out.
 
 | Posture                      | Authentication                                                  | Data written                                     | Reads post-quantum data |
 | ---------------------------- | --------------------------------------------------------------- | ------------------------------------------------ | ----------------------- |

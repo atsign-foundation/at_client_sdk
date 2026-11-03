@@ -84,8 +84,6 @@ void main() {
       'authenticationKeyAlgorithm',
       'sealsToKeyAlgorithms',
       'keyEstablishmentAlgorithms',
-      'signingAlgoType',
-      'hashingAlgoType',
     ];
     for (final field in algorithmFields) {
       expect(prefs, contains(field),

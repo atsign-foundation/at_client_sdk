@@ -241,6 +241,8 @@ void main() {
       when(
         () => pending.client(any(), storage: any(named: 'storage')),
       ).thenAnswer((_) async => client);
+      when(() => pending.cancel()).thenAnswer((_) async {});
+      when(() => pending.stop()).thenAnswer((_) async {});
 
       Object? result = 'unset';
       await pumpOpener(
@@ -267,6 +269,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(result, same(client));
+      await tester.pump();
+      expect(find.byType(ApkamActivationDialog), findsNothing);
+      verifyNever(() => pending.cancel());
+      verifyNever(() => pending.stop());
       final keys = verify(
         () => flows.enroll(
           '@alice',

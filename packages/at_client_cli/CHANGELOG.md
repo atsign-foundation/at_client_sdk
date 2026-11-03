@@ -1,6 +1,16 @@
 ## 1.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- feat: `at_register`, and `at_activate onboard` without `-c`, ask the
+  registrar with the API key in `AT_REGISTRAR_API_KEY` when it is set, and
+  otherwise with a built-in key, so both work without it. A key that is set
+  but holds a character an HTTP header cannot carry is refused before
+  anything is sent.
+- feat: a program built on `CLIBase` whose keyfile still holds only its
+  enrollment request waits for the approval, as at_activate does, and then
+  runs, rather than throwing.
+- feat: instances of a program that share a keyfile opened through
+  `CliKeys.fileFor`, as `CLIBase` opens it, retrofit it one at a time.
 - feat: at_client_cli is at_onboarding_cli and at_cli_commons in one package:
   `CLIBase`, the at_activate and at_register tools, and the library behind
   them. `AtActivate.main` and `AtRegister.main` run the tools inside another
@@ -26,6 +36,11 @@
   client with `CLIBase` or `Atsign.open`; the README's migration table names
   what replaces each.
 - breaking: `CLIBase`'s `preference` is an `AtClientPreference`.
+- breaking: `CLIBase` takes no `-d`/`--legacy-root-domain`, so use
+  `-r`/`--root-server`, and `CLIBase.createArgsParser` and
+  `fromCommandLineArgs` take no `addLegacyRootDomainArg`. `at_activate`'s
+  `-d` is still the device name. The tools take no `--hashingAlgoType`,
+  which did nothing.
 - breaking: `CLIBase` takes no `downloadDir`, which nothing read.
 - breaking: `CLIBase` throws `AtCredentialRefusedException` for every
   refusal and `SecondaryNotFoundException` for an atSign the atDirectory does

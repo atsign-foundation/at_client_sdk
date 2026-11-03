@@ -76,7 +76,7 @@ a read returns stale/empty data.
 - sync cadence is `AtClientPreference.syncIntervalMins` (default 10 minutes) —
   relevant for how quickly a missed live update is reconciled;
 - await/observe completion via `SyncService` + `SyncProgressListener`
-  (`sync(onDone:)` is deprecated);
+  (`sync(onDone:)` is removed in at_client 4.0);
 - this is essential for tests and headless drivers that must wait until synced
   before asserting.
 

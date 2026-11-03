@@ -20,7 +20,10 @@ import 'package:at_client_cli/at_client_cli.dart';
 
 void main(List<String> args) async {
   final AtClient atClient =
-      (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).atClient;
+      (await CLIBase.fromCommandLineArgs(args,
+              namespace: 'my_app',
+              preference: AtClientPreference(posture: PqPosture.pqActive)))
+          .atClient;
   // ready — collections, notifications, RPC all work from here
 }
 ```
@@ -32,11 +35,12 @@ verbose, etc.). This is the same pattern the canonical TUI example uses
 
 `CLIBase` waits for the client to come online, and otherwise stops it and
 throws: `AtCredentialRefusedException` when the atServer refuses the keys,
-`AtEnrollmentPendingException` when the keyfile holds only an enrollment
-request, `SecondaryNotFoundException` when the atDirectory has no atServer for
-the atSign, and `SecondaryServerConnectivityException` only when the atServer
-is not reached in time. A retry loop catches that last one alone; the others
-need a person.
+`SecondaryNotFoundException` when the atDirectory has no atServer for the
+atSign, and `SecondaryServerConnectivityException` only when the atServer is
+not reached in time. A retry loop catches that last one alone; the others
+need a person. A keyfile holding only an enrollment request is resumed:
+`CLIBase` waits for its approval, as at_activate does, and throws
+`AtEnrollmentException` when it is denied or expires.
 
 ## One process, one storage path
 
@@ -48,7 +52,7 @@ and two processes on one location corrupt it.
 import 'package:at_client_cli/at_client_cli.dart';
 
 final dir = Directory.systemTemp.createTempSync('agent_').path;
-final prefs = AtClientPreference()..namespace = 'my_app';
+final prefs = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'my_app';
 final client = await Atsign(atSign).open(
     keys: CliKeys.fileFor(atSign, path: keysPath),
     preference: prefs,
@@ -64,9 +68,15 @@ deprecated `AtClientPreference.hiveStoragePath`, and at_client 4.0 removed
 `commitLogPath`.
 
 `CLIBase` handles this for typical single-instance CLIs, keeping the store
-under `~/.atsign/storage/<atSign>/<namespace>/`. When launching several
+under `~/.atsign/storage/<atSign>/<namespace>/single/`. When launching several
 instances of the same agent on one machine, generate a unique temp directory
 per instance and pass it as `-s`.
+
+Onboard a new agent's atSign with `at_activate onboard --posture pqActive`,
+so its keyfile already holds a post-quantum credential and no instance has to
+retrofit it. A keyfile onboarded without it is retrofitted at the first
+`pqActive` start; instances sharing a keyfile retrofit it one at a time,
+because `CliKeys.fileFor`, which `CLIBase` uses, locks the keyfile for it.
 
 > **Gotcha:** `exit()` does not flush buffered stdout — call
 > `await stdout.flush()` first or log lines vanish when output is redirected.
@@ -131,7 +141,7 @@ client-wide preference.
 ```dart
 import 'package:at_client_cli/at_client_cli.dart';  // ServiceFactoryWithNoOpSyncService is NOT in at_client
 
-final prefs = AtClientPreference()
+final prefs = AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = 'my_app'
   ..remoteLocalPref = RemoteLocalPref.remoteOnly;  // every op hits the atServer
 
@@ -170,8 +180,19 @@ An always-on agent is a natural approver for new-device APKAM enrollment
 requests. `at_client` exposes this via `atClient.enrollments`:
 
 ```dart
+// Approve only what this agent expects: the app and device it is waiting for,
+// asking for no namespace beyond the app's own. Anyone holding a passcode can
+// ask for anything.
 for (final request in await atClient.enrollments.pending()) {
-  await atClient.enrollments.approve(request.enrollmentId!);   // or deny / revoke
+  final asksFor = request.namespace?.keys ?? const <String>[];
+  final expected = request.appName == 'my_app' &&
+      request.deviceName == expectedDevice &&
+      asksFor.every((namespace) => namespace == 'my_app');
+  if (expected) {
+    await atClient.enrollments.approve(request.enrollmentId!);
+  } else {
+    await atClient.enrollments.deny(request.enrollmentId!);
+  }
 }
 atClient.enrollments.requests.listen((r) => ...);   // new requests as they arrive
 final passcode = await atClient.enrollments.otp();  // what the new device quotes

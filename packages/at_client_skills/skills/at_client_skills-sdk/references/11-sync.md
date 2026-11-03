@@ -27,9 +27,9 @@ propagate, and any real-time features appear broken.
 **Fix:** scope sync to your app's namespace.
 
 ```dart
-final acp = AtClientPreference()
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';   // scope sync to THIS app's keys
+final acp = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';   // scope sync to THIS app's keys
 ```
 
 (Where the store lives is the `storage:` the client is opened on — see
@@ -62,7 +62,7 @@ or decryption — it only excludes other apps' unrelated keys.
 ## 3. Observe completion with `SyncProgressListener`
 
 Tests and headless drivers must wait until synced before asserting. Use
-`SyncProgressListener` — **not** the deprecated `sync(onDone:)`:
+`SyncProgressListener`; 4.0 removed `sync(onDone:)` and `sync(onError:)`:
 
 ```dart
 class _SyncedListener implements SyncProgressListener {
@@ -74,7 +74,7 @@ class _SyncedListener implements SyncProgressListener {
   }
 }
 
-final sync = client.syncService;   // the client's own; the manager's getter is deprecated
+final sync = client.syncService;   // the client's own; 4.0 removed the manager's getter
 final listener = _SyncedListener(() => print('synced'));
 sync.addProgressListener(listener);
 // ... later:

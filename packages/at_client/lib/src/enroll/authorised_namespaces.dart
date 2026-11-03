@@ -17,7 +17,7 @@ Future<Set<String>> authorisedNamespacesOf(AtClient atClient,
         ownNamespace: ownNamespace);
 
 /// The grants [atClient]'s own enrollment record holds, or null for the
-/// atSign's own credential, which no grant limits.
+/// primary enrollment, whose `*:rw` limits nothing.
 ///
 /// Throws when the enrollment record cannot be read.
 Future<Map<String, dynamic>?> ownGrantsOf(AtClient atClient) async {
@@ -29,7 +29,7 @@ Future<Map<String, dynamic>?> ownGrantsOf(AtClient atClient) async {
 }
 
 /// The namespaces [grants] hold data in, as [authorisedNamespacesOf] reads
-/// them: [ownNamespace] alone for null [grants], the atSign's own credential.
+/// them: [ownNamespace] alone for null [grants], the primary enrollment's.
 Set<String> authorisedNamespacesIn(Map<String, dynamic>? grants,
     {required String? ownNamespace}) {
   final own = (ownNamespace == null || ownNamespace.isEmpty)

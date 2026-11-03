@@ -79,7 +79,11 @@ enum EnvelopeType {
   nskeyRing('at-nskey-ring+jws'),
 
   /// A sealed secret addressed to one enrollment's key package.
-  secretEnvelope('at-secret-envelope+jws');
+  secretEnvelope('at-secret-envelope+jws'),
+
+  /// A client's record, in its own local storage, that it verified its own
+  /// namespace-key advertisement. Never sent.
+  verifiedAdvertisement('at-verified-advertisement+jws');
 
   const EnvelopeType(this.typ);
 

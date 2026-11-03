@@ -580,11 +580,13 @@ on trunk. It does **not** gate on S-1/S-2/S-3.
    still served on an exact `plookup` ([decisions.md](decisions.md) section 13). Its private — a KEM
    private that **decapsulates** CKs, never decrypts application data — is conveyed per-APKAM as a
    Secret over the substrate, and earlier generations are retained, addressed by `nskeyKid`.
-5. **appMetadata carries `ns`** — the value's own namespace — **and `ckNs`** on a data value, naming where
-   the content key lives ([decisions.md](decisions.md) section 19). `ns` exists because `AtKey.fromString`
-   splits at the **last** dot, so a multi-segment namespace is unrecoverable from the wire string; it is
-   also what the layer-3 AAD binds. (This fact previously read "appMetadata carries NO `ns` field", which
-   the nested-namespace ruling reversed.) See B-1 in
+5. **appMetadata carries `ns`** — on a data value, the level the write's walk started at — **and `ckNs`**
+   on a data value, naming where the content key lives ([decisions.md](decisions.md) sections 19 and
+   [159](decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)).
+   `ns` exists because `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace is
+   unrecoverable from the wire string. The layer-3 AAD binds the value's whole name, never `ns`. (This
+   fact previously read "appMetadata carries NO `ns` field", which the nested-namespace ruling reversed,
+   and then that `ns` was the value's own namespace and what the AAD binds, until ruling 159.) See B-1 in
    [section 6](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece).
 
 ### SS-0 — land the WP-SS substrate baseline · at_client · M — **SATISFIED (merged to trunk 2026-07-17)**
@@ -880,17 +882,23 @@ proceeds against a test fixture that supplies the nskey private directly (see th
 **Deliverables (plan-altitude headings; full mechanics → [design.md](../design.md), D1 nskey data path):**
 - **Layer 3 — `at/symmetric/AES/GCM`:** AES-256-GCM under a symmetric CK cited by `ckKid`;
   `appMetadata{providerId, ckKid, iv, ns, ckNs}`; binary-safe; CK cache keyed
-  `(owner, ckNs, ckKid)`. `ns` is the value's own namespace and is what the AAD binds; `ckNs` is where
-  the CK lives ([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)).
+  `(owner, ckNs, ckKid)`. `ns` is the level the write's walk started at, and the AAD binds the value's
+  whole name; `ckNs` is where the CK lives ([decisions.md 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)).
 - **Layer 2 — `at/nskey/XWING`:** `pqSeal` the CK to the recipient's nskey public half, written once as
   `<ckKid>.__ck.<ckNs>@<owner>`; `appMetadata{providerId, recipientKind, ckKid, nskeyKid, ns}`.
   Self data seals to the owner's own nskey; sharing seals to the recipient's nskey (fetched via
   `plookup` on `public:__nskey.<ns>@<recipient>`) — one keypair, same provider, uniform self/cross flow.
   `nskeyKid` names the generation, so a reader holding several after a rotation indexes straight to it.
-- **Namespace resolution:** a sender walks the value's namespace most-specific-first and seals to the first
-  published nskey; that namespace is `ckNs`, and an exhausted walk is cold start. Senders remember the
-  levels they have found **empty**, so a composed sub-collection namespace pays its probes once rather
-  than per write; remembering *hits* instead is unsafe and rejected, since it skips the deeper probes.
+- **Namespace resolution:** a write to the sender's own atSign starts at the namespace the value's
+  key names in full
+  ([decisions.md 159](decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)),
+  walks up most-specific-first and seals to the first
+  published nskey; that namespace is `ckNs`, and an exhausted walk is cold start. A share is sealed
+  at the most specific level of its key's name that the recipient advertises, all asked in one batch
+  ([decisions.md 161](decisions.md#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02)). Senders remember the
+  levels they have found **empty**, for 15 minutes on their own writes and 30 seconds on a share, so a
+  composed sub-collection namespace pays its probes once rather than per write; remembering *hits*
+  instead is unsafe and rejected, since it skips the deeper probes.
   Required for AtCollection, whose sub-collection namespaces embed a per-**item** id.
 - **Get/put routing + the CK manager:** `CkManager.ensureCurrent(dest, ns)` re-`plookup`s the
   destination's advertised nskey and mints + conveys a CK when there is none for that destination or the
@@ -9399,6 +9407,11 @@ current content key toward that destination rests on no own generation. That
 answer can be stale: an own key another enrollment mints meanwhile is noticed up to
 15 minutes late. It is allowed because a null from that check never replaces a
 content key, so being late costs a delay and changes no answer a write acts on.
+**Amended 2026-11-02** (decisions 161 item 6): for a share, a level found missing is
+remembered for 30 seconds and decides without a lookup; this rule still holds for a
+write to the client's own atSign. And `CkManager`'s memory of a sender holding no key
+of its own is gone: the sender's own level is read from the namespaces it holds, so
+there is no lookup for it to save.
 
 ⚠️ **A narrower fix was ruled and then withdrawn the same hour, and why is worth
 keeping.** The first ruling was to make `CryptoRuntime.isReadyFor` bypass the

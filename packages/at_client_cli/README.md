@@ -41,6 +41,17 @@ Fetches a free atSign, emails you a verification code, then activates the
 atSign once you paste the code back. The generated `.atKeys` file lands in
 `~/.atsign/keys/`.
 
+The registrar API key names your app to the registrar. `at_register` sends
+the one in `AT_REGISTRAR_API_KEY` when it is set, and otherwise a key built
+into at_client_cli; to name your own app, create a key via the registrar at
+my.atsign.com and set the variable to it.
+
+`at_register` takes no `--posture`: it activates at at_client's default
+(`legacy` today). An app that runs at `pqReady` or `pqActive` upgrades those
+keys itself at its first start, which needs the atServer; until that start
+completes, a `pqActive` client writes nothing. An atSign you already hold can
+be activated at a posture of its own with `at_activate onboard --posture`.
+
 ### `at_activate` — the atSign's lifecycle from the terminal
 
 Every invocation should name a command. With none, `at_activate` still runs
@@ -52,7 +63,8 @@ because a later major will refuse it.
 at_activate onboard -a @alice -c <cram_secret>
 
 # ...or let at_activate fetch it: the registrar emails a verification code,
-# which you paste back
+# which you paste back. It sends AT_REGISTRAR_API_KEY when it is set, and
+# otherwise the built-in key, as at_register does
 at_activate onboard -a @alice
 ```
 
@@ -113,8 +125,10 @@ import 'package:at_client_cli/at_client_cli.dart';
 
 Future<void> main(List<String> args) async {
   final parser = CLIBase.createArgsParser(namespace: 'my_app');
-  final AtClient client =
-      (await CLIBase.fromCommandLineArgs(args, parser: parser)).atClient;
+  final AtClient client = (await CLIBase.fromCommandLineArgs(args,
+          parser: parser,
+          preference: AtClientPreference(posture: PqPosture.pqActive)))
+      .atClient;
   // ...
   await client.stop();
 }
@@ -128,12 +142,17 @@ online. Otherwise it stops the client and throws:
 
 - `AtCredentialRefusedException` when the atServer refuses the keys, naming
   the cause, and saying when the enrollment awaits approval or was denied;
-- `AtEnrollmentPendingException` when the keyfile still holds only its
-  enrollment request;
+- `AtEnrollmentException` when the enrollment request the keyfile holds is
+  denied or expires;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
   atSign;
 - `SecondaryServerConnectivityException` when the atServer is not reached in
   time, the one a retry loop should catch.
+
+A keyfile still holding only its enrollment request is resumed: the program
+says it is waiting for approval of that enrollment, waits as at_activate
+does, and runs once it is approved. Ctrl-C while it waits keeps the request
+for the next run.
 
 Pass `preference:` an `AtClientPreference` to set anything the flags do not.
 
@@ -148,7 +167,7 @@ program keeps:
 ```dart
 import 'package:at_client_cli/at_client_cli.dart';
 
-final preference = AtClientPreference()..namespace = 'my_app';
+final preference = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'my_app';
 final keys = CliKeys.fileFor('@alice');       // ~/.atsign/keys/@alice_key.atKeys
 final storage = CliKeys.storageFor('@alice', program: 'my_app');
 final lookUps = lookUpsFor(preference.rootDomain);
@@ -157,9 +176,10 @@ final atDirectory =
 ```
 
 `CliKeys.fileFor` takes a `path` and a `passPhrase`; `CliKeys.storageFor`
-puts the store under `~/.atsign/storage/<atSign>/<program>/`, where `CLIBase`
-keeps it for that namespace, or at `path`, and the client closes it when it
-stops. `lookUps` builds every connection the client opens, and
+puts the store at `~/.atsign/storage/<atSign>/<program>/<id>`, `single` when no
+`id` is given, where `CLIBase` keeps it for that namespace, or at `path`, and
+the client closes it when it stops. `lookUps` builds every connection the
+client opens, and
 `lookUpsFor(rootDomain)` is the one `CLIBase` uses: `proxyLookUps()` when the
 root domain names a proxy (`proxy:host:port`), which sends `from:<atSign>`
 first on every connection so the proxy can route it, and
@@ -169,8 +189,9 @@ first on every connection so the proxy can route it, and
 `~/.atsign/storage/<atSign>/at_activate/`, so running two of them at once for
 the same atSign is not supported: the second fails when it opens the store.
 
-Activate a new atSign with its CRAM secret (or run `at_activate onboard`,
-which fetches one from the registrar against an emailed verification code):
+Activate a new atSign with its CRAM secret (or run `at_activate onboard`
+without `-c`, which fetches one from the registrar against an emailed
+verification code):
 
 ```dart
 final owner = await Atsign('@alice').activate(
@@ -239,15 +260,17 @@ at_onboarding_cli 1.x wrote is read unchanged.
 | `.isOnboarded()`                                                                                 | `at_activate status`, or at_lookup's `checkAtSignServer`                                                                                                                |
 | `.close()`                                                                                       | `atClient.stop()`                                                                                                                                                       |
 | `.atLookUp`, `.atChops`, `.atAuth`, `.completeActivation()`, `.getAtClient()`                    | none; the client's own connection does what they exposed                                                                                                                |
-| `AtOnboardingPreference`                                                                         | `AtClientPreference`; its `atKeysFilePath` and `passPhrase` are `CliKeys.fileFor(atSign, path: ..., passPhrase: ...)`, its `storagePath` is `CliKeys.storageFor(...)`. With no `path`, `storageFor` opens a new store at `~/.atsign/storage/<atSign>/<program>/single`, not the old `~/.atsign/at_onboarding_cli/storage/<atSign>/hive` (`.../<atSign>/<enrollmentId>/hive` once enrolled); pass that directory as `path` to keep using the old store |
+| `AtOnboardingPreference`                                                                         | `AtClientPreference`; its `atKeysFilePath` and `passPhrase` are `CliKeys.fileFor(atSign, path: ..., passPhrase: ...)`, its `storagePath` is `CliKeys.storageFor(...)`. With no `path`, `storageFor` opens a new store at `~/.atsign/storage/<atSign>/<program>/single`, not the old `~/.atsign/at_onboarding_cli/storage/<atSign>/hive`; pass that directory as `path` to keep using the old store |
 | `AtOnboardingPreference()..signingAlgoType = ...`                                                | `AtClientPreference(posture: ..., authenticationKeyAlgorithm: ...)`, fixed at construction                                                                              |
 | `createAtClient(...)`                                                                            | `createAtClient(...)`, unchanged: the same parameters, and the client at_activate's commands open                                                                       |
-| `OnboardingUtil`                                                                                 | `at_activate onboard` fetches a CRAM secret, and `at_register` a free atSign                                                                                            |
+| `OnboardingUtil`                                                                                 | `at_activate onboard` fetches a CRAM secret, and `at_register` a free atSign, each with the registrar API key in `AT_REGISTRAR_API_KEY` when it is set, or a built-in one |
 | `AuthKeyType`                                                                                    | none: read a keyfile with `CliKeys.fileFor(atSign).read(atSign)`                                                                                                        |
 | `MySyncProgressListener`                                                                         | a `SyncProgressListener` of the program's own                                                                                                                           |
 | `package:at_onboarding_cli/src/activate_cli/activate_cli.dart`                                   | `AtActivate.main(args)`, or the `at_activate` executable                                                                                                                |
 | `AtOnboardingException` and its subclasses                                                       | `AtClientException`, which they extended                                                                                                                                |
 | `at_activate -a @alice -c <secret>` (no command)                                                 | `at_activate onboard -a @alice -c <secret>`; an invocation naming no command still runs `onboard`, with a deprecation warning                                           |
+| `CLIBase`'s `-d`/`--legacy-root-domain`, and `createArgsParser(addLegacyRootDomainArg: ...)`     | `-r`/`--root-server`; the option and the parameter are gone, and `at_activate`'s `-d` is still the device name                                                          |
+| `--hashingAlgoType`                                                                              | gone; it did nothing                                                                                                                                                    |
 | (no signing-algorithm flag)                                                                      | `--posture legacy\|pqReady\|pqActive` on every command; `enroll --key-exchange legacy\|pq` for how the enrollment's key travels                                          |
 | the `*.enrollment.checkpoint` file                                                               | gone; the keyfile holds the pending keys                                                                                                                                |
 | at_activate's store under `~/.atsign/at_onboarding_cli/storage/`                                 | under `~/.atsign/storage/<atSign>/at_activate/`, started afresh; the keys, in the keyfile, are untouched                                                               |

@@ -1,13 +1,7 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart'
-    show
-        AtKeys,
-        CryptographicMaterial,
-        CryptographicMaterialAlgorithm,
-        CryptographicMaterialRole,
-        CryptographicMaterialStatus;
 import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -15,7 +9,8 @@ import 'package:test/test.dart';
 import 'keyfile_helpers.dart';
 import 'lifecycle_rig.dart';
 
-/// `CLIBase.fromCommandLineArgs` tells a refusal from an outage.
+/// `CLIBase.fromCommandLineArgs` tells a refusal from an outage, and resumes
+/// a keyfile that holds only an enrollment request.
 ///
 /// Catalogue: features/at_client_cli/cli_base_open.feature
 ///
@@ -28,14 +23,14 @@ void main() {
   late String keysPath;
   late String storageDir;
   late int port;
-  late int lookUpsBuilt;
+
+  setUpAll(() => registerFallbackValue(_FakeVerbBuilder()));
 
   setUp(() async {
     dir = Directory.systemTemp.createTempSync('cli_base_open_');
     keysPath = '${dir.path}/keys/key.atKeys';
     storageDir = '${dir.path}/storage';
     port = await refusedPort();
-    lookUpsBuilt = 0;
   });
 
   tearDown(() async {
@@ -57,7 +52,6 @@ void main() {
         required AtAuthenticator? authenticator,
         SecondaryAddressFinder? secondaryAddressFinder,
       }) {
-        lookUpsBuilt++;
         final lookUp = lookUpAnswering(onPkam);
         when(() => lookUp.stopNotifications()).thenAnswer((_) async {});
         return lookUp;
@@ -158,34 +152,100 @@ void main() {
         reason: 'no client is left open');
   });
 
-  test('A keyfile still holding only its enrollment request says so', () async {
-    const atSign = '@clirequestonly';
-    final keyPair = randomLegacyKeys().authenticationKeyPairFor(null)!;
-    final request = AtKeys(atsign: Atsign(atSign));
-    for (final (role, key) in [
-      (CryptographicMaterialRole.privateAuthentication, keyPair.privateKey),
-      (CryptographicMaterialRole.publicAuthentication, keyPair.publicKey),
-    ]) {
-      request.addKey(CryptographicMaterial(
-          keyId: 'auth:rsa2048:1',
-          enrollmentId: 'e-pending',
-          role: role,
-          algorithm: CryptographicMaterialAlgorithm.rsa2048,
-          bytes: AtBytes.fromString(key),
-          createdAt: DateTime.now().toUtc(),
-          status: CryptographicMaterialStatus.pending));
-    }
-    expect(request.pendingEnrollmentIds, ['e-pending'],
-        reason: 'the precondition: the keyfile holds only the request');
-    await FileAtKeysIo(filePath: (_) => keysPath).write(atSign, request);
+  group('Given a keyfile holding only its enrollment request', () {
+    const atSign = approvingAtSign;
+    late List<String> wrapped;
 
-    await expectLater(
-        open(atSign, answering(() async => true)),
-        throwsA(isA<AtEnrollmentPendingException>()
-            .having((e) => e.pendingEnrollmentIds, 'pending', ['e-pending'])));
-    expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
-        reason: 'no client is opened');
-    expect(lookUpsBuilt, 0, reason: 'no atServer is asked');
+    Future<List<String>> pending() => pendingIn(keysPath, atSign);
+
+    Future<void> submitRequest() async {
+      if (File(keysPath).existsSync()) File(keysPath).deleteSync();
+      wrapped = await fileRequest(
+          keysPath: keysPath, rootPort: port, namespace: namespace);
+      expect(await pending(), [approvedEnrollmentId],
+          reason: 'the precondition: the keyfile holds only the request');
+    }
+
+    /// CLIBase over [server], polling for approval every 10ms, with what it
+    /// writes to stderr in [stderrText].
+    Future<CLIBase> openOver(MockAtLookupImpl server, List<String> stderrText) {
+      when(() => server.stopNotifications()).thenAnswer((_) async {});
+      return IOOverrides.runZoned(
+          () => CLIBase.fromCommandLineArgs([
+                '-a', atSign, //
+                '-k', keysPath,
+                '-s', storageDir,
+                '-r', '127.0.0.1:$port',
+                '--max-connect-attempts', '1',
+                '--never-sync',
+              ],
+                  parser: CLIBase.createArgsParser(namespace: namespace),
+                  lookUps: (
+                          {required String atSign,
+                          required AtRootDomain rootDomain,
+                          required AtAuthenticator? authenticator,
+                          SecondaryAddressFinder? secondaryAddressFinder}) =>
+                      server,
+                  approvalRetryInterval: const Duration(milliseconds: 10)),
+          stderr: () => _Captured(stderrText));
+    }
+
+    test('A keyfile still holding only its enrollment request is resumed',
+        () async {
+      await submitRequest();
+      final server = approvingAtServer(
+          decide: (_) async => true, wrapped: wrapped);
+      final stderrText = <String>[];
+
+      final cli = await openOver(server.lookUp, stderrText);
+
+      expect(stderrText.join(),
+          contains('Waiting for approval of enrollment $approvedEnrollmentId'));
+      expect(cli.atClient.enrollmentId, approvedEnrollmentId);
+      expect(cli.atClient.connection.current.isOnline, isTrue);
+      expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+          reason: 'the wait resumed from the keyfile; no second request');
+      expect(
+          (await FileAtKeysIo(filePath: (_) => keysPath).read(atSign))
+              .enrollmentToAuthenticateAs(),
+          approvedEnrollmentId);
+    });
+
+    test(
+        'A denied or expired request ends the program with that reason, and '
+        'its keys go', () async {
+      for (final (code, reason) in [
+        ('AT0025', 'Apkam Auth Denied'),
+        ('AT0028', 'enrollment expired'),
+      ]) {
+        await submitRequest();
+        final server = approvingAtServer(
+            decide: (_) async => throw UnAuthenticatedException(
+                'Failed connecting to $atSign. error:$code:$reason'),
+            wrapped: wrapped);
+
+        await expectLater(openOver(server.lookUp, []),
+            throwsA(isA<AtEnrollmentException>()),
+            reason: code);
+        expect(await pending(), isEmpty, reason: code);
+        expect(AtClientImpl.holdsLiveClient(atSign), isFalse, reason: code);
+      }
+    });
+
+    test(
+        'An atServer not reached for the retry budget ends the program, '
+        'keeping the request', () async {
+      await submitRequest();
+      final server = approvingAtServer(
+          decide: (_) async =>
+              throw SecondaryConnectException('could not connect'),
+          wrapped: wrapped);
+
+      await expectLater(openOver(server.lookUp, []),
+          throwsA(isA<SecondaryConnectException>()));
+      expect(await pending(), [approvedEnrollmentId]);
+      expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
+    });
   });
 
   test('An atSign the atDirectory has no atServer for is named as such',
@@ -204,3 +264,21 @@ void main() {
         reason: 'no client is left open');
   });
 }
+
+/// Collects what is written to it, for a test to read.
+class _Captured implements Stdout {
+  _Captured(this.text);
+
+  final List<String> text;
+
+  @override
+  void write(Object? object) => text.add('$object');
+
+  @override
+  void writeln([Object? object = '']) => text.add('$object\n');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _FakeVerbBuilder extends Fake implements VerbBuilder {}

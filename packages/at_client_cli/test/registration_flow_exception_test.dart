@@ -4,6 +4,8 @@ import 'package:test/test.dart';
 
 /// A registrar that answers every request for a free atSign with an error.
 class _RefusingRegistrar extends OnboardingUtil {
+  _RefusingRegistrar() : super('app-key');
+
   @override
   Future<List<String>> getFreeAtSigns(
           {int amount = 1, String authority = ''}) async =>
@@ -18,7 +20,7 @@ class _FollowUpRegistrar extends OnboardingUtil {
   final List<String> _codesTyped;
   final List<String> confirmations = [];
 
-  _FollowUpRegistrar(this._codesTyped);
+  _FollowUpRegistrar(this._codesTyped) : super('app-key');
 
   @override
   String getVerificationCodeFromUser() => _codesTyped.removeAt(0);

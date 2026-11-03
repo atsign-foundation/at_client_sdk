@@ -47,7 +47,6 @@ void main() {
       atSign,
       'wavi',
       AtClientPreference()
-        ..isLocalStoreRequired = true
         ..syncRegex = ''
         ..hiveStoragePath = path,
       lookUps: secureSocketLookUps(),

@@ -1,7 +1,7 @@
 // Tests for the [Query<T>] builder API on [AtCollection<T>].
 //
 // Query is a value-typed, immutable builder layered on top of
-// [AtCollection.getItems] for `fetch()` and
+// [AtCollection.getItems] for `get()` and
 // [AtCollection.updates]/[AtCollection.deletes] for `watch()`. These
 // tests exercise the builder surface and the two terminal operations
 // against a mocked [AtClient], matching the pattern in
@@ -130,7 +130,7 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('query() — pass-through', () {
-    test('with no modifiers, fetch() equals getItems()', () async {
+    test('with no modifiers, get() equals getItems()', () async {
       final c = buildCollection();
       seed({
         'a': Task('alpha', done: false, due: d2),

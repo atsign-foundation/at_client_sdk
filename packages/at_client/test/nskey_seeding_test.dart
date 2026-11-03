@@ -104,6 +104,40 @@ void main() {
     expect(w.asked, isEmpty);
   });
 
+  group('Given a published record that cannot be read', () {
+    NskeySeeding over(Exception failure, List<NskeyRotationContext> asked) {
+      final atClient = MockAtClient();
+      when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+      return NskeySeeding(
+        atClient: atClient,
+        ring: _RingUnreadable(atClient, failure),
+        rotationPolicy: (ns) {
+          asked.add(ns);
+          return true;
+        },
+      );
+    }
+
+    test(
+        'when the atServer is unreachable, then the policy is not asked and '
+        'nothing is rotated', () async {
+      final asked = <NskeyRotationContext>[];
+      final seeding =
+          over(SecondaryConnectException('atServer unreachable'), asked);
+
+      expect(
+          await seeding.rotateIfPolicyAsks(atSign, 'app_1.my_apps'), isFalse);
+      expect(asked, isEmpty);
+    });
+
+    test('when the client stops, then the stop ends the question', () async {
+      final seeding = over(StoppedException('stopped'), []);
+
+      await expectLater(seeding.rotateIfPolicyAsks(atSign, 'app_1.my_apps'),
+          throwsA(isA<StoppedException>()));
+    });
+  });
+
   test('a published generation is put to the policy, with its own dates',
       () async {
     final minted = DateTime.utc(2026, 2, 3, 4, 5, 6);
@@ -982,6 +1016,17 @@ class _RingAnswering extends PublishedNskeyKeyRing {
         ? null
         : (advertisement: published, updatedAt: null);
   }
+}
+
+/// A ring whose published record cannot be read, failing with [_failure].
+class _RingUnreadable extends PublishedNskeyKeyRing {
+  _RingUnreadable(super.atClient, this._failure);
+
+  final Exception _failure;
+
+  @override
+  Future<({NskeyAdvertisement advertisement, DateTime? updatedAt})?>
+      publishedRecord(String owner, String namespace) async => throw _failure;
 }
 
 /// A ring whose published record — generation and record stamp both — is

@@ -91,8 +91,7 @@ observations, so the monitor was never authenticating RSA for want of anything
 setting its algorithm — and 14.34's `signingAlgo:rsa2048` monitor was the
 **legacy** client's of the two live at the time, correctly RSA.
 
-A second candidate died too: `signingAlgoOf` falls back to
-`preference.signingAlgoType` (default `rsa2048`) whenever
+A second candidate died too: `signingAlgoOf` falls back to `rsa2048` whenever
 `_resolveSigningAlgoFromKeyMaterial` records null, and that path throws nothing
 and logs nothing. The probe showed the fallback firing on the **control** arm
 only, where it is correct by design — a legacy enrollment holds no typed

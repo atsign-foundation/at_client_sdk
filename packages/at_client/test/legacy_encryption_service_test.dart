@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart' show AtPrivateKey, RsaEncryptionAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
@@ -290,8 +292,7 @@ void main() {
       expect(atKey.metadata.ivNonce, isNotNull);
 
       var decryptedSharedKey =
-          // ignore: deprecated_member_use_from_same_package
-          EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
+          _rsaDecrypt(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptedSharedKey,
@@ -315,8 +316,7 @@ void main() {
           .thenAnswer((_) => Future.value(encryptionPublicKey));
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       var decryptedSharedKey =
-          // ignore: deprecated_member_use_from_same_package
-          EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
+          _rsaDecrypt(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptedSharedKey,
@@ -350,9 +350,7 @@ void main() {
       expect(secondIv, isNot(firstIv),
           reason: 'this AES is CTR, so two values under one shared key and '
               'one IV would share a keystream');
-      // ignore: deprecated_member_use_from_same_package
-      final key =
-          EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
+      final key = _rsaDecrypt(encryptedSharedKey, encryptionPrivateKey);
       expect(EncryptionUtil.decryptValue(firstValue, key, ivBase64: firstIv),
           'first');
       expect(EncryptionUtil.decryptValue(secondValue, key, ivBase64: secondIv),
@@ -527,3 +525,8 @@ class UpdateEncryptedSharedKeyMatcher extends Matcher {
     return false;
   }
 }
+
+/// [cipher], RSA-encrypted and base64-encoded, decrypted with [privateKey].
+String _rsaDecrypt(String cipher, String privateKey) => utf8.decode(
+    (RsaEncryptionAlgo()..atPrivateKey = AtPrivateKey.fromString(privateKey))
+        .decrypt(base64Decode(cipher)));
