@@ -722,6 +722,17 @@ void main() {
         clauses: ['wrote the record that names G1'],
       );
       provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'a holder that filed a superseded generation answers an ask for it, '
+            'and the asker opens a record sealed to it',
+        proves: 'through the real answer path, a holder that filed g1 and g2 '
+            'answers an ask for g1, and the asker files it and opens a record '
+            'sealed to g1. Mutation-proven: priming only the newer generation '
+            'reddens it at the answer, and priming only g1 reddens only the '
+            'count checked after it',
+        clauses: ['wrote the record that names G1'],
+      );
+      provenIn(
         'packages/at_client/test/nskey_data_path_test.dart',
         'a read hands the key ring the atSign that wrote the record',
         proves: 'the provider names the conveyance record\'s writer to the '

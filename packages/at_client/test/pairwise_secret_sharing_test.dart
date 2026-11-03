@@ -9,6 +9,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/pre_publish_conveyance.dart'
     show PrePublishConveyance;
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
+    show NskeySeeding;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -1683,6 +1685,86 @@ void main() {
       expect(await sharerA.sweepOnce(), 1);
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.deadbeef')!.value,
           'KEYBYTES');
+    });
+
+    test(
+        'a holder that filed a superseded generation answers an ask for it, '
+        'and the asker opens a record sealed to it', () async {
+      const namespace = 'app_1.my_apps';
+      directory.authorize(namespace, 'enroll-a');
+      directory.authorize(namespace, 'enroll-b');
+      final g1 = await XWingKeyPair.generate();
+      final g2 = await XWingKeyPair.generate();
+      final g1Kid = nskeyKidOf(g1.publicKeyBytes);
+
+      Future<NskeyPrivateFiling> filing(List<XWingKeyPair> held) async {
+        final io = InMemoryAtKeysIo();
+        await io.write(atSign, AtKeys());
+        final filing = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+        for (final pair in held) {
+          await filing.store(
+              namespace: namespace,
+              nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+              seed: NskeySeed(pair.privateKeyBytes));
+        }
+        return filing;
+      }
+
+      // B, the holder, filed g1 and then its successor g2, and its start
+      // primes what it answers from what it filed.
+      final holding = await filing([g1, g2]);
+      final primed = await NskeySeeding(
+              atClient: sharerB.atClient,
+              ring: PublishedNskeyKeyRing(sharerB.atClient,
+                  privateFiling: holding),
+              privateFiling: holding)
+          .hydrateStoreFromFiling(sharerB);
+
+      // A re-enrolled after the rotation, so it holds only g2.
+      final asking = await filing([g2]);
+      Future<void>? answered;
+      final ring = PublishedNskeyKeyRing(sharerA.atClient,
+          privateFiling: asking,
+          fetchConveyance: () async {},
+          requestConveyance: (ns, name) => answered =
+              requestAndFileNskeyPrivate(sharerA, asking, ns, name,
+                  logger: AtSignLogger('asker'),
+                  timeout: const Duration(seconds: 5)));
+
+      // A record @alice wrote before the rotation, sealed to g1.
+      final writer = NskeyProvider(
+          keyRing: InMemoryNskeyKeyRing()
+            ..seedKeypair(atSign, namespace,
+                publicKey: g1.publicKeyBytes, privateKey: g1.privateKeyBytes),
+          cache: ContentKeyCache());
+      final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
+      final record = AtKey()
+        ..key = '${ck.ckKid}.__ck'
+        ..namespace = namespace
+        ..sharedBy = atSign
+        ..metadata = Metadata();
+      final context = CryptoContext(atClient: sharerA.atClient);
+      final sealed = await writer.encrypt(context, record, ck.toBase64());
+      expect(record.metadata.appMetadata!.additional!['nskeyKid'], g1Kid);
+
+      final reader = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      await expectLater(reader.decrypt(context, record, sealed),
+          throwsA(isA<NskeyPrivateUnavailableException>()),
+          reason: 'A holds no private for g1 yet, and the miss asks for it');
+      expect(answered, isNotNull, reason: 'the miss asked');
+      await pumpEventQueue();
+
+      expect(await sharerB.sweepOnce(), 1,
+          reason: 'B takes the request and answers it');
+      expect(await sharerA.sweepOnce(), 1, reason: 'A takes the answer');
+      await answered;
+
+      expect(await reader.decrypt(context, record, sealed), ck.toBase64(),
+          reason: 'A filed the private B answered with, and the record '
+              'sealed to the superseded generation opens');
+      expect(primed, 2,
+          reason: 'checked last, so a holder that primes one generation fails '
+              'above when that one is g1 and only here when it is g2');
     });
 
     test('a request whose requestId is not id-shaped is answered unsolicited',
