@@ -297,12 +297,22 @@ void main() {
       expect(warned,
           contains('run at pqReady or above, it re-enrolls at its first start'),
           reason: 'and what the device does at each posture');
-      expect(warned, contains('at_activate enroll --posture pqReady'),
+      expect(warned, contains('request again with --posture pqReady'),
           reason: 'and how to convey them');
-      expect(warned, contains('revoke it with `at_activate revoke -i $b`'),
+      final revoke = RegExp(r'revoke it with `at_activate revoke ([^`]*)`')
+          .firstMatch(warned)
+          ?.group(1);
+      expect(revoke, isNotNull,
           reason: 'naming the step that still applies once it is approved');
+      final parsed = AuthCliArgs()
+          .createParserForCommand(AuthCliCommand.revoke)
+          .parse(revoke!.split(' '));
+      expect(parsed[AuthCliArgs.argNameAtSign], '@alice',
+          reason: 'a revoke command at_activate accepts as printed');
+      expect(parsed[AuthCliArgs.argNameEnrollmentId], b);
       expect(warned, isNot(contains('deny it')),
           reason: 'a deny finds nothing pending once approve has run');
+      expect(warned.trimRight(), endsWith('Approving as asked.'));
       expect(approvals, [b], reason: 'and approves the request as asked');
     });
 

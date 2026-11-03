@@ -1100,8 +1100,8 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
           'namespace keys. Run legacy, it reads none of the atSign\'s '
           'post-quantum data; run at pqReady or above, it re-enrolls at its '
           'first start and asks for them. To convey them, revoke it with '
-          '`at_activate revoke -i $eId` and request again with '
-          '`at_activate enroll --posture pqReady`. Approving as asked.');
+          '`at_activate revoke -a ${atClient.getCurrentAtSign()} -i $eId` '
+          'and request again with --posture pqReady. Approving as asked.');
     }
     // NOTE: approving is also when this atSign's secrets are sealed to the new
     // device's key package, which is why it goes through the client.

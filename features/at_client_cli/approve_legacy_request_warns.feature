@@ -21,4 +21,4 @@ Feature: at_activate approve warns about a request at the legacy key exchange on
   Scenario: Approving a request at the legacy key exchange on an atSign that publishes a namespace key warns
     Given @alice publishes a namespace key, and a device's enrollment request at the legacy key exchange
     When the atSign's manager runs at_activate approve for it
-    Then approve warns that the approval conveys none of the atSign's namespace keys, so the device reads none of its post-quantum data unless its app runs at pqReady or above (then it re-enrolls at its first start and asks for them), and that revoking it and requesting again at pqReady conveys them at approval; and it approves the request as asked
+    Then approve warns that the approval conveys none of the atSign's namespace keys, so the device reads none of its post-quantum data unless its app runs at pqReady or above (then it re-enrolls at its first start and asks for them), and that revoking it with the `at_activate revoke -a <atSign> -i <id>` it prints for that atSign and request, and requesting again at pqReady, conveys them at approval; and it approves the request as asked
