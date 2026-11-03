@@ -297,7 +297,7 @@ ruling that a removed default is preferable to a conditional default.
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
 | **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               | **Landed** ([#2149], [#2183]); `at_client` is gated too (`.github/wasm_gates.yaml`)        |
 | **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **Landed** — S4–S6 ([#2162]); S1–S3 superseded by the transport work ([#2163], [#2164])  |
-| **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | **Landed** — at_lookup 4.0.0, with the web transport (`at_lookup_web.dart`) ([#2223])      |
+| **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | **Landed** ([#2399]) — at_lookup 4.0.0 on trunk, not yet on pub.dev; web transport `at_lookup_web.dart` |
 | **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-26).         | T2 for storage   | **V1 partly landed** — the `hive.dart`/`memory.dart`/`sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate are on trunk; `RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore` and `remote_only` are not (open: #2258–#2261, #2273–#2276, #2336) — PB-3 ([`pb3-storage-bundle.md`](pb3-storage-bundle.md)). V2 decided, not built |
 | **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | **Landed** — `at_utils` and `at_client` 4.0.0 |
 | **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-17 (K-6, K-8 superseded; K-10 pointer + K-11 document); first live session partial — see [`implementation-plan.md`](implementation-plan.md) §5b |
@@ -311,7 +311,7 @@ ruling that a removed default is preferable to a conditional default.
 [#2163]: https://github.com/atsign-foundation/at_client_sdk/pull/2163
 [#2164]: https://github.com/atsign-foundation/at_client_sdk/pull/2164
 [#2183]: https://github.com/atsign-foundation/at_client_sdk/pull/2183
-[#2223]: https://github.com/atsign-foundation/at_client_sdk/pull/2223
+[#2399]: https://github.com/atsign-foundation/at_client_sdk/pull/2399
 [#2338]: https://github.com/atsign-foundation/at_client_sdk/pull/2338
 [#2341]: https://github.com/atsign-foundation/at_client_sdk/pull/2341
 
