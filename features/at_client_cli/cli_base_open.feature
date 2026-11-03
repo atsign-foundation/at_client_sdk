@@ -4,7 +4,8 @@ Feature: CLIBase says why an atServer refused, apart from an outage
   stands until someone acts (the keys were revoked, or the enrollment awaits
   approval), so CLIBase throws it at once with the reason; an atServer not
   reached within maxConnectAttempts is transient, and CLIBase throws a
-  different exception, which is the one a retry loop catches. A keyfile a denial, a cancel or an
+  different exception, which is the one a retry loop catches, naming the
+  atDirectory address and what failed. A keyfile a denial, a cancel or an
   expiry left with no credential is refused at once, and the program says
   so on stderr. A keyfile still
   holding only its enrollment request is resumed: the program waits for that
@@ -43,6 +44,11 @@ Feature: CLIBase says why an atServer refused, apart from an outage
     Given an atServer that does not answer within maxConnectAttempts tries
     When the program calls CLIBase.fromCommandLineArgs
     Then it throws SecondaryServerConnectivityException, and no client is left open
+
+  Scenario: An atServer not reached names the atDirectory address and what failed
+    Given an atServer whose connection fails, with the atDirectory at 127.0.0.1 on a port of the test's
+    When the program calls CLIBase.fromCommandLineArgs
+    Then the SecondaryServerConnectivityException it throws names the atDirectory 127.0.0.1 and its port, and the connection's error
 
   Scenario: A keyfile left with no credential is refused at once, and says so
     Given a keyfile holding no credential and no enrollment request

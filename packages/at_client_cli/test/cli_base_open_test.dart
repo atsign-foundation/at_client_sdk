@@ -152,6 +152,23 @@ void main() {
         reason: 'no client is left open');
   });
 
+  test('An atServer not reached names the atDirectory address and what failed',
+      () async {
+    const atSign = '@clioutagenamed';
+    await writeKeys(atSign);
+
+    await expectLater(
+        open(
+            atSign,
+            answering(() async => throw SecondaryConnectException(
+                'could not connect to the atServer'))),
+        throwsA(isA<SecondaryServerConnectivityException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('atDirectory 127.0.0.1:$port'),
+                contains('could not connect to the atServer')))));
+  });
+
   test('A keyfile left with no credential is refused at once, and says so',
       () async {
     const atSign = '@clinocredential';

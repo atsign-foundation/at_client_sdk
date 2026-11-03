@@ -312,8 +312,9 @@ class CLIBase {
   /// atDirectory has no atServer for the atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or
   /// at_activate's retries while waiting for approval
-  /// ([SecondaryServerConnectivityException] for the first). No client is
-  /// left open when it throws.
+  /// ([SecondaryServerConnectivityException] for the first, naming the
+  /// atDirectory address and what failed). No client is left open when it
+  /// throws.
   Future<void> init() async {
     AtServiceFactory? atServiceFactory;
 
@@ -427,7 +428,9 @@ class CLIBase {
     return SecondaryServerConnectivityException(
         'Failed to connect within $maxConnectAttempts attempts: '
         '${state.outcome.name}'
-        '${state.cause == null ? '' : ' (${state.cause!.name})'}');
+        '${state.cause == null ? '' : ' (${state.cause!.name})'}: atDirectory '
+        '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'
+        '${state.error == null ? '' : ': ${state.error}'}');
   }
 
   /// [e], once written to stderr after the progress line.
