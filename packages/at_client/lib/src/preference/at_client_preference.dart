@@ -375,7 +375,10 @@ class AtClientPreference {
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
   /// Fetch the notifications received while the client was offline, from the
-  /// last one it received. Defaults to true.
+  /// last one it received; a store that has received none starts from when its
+  /// client first started, so a new device or a reinstall gets nothing sent
+  /// before it. Notifications are not a history: keep history in records.
+  /// Defaults to true.
   ///
   /// Set to false to ignore those. Notifications received since the client's
   /// notification service was created are delivered once either way, including

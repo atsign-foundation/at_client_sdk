@@ -88,7 +88,7 @@ The remaining commands run on the keyfile `-k` names (that one by default):
 what a client built for it does post-quantum (see the
 [at_client README](../at_client/README.md#post-quantum-cryptography)).
 An unnamed `--posture` is at_client's default on every command (`legacy`
-today), and `onboard` and `enroll` say which posture they ran at. Approving
+today), and `onboard` and `enroll` say so when they take it. Approving
 a post-quantum enrollment needs the post-quantum providers, so under `legacy`
 at_client refuses such an approval when it reads the request; pass
 `--posture pqReady` to approve one. `enroll --key-exchange legacy|pq`

@@ -216,7 +216,7 @@ class CLIBase {
   late final AtClient atClient;
 
   /// Validates parameters and constructs a CLIBase instance.
-  /// <br/> <br/>
+  ///
   /// Validation rules:
   /// - homeDir must be non-null when either of the atKeysFilePath or
   ///   storageDir parameters is null
@@ -224,13 +224,12 @@ class CLIBase {
   ///   `atRootDomain` is non-null then it is used, otherwise we parse
   ///   `rootDomain` to create an [AtRootDomain] and we use that.
   ///
-  /// <br/>
   /// Also configures the default AtSignLogger log level to be either INFO
   /// if verbose is true, or WARNING if verbose is false (the default), so the
   /// SDK's warnings, such as a notification it dropped, reach stderr. If the
   /// application wishes to use a different default log level then it can do
   /// something like this:
-  /// ```
+  /// ```dart
   ///     AtSignLogger.root_level = 'FINEST';
   ///     cliBase.logger.logger.level = Level.FINEST;
   /// ```
