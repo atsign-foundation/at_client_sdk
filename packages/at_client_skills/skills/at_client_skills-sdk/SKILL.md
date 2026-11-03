@@ -479,9 +479,10 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
   false)` and sets `allowLegacyCryptoFallback`: each send requires the peer's
   namespace with `sealToNamespace`, and a peer advertising nothing there gets
   legacy encryption. A `pqReady` client with `allowLegacyCryptoFallback` can
-  instead ask `canSealTo` before each send and request
-  `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where it answers
-  true.
+  instead ask `canSealTo` before each send and send with `sealToNamespace`
+  where it answers true: with no `cryptoProviderId`, `sealToNamespace`
+  selects the namespace-key provider wherever the client's config registers
+  it, as `pqReady` and above do.
 - The at_client README's "Post-quantum cryptography" section has the full
   ladder and what each stage switches on.
 

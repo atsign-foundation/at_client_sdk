@@ -656,8 +656,11 @@ What each posture switches on:
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` with
   `allowLegacyCryptoFallback` and requires each daemon's namespace. It can
   instead run `pqReady` with `allowLegacyCryptoFallback`, ask `canSealTo`,
-  and request `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where
-  the answer is true.
+  and send with `sealToNamespace` where the answer is true. A share with
+  `sealToNamespace` and no `cryptoProviderId` is sealed with the
+  namespace-key provider, `symmetricAesGcmCryptoProviderId`, wherever the
+  client's config registers it, as `pqReady` and above do, and is refused,
+  naming the posture or the config, where it does not.
 - **A write right after opening.** A client's start-up publishes its
   namespace keys after `open` returns. A write to the client's own atSign
   that finds no key while start-up is still to publish one for its

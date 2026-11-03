@@ -15793,7 +15793,13 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    `AtClientBindings.notify`, seal to
    the recipient's key at exactly that namespace, with no walk. It is refused for a write to the
    client's own atSign, for one that is not encrypted, under a provider that seals to no
-   namespace key, and for a namespace the key's name does not end with after a dot.
+   namespace key, and for a namespace the key's name does not end with after a dot. With no
+   `cryptoProviderId`, a write that requires a namespace uses `symmetricAesGcmCryptoProviderId`
+   wherever the client's config registers it (`pqReady` and above, or an app config holding it);
+   at `legacy`, or with an app config lacking it, it is refused naming the posture or the config.
+   **Amended 2026-11-03** (gkc: "(a) Auto-select (Rec.)"): a write with no `cryptoProviderId` used
+   the client's default provider, which at `pqReady` is legacy, so it was refused as "the legacy
+   provider seals to no namespace key" unless the program named the namespace-key provider.
 3. **`CryptoRuntime.canSealTo(atSign, namespace)`** answers true only when the recipient
    advertises a verified key at exactly that namespace. It never throws: it answers false, with a
    warning naming the cause, when the recipient's atServer cannot be reached or the advertisement
@@ -15809,8 +15815,10 @@ advertised, or fail pq sealing (and perhaps fall back to legacy) if Bob has adve
    finer-grained control to programs"). (a), the main pattern, is
    `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` with
    `allowLegacyCryptoFallback`, every send requiring its `<device>.sshnp`. (b) is `pqReady` with
-   `allowLegacyCryptoFallback`, asking `canSealTo` per send and requesting the namespace-key
-   provider with `sealToNamespace` where it answers true, legacy otherwise. None of the named
+   `allowLegacyCryptoFallback`, asking `canSealTo` per send and sending with `sealToNamespace`
+   where it answers true, which selects the namespace-key provider as "A program can require one
+   namespace" says, legacy otherwise.
+   None of the named
    stages fits alone: `pqReady` writes legacy by default, and `pqActive` disallows legacy
    encryption, which turns the fallback off.
 5. **The levels are asked about in one batch** of `plookup` entries, over the `batch:` verb,

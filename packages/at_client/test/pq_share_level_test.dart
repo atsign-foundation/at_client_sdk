@@ -592,6 +592,105 @@ void main() {
     });
   });
 
+  group('Given a share requiring a namespace that names no provider', () {
+    /// Alice's client at [posture], given [crypto] when the app names one.
+    void at(PqPosture posture, {CryptoConfig? crypto}) {
+      atClient = MockAtClient(posture: posture);
+      when(() => atClient.getCurrentAtSign()).thenReturn(_alice);
+      atClient.getPreferences().namespace = 'sensor';
+      if (crypto != null) atClient.getPreferences().crypto = crypto;
+      context = CryptoContext(atClient: atClient);
+    }
+
+    /// A notification of [key] requiring d1.sensor, naming no provider.
+    Future<NotifyVerbBuilder> send(AtKey key) {
+      key.metadata.isEncrypted = true;
+      return NotificationRequestTransformer(atClient).transform(
+          NotificationParams.forUpdate(key,
+              value: 'memo', sealToNamespace: 'd1.sensor'));
+    }
+
+    test(
+        'At pqReady, a send requiring a namespace and naming no provider is '
+        "sealed to the recipient's key there", () async {
+      final pair = await XWingKeyPair.generate();
+      final c = _Client(_Ring());
+      final bobs = c.ring
+          .seedPublicOnly(_bob, 'd1.sensor', publicKey: pair.publicKeyBytes);
+      final bob = _Client(_Ring()
+        ..seedKeypair(_bob, 'd1.sensor',
+            publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes));
+      at(PqPosture.pqReady,
+          crypto: CryptoConfig(
+            defaultProviderId: legacyCryptoProviderId,
+            providers: [c.data, c.nskey],
+            keyRing: c.ring,
+          ));
+      wire(c);
+      final key = AtKey.fromString('$_bob:reading.d1.sensor$_alice');
+
+      final builder = await send(key);
+
+      expect(sealedTo(_bob, 'd1.sensor'), bobs);
+      final conveyance = store.values.singleWhere(
+          (r) => r.key.toString().startsWith('$_bob:'),
+          orElse: () => fail('no conveyance to bob'));
+      await bob.nskey.decrypt(context, conveyance.key, conveyance.value);
+      final fromWire = AtKey.fromString(key.toString())
+        ..metadata.appMetadata = key.metadata.appMetadata;
+      expect(await bob.data.decrypt(context, fromWire, builder.value!), 'memo',
+          reason: 'bob opens it');
+    });
+
+    test(
+        'At legacy, a share requiring a namespace and naming no provider is '
+        'refused naming the posture', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'd1.sensor');
+      at(PqPosture.legacy);
+      wire(c);
+
+      await expectLater(
+          send(AtKey.fromString('$_bob:reading.d1.sensor$_alice')),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'sealToNamespace')
+              .having(
+                  (e) => e.message,
+                  'message',
+                  allOf(
+                      contains('a client at PqPosture.legacy'),
+                      contains(symmetricAesGcmCryptoProviderId),
+                      isNot(contains('CryptoConfig'))))));
+      expect(c.ring.lookedUp, isEmpty);
+    });
+
+    test(
+        'A share requiring a namespace and naming no provider, under a config '
+        'without the namespace-key provider, is refused naming the config',
+        () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'd1.sensor');
+      at(PqPosture.pqReady,
+          crypto: CryptoConfig(
+            defaultProviderId: c.nskey.id,
+            providers: [c.nskey],
+            keyRing: c.ring,
+          ));
+      wire(c);
+
+      await expectLater(
+          send(AtKey.fromString('$_bob:reading.d1.sensor$_alice')),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'sealToNamespace')
+              .having(
+                  (e) => e.message,
+                  'message',
+                  allOf(contains('CryptoConfig'),
+                      contains(symmetricAesGcmCryptoProviderId)))));
+      expect(c.ring.lookedUp, isEmpty);
+    });
+  });
+
   group(
       "Given alice's client right after opening, before start-up has "
       'published any key', () {

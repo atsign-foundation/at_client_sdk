@@ -18,6 +18,10 @@
   client gives up on, such as one it cannot decrypt, with the reason it
   logs at warning. A client whose posture reads no post-quantum data says
   so when it drops one sealed post-quantum, and to restart it.
+- feat: `sealToNamespace` with no `cryptoProviderId` seals with the
+  namespace-key provider, so a `pqReady` program no longer names it; a
+  client whose config lacks it, as at `PqPosture.legacy`, is refused with
+  an error naming its posture or config.
 - fix: a collection record this device cannot read yet fails `getItems()`
   with a `CItemReadException` naming the record and the error its read
   failed with, rather than a string; `getItemsAsStream()` with an `onError`

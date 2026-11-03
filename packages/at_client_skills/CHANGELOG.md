@@ -31,6 +31,8 @@
 - A share goes to the most specific namespace key the recipient advertises;
   `sealToNamespace` requires one namespace, and `canSealTo` asks first
   (`SKILL.md`).
+- A `pqReady` program sends with `sealToNamespace` alone, which selects the
+  namespace-key provider (`SKILL.md`).
 - A new app names `PqPosture.pqActive`, as every snippet now does, and an
   app built on 3.x moves to it through `pqReady` in two releases; a table
   says what each posture writes, reads and needs (`SKILL.md` §11; the
