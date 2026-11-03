@@ -4,10 +4,9 @@ Feature: A notification a client cannot deliver is reported
   a client whose posture reads no post-quantum data, is logged at warning
   with its key and the reason, and emitted on
   NotificationService.droppedEvents. For a client whose posture reads no
-  post-quantum data the reason names the posture and says to restart it,
-  since a client of an atSign that publishes a namespace key runs at its
-  pqReady floor from its next start. A CLIBase program shows warnings on
-  stderr by default.
+  post-quantum data the reason names the posture, says the notification is
+  lost, and says to configure pqReady or above for later ones. A CLIBase
+  program shows warnings on stderr by default.
 
   Races: none new; a drop is reported once, from the loop that drops it.
   Replay: none arise; nothing is sent.

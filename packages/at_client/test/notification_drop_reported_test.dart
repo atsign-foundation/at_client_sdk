@@ -90,9 +90,13 @@ void main() {
     expect(
         logs.at('WARNING'),
         contains(allOf(
-            contains(key), contains('PqPosture.legacy'), contains('restart'))),
-        reason: 'the warning names the notification and the posture, and '
-            'says what reads it');
+            contains(key),
+            contains('PqPosture.legacy'),
+            contains('so this notification is lost'),
+            contains('Configure PqPosture.pqReady or above to read later '
+                'ones'))),
+        reason: 'the warning names the notification and the posture, says '
+            'it is lost, and says what reads later ones');
   });
 
   for (final (shape, preference, providerId) in [

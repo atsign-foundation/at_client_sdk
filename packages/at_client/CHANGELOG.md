@@ -13,7 +13,8 @@
 - feat: `NotificationService.droppedEvents` reports each notification a
   client gives up on, such as one it cannot decrypt, with the reason it
   logs at warning. A client whose posture reads no post-quantum data says
-  so when it drops one sealed post-quantum, and to restart it.
+  so when it drops one sealed post-quantum, that it is lost, and to
+  configure `pqReady` or above for later ones.
 - feat: `sealToNamespace` with no `cryptoProviderId` seals with the
   namespace-key provider, so a `pqReady` program no longer names it; a
   client whose config lacks it, as at `PqPosture.legacy`, is refused with

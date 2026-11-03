@@ -316,11 +316,13 @@ class CryptoRuntime {
         !posture.configuresPqProviders &&
         (id == nskeyCryptoProviderId ||
             id == symmetricAesGcmCryptoProviderId)) {
+      final notification = lookupReason == 'notify';
       return 'Crypto provider "$id" is not registered: this client runs at '
-          '${postureName(posture)}, which reads no post-quantum data. Lookup '
-          'reason: $lookupReason. Registered providers: ${ids.join(', ')}. A '
-          'client of an atSign that publishes a namespace key runs at its '
-          'pqReady floor from its next start: restart it to read this.';
+          '${postureName(posture)}, which reads no post-quantum data'
+          '${notification ? ', so this notification is lost' : ''}. Configure '
+          'PqPosture.pqReady or above to read '
+          '${notification ? 'later ones' : 'it'}. Lookup reason: '
+          '$lookupReason. Registered providers: ${ids.join(', ')}.';
     }
     return 'Crypto provider "$id" is not registered. '
         'Lookup reason: $lookupReason. '
