@@ -316,12 +316,9 @@ class TestUtils {
         current.getCurrentAtSign() == currentAtSign &&
         atKeysIo == null &&
         !current.isStopped) {
-      AtClientImpl.refuseChangedRolloutAxes(
-          running: current.getPreferences(),
-          asked: preference,
-          cacheKey:
-              AtClientImpl.instanceKey(currentAtSign, current.enrollmentId));
-      // Some other test may have messed with the preferences.
+      // Some other test may have messed with the preferences. setPreferences
+      // refuses a preference whose rollout axes differ from the running
+      // client's.
       current.setPreferences(preference);
       await loader.setEncryptionKeys(current, currentAtSign);
       return manager;
