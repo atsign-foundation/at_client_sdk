@@ -6,6 +6,13 @@ abstract interface class KeyBytesStore {
   Future<void> delete(String atSign);
 }
 
+/// The credential id of the passkey that last unlocked an atSign's keys on
+/// this device, kept beside its envelope.
+abstract interface class CredentialHintStore {
+  Future<Uint8List?> credentialId(String atSign);
+  Future<void> putCredentialId(String atSign, Uint8List id);
+}
+
 class InMemoryKeyBytesStore implements KeyBytesStore {
   final Map<String, Uint8List> _store = {};
 
