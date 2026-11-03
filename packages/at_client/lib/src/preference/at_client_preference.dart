@@ -306,12 +306,14 @@ class AtClientPreference {
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
 
-  /// The process-wide default network timeout: the maximum wall-clock the SDK
-  /// will spend reaching/using the atServer (connect + retries + waiting for a
-  /// response) before giving up. When set on the `AtClientPreference` used to
-  /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
-  /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
-  /// the existing default (30s) applies.
+  /// The process-wide default network timeout: the timeout for each network
+  /// operation the SDK makes, such as a connect, an atDirectory lookup, or the
+  /// wait for a response's next bytes. One SDK call can make several in
+  /// sequence, so its wall-clock can be a multiple of this. When set on the
+  /// `AtClientPreference` used to create an `AtClient`, it becomes
+  /// `AtNetworkTimeouts.defaultTimeout` for the whole process (capped at
+  /// `AtNetworkTimeouts.maxAllowed`, 60s). When null, the existing default
+  /// (30s) applies.
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
