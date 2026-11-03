@@ -316,6 +316,7 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `notificationService.send(namespace: ...)` | `send(idAndNamespace: ...)`, the same value |
 | `AtClientManager.getInstance().syncService`, `.notificationService` | `client.syncService`, `client.notificationService` |
 | `syncService.sync(onDone: ...)`, `setOnDone(...)` | a `SyncProgressListener` added with `addProgressListener` |
+| `syncService.sync(onError: ...)` | a `SyncProgressListener`, which hears each sync that fails |
 | `AtServiceFactory.atClient(...)` | `Atsign(a).open(...)` or `buildAtClient(...)` |
 | `PutRequestOptions.storeSharedKeyEncryptedMetadata` | nothing; it was always true |
 | `RemoteSecondary(..., signingAlgoType: ...)` | nothing; the keys name the algorithm |
@@ -544,7 +545,7 @@ null passes a default in its place, such as
 `AtClient` gained `atKeysIo`, `connection` and `ensureReachable`, and
 `AtLookUp` gained `authenticator` and `stop`. Regenerate generated mocks, and
 add the members to any class implementing either. A `SyncService` of your own
-drops `setOnDone` and `sync`'s `onDone`, and an `AtServiceFactory` of your own
+drops `setOnDone` and `sync`'s `onDone` and `onError`, and an `AtServiceFactory` of your own
 drops `atClient` and takes only the client in `notificationService` and
 `syncService`.
 

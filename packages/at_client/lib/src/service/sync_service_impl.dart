@@ -225,9 +225,8 @@ class SyncServiceImpl implements SyncService {
   }
 
   @override
-  void sync({Function? onError}) {
+  void sync() {
     final syncRequest = SyncRequest();
-    syncRequest.onError = onError;
     syncRequest.requestSource = SyncRequestSource.app;
     syncRequest.requestedOn = DateTime.now().toUtc();
     syncRequest.result = SyncResult();
@@ -358,12 +357,7 @@ class SyncServiceImpl implements SyncService {
       if (isStopped) {
         // NOTE: stop() landed while _isInSync was parked on its network read.
         // Anything this run did from here would be sync activity after stop()
-        // returned, so the request is answered as stopped instead.
-        syncRequest.result!
-          ..syncStatus = SyncStatus.failure
-          ..atClientException = AtClientException(
-              error_codes['AtClientException'], 'SyncService has been stopped');
-        _syncError(syncRequest);
+        // returned.
         return;
       }
       if (inSync) {
@@ -410,8 +404,6 @@ class SyncServiceImpl implements SyncService {
       _logger.warning(
           'Exception in sync ${syncRequest.id}. Reason: ${e.getTraceMessage()}');
       final wrapped = AtExceptionManager.createException(e);
-      syncRequest.result!.atClientException = wrapped;
-      _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
@@ -421,17 +413,11 @@ class SyncServiceImpl implements SyncService {
     } on _SyncAbandoned {
       _logger
           .finer('sync ${syncRequest.id} abandoned: the service was stopped');
-      syncRequest.result!.atClientException = AtClientException(
-          error_codes['AtClientException'], 'SyncService has been stopped');
-      _syncError(syncRequest);
       _syncInProgress = false;
     } catch (e) {
       if (e is StoppedException || isStopped) {
         _logger
             .finer('sync ${syncRequest.id} abandoned: the service was stopped');
-        syncRequest.result!.atClientException = AtClientException(
-            error_codes['AtClientException'], 'SyncService has been stopped');
-        _syncError(syncRequest);
         _syncInProgress = false;
         return;
       }
@@ -443,8 +429,6 @@ class SyncServiceImpl implements SyncService {
       _logger.warning(
           'Unexpected exception in sync ${syncRequest.id}. Reason: $e');
       final wrapped = AtClientException.message('$e');
-      syncRequest.result!.atClientException = wrapped;
-      _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
@@ -505,28 +489,6 @@ class SyncServiceImpl implements SyncService {
   /// lasted.
   SyncRequest _getSyncRequest() => syncRequests.removeFirst();
 
-  void _syncError(SyncRequest syncRequest) {
-    _safeInvokeOnError(syncRequest);
-  }
-
-  /// Calls [request.onError] (if non-null) with [request.result],
-  /// wrapping the callback in a try-catch and logging anything
-  /// thrown. The queue's eviction / drain / completion flows must
-  /// not be derailed by a misbehaving caller-supplied callback —
-  /// neither a single overflow nor a service stop should fail
-  /// because one onError handler threw.
-  ///
-  /// Caller is responsible for populating [request.result] with the
-  /// failure status and exception before calling.
-  void _safeInvokeOnError(SyncRequest request) {
-    if (request.onError == null) return;
-    try {
-      request.onError!(request.result);
-    } catch (e) {
-      _logger.warning('SyncRequest.onError threw and was swallowed: $e');
-    }
-  }
-
   /// One `info` line per round that moved data; the per-entry lines are `finer`.
   void _logRoundSummary(SyncRequest syncRequest, SyncResult syncResult) {
     final keys = syncResult.keyInfoList;
@@ -553,13 +515,7 @@ class SyncServiceImpl implements SyncService {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
     _logger.finer('Inside syncComplete. syncRequest.requestSource : '
         '${syncRequest.requestSource}');
-    _clearQueue(alreadyHandled: syncRequest);
-  }
-
-  // ignore: unused_element
-  void _onError(SyncResult syncResult) {
-    _logger
-        .severe('system sync error ${syncResult.atClientException?.message}');
+    _clearQueue();
   }
 
   /// We use this so that after [processSyncRequests] runs, it can enqueue a sync
@@ -586,21 +542,9 @@ class SyncServiceImpl implements SyncService {
       return;
     }
     if (syncRequests.length == queueSize) {
-      // Drop-oldest sliding window: evict the head, not the tail. The
-      // newest request is always retained (it represents the most
-      // recent caller's intent to sync). The evicted request gets
-      // an explicit onError invocation so its caller isn't left
-      // waiting indefinitely on a callback that will never fire.
-      final evicted = syncRequests.removeFirst();
-      evicted.result ??= SyncResult();
-      evicted.result!
-        ..syncStatus = SyncStatus.failure
-        ..atClientException = AtClientException(
-          error_codes['AtClientException'],
-          'Sync request evicted: queue at capacity ($queueSize); '
-          'superseded by a newer sync request',
-        );
-      _safeInvokeOnError(evicted);
+      // NOTE: drop-oldest, so the newest request, the most recent caller's
+      // intent to sync, is always kept.
+      syncRequests.removeFirst();
     }
     syncRequests.addLast(syncRequest);
     // Trigger a sync run on the next microtask. Deferring (rather than
@@ -626,41 +570,15 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  /// Drains the queue at the end of a successful sync run. Each
-  /// remaining request — every queued sync intent that wasn't the
-  /// one chosen for processing — is conceptually answered by the
-  /// run that just completed (it brought local up to date), so we
-  /// fire `onError` on each with a "superseded" failure rather than
-  /// leaving its callback dangling forever.
+  /// Drops every queued request at the end of a successful round, which
+  /// brought local storage up to date for each of them.
   ///
-  /// **Tail-of-burst handling**: "what to push" is owned by
-  /// `LocalSecondary`'s `AtSyncQueue`, not by this request queue. A
-  /// late-arriving local write (one whose `_update` / `_delete`
-  /// enqueue lands during a running round) lives in the sync-queue
-  /// Hive box; the next `processSyncRequests` round peeks the queue
-  /// from a fresh snapshot and drains those entries. Wholesale
-  /// clearing of the request queue here is therefore safe — no
-  /// pending-write information lives on it.
-  ///
-  /// The just-processed request has completed by the time this is
-  /// called from [_syncComplete]; passing it as [alreadyHandled] keeps it
-  /// from being notified via `onError` here. Identity comparison is exact (`identical`) so only the
-  /// specific in-flight instance is skipped.
-  void _clearQueue({SyncRequest? alreadyHandled}) {
+  /// "What to push" lives in `LocalSecondary`'s `AtSyncQueue`, not here, so a
+  /// write landing during a round is drained by the next round that runs,
+  /// from a fresh snapshot of that queue.
+  void _clearQueue() {
     _logger.finer('Clearing sync queue');
-    final exception = AtClientException(
-      error_codes['AtClientException'],
-      'Sync request superseded by a coalesced sync run that just completed',
-    );
-    while (syncRequests.isNotEmpty) {
-      final r = syncRequests.removeFirst();
-      if (identical(r, alreadyHandled)) continue;
-      r.result ??= SyncResult();
-      r.result!
-        ..syncStatus = SyncStatus.failure
-        ..atClientException = exception;
-      _safeInvokeOnError(r);
-    }
+    syncRequests.clear();
   }
 
   /// Throws if [stop] has been called. Placed at the stage boundaries of
@@ -1758,20 +1676,8 @@ class SyncServiceImpl implements SyncService {
   }
 
   void _drainSyncQueue() {
-    // 1. Drain the sync request queue with errors
+    syncRequests.clear();
     final progress = _buildStoppedProgress();
-    final exception = progress.atClientException;
-
-    while (syncRequests.isNotEmpty) {
-      final request = syncRequests.removeFirst();
-      request.result ??= SyncResult();
-      request.result!
-        ..syncStatus = SyncStatus.failure
-        ..atClientException = exception;
-      _safeInvokeOnError(request);
-    }
-
-    // 2. Notify progress listeners of the failure
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(progress);

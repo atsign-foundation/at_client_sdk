@@ -187,6 +187,7 @@ replaces it because nothing read it.
 | `notificationService.send(namespace: ...)`                                                   | `send(idAndNamespace: ...)`, the same value                                             |
 | `AtClientManager.getInstance().syncService`, `.notificationService`                          | `client.syncService`, `client.notificationService`                                      |
 | `syncService.sync(onDone: ...)`, `setOnDone(...)`                                            | a `SyncProgressListener` added with `addProgressListener`                               |
+| `syncService.sync(onError: ...)`                                                             | a `SyncProgressListener`, which hears each sync that fails                              |
 | `AtServiceFactory.atClient(...)`                                                             | `Atsign(a).open(...)` or `buildAtClient(...)`                                           |
 | `AtClientPreference.syncStrategy`, `SyncStrategy`                                            | nothing; they did nothing                                                               |
 | `AtClientPreference.isLocalStoreRequired`, `useAtChops`, `hashingAlgoType`                   | nothing; they did nothing                                                               |

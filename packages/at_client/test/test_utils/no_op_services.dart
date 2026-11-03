@@ -24,5 +24,5 @@ class NoOpSyncService implements SyncService {
   void removeProgressListener(SyncProgressListener listener) {}
 
   @override
-  void sync({Function? onError}) {}
+  void sync() {}
 }

@@ -133,13 +133,12 @@ void main() {
     SyncServiceImpl.queueSize = 1;
     final gate = Completer<List<String>>();
     when(() => localSecondary.peekSyncQueue()).thenAnswer((_) => gate.future);
-    var evicted = false;
-    sync.sync(onError: (_) => evicted = true);
+    sync.sync();
     // The round is parked on its first read of the sync queue.
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(sync.isSyncInProgress, isTrue);
 
-    sync.sync(onError: (_) => evicted = true);
+    sync.sync();
     expect(sync.syncRequests.single.requestSource, SyncRequestSource.app);
     stats.add(statsNotification('6'));
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -147,8 +146,6 @@ void main() {
     expect(sync.syncRequests.single.requestSource, SyncRequestSource.app,
         reason: 'the notification\'s commit id is already in the cache; the '
             'app\'s request is the only thing that would read fresh');
-    expect(evicted, isFalse,
-        reason: 'and the app was not told its request was superseded');
 
     gate.complete(<String>[]);
     while (sync.isSyncInProgress) {

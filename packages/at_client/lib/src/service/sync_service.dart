@@ -28,7 +28,7 @@ abstract class SyncService {
   /// ```dart
   /// client.syncService.sync();
   /// ```
-  void sync({Function? onError});
+  void sync();
 
   /// Whether nothing waits to push and the atServer's latest commit id for
   /// this client's sync filter is at or below the one it has pulled to.
@@ -129,10 +129,9 @@ class SyncRequest {
   late String id;
   SyncRequestSource requestSource = SyncRequestSource.app;
   late DateTime requestedOn;
-  Function? onError;
   SyncResult? result;
 
-  SyncRequest({this.onError}) {
+  SyncRequest() {
     id = Uuid().v4();
     requestedOn = DateTime.now().toUtc();
   }

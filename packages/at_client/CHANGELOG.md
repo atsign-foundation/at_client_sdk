@@ -54,6 +54,8 @@
   `client.notificationService`.
 - breaking: `SyncService.sync` takes no `onDone`, and `setOnDone` is removed;
   a `SyncProgressListener` hears how each sync went.
+- breaking: `SyncService.sync` takes no `onError`, and `SyncRequest` has no
+  `onError`; a `SyncProgressListener` hears each sync that fails.
 - breaking: `AtServiceFactory.atClient` is removed, and the factory's
   `notificationService` and `syncService` take only the client.
   `AtClientImpl.create` and `SyncServiceImpl.create` take no

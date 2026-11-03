@@ -62,7 +62,7 @@ or decryption — it only excludes other apps' unrelated keys.
 ## 3. Observe completion with `SyncProgressListener`
 
 Tests and headless drivers must wait until synced before asserting. Use
-`SyncProgressListener`; 4.0 removed `sync(onDone:)`:
+`SyncProgressListener`; 4.0 removed `sync(onDone:)` and `sync(onError:)`:
 
 ```dart
 class _SyncedListener implements SyncProgressListener {

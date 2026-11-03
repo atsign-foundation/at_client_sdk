@@ -40,8 +40,8 @@
   `NotificationParams.forText` and `send(namespace:)` are listed as removed in
   4.0, with what replaces each (`SKILL.md` §18; `references/01`).
 - `AtClientManager`'s `syncService` and `notificationService`,
-  `sync(onDone:)`, `setOnDone`, `AtServiceFactory.atClient` and
-  `syncStrategy` are listed as removed in 4.0 (`SKILL.md` §18;
+  `sync(onDone:)`, `sync(onError:)`, `setOnDone`, `AtServiceFactory.atClient`
+  and `syncStrategy` are listed as removed in 4.0 (`SKILL.md` §18;
   `references/01`, `11`, `15`).
 - `AtClientPreference`'s `isLocalStoreRequired`, `privateKey`, `useAtChops`,
   `signingAlgoType` and `hashingAlgoType`, `RemoteSecondary`'s
