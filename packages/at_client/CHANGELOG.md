@@ -26,6 +26,9 @@
   `CollectionOpException<T>` carries the item written as `item`, so the
   share is retried with `updateSharedWith(e.item!, ...)` rather than a
   second `create`.
+- feat: `Atsign.open` refuses keys a denial, a cancel or an expiry left
+  with no credential at once, with `AtNoCredentialException` saying to
+  enroll again, rather than failing a minute later as unreachable.
 - fix: a collection record this device cannot read yet fails `getItems()`
   with a `CItemReadException` naming the record and the error its read
   failed with, rather than a string; `getItemsAsStream()` with an `onError`

@@ -439,6 +439,18 @@ class AtEnrollmentCancelledException extends AtEnrollmentException {
   AtEnrollmentCancelledException(super.message);
 }
 
+/// `open` was asked to open a keyfile that holds no credential and no
+/// pending enrollment, as a denial, a cancel or an expiry leaves it, so there
+/// is nothing to authenticate with: the device has to enroll again.
+class AtNoCredentialException extends AtException {
+  final String atSign;
+
+  AtNoCredentialException(this.atSign)
+      : super('$atSign holds no credential in this keyfile: its enrollment '
+            'was denied, cancelled or expired, or never completed, so there '
+            'is nothing to authenticate with; enroll again');
+}
+
 /// `open` was asked to open a keyfile that holds nothing but an enrollment
 /// awaiting approval, so there is no credential to authenticate with yet.
 /// `Atsign.resumeEnrollment` is the way to pick it up, and throws this too,

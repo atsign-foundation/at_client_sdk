@@ -255,6 +255,30 @@ void main() {
             .having((e) => e.pendingEnrollmentIds, 'pending', [enrollmentId])));
   });
 
+  test('A keyfile left empty by a denial or a cancel is refused at once',
+      () async {
+    final store = InMemoryAtKeysIo();
+    final pending = await submit(store, atServer(decide: (_) async => true));
+    await pending.cancel();
+    final before = jsonEncode((await store.read(atSign)).toJson());
+    final finder = _RecordingAtDirectory();
+
+    await expectLater(
+        Atsign(atSign)
+            .open(
+                keys: store,
+                preference: await preference(),
+                lookUps: secureSocketLookUps(),
+                secondaryAddressFinder: finder,
+                storage: hiveStoreFor(Atsign(atSign), await preference()))
+            .timeout(const Duration(seconds: 2)),
+        throwsA(isA<AtNoCredentialException>().having((e) => e.message,
+            'message', allOf(contains('no credential'), contains('enroll')))));
+    expect(jsonEncode((await store.read(atSign)).toJson()), before,
+        reason: 'nothing is written to the keyfile');
+    expect(finder.asked, isEmpty, reason: 'no connection is attempted');
+  });
+
   test('resumeEnrollment finds the request by app and device, and only that',
       () async {
     final store = InMemoryAtKeysIo();
@@ -1583,5 +1607,17 @@ class _ReadHookedStore extends InMemoryAtKeysIo {
   FutureOr<AtKeys> read(String atsign) {
     _onRead?.call(++_reads);
     return super.read(atsign);
+  }
+}
+
+/// An atDirectory that records each atSign it is asked about and answers none.
+class _RecordingAtDirectory implements SecondaryAddressFinder {
+  final List<String> asked = [];
+
+  @override
+  Future<SecondaryAddress> findSecondary(String atSign,
+      {Duration? timeout}) async {
+    asked.add(atSign);
+    throw SecondaryNotFoundException('asked for $atSign');
   }
 }

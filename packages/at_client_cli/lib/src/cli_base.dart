@@ -304,7 +304,9 @@ class CLIBase {
   /// does, asking every [approvalRetryInterval], then opens on the keys the
   /// approval completes.
   ///
-  /// Throws [AtCredentialRefusedException] when the atServer refuses the
+  /// Throws [AtNoCredentialException] at once when the keyfile holds no
+  /// credential, as a denial, a cancel or an expiry leaves it,
+  /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentException] when the request is denied or expires,
   /// which removes its keys, [SecondaryNotFoundException] when the
   /// atDirectory has no atServer for the atSign, and the failure when the
@@ -353,6 +355,8 @@ class CLIBase {
             serviceFactory: atServiceFactory);
       } on AtOpenRefusedException catch (e) {
         throw _reported(_openFailure(e.state));
+      } on AtNoCredentialException catch (e) {
+        throw _reported(e);
       }
     }
 

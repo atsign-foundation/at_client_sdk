@@ -4,6 +4,8 @@
 - feat: `at_activate approve` warns when it approves a request made at the
   legacy key exchange on an atSign that publishes a namespace key, and says
   that enrolling at `--posture pqReady` avoids the device re-enrolling itself.
+- feat: a `CLIBase` program whose keyfile holds no credential, as a denial,
+  a cancel or an expiry leaves it, says so on stderr and stops at once.
 - feat: a `CLIBase` program shows the SDK's warnings on stderr by default,
   such as a notification it could not decrypt; `-v` shows the rest.
 - feat: `at_register`, and `at_activate onboard` without `-c`, ask the

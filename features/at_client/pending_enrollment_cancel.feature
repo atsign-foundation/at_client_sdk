@@ -17,6 +17,10 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   An expired request, which the atServer answers with AT0028, has its pending
   keys removed as a denial does.
 
+  A store a cancel, a denial or an expiry left with no credential is refused
+  by Atsign.open at once with AtNoCredentialException, which says to enroll
+  again, before it writes anything or opens a connection.
+
   Races: a stop or a cancel and an approval resolve at the write to the
   store. One that lands first leaves nothing written. stop then cancel
   removes the keys; cancel then stop changes nothing. An approval written first
@@ -172,3 +176,8 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a store holding two pending requests for one app, from two devices
     When the app calls resumeEnrollment with only the app
     Then it throws AtEnrollmentPendingException naming both and saying to name the app and device, and naming a device as well resumes that one
+
+  Scenario: A keyfile left empty by a denial or a cancel is refused at once
+    Given a keyfile whose enrollment request was denied, or cancelled, and so holds no credential
+    When a program opens it
+    Then the open throws at once a refusal saying the keyfile holds no credential and to enroll again, nothing is written to the keyfile, and no connection is attempted

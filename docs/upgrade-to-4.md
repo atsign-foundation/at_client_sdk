@@ -173,7 +173,9 @@ atSign again as an enrollment whose client is still live throws a
 
 On the first open of an atSign on a device, `Atsign.open` throws
 `AtEnrollmentPendingException` when the keys hold only an enrollment request
-that has not been approved, and
+that has not been approved, `AtNoCredentialException` at once when they hold
+no credential and no request, as a denial, a cancel or an expiry leaves them,
+and
 `AtOpenRefusedException` when the atServer refuses the keys or the atDirectory
 knows no atServer for the atSign; its `state` says which. Otherwise
 `Atsign.open` returns once its one attempt to reach the atServer has ended,
