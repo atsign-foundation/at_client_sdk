@@ -689,6 +689,11 @@ What each posture switches on:
   authentication key than its enrollment holds re-enrolls itself at its
   first start and comes up on the new enrollment. This needs an atServer
   that verifies ML-DSA signatures; a `legacy` client makes no such demand.
+  The new enrollment receives no namespace keys from an approval, so it asks
+  the atSign's other enrollments for them, and only one online at the time
+  can answer. On an atSign that has published any namespace key, enroll a
+  device at the posture its app runs at, `pqReady` or above, so that its
+  approval conveys the namespace keys.
 - **Signed advertisements and key packages.** Everything a peer relies on
   is carried in a signed envelope and verified before use; the signing keys
   chain to a per-atSign signing root that only fully privileged
