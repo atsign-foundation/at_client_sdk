@@ -13,7 +13,9 @@ Feature: at_register's exit code says how registration ended
   DoS: bounded; each code costs at most two validate-person requests, one code
   and one confirmation, and at most three codes are asked for, so a registrar
   that keeps asking for confirmation gets at most six requests.
-  Forgery and impersonation: none arise; nothing sent or accepted changes.
+  Forgery and impersonation: none arise; a confirmation only re-sends the
+  code the registrar has just accepted, and it is limited to two requests per
+  code and three codes.
 
   Scenario: An activation that fails after registration exits non-zero
     Given a registrar that registers an atSign and hands over its CRAM secret
