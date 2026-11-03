@@ -293,6 +293,11 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     When alice shares x.notes.todos.demos with bob
     Then her copy is named at notes.todos.demos and sealed to her todos.demos key, which its ns names, and nothing is minted
 
+  Scenario: A reserved namespace is never the writer's own level
+    Given alice holding namespace keys for demos and __rpcs.demos, and bob advertising one for demos
+    When alice shares x.__rpcs.demos with bob
+    Then her copy of the content key is sealed to her key for demos
+
   Scenario: Before her start-up has published her key, a share goes without her copy, with a warning
     Given bob advertising todos.demos, and alice's start-up still to publish her todos.demos key
     When alice shares x.todos.demos with bob

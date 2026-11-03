@@ -765,7 +765,8 @@ class CkManager {
 
   /// The level [sender]'s copy of a key it shares in [valueKey] is sealed
   /// at: the most specific namespace it holds a namespace private for that
-  /// the key's whole name ends with after a dot, or null when it holds none.
+  /// the key's whole name ends with after a dot, never a reserved one, or
+  /// null when it holds none.
   ///
   /// Read from the namespaces this enrollment holds, so it asks nothing of the
   /// atServer.
@@ -774,6 +775,7 @@ class CkManager {
     String? level;
     for (final held in await keyRing.heldNamespaces(sender)) {
       final namespace = held.toLowerCase();
+      if (NskeyResolver.isReserved(namespace)) continue;
       if (name.endsWith('.$namespace') &&
           (level == null || namespace.length > level.length)) {
         level = namespace;

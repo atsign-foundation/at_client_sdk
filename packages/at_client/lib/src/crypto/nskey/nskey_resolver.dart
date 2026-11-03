@@ -127,7 +127,7 @@ class NskeyResolver {
     return [
       for (final level
           in candidates('${atKey.key}.$namespace'.toLowerCase()).skip(1))
-        if (!_isReserved(level)) level
+        if (!isReserved(level)) level
     ];
   }
 
@@ -213,7 +213,7 @@ class NskeyResolver {
     var start = own;
     for (final held in await keyRing.heldNamespaces(holder)) {
       final namespace = held.toLowerCase();
-      if (_isReserved(namespace)) continue;
+      if (isReserved(namespace)) continue;
       if (namespace.length > start.length && name.endsWith('.$namespace')) {
         start = namespace;
       }
@@ -229,7 +229,8 @@ class NskeyResolver {
   /// Whether [namespace] belongs to the atServer, a grant or a library's own
   /// records rather than to data: `*`, or one any of whose labels starts with
   /// `__`, as AtRpc's `__rpcs` and a read receipt's `__rr` do.
-  static bool _isReserved(String namespace) =>
+  @internal
+  static bool isReserved(String namespace) =>
       namespace == EnrollmentConstants.allNamespaces ||
       namespace.split('.').any((label) => label.startsWith('__'));
 

@@ -967,6 +967,25 @@ void main() {
       neverMinted();
     });
 
+    test('A reserved namespace is never the writer\'s own level', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'demos');
+      final hers = await hold(c.ring, _alice, 'demos');
+      await hold(c.ring, _alice, '__rpcs.demos');
+      configure(c);
+      wire(c);
+      final key = AtKey.fromString('$_bob:x.__rpcs.demos$_alice');
+
+      await write(c, key);
+
+      expect(stamped(key)['ckNs'], 'demos');
+      expect(copyIn('demos'), isNotNull,
+          reason: 'she holds a key for demos, her own level here, since a '
+              'reserved namespace is never one');
+      expect(copyIn('demos'),
+          allOf(containsPair('nskeyKid', hers), containsPair('ns', 'demos')));
+    });
+
     test(
         'Before her start-up has published her key, a share goes without her '
         'copy, with a warning', () async {

@@ -1086,7 +1086,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
      — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
      sealed to. Seal it again to **alice's own** nskey at her own level, the most
-     specific namespace she holds a key for that covers the value, as the
+     specific namespace she holds a key for that covers the value, never a
+     reserved one, as the
      **sibling copy** `<ckKid>.__ck.<ckNs>@alice`, which names bob in its
      `appMetadata`. Nothing is minted for it: an alice holding no key there yet, or
      whose level does not cover bob's, shares without the copy, with a warning.
