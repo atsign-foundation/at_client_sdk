@@ -30,6 +30,8 @@
   (`references/02`).
 - Keys a denial, a cancel or an expiry left with no credential are refused
   by `open` with `AtNoCredentialException` (`SKILL.md`; `references/15`).
+- A second process on a Hive store another holds is refused with
+  `AtStorageInUseException` (`references/14`, `15`).
 - An item a collection cannot read yet is a `CItemReadException`, which
   `.handleError` can test for (`references/02`, `references/07`).
 - A program serving a mixed fleet writes post-quantum with

@@ -305,6 +305,7 @@ class CLIBase {
   ///
   /// Throws [AtNoCredentialException] at once when the keyfile holds no
   /// credential, as a denial, a cancel or an expiry leaves it,
+  /// [AtStorageInUseException] when another process holds the store open,
   /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentException] when the request is denied or expires,
   /// which removes its keys, [SecondaryNotFoundException] when the
