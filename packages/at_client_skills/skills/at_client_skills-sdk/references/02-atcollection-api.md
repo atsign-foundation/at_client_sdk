@@ -90,7 +90,9 @@ awaits local emission so `watch()` listeners see the update before
 - Throws `StateError` if `id` is supplied and already exists on the atServer
 - If `id` omitted: retries on collision (astronomically unlikely); throws
   `StateError` after 10 attempts
-- Throws `CollectionOpException` on any key-level write failure
+- Throws `CollectionOpException` on any key-level write failure. When the
+  item's own copy is the one that failed, no recipient's copy is written:
+  each is in the exception's `results` as `OpNotAttempted`
 - At `pqActive`, each `sharedWith` recipient must have published a key for
   the namespace; one that has not fails the write with a
   `NamespaceKeyUnavailableException` naming them.

@@ -503,6 +503,65 @@ void main() {
       );
     });
 
+    /// Puts that refuse the self copy and accept every recipient's.
+    Exception refuseSelfCopy() {
+      final refused = Exception('no private held for the current generation');
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        if ((i.positionalArguments[0] as AtKey).sharedWith == null) {
+          throw refused;
+        }
+        return true;
+      });
+      return refused;
+    }
+
+    Future<CollectionOpException> thrownBy(Future<Object?> op) async {
+      try {
+        await op;
+      } on CollectionOpException catch (e) {
+        return e;
+      }
+      fail('the write returned instead of throwing CollectionOpException');
+    }
+
+    test('A create whose self copy fails writes no share', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      final refused = refuseSelfCopy();
+      final c = buildCollection<String>();
+
+      final thrown =
+          await thrownBy(c.create(obj: 'x', id: 'h4', sharedWith: {bob}));
+
+      expect(thrown.failures.single.atKey.sharedWith, isNull,
+          reason: 'the one failure the exception names is the self copy');
+      expect(thrown.failures.single.reason, same(refused));
+      expect(
+          thrown.results
+              .whereType<OpNotAttempted>()
+              .map((r) => r.atKey.sharedWith),
+          [bobStr],
+          reason: "@bob's copy is reported as not attempted");
+      verify(() => atClient.put(any(), any())).called(1);
+      verifyNever(() => atClient.delete(any()));
+    });
+
+    test('an update whose self copy fails writes and removes no share',
+        () async {
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async =>
+          [AtKey.fromString('@dave:h4u.$namespace$selfAtSignStr')]);
+      refuseSelfCopy();
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'h4u', sharedWith: {bob});
+
+      final thrown = await thrownBy(c.update(item));
+
+      expect(thrown.failures.single.atKey.sharedWith, isNull);
+      verify(() => atClient.put(any(), any())).called(1);
+      verifyNever(() => atClient.delete(any()));
+    });
+
     test(
         'update after create elides the existence probe (no atClient.get '
         'round-trip for the just-written id)', () async {

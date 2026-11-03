@@ -78,6 +78,9 @@
   it. Each refusal names both settings.
 - fix: a collection's items are the records its atSign writes and the shares
   addressed to it; a public record in its namespace is never one.
+- fix: a collection item whose own copy cannot be written is not shared
+  either, so no recipient holds an item its owner cannot list; the
+  `CollectionOpException` lists each recipient's copy as `OpNotAttempted`.
 - fix: at `pqActive`, a collection in a dotted namespace such as
   `todos.demos` writes and shares its records.
 - feat: at `pqActive`, a write to the client's own atSign made right after it

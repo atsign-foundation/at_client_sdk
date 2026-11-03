@@ -3177,6 +3177,9 @@ interface class AtCollection<T> {
   /// key-level failure — callers that want throwing semantics (like
   /// [create] and [update]) inspect the returned results and raise
   /// [CollectionOpException].
+  ///
+  /// When the self copy cannot be written, nothing else is: each recipient's
+  /// copy is returned as [OpNotAttempted].
   Future<List<OpResult>> _put(
     CItem<T> item, {
     bool unshareWithOthers = true,
@@ -3191,6 +3194,8 @@ interface class AtCollection<T> {
 
     final results = <OpResult>[];
     final selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
+    AtKey recipientKey(Atsign recipient) =>
+        AtKey.fromString('$recipient:${item.id}.$namespace$atSign');
     final md = _buildMetadata(item, now);
 
     // 1. Self copy.
@@ -3215,7 +3220,12 @@ interface class AtCollection<T> {
       _emitAncestorSubUpdated(item);
     } catch (e) {
       if (e is StoppedException) rethrow;
-      results.add(OpFailure(selfKey, CollectionOp.put, e));
+      // NOTE: a share is written only after the owner's own copy.
+      return [
+        OpFailure(selfKey, CollectionOp.put, e),
+        for (final otherAtSign in item.sharedWith)
+          OpNotAttempted(recipientKey(otherAtSign), CollectionOp.put),
+      ];
     }
 
     // 2. Diff: delete recipient copies whose atSign is no longer in
@@ -3237,9 +3247,7 @@ interface class AtCollection<T> {
 
     // 3. Recipient copies (create or overwrite).
     for (final otherAtSign in item.sharedWith) {
-      final k = AtKey.fromString(
-        '$otherAtSign:${item.id}.$namespace$atSign',
-      );
+      final k = recipientKey(otherAtSign);
       try {
         k.metadata = md;
         await atClient.put(k, jsonEncode(item.toJson()));
@@ -5143,6 +5151,15 @@ final class OpFailure extends OpResult {
 
   @override
   String toString() => '$atKey:${op.name}:Failure:$reason';
+}
+
+/// A key-level op that was not attempted because the item's own copy could
+/// not be written.
+final class OpNotAttempted extends OpResult {
+  OpNotAttempted(super.atKey, super.op);
+
+  @override
+  String toString() => '$atKey:${op.name}:NotAttempted';
 }
 
 /// Thrown by [AtCollection.create] / [AtCollection.update] /

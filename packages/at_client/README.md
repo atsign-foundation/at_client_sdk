@@ -283,7 +283,9 @@ does not. With the atServer out of reach, `create(sharedWith: ...)` writes
 the self copy and then throws a `CollectionOpException` naming each
 recipient's copy it could not write. The item is listed, and nothing sends
 the share later: retry it with `updateSharedWith(item, ...)`, not `create`,
-which would write a second item.
+which would write a second item. When the self copy itself cannot be
+written, nothing else is: the exception names the self copy, and its
+`results` list each recipient's copy as `OpNotAttempted`.
 
 `update` / `delete` / `create` fire `CItemUpdated` / `CItemDeleted`
 on the writing collection's event streams as soon as the local write
