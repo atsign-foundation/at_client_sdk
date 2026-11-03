@@ -2364,7 +2364,9 @@ encoded; a longer value is refused rather than truncated.
 
 **No mint ever withdraws a key, and that is what makes the advertisement safe to
 read at any moment.** A mint adds the algorithms the in-use set names and the
-enrollment lacks, and retires the ones it no longer names — and a retired entry
+enrollment lacks, and retires the ones it no longer names, except that a held
+key stronger than every algorithm the set names stays active and, while one is
+held, nothing is minted — and a retired entry
 stays advertised, because `SigningKeyMinting._publish` composes `withdrawn` from
 the keys being retired *plus* everything the keyfile already records as
 withdrawn, and `verifyEnvelope` tries every advertised key for the resolved
@@ -2863,8 +2865,9 @@ Both are constructor refusals in `AtClientPreference`, and both narrow
 - **No axis may be weaker than the posture it is named against.** A posture is
   a floor; an override lowering an axis below it is what a floor prevents.
   Left legal, deliberately: a `dataSigningKeyAlgorithms` weaker than the
-  posture names, which mints rsa2048 and keeps `_apsk` bare — coherent, and not
-  extended without a ruling.
+  posture names. An enrollment holding no stronger client data signing key
+  mints rsa2048 and keeps `_apsk` bare; one holding an ML-DSA-65 key keeps it
+  active and mints nothing, because key material wins.
 
 #### 9.8.6 A pre-enrollment atSign retrofits into a first enrollment
 

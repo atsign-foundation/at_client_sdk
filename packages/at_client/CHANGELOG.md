@@ -12,6 +12,10 @@
   enrollment signed before a rotation stays valid. A later release re-signs
   what an enrollment publishes under its active key, and then withdraws the
   retired one.
+- fix: a client started at a weaker posture than its enrollment's client
+  data signing key, such as `pqReady` after `pqActive`, keeps signing with
+  that key and mints no weaker one, so its keyfile and `_apsk` stay as they
+  were.
 - feat: a namespace key's private is conveyed, before the key is published,
   to every enrollment listed for its namespace that has a key package. An
   enrollment the conveyance misses first looks for an envelope addressed to
