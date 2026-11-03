@@ -238,11 +238,9 @@ class CkManager {
       }
     }
 
-    if (!sharing) {
-      await _awaitOwnPrivate(owner, ckNs, target.alg, until: until);
-    }
     await _cutAndConvey(context, valueKey, owner, ckNs, target.nskeyKid,
         keyAlgo: target.alg,
+        until: until,
         useRemoteAtServer: useRemoteAtServer,
         replacing: current?.ckKid,
         ownGeneration: ownGeneration);
@@ -289,6 +287,7 @@ class CkManager {
           'cannot rotate a content key for a record with no owner or '
           'namespace: $valueKey');
     }
+    final until = StartUpSeeding.boundFromNow();
     final holder = context.atClient.getCurrentAtSign();
     final found = _isShare(owner, holder)
         ? await _shareKey(owner, valueKey, null)
@@ -314,6 +313,7 @@ class CkManager {
 
     return _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
         keyAlgo: advertised.alg,
+        until: until,
         useRemoteAtServer: useRemoteAtServer,
         force: true);
   }
@@ -326,6 +326,9 @@ class CkManager {
   /// sealed to [nskeyKid] whose sibling copy rests on [ownGeneration] where
   /// the caller holds one, returns that key instead of cutting a second one,
   /// unless [force] asks for a fresh one regardless.
+  ///
+  /// A cut for this client's own atSign first waits, until [until], for any
+  /// start-up ask for its key's private, as [_awaitOwnPrivate] does.
   Future<ContentKey> _cutAndConvey(
     CryptoContext context,
     AtKey valueKey,
@@ -333,24 +336,29 @@ class CkManager {
     String ckNs,
     String nskeyKid, {
     required String keyAlgo,
+    required DateTime until,
     bool? useRemoteAtServer,
     String? replacing,
     String? ownGeneration,
     bool force = false,
-  }) =>
-      _inTurn(() async {
-        final current = cache.current(owner, ckNs);
-        if (!force &&
-            current != null &&
-            current.ckKid != replacing &&
-            cache.currentNskeyKid(owner, ckNs) == nskeyKid &&
-            (ownGeneration == null ||
-                cache.currentOwnNskeyKid(owner, ckNs) == ownGeneration)) {
-          return current;
-        }
-        return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
-            keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
-      });
+  }) async {
+    if (!_isShare(owner, context.atClient.getCurrentAtSign())) {
+      await _awaitOwnPrivate(owner, ckNs, keyAlgo, until: until);
+    }
+    return _inTurn(() async {
+      final current = cache.current(owner, ckNs);
+      if (!force &&
+          current != null &&
+          current.ckKid != replacing &&
+          cache.currentNskeyKid(owner, ckNs) == nskeyKid &&
+          (ownGeneration == null ||
+              cache.currentOwnNskeyKid(owner, ckNs) == ownGeneration)) {
+        return current;
+      }
+      return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
+          keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
+    });
+  }
 
   Future<ContentKey> _cutAndConveyInTurn(
     CryptoContext context,

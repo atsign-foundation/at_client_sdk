@@ -743,13 +743,18 @@ void main() {
           reason: 'the write goes on once the answer is filed');
     });
 
-    test(
-        "when a write waits on start-up's ask, then a write in a namespace "
-        'whose key is held goes ahead', () async {
+    /// Files a held generation for notes.demos, whose writes need no wait.
+    Future<void> holdNotes() async {
       final notes = await XWingKeyPair.generate();
       ring.seedKeypair(_alice, 'notes.demos',
           publicKey: notes.publicKeyBytes, privateKey: notes.privateKeyBytes);
       ring.held.add('notes.demos');
+    }
+
+    test(
+        "when a write waits on start-up's ask, then a write in a namespace "
+        'whose key is held goes ahead', () async {
+      await holdNotes();
       ring.asks['todos.demos|$kid'] = answer.future;
 
       final waiting = write(c, key);
@@ -759,6 +764,21 @@ void main() {
 
       answer.complete();
       await expectLater(waiting, notYetConveyed());
+    });
+
+    test(
+        "when a rotation waits on start-up's ask, then a write in a namespace "
+        'whose key is held goes ahead', () async {
+      await holdNotes();
+      ring.asks['todos.demos|$kid'] = answer.future;
+
+      final rotating = c.manager.rotateContentKey(context, key);
+      expect(await _pending(rotating), isTrue,
+          reason: "the todos.demos rotation waits on start-up's ask");
+      await atOnce(write(c, _built('y', 'notes.demos')));
+
+      answer.complete();
+      await expectLater(rotating, notYetConveyed());
     });
 
     test(
