@@ -347,11 +347,13 @@ class SyncServiceImpl implements SyncService {
     // _syncInProgress because _isInSync short-circuits on the latter.
     _processInProgress = true;
     final syncRequest = _getSyncRequest();
-    // NOTE: the round answers every queued request, so it reads the server
-    // fresh if any of them is an app's; the one dequeued may be a system
-    // request that was queued ahead of the app's.
+    // NOTE: the round answers the requests queued now, before it reads the
+    // server, so it reads fresh if any of them is an app's; the one dequeued
+    // may be a system request queued ahead of the app's. A request made after
+    // the read waits for a round of its own.
+    final answering = syncRequests.toList();
     final anAppIsWaiting = syncRequest.requestSource == SyncRequestSource.app ||
-        syncRequests.any((r) => r.requestSource == SyncRequestSource.app);
+        answering.any((r) => r.requestSource == SyncRequestSource.app);
     try {
       final inSync = await _isInSync(syncRequest, forceFresh: anAppIsWaiting);
       if (isStopped) {
@@ -366,7 +368,7 @@ class SyncServiceImpl implements SyncService {
           ..syncStatus = SyncStatus.success
           ..lastSyncedOn = DateTime.now().toUtc()
           ..dataChange = false;
-        _syncComplete(syncRequest);
+        _syncComplete(syncRequest, answering);
         _syncInProgress = false;
         _informSyncProgress(SyncProgress()
           ..syncStatus = SyncStatus.success
@@ -384,7 +386,7 @@ class SyncServiceImpl implements SyncService {
           localCommitIdBeforeSync: localCommitIdBeforeSync);
 
       _logRoundSummary(syncRequest, syncResult);
-      _syncComplete(syncRequest);
+      _syncComplete(syncRequest, answering);
       serverCommitId = await _getServerCommitId();
       final localCommitId = await _getLocalCommitId();
 
@@ -511,11 +513,11 @@ class SyncServiceImpl implements SyncService {
         'pushed $pushed; server commit id $_latestKnownServerCommitId');
   }
 
-  void _syncComplete(SyncRequest syncRequest) {
+  void _syncComplete(SyncRequest syncRequest, List<SyncRequest> answered) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
     _logger.finer('Inside syncComplete. syncRequest.requestSource : '
         '${syncRequest.requestSource}');
-    _clearQueue();
+    _clearQueue(answered);
   }
 
   /// We use this so that after [processSyncRequests] runs, it can enqueue a sync
@@ -570,15 +572,17 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  /// Drops every queued request at the end of a successful round, which
-  /// brought local storage up to date for each of them.
+  /// Drops the requests a round that succeeded answered: those queued when it
+  /// read the atServer. A request made after that read stays queued, so the
+  /// round [_drainQueueIfPending] starts next reads after it was made, and
+  /// every request made during one round shares that one round.
   ///
-  /// "What to push" lives in `LocalSecondary`'s `AtSyncQueue`, not here, so a
-  /// write landing during a round is drained by the next round that runs,
-  /// from a fresh snapshot of that queue.
-  void _clearQueue() {
-    _logger.finer('Clearing sync queue');
-    syncRequests.clear();
+  /// "What to push" lives in `LocalSecondary`'s `AtSyncQueue`, not here, so
+  /// the next round drains a write that landed during this one from a fresh
+  /// snapshot of that queue.
+  void _clearQueue(List<SyncRequest> answered) {
+    _logger.finer('Clearing the sync requests the round answered');
+    syncRequests.removeWhere((r) => answered.any((a) => identical(a, r)));
   }
 
   /// Throws if [stop] has been called. Placed at the stage boundaries of

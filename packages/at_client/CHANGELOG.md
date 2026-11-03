@@ -56,6 +56,8 @@
   a `SyncProgressListener` hears how each sync went.
 - breaking: `SyncService.sync` takes no `onError`, and `SyncRequest` has no
   `onError`; a `SyncProgressListener` hears each sync that fails.
+- fix: a `sync()` called while a sync is running runs once that one ends, so
+  a write made meanwhile no longer waits for the next periodic sync.
 - breaking: `AtServiceFactory.atClient` is removed, and the factory's
   `notificationService` and `syncService` take only the client.
   `AtClientImpl.create` and `SyncServiceImpl.create` take no

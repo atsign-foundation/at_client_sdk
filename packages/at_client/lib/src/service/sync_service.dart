@@ -116,8 +116,8 @@ class SyncResult {
 
 /// Identifies the origin of a [SyncRequest]. Every sync request is
 /// idempotent — "what to push" is owned by `LocalSecondary`'s
-/// `AtSyncQueue`, so requests are just "please drain" triggers that
-/// can be coalesced wholesale at end-of-round.
+/// `AtSyncQueue`, so requests are just "please drain" triggers: a round
+/// answers every request queued when it reads the atServer.
 ///
 /// `app` is a `sync()` call — the app's, the warm start's, or the periodic
 /// safety net's — and the round it starts fetches the atServer's commit id.

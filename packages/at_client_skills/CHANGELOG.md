@@ -9,6 +9,8 @@
   (`references/15`).
 - Once `pending.stop()` or `cancel()` returns, an app whose approval landed
   first opens the atSign at once (`references/15`).
+- `sync()` calls made while a round runs share one more round once it ends
+  (`references/15`).
 - A program serving a mixed fleet writes post-quantum with
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
   `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`

@@ -208,7 +208,7 @@ runs on its own from the moment the client is built:
   moved), and every `AtClientPreference.syncIntervalMins` (default 10) as a
   fallback;
 - `sync()` requests a round now; requests coalesce, so a burst of calls is one
-  round;
+  round, and calls made while a round runs share one more round once it ends;
 - `isInSync()` asks the atServer fresh and answers whether nothing is left to
   push and the local store has everything the client's sync filter admits;
 - `isSyncInProgress`, and `addProgressListener(SyncProgressListener)` for
