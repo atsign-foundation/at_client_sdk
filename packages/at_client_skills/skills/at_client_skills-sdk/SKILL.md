@@ -470,9 +470,9 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
 - Under `pqActive`, a write made right after the client opens, before its
   start-up has published the namespace key, waits up to 30 seconds for it,
   then throws `NamespaceKeyUnavailableException` naming that key. One made
-  while start-up is still asking the atSign's other enrollments for the
-  key's private waits up to 30 seconds for the answer, then throws
-  `NskeyPrivateNotHeldException`.
+  while start-up is yet to ask, or is asking, the atSign's other enrollments
+  for the key's private waits up to 30 seconds in all for the answer, then
+  throws `NskeyPrivateNotHeldException`.
 - A program whose peers are a mixed fleet, some advertising a namespace key
   and some not, builds `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
   false)` and sets `allowLegacyCryptoFallback`: each send requires the peer's

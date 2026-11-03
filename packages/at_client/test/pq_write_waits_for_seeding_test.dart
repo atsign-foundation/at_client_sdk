@@ -79,6 +79,9 @@ class _AskingRing extends _Ring implements AwaitsStartUpAsk {
   final Map<String, Future<void>> asks = {};
 
   @override
+  Future<void>? startUpAsksPending;
+
+  @override
   Future<void>? startUpAskFor(String namespace, String nskeyKid) =>
       asks['$namespace|$nskeyKid'];
 }
@@ -710,6 +713,74 @@ void main() {
       answer.complete();
 
       await expectLater(atOnce(writing), notYetConveyed());
+    });
+
+    test(
+        "A write made before start-up asks for its key's private waits for "
+        'the ask and its answer', () async {
+      final asking = Completer<void>();
+      ring.startUpAsksPending = asking.future;
+
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue,
+          reason: 'it waits for start-up to ask');
+      ring.asks['todos.demos|$kid'] = answer.future;
+      asking.complete();
+      expect(await _pending(writing), isTrue,
+          reason: 'and then for the answer to that ask');
+      ring.seedKeypair(_alice, 'todos.demos',
+          publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes);
+      answer.complete();
+      await writing;
+
+      expect(
+          store[store.keys.singleWhere((k) => k.contains('.__ck.todos.demos'))]!
+              .key
+              .metadata
+              .appMetadata!
+              .additional!['nskeyKid'],
+          kid,
+          reason: 'the write goes on once the answer is filed');
+    });
+
+    test(
+        'when start-up has already made its asks, then the write throws at once',
+        () async {
+      ring.startUpAsksPending = Future<void>.value();
+
+      await expectLater(atOnce(write(c, key)), notYetConveyed());
+    });
+
+    test(
+        'when start-up ends without asking, as when the client stops, then the '
+        'write throws at once', () async {
+      final asking = Completer<void>();
+      ring.startUpAsksPending = asking.future;
+
+      final writing = write(c, key);
+      expect(await _pending(writing), isTrue);
+      asking.complete();
+
+      await expectLater(atOnce(writing), notYetConveyed());
+    });
+
+    test('the waits for the ask and for its answer share one bound',
+        timeout: const Timeout(Duration(seconds: 10)), () async {
+      StartUpSeeding.wait = const Duration(seconds: 2);
+      final asking = Completer<void>();
+      ring.startUpAsksPending = asking.future;
+      final started = DateTime.now();
+
+      final writing = expectLater(write(c, key), notYetConveyed());
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      ring.asks['todos.demos|$kid'] = answer.future;
+      asking.complete();
+      await writing;
+
+      expect(DateTime.now().difference(started),
+          lessThan(const Duration(milliseconds: 2900)),
+          reason: 'the wait for the answer takes only what the wait for the '
+              'ask left of the bound, not a bound of its own');
     });
 
     test('when start-up has no ask outstanding, then the write throws at once',

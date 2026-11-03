@@ -232,6 +232,70 @@ void main() {
       expect(swept, 0, reason: 'an unprivileged client must not sweep');
     });
 
+    test(
+        "start-up's asks are pending from its start until its ask step has "
+        'run', () async {
+      final keysIo = MockAtKeysIo();
+      final readGate = Completer<Never>();
+      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
+      final sweeping = Completer<void>();
+      final sweepGate = Completer<int>();
+      final bootstrap = build(
+          keysIo: keysIo,
+          privilege: _FakePrivilege(true),
+          sweep: () {
+            sweeping.complete();
+            return sweepGate.future;
+          });
+      expect(bootstrap.ring.startUpAsksPending, isNull,
+          reason: 'nothing is pending before start-up begins');
+
+      final startup = bootstrap.startup();
+      final pending = bootstrap.ring.startUpAsksPending;
+      expect(pending, isNotNull, reason: 'pending from its first step');
+      var asked = false;
+      unawaited(pending!.then((_) => asked = true));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(asked, isFalse,
+          reason: 'its first step is parked, so it has yet to ask');
+
+      readGate.completeError(Exception('the test releases the parked read'));
+      await sweeping.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(Duration.zero);
+      expect(asked, isTrue,
+          reason: 'done once its ask step has run, while a later step is '
+              'still parked');
+      sweepGate.complete(0);
+      await startup;
+    });
+
+    test('a start-up that will not ask leaves nothing pending', () async {
+      final bootstrap =
+          build(keysIo: MockAtKeysIo(), gates: const PqStartupGates.inert());
+
+      await bootstrap.startup();
+
+      expect(bootstrap.ring.startUpAsksPending, isNull);
+    });
+
+    test("stop() ends what start-up's asks hold up", () async {
+      final keysIo = MockAtKeysIo();
+      final readGate = Completer<Never>();
+      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
+      final bootstrap = build(keysIo: keysIo);
+      final startup = bootstrap.startup();
+      var asked = false;
+      unawaited(bootstrap.ring.startUpAsksPending!.then((_) => asked = true));
+
+      bootstrap.stop();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(asked, isTrue,
+          reason: 'a write waiting on start-up\'s asks is let go at once');
+      readGate.completeError(Exception('the test releases the parked read'));
+      await startup;
+    });
+
     test('stop() between steps halts the startup', () async {
       // Parks the first step: hydration reads the keyfile, so the read's
       // future is this test's hold on the sequence.

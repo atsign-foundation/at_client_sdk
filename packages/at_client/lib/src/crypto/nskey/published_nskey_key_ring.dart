@@ -1,4 +1,4 @@
-import 'dart:async' show StreamSubscription, unawaited;
+import 'dart:async' show Completer, StreamSubscription, unawaited;
 import 'dart:convert' show jsonDecode, jsonEncode;
 import 'dart:typed_data' show Uint8List;
 
@@ -1734,4 +1734,19 @@ class PublishedNskeyKeyRing
   @override
   Future<void>? startUpAskFor(String namespace, String nskeyKid) =>
       _startUpAsks[(namespace: namespace.toLowerCase(), nskeyKid: nskeyKid)];
+
+  Completer<void>? _startUpAsking;
+
+  /// This client's start-up is to ask for the own privates it lacks, until
+  /// [startUpAsked].
+  void startUpWillAsk() => _startUpAsking ??= Completer<void>();
+
+  /// This client's start-up has made its asks, or will make none.
+  void startUpAsked() {
+    final asking = _startUpAsking;
+    if (asking != null && !asking.isCompleted) asking.complete();
+  }
+
+  @override
+  Future<void>? get startUpAsksPending => _startUpAsking?.future;
 }

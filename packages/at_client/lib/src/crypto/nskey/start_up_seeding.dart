@@ -17,10 +17,21 @@ class StartUpSeeding {
   @visibleForTesting
   static Duration wait = const Duration(seconds: 30);
 
-  /// Waits for [future] to end, however it ends, at most [wait].
-  static Future<void> waitOn(Future<void> future) => future
-      .then((_) {}, onError: (Object _) {})
-      .timeout(wait, onTimeout: () {});
+  /// Waits for [future] to end, however it ends, at most [wait], or until
+  /// [until] when given.
+  static Future<void> waitOn(Future<void> future, {DateTime? until}) {
+    var bound = wait;
+    if (until != null) {
+      final left = until.difference(DateTime.now());
+      bound = left.isNegative ? Duration.zero : left;
+    }
+    return future
+        .then((_) {}, onError: (Object _) {})
+        .timeout(bound, onTimeout: () {});
+  }
+
+  /// [wait] from now, as the one bound several [waitOn]s share.
+  static DateTime boundFromNow() => DateTime.now().add(wait);
 
   final Completer<void> _namespaces = Completer<void>();
   Set<String> _seeded = const {};

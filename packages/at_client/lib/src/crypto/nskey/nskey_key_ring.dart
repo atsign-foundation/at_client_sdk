@@ -313,6 +313,10 @@ abstract interface class AwaitsStartUpAsk {
   /// awaited, or null; it completes once the answer is filed or the wait for
   /// one ends.
   Future<void>? startUpAskFor(String namespace, String nskeyKid);
+
+  /// Completes once the client's start-up has made its asks, or will make
+  /// none; null when its start-up was never to ask.
+  Future<void>? get startUpAsksPending;
 }
 
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.

@@ -27,7 +27,8 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
   DoS: a waiting write holds no connection and makes no request while it
   waits; every waiting write shares one signal; each waits at most 30
   seconds; a write with no atServer, or in a namespace start-up will not
-  seed, does not wait; stop ends every wait at once.
+  seed, does not wait; stop ends every wait at once. A write waits at most
+  30 s whatever start-up does; no new asks are sent.
   Forgery and impersonation: what a write seals to, and for whom, is
   unchanged; waiting only delays when the existing rule is applied. A key's
   name cannot make start-up mint, since start-up mints only the namespaces
@@ -142,3 +143,8 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     Given an enrollment of @alice that holds no private for the current generation of todos, whose start-up has asked the other enrollments for it
     When it writes in todos before an answer is filed
     Then the write waits, at most 30 seconds, and succeeds once a holder's answer is filed; with no answer by then it throws naming the generation as not yet conveyed
+
+  Scenario: A write made before start-up asks for its key's private waits for the ask and its answer
+    Given an enrollment missing the current generation's private, and its start-up yet to ask for it
+    When it writes
+    Then the write waits for start-up's ask and its answer, at most 30 seconds in all, and goes on

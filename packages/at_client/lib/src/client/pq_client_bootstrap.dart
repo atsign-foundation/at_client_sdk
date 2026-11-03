@@ -320,6 +320,7 @@ class PqClientBootstrap {
     // listener, a notification subscription and every secret wait alive.
     sharing.stop();
     startUpSeeding.stop();
+    ring.startUpAsked();
   }
 
   /// Whether the `seedNamespaceKeys` step will seed anything.
@@ -334,6 +335,7 @@ class PqClientBootstrap {
   Future<void> startup() async {
     if (_started) return startupComplete;
     _started = true;
+    if (_asksForMissingPrivates) ring.startUpWillAsk();
 
     // NOTE: assigned here rather than in the constructor, because an
     // application names its crypto configuration after the client is built.
@@ -374,6 +376,7 @@ class PqClientBootstrap {
       }
     } finally {
       startUpSeeding.finish();
+      ring.startUpAsked();
       _startupComplete.complete();
     }
   }
@@ -641,8 +644,7 @@ class PqClientBootstrap {
   /// namespace reads as one this client can never open. Guarded on the
   /// keysIo because the answer must have somewhere durable to land.
   Future<void> _requestMissingPrivates() async {
-    if (!_gates.requestMissingPrivates) return;
-    if (_keysIo == null) return;
+    if (!_asksForMissingPrivates) return;
     try {
       final asked = await seeding.requestMissingPrivates(sharing);
       if (asked.isNotEmpty) {
@@ -654,8 +656,14 @@ class PqClientBootstrap {
       _logger.warning('Could not request missing nskey privates for '
           '$_atSign; the affected namespaces stay unreadable until the next '
           'start retries: $e, $st');
+    } finally {
+      ring.startUpAsked();
     }
   }
+
+  /// Whether the `requestMissingPrivates` step will ask for anything.
+  bool get _asksForMissingPrivates =>
+      _gates.requestMissingPrivates && _keysIo != null;
 
   /// Links this enrollment's keys through `enroll:link`.
   ///

@@ -203,13 +203,20 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       // the advertisement's signature.
       if (nskeyOwner == context.atClient.getCurrentAtSign()) {
         final ring = keyRing;
+        final startUp =
+            ring is AwaitsStartUpAsk ? ring as AwaitsStartUpAsk : null;
         // NOTE: read before the miss, so only start-up's ask holds a write.
-        final askedAtStartUp = ring is AwaitsStartUpAsk
-            ? (ring as AwaitsStartUpAsk).startUpAskFor(namespace, usable.kid)
-            : null;
+        var askedAtStartUp = startUp?.startUpAskFor(namespace, usable.kid);
+        final asksPending = startUp?.startUpAsksPending;
         var held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
+        final until = StartUpSeeding.boundFromNow();
+        if (held == null && askedAtStartUp == null && asksPending != null) {
+          await StartUpSeeding.waitOn(asksPending, until: until);
+          askedAtStartUp = startUp!.startUpAskFor(namespace, usable.kid);
+          held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
+        }
         if (held == null && askedAtStartUp != null) {
-          await StartUpSeeding.waitOn(askedAtStartUp);
+          await StartUpSeeding.waitOn(askedAtStartUp, until: until);
           held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
         }
         if (held == null) {
