@@ -105,8 +105,7 @@ void main() {
 
     await atClient.put(selfKey(), 'value');
 
-    verify(() => remote.executeVerb(any(that: isA<UpdateVerbBuilder>())))
-        .called(1);
+    verify(() => remote.executeVerb(any())).called(1);
     expect(provider.routes, [true],
         reason: 'the value went to the atServer, so a conveyance written in '
             'the prepare step must go there too, or the value cites a key '

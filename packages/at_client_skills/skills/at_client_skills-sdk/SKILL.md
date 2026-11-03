@@ -457,11 +457,10 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
 - A preference that names no posture rides the SDK's default: `legacy` in
   4.0, `pqReady` from a later 4.x and `pqActive` from 5.0.
 - A client never runs below its floor. A keyfile holding a namespace key's
-  private, or an atSign publishing any namespace key, sets `pqReady`; an
-  ML-DSA-65 data signing key sets `pqActive`. Configured lower, the client
-  logs a warning and is raised on authentication, data signing, reading and
-  writing post-quantum and seeding; `disallowLegacyEncryption` stays as
-  configured.
+  private sets `pqReady`; an ML-DSA-65 data signing key sets `pqActive`.
+  Configured lower, the client logs a warning and is raised on
+  authentication, data signing, and reading and writing post-quantum;
+  seeding and `disallowLegacyEncryption` stay as configured.
 - Under `pqActive`, a client whose enrollment is granted `*` holds a
   namespace key only for `preference.namespace`; with none set it has nothing
   to write with. A collection's namespace therefore ends with `.` and

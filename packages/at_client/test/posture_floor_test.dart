@@ -37,7 +37,8 @@ void main() {
       expect(raised.configuresPqProviders, isTrue);
       expect(raised.writesPqByDefault, isFalse,
           reason: 'pqReady writes legacy, so the floor raises nothing here');
-      expect(raised.seedNamespaceKeys, isTrue);
+      expect(raised.seedNamespaceKeys, isFalse,
+          reason: 'the floor never raises seeding');
       expect(raised.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(raised.disallowLegacyEncryption, isFalse);
       expect(raised.mintLegacyMaterial, isTrue);
@@ -112,10 +113,19 @@ void main() {
     'posture',
     'authenticationKeyAlgorithm',
     'dataSigningKeyAlgorithms',
-    'seedNamespaceKeys',
   };
 
   group('AtClientPreference.raisedTo', () {
+    test('never raises seedNamespaceKeys, and raises the key exchange', () {
+      final configured = AtClientPreference(posture: PqPosture.legacy);
+      final raised = configured.raisedTo(PqPosture.pqReady);
+
+      expect(raised.seedNamespaceKeys, isFalse,
+          reason: 'a floor does not turn seeding on');
+      expect(raised.posture.seedNamespaceKeys, isFalse);
+      expect(raised.posture.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
+    });
+
     test('returns the preference itself when nothing is raised', () {
       final preference = AtClientPreference(posture: PqPosture.pqActive);
       expect(preference.raisedTo(PqPosture.pqReady), same(preference));
@@ -224,38 +234,22 @@ void main() {
           same(PqPosture.pqReady));
     });
 
+    test('is null for an active RSA-2048 client data signing key', () {
+      final keys = holding([
+        material('sign:rsa2048:1', 'privateSigning',
+            CryptographicMaterialAlgorithm.rsa2048,
+            enrollmentId: 'e-1'),
+        material('sign:rsa2048:1', 'publicVerification',
+            CryptographicMaterialAlgorithm.rsa2048,
+            enrollmentId: 'e-1'),
+      ]);
+      expect(floorOfKeyMaterial(keys, 'e-1'), isNull,
+          reason: 'only an ML-DSA-65 client data signing key sets pqActive, '
+              'and pqReady mints an RSA-2048 one');
+    });
+
     test('is null for a keyfile holding neither', () {
       expect(floorOfKeyMaterial(holding([]), 'e-1'), isNull);
     });
-  });
-
-  group('advertisesOwnNamespaceKey', () {
-    test('counts a namespace key the atSign publishes itself', () {
-      expect(advertisesOwnNamespaceKey(['public:__nskey.todos@alice'], atSign),
-          isTrue);
-    });
-
-    test('never counts a cached copy of another atSign\'s', () {
-      expect(
-          advertisesOwnNamespaceKey(
-              ['cached:public:__nskey.todos@bob', 'public:__nskey.x@bob'],
-              atSign),
-          isFalse);
-    });
-
-    test('counts nothing but namespace keys', () {
-      expect(
-          advertisesOwnNamespaceKey(
-              ['public:__other.todos@alice', 'todos.app@alice'], atSign),
-          isFalse);
-    });
-  });
-
-  test('higherFloor ranks pqActive above pqReady above none', () {
-    expect(higherFloor(null, null), isNull);
-    expect(higherFloor(PqPosture.pqReady, null), same(PqPosture.pqReady));
-    expect(higherFloor(null, PqPosture.pqActive), same(PqPosture.pqActive));
-    expect(higherFloor(PqPosture.pqReady, PqPosture.pqActive),
-        same(PqPosture.pqActive));
   });
 }

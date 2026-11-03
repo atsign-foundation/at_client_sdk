@@ -1,20 +1,17 @@
 @Tags(['pq'])
 library;
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_functional_test/src/enrollment_approval.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
 
-/// A client never runs below its posture floor: the floor its keyfile's key
-/// material sets, and the floor its atSign sets by publishing a namespace
-/// key, each met against a live atServer.
+/// A client never runs below the posture floor its keyfile's key material
+/// sets, met against a live atServer.
 ///
 /// Catalogue: features/at_client/posture_floor.feature
 void main() {
@@ -113,79 +110,6 @@ void main() {
     expect(read.metadata?.appMetadata?.additional?['ckNs'], namespace,
         reason: "what it opened was sealed under its key at $namespace, not "
             'with legacy encryption');
-  }, timeout: Timeout(Duration(minutes: 4)));
-
-  test(
-      'A legacy client of an atSign that publishes a namespace key runs at '
-      'pqReady', () async {
-    final namespace = 'floorask$runId';
-    final owner = await open(alice, demoKeys(alice), PqPosture.pqReady,
-        namespace, TestUtils.storageForPrincipal(alice, 'owner'));
-    expect((await owner.ensureReachable(namespace)).holdsPrivate, isTrue,
-        reason: '@alice publishes a namespace key at $namespace, and this '
-            'enrollment holds its private to answer an ask');
-    final kid = await publishedKid(owner, alice, namespace);
-
-    final legacyKeys = InMemoryAtKeysIo();
-    final unauthenticated = TestUtils.unauthenticatedLookUp(alice);
-    final AtEnrollmentResponse response;
-    try {
-      response = await AtEnrollment.create().submit(
-          AtEnrollmentRequest(
-              session: TestUtils.enrollmentSession(alice, keys: legacyKeys),
-              appName: 'floor-legacy',
-              deviceName: 'floor-legacy-$runId',
-              namespaces: {namespace: 'rw'},
-              otp: (await owner.getOTP()).response,
-              signingAlgo: SigningAlgoType.rsa2048),
-          unauthenticated);
-    } finally {
-      await unauthenticated.close();
-    }
-    final request = (await owner.enrollmentService!.fetchEnrollmentRequests())
-        .firstWhere((e) => e.enrollmentId == response.enrollmentId);
-    expect(request.metadata?['keyPackage'], isNull,
-        reason: 'the precondition: an enrollment at the legacy key exchange '
-            'carries no key package');
-    await owner.enrollmentService!.approve(EnrollmentRequestDecision.approved(
-        atSign: alice,
-        enrollmentId: response.enrollmentId,
-        apkamSymmetricKey:
-            AtBytes.fromString(request.encryptedAPKAMSymmetricKey!)));
-    await awaitEnrollmentApproval(response,
-        atSign: alice, rootDomain: TestUtils.rootDomain);
-    final filing = NskeyPrivateFiling(keysIo: legacyKeys, atSign: alice);
-    expect(await filing.read(namespace, kid), isNull,
-        reason: 'the precondition: the enrollment holds no namespace key');
-
-    final started = DateTime.now();
-    final client = await open(alice, legacyKeys, PqPosture.legacy, namespace,
-        TestUtils.storageForPrincipal(alice, 'legacy-enrollment'));
-
-    expect(
-        logs.since(started, 'WARNING'),
-        anyElement(contains(
-            'is raised to its pqReady floor, set by its atSign publishing a '
-            'namespace key')),
-        reason: 'it warns that it runs at pqReady, since its atSign publishes '
-            'a namespace key');
-    expect(client.enrollmentId, isNot(response.enrollmentId),
-        reason: 'it re-enrolls itself');
-    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
-        reason: 'it re-enrolls itself with ML-DSA-65 authentication');
-    expect(
-        logs.since(started, 'INFO'),
-        anyElement(allOf(contains('Asked other enrollments for the nskey'),
-            contains(namespace))),
-        reason: "it asks @alice's other enrollments for its namespace keys");
-    final deadline = DateTime.now().add(const Duration(seconds: 30));
-    while (await filing.read(namespace, kid) == null &&
-        DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-    expect(await filing.read(namespace, kid), isNotNull,
-        reason: 'the enrollment holding the private answers the ask, and the '
-            'client files it within 30 seconds');
   }, timeout: Timeout(Duration(minutes: 4)));
 }
 

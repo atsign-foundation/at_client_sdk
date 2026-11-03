@@ -86,7 +86,6 @@ void main() {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     AtAuthenticator? installed;
-    var authenticated = false;
     when(() => lookUp.authenticator = any()).thenAnswer((invocation) {
       installed = invocation.positionalArguments.first as AtAuthenticator?;
       return null;
@@ -109,15 +108,10 @@ void main() {
     });
     when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async {
       final builder = invocation.positionalArguments.first as VerbBuilder;
-      // NOTE: as AtLookupImpl does, an authenticated scan logs in first.
-      if (builder is ScanVerbBuilder && builder.auth && !authenticated) {
-        await lookUp.pkamAuthenticate();
-      }
       sent.add(builder.buildCommand());
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         return 'data:1';
       }
-      if (builder is ScanVerbBuilder) return 'data:[]';
       throw StateError('the mocked atServer has no answer for: '
           '${builder.buildCommand()}');
     });
@@ -129,13 +123,9 @@ void main() {
       final wire = _PkamAtServer();
       if (installed != null) await installed!(wire);
       sent.add('pkam:${wire.enrollmentId}');
-      authenticated = true;
       return true;
     });
-    when(() => lookUp.close()).thenAnswer((_) async {
-      authenticated = false;
-      sent.add('close()');
-    });
+    when(() => lookUp.close()).thenAnswer((_) async => sent.add('close()'));
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     return (lookUp: lookUp, sent: sent);
   }

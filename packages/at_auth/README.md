@@ -188,11 +188,6 @@ three layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-
-     Either shape may carry `atsignFloor` at the top level: the posture
-     floor its atSign sets, `pqReady` once a client has found the atSign
-     publishing a namespace key. `AtKeys.raiseAtSignFloor` is its only
-     writer, and an update that would lower or remove it is refused.
    - **Typed-keys** (`"version": 1`): adds `atsign`, an empty top-level
      `keys` array, and two containers
      of typed key materials, while the legacy fields stay flat at the

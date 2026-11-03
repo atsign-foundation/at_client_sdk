@@ -90,36 +90,8 @@ class AtKeys {
     'keys',
   };
 
-  static const _atSignFloorField = 'atsignFloor';
-
-  /// The one floor an atSign's advertisements set: every client of an atSign
-  /// that publishes a namespace key runs at `pqReady` at least.
-  static const atSignFloorPqReady = 'pqReady';
-
   //todo: make non-nullable and final in v5
   Atsign? atsign;
-
-  String? _atSignFloor;
-
-  /// The posture floor this keyfile records for its atSign, as a client of it
-  /// last found the atSign advertising, or null when none has been recorded.
-  ///
-  /// It never comes down: [raiseAtSignFloor] is its only writer, and an update
-  /// that would lower or remove it is refused.
-  String? get atSignFloor => _atSignFloor;
-
-  /// Records [floor] as this atSign's floor, returning whether the keyfile
-  /// changed; a floor already recorded is kept. Throws [ArgumentError] for a
-  /// floor other than [atSignFloorPqReady].
-  bool raiseAtSignFloor(String floor) {
-    if (floor != atSignFloorPqReady) {
-      throw ArgumentError.value(
-          floor, 'floor', 'this build records only $atSignFloorPqReady');
-    }
-    if (_atSignFloor != null) return false;
-    _atSignFloor = floor;
-    return true;
-  }
 
   final Map<String, _EnrollmentSlot> _enrollments = {};
 
@@ -1080,7 +1052,6 @@ class AtKeys {
         defaultEncryptionPrivateKey == other.defaultEncryptionPrivateKey &&
         defaultSelfEncryptionKey == other.defaultSelfEncryptionKey &&
         apkamSymmetricKey == other.apkamSymmetricKey &&
-        _atSignFloor == other._atSignFloor &&
         _mapEquals(metadata, other.metadata) &&
         _materialsEqual(other);
   }
@@ -1114,7 +1085,6 @@ class AtKeys {
         defaultEncryptionPrivateKey,
         defaultSelfEncryptionKey,
         apkamSymmetricKey,
-        _atSignFloor,
         _metadataHash(metadata),
         // Commutative fold so hashCode matches the order-insensitive equality.
         keys.fold<int>(0, (acc, material) => acc ^ material.hashCode),
@@ -1255,8 +1225,8 @@ class AtKeys {
   // ignore: deprecated_member_use_from_same_package
   String? get storedEnrollmentId => enrollmentId;
 
-  /// Encodes just the legacy flat shape — the hard-coded fields, [metadata]
-  /// and [atSignFloor] — with no `version`/`atsign`/`keys`.
+  /// Encodes just the legacy flat shape — the hard-coded fields plus
+  /// [metadata] — with no `version`/`atsign`/`keys`.
   Map<String, dynamic> _toLegacyJson() {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
@@ -1271,8 +1241,7 @@ class AtKeys {
       'enrollmentId': enrollmentId,
       for (var entry in metadata.entries)
         if (!auth_constants.keySchemaList.contains(entry.key))
-          entry.key: entry.value,
-      if (_atSignFloor != null) _atSignFloorField: _atSignFloor,
+          entry.key: entry.value
     };
   }
 
@@ -1294,10 +1263,7 @@ class AtKeys {
       ..enrollmentId =
           _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
     for (var entry in json.entries) {
-      if (entry.key == _atSignFloorField) {
-        keys._atSignFloor = const AtKeysAssurance()
-            .optionalString(entry.value, _atSignFloorField);
-      } else if (!auth_constants.keySchemaList.contains(entry.key)) {
+      if (!auth_constants.keySchemaList.contains(entry.key)) {
         keys.metadata[entry.key] = entry.value;
       }
     }

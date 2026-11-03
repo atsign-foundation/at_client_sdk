@@ -130,9 +130,9 @@ class AtClientPreference {
 
   /// A copy of this preference raised to [floor]: [posture] as
   /// [PqPosture.raisedTo] raises it, [authenticationKeyAlgorithm] and
-  /// [dataSigningKeyAlgorithms] the same way, [seedNamespaceKeys] where the
-  /// floor seeds, and every other field as it is. This preference itself when
-  /// nothing is raised.
+  /// [dataSigningKeyAlgorithms] the same way, and every other field, the
+  /// never-raised [seedNamespaceKeys] among them, as it is. This preference
+  /// itself when nothing is raised.
   @internal
   AtClientPreference raisedTo(PqPosture floor) {
     final raisedPosture = posture.raisedTo(floor);
@@ -140,11 +140,9 @@ class AtClientPreference {
         authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm);
     final dataSigning = raisedDataSigning(
         dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms);
-    final seeds = seedNamespaceKeys || floor.seedNamespaceKeys;
     if (identical(raisedPosture, posture) &&
         authentication == authenticationKeyAlgorithm &&
-        identical(dataSigning, dataSigningKeyAlgorithms) &&
-        seeds == seedNamespaceKeys) {
+        identical(dataSigning, dataSigningKeyAlgorithms)) {
       return this;
     }
     return AtClientPreference(
@@ -176,7 +174,7 @@ class AtClientPreference {
       ..remoteLocalPref = remoteLocalPref
       ..crypto = crypto
       ..allowLegacyCryptoFallback = allowLegacyCryptoFallback
-      ..seedNamespaceKeys = seeds;
+      ..seedNamespaceKeys = seedNamespaceKeys;
   }
 
   /// Where [other] would change what a **running** client does — one line per

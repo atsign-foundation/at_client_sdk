@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
-    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys, WrittenAtKeysIo;
+    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_client/src/enroll/first_enrollment.dart'
@@ -2091,14 +2091,8 @@ class AtClientImpl implements AtClient {
             grants: const {'*': 'rw', '__manage': 'rw'},
           );
 
-  /// Raises this client's preference to its posture floor, warning when that
-  /// raises anything: the higher of what its enrollment's key material sets
-  /// and what its atSign advertises.
-  ///
-  /// The atSign's advertisements are read only when they could raise this
-  /// client, at most [AtConnection.defaultBudget], counting only namespace
-  /// keys the atSign publishes itself. A floor they set is recorded in the
-  /// keyfile, which keeps it for a start with no atServer.
+  /// Raises this client's preference to the posture floor its enrollment's
+  /// key material sets, warning when that raises anything.
   Future<void> _applyPostureFloor() async {
     final configured = _preference!;
     final AtKeys keys;
@@ -2109,21 +2103,8 @@ class AtClientImpl implements AtClient {
           'its posture floor and runs as configured: $e');
       return;
     }
-    final reasons = <String>[];
-    final material = floorOfKeyMaterial(
+    final floor = floorOfKeyMaterial(
         keys, enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
-    if (material != null) reasons.add('the key material its enrollment holds');
-    var atSign = recordedAtSignFloor(keys);
-    if (atSign == null &&
-        material == null &&
-        !identical(configured.raisedTo(PqPosture.pqReady), configured) &&
-        await _advertisesOwnNamespaceKey()) {
-      atSign = PqPosture.pqReady;
-      await _recordAtSignFloor();
-    }
-    if (atSign != null) reasons.add('its atSign publishing a namespace key');
-
-    final floor = higherFloor(material, atSign);
     if (floor == null) return;
     final raised = configured.raisedTo(floor);
     if (identical(raised, configured)) return;
@@ -2132,9 +2113,8 @@ class AtClientImpl implements AtClient {
     final floorName =
         identical(floor, PqPosture.pqActive) ? 'pqActive' : 'pqReady';
     _logger.warning('$_atSign is configured ${postureName(configured.posture)} '
-        'and is raised to its $floorName floor, set by '
-        '${reasons.join(' and ')}: '
-        '${_raisedSettings(configured, raised).join(', ')}');
+        'and is raised to its $floorName floor, set by the key material its '
+        'enrollment holds: ${_raisedSettings(configured, raised).join(', ')}');
   }
 
   /// The settings [raised] runs differently from [configured].
@@ -2146,8 +2126,10 @@ class AtClientImpl implements AtClient {
       if (raised.authenticationKeyAlgorithm !=
           configured.authenticationKeyAlgorithm)
         'authenticationKeyAlgorithm ${raised.authenticationKeyAlgorithm.name}',
-      if (!identical(
-          raised.dataSigningKeyAlgorithms, configured.dataSigningKeyAlgorithms))
+      if (raised.dataSigningKeyAlgorithms.length !=
+              configured.dataSigningKeyAlgorithms.length ||
+          !raised.dataSigningKeyAlgorithms
+              .containsAll(configured.dataSigningKeyAlgorithms))
         'dataSigningKeyAlgorithms '
             '${algorithms(raised.dataSigningKeyAlgorithms)}',
       for (final (name, before, after) in [
@@ -2161,49 +2143,11 @@ class AtClientImpl implements AtClient {
           configured.posture.writesPqByDefault,
           raised.posture.writesPqByDefault
         ),
-        (
-          'seedNamespaceKeys',
-          configured.seedNamespaceKeys,
-          raised.seedNamespaceKeys
-        ),
       ])
         if (before != after) '$name $after',
       if (raised.posture.keyExchangeMode != configured.posture.keyExchangeMode)
         'keyExchangeMode ${raised.posture.keyExchangeMode.name}',
     ];
-  }
-
-  /// Whether this atSign publishes a namespace key of its own, as one
-  /// authenticated scan answers within [AtConnection.defaultBudget]; false
-  /// when it cannot be read.
-  Future<bool> _advertisesOwnNamespaceKey() async {
-    try {
-      final names = await getKeys(
-              regex: r'__nskey\.',
-              showHiddenKeys: true,
-              useRemoteAtServer: true)
-          .timeout(AtConnection.defaultBudget);
-      return advertisesOwnNamespaceKey(names, '$_atSign');
-    } catch (e) {
-      _logger.info('Could not read whether $_atSign publishes a namespace '
-          'key, so this start uses the floor its keyfile records: $e');
-      return false;
-    }
-  }
-
-  /// Records the floor this atSign's advertisements set in the keyfile, so a
-  /// start with no atServer keeps it.
-  Future<void> _recordAtSignFloor() async {
-    final io = _atKeysIo;
-    if (io is! WrittenAtKeysIo) return;
-    try {
-      await io.update(
-          _atSign, (keys) => keys.raiseAtSignFloor(AtKeys.atSignFloorPqReady));
-    } on Exception catch (e) {
-      _logger.warning('$_atSign publishes a namespace key, and the keyfile '
-          'could not record the floor that sets, so a start with no atServer '
-          'will not know it: $e');
-    }
   }
 
   /// Settles the enrollment this client runs as, before anything that derives

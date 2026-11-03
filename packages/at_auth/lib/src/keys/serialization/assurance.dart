@@ -31,8 +31,6 @@ class AtKeysAssurance {
     'keys',
   };
 
-  static const _atSignFloorField = 'atsignFloor';
-
   // ---- low-level parsing/value primitives, called by the models' fromJson ----
 
   String expectNonEmptyString(Object? value, String fieldName) {
@@ -278,19 +276,11 @@ class AtKeysAssurance {
   ///   given and [existing] names another atSign.
   ///
   /// Any other typed [existing] holding a credential keeps its typed header.
-  ///
-  /// The atSign floor never comes down: once [existing] records one,
-  /// [candidate] must carry the same value, in either shape.
   void validateMapUpdate({
     required Map<String, dynamic> existing,
     required Map<String, dynamic> candidate,
     Atsign? atsign,
   }) {
-    final floor = existing[_atSignFloorField];
-    if (floor != null && candidate[_atSignFloorField] != floor) {
-      throw AtKeysAssuranceException('map.$_atSignFloorField: the atSign '
-          'floor $floor is never lowered or removed');
-    }
     final existingMaterials = _decode(existing);
     final candidateMaterials = _decode(candidate);
 

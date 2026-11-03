@@ -6,14 +6,10 @@
   per-namespace keys, a signing root, secret conveyance between an atSign's
   enrollments, and key rotation. The default posture is still
   `PqPosture.legacy`, which runs none of it.
-- feat: a client never runs below its posture floor. A keyfile holding a
-  namespace key's private, or an atSign that publishes any namespace key,
-  sets `pqReady`, and an ML-DSA-65 data signing key sets `pqActive`; a
-  client configured lower logs a warning and is raised to the floor. A
-  legacy client of such an atSign therefore re-enrolls itself and reads
-  post-quantum data at its first start.
-- note: a client configured below `pqReady` reads, as it starts, whether its
-  atSign publishes a namespace key, unless its keyfile already says so.
+- feat: a client never runs below its posture floor: a keyfile holding a
+  namespace key's private sets `pqReady`, and an ML-DSA-65 data signing key
+  sets `pqActive`; a client configured lower logs a warning and is raised to
+  the floor.
 - feat: `NotificationService.droppedEvents` reports each notification a
   client gives up on, such as one it cannot decrypt, with the reason it
   logs at warning. A client whose posture reads no post-quantum data says

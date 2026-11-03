@@ -18,8 +18,8 @@
   (`references/02`).
 - A write waits up to 30 seconds for the answer to start-up's ask for its
   namespace key's private (`SKILL.md`).
-- A client never runs below its posture floor, set by its keyfile's keys and
-  its atSign's namespace keys (`SKILL.md`).
+- A client never runs below its posture floor, set by its keyfile's keys
+  (`SKILL.md`).
 - Sync's fallback is a 30-second timer; `AtClientPreference.syncIntervalMins`,
   which set nothing, is listed as removed in 4.0 (`SKILL.md`; `references/11`,
   `15`).

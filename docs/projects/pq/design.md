@@ -2308,12 +2308,6 @@ readers in the field may expect it wherever there is a `version`
 it would discard the material and authenticate from the flat block as the wrong
 enrollment.
 
-Any of the three may carry a top-level `atsignFloor`, the posture floor the
-atSign sets, `pqReady` once a client has found it publishing a namespace key.
-`AtKeys.raiseAtSignFloor` is its only writer, and the update assurance refuses a
-write that lowers or removes it. at_auth 3.3.0 and 4.0.0-rc7 keep it through a
-read and a write as a field they do not know.
-
 ### 9.3 `_apsk`
 
 ```json
@@ -2875,30 +2869,30 @@ Both are constructor refusals in `AtClientPreference`, and both narrow
   posture names. An enrollment holding no stronger client data signing key
   mints rsa2048 and keeps `_apsk` bare; one holding an ML-DSA-65 key keeps it
   active and mints nothing, because key material wins.
-- **A client never runs below its floor.** The floor is the higher of what its
-  enrollment's key material sets, `pqActive` for an active ML-DSA-65 client
-  data signing key and `pqReady` for any namespace-key private, and what its
-  atSign advertises, `pqReady` for any `public:__nskey.*` the atSign publishes
-  itself. A start configured below it warns and is raised per setting:
-  `authenticationKeyAlgorithm`, the strongest of `dataSigningKeyAlgorithms`,
-  `configuresPqProviders`, `writesPqByDefault`, and `seedNamespaceKeys` with
-  `keyExchangeMode`. `disallowLegacyEncryption`, `mintLegacyMaterial`,
-  `sealsToKeyAlgorithms`, `keyEstablishmentAlgorithms` and the
-  `allowLegacyCryptoFallback` preference stay as configured.
-  - What the atSign advertises is read by one authenticated scan before the
-    enrollment settles, since the retrofit decision reads the raised posture.
-    The scan runs only when it could raise the client, is bounded by
-    `AtConnection.defaultBudget`, and never counts a cached copy of another
-    atSign's key. The floor it finds is recorded in the keyfile's
-    `atsignFloor`, so a start with no atServer keeps it and it never comes
-    down; the enrollment's own floor is derived from key material at every
-    start and never stored.
-  - Rejected: a `local:` record for the atSign floor, which is lost with the
-    store, when a new device's first start with no atServer is exactly the
-    case that needs it. Raising a named stage to the whole higher stage,
-    which would make a `pqReady` client at a `pqActive` floor refuse writes to
-    a destination with no namespace key. Lifting a running client when its
-    atSign publishes its first namespace key: it is lifted at its next start.
+- **A client never runs below its floor.** The floor is what its enrollment's
+  key material sets: `pqActive` for an active ML-DSA-65 client data signing
+  key, and `pqReady` for any namespace-key private. A start configured below it
+  warns and is raised per setting: `authenticationKeyAlgorithm`, the strongest
+  of `dataSigningKeyAlgorithms`, `configuresPqProviders`, `writesPqByDefault`,
+  and `keyExchangeMode`. `seedNamespaceKeys`, `disallowLegacyEncryption`,
+  `mintLegacyMaterial`, `sealsToKeyAlgorithms`, `keyEstablishmentAlgorithms`
+  and the `allowLegacyCryptoFallback` preference stay as configured. The floor
+  is derived from the keyfile at every start and never stored, so a start with
+  no atServer applies it too.
+  - Seeding is never raised: it is the one setting that would publish a
+    permanent record for the atSign, and a client that does not seed still
+    reaches its atSign's keys by conveyance or by asking.
+  - Built and withdrawn for 4.0: a second input from what the atSign
+    advertises, `pqReady` for any `public:__nskey.*` it publishes itself, read
+    by one authenticated scan at start and recorded in the keyfile so a start
+    with no atServer kept it. The live packs showed it raising every legacy
+    client of an atSign once any client published a namespace key: 160 raises
+    in one functional run, with 61 functional and 19 end-to-end failures, the
+    end-to-end ones from raised clients seeding and stranding a namespace's
+    mint lock. It is deferred until after 4.0.
+  - Rejected: raising a named stage to the whole higher stage, which would
+    make a `pqReady` client at a `pqActive` floor refuse writes to a
+    destination with no namespace key.
 
 #### 9.8.6 A pre-enrollment atSign retrofits into a first enrollment
 

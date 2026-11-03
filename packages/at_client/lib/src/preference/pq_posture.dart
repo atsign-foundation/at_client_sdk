@@ -148,12 +148,11 @@ class PqPosture {
   /// This posture with each setting that [floor] sets more strongly raised to
   /// the floor's: the authentication key algorithm, the data signing set when
   /// its strongest algorithm is weaker than the floor's, configuring and
-  /// writing post-quantum, and seeding namespace keys with the pq key
-  /// exchange. Every other axis stays as it is, and a posture at or above
+  /// writing post-quantum, and the pq key exchange. Every other axis, seeding
+  /// namespace keys among them, stays as it is, and a posture at or above
   /// [floor] on all of these is returned unchanged.
   @internal
   PqPosture raisedTo(PqPosture floor) {
-    final seeds = seedNamespaceKeys || floor.seedNamespaceKeys;
     final raised = (
       authentication: strongerOf(
           authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm),
@@ -161,8 +160,7 @@ class PqPosture {
           dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms),
       configures: configuresPqProviders || floor.configuresPqProviders,
       writes: writesPqByDefault || floor.writesPqByDefault,
-      seeds: seeds,
-      exchange: seeds || floor.keyExchangeMode == EnrollmentKeyExchangeMode.pq
+      exchange: floor.keyExchangeMode == EnrollmentKeyExchangeMode.pq
           ? EnrollmentKeyExchangeMode.pq
           : keyExchangeMode,
     );
@@ -170,7 +168,6 @@ class PqPosture {
         identical(raised.dataSigning, dataSigningKeyAlgorithms) &&
         raised.configures == configuresPqProviders &&
         raised.writes == writesPqByDefault &&
-        raised.seeds == seedNamespaceKeys &&
         raised.exchange == keyExchangeMode) {
       return this;
     }
@@ -179,7 +176,6 @@ class PqPosture {
       dataSigningKeyAlgorithms: raised.dataSigning,
       configuresPqProviders: raised.configures,
       writesPqByDefault: raised.writes,
-      seedNamespaceKeys: raised.seeds,
       keyExchangeMode: raised.exchange,
     );
   }
