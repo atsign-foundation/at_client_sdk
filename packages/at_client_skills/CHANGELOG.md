@@ -25,6 +25,9 @@
   `15`).
 - A notification a subscription drops, one it cannot decrypt included, is
   logged at warning and emitted on `droppedEvents` (`SKILL.md` §13).
+- A `create` whose share fails after its own copy is retried with
+  `updateSharedWith(e.item!, ...)`, catching `CollectionOpException<T>`
+  (`references/02`).
 - An item a collection cannot read yet is a `CItemReadException`, which
   `.handleError` can test for (`references/02`, `references/07`).
 - A program serving a mixed fleet writes post-quantum with

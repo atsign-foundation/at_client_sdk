@@ -880,7 +880,9 @@ interface class AtCollection<T> {
   /// method's doc comment for the defaults and the null semantics.
   ///
   /// Returns the persisted item. Throws [CollectionOpException] on any
-  /// key-level failure.
+  /// key-level failure; when the item's own copy was written and a
+  /// recipient's was not, its [CollectionOpException.item] is the item
+  /// written, to retry the share with [updateSharedWith].
   Future<CItem<T>> create({
     required T obj,
     String? id,
@@ -936,9 +938,22 @@ interface class AtCollection<T> {
     // round-trip saved is the right trade.
     final results = await _put(item, unshareWithOthers: false);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results, item: _asWritten(item, results));
     }
     await _awaitLocalEmissions();
+    return item;
+  }
+
+  /// [item] naming only the recipients whose copies [results] wrote, or null
+  /// when its own copy was not written.
+  CItem<T>? _asWritten(CItem<T> item, List<OpResult> results) {
+    if (!results.any((r) => r is OpSuccess && r.atKey.sharedWith == null)) {
+      return null;
+    }
+    item.sharedWith.removeAll({
+      for (final r in results.whereType<OpFailure>())
+        if (r.atKey.sharedWith != null) r.atKey.sharedWith!.toAtsign()
+    });
     return item;
   }
 
@@ -1007,7 +1022,7 @@ interface class AtCollection<T> {
     final exists = await _selfKeyExists(id);
     final results = await _put(draft);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     if (!exists) {
       // Mirror [create]'s seen-id bookkeeping for the brand-new case.
@@ -1053,7 +1068,7 @@ interface class AtCollection<T> {
     }
     final results = await _put(item, unshareWithOthers: unshareWithOthers);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     await _awaitLocalEmissions();
   }
@@ -1147,7 +1162,7 @@ interface class AtCollection<T> {
       }
     }
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     item.sharedWith
       ..clear()
@@ -1169,7 +1184,7 @@ interface class AtCollection<T> {
   Future<void> delete(CItem<T> item, {bool cascade = false}) async {
     final results = await _delete(item, cascade: cascade);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     await _awaitLocalEmissions();
   }
@@ -5099,7 +5114,7 @@ final class CItem<T> {
       );
       final results = await rr._putRecipientsOnly(receipt);
       if (results.any((r) => r is OpFailure)) {
-        throw CollectionOpException(results);
+        throw CollectionOpException<T>(results);
       }
       // Patch the in-process readers cache so a subsequent
       // wasMarkedReadByMe on this CItem instance returns true even
@@ -5165,10 +5180,19 @@ final class OpNotAttempted extends OpResult {
 /// [AtCollection.delete] when any key-level op failed. Inspect [results]
 /// for the per-key breakdown, or [failures] / [firstFailure] for the
 /// subset that went wrong.
-final class CollectionOpException implements Exception {
+///
+/// [T] is the item type of the collection that threw it, so
+/// `on CollectionOpException<Todo> catch (e)` hands back a typed [item].
+final class CollectionOpException<T> implements Exception {
   final List<OpResult> results;
 
-  CollectionOpException(this.results);
+  /// The item [AtCollection.create] wrote when its own copy landed and a
+  /// recipient's copy did not, naming only the recipients whose copies were
+  /// written: retry the rest with [AtCollection.updateSharedWith], not
+  /// [AtCollection.create], which would write a second item. Null otherwise.
+  final CItem<T>? item;
+
+  CollectionOpException(this.results, {this.item});
 
   List<OpFailure> get failures => results.whereType<OpFailure>().toList();
 

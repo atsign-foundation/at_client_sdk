@@ -22,6 +22,10 @@
   namespace-key provider, so a `pqReady` program no longer names it; a
   client whose config lacks it, as at `PqPosture.legacy`, is refused with
   an error naming its posture or config.
+- feat: when `create`'s own copy is written and a recipient's is not, its
+  `CollectionOpException<T>` carries the item written as `item`, so the
+  share is retried with `updateSharedWith(e.item!, ...)` rather than a
+  second `create`.
 - fix: a collection record this device cannot read yet fails `getItems()`
   with a `CItemReadException` naming the record and the error its read
   failed with, rather than a string; `getItemsAsStream()` with an `onError`

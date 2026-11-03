@@ -93,6 +93,11 @@ awaits local emission so `watch()` listeners see the update before
 - Throws `CollectionOpException` on any key-level write failure. When the
   item's own copy is the one that failed, no recipient's copy is written:
   each is in the exception's `results` as `OpNotAttempted`
+- When the own copy was written and a recipient's was not, catch
+  `CollectionOpException<T>`: its `item` is the item written, naming only
+  the recipients whose copies were written. Retry the share with
+  `updateSharedWith(e.item!, recipients)`, never `create`, which writes a
+  second item
 - At `pqActive`, each `sharedWith` recipient must have published a key for
   the namespace; one that has not fails the write with a
   `NamespaceKeyUnavailableException` naming them.

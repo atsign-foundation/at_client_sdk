@@ -284,9 +284,11 @@ the self copy and then throws a `CollectionOpException` naming each
 recipient's copy it could not write. With an atServer that stops answering
 mid-connection, that takes up to about a minute at the default
 `networkTimeout`, and a call abandoned before then can still complete. The
-item is listed, and nothing sends
-the share later: retry it with `updateSharedWith(item, ...)`, not `create`,
-which would write a second item. When the self copy itself cannot be
+item is listed, and nothing sends the share later. Catch
+`CollectionOpException<T>`: its `item` is the item written, naming only the
+recipients whose copies were written, so `updateSharedWith(e.item!, ...)`
+retries the rest. Never retry with `create`, which would write a second
+item. When the self copy itself cannot be
 written, nothing else is: the exception names the self copy, and its
 `results` list each recipient's copy as `OpNotAttempted`.
 

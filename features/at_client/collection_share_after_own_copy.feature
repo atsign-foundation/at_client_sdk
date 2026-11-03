@@ -5,7 +5,10 @@ Feature: A collection writes a share only after its own copy
   written and no recipient the item no longer names is removed: the
   CollectionOpException names the own copy, and its results list each
   recipient's copy as OpNotAttempted. So a recipient never holds an item
-  its owner's clients cannot list, update or delete.
+  its owner's clients cannot list, update or delete. When the own copy is
+  written and a recipient's copy fails, create's CollectionOpException
+  carries the item it wrote, so the caller retries the share with
+  updateSharedWith rather than writing a second item with create.
 
   Races: the outcome is the same whichever of the atSign's clients takes a
   namespace's mint lock first; a write either lands its own copy and then
@@ -18,3 +21,9 @@ Feature: A collection writes a share only after its own copy
     Given an enrollment of @alice that holds no private for the current generation of "todos"
     When it calls create(obj: t, sharedWith: {@bob})
     Then it throws CollectionOpException naming the self copy, @bob holds no copy of the item, and no client of @alice or @bob lists it
+
+  Scenario: A share that fails after the self copy hands back the item to retry with
+    Given @bob has published no namespace key for "list.todos"
+    When @alice calls create(obj: t, sharedWith: {@bob}) at pqActive
+    Then it throws CollectionOpException whose item is the item written, and getItems() lists it once
+    And updateSharedWith(e.item!, {@bob}) after @bob publishes shares that same item

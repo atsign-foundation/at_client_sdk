@@ -57,7 +57,7 @@ Future<void> sender(
   try {
     await binaries.create(obj: data, sharedWith: otherAtSigns);
     progressSink.add('  ...saved.');
-  } on CollectionOpException catch (e) {
+  } on CollectionOpException<Uint8List> catch (e) {
     for (final r in e.results) {
       progressSink.add(r.toString());
     }

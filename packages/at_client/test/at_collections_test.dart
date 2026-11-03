@@ -541,8 +541,55 @@ void main() {
               .map((r) => r.atKey.sharedWith),
           [bobStr],
           reason: "@bob's copy is reported as not attempted");
+      expect(thrown.item, isNull,
+          reason: 'nothing was written, so there is no item to retry');
       verify(() => atClient.put(any(), any())).called(1);
       verifyNever(() => atClient.delete(any()));
+    });
+
+    test(
+        'A share that fails after the self copy hands back the item to retry '
+        'with', () async {
+      final written = <String, String>{};
+      var bobPublished = false;
+      when(() => atClient.get(any())).thenAnswer((i) async {
+        final json = written['${i.positionalArguments[0]}'];
+        if (json == null) throw Exception('no such key');
+        return AtValue()
+          ..value = json
+          ..metadata = (Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        final key = i.positionalArguments[0] as AtKey;
+        if (key.sharedWith == bobStr && !bobPublished) {
+          throw Exception('$bobStr has no published nskey for $namespace');
+        }
+        written['$key'] = i.positionalArguments[1] as String;
+        return true;
+      });
+      when(() => atClient.getAtKeys(regex: any(named: 'regex'))).thenAnswer(
+          (_) async => [for (final k in written.keys) AtKey.fromString(k)]);
+      final c = buildCollection<String>();
+
+      CollectionOpException<String>? thrown;
+      try {
+        await c.create(obj: 't', id: 'c12', sharedWith: {bob});
+      } on CollectionOpException<String> catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown?.item?.id, 'c12',
+          reason: 'the exception hands back the item written');
+      expect((await c.getItems()).map((item) => item.id), ['c12'],
+          reason: 'getItems lists it once');
+
+      bobPublished = true;
+      await c.updateSharedWith(thrown!.item!, {bob});
+      expect(
+          written.keys.where((k) => k.startsWith('$bobStr:c12.')), hasLength(1),
+          reason: "the retry writes @bob's copy of that same item");
     });
 
     test('an update whose self copy fails writes and removes no share',
