@@ -169,7 +169,10 @@ A program that does not take `CLIBase`'s flags calls at_client's verbs
 itself. The one import carries them, since at_client_cli re-exports
 at_client's native API, its storage backends and mixins, the registrar and
 the logging handlers. `CliKeys` gives the verbs the keyfile and store a command-line
-program keeps:
+program keeps. Unless it sets `AtSignLogger.root_level`, such a program logs
+only the SDK's warnings, to stdout;
+`AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler()` sends them to
+stderr:
 
 ```dart
 import 'package:at_client_cli/at_client_cli.dart';
