@@ -592,6 +592,83 @@ void main() {
           reason: "the retry writes @bob's copy of that same item");
     });
 
+    /// An atServer holding what it is written, whose put of @bob's copy fails
+    /// while [refusesBob] says so.
+    Map<String, String> storeRefusingBob(bool Function() refusesBob) {
+      final written = <String, String>{};
+      when(() => atClient.get(any())).thenAnswer((i) async {
+        final json = written['${i.positionalArguments[0]}'];
+        if (json == null) throw Exception('no such key');
+        return AtValue()
+          ..value = json
+          ..metadata = (Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        final key = i.positionalArguments[0] as AtKey;
+        if (key.sharedWith == bobStr && refusesBob()) {
+          throw Exception('$bobStr has no published nskey for $namespace');
+        }
+        written['$key'] = i.positionalArguments[1] as String;
+        return true;
+      });
+      when(() => atClient.delete(any())).thenAnswer((i) async {
+        written.remove('${i.positionalArguments[0]}');
+        return true;
+      });
+      when(() => atClient.getAtKeys(regex: any(named: 'regex'))).thenAnswer(
+          (_) async => [for (final k in written.keys) AtKey.fromString(k)]);
+      return written;
+    }
+
+    test('A create whose share fails changes no recipient set the app holds',
+        () async {
+      var refusesBob = false;
+      final written = storeRefusingBob(() => refusesBob);
+      int bobCopiesOf(String id) =>
+          written.keys.where((k) => k.startsWith('$bobStr:$id.')).length;
+      final c = buildCollection<String>();
+      final set = {bob};
+      final earlier = await c.create(obj: 'a', id: 'a1', sharedWith: set);
+
+      refusesBob = true;
+      CollectionOpException<String>? thrown;
+      try {
+        await c.create(obj: 'b', id: 'b1', sharedWith: set);
+      } on CollectionOpException<String> catch (e) {
+        thrown = e;
+      }
+      expect(thrown?.item?.sharedWith, isEmpty,
+          reason: 'the item handed back names no recipient it was not '
+              'shared with');
+      expect(set, {bob}, reason: "the app's set still names @bob");
+      expect(earlier.sharedWith, {bob}, reason: 'and so does the earlier item');
+
+      refusesBob = false;
+      await c.update(earlier);
+      expect(bobCopiesOf('a1'), 1,
+          reason: "an update of the earlier item keeps @bob's copy");
+      await c.updateSharedWith(thrown!.item!, set);
+      expect(bobCopiesOf('b1'), 1,
+          reason: "updateSharedWith(e.item!, set) writes @bob's copy of the "
+              'new item');
+    });
+
+    test(
+        "updateSharedWith given the item's own recipient set keeps its "
+        'recipients', () async {
+      final written = storeRefusingBob(() => false);
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 's', id: 's1', sharedWith: {bob});
+
+      await c.updateSharedWith(item, item.sharedWith);
+
+      expect(item.sharedWith, {bob});
+      expect(
+          written.keys.where((k) => k.startsWith('$bobStr:s1.')), hasLength(1));
+    });
+
     test('an update whose self copy fails writes and removes no share',
         () async {
       when(

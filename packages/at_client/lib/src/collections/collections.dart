@@ -824,6 +824,9 @@ interface class AtCollection<T> {
   /// guarantee a collision-free id, use [create] (which retries on
   /// collision) rather than calling [draft] followed by a manual write.
   ///
+  /// The item holds its own copy of [sharedWith], so a set the app keeps
+  /// and passes again is never changed by a write of this item.
+  ///
   /// [expiresAt] defaults to `now + defaultExpiration`. Supply an
   /// explicit value to override for this item alone.
   ///
@@ -860,7 +863,7 @@ interface class AtCollection<T> {
       id: id,
       type: _resolveType(obj),
       obj: obj,
-      sharedWith: sharedWith ?? {},
+      sharedWith: {...?sharedWith},
       createdAt: now,
       expiresAt: expiresAt ?? now.add(defaultExpiration),
       availableAt: availableAt,
@@ -1110,6 +1113,9 @@ interface class AtCollection<T> {
     Set<Atsign> sharedWith, {
     bool unshareWithOthers = true,
   }) async {
+    // NOTE: a copy, because the item's own Set is cleared below and the caller
+    // may have passed that very Set.
+    final wanted = {...sharedWith};
     if (item.owner != atSign) {
       throw ArgumentError('You may not update items owned by other atSigns');
     }
@@ -1120,15 +1126,15 @@ interface class AtCollection<T> {
       );
     }
     final toUnshare = unshareWithOthers
-        ? item.sharedWith.difference(sharedWith)
+        ? item.sharedWith.difference(wanted)
         : const <Atsign>{};
-    final toShare = sharedWith.difference(item.sharedWith);
+    final toShare = wanted.difference(item.sharedWith);
     if (toUnshare.isEmpty && toShare.isEmpty) {
       // No recipient-set delta. Still align the item's own Set with
       // the caller's argument in case they passed a fresh instance.
       item.sharedWith
         ..clear()
-        ..addAll(sharedWith);
+        ..addAll(wanted);
       return;
     }
     final now = DateTime.now();
@@ -1166,7 +1172,7 @@ interface class AtCollection<T> {
     }
     item.sharedWith
       ..clear()
-      ..addAll(sharedWith);
+      ..addAll(wanted);
     await _awaitLocalEmissions();
   }
 

@@ -27,3 +27,8 @@ Feature: A collection writes a share only after its own copy
     When @alice calls create(obj: t, sharedWith: {@bob}) at pqActive
     Then it throws CollectionOpException whose item is the item written, and getItems() lists it once
     And updateSharedWith(e.item!, {@bob}) after @bob publishes shares that same item
+
+  Scenario: A create whose share fails changes no recipient set the app holds
+    Given @alice's app keeps one recipient set naming @bob, and an item already shared with @bob from it
+    When a create sharing with that set fails to write @bob's copy
+    Then the app's set and the earlier item still name @bob, an update of the earlier item keeps @bob's copy, and updateSharedWith(e.item!, set) writes @bob's copy of the new item
