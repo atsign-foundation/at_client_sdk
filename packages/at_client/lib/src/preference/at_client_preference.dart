@@ -28,8 +28,10 @@ class AtClientPreference {
   /// axis set as a group, and a floor an explicit axis may raise but not lower.
   ///
   /// ⚠️ An existing enrollment holding an authentication key weaker than this
-  /// asks for is retrofitted at the next start, with no opt-out; an app that
-  /// must not move names [PqPosture.legacy].
+  /// asks for is retrofitted at the next start, with no opt-out. An app that
+  /// wants less names [PqPosture.legacy] rather than weakening an axis of a
+  /// stronger posture, and is still raised to the floor its own key material
+  /// sets.
   final PqPosture posture;
 
   /// Which of the post-quantum startup's steps this client runs, or null to
@@ -124,7 +126,8 @@ class AtClientPreference {
           'authenticationKeyAlgorithm',
           'is weaker than ${posture.authenticationKeyAlgorithm.name}, which '
               'this posture names. A posture is a floor: name a posture that '
-              'wants ${asked.name}, or PqPosture.legacy to stay where you are');
+              'wants ${asked.name}, or PqPosture.legacy, which drives no '
+              'upgrade beyond the floor its keyfile\'s key material sets');
     }
   }
 

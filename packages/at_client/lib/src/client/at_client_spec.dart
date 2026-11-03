@@ -119,9 +119,13 @@ abstract class AtClient {
   EnrollmentService? get enrollmentService;
 
   /// Sets the preferences this client reads, such as its namespace and its
-  /// post-quantum posture.
+  /// post-quantum posture. A client below its posture floor is raised to it
+  /// again, on its own copy of [preference].
   void setPreferences(AtClientPreference preference);
 
+  /// The preferences this client runs on. A client raised to its posture
+  /// floor runs on its own copy of the preference it was given, so a setting
+  /// changes through this or [setPreferences], not through that object.
   AtClientPreference? getPreferences();
 
   /// Whether [stop] has run.

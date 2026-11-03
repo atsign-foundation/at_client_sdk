@@ -4601,8 +4601,9 @@ Threats, answered for the whole set:
   spelled in the bare form. The control is `PqPosture.legacy`, where an empty
   set is exactly what the posture means and is accepted.
   *And* an explicit **`authenticationKeyAlgorithm` weaker than the posture
-  names is refused**: a posture is a floor, and an app that must not move names
-  `PqPosture.legacy` rather than weakening an axis of a stronger posture.
+  names is refused**: a posture is a floor, and an app that wants less names
+  `PqPosture.legacy` rather than weakening an axis of a stronger posture, and
+  is still raised to the floor its own key material sets.
 
   ⚠️ **The floor rule reads ONE axis.** A `dataSigningKeyAlgorithms` weaker
   than the posture names

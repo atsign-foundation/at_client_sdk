@@ -698,7 +698,8 @@ What each posture switches on:
   left as they were. A client whose posture asks for a stronger
   authentication key than its enrollment holds re-enrolls itself at its
   first start and comes up on the new enrollment. This needs an atServer
-  that verifies ML-DSA signatures; a `legacy` client makes no such demand.
+  that verifies ML-DSA signatures; a `legacy` client makes no such demand
+  unless its key material raises it to a floor.
   The new enrollment receives no namespace keys from an approval, so it asks
   the atSign's other enrollments for them, and only one online at the time
   can answer. On an atSign that has published any namespace key, enroll a

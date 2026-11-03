@@ -226,7 +226,8 @@ class PqPosture {
   });
 
   /// A client built before any of this: classical throughout, driving no
-  /// upgrade, and unable to read post-quantum data at all.
+  /// upgrade, and unable to read post-quantum data at all, unless its
+  /// keyfile's own post-quantum key material raises it to a floor.
   ///
   /// ⚠️ A record sealed to this atSign's namespace key is refused with
   /// `CryptoProviderNotRegistered`; an app that must read post-quantum data

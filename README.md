@@ -158,7 +158,8 @@ secrets to it rather than wrapping them with RSA. A client whose posture
 asks for a stronger authentication key than its enrollment holds
 re-enrolls itself at its first start, filing the new enrollment in the
 same keys store beside the legacy fields. ML-DSA authentication needs an
-atServer that verifies it; a `legacy` client makes no such demand.
+atServer that verifies it; a `legacy` client makes no such demand unless
+its key material raises it to a floor.
 
 The default posture moves one stage at a time — `legacy` through 4.0,
 `pqReady` from a later 4.x release, `pqActive` at 5.0 — because a record may only be

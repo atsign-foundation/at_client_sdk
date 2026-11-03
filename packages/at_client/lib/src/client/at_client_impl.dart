@@ -1021,8 +1021,9 @@ class AtClientImpl implements AtClient {
     // config's nskey providers read through the bootstrap's key ring, the same
     // ring the startup steps mint into and file from.
     //
-    // A stage that configures no post-quantum providers runs NONE of the
-    // startup: no wire write, no subscription, no change to the keyfile. Keyed
+    // A stage that, after the posture floor, configures no post-quantum
+    // providers runs NONE of the startup: no wire write, no subscription, no
+    // change to the keyfile. Keyed
     // on the axis rather than on `posture == PqPosture.legacy`, so a
     // deployment that builds its own posture with the providers off gets the
     // same client.
@@ -2058,8 +2059,9 @@ class AtClientImpl implements AtClient {
   /// posture asking for [wanted].
   ///
   /// **A posture is a floor, never a downgrade.** Key material wins, so
-  /// `PqPosture.legacy` means "do not drive an upgrade" rather than "return to
-  /// legacy", and cannot un-retrofit an atSign that has already moved.
+  /// `PqPosture.legacy` means "do not drive an upgrade beyond the floor its key
+  /// material sets" rather than "return to legacy", and cannot un-retrofit an
+  /// atSign that has already moved.
   ///
   /// "Stronger" is at_chops' own total order rather than a judgement made
   /// here: a signer and a verifier that disagreed about it would negotiate

@@ -824,7 +824,8 @@ a pending enrollment, and `saveSpp` takes a `Passcode`.
 An app built on 3.x writes legacy-encrypted data, and every client that
 reads it is a legacy client. at_client 4.0's default posture is still
 `PqPosture.legacy`, so an app upgraded by sections 1 to 4 reads and writes
-as it did. It moves to post-quantum in two steps, each one a release rolled
+as it did, unless its keyfile already holds post-quantum key material, when
+it runs at the floor that material sets (see the at_client README). It moves to post-quantum in two steps, each one a release rolled
 out to every client of the app:
 
 1. Rebuild it with `PqPosture.pqReady` and roll that out. Each client then

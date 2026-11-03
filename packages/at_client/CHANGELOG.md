@@ -5,11 +5,13 @@
   ML-DSA-65 signing, X-Wing and ML-KEM-1024 key establishment,
   per-namespace keys, a signing root, secret conveyance between an atSign's
   enrollments, and key rotation. The default posture is still
-  `PqPosture.legacy`, which runs none of it.
+  `PqPosture.legacy`, which runs none of it unless a keyfile's own
+  post-quantum key material raises the client to its floor.
 - feat: a client never runs below its posture floor: a keyfile holding a
   namespace key's private sets `pqReady`, and an ML-DSA-65 data signing key
   sets `pqActive`; a client configured lower logs a warning and is raised to
-  the floor.
+  the floor, on its own copy of the preference, which `getPreferences()` and
+  `setPreferences()` reach.
 - feat: `NotificationService.droppedEvents` reports each notification a
   client gives up on, such as one it cannot decrypt, with the reason it
   logs at warning. A client whose posture reads no post-quantum data says
@@ -39,10 +41,9 @@
   enrollment signed before a rotation stays valid. A later release re-signs
   what an enrollment publishes under its active key, and then withdraws the
   retired one.
-- fix: a client started at a weaker posture than its enrollment's client
-  data signing key, such as `pqReady` after `pqActive`, keeps signing with
-  that key and mints no weaker one, so its keyfile and `_apsk` stay as they
-  were.
+- fix: a client whose data signing set names only algorithms weaker than a
+  client data signing key its enrollment holds keeps signing with that key
+  and mints no weaker one, so its keyfile and `_apsk` stay as they were.
 - feat: a namespace key's private is conveyed, before the key is published,
   to every enrollment listed for its namespace that has a key package. An
   enrollment the conveyance misses first looks for an envelope addressed to
