@@ -22,9 +22,9 @@ final _logger = AtSignLogger('VerifiedAdvertisementRecord');
 ///
 /// Kept in local storage under a `local:` key, which never syncs, and signed
 /// with this client's data signing key, so nothing that can only write local
-/// storage can produce one. It names the namespace keys the client held when
-/// it verified, and vouches for exactly those bytes only while the client
-/// holds the same ones.
+/// storage can produce one. It names the namespace keys filed for the
+/// namespace when it was written, retired ones included, and vouches for
+/// exactly those bytes only while the same ones are filed.
 class VerifiedAdvertisementRecord {
   final AtClient _atClient;
   final NskeyPrivateFiling? _filing;
@@ -35,9 +35,20 @@ class VerifiedAdvertisementRecord {
         _signer = AtClientEnvelopeSigner(_atClient);
 
   /// Records that [payload], this atSign's advertisement for [namespace], was
-  /// just verified online. A failure is logged, since the advertisement itself
-  /// was verified and only a later offline start loses by it.
-  Future<void> remember(String namespace, String payload) async {
+  /// verified online. A failure is logged, since the advertisement itself was
+  /// verified and only a later offline start loses by it.
+  ///
+  /// Records are written one at a time, each naming the keys filed when it
+  /// runs.
+  Future<void> remember(String namespace, String payload) {
+    final writing = _writing.then((_) => _remember(namespace, payload));
+    _writing = writing.then((_) {}, onError: (Object _) {});
+    return writing;
+  }
+
+  Future<void> _writing = Future.value();
+
+  Future<void> _remember(String namespace, String payload) async {
     final key = _keyFor(namespace);
     final local = _atClient.getLocalSecondary();
     if (key == null || local == null) return;
@@ -119,8 +130,7 @@ class VerifiedAdvertisementRecord {
       String namespace, String payload) async {
     final filing = _filing;
     if (filing == null) return null;
-    final held = [for (final f in await filing.filedFor(namespace)) f.nskeyKid]
-      ..sort();
+    final held = [...await filing.kidsFiledFor(namespace)]..sort();
     return {
       'atSign': _atClient.getCurrentAtSign(),
       'namespace': namespace.toLowerCase(),

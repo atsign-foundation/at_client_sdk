@@ -439,6 +439,21 @@ class NskeyPrivateFiling {
     ];
   }
 
+  /// The kid of every private filed for [namespace], retired ones included,
+  /// whatever algorithm it expands under.
+  Future<List<String>> kidsFiledFor(String namespace) async {
+    final keys = await _readSourceOrNull('the privates filed for $namespace');
+    if (keys == null) return const [];
+    final prefix = '$nskeyKeyfileIdPrefix${namespace.toLowerCase()}.';
+    return [
+      for (final material in keys.atSignKeys)
+        if (material.role == CryptographicMaterialRole.privateDecapsulation &&
+            material.keyId.startsWith(prefix) &&
+            !material.keyId.substring(prefix.length).contains('.'))
+          material.keyId.substring(prefix.length)
+    ];
+  }
+
   /// Every private this keyfile holds, grouped by namespace: `{namespace:
   /// {nskeyKid: private}}`.
   ///

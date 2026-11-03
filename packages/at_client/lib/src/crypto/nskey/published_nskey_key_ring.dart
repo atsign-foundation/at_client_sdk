@@ -459,6 +459,38 @@ class PublishedNskeyKeyRing
   /// known, the verified bytes they came from.
   final Map<String, _CachedAdvertisement> _remote = {};
 
+  /// The bytes of each of this atSign's own advertisements this ring verified
+  /// against the atServer, or published, in this session, by folded scope.
+  final Map<String, String> _verifiedOnline = {};
+
+  StreamSubscription<FiledNskeyPrivate>? _filingsSubscription;
+
+  static String _foldedScope(String owner, String namespace) =>
+      _scope(owner, namespace.toLowerCase());
+
+  /// Records that [payload], this atSign's advertisement for [namespace], was
+  /// verified online in this session, and records it again whenever a
+  /// namespace key is filed for [namespace] later in the session.
+  Future<void> _rememberVerified(
+      String owner, String namespace, String payload) async {
+    _verifiedOnline[_foldedScope(owner, namespace)] = payload;
+    _filingsSubscription ??=
+        privateFiling?.privatesFiled.listen(_rememberAfterFiling);
+    await _verifiedRecord.remember(namespace, payload);
+  }
+
+  /// Records again the advertisement verified online in this session for the
+  /// namespace [filed] names, so the record names the key just filed.
+  Future<void> _rememberAfterFiling(FiledNskeyPrivate filed) async {
+    final payload = _verifiedOnline[_foldedScope(filed.owner, filed.namespace)];
+    if (payload == null) return;
+    try {
+      await _verifiedRecord.remember(filed.namespace, payload);
+    } on StoppedException {
+      return;
+    }
+  }
+
   StreamSubscription<DataEvent>? _ownChangesSubscription;
 
   /// Starts expiring this client's own cached advertisements whenever local
@@ -901,7 +933,7 @@ class PublishedNskeyKeyRing
       fetchedAt: DateTime.now(),
       payload: payload,
     );
-    await _verifiedRecord.remember(namespace, payload);
+    await _rememberVerified(owner, namespace, payload);
     for (final key in prepared.minted) {
       final generation =
           _generation(owner, namespace, nskeyKidOf(key.publicKey));
@@ -1155,6 +1187,7 @@ class PublishedNskeyKeyRing
     } on AtException catch (e) {
       if (classifyConnectionFailure(e)?.isOffline != true) rethrow;
       if (await _verifiedRecord.vouchesFor(namespace, payload)) {
+        _verifiedOnline.remove(_foldedScope(owner, namespace));
         return _advertisementIn(payload);
       }
       e.message = 'could not verify ${nskeyAdvertisementKey(owner, namespace)}'
@@ -1163,7 +1196,7 @@ class PublishedNskeyKeyRing
           '${e.message}';
       rethrow;
     }
-    await _verifiedRecord.remember(namespace, payload);
+    await _rememberVerified(owner, namespace, payload);
     return advertisement;
   }
 
@@ -1345,7 +1378,7 @@ class PublishedNskeyKeyRing
       payload: value.value as String,
     );
     if (_isOwn(owner)) {
-      await _verifiedRecord.remember(namespace, value.value as String);
+      await _rememberVerified(owner, namespace, value.value as String);
     }
     return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
   }

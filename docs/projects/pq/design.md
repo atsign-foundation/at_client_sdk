@@ -522,8 +522,9 @@ come from the substrate
 ([§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)).
 Across a restart the cache is gone, so each client keeps a local record of the bytes
 it verified: a `local:` key that never syncs, signed with the keys the client signs its
-envelopes with (type `at-verified-advertisement+jws`) and naming the namespace keys it
-held then. A start that cannot reach the atServer accepts its own advertisement from
+envelopes with (type `at-verified-advertisement+jws`) and naming the namespace keys
+filed for that namespace, retired ones included; a key filed later in the same session
+rewrites it, for bytes that session verified online. A start that cannot reach the atServer accepts its own advertisement from
 local storage only when that record vouches for exactly those bytes and the keys it
 holds now; an atServer that answers still decides. What is left is a restored older
 copy of local storage from before a rotation whose key never reached the client: it is

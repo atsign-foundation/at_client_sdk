@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
@@ -65,7 +66,9 @@ class _Device {
 
   /// The client the device minted and published with.
   late final _Client client = _clientFor(this);
-  late final NskeyPrivateFiling filing =
+
+  /// The filing of the latest start, since each start builds its own.
+  late NskeyPrivateFiling filing =
       NskeyPrivateFiling(keysIo: keys, atSign: _atSign);
 
   /// Whether this is the primary enrollment on the atSign's root keys, whose
@@ -75,15 +78,22 @@ class _Device {
   /// Whether the client has stopped, so its local reads say so.
   bool stopped = false;
 
+  /// Awaited before each local write lands, with the key it writes.
+  Future<void> Function(String key)? beforeLocalWrite;
+
   _Device(this.enrollmentId, this.server, {this.onRootKeys = false})
       : apkam = pkamKeyPairFor(_atSign, enrollmentId),
         keys = keysHoldingApkam(_atSign, onRootKeys ? null : enrollmentId,
             pkamKeyPairFor(_atSign, enrollmentId));
 
   /// A fresh start: a new client, so nothing it cached survives, and a new
-  /// ring, over this device's keys and local storage.
-  PublishedNskeyKeyRing start() =>
-      PublishedNskeyKeyRing(_clientFor(this), privateFiling: filing);
+  /// filing and ring, over this device's keys and local storage.
+  PublishedNskeyKeyRing start(
+      {Duration advertisementTtl = const Duration(minutes: 15)}) {
+    filing = NskeyPrivateFiling(keysIo: keys, atSign: _atSign);
+    return PublishedNskeyKeyRing(_clientFor(this),
+        privateFiling: filing, advertisementTtl: advertisementTtl);
+  }
 
   /// Publishes this enrollment's `_apsk` on the atServer.
   Future<void> publishApsk() async {
@@ -127,6 +137,7 @@ _Client _clientFor(_Device d) {
       cameFromServer: any(named: 'cameFromServer'))).thenAnswer((inv) async {
     final builder = inv.positionalArguments.first;
     if (builder is UpdateVerbBuilder) {
+      await d.beforeLocalWrite?.call(builder.atKey.toString());
       d.local[builder.atKey.toString()] = builder.value as String;
       return 'data:1';
     }
@@ -236,6 +247,36 @@ void main() {
     ..key = 'x'
     ..namespace = namespace
     ..sharedBy = _atSign;
+
+  /// The namespace keys [device]'s local record names, or null with no record.
+  List<Object?>? recordHeld(_Device device) {
+    final stored = device.local[device.recordKey];
+    if (stored == null) return null;
+    final record =
+        SignedEnvelope.fromJson(jsonDecode(stored) as Map).payload as Map;
+    return record['held'] as List<Object?>;
+  }
+
+  /// Lets the event loop run until [done] holds, for at most [within].
+  Future<void> settle(bool Function() done,
+      {Duration within = const Duration(seconds: 2)}) async {
+    final deadline = DateTime.now().add(within);
+    while (!done() && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+  }
+
+  /// Files a fresh generation of N's namespace key through [device]'s latest
+  /// start, as a conveyance does, and returns its kid.
+  Future<String> fileNext(_Device device,
+      {String namespace = _namespace}) async {
+    final next = await nskeyGeneration(_alg);
+    await device.filing.file(Secret(
+        namespace: namespace,
+        name: '${NskeyPrivateFiling.secretNamePrefix}${next.kid}',
+        value: base64Encode(next.seed)));
+    return next.kid;
+  }
 
   test(
       'A client restarted with no atServer writes in a namespace it verified '
@@ -372,6 +413,176 @@ void main() {
     final advertised = await self.start().currentPublic(_atSign, _namespace);
 
     expect(advertised?.nskeyKid, kid);
+  });
+
+  test(
+      'A namespace key conveyed after the online verification counts at an '
+      'offline restart', () async {
+    final server = _AtServer();
+    final sibling = _Device('enroll-sibling', server);
+    await sibling.publishApsk();
+    final kid = (await sibling.start().mintAndPublish(_namespace)).nskeyKid;
+    final self = _Device('enroll-self', server);
+    await self.publishApsk();
+    self.syncAdvertisement();
+    await self.start().currentPublic(_atSign, _namespace);
+    expect(recordHeld(self), isEmpty,
+        reason: 'the premise: it verified holding none of N\'s keys');
+    final seed = await sibling.filing.readSeed(_namespace, kid);
+    expect(
+        await self.filing.file(Secret(
+            namespace: _namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
+            value: base64Encode(seed!.bytes))),
+        isTrue,
+        reason: 'the premise: the key was conveyed in the same session');
+    await settle(() => recordHeld(self)?.contains(kid) ?? false);
+    server.reachable = false;
+
+    expect(
+        (await self.start().currentPublic(_atSign, _namespace))?.nskeyKid, kid,
+        reason: 'the record was rewritten for the bytes verified online, '
+            'naming the key conveyed after');
+  });
+
+  test(
+      'Given a client that accepted its advertisement offline on its record, '
+      'when a namespace key is filed for N, then the record is not rewritten',
+      () async {
+    final (:device, kid: _) = await mintedAndVerified();
+    final before = device.local[device.recordKey];
+    device.server.reachable = false;
+    await device.start().currentPublic(_atSign, _namespace);
+
+    await fileNext(device);
+    await settle(() => device.local[device.recordKey] != before,
+        within: const Duration(milliseconds: 500));
+
+    expect(device.local[device.recordKey], before,
+        reason: 'a record is written only for bytes verified online in this '
+            'session');
+  });
+
+  test(
+      'Given a namespace key filed after the online verification, when it is '
+      'retired, then a restart with no atServer still accepts N', () async {
+    final (:device, :kid) = await mintedAndVerified();
+    await device.start().currentPublic(_atSign, _namespace);
+    final next = await fileNext(device);
+    await settle(() => recordHeld(device)?.contains(next) ?? false);
+    expect(recordHeld(device), contains(next),
+        reason: 'the premise: the record names the key filed after');
+
+    await device.filing.retire(_namespace, [next]);
+    device.server.reachable = false;
+
+    expect((await device.start().currentPublic(_atSign, _namespace))?.nskeyKid,
+        kid,
+        reason: 'a retired key is still filed, so the record names it');
+  });
+
+  test(
+      'Given a namespace key filed under N spelt in capitals after the online '
+      'verification, when the client restarts with no atServer, then it '
+      'accepts N', () async {
+    final (:device, :kid) = await mintedAndVerified();
+    await device.start().currentPublic(_atSign, _namespace);
+    final next = await fileNext(device, namespace: _namespace.toUpperCase());
+    await settle(() => recordHeld(device)?.contains(next) ?? false);
+    device.server.reachable = false;
+
+    expect((await device.start().currentPublic(_atSign, _namespace))?.nskeyKid,
+        kid);
+  });
+
+  test(
+      'Given a namespace key filed for a namespace below N after the online '
+      'verification, when the client restarts with no atServer, then it '
+      'accepts N', () async {
+    final (:device, :kid) = await mintedAndVerified();
+    await device.start().currentPublic(_atSign, _namespace);
+    await fileNext(device, namespace: '$_namespace.v2');
+    await settle(() => false, within: const Duration(milliseconds: 300));
+    device.server.reachable = false;
+
+    expect((await device.start().currentPublic(_atSign, _namespace))?.nskeyKid,
+        kid,
+        reason: 'a key below N is not one of N\'s');
+  });
+
+  test(
+      'Given bytes verified online that local storage has since replaced, and '
+      'that were accepted offline on their own record, when a namespace key is '
+      'filed for N, then the record is not rewritten for the earlier bytes',
+      () async {
+    final (:device, kid: _) = await mintedAndVerified();
+    final session = device.start(advertisementTtl: Duration.zero);
+    final sessionFiling = device.filing;
+    await session.currentPublic(_atSign, _namespace);
+    final sibling = _Device('enroll-sibling', device.server);
+    await sibling.publishApsk();
+    final (:rotated, superseded: _) = await sibling.start().rotate(_namespace);
+    device.syncAdvertisement();
+    await device.start().currentPublic(_atSign, _namespace);
+    final before = device.local[device.recordKey];
+    device.filing = sessionFiling;
+    device.server.reachable = false;
+    device.asked.clear();
+    expect((await session.currentPublic(_atSign, _namespace))?.nskeyKid,
+        rotated.nskeyKid,
+        reason: 'the premise: the session accepted the newer bytes');
+    expect(device.asked, contains('remote ${_apskKey('enroll-sibling')}'),
+        reason: 'the premise: it could not verify them, so its record vouched '
+            'for them');
+
+    await fileNext(device);
+    await settle(() => device.local[device.recordKey] != before,
+        within: const Duration(milliseconds: 500));
+
+    expect(device.local[device.recordKey], before,
+        reason: 'a record is written only for the bytes the session verified '
+            'online, and those are no longer what it holds');
+  });
+
+  test(
+      'Given a client stopped after verifying N online, when a namespace key '
+      'is filed for N, then nothing is raised', () async {
+    final (:device, kid: _) = await mintedAndVerified();
+    await device.start().currentPublic(_atSign, _namespace);
+    device.stopped = true;
+
+    await fileNext(device);
+    await settle(() => false, within: const Duration(milliseconds: 300));
+  });
+
+  test(
+      'Given two namespace keys filed one after the other, when the record '
+      'for the first is still being written, then the record names both',
+      () async {
+    final (:device, kid: _) = await mintedAndVerified();
+    await device.start().currentPublic(_atSign, _namespace);
+    final release = Completer<void>();
+    var held = false;
+    device.beforeLocalWrite = (key) async {
+      if (key != device.recordKey || held) return;
+      held = true;
+      await release.future;
+    };
+
+    final first = await fileNext(device);
+    await settle(() => held);
+    expect(held, isTrue, reason: 'the premise: the first rewrite is writing');
+    final second = await fileNext(device);
+    await settle(() => recordHeld(device)?.contains(second) ?? false,
+        within: const Duration(milliseconds: 200));
+    release.complete();
+    await settle(() =>
+        (recordHeld(device)?.contains(first) ?? false) &&
+        (recordHeld(device)?.contains(second) ?? false));
+
+    expect(recordHeld(device), containsAll([first, second]),
+        reason: 'each rewrite reads the keys filed when it runs, after the '
+            'one before it has written');
   });
 
   test('An advertisement altered in local storage is not accepted offline',

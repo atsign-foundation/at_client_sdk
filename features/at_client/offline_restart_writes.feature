@@ -4,8 +4,9 @@ Feature: A client that holds its namespace key writes after an offline restart
   key of the enrollment that published it, read from the atServer. Once it
   has verified it, it keeps a local record of the bytes it verified, signed by
   its client data signing key (its client authentication signing key until it
-  holds one, as for every envelope it signs) and naming the namespace keys it
-  held then.
+  holds one, as for every envelope it signs) and naming the namespace keys
+  filed for it, retired ones included. A namespace key filed later in the
+  same session rewrites the record, for bytes that session verified online.
   When a restart finds no atServer, it accepts the advertisement in local
   storage only if that record vouches for exactly those bytes and the
   namespace keys it holds now. Online, and when the atServer refuses, nothing
@@ -16,7 +17,8 @@ Feature: A client that holds its namespace key writes after an offline restart
 
   Races: the record is written after the verification it describes, for the
   bytes verified; a change pulled later no longer matches it and is verified
-  online.
+  online. Records are written one at a time, each naming the keys filed when
+  it is written.
   Replay: a restored older copy of local storage is refused once the client
   holds a namespace key it did not hold then. Left over: a copy from before a
   rotation whose key never reached this client is accepted until sync next
@@ -38,6 +40,11 @@ Feature: A client that holds its namespace key writes after an offline restart
   Scenario: The same holds when another enrollment of the atSign published the namespace key
     Given a pqActive client holding N's namespace key, whose advertisement another enrollment signed, verified online
     When it restarts with no atServer reachable and writes a self key in N
+    Then the write succeeds locally and is queued for sync
+
+  Scenario: A namespace key conveyed after the online verification counts at an offline restart
+    Given a client that verified N's advertisement online while holding none of N's namespace keys, then was conveyed one in the same session
+    When it restarts with no atServer reachable and writes in N
     Then the write succeeds locally and is queued for sync
 
   Scenario: An advertisement altered in local storage is not accepted offline
