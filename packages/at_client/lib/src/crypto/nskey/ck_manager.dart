@@ -145,7 +145,11 @@ class CkManager {
   /// [startUpSeeding] is still to seed a namespace covering [valueKey], it
   /// waits for that seeding, at most [StartUpSeeding.wait], and resolves
   /// again. It waits the same way when the key it found is broader than a
-  /// namespace start-up has said it will seed covering [valueKey].
+  /// namespace start-up has said it will seed covering [valueKey]. When it
+  /// holds no private for its key and start-up is asking for one, it waits
+  /// for that ask and its answer before cutting a content key, within
+  /// [StartUpSeeding.wait] of the write's start, so other writes' cuts never
+  /// queue behind the wait.
   ///
   /// Returns the level this write starts at, which for a share is the value's
   /// own namespace as [NskeyResolver.startLevelOf] widens it, and the
@@ -165,6 +169,7 @@ class CkManager {
       }
       return null;
     }
+    final until = StartUpSeeding.boundFromNow();
     final holder = context.atClient.getCurrentAtSign();
     final sharing = _isShare(owner, holder);
     if (sealToNamespace != null) {
@@ -233,12 +238,31 @@ class CkManager {
       }
     }
 
+    if (!sharing) {
+      await _awaitOwnPrivate(owner, ckNs, target.alg, until: until);
+    }
     await _cutAndConvey(context, valueKey, owner, ckNs, target.nskeyKid,
         keyAlgo: target.alg,
         useRemoteAtServer: useRemoteAtServer,
         replacing: current?.ckKid,
         ownGeneration: ownGeneration);
     return chosen;
+  }
+
+  /// Waits until [until], before the cut takes its turn, for start-up's ask
+  /// for the private of [owner]'s own generation a cut in [ckNs] seals to
+  /// under [keyAlgo], and throws as sealing would when it is still not held,
+  /// so no cut waits while holding the turn.
+  Future<void> _awaitOwnPrivate(String owner, String ckNs, String keyAlgo,
+      {required DateTime until}) async {
+    final usable =
+        (await keyRing.currentPublic(owner, ckNs))?.usableFor([keyAlgo]);
+    if (usable == null) return;
+    if (await heldOwnAfterStartUpAsk(keyRing, owner, ckNs, usable.kid,
+            until: until) ==
+        null) {
+      throw NskeyPrivateNotHeldException(owner, ckNs, usable.kid);
+    }
   }
 
   /// Rotates the content key for the destination [valueKey] addresses: cuts a

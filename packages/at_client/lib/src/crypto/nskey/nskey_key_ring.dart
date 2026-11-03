@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart'
+    show StartUpSeeding;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
@@ -317,6 +319,33 @@ abstract interface class AwaitsStartUpAsk {
   /// Completes once the client's start-up has made its asks, or will make
   /// none; null when its start-up was never to ask.
   Future<void>? get startUpAsksPending;
+}
+
+/// The public half of [owner]'s own generation [nskeyKid] in [namespace] once
+/// this client holds its private, waiting until [until] for [ring]'s start-up
+/// to ask for it and for the answer; null when it is still not held.
+Future<PackageKey?> heldOwnAfterStartUpAsk(
+    NskeyKeyRing ring, String owner, String namespace, String nskeyKid,
+    {required DateTime until}) async {
+  final startUp = ring is AwaitsStartUpAsk ? ring as AwaitsStartUpAsk : null;
+  Future<PackageKey?> held() async =>
+      await ring.privateHalf(owner, namespace, nskeyKid) == null
+          ? null
+          : await ring.heldPublic(owner, namespace, nskeyKid);
+  // NOTE: read before the miss, so only start-up's ask holds a write.
+  var asked = startUp?.startUpAskFor(namespace, nskeyKid);
+  final asksPending = startUp?.startUpAsksPending;
+  var found = await held();
+  if (found == null && asked == null && asksPending != null) {
+    await StartUpSeeding.waitOn(asksPending, until: until);
+    asked = startUp!.startUpAskFor(namespace, nskeyKid);
+    found = await held();
+  }
+  if (found == null && asked != null) {
+    await StartUpSeeding.waitOn(asked, until: until);
+    found = await held();
+  }
+  return found;
 }
 
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.

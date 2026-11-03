@@ -744,6 +744,39 @@ void main() {
     });
 
     test(
+        "when a write waits on start-up's ask, then a write in a namespace "
+        'whose key is held goes ahead', () async {
+      final notes = await XWingKeyPair.generate();
+      ring.seedKeypair(_alice, 'notes.demos',
+          publicKey: notes.publicKeyBytes, privateKey: notes.privateKeyBytes);
+      ring.held.add('notes.demos');
+      ring.asks['todos.demos|$kid'] = answer.future;
+
+      final waiting = write(c, key);
+      expect(await _pending(waiting), isTrue,
+          reason: "the todos.demos write waits on start-up's ask");
+      await atOnce(write(c, _built('y', 'notes.demos')));
+
+      answer.complete();
+      await expectLater(waiting, notYetConveyed());
+    });
+
+    test(
+        'when two writes wait on an ask that is never answered, then they '
+        'give up together',
+        timeout: const Timeout(Duration(seconds: 10)), () async {
+      StartUpSeeding.wait = const Duration(milliseconds: 300);
+      ring.asks['todos.demos|$kid'] = answer.future;
+
+      final first = write(c, key);
+      final second = write(c, _built('y', 'todos.demos'));
+      await expectLater(first, notYetConveyed());
+      expect(await _pending(second), isFalse,
+          reason: 'the second write waited alongside the first, not after it');
+      await expectLater(second, notYetConveyed());
+    });
+
+    test(
         'when start-up has already made its asks, then the write throws at once',
         () async {
       ring.startUpAsksPending = Future<void>.value();

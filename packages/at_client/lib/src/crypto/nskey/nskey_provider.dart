@@ -202,23 +202,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       // derives. A peer's private is never held, so a share can rest only on
       // the advertisement's signature.
       if (nskeyOwner == context.atClient.getCurrentAtSign()) {
-        final ring = keyRing;
-        final startUp =
-            ring is AwaitsStartUpAsk ? ring as AwaitsStartUpAsk : null;
-        // NOTE: read before the miss, so only start-up's ask holds a write.
-        var askedAtStartUp = startUp?.startUpAskFor(namespace, usable.kid);
-        final asksPending = startUp?.startUpAsksPending;
-        var held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
-        final until = StartUpSeeding.boundFromNow();
-        if (held == null && askedAtStartUp == null && asksPending != null) {
-          await StartUpSeeding.waitOn(asksPending, until: until);
-          askedAtStartUp = startUp!.startUpAskFor(namespace, usable.kid);
-          held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
-        }
-        if (held == null && askedAtStartUp != null) {
-          await StartUpSeeding.waitOn(askedAtStartUp, until: until);
-          held = await _heldOwnPublic(nskeyOwner, namespace, usable.kid);
-        }
+        final held = await heldOwnAfterStartUpAsk(
+            keyRing, nskeyOwner, namespace, usable.kid,
+            until: StartUpSeeding.boundFromNow());
         if (held == null) {
           throw NskeyPrivateNotHeldException(nskeyOwner, namespace, usable.kid);
         }
@@ -281,14 +267,6 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     return envelope;
   }
-
-  /// The public half of [owner]'s generation [nskeyKid] in [namespace] that
-  /// the private this client holds derives, or null when it holds none.
-  Future<PackageKey?> _heldOwnPublic(
-          String owner, String namespace, String nskeyKid) async =>
-      await keyRing.privateHalf(owner, namespace, nskeyKid) == null
-          ? null
-          : await keyRing.heldPublic(owner, namespace, nskeyKid);
 
   @override
   Future<String> decrypt(
