@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:crypton/crypton.dart';

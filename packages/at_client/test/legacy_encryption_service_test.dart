@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart' show AtPrivateKey, RsaEncryptionAlgo;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';

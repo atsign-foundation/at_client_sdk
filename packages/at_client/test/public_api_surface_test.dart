@@ -170,8 +170,6 @@ const Set<String> _atClientBarrelExports = {
   // with the method.
   'package:at_client/src/client/at_reachability.dart',
   'package:at_client/src/client/data_event.dart',
-  'package:at_client/src/client/local_secondary.dart',
-  'package:at_client/src/client/remote_secondary.dart',
   'package:at_client/src/client/request_options.dart',
   // AtClient.tryAcquireServerMutex and its lease.
   'package:at_client/src/client/server_mutex.dart',

@@ -307,6 +307,17 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
         'notes.my_app', const Duration(days: 30));
 ```
 
+### `Undefined class 'LocalSecondary'`, or `'RemoteSecondary'`
+
+`package:at_client/at_client.dart` no longer exports `LocalSecondary` or
+`RemoteSecondary`: they are the client's own plumbing, and an app should not
+need them. `AtClient.getLocalSecondary()` and `getRemoteSecondary()` remain,
+and their dartdoc says the same. If you have to use one, because nothing else
+does what you need, please file a feature request at
+https://github.com/atsign-foundation/at_client_sdk/issues so that there is an
+alternative; until then the type comes from
+`package:at_client/src/client/local_secondary.dart` or `remote_secondary.dart`.
+
 ### Other methods that are gone
 
 | Before | After |
@@ -330,7 +341,7 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `LocalSecondary.getPrivateKey()`, `getPublicKey()` | `getPkamPrivateKey()`, `getPkamPublicKey()` |
 | `EncryptionUtil.decryptKey(...)` | at_chops' `RsaEncryptionAlgo`, with the private key as its `atPrivateKey` |
 | `RemoteSecondary.authenticateCram(secret)` | `Atsign.activate`, which takes the CRAM secret |
-| `AtClientUtil.findSecondary(...)` | `RemoteSecondary.findSecondaryUrl()` |
+| `AtClientUtil.findSecondary(...)` | `findSecondary(atSign)` on the `SecondaryAddressFinder` the client was opened with |
 | `ApkamSigning.publicSigningKey`, `privateSigningKey` | `signingKeys` |
 | `atClient.persistenceBundle` | the `AtClientStorage` the client was given |
 | `AtUtils.formatAtSign` | `AtUtils.fixAtSign` |

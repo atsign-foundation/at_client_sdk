@@ -283,6 +283,9 @@
   `useAtChops`, `signingAlgoType` and `hashingAlgoType` are removed. A client
   is given its storage, and signs with the keys in its `AtKeysIo`, which name
   the algorithm.
+- breaking: `at_client.dart` no longer exports `LocalSecondary` or
+  `RemoteSecondary`, which an app should not need; `getLocalSecondary()`
+  and `getRemoteSecondary()` remain, not for application use.
 - breaking: `AtClientPreference.syncIntervalMins` is removed; it set nothing,
   and sync's fallback timer runs every 30 seconds.
 - breaking: `RemoteSecondary`'s `signingAlgoType` parameter and

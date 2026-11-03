@@ -18,9 +18,20 @@ import 'package:at_client/src/service/encryption_service.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  /// Returns a [RemoteSecondary] to communicate with user's cloud secondary server.
+  /// The connection this client sends verbs to its atServer on.
+  ///
+  /// You should not use this. If you have to, because nothing else does what
+  /// you need, please file a feature request at
+  /// https://github.com/atsign-foundation/at_client_sdk/issues so that there
+  /// is an alternative.
   RemoteSecondary? getRemoteSecondary();
 
+  /// The local store this client reads and writes first.
+  ///
+  /// You should not use this. If you have to, because nothing else does what
+  /// you need, please file a feature request at
+  /// https://github.com/atsign-foundation/at_client_sdk/issues so that there
+  /// is an alternative.
   LocalSecondary? getLocalSecondary();
 
   /// Stream of [DataEvent]s — `DataUpdated` for every successful local
