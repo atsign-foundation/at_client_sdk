@@ -325,7 +325,8 @@ class PublishedNskeyKeyRing
   }
 
   /// Broadcasts a pull request for a missing own-atSign private, when
-  /// [privateHalf] comes up empty for a generation this atSign has published.
+  /// [privateHalf] comes up empty for a generation this atSign has published,
+  /// or one named by a record this atSign wrote.
   ///
   /// The request is store-and-forward: any current holder answers when it next
   /// runs, and whoever supplies this owns waiting for the answer and filing it
@@ -1389,15 +1390,22 @@ class PublishedNskeyKeyRing
     return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
   }
 
+  /// A miss on an own generation fetches this enrollment's conveyance records
+  /// and then asks the other enrollments, when an own advertisement names the
+  /// generation, or when this atSign wrote the record ([writtenBy]) in a
+  /// namespace [_knowsOwn] accepts.
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-      String owner, String namespace, String nskeyKid) async {
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy}) async {
     final held = await heldPrivateHalf(owner, namespace, nskeyKid);
     if (held != null || !_isOwn(owner)) return held;
     if (!_askOnReadMiss) return null;
 
-    // NOTE: no fetch and no ask for a generation no own advertisement names.
-    if (!await _advertisedOwn(namespace, nskeyKid)) return null;
+    // NOTE: no fetch and no ask for a generation no own advertisement names,
+    // unless this atSign wrote the record that names it.
+    final ownRecord = _isOwn(writtenBy) && await _knowsOwn(namespace);
+    if (!ownRecord && !await _advertisedOwn(namespace, nskeyKid)) return null;
 
     await _fetchOnMiss(namespace, nskeyKid).timeout(fetchOnMissTimeout,
         onTimeout: () => _logger.info('The fetch of the conveyance records '

@@ -268,8 +268,14 @@ abstract class NskeyKeyRing {
   /// received that generation. Holding none at all leaves the value undecryptable
   /// rather than silently skipped; missing only an older one is recoverable by
   /// pulling that generation over the substrate.
+  ///
+  /// [writtenBy] is the atSign that wrote the record naming the generation,
+  /// when a record is being opened: an implementation that pulls a missing
+  /// own generation may pull one no own advertisement names when the current
+  /// atSign wrote that record.
   Future<NskeyDecapsulationKey?> privateHalf(
-      String owner, String namespace, String nskeyKid);
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy});
 
   /// The public half of a *named generation* of `(owner, namespace)` whose
   /// private this client holds, taken from what it holds rather than read
@@ -366,7 +372,8 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
 
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-          String owner, String namespace, String nskeyKid) async =>
+          String owner, String namespace, String nskeyKid,
+          {String? writtenBy}) async =>
       _private[_generation(owner, namespace, nskeyKid)];
 
   @override

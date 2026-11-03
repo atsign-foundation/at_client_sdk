@@ -287,7 +287,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     }
     requireRecordKid(nskeyKid, 'nskeyKid');
 
-    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid);
+    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid,
+        writtenBy: _recordOwnerOf(atKey));
     if (private == null) {
       // NOTE: the notification service parks on this type and re-drives it when
       // the private is filed, so the retry must not depend on the wording.

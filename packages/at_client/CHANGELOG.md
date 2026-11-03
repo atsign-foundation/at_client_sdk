@@ -20,6 +20,9 @@
   to every enrollment listed for its namespace that has a key package. An
   enrollment the conveyance misses first looks for an envelope addressed to
   it, then asks the others.
+- fix: a device that re-enrolled itself after a namespace key was rotated
+  reads what its atSign wrote before the rotation, once an enrollment still
+  holding the older key is online to answer its ask.
 - feat: `PendingEnrollment.cancel()` ends the wait `client` or
   `awaitApproval` is in, which throws `AtEnrollmentCancelledException` once
   the enrollment's pending keys are removed; `cancel()` throws when the key
