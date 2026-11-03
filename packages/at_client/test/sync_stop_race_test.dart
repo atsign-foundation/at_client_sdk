@@ -131,6 +131,34 @@ void main() {
         reason: 'the stranded run is reported as stopped');
   });
 
+  test(
+      'a run reading local storage for its in-sync check when stop() lands '
+      'does no work on resume', () async {
+    when(() => remote.executeVerb(any()))
+        .thenAnswer((_) async => 'data:[{"value":"9"}]');
+    final park = Completer<int>();
+    var parked = false;
+    when(() => local.syncQueueSize).thenAnswer((_) {
+      parked = true;
+      return park.future;
+    });
+
+    service.sync();
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!parked && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(milliseconds: 1));
+    }
+    expect(parked, isTrue, reason: 'the premise: the run is reading it');
+    final stopping = service.stop();
+    clearInteractions(atClient);
+    park.complete(5);
+    await stopping;
+    await Future.delayed(const Duration(milliseconds: 20));
+
+    verifyNever(() => atClient.get(any()));
+    verifyNever(() => local.peekSyncQueue(limit: any(named: 'limit')));
+  });
+
   test('control: without stop(), the same parked run resumes and does work',
       () async {
     final park = Completer<String>();
