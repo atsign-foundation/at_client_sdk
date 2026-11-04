@@ -28,7 +28,7 @@ dependencies:
   at_client: ^4.0.0
   encrypt: ^5.0.3
   intl: ^0.20.2
-  file_picker: ^11.0.02
+  file_picker: ^11.0.2
   path: ^1.9.1
   path_provider: ^2.1.5
   pinput: ^5.0.1
