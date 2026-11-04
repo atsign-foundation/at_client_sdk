@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_auth/src/auth/at_authenticator.dart' show signPkamChallenge;
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_commons/at_commons.dart' show AtBytes;
+import 'package:at_commons/at_commons.dart' show AtBytes, AtSigningException;
 
 /// The key material a fresh atSign is activated with.
 ///
@@ -111,21 +115,72 @@ typedef ApkamKeyPairMinter = Future<({String publicKey, String privateKey})>
     Function(SigningAlgoType signingAlgo);
 
 /// Refuses an APKAM keypair a caller supplied in place of [mintApkamKeyPair]
-/// when [signingAlgo] is one that function has no mint path for, or when it
-/// is `mldsa65` and either half is not base64 of a raw ML-DSA-65 key.
+/// unless it is a working pair under [signingAlgo], and returns it with both
+/// halves in standard base64.
 ///
-/// Throws [AtSigningException] for a malformed `mldsa65` pair and
+/// "Working" means the private half signs a fixed string, through
+/// [signPkamChallenge] (the signer a `pkam:` uses), and that signature
+/// verifies against the public half. A pair that is merely well-formed (halves
+/// from two keypairs, all zero bytes, or empty) would be enrolled and then
+/// fail every `pkam:` after approval, which `waitForApproval` reads as "not
+/// decided yet"; the atServer also refuses to enrol that public key again
+/// while the record exists.
+///
+/// Both halves are canonicalised (`base64Encode(base64Decode(s))`) so a
+/// base64url spelling is not sent in one place and re-encoded in the keyfile.
+///
+/// Throws [AtSigningException] for a pair that is malformed or mismatched and
 /// [ArgumentError] for an algorithm with no mint path.
-void checkApkamKeyPair(SigningAlgoType signingAlgo,
-    ({String publicKey, String privateKey}) apkam) {
-  switch (signingAlgo) {
-    case SigningAlgoType.mldsa65:
-      MlDsa65KeyPair.create(apkam.publicKey, apkam.privateKey);
-    case SigningAlgoType.rsa2048:
-      return;
-    default:
-      throw _noMintPath(signingAlgo);
+Future<({String publicKey, String privateKey})> checkApkamKeyPair(
+    SigningAlgoType signingAlgo,
+    ({String publicKey, String privateKey}) apkam) async {
+  if (signingAlgo != SigningAlgoType.mldsa65 &&
+      signingAlgo != SigningAlgoType.rsa2048) {
+    throw _noMintPath(signingAlgo);
   }
+  final Uint8List publicBytes;
+  final ({String publicKey, String privateKey}) canonical;
+  try {
+    publicBytes = base64Decode(apkam.publicKey);
+    canonical = (
+      publicKey: base64Encode(publicBytes),
+      privateKey: base64Encode(base64Decode(apkam.privateKey)),
+    );
+  } on FormatException catch (e) {
+    throw AtSigningException(
+        'the supplied ${signingAlgo.name} APKAM keypair is not base64: $e');
+  }
+
+  if (signingAlgo == SigningAlgoType.mldsa65) {
+    MlDsa65KeyPair.create(canonical.publicKey, canonical.privateKey);
+  }
+
+  const challenge = 'apkam keypair check';
+  final message = Uint8List.fromList(utf8.encode(challenge));
+  final bool verified;
+  try {
+    final signature = base64Decode(signPkamChallenge((
+      algorithm: signingAlgo,
+      publicKey: canonical.publicKey,
+      privateKey: canonical.privateKey
+    ), challenge));
+    verified = signingAlgo == SigningAlgoType.mldsa65
+        ? MlDsa65PureDartAlgo.verifyBytesSync(message,
+            signature: signature, publicKey: publicBytes)
+        : await RsaSignatureAlgo.rsa2048()
+            .verifyBytes(message, signature: signature, publicKey: publicBytes);
+  } on AtSigningException {
+    rethrow;
+  } catch (e) {
+    throw AtSigningException(
+        'the supplied ${signingAlgo.name} APKAM keypair cannot sign: $e');
+  }
+  if (!verified) {
+    throw AtSigningException(
+        'the supplied ${signingAlgo.name} APKAM private key does not match '
+        'its public key');
+  }
+  return canonical;
 }
 
 ArgumentError _noMintPath(SigningAlgoType signingAlgo) => ArgumentError.value(

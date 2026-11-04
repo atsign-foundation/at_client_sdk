@@ -242,10 +242,11 @@ class EnrollmentSubmitter {
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
-    final supplied = atEnrollmentRequest.apkamKeyPair;
-    if (supplied != null) {
-      mint.checkApkamKeyPair(atEnrollmentRequest.signingAlgo, supplied);
-    }
+    final suppliedRaw = atEnrollmentRequest.apkamKeyPair;
+    final supplied = suppliedRaw == null
+        ? null
+        : await mint.checkApkamKeyPair(
+            atEnrollmentRequest.signingAlgo, suppliedRaw);
     // NOTE: under the algorithm the CALLER named. Minting RSA-2048 regardless
     // hands an atSign whose deployment has moved to post-quantum an
     // RSA-authenticating enrollment, which the client retrofits away on its
