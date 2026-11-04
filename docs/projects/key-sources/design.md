@@ -142,21 +142,23 @@ unsigned binary is refused. The team does the gating rather than the access
 list, which fits the keychain's partition list recording the creator's team,
 though I haven't inspected the partition list directly.
 
-That refusal doesn't make the trust boundary everything Atsign signs, though,
-because of two of the entitlements these binaries carry:
+I don't expect that refusal to make the trust boundary everything Atsign
+signs, though, because of two of the entitlements these binaries carry:
 `com.apple.security.cs.allow-dyld-environment-variables` and
 `com.apple.security.cs.disable-library-validation`
 ([`entitlements.plist`](probes/macos_keychain/entitlements.plist)). Together
 they switch off the hardened runtime's refusal of `DYLD_INSERT_LIBRARIES` and
-of libraries not signed by the same team. Any process running as the user can
-then start an Atsign-signed binary with `DYLD_INSERT_LIBRARIES` pointing at its
-own ad-hoc dylib, and the dylib's code runs with Atsign's code identity and
-team, which is what the keychain checks. With these entitlements the boundary
-is any process running as the user, the same exposure as the
-`/usr/bin/security` route above. `run_signed.sh` now has an arm that injects
-[`inject.c`](probes/macos_keychain/inject.c) into the second signed binary to
-measure this; it wasn't in the run recorded in the table. The keychain key
-source is only worth more than the file if every binary Atsign signs with
+of libraries not signed by the same team. I expect that any process running as
+the user can then start an Atsign-signed binary with `DYLD_INSERT_LIBRARIES`
+pointing at its own ad-hoc dylib, that the dylib's code runs with Atsign's code
+identity and team, which is what the keychain checks, and so that it reads the
+item. If so, with these entitlements the boundary is any process running as
+the user, the same exposure as the `/usr/bin/security` route above. I haven't
+measured this: `run_signed.sh` now has an arm that injects
+[`inject.c`](probes/macos_keychain/inject.c) into the second signed binary, but
+it wasn't in the run recorded in the table, and it's listed as open in
+[section 10](#10-open-questions-and-probes-still-to-run). Until it has run, I'd treat the keychain key
+source as worth more than the file only if every binary Atsign signs with
 access to the item drops both entitlements, and stays without them.
 
 Two things aren't covered. The arms used an Apple Development certificate
@@ -284,7 +286,7 @@ for a daemon that has nowhere better to keep a key (see
 | Linux daemon            | a 32-byte key sealed with `systemd-creds` (TPM where there is one, the host key where not), delivered by `LoadCredentialEncrypted=` and read from `$CREDENTIALS_DIRECTORY` | yes, see [section 3](#3-measurements)                                                                          |
 | Container or Kubernetes | a key in an environment variable or a mounted secret; read-only injection suits a key, and not the writable document                                                       | no                                                                                                             |
 | Cloud VM                | a cloud KMS (AWS, GCP or Azure) wraps and unwraps, and the instance's cloud identity is the first secret                                                                   | no; a daemon would then need the KMS reachable to start                                                        |
-| macOS desktop           | a 32-byte key in the login keychain, created by a team-signed binary with an all-applications access list; an unsigned build uses the file, or `/usr/bin/security`         | yes: every binary the team signs reads it without a prompt, across upgrades, and unsigned binaries are refused; but with NoPorts' current entitlements any same-user process can inject code into a team-signed binary and read it too (see [section 3](#team-signed-builds)) |
+| macOS desktop           | a 32-byte key in the login keychain, created by a team-signed binary with an all-applications access list; an unsigned build uses the file, or `/usr/bin/security`         | yes: every binary the team signs reads it without a prompt, across upgrades, and unsigned binaries are refused; but I expect, not yet measured, that with NoPorts' current entitlements any same-user process can inject code into a team-signed binary and read it too (see [section 3](#team-signed-builds)) |
 | Windows                 | DPAPI (`CryptProtectData`), scoped to the user or the machine                                                                                                              | no                                                                                                             |
 | Browser                 | a passkey's PRF output, or a non-extractable WebCrypto key; see [section 8](#8-the-browser)                                                                                | no                                                                                                             |
 
@@ -384,11 +386,11 @@ evicted unless the site holds persistent storage.
 ## 9. What this does not protect
 
 A running daemon holds its unwrapped keys in memory, so root on that host, or
-anything that can read the process, has them. On macOS, while Atsign-signed
-binaries carry `allow-dyld-environment-variables` and
+anything that can read the process, has them. On macOS, I expect that while
+Atsign-signed binaries carry `allow-dyld-environment-variables` and
 `disable-library-validation`, any process running as the user can inject code
-into one of them and read the keychain key (see
-[section 3](#team-signed-builds)). In a browser, script running on
+into one of them and read the keychain key; the injection arm hasn't run yet
+(see [section 3](#team-signed-builds)). In a browser, script running on
 the page's origin can use the key while the page is open. And none of it
 narrows what one enrollment can decrypt: as
 [section 2](#2-what-exists-today) shows, a legacy enrollment carries the
