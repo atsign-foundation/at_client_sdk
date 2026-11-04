@@ -1,7 +1,7 @@
 # atKeys on the atServer: a PRF-named blob
 
-* **Status:** Agreed direction, for review
-* **Last Updated:** 2026-10-08
+* **Status:** Draft
+* **Last Updated:** 2026-11-04
 
 A short profile of [`design.md` section 8](design.md#8-the-browser), gate (a):
 the browser's atKeys document lives on the atServer under a name only the
@@ -44,12 +44,14 @@ kek      = HKDF(ikm, info = "atkeys-kek|<atSign>")
 The record is `public:_<recordId>@<atSign>`, with a **single** underscore:
 
 * at_server gives `public:_` keys no commit-log row, so they never sync to
-  other clients (read from at_server's `sqlite_at_commit_log.dart` and
-  `hive_at_commit_log.dart`, not in this repo and not verified here;
+  other clients (`HiveAtCommitLog` and `SqliteAtCommitLog` skip `public:_`;
   `public:__` keys *do* sync).
 * Scan hides them from everyone, including the owner.
-* `lookup:` travels over TLS (PQ-TLS when compatible), so only the atServer
-  sees the name.
+* `lookup:` travels over TLS (PQ-TLS when compatible), so the name is not
+  exposed on the wire.
+* The name is still a secret that travels: the atServer sees it, and
+  `LookupVerbHandler` logs the looked-up key at `finer`, so it is in any
+  atServer log kept at that level. Renaming it means moving the record.
 
 ## What's created when
 
@@ -87,6 +89,7 @@ sequenceDiagram
     AS-->>A: envelope
     A->>A: unwrap data key with kek, decrypt (AAD checked)
     A->>A: check keys match the published public keys
+    Note over A: browser: APKAM key re-derived from the passkey (gate c)
     A->>AS: authenticate (PKAM)
 ```
 
@@ -96,33 +99,51 @@ sequenceDiagram
   `apkamSymmetricKey`.
 * **APKAM private keys stay on the secure platform** and are never in the blob
   ([`apkam-custody.md` section 1](apkam-custody.md#1-the-problem)).
-* Browser exception: under gate (c) the PRF-derived APKAM key sits in page
-  memory for the session
+* **Gate (a) alone leaves no PKAM key after a wipe.** The restore fetches the
+  blob, but the last step is a PKAM, and a key that was never in the blob has
+  to come from somewhere that survived the wipe. On native platforms that is
+  the hardware-held APKAM key, which lives with the device secret. In the
+  browser nothing survives except the passkey, so gate (a) is used there only
+  together with gate (c): the APKAM key is re-derived from the passkey and sits
+  in page memory for the session
   ([`apkam-custody.md` section 9](apkam-custody.md#9-the-browser-as-the-only-device)).
+  The alternative, carrying the browser's APKAM private key in the blob, is not
+  taken: it puts the key the atServer authenticates on the atServer.
 
 ## Where the device secret comes from
 
 | Platform | PRF |
 | --- | --- |
 | Browser (built first) | WebAuthn PRF extension on a discoverable passkey |
-| Apple | Secure Enclave P-256 ECDH against a fixed point (no HMAC in the enclave) |
+| Apple | Secure Enclave P-256 ECDH against a fixed point (no HMAC in the enclave). **Classical**: a quantum attacker who recovers the enclave key's scalar from its public key gets the PRF |
 | Linux TPM | `TPM2_HMAC` with a keyedHash key |
 | Android | Keystore HMAC-SHA256 key |
-| Windows TPM | `ECDH_ZGen`; HMAC through PCP is an open question |
+| Windows TPM | `ECDH_ZGen` (**classical**, as Apple); HMAC through PCP is an open question |
 
-Only high-entropy sources qualify. No passphrase source: a deterministic
+The HMAC sources are post-quantum; the ECDH ones are not, and the public point
+must never be published. Only high-entropy sources qualify. No passphrase source: a deterministic
 `recordId` would become an offline guessing target.
 
 ## Handing the restored keys to a client
 
-Trunk requires every client to be given an `AtKeysIo`, and a client's store must
-be a durable `WrittenAtKeysIo`, where the guards check the type and durability is a stated rule (`e4de03a60`, `4c07f9aff`; `design.md` section 4).
+Trunk requires every client to be given an `AtKeysIo`, and the store a client
+runs on MUST be a durable `WrittenAtKeysIo`: the guards check the type, and
+durability is the MUST in `WrittenAtKeysIo`'s dartdoc (`e4de03a60`,
+`4c07f9aff`; [`design.md` section 4](design.md#4-the-split-a-store-and-a-key-source)).
 The restored envelope is therefore wrapped as a `WrittenAtKeysIo` whose `flush`
 and `update` re-encrypt under a fresh data key and write `public:_<recordId>`
 back, so the keys a client files later (namespace keys, signing keys, a minted
 root) survive the page. `InMemoryAtKeysIo` is for tests and handshakes, never
 this store: a root minted into page memory would be lost with the tab, and a
 root whose private is lost cannot be replaced.
+
+**Prerequisite: a conditional update on the atServer.** Devices that share a
+synced passkey share one record, so two of them can write it at once, and with
+a plain `update` the later write drops what the earlier one filed. A dropped
+signing root or nskey private can't be replaced. at_server trunk has no
+compare-and-swap today (other implementations not checked), so the
+server-backed store does not ship until every atServer it runs against has
+one.
 
 ## Decisions
 
@@ -147,7 +168,7 @@ From an adversarial review of the first draft of this doc (33 findings).
 | Raw PRF output used as the name lets the server compute the key | Raw `ikm` never leaves the device |
 | recordId links atSigns; nothing binds the atSign | atSign in both labels and the AAD |
 | recordId reaches other apps through sync | `public:_` has no commit-log row |
-| recordId exposed on the wire | TLS, moving to PQ-TLS |
+| recordId exposed on the wire | TLS, moving to PQ-TLS (the atServer and its logs still see it; see Open) |
 | Two prompts per cold start | One PRF call |
 | Key substitution on restore goes unnoticed | Check against published public keys before PKAM |
 | Whole keyfile, including APKAM keys, on the server | APKAM keys excluded |
@@ -172,7 +193,8 @@ From an adversarial review of the first draft of this doc (33 findings).
 | rpId covers subdomains and Related Origins | Exact, dedicated rpId; no Related Origins |
 | PRF output differs with and without user verification | Pin UV to `required`; never auto-recreate on failure |
 | Same construction across platforms | Version byte and test vectors |
-| Concurrent writers lose updates | Conditional update, shared with [`design.md` section 10](design.md#10-open-questions-and-probes-still-to-run) |
+| recordId in atServer logs: `LookupVerbHandler` logs the key at `finer` | Stop logging `public:_` names, or log a hash; until then a log reader can fetch the blob. Rotation means moving the record |
+| Concurrent writers lose updates | Conditional update on the atServer; a prerequisite, not optional (see [Handing the restored keys to a client](#handing-the-restored-keys-to-a-client)) |
 
 ### Better than today
 

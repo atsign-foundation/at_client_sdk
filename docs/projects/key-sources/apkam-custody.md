@@ -113,11 +113,14 @@ Tiers rank differently by role, because the threats differ:
 
 Within a tier the strongest algorithm wins, using
 `SigningAlgoType.strongestFirst` for signing and the posture's key-establishment
-order for encapsulation. The choice is recorded and never silently downgraded,
-by the rule that a weaker tier is recorded, never silently substituted: if the
-chosen tier is unavailable the operation is refused, not retried with a lower
-one. (The trusted-devices decision record that would hold this rule doesn't
-exist yet; writing it is the `docs` row of [section 11](#11-changes-by-package).)
+order for encapsulation. The tier is chosen once, at enrollment, and recorded
+with the enrollment. The fallbacks in [section 6](#6-securityplatformkeysource)
+and [section 9](#9-the-browser-as-the-only-device) apply only to that choice,
+and a weaker tier taken there is recorded as what it is. After enrollment
+nothing runs below the recorded tier: if it is unavailable the operation is
+refused, not retried with a lower one. (The trusted-devices decision record
+that would hold this rule doesn't exist yet; writing it is the `docs` row of
+[section 11](#11-changes-by-package).)
 A `PqPosture` setting of `custody: required` refuses the software tier.
 
 ## 5. The seam: SecurityPlatform
@@ -231,9 +234,11 @@ that namespace the right home:
   or `.d.__e`, so the record goes with it.
 - It needs no server change.
 
-Expiry is a third case. An expired enrollment's data stays at `.a.__e` until the
-expiry sweep runs, up to about 10.5 minutes today; that is fixed by
-[at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831).
+Expiry is a third case. Since at_server#2858 (shipped in p3.18.1, fixing
+[at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831)),
+the first `llookup` of an expired enrollment's data moves it to `.d.__e`
+(`EnrollmentManager.moveExpiredEnrollmentData`), so it is never served from
+`.a.__e`; the expiry sweep is the backstop for data nobody looks up.
 
 The approver's secret-sharing envelope can't serve instead. `__ssenv`
 envelopes are deleted once consumed (`pairwise_secret_sharing.dart`), including
@@ -274,16 +279,23 @@ sequenceDiagram
 | Browser               | one PRF `get()`; the derived keys are held for the session                |
 
 Trunk requires every client to be given an `AtKeysIo` at construction, and
-that store should be a durable `WrittenAtKeysIo`: the guards check the type
-only, and durability is a rule in `memory_io.dart`'s doc comment (see
-`design.md` section 4). So the order above is: the handshake authenticates
+that store MUST be a durable `WrittenAtKeysIo`: the guards check the type
+only, and durability is the MUST in `WrittenAtKeysIo`'s dartdoc
+(`at_keys_io.dart`; see `design.md` section 4). So the order above is: the handshake authenticates
 through an `InMemoryAtKeysIo()` it writes the handshake keys into, as at_auth's
 handshake does, then the document is fetched, then a server-backed `WrittenAtKeysIo` is built
 over it and handed to the client. That store writes `flush` and `update` back
 to `atkeys.<enrollmentId>.a.__e`; it is not a session-memory copy, because a
 client running on a store that forgets would mint a signing root whose private
 is lost. Trunk's guard is the store's type: a client on any other `AtKeysIo`
-mints no root or signing keys and skips the enrollment snapshot.
+mints no root, signing keys or key package and skips the enrollment snapshot.
+
+The server-backed store needs a conditional update on the atServer before it
+ships. Devices that share a synced passkey share one enrollment and one record
+([section 9](#9-the-browser-as-the-only-device)), so two of them can write it at
+once, and with a plain `update` the later write drops what the earlier one
+filed. A dropped root or nskey private can't be replaced. at_server trunk has
+no compare-and-swap today; other atServer implementations not checked.
 
 Each platform reports whether it achieved per-operation, per-session or no
 prompting, so policy can see what it got.
@@ -344,7 +356,6 @@ be converted to compact hex. A pin test still guards it
 | Does the Secure Enclave's ML-DSA-65 signature verify with the pure-Dart verifier (context string, pure or pre-hash)? | A macOS 26 probe that signs and verifies in Dart |
 | Do Secure Enclave ML-KEM-1024 public-key bytes give the same key-package id as ours? | The same probe |
 | Does NCrypt PCP expose HMAC on Windows TPMs, or only ECDH_ZGen? | A Windows probe |
-| Can the atServer update a record conditionally? | Shared with `design.md` section 10; multi-writer rewraps need it |
 | Is the custody tier worth recording in the enrollment record, so policy can require hardware later? | A decision for at_server; not blocking |
 | How is a device secret rotated, and does revocation force it? | Design: new secret, new record name, old record deleted |
 | Is the PRF output stable across UV states on every authenticator? | Pin UV to `required` and probe hmac-secret with and without UV |
@@ -360,8 +371,8 @@ be converted to compact hex. A pin test still guards it
 | at_client_wasm | `WebAuthnSecurityPlatform` on the existing passkey port, as in [section 9](#9-the-browser-as-the-only-device) |
 | at_onboarding_cli | `--security tpm2\|software`, with a tpm2-tss FFI platform in its own package |
 | at_commons, at_lookup | none; the PKAM grammar already carries `ecc_secp256r1` and `mldsa65` |
-| at_server | none required; a pin test that ecc PKAM signatures are compact hex |
-| docs | a trusted-devices decision record that separates APKAM custody from the device-assertion credential, which must never be a PKAM key |
+| at_server | a conditional update (compare-and-swap) on a record, a prerequisite for the server-backed store ([section 8](#8-opening-a-session)); a pin test that ecc PKAM signatures are compact hex |
+| docs | a trusted-devices decision record that separates APKAM custody from the device-assertion credential, which must never be a PKAM key, and holds the tier rule: chosen once at enrollment, recorded, never run below |
 
 The order that keeps each step shippable: at_chops primitives, then the at_auth
 seam with only the software platform (no behaviour change), then the server
