@@ -340,6 +340,53 @@ void main() {
               'whatever another call with the same regex and decryption does '
               'to its own');
     });
+
+    test(
+        'when both ask for the same decryption and the first changes the '
+        'metadata of the notification it receives, then the second sees it '
+        'as it arrived', () async {
+      final second = <(String?, String?)>[];
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) {
+        n.metadata!.encKeyName = 'changed by the first subscriber';
+        n.metadata!.appMetadata!.providerId = 'changed-by-first';
+      });
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => second.add(
+              (n.metadata!.encKeyName, n.metadata!.appMetadata!.providerId)));
+
+      await deliver(_frame(key));
+
+      expect(second, [(null, 'strict-provider')],
+          reason: 'a subscription\'s copy of a notification carries its own '
+              'metadata, app metadata included');
+    });
+
+    test(
+        'when both wait for their key on as many notifications as the park '
+        'holds, then none is dropped', () async {
+      final maxParked = NotificationServiceImpl.maxParked;
+      addTearDown(() => NotificationServiceImpl.maxParked = maxParked);
+      NotificationServiceImpl.maxParked = 2;
+      provider.filed = false;
+      final dropped = <DroppedNotification>[];
+      service.droppedEvents.listen(dropped.add);
+      for (var i = 0; i < 2; i++) {
+        service
+            .subscribe(regex: r'discover_response', shouldDecrypt: true)
+            .listen((_) {});
+      }
+
+      await deliver(_frame(key));
+      await deliver(_frame('@alice:discover_response_2.$_namespace@alice'));
+
+      expect(dropped, isEmpty,
+          reason: 'the park bound counts notifications, so the number of '
+              'subscriptions waiting on each does not shrink it');
+      expect(service.parkedCount, 4);
+    });
   });
 
   group('Given three subscribers matching one notification', () {
@@ -468,9 +515,61 @@ void main() {
     });
 
     test(
+        'when its only listener cancels, then its parked notification is '
+        'reported as dropped', () async {
+      provider.filed = false;
+      final dropped = <DroppedNotification>[];
+      service.droppedEvents.listen(dropped.add);
+      final leaving = service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((_) {});
+      await deliver(_frame(key));
+      expect(service.parkedCount, 1, reason: 'precondition: it parked');
+
+      await leaving.cancel();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(dropped.map((d) => d.key), [key],
+          reason: 'a parked notification given up with its subscription is '
+              'reported, as every other notification this service gives up '
+              'on is');
+    });
+
+    test(
+        'when another subscription changes the metadata of the same '
+        'notification, then it is still delivered once the key is filed',
+        () async {
+      provider.filed = false;
+      final delivered = Completer<String?>();
+      final droppedOne = Completer<DroppedNotification>();
+      service.droppedEvents.listen((d) {
+        if (!droppedOne.isCompleted) droppedOne.complete(d);
+      });
+      service.subscribe(regex: r'discover_response').listen(
+          (n) => n.metadata!.appMetadata!.providerId = 'not-a-provider');
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => delivered.complete(n.value));
+      await deliver(_frame(key));
+      expect(service.parkedCount, 1, reason: 'precondition: it parked');
+
+      provider.filed = true;
+      ring.announce();
+      final outcome =
+          await Future.any<Object?>([delivered.future, droppedOne.future])
+              .timeout(const Duration(seconds: 10));
+
+      expect(outcome, _plaintext,
+          reason: 'what one subscription does to its copy must not change '
+              'the notification another is still waiting to receive');
+    });
+
+    test(
         'when it is cancelled while its notification is being decrypted, then '
         'nothing is parked for it', () async {
       provider.filed = false;
+      final dropped = <DroppedNotification>[];
+      service.droppedEvents.listen(dropped.add);
       late final StreamSubscription<AtNotification> leaving;
       leaving = service
           .subscribe(regex: r'discover_response', shouldDecrypt: true)
@@ -483,6 +582,8 @@ void main() {
       expect(service.parkedCount, 0,
           reason: 'a notification parked for a released subscription is held '
               'for nobody, and nothing releases it');
+      expect(dropped.map((d) => d.key), [key],
+          reason: 'the notification it was given up for is reported');
     });
   });
 

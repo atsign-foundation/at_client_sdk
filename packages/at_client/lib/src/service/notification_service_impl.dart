@@ -43,9 +43,9 @@ import 'package:meta/meta.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 
 class NotificationServiceImpl extends NotificationService {
-  /// Every subscription with a listener, in the order each was first
-  /// listened to: one per [subscribe] call, with the regex and decryption it
-  /// asked for.
+  /// Every subscription with a listener, in the order each began its current
+  /// listen: one per [subscribe] call, with the regex and decryption it asked
+  /// for.
   final Map<StreamController<AtNotification>, NotificationConfig>
       _subscriptions = {};
   final emptyRegex = '';
@@ -129,7 +129,8 @@ class NotificationServiceImpl extends NotificationService {
         (ring as SignalsPrivateFiling).privatesFiled.listen(_reDriveParked);
   }
 
-  /// How many notifications are held waiting for a key, right now.
+  /// How many entries are held waiting for a key, right now: one for each
+  /// subscription a parked notification waits to reach.
   @visibleForTesting
   int get parkedCount =>
       _parked.values.fold<int>(0, (sum, entries) => sum + entries.length);
@@ -204,7 +205,13 @@ class NotificationServiceImpl extends NotificationService {
       NotificationConfig config, StreamController controller) {
     // NOTE: nothing is parked for a subscription released while this
     // notification was being decrypted; nothing would release the entry.
-    if (!_subscriptions.containsKey(controller)) return;
+    if (!_subscriptions.containsKey(controller)) {
+      _drop(
+          n.key,
+          'Not parking notification ${n.key}: the subscription to '
+          '"${config.regex}" was released while it was being decrypted');
+      return;
+    }
     final key = (
       owner: e.owner.toAtsign().toString(),
       namespace: e.namespace,
@@ -241,19 +248,25 @@ class NotificationServiceImpl extends NotificationService {
       if (entry.value.isEmpty) _parked.remove(entry.key);
     }
 
-    var total = _parked.values.fold<int>(0, (sum, l) => sum + l.length);
-    while (total > maxParked) {
-      final oldestKey = _parked.entries
-          .reduce((a, b) =>
-              a.value.first.parkedAt.isBefore(b.value.first.parkedAt) ? a : b)
-          .key;
-      final dropped = _parked[oldestKey]!.removeAt(0);
+    // NOTE: the bound counts notifications, not entries, so the number of
+    // subscriptions a notification waits for does not shrink the park.
+    final held = Set<AtNotification>.identity()
+      ..addAll(_parked.values.expand((l) => l).map((p) => p.notification));
+    while (held.length > maxParked) {
+      final oldest = _parked.values
+          .expand((l) => l)
+          .reduce((a, b) => b.parkedAt.isBefore(a.parkedAt) ? b : a)
+          .notification;
+      for (final entry in _parked.entries.toList()) {
+        entry.value
+            .removeWhere((parked) => identical(parked.notification, oldest));
+        if (entry.value.isEmpty) _parked.remove(entry.key);
+      }
+      held.remove(oldest);
       _drop(
-          dropped.notification.key,
-          'Dropping parked notification ${dropped.notification.key}'
-          ': the park is full at $maxParked entries');
-      if (_parked[oldestKey]!.isEmpty) _parked.remove(oldestKey);
-      total--;
+          oldest.key,
+          'Dropping parked notification ${oldest.key}'
+          ': the park is full at $maxParked notifications');
     }
   }
 
@@ -1123,16 +1136,21 @@ class NotificationServiceImpl extends NotificationService {
   void _release(StreamController<AtNotification> controller) {
     final config = _subscriptions.remove(controller);
     if (config == null) return;
-    var released = 0;
+    final released = <_ParkedNotification>[];
     _parked.removeWhere((_, entries) {
-      final before = entries.length;
-      entries.removeWhere((parked) => identical(parked.controller, controller));
-      released += before - entries.length;
+      entries.removeWhere((parked) {
+        if (!identical(parked.controller, controller)) return false;
+        released.add(parked);
+        return true;
+      });
       return entries.isEmpty;
     });
-    if (released > 0) {
-      logger.info('Released $released parked notification(s) with the '
-          'subscription to "${config.regex}": its last listener cancelled');
+    for (final parked in released) {
+      _drop(
+          parked.notification.key,
+          'Dropping parked notification ${parked.notification.key} for the '
+          'subscription to "${config.regex}": its last listener cancelled '
+          'before the key arrived');
     }
   }
 

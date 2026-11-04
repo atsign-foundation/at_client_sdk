@@ -2,8 +2,8 @@
 
 - fix: a notification subscription is released once its last listener
   cancels.
-- fix: a change one subscriber makes to a notification is no longer seen by
-  another subscribed with the same regex and `shouldDecrypt`.
+- fix: a change one subscriber makes to a notification, its metadata
+  included, is no longer seen by another subscriber.
 
 ## 4.0.0
 

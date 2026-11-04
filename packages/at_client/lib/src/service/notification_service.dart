@@ -23,8 +23,9 @@ abstract class NotificationService {
   /// notification; subscriptions asking for the same decryption share one
   /// decryption of it.
   /// - A subscription is held while its stream has a listener. Once the last
-  /// listener cancels it is released, with any notification it was still
-  /// waiting to decrypt; listening to the stream again holds it again.
+  /// listener cancels it is released, and any notification it was still
+  /// waiting to decrypt is reported on [droppedEvents]; listening to the
+  /// stream again holds it again.
   /// - when [AtClientPreference.monitorAutoStart] is true, the notifications listener
   /// will be started either the first time that [subscribe] is called by the
   /// application code, or 30 seconds after creation if there have been no
