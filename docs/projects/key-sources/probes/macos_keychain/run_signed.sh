@@ -4,10 +4,23 @@
 #   SIGNING_IDENTITY="Apple Development: Your Name (ABCDE12345)" ./run_signed.sh
 # List yours with: security find-identity -v -p codesigning
 # Items are created under unique service names and deleted at the end, and the
-# signed binaries are removed.
+# signed binaries are removed, even if interrupted.
 set -u
 cd "$(dirname "$0")"
 : "${SIGNING_IDENTITY:?set SIGNING_IDENTITY to a code-signing identity}"
+DEF="atsign-kc-probe-sdef-$$"; ANY="atsign-kc-probe-sany-$$"
+cleanup() {
+  # The signed writer deletes its own items without a prompt. If it's missing,
+  # or was interrupted between rebuild and re-sign, the security tool deletes
+  # whatever is left, and may ask for the login password to do it.
+  for s in "$DEF" "$ANY"; do
+    [ -x out/writer ] && out/writer delete "$s" >/dev/null 2>&1
+    security delete-generic-password -s "$s" -a probe >/dev/null 2>&1
+  done
+  rm -rf out bin/probe_writer.dart bin/probe_other.dart bin/probe_unsigned.dart
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 dart pub get >/dev/null
 mkdir -p out
 build() { # $1 = output name, $2 = build tag
@@ -22,10 +35,13 @@ sign() { # $1 = output name
 build writer w1; sign writer
 build other o1; sign other
 build unsigned u1
+cc -dynamiclib -Wno-deprecated-declarations -framework Security \
+  -framework CoreFoundation -o out/inject.dylib inject.c
+codesign --force -s - out/inject.dylib >/dev/null 2>&1
 for b in writer other unsigned; do
   echo "$b: $(codesign -dv "out/$b" 2>&1 | grep -E '^(Identifier|TeamIdentifier)=' | tr '\n' ' ')"
 done
-DEF="atsign-kc-probe-sdef-$$"; ANY="atsign-kc-probe-sany-$$"
+echo "entitlements: $(codesign -d --entitlements - --xml out/other 2>/dev/null | grep -oE 'com\.apple\.security\.cs\.[a-z-]+' | tr '\n' ' ')"
 
 echo '--- negative control: read before the item exists (expect -25300)'
 out/writer read "$DEF"
@@ -39,9 +55,9 @@ echo '--- the second signed binary reads the all-applications item'
 out/other read "$ANY"
 echo '--- an unsigned binary reads the all-applications item'
 out/unsigned read "$ANY"
+echo '--- an ad-hoc dylib injected into the second signed binary reads the all-applications item'
+echo '    (a plain "mode=read" line for service x, not "PROBE injected", means dyld refused the dylib)'
+KCPROBE_INJECT_SERVICE="$ANY" DYLD_INSERT_LIBRARIES="$PWD/out/inject.dylib" out/other read x
 echo '--- the writer, rebuilt with a new code hash and re-signed, reads its default item'
 build writer w2-upgraded; sign writer
 out/writer read "$DEF"
-
-out/writer delete "$DEF"; out/writer delete "$ANY"
-rm -rf out bin/probe_writer.dart bin/probe_other.dart bin/probe_unsigned.dart
