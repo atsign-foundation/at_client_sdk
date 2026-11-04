@@ -32,7 +32,8 @@ import 'package:ffi/ffi.dart';
 /// (OpenSSL < 3.5) fails lazily, as a [StateError] from the first
 /// [generateKeyPair]/[signBytes]/[verifyBytes] call. Gate on
 /// `libCryptoSupportsMlDsa65` if you pin the library yourself.
-final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
+final class MlDsa65FfiAlgo
+    implements AtSigningAlgorithm, AtSeededSignatureAlgorithm {
   final DynamicLibrary _lib;
 
   Uint8List? _secretKey;
@@ -58,7 +59,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   late final OsslParamBldNewDart _bldNew;
   late final OsslParamBldFreeDart _bldFree;
   late final OsslParamBldToParamDart _bldToParam;
-  late final OsslParamBldPushOctetStringDart _bldPushOctet;
+  late final OsslParamBldPushOctetPtrDart _bldPushOctetPtr;
   late final OsslParamFreeDart _paramFree;
   late final EvpPkeyFromdataInitDart _fromdataInit;
   late final EvpPkeyFromdataDart _fromdata;
@@ -108,8 +109,8 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     _bldToParam =
         _lib.lookupFunction<OsslParamBldToParamNative, OsslParamBldToParamDart>(
             'OSSL_PARAM_BLD_to_param');
-    _bldPushOctet = _lib.lookupFunction<OsslParamBldPushOctetStringNative,
-        OsslParamBldPushOctetStringDart>('OSSL_PARAM_BLD_push_octet_string');
+    _bldPushOctetPtr = _lib.lookupFunction<OsslParamBldPushOctetPtrNative,
+        OsslParamBldPushOctetPtrDart>('OSSL_PARAM_BLD_push_octet_ptr');
     _paramFree = _lib.lookupFunction<OsslParamFreeNative, OsslParamFreeDart>(
         'OSSL_PARAM_free');
     _fromdataInit =
@@ -155,7 +156,17 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   /// Returns `(publicKey: 1952 raw bytes, secretKey: 4032 raw bytes)`, the
   /// same bytes [MlDsa65PureDartAlgo.keyPairFromSeed] returns for [seed].
   ///
-  /// Throws [ArgumentError] unless [seed] is [MlDsa65Sizes.seedBytes] long.
+  /// The seed *is* the private key: whoever holds it can rebuild the secret
+  /// key and sign, PKAM included, as the enrollment it belongs to. Keep it
+  /// as secret as the secret key. It must be [MlDsa65Sizes.seedBytes]
+  /// secret, uniformly random bytes, never a constant such as `Uint8List(32)`.
+  /// A seed taken from other key material, such as a passkey PRF output, must
+  /// first go through a KDF (e.g. HKDF) with a label of its own, so the same
+  /// bytes never seed another key.
+  ///
+  /// Throws [ArgumentError] (named `seed`) unless [seed] is
+  /// [MlDsa65Sizes.seedBytes] long.
+  @override
   Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
       Uint8List seed) async {
     MlDsa65Sizes.validateSeed(seed);
@@ -170,9 +181,12 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     try {
       final Pointer<OSSL_PARAM_BLD> bld = _bldNew();
       if (bld == nullptr) throw StateError('OSSL_PARAM_BLD_new failed');
-      if (_bldPushOctet(bld, paramName, seedBuf, seed.length) <= 0) {
+      // By reference, not push_octet_string: to_param would copy the seed
+      // into params, and OSSL_PARAM_free frees that copy without clearing it.
+      // seedBuf is then the only copy, and it outlives fromdata (finally).
+      if (_bldPushOctetPtr(bld, paramName, seedBuf, seed.length) <= 0) {
         _bldFree(bld);
-        throw StateError('OSSL_PARAM_BLD_push_octet_string failed');
+        throw StateError('OSSL_PARAM_BLD_push_octet_ptr failed');
       }
       params = _bldToParam(bld);
       _bldFree(bld);

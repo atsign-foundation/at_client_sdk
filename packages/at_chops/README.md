@@ -178,6 +178,28 @@ one and `keyPairFromSeed` rejects an invalid one. Concrete classes expose
 the seed — 32 and 64 bytes are both valid for *some* backend, so the bytes alone
 cannot say which.
 
+### Persisting an ML-DSA-65 key
+
+ML-DSA-65 has a seeded keygen too. `AtPqc.mlDsa65` is an
+`AtSeededSignatureAlgorithm`, and `keyPairFromSeed` takes the 32-byte FIPS 204
+seed (`MlDsa65Sizes.seedBytes`) and returns the same key pair on the pure-Dart
+and OpenSSL backends.
+
+```dart
+final AtSeededSignatureAlgorithm dsa = AtPqc.mlDsa65;
+final Random random = Random.secure();
+final seed = Uint8List.fromList(
+    List<int>.generate(MlDsa65Sizes.seedBytes, (_) => random.nextInt(256)));
+final kp = await dsa.keyPairFromSeed(seed); // same pair on every backend
+```
+
+**The seed is the private key.** Whoever holds it can sign, PKAM included, as
+the enrollment it belongs to, so store it as you would the secret key. It must
+be 32 secret, uniformly random bytes, never a constant such as `Uint8List(32)`.
+A seed taken from other key material, such as a passkey PRF output, must first
+go through a KDF (HKDF, say) with a label of its own, so the same bytes never
+seed another key.
+
 ### AtPqc (auto-resolved PQ backends)
 
 `AtPqc` is the recommended entry point for PQ crypto — it auto-resolves the

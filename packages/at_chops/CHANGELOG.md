@@ -1,12 +1,20 @@
+## 3.8.0
+
+- feat: `MlDsa65PureDartAlgo.keyPairFromSeed` and `MlDsa65FfiAlgo.keyPairFromSeed`
+  derive the same ML-DSA-65 key pair from a 32-byte FIPS 204 seed
+  (`MlDsa65Sizes.seedBytes`). The seed is the private key; see the README's
+  "Persisting an ML-DSA-65 key".
+- feat: `AtSeededSignatureAlgorithm`, an `AtSignatureAlgorithm` that also has
+  `keyPairFromSeed`. Both ML-DSA-65 classes implement it, and `AtPqc.mlDsa65`
+  is now typed as it, so a caller going through `AtPqc` can reach the seeded
+  path.
+
 ## 3.7.1
 
 - chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.
 - fix: `AtKeysCrypto.fromHashingAlgorithm` throws an `ArgumentError` naming
   the hashing type for any type but argon2id, rather than returning an object
   whose `encrypt` and `decrypt` fail.
-- feat: `MlDsa65PureDartAlgo.keyPairFromSeed` and `MlDsa65FfiAlgo.keyPairFromSeed`
-  derive the same ML-DSA-65 key pair from a 32-byte FIPS 204 seed
-  (`MlDsa65Sizes.seedBytes`).
 
 ## 3.7.0
 

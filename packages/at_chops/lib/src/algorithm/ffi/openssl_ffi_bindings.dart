@@ -79,6 +79,14 @@ typedef OsslParamBldPushOctetStringNative = Int32 Function(
 typedef OsslParamBldPushOctetStringDart = int Function(
     Pointer<OSSL_PARAM_BLD>, Pointer<Utf8>, Pointer<Uint8>, int);
 
+/// `OSSL_PARAM_BLD_push_octet_ptr`: the built params point at the caller's
+/// buffer instead of copying it, so the caller keeps the only copy and can
+/// clear it. The buffer must outlive every use of the params.
+typedef OsslParamBldPushOctetPtrNative = Int32 Function(
+    Pointer<OSSL_PARAM_BLD>, Pointer<Utf8>, Pointer<Uint8>, IntPtr);
+typedef OsslParamBldPushOctetPtrDart = int Function(
+    Pointer<OSSL_PARAM_BLD>, Pointer<Utf8>, Pointer<Uint8>, int);
+
 typedef OsslParamFreeNative = Void Function(Pointer<OSSL_PARAM>);
 typedef OsslParamFreeDart = void Function(Pointer<OSSL_PARAM>);
 

@@ -13,7 +13,7 @@ import 'package:pqcrypto/pqcrypto.dart';
 ///
 /// Construct an instance and call [signBytes]/[verifyBytes] (the
 /// [AtSignatureAlgorithm] interface) — all key material is passed
-/// explicitly. Or use [AtPqc.mlDsa65] (typed [AtSignatureAlgorithm]) for
+/// explicitly. Or use [AtPqc.mlDsa65] (typed [AtSeededSignatureAlgorithm]) for
 /// auto-resolved FFI/pure dispatch without touching this class.
 ///
 /// The stateful [AtSigningAlgorithm] path ([secretKey]/[sign]/[verify]) is
@@ -21,7 +21,7 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// `AtChopsImpl`'s signing/verification dispatch; it is deprecated — new
 /// code should pass key material per call.
 final class MlDsa65PureDartAlgo
-    implements AtSigningAlgorithm, AtSignatureAlgorithm {
+    implements AtSigningAlgorithm, AtSeededSignatureAlgorithm {
   Uint8List? _secretKey;
 
   MlDsa65PureDartAlgo();
@@ -44,7 +44,17 @@ final class MlDsa65PureDartAlgo
   /// Returns raw `(publicKey: 1952 bytes, secretKey: 4032 bytes)`, the same
   /// bytes `MlDsa65FfiAlgo.keyPairFromSeed` returns for [seed].
   ///
-  /// Throws [ArgumentError] unless [seed] is [MlDsa65Sizes.seedBytes] long.
+  /// The seed *is* the private key: whoever holds it can rebuild the secret
+  /// key and sign, PKAM included, as the enrollment it belongs to. Keep it
+  /// as secret as the secret key. It must be [MlDsa65Sizes.seedBytes]
+  /// secret, uniformly random bytes, never a constant such as `Uint8List(32)`.
+  /// A seed taken from other key material, such as a passkey PRF output, must
+  /// first go through a KDF (e.g. HKDF) with a label of its own, so the same
+  /// bytes never seed another key.
+  ///
+  /// Throws [ArgumentError] (named `seed`) unless [seed] is
+  /// [MlDsa65Sizes.seedBytes] long.
+  @override
   Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
       Uint8List seed) async {
     MlDsa65Sizes.validateSeed(seed);

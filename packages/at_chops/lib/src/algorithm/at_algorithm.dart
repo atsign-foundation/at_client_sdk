@@ -85,6 +85,25 @@ abstract interface class AtSignatureAlgorithm {
       {required Uint8List signature, required Uint8List publicKey});
 }
 
+/// An [AtSignatureAlgorithm] whose key pair can also be derived from a seed,
+/// as ML-DSA-65's can from its 32-byte FIPS 204 `ξ`.
+///
+/// The seed *is* the private key: whoever holds it can sign as its owner. It
+/// must be secret, uniformly random bytes of the backend's seed length, and a
+/// seed taken from other key material (a passkey PRF output, say) must first
+/// go through a KDF with a label of its own, so the same bytes never seed
+/// another key.
+abstract interface class AtSeededSignatureAlgorithm
+    implements AtSignatureAlgorithm {
+  /// Deterministically derive the key pair for [seed]. Every backend of one
+  /// algorithm returns the same bytes for the same seed.
+  ///
+  /// Throws [ArgumentError] (named `seed`) if [seed] is not this algorithm's
+  /// seed length.
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+      Uint8List seed);
+}
+
 /// Interface for hashing data. Refer [DefaultHash] for sample implementation.
 abstract class AtHashingAlgorithm<K, V> {
   /// Hashes the passed data

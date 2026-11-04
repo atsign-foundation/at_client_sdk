@@ -286,8 +286,13 @@ void main() {
 
     for (final int length in [0, 31, 33, 64]) {
       test('a $length-byte seed throws ArgumentError', () {
-        expect(() => algo.keyPairFromSeed(Uint8List(length)),
-            throwsA(isA<ArgumentError>()));
+        // The name pins at_chops' own guard: pqcrypto throws an unnamed
+        // ArgumentError('Seed must be 32 bytes'), which a bare
+        // isA<ArgumentError>() would accept with the guard removed.
+        expect(
+            () => algo.keyPairFromSeed(Uint8List(length)),
+            throwsA(
+                isA<ArgumentError>().having((e) => e.name, 'name', 'seed')));
       });
     }
   });

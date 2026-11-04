@@ -218,7 +218,10 @@ void main() {
           expect(
               () => MlDsa65FfiAlgo.fromLib(lib!)
                   .keyPairFromSeed(Uint8List(length)),
-              throwsA(isA<ArgumentError>()));
+              // The name pins at_chops' own guard: an ArgumentError from
+              // OpenSSL's side would not carry it.
+              throwsA(
+                  isA<ArgumentError>().having((e) => e.name, 'name', 'seed')));
         });
       }
     });
