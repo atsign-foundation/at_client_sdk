@@ -187,6 +187,11 @@ void main() {
 
     late ({String publicKey, String privateKey}) supplied;
 
+    AtAuthSession session() => AtAuthSession(
+        atSign: atSign,
+        rootDomain: AtRootDomain.atsignDomain,
+        atKeysIo: InMemoryAtKeysIo());
+
     setUpAll(() async {
       final kp = await MlDsa65KeyPair.generate();
       supplied = (
@@ -217,7 +222,7 @@ void main() {
             FutureOr<Map<String, dynamic>?> Function(AtKeysIo)?
                 metadataBuilder}) =>
         AtEnrollmentRequest(
-            atSign: atSign,
+            session: session(),
             appName: 'wavi',
             deviceName: 'browser',
             otp: 'ABC123',
@@ -278,7 +283,7 @@ void main() {
       final (lookUp, sent) = recordingLookUp();
       final keys = (await AtEnrollmentImpl().submit(
               AtEnrollmentRequest.pq(
-                atSign: atSign,
+                session: session(),
                 appName: 'wavi',
                 deviceName: 'browser',
                 otp: 'ABC123',
@@ -350,7 +355,7 @@ void main() {
       await expectLater(
           AtEnrollmentImpl().submit(
               AtEnrollmentRequest(
-                  atSign: atSign,
+                  session: session(),
                   appName: 'wavi',
                   deviceName: 'browser',
                   otp: 'ABC123',
