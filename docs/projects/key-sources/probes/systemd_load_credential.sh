@@ -8,7 +8,7 @@ echo "content_ok=$(python3 -c "d=open('$D/atkeys','rb').read();print(len(d)==163
 echo "inline=$(cat "$D/inline")"
 grep " $D " /proc/self/mountinfo | awk '{print "mount_opts=" $6}'
 echo x >> "$D/atkeys" 2>/dev/null; echo "append rc=$?"
-cp "$D/atkeys" /tmp/x 2>/dev/null; mv /tmp/x "$D/atkeys" 2>/dev/null; echo "replace rc=$?"
+T=$(mktemp); cp "$D/atkeys" "$T" 2>/dev/null; mv "$T" "$D/atkeys" 2>/dev/null; echo "replace rc=$?"; rm -f "$T"
 touch "$D/atkeys.bak" 2>/dev/null; echo "create_beside rc=$?"
 echo "visible_from_outside_while_running=$(sudo -n ls /run/credentials/ 2>&1 | tr '\n' ' ')"
 SVC
