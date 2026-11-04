@@ -43,9 +43,9 @@ import 'package:meta/meta.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 
 class NotificationServiceImpl extends NotificationService {
-  /// Every subscription with a listener, in the order each began its current
-  /// listen: one per [subscribe] call, with the regex and decryption it asked
-  /// for.
+  /// Every listener on a [subscribe] stream, in the order each began
+  /// listening: each a subscription of its own, with the regex and decryption
+  /// it asked for.
   final Map<StreamController<AtNotification>, NotificationConfig>
       _subscriptions = {};
   final emptyRegex = '';
@@ -172,8 +172,8 @@ class NotificationServiceImpl extends NotificationService {
   ///
   /// [transforms] holds this notification's transforms, keyed by whether they
   /// decrypt, so subscriptions share one decryption, and each gets its own
-  /// copy of the result: what one [subscribe] call's listener does to its
-  /// notification, no other sees. The regex is matched first wherever the key
+  /// copy of the result: what one listener does to its notification, no other
+  /// sees. The regex is matched first wherever the key
   /// is not itself ciphertext, so a subscription that does not receive the
   /// notification decrypts nothing.
   Future<void> _deliver(
@@ -1075,17 +1075,6 @@ class NotificationServiceImpl extends NotificationService {
     final notificationConfig = NotificationConfig()
       ..regex = regex
       ..shouldDecrypt = shouldDecrypt;
-    late final StreamController<AtNotification> controller;
-    controller = StreamController<AtNotification>.broadcast(
-      onListen: () {
-        if (isStopped) {
-          controller.close();
-          return;
-        }
-        _subscriptions[controller] = notificationConfig;
-      },
-      onCancel: () => _release(controller),
-    );
 
     // Temporary fix for https://github.com/atsign-foundation/at_client_sdk/issues/770
     //     (Temporary because it's a bit of a kludge, but the proper fix requires the implementation
@@ -1128,11 +1117,27 @@ class NotificationServiceImpl extends NotificationService {
         startListening();
       }
     }
-    return controller.stream;
+    return _SubscriptionStream(this, notificationConfig);
+  }
+
+  /// Starts one listener on a [subscribe] stream, with a controller of its own
+  /// that is held until the listener cancels.
+  StreamSubscription<AtNotification> _listen(
+      NotificationConfig config, void Function(AtNotification)? onData,
+      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
+    final controller = StreamController<AtNotification>();
+    if (isStopped) {
+      controller.close();
+    } else {
+      _subscriptions[controller] = config;
+      controller.onCancel = () => _release(controller);
+    }
+    return controller.stream.listen(onData,
+        onError: onError, onDone: onDone, cancelOnError: cancelOnError);
   }
 
   /// Releases [controller]'s subscription, with every notification parked
-  /// for it, once its last listener has cancelled.
+  /// for it, once its listener has cancelled.
   void _release(StreamController<AtNotification> controller) {
     final config = _subscriptions.remove(controller);
     if (config == null) return;
@@ -1148,9 +1153,9 @@ class NotificationServiceImpl extends NotificationService {
     for (final parked in released) {
       _drop(
           parked.notification.key,
-          'Dropping parked notification ${parked.notification.key} for the '
-          'subscription to "${config.regex}": its last listener cancelled '
-          'before the key arrived');
+          'Dropping parked notification ${parked.notification.key} for a '
+          'subscription to "${config.regex}": its listener cancelled before '
+          'the key arrived');
     }
   }
 
@@ -1273,6 +1278,40 @@ class NotificationServiceImpl extends NotificationService {
   @override
   Stream<NotificationListenerState> get currentListenerStateStream =>
       monitor.currentStateStream;
+}
+
+/// A [NotificationServiceImpl.subscribe] stream: each listener is a
+/// subscription of its own, and two streams asking one service for the same
+/// regex and decryption compare equal, so a caller that subscribes again on
+/// every rebuild keeps the subscription it has.
+class _SubscriptionStream extends Stream<AtNotification> {
+  _SubscriptionStream(this._service, this._config);
+
+  final NotificationServiceImpl _service;
+  final NotificationConfig _config;
+
+  @override
+  bool get isBroadcast => true;
+
+  @override
+  StreamSubscription<AtNotification> listen(
+          void Function(AtNotification event)? onData,
+          {Function? onError,
+          void Function()? onDone,
+          bool? cancelOnError}) =>
+      _service._listen(_config, onData,
+          onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SubscriptionStream &&
+      identical(other._service, _service) &&
+      other._config.regex == _config.regex &&
+      other._config.shouldDecrypt == _config.shouldDecrypt;
+
+  @override
+  int get hashCode => Object.hash(
+      identityHashCode(_service), _config.regex, _config.shouldDecrypt);
 }
 
 /// One notification held back, with everything needed to deliver it later.

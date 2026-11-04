@@ -270,9 +270,9 @@ void main() {
     });
 
     test(
-        'when both ask for the same decryption, then each has a subscription '
-        'of its own and both receive the notification, from one decryption',
-        () async {
+        'when both ask for the same decryption, then each listener has a '
+        'subscription of its own and both receive the notification, from one '
+        'decryption', () async {
       final first = <String?>[];
       final second = <String?>[];
       service
@@ -336,9 +336,9 @@ void main() {
       await deliver(_frame(key));
 
       expect(second, [_plaintext],
-          reason: 'each subscribe call gets its own copy of the notification, '
-              'whatever another call with the same regex and decryption does '
-              'to its own');
+          reason: 'each listener gets its own copy of the notification, '
+              'whatever another with the same regex and decryption does to its '
+              'own');
     });
 
     test(
@@ -511,7 +511,7 @@ void main() {
 
       expect(service.parkedCount, 1,
           reason: 'a subscription releases the notifications parked for it '
-              'when its last listener cancels, and only those');
+              'when its listener cancels, and only those');
     });
 
     test(
@@ -686,6 +686,95 @@ void main() {
       expect(seen, [_plaintext],
           reason: 'listening to a released subscription\'s stream again holds '
               'it again');
+    });
+  });
+
+  group('Given a stream subscribe returned for a regex and decryption', () {
+    test(
+        'when subscribe is called again with the same arguments, then the '
+        'stream it returns compares equal, and one asking for anything else '
+        'does not', () {
+      final stream =
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true);
+
+      expect(
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true),
+          stream,
+          reason: 'a caller that subscribes again on every rebuild must be '
+              'able to tell it already holds this stream');
+      expect(
+          service
+              .subscribe(regex: r'discover_response', shouldDecrypt: true)
+              .hashCode,
+          stream.hashCode);
+      expect(
+          service.subscribe(regex: r'discover_response', shouldDecrypt: false),
+          isNot(stream),
+          reason: 'a stream asking for the other decryption is another '
+              'subscription');
+      expect(service.subscribe(regex: r'discover', shouldDecrypt: true),
+          isNot(stream),
+          reason: 'a stream asking for another regex is another subscription');
+    });
+
+    test(
+        'when another client\'s service is asked for the same, then its stream '
+        'does not compare equal', () async {
+      final other = MockAtClientImpl();
+      when(() => other.getCurrentAtSign()).thenReturn('@bob');
+      when(() => other.atSign).thenReturn('@bob'.toAtsign());
+      when(() => other.getPreferences())
+          .thenReturn(AtClientPreference()..namespace = _namespace);
+      final otherService = await NotificationServiceImpl.create(other,
+              monitor: _FakeMonitor(),
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(otherService.stopAllSubscriptions);
+
+      expect(
+          otherService.subscribe(
+              regex: r'discover_response', shouldDecrypt: true),
+          isNot(service.subscribe(
+              regex: r'discover_response', shouldDecrypt: true)),
+          reason: 'a subscription is its atSign\'s own; two clients asking '
+              'for the same regex hold different things');
+    });
+
+    test(
+        'when the app subscribes again with the same arguments on a rebuild, '
+        'then a notification waiting for its key is still delivered', () async {
+      provider.filed = false;
+      final delivered = Completer<String?>();
+      final droppedOne = Completer<DroppedNotification>();
+      service.droppedEvents.listen((d) {
+        if (!droppedOne.isCompleted) droppedOne.complete(d);
+      });
+      void onNotification(AtNotification n) => delivered.complete(n.value);
+      var stream =
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true);
+      var listener = stream.listen(onNotification);
+      await deliver(_frame(key));
+      expect(service.parkedCount, 1, reason: 'precondition: it parked');
+
+      Future<void> rebuildAsStreamBuilderDoes(
+          Stream<AtNotification> given) async {
+        if (given == stream) return;
+        await listener.cancel();
+        stream = given;
+        listener = stream.listen(onNotification);
+      }
+
+      await rebuildAsStreamBuilderDoes(
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true));
+      provider.filed = true;
+      ring.announce();
+      final outcome =
+          await Future.any<Object?>([delivered.future, droppedOne.future])
+              .timeout(const Duration(seconds: 10));
+
+      expect(outcome, _plaintext,
+          reason: 'a caller that subscribes again on every rebuild keeps its '
+              'subscription, and what it is waiting to receive');
     });
   });
 
