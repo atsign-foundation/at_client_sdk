@@ -6,7 +6,9 @@
   say why and at which character, and which holds none of the file's text. A
   JSON value that is not an object no longer fails as a `TypeError`.
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
-  enrollment enrolls in place of a freshly minted APKAM keypair.
+  enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
+  private half does not sign for its public half is refused with
+  `AtSigningException` before `enroll:request` is sent.
 - fix: after `CramAuthenticator.authenticate` the lookup's own authenticator
   is back in place, and a second CRAM authentication on a lookup already
   running one throws `StateError`.
