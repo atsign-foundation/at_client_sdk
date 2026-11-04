@@ -669,12 +669,12 @@ void main() {
 
       expect(thrown.item?.sharedWith, {carol},
           reason: "@carol's copy was written and @bob's was not");
-      expect(written.keys.where((k) => k.startsWith('@carol:m1.')),
-          hasLength(1));
+      expect(
+          written.keys.where((k) => k.startsWith('@carol:m1.')), hasLength(1));
 
       await c.update(thrown.item!);
-      expect(written.keys.where((k) => k.startsWith('@carol:m1.')),
-          hasLength(1),
+      expect(
+          written.keys.where((k) => k.startsWith('@carol:m1.')), hasLength(1),
           reason: "an update of the item handed back keeps @carol's copy");
     });
 

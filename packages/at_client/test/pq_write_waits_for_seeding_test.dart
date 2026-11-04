@@ -856,8 +856,8 @@ void main() {
 
     final writing = expectLater(
         write(c, _built('x', 'todos.demos')),
-        throwsA(isA<NskeyPrivateNotHeldException>().having(
-            (e) => e.message, 'message', contains('has not yet been conveyed'))));
+        throwsA(isA<NskeyPrivateNotHeldException>().having((e) => e.message,
+            'message', contains('has not yet been conveyed'))));
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     // NOTE: start-up adopts another enrollment's generation, whose private
     // this enrollment does not yet hold, and its ask for it is still to come.
