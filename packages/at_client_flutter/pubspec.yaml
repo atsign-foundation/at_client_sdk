@@ -40,6 +40,8 @@ dev_dependencies:
   mocktail: ^1.0.4
   at_persistence_secondary_server: ^5.4.0
   path_provider_platform_interface: ^2.1.2
+  # path_provider allows platform 3.0.x, which no longer compiles.
+  platform: ^3.1.0
   plugin_platform_interface: ^2.1.8
   flutter_test:
     sdk: flutter
