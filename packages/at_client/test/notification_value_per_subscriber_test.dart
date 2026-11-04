@@ -612,6 +612,40 @@ void main() {
     });
 
     test(
+        'when another subscription waiting on the same notification cancels '
+        'while this one is re-driven, then its notification is reported as '
+        'dropped', () async {
+      provider.filed = false;
+      final dropped = <DroppedNotification>[];
+      service.droppedEvents.listen(dropped.add);
+      final delivered = Completer<String?>();
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => delivered.complete(n.value));
+      final leaving = service
+          .subscribe(regex: r'\.sshrvd@alice', shouldDecrypt: true)
+          .listen((_) {});
+      await deliver(_frame(key));
+      expect(service.parkedCount, 2, reason: 'precondition: both parked');
+
+      provider.filed = true;
+      provider.onDecrypt = () {
+        provider.onDecrypt = null;
+        leaving.cancel();
+      };
+      ring.announce();
+      expect(await delivered.future.timeout(const Duration(seconds: 10)),
+          _plaintext,
+          reason: 'precondition: the re-drive ran');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(dropped.map((d) => d.key), [key],
+          reason: 'a parked notification given up because its listener '
+              'cancelled during the re-drive is reported, as one given up at '
+              'any other moment is');
+    });
+
+    test(
         'when it is cancelled while its notification is being decrypted, then '
         'nothing is parked for it', () async {
       provider.filed = false;
@@ -839,6 +873,20 @@ void main() {
           reason: 'a stopped service delivers nothing again, so a stream '
               'listened to after the stop ends rather than waiting forever');
       expect(service.getStreamListenersCount(), 0);
+    });
+  });
+
+  group('Given a listener paused when the service stops', () {
+    test('when the service stops, then it holds no subscription at once', () {
+      service.subscribe(regex: r'discover_response').listen((_) {}).pause();
+      expect(service.getStreamListenersCount(), 1,
+          reason: 'precondition: the paused listener is held');
+
+      service.stopAllSubscriptions();
+
+      expect(service.getStreamListenersCount(), 0,
+          reason: 'a stopped service holds no subscription, whether or not '
+              'its listener ever takes the end of its stream');
     });
   });
 

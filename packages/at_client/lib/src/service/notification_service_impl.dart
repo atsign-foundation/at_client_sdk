@@ -288,6 +288,12 @@ class NotificationServiceImpl extends NotificationService {
     final transformsByNotification =
         Map<AtNotification, Map<bool, Future<AtNotification>>>.identity();
     for (final parked in waiting) {
+      // NOTE: [waiting] is out of the park, so a listener that cancels during
+      // this loop is not released from it.
+      if (!_subscriptions.containsKey(parked.controller)) {
+        _dropReleased(parked);
+        continue;
+      }
       try {
         await _deliver(
             parked.notification,
@@ -840,16 +846,8 @@ class NotificationServiceImpl extends NotificationService {
   }) {
     _throwIfStopped();
     String r = '^$atSign:([^.]+\\.)?$namespace@';
-    // Single-subscription controller. Its onPause/onResume hooks are
-    // deliberately NOT wired to pause the upstream subscription:
-    // [subscribe] returns a broadcast stream, and broadcast
-    // subscriptions DO NOT buffer events emitted during pause()
-    // (events are delivered to other live subscribers and dropped
-    // for the paused one). When the downstream consumer pauses
-    // [sc.stream], the single-sub controller buffers incoming
-    // notifications internally; we keep accepting from upstream
-    // and adding to the controller, and the controller delivers
-    // the buffered notifications when the consumer resumes.
+    // NOTE: a downstream pause buffers in this single-subscription
+    // controller while the upstream subscription keeps delivering.
     StreamController<AtNotification> sc = StreamController<AtNotification>();
     StreamSubscription<AtNotification>? notifStreamSubscription;
     sc.onListen = () {
@@ -1139,8 +1137,7 @@ class NotificationServiceImpl extends NotificationService {
   /// Releases [controller]'s subscription, with every notification parked
   /// for it, once its listener has cancelled.
   void _release(StreamController<AtNotification> controller) {
-    final config = _subscriptions.remove(controller);
-    if (config == null) return;
+    if (_subscriptions.remove(controller) == null) return;
     final released = <_ParkedNotification>[];
     _parked.removeWhere((_, entries) {
       entries.removeWhere((parked) {
@@ -1150,14 +1147,16 @@ class NotificationServiceImpl extends NotificationService {
       });
       return entries.isEmpty;
     });
-    for (final parked in released) {
-      _drop(
-          parked.notification.key,
-          'Dropping parked notification ${parked.notification.key} for a '
-          'subscription to "${config.regex}": its listener cancelled before '
-          'the key arrived');
-    }
+    released.forEach(_dropReleased);
   }
+
+  /// Reports [parked] as dropped because the listener it waits to reach has
+  /// cancelled.
+  void _dropReleased(_ParkedNotification parked) => _drop(
+      parked.notification.key,
+      'Dropping parked notification ${parked.notification.key} for a '
+      'subscription to "${parked.config.regex}": its listener cancelled '
+      'before the key arrived');
 
   @override
   Future<NotificationResult> getStatus(String notificationId) async {
