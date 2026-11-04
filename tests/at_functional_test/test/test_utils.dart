@@ -78,6 +78,14 @@ final legacyPlusPqProviders = PqPosture(
 /// overrun a one-second ttl mid-mint.
 const liveMintLockTtl = Duration(seconds: 5);
 
+/// What each enrollment listed for a namespace adds to a live test's mint
+/// lock when the mint conveys before it publishes.
+///
+/// A rotation reserves two conveyances of one key each, so the conveyance that
+/// runs may take up to a second per listed enrollment before the holder's
+/// lease is spent and it abandons the publish.
+const liveMintLockBudgetPerMember = Duration(milliseconds: 500);
+
 /// Waits until the atServer no longer holds the mint lock on [namespace] of
 /// [client]'s atSign, whatever ttl it was taken with, reading it as [client].
 ///

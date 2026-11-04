@@ -82,7 +82,9 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
+          privateFiling: filing,
+          lockTtl: liveMintLockTtl,
+          lockBudgetPerMember: liveMintLockBudgetPerMember),
     );
   }
 

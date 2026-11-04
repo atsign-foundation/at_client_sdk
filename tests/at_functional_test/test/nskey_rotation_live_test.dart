@@ -94,7 +94,9 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
+          privateFiling: filing,
+          lockTtl: liveMintLockTtl,
+          lockBudgetPerMember: liveMintLockBudgetPerMember),
     );
   }
 
@@ -671,7 +673,10 @@ void main() {
 
   test(
       'UC-G2.5 · a revocation whose rotation did not happen is rotated at the '
-      'next start', () async {
+      'next start',
+      // The control waits out the rotation's mint lock, which grows by a
+      // budget for every enrollment listed for the namespace.
+      timeout: const Timeout(Duration(minutes: 2)), () async {
     // The backstop for the composed lever: `revokeEnrollmentAndRotate` revokes
     // and then rotates, and when the second half does not happen nothing else
     // notices — the revoked enrollment is off every roster and still holds the

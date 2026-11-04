@@ -133,7 +133,8 @@ void main() {
     await AtClientSecretSharing.forClient(old.client).register();
 
     final oldRing = PublishedNskeyKeyRing(old.client,
-        lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero);
+        lockTtl: liveMintLockTtl,
+        lockBudgetPerMember: liveMintLockBudgetPerMember);
     final oldSeeding = NskeySeeding(
         atClient: old.client,
         ring: oldRing,
@@ -193,7 +194,8 @@ void main() {
     await NskeySeeding(
             atClient: rolled.client,
             ring: PublishedNskeyKeyRing(rolled.client,
-                lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
+                lockTtl: liveMintLockTtl,
+                lockBudgetPerMember: liveMintLockBudgetPerMember),
             sharing: AtClientSecretSharing.forClient(rolled.client))
         .seedNamespace(atSign, namespace);
 
