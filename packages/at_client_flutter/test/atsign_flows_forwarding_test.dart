@@ -134,7 +134,7 @@ void main() {
     return sent;
   }
 
-  Future<AtClient> opening({String? namespace}) {
+  Future<AtClient> opening({String? namespace, String? preferenceNamespace}) {
     const atSign = '@flowsopen';
     final keys = InMemoryAtKeysIo.holding(
       atSign,
@@ -149,7 +149,7 @@ void main() {
     return const AtsignFlows().open(
       atSign,
       keys: keys,
-      preference: AtClientPreference(),
+      preference: AtClientPreference()..namespace = preferenceNamespace,
       storage: InMemoryAtClientStorage(atSign: atSign),
       lookUps: handing(scriptedAtServer([])),
       namespace: namespace,
@@ -211,14 +211,13 @@ void main() {
   test(
     'A client opened given no namespace takes the preference\'s own',
     () async {
-      final client = await opening();
+      final client = await opening(preferenceNamespace: 'pref_ns');
 
       expect(
         client.getPreferences()?.namespace,
-        isNull,
+        'pref_ns',
         reason:
-            'with no namespace given, the preference\'s own, here none, '
-            'is the client\'s',
+            'with no namespace given, the preference\'s own is the client\'s',
       );
     },
   );

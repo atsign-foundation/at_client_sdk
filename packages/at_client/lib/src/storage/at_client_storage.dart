@@ -1,5 +1,6 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
+import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:meta/meta.dart';
 
@@ -53,6 +54,17 @@ abstract class AtClientStorage {
   /// which is what an app with no teardown of its own wants — it still chooses
   /// the backend and the location, without having to close anything.
   bool get closedByClient;
+}
+
+/// A store at [location] is held open by another process, so this one
+/// cannot open it: give each process a location of its own.
+class AtStorageInUseException extends AtException {
+  final String location;
+
+  AtStorageInUseException(this.location, Object cause)
+      : super('the store at $location is open in another process, so this '
+            'one cannot open it; give each process a location of its own '
+            '($cause)');
 }
 
 /// The claim rules every [AtClientStorage] shares; a backend supplies

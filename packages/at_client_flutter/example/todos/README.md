@@ -28,7 +28,12 @@ collection-shaped pattern wired up correctly.
   — see "Collections — todos app"). Same domain shape, same wire
   format, same audience. The two apps are interop-compatible: log
   into both with two atSigns, share a todo from one, and the other
-  side picks it up live.
+  side picks it up live. Both run at `PqPosture.pqActive` in
+  namespace `todos.demos`. `test/todos_examples_pq_test.dart` shares
+  todos both ways between this app's service and the CLI example's
+  collection calls, against a virtual atServer named by
+  `TODOS_VE_ROOT` (such as `vip.ve.atsign.zone:26000`); without it,
+  the test is skipped.
 - **Flutter onboarding plumbing**:
   [`at_client_flutter`](../../README.md) (key-chain storage, OTP
   entry dialogs, atSign-selection dialogs).
@@ -94,8 +99,10 @@ The launch screen offers two onboarding paths:
   this on second-and-later launches.
 - **Onboard from .atKeys file** — first-launch path. Choose the
   `.atKeys` file generated when the atSign was originally
-  onboarded (or onboard it now via the `at_onboarding_flutter`
-  flow if you haven't yet).
+  onboarded. This app activates no atSign of its own: to activate a
+  new one, run at_client_flutter's example app, whose walkthrough uses
+  `RegistrarCramDialog` and `CramDialog`, or `at_activate onboard`
+  from at_client_cli.
 
 After login the home screen is a streamed list of todos. Tap one
 to drill into the detail screen (notes, read receipts, sharing

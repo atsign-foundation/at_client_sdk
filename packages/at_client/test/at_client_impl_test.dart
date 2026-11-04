@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
@@ -46,9 +47,8 @@ void main() {
   /// client that superseded it.
   group('a superseded enrollment id', () {
     const atSign = '@alice';
-    AtClientPreference pref() => AtClientPreference()
-      ..hiveStoragePath = 'test/hive'
-      ..isLocalStoreRequired = true;
+    AtClientPreference pref() =>
+        AtClientPreference()..hiveStoragePath = 'test/hive';
 
     setUp(() async {
       await _dropCachedClients(atSign);
@@ -149,7 +149,6 @@ void main() {
     });
 
     test('test current atsign', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
@@ -157,7 +156,6 @@ void main() {
           lookUps: secureSocketLookUps(),
           secondaryAddressFinder: atDirectoryOf(preference),
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
     });
@@ -173,7 +171,6 @@ void main() {
       expect(atClient.getCurrentAtSign(), atSign);
     });
     test('test preference', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
@@ -181,7 +178,6 @@ void main() {
           lookUps: secureSocketLookUps(),
           secondaryAddressFinder: atDirectoryOf(preference),
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
     });

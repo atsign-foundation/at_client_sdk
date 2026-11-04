@@ -1171,6 +1171,22 @@ class AtKeys {
     if (enrollmentId != null) this.enrollmentId = enrollmentId;
   }
 
+  /// Undoes what [fileLegacyMaterial] filed for [enrollmentId], once that
+  /// enrollment is gone: the flat enrollment id when it names [enrollmentId],
+  /// and then the flat APKAM symmetric key too if the document holds no
+  /// enrollment and no authentication material. What another enrollment
+  /// filed is left as it is.
+  void unfileLegacyEnrollment(String enrollmentId) {
+    // ignore: deprecated_member_use_from_same_package
+    if (this.enrollmentId != enrollmentId) return;
+    // ignore: deprecated_member_use_from_same_package
+    this.enrollmentId = null;
+    if (enrollmentIds.isEmpty && !holdsAuthenticationMaterial) {
+      // ignore: deprecated_member_use_from_same_package
+      apkamSymmetricKey = null;
+    }
+  }
+
   /// A legacy-shaped document holding what [fileLegacyMaterial] files and
   /// nothing typed: the shape of every keyfile written before the typed
   /// section existed, and of a demo atSign's credentials.

@@ -90,7 +90,18 @@ awaits local emission so `watch()` listeners see the update before
 - Throws `StateError` if `id` is supplied and already exists on the atServer
 - If `id` omitted: retries on collision (astronomically unlikely); throws
   `StateError` after 10 attempts
-- Throws `CollectionOpException` on any key-level write failure
+- Throws `CollectionOpException` on any key-level write failure. When the
+  item's own copy is the one that failed, no recipient's copy is written:
+  each is in the exception's `results` as `OpNotAttempted`
+- When the own copy was written and a recipient's was not, catch
+  `CollectionOpException<T>`: its `item` is the item written, naming only
+  the recipients whose copies were written. Retry the share with
+  `updateSharedWith(e.item!, recipients)`, never `create`, which writes a
+  second item
+- At `pqActive`, each `sharedWith` recipient must have published a key for
+  the namespace; one that has not fails the write with a
+  `NamespaceKeyUnavailableException` naming them.
+  `CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first
 
 ### `Future<CItem<T>> upsert({required String id, required T obj, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
@@ -147,13 +158,16 @@ failures.
 
 ### `Future<List<CItem<T>>> getItems({String? id, Atsign? owner})`
 
-Returns all matching items as a list. A per-key decode failure aborts the list.
+Returns all matching items as a list. One item this device cannot read, such
+as one sealed to a namespace key it does not hold yet, fails the list with a
+`CItemReadException` naming it.
 
 ### `Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner})`
 
-Yields each item as it is fetched. **Per-key decode failures are yielded as
-stream errors** (not swallowed). Chain `.handleError(...)` to restore
-silent-skip behaviour.
+Yields each item as it is fetched. **An item this device cannot read is
+yielded as a `CItemReadException` stream error** (not swallowed), and the
+stream goes on. Listen with `onError`, or chain `.handleError(...)`, to list
+the rest.
 
 ### `Future<bool> exists(String id, Atsign owner)`
 

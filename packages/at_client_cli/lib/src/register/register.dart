@@ -20,7 +20,6 @@ class Register {
   /// activation fails.
   Future<void> main(List<String> args) async {
     Map<String, String> params = HashMap<String, String>();
-    OnboardingUtil registerUtil = OnboardingUtil();
 
     final argParser = ArgParser()
       ..addOption('email',
@@ -32,8 +31,11 @@ class Register {
     ArgResults argResults = argParser.parse(args);
 
     if (argResults.wasParsed('help')) {
-      stderr.writeln(
-          '[Usage] dart run register.dart -e email@email.com\n[Options]\n${argParser.usage}');
+      stderr.writeln('[Usage] dart run register.dart -e email@email.com\n'
+          '[Options]\n${argParser.usage}\n'
+          '[Environment]\n$registrarApiKeyVariable  a registrar API key to '
+          'send in place of the built-in one, created via the registrar at '
+          'my.atsign.com');
       exit(0);
     }
 
@@ -42,6 +44,15 @@ class Register {
           '[Unable to run Register CLI] Please enter your email address'
           '\n[Usage] dart run register.dart -e email@email.com\n[Options]\n${argParser.usage}');
       exit(6);
+    }
+
+    final OnboardingUtil registerUtil;
+    try {
+      registerUtil =
+          OnboardingUtil(Platform.environment[registrarApiKeyVariable]);
+    } on AtClientException catch (e) {
+      stderr.writeln('[Unable to run Register CLI] ${e.message}');
+      exit(8);
     }
 
     if (registerUtil.validateEmail(argResults['email'])) {
@@ -195,12 +206,22 @@ class ValidateOtp extends RegisterApiTask {
             '[Unable to proceed] The verification code you entered is either invalid or expired.\n'
             ' Check your verification code and try again.');
         params.remove('otp');
+        // The next code is a fresh attempt, not a confirmation of this one.
+        params['confirmation'] = 'false';
         result.apiCallStatus = ApiCallStatus.retry;
         result.exceptionMessage = _otpAttemptsExhausted;
       } else if (apiResponse == 'follow-up') {
+        // NOTE: the confirmation is not an attempt at the code, and is asked
+        // for once; a second ask ends the flow.
+        if (params['confirmation'] == 'true') {
+          result.exceptionMessage =
+              'The registrar asked again to confirm a confirmed code.';
+          result.apiCallStatus = ApiCallStatus.failure;
+          return result;
+        }
         params.update('confirmation', (value) => 'true');
         result.data['otp'] = params['otp'];
-        result.apiCallStatus = ApiCallStatus.retry;
+        return await run();
       } else if (apiResponse.startsWith("@")) {
         result.data['cramkey'] = apiResponse.split(":")[1];
         stdout.writeln(
@@ -227,15 +248,13 @@ Future<void> main(List<String> args) async {
     if (e.toString().contains('Missing argument')) {
       stderr.writeln(
           '[Unable to run Register CLI] Please re-run with your email address');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(1);
     } else if (e.toString().contains('Could not find an option or flag')) {
       stderr
           .writeln('[Unable to run Register CLI] The option entered is invalid.'
               ' Please use the \'-e\' flag to input your email');
-      stderr
-          .writeln('Usage: \'at_register -e email@email.com\'');
+      stderr.writeln('Usage: \'at_register -e email@email.com\'');
       exit(2);
     } else {
       stderr.writeln(

@@ -8,7 +8,6 @@ import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -106,8 +105,6 @@ class SyncServiceImpl implements SyncService {
   @override
   bool get isSyncInProgress => _syncInProgress;
 
-  Function? onDone;
-
   late final AtSignLogger _logger;
 
   // "^shared_key\..+@.+" matches the key that starts-with shared_key.<someone>@<me>
@@ -167,10 +164,7 @@ class SyncServiceImpl implements SyncService {
   /// Tests pass `warmStartSync: false` to keep the request queue
   /// pristine for assertion-style scenarios.
   static Future<SyncService> create(AtClient atClient,
-      {@Deprecated('will be removed in a future version')
-      AtClientManager? atClientManager,
-      RemoteSecondary? remoteSecondary,
-      bool warmStartSync = true}) async {
+      {RemoteSecondary? remoteSecondary, bool warmStartSync = true}) async {
     final ownsRemoteSecondary = remoteSecondary == null;
     remoteSecondary ??= remoteSecondaryFor(atClient);
     final syncService = SyncServiceImpl._(atClient, remoteSecondary,
@@ -231,12 +225,8 @@ class SyncServiceImpl implements SyncService {
   }
 
   @override
-  void sync(
-      {@Deprecated('Use SyncProgressListener') Function? onDone,
-      Function? onError}) {
+  void sync() {
     final syncRequest = SyncRequest();
-    syncRequest.onDone = onDone;
-    syncRequest.onError = onError;
     syncRequest.requestSource = SyncRequestSource.app;
     syncRequest.requestedOn = DateTime.now().toUtc();
     syncRequest.result = SyncResult();
@@ -246,7 +236,12 @@ class SyncServiceImpl implements SyncService {
 
   /// Listens on stats notification sent by the cloud secondary server.
   ///
-  /// Every well-formed notification promotes the cached
+  /// Only the atServer's stats notification for this client's own atSign
+  /// counts: its sender is that atSign and its key is
+  /// `statsNotification.<atSign>`. Anything else the subscription matches is
+  /// ignored.
+  ///
+  /// Every well-formed one promotes the cached
   /// [_latestKnownServerCommitId] (monotonically — see
   /// [_promoteServerCommitId]) and unconditionally enqueues a
   /// sync request. The actual
@@ -264,6 +259,13 @@ class SyncServiceImpl implements SyncService {
     _statsNotificationSubscription = _atClient.notificationService
         .subscribe(regex: 'statsNotification')
         .listen((notification) async {
+      // NOTE: sync acts only on the atServer's stats notification for this
+      // client's own atSign.
+      if (!_isOwnStats(notification)) {
+        _logger.finer('statsServiceListener: ignoring ${notification.key} '
+            'from ${notification.from}');
+        return;
+      }
       _logger.finer('RCVD: stats notification in sync: ${notification.value}');
       final raw = notification.value;
       if (raw == null) return;
@@ -281,6 +283,20 @@ class SyncServiceImpl implements SyncService {
         ..result = SyncResult();
       _addSyncRequestToQueue(syncRequest);
     });
+  }
+
+  /// Whether [notification] is the atServer's stats notification for this
+  /// client's own atSign, with the sender compared in canonical form.
+  bool _isOwnStats(AtNotification notification) {
+    final own = _atClient.getCurrentAtSign();
+    if (own == null) return false;
+    try {
+      return notification.from.toAtsign() == own.toAtsign() &&
+          notification.key.toLowerCase() ==
+              'statsNotification.${own.toAtsign()}'.toLowerCase();
+    } on InvalidAtSignException {
+      return false;
+    }
   }
 
   @override
@@ -331,22 +347,19 @@ class SyncServiceImpl implements SyncService {
     // _syncInProgress because _isInSync short-circuits on the latter.
     _processInProgress = true;
     final syncRequest = _getSyncRequest();
-    // NOTE: the round answers every queued request, so it reads the server
-    // fresh if any of them is an app's; the one dequeued may be a system
-    // request that was queued ahead of the app's.
+    // NOTE: the round answers the requests queued now, before it reads the
+    // server, so it reads fresh if any of them is an app's; the one dequeued
+    // may be a system request queued ahead of the app's. A request made after
+    // the read waits for a round of its own.
+    final answering = syncRequests.toList();
     final anAppIsWaiting = syncRequest.requestSource == SyncRequestSource.app ||
-        syncRequests.any((r) => r.requestSource == SyncRequestSource.app);
+        answering.any((r) => r.requestSource == SyncRequestSource.app);
     try {
       final inSync = await _isInSync(syncRequest, forceFresh: anAppIsWaiting);
       if (isStopped) {
-        // NOTE: stop() landed while _isInSync was parked on its network read.
-        // Anything this run did from here would be sync activity after stop()
-        // returned, so the request is answered as stopped instead.
-        syncRequest.result!
-          ..syncStatus = SyncStatus.failure
-          ..atClientException = AtClientException(
-              error_codes['AtClientException'], 'SyncService has been stopped');
-        _syncError(syncRequest);
+        // NOTE: stop() can land after _isInSync's own check, while it reads
+        // local storage. Anything this run did from here would be sync
+        // activity after stop() returned.
         return;
       }
       if (inSync) {
@@ -355,7 +368,7 @@ class SyncServiceImpl implements SyncService {
           ..syncStatus = SyncStatus.success
           ..lastSyncedOn = DateTime.now().toUtc()
           ..dataChange = false;
-        _syncComplete(syncRequest);
+        _syncComplete(syncRequest, answering);
         _syncInProgress = false;
         _informSyncProgress(SyncProgress()
           ..syncStatus = SyncStatus.success
@@ -373,7 +386,7 @@ class SyncServiceImpl implements SyncService {
           localCommitIdBeforeSync: localCommitIdBeforeSync);
 
       _logRoundSummary(syncRequest, syncResult);
-      _syncComplete(syncRequest);
+      _syncComplete(syncRequest, answering);
       serverCommitId = await _getServerCommitId();
       final localCommitId = await _getLocalCommitId();
 
@@ -393,8 +406,6 @@ class SyncServiceImpl implements SyncService {
       _logger.warning(
           'Exception in sync ${syncRequest.id}. Reason: ${e.getTraceMessage()}');
       final wrapped = AtExceptionManager.createException(e);
-      syncRequest.result!.atClientException = wrapped;
-      _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
@@ -404,17 +415,11 @@ class SyncServiceImpl implements SyncService {
     } on _SyncAbandoned {
       _logger
           .finer('sync ${syncRequest.id} abandoned: the service was stopped');
-      syncRequest.result!.atClientException = AtClientException(
-          error_codes['AtClientException'], 'SyncService has been stopped');
-      _syncError(syncRequest);
       _syncInProgress = false;
     } catch (e) {
       if (e is StoppedException || isStopped) {
         _logger
             .finer('sync ${syncRequest.id} abandoned: the service was stopped');
-        syncRequest.result!.atClientException = AtClientException(
-            error_codes['AtClientException'], 'SyncService has been stopped');
-        _syncError(syncRequest);
         _syncInProgress = false;
         return;
       }
@@ -426,8 +431,6 @@ class SyncServiceImpl implements SyncService {
       _logger.warning(
           'Unexpected exception in sync ${syncRequest.id}. Reason: $e');
       final wrapped = AtClientException.message('$e');
-      syncRequest.result!.atClientException = wrapped;
-      _syncError(syncRequest);
       _syncInProgress = false;
       _informSyncProgress(SyncProgress()
         ..syncStatus = SyncStatus.failure
@@ -480,45 +483,13 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
-  /// Dequeues the request this round answers: an app's request that carries
-  /// its own callback, else the oldest.
+  /// Dequeues the request this round answers: the oldest.
   ///
-  /// Removed, whichever it is. A failed round answers only the request it
+  /// Removed, not peeked. A failed round answers only the request it
   /// dequeued, so one left in the queue would be run again on the next
   /// microtask, and again on the one after, for as long as the failure
   /// lasted.
-  SyncRequest _getSyncRequest() {
-    for (final syncRequest in syncRequests) {
-      if (syncRequest.requestSource == SyncRequestSource.app &&
-          syncRequest.onDone != null) {
-        syncRequests.remove(syncRequest);
-        return syncRequest;
-      }
-    }
-    return syncRequests.removeFirst();
-  }
-
-  void _syncError(SyncRequest syncRequest) {
-    _safeInvokeOnError(syncRequest);
-  }
-
-  /// Calls [request.onError] (if non-null) with [request.result],
-  /// wrapping the callback in a try-catch and logging anything
-  /// thrown. The queue's eviction / drain / completion flows must
-  /// not be derailed by a misbehaving caller-supplied callback —
-  /// neither a single overflow nor a service stop should fail
-  /// because one onError handler threw.
-  ///
-  /// Caller is responsible for populating [request.result] with the
-  /// failure status and exception before calling.
-  void _safeInvokeOnError(SyncRequest request) {
-    if (request.onError == null) return;
-    try {
-      request.onError!(request.result);
-    } catch (e) {
-      _logger.warning('SyncRequest.onError threw and was swallowed: $e');
-    }
-  }
+  SyncRequest _getSyncRequest() => syncRequests.removeFirst();
 
   /// One `info` line per round that moved data; the per-entry lines are `finer`.
   void _logRoundSummary(SyncRequest syncRequest, SyncResult syncResult) {
@@ -542,31 +513,11 @@ class SyncServiceImpl implements SyncService {
         'pushed $pushed; server commit id $_latestKnownServerCommitId');
   }
 
-  void _syncComplete(SyncRequest syncRequest) {
+  void _syncComplete(SyncRequest syncRequest, List<SyncRequest> answered) {
     syncRequest.result!.lastSyncedOn = DateTime.now().toUtc();
-    _logger.finer(
-        'Inside syncComplete. syncRequest.requestSource : ${syncRequest.requestSource}; syncRequest.onDone : ${syncRequest.onDone}');
-    // If specific onDone callback is set, call specific onDone callback,
-    // else call the global onDone callback.
-    if (syncRequest.onDone != null &&
-        syncRequest.requestSource == SyncRequestSource.app) {
-      _logger.finer('Sending result to onDone callback');
-      syncRequest.onDone!(syncRequest.result);
-    } else if (onDone != null) {
-      onDone!(syncRequest.result);
-    }
-    _clearQueue(alreadyHandled: syncRequest);
-  }
-
-  // ignore: unused_element
-  void _onDone(SyncResult syncResult) {
-    _logger.finer('system sync completed on ${syncResult.lastSyncedOn}');
-  }
-
-  // ignore: unused_element
-  void _onError(SyncResult syncResult) {
-    _logger
-        .severe('system sync error ${syncResult.atClientException?.message}');
+    _logger.finer('Inside syncComplete. syncRequest.requestSource : '
+        '${syncRequest.requestSource}');
+    _clearQueue(answered);
   }
 
   /// We use this so that after [processSyncRequests] runs, it can enqueue a sync
@@ -593,21 +544,9 @@ class SyncServiceImpl implements SyncService {
       return;
     }
     if (syncRequests.length == queueSize) {
-      // Drop-oldest sliding window: evict the head, not the tail. The
-      // newest request is always retained (it represents the most
-      // recent caller's intent to sync). The evicted request gets
-      // an explicit onError invocation so its caller isn't left
-      // waiting indefinitely on a callback that will never fire.
-      final evicted = syncRequests.removeFirst();
-      evicted.result ??= SyncResult();
-      evicted.result!
-        ..syncStatus = SyncStatus.failure
-        ..atClientException = AtClientException(
-          error_codes['AtClientException'],
-          'Sync request evicted: queue at capacity ($queueSize); '
-          'superseded by a newer sync request',
-        );
-      _safeInvokeOnError(evicted);
+      // NOTE: drop-oldest, so the newest request, the most recent caller's
+      // intent to sync, is always kept.
+      syncRequests.removeFirst();
     }
     syncRequests.addLast(syncRequest);
     // Trigger a sync run on the next microtask. Deferring (rather than
@@ -633,42 +572,17 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  /// Drains the queue at the end of a successful sync run. Each
-  /// remaining request — every queued sync intent that wasn't the
-  /// one chosen for processing — is conceptually answered by the
-  /// run that just completed (it brought local up to date), so we
-  /// fire `onError` on each with a "superseded" failure rather than
-  /// leaving its callback dangling forever.
+  /// Drops the requests a round that succeeded answered: those queued when it
+  /// read the atServer. A request made after that read stays queued, so the
+  /// round [_drainQueueIfPending] starts next reads after it was made, and
+  /// every request made during one round shares that one round.
   ///
-  /// **Tail-of-burst handling**: "what to push" is owned by
-  /// `LocalSecondary`'s `AtSyncQueue`, not by this request queue. A
-  /// late-arriving local write (one whose `_update` / `_delete`
-  /// enqueue lands during a running round) lives in the sync-queue
-  /// Hive box; the next `processSyncRequests` round peeks the queue
-  /// from a fresh snapshot and drains those entries. Wholesale
-  /// clearing of the request queue here is therefore safe — no
-  /// pending-write information lives on it.
-  ///
-  /// The just-processed request's `onDone` has already fired by the
-  /// time this is called from [_syncComplete]; passing it as
-  /// [alreadyHandled] keeps it from also being notified via `onError`
-  /// here. Identity comparison is exact (`identical`) so only the
-  /// specific in-flight instance is skipped.
-  void _clearQueue({SyncRequest? alreadyHandled}) {
-    _logger.finer('Clearing sync queue');
-    final exception = AtClientException(
-      error_codes['AtClientException'],
-      'Sync request superseded by a coalesced sync run that just completed',
-    );
-    while (syncRequests.isNotEmpty) {
-      final r = syncRequests.removeFirst();
-      if (identical(r, alreadyHandled)) continue;
-      r.result ??= SyncResult();
-      r.result!
-        ..syncStatus = SyncStatus.failure
-        ..atClientException = exception;
-      _safeInvokeOnError(r);
-    }
+  /// "What to push" lives in `LocalSecondary`'s `AtSyncQueue`, not here, so
+  /// the next round drains a write that landed during this one from a fresh
+  /// snapshot of that queue.
+  void _clearQueue(List<SyncRequest> answered) {
+    _logger.finer('Clearing the sync requests the round answered');
+    syncRequests.removeWhere((r) => answered.any((a) => identical(a, r)));
   }
 
   /// Throws if [stop] has been called. Placed at the stage boundaries of
@@ -724,6 +638,39 @@ class SyncServiceImpl implements SyncService {
     return syncResult;
   }
 
+  /// The codes with which the atServer refuses a queued write for good, so
+  /// that pushing it again is refused again: unauthorized, an immutable
+  /// record, an invalid key, an illegal argument and invalid syntax.
+  static final Set<String> _refusedForGood = refusedForGoodCodes();
+
+  /// The codes at_commons' [codes] gives the exceptions [_refusedForGood] is
+  /// named by.
+  ///
+  /// Throws a [StateError] naming an exception [codes] lists no code for.
+  @visibleForTesting
+  static Set<String> refusedForGoodCodes([Map codes = error_codes]) => {
+        for (final name in const [
+          'UnAuthorizedException',
+          'IllegalStateException',
+          'InvalidAtKeyException',
+          'IllegalArgumentException',
+          'InvalidSyntaxException',
+        ])
+          codes[name] as String? ??
+              (throw StateError('at_commons lists no error code for $name')),
+      };
+
+  /// The codes at_commons lists for the atServer's exceptions.
+  static final Set<String> _listedCodes = {
+    for (final code in error_codes.values) code as String,
+  };
+
+  /// Whether the atServer's refusal [code] drops a queued write for good: one
+  /// of [_refusedForGood], or a code at_commons does not list.
+  static bool _dropsForGood(String? code) =>
+      code != null &&
+      (_refusedForGood.contains(code) || !_listedCodes.contains(code));
+
   /// Drains the [LocalSecondary]'s sync queue, pushing each pending
   /// atKey to the cloud secondary as part of a batched `batch:` verb.
   ///
@@ -740,8 +687,11 @@ class SyncServiceImpl implements SyncService {
   ///    network round-trip per batch — keeps push throughput high
   ///    under heavy load).
   /// 4. For each per-entry response: on success, remove from the
-  ///    queue and promote `_latestKnownServerCommitId`. On failure,
-  ///    leave in queue for retry on the next round.
+  ///    queue and promote `_latestKnownServerCommitId`. On a refusal
+  ///    for good ([_dropsForGood]), remove from the queue logged at
+  ///    severe, keeping the local copy. On any other answer without a
+  ///    commit id, leave in queue logged at warning, and on any other
+  ///    failure leave in queue, for retry.
   /// 5. Emit a per-batch [SyncStatus.inProgress] event so listeners
   ///    can render "pushed N of M" progress.
   /// 6. Repeat until the queue is empty.
@@ -843,8 +793,23 @@ class SyncServiceImpl implements SyncService {
           if (responseObject.data != null) {
             commitId = int.parse(responseObject.data!);
           }
+          if (commitId == -1 && _dropsForGood(responseObject.errorCode)) {
+            // NOTE: a refusal for good is not retried, so it cannot hold up
+            // the entries behind it; the local copy stays as written.
+            final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
+                source.atKey, source.seq);
+            if (!removed) rewrittenMidPush++;
+            _logger.severe('The atServer refused ${source.op.name} of '
+                '${source.atKey} for enrollment ${_atClient.enrollmentId} '
+                'with ${responseObject.errorCode} '
+                '(${responseObject.errorMessage}), so it is not retried and '
+                'this device keeps its local copy'
+                '${removed ? '' : '; a newer write to it pushes next round'}');
+            _bailIfStopped();
+            continue;
+          }
           if (commitId == -1) {
-            _logger.severe(
+            _logger.warning(
                 '${source.op} for key ${source.atKey} failed. Error code '
                 '${responseObject.errorCode} error message '
                 '${responseObject.errorMessage}');
@@ -909,9 +874,9 @@ class SyncServiceImpl implements SyncService {
         serverCommitId: _latestKnownServerCommitId,
       );
       _bailIfStopped();
-      // Defensive: if every entry in this batch failed (e.g. a
-      // server-side per-key authorization issue), the entries we
-      // tried weren't removed from the queue. Compare against the
+      // Defensive: if every entry in this batch failed with a refusal
+      // that is retried, the entries we tried weren't removed from the
+      // queue. Compare against the
       // pre-batch snapshot — if size hasn't dropped at all (after
       // accounting for any new writes that arrived during the
       // batch), bail out and let a subsequent round retry.
@@ -1622,7 +1587,9 @@ class SyncServiceImpl implements SyncService {
         DeleteVerbBuilder(:final atKey) => atKey,
         _ => builder.runtimeType,
       };
-      _logger.finer('Failed to sync $atKey caused by ${e.toString()}');
+      _logger.warning('Not applying the atServer\'s change to $atKey on this '
+          'device: the grants of enrollment ${_atClient.enrollmentId} do not '
+          'cover it locally ($e)');
     }
   }
 
@@ -1713,20 +1680,8 @@ class SyncServiceImpl implements SyncService {
   }
 
   void _drainSyncQueue() {
-    // 1. Drain the sync request queue with errors
+    syncRequests.clear();
     final progress = _buildStoppedProgress();
-    final exception = progress.atClientException;
-
-    while (syncRequests.isNotEmpty) {
-      final request = syncRequests.removeFirst();
-      request.result ??= SyncResult();
-      request.result!
-        ..syncStatus = SyncStatus.failure
-        ..atClientException = exception;
-      _safeInvokeOnError(request);
-    }
-
-    // 2. Notify progress listeners of the failure
     for (var listener in _syncProgressListeners) {
       try {
         listener.onSyncProgressEvent(progress);
@@ -1735,11 +1690,6 @@ class SyncServiceImpl implements SyncService {
       }
     }
     _syncProgressListeners.clear();
-  }
-
-  @override
-  void setOnDone(Function onDone) {
-    this.onDone = onDone;
   }
 
   @visibleForTesting

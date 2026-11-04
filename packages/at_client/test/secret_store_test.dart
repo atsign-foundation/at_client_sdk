@@ -259,6 +259,14 @@ void main() {
       expect(SecretStore.namespaceAuthorizes({'app': 'rw'}, 'myapp'), isFalse);
       expect(SecretStore.namespaceAuthorizes({}, 'myapp'), isFalse);
     });
+
+    test('a grant and a namespace are compared folded', () {
+      expect(SecretStore.namespaceAuthorizes({'MyApp': 'rw'}, 'myapp'), isTrue);
+      expect(SecretStore.namespaceAuthorizes({'myapp': 'r'}, 'Data.MyApp'),
+          isTrue);
+      expect(
+          SecretStore.namespaceAuthorizes({'MyApp': 'rw'}, 'mychat'), isFalse);
+    });
   });
 
   group('Secret json', () {

@@ -417,7 +417,8 @@ class _FixedRing implements NskeyKeyRing {
 
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-          String owner, String namespace, String nskeyKid) async =>
+          String owner, String namespace, String nskeyKid,
+          {String? writtenBy}) async =>
       nskeyKid == _advertised.nskeyKid
           ? NskeyDecapsulationKey(_secretKey)
           : null;
@@ -428,6 +429,9 @@ class _FixedRing implements NskeyKeyRing {
       nskeyKid == _advertised.nskeyKid
           ? _advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
           : null;
+
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async => const {};
 }
 
 /// A ring serving one advertisement carrying MORE THAN ONE key, plus the
@@ -445,7 +449,8 @@ class _WidenedRing implements NskeyKeyRing {
 
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-      String owner, String namespace, String nskeyKid) async {
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy}) async {
     final secret = _privates[nskeyKid];
     return secret == null ? null : NskeyDecapsulationKey(secret);
   }
@@ -456,4 +461,7 @@ class _WidenedRing implements NskeyKeyRing {
       _privates.containsKey(nskeyKid)
           ? advertised.keys.where((k) => k.kid == nskeyKid).firstOrNull
           : null;
+
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async => const {};
 }

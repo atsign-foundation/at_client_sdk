@@ -300,12 +300,13 @@ enum EventSource { data, notifs, both }
 ///
 /// ---
 ///
-/// Per-key decode failures on the read path are yielded into the
-/// stream as errors — not logged and swallowed. Every higher-level
-/// read method is a thin wrapper over [getItemsAsStream], so
-/// `await collection.getItems()` will throw on the first bad key;
+/// A record the read path cannot read, such as one sealed to a key this
+/// device does not hold yet, is yielded into the stream as a
+/// [CItemReadException] error — not logged and swallowed. Every
+/// higher-level read method is a thin wrapper over [getItemsAsStream], so
+/// `await collection.getItems()` will throw on the first such record;
 /// `await for` without an `onError` handler will throw on the first
-/// bad key. Apps that want the old silent-skip posture should chain
+/// such record. Apps that want the old silent-skip posture should chain
 /// `.handleError(...)` before consuming the stream.
 /// Leading anchor shared by every AtKey scan AtCollection emits.
 ///
@@ -315,6 +316,9 @@ enum EventSource { data, notifs, both }
 ///     cursor, etc.) and must never be confused with collection
 ///     items, even when their tail happens to share the namespace
 ///     shape (the underlying defect behind #1942).
+///   - `(?!(?:cached:)?public:)` rejects a public record, this atSign's
+///     own or one its atServer cached from another atSign. A collection
+///     writes no public record, so none is an item.
 ///   - `(?:[^:]*:){0,2}` tolerates up to two leading wrapper
 ///     segments, covering every local shape a collection item can
 ///     take: none for a self-owned key (`<id>.<ns>@self`), one for
@@ -329,7 +333,8 @@ enum EventSource { data, notifs, both }
 ///     could not absorb the second `@self:` segment the way the
 ///     `[^.]+` wildcard on the unfiltered scan does — the defect
 ///     behind #2032.
-const String _atKeyScanPrefix = r'^(?!local:)(?:[^:]*:){0,2}';
+const String _atKeyScanPrefix =
+    r'^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}';
 
 interface class AtCollection<T> {
   static const String _rr = '__rr';
@@ -619,9 +624,9 @@ interface class AtCollection<T> {
 
     // Broadest possible match for keys at this namespace — used by
     // the bulk-read path. `.*` permits any leading wire shape
-    // (sharedWith prefix, cached prefix, plain self) so long as it
-    // doesn't begin with `local:`.
-    _regexAllStr = '^(?!local:).*\\.$_escapedNamespace@';
+    // (sharedWith prefix, cached prefix, plain self) that
+    // [_atKeyScanPrefix] admits.
+    _regexAllStr = '$_atKeyScanPrefix.*\\.$_escapedNamespace@';
     // Same logical shape as `_directKeyRegex` but with multi-segment
     // ids — matches direct items `<id>.<ns>@` AND any deeper sub-item
     // `<id>.<subName>.<parentId>.…<ns>@`. Used as a cheap filter to
@@ -819,6 +824,9 @@ interface class AtCollection<T> {
   /// guarantee a collision-free id, use [create] (which retries on
   /// collision) rather than calling [draft] followed by a manual write.
   ///
+  /// The item holds its own copy of [sharedWith], so a set the app keeps
+  /// and passes again is never changed by a write of this item.
+  ///
   /// [expiresAt] defaults to `now + defaultExpiration`. Supply an
   /// explicit value to override for this item alone.
   ///
@@ -855,7 +863,7 @@ interface class AtCollection<T> {
       id: id,
       type: _resolveType(obj),
       obj: obj,
-      sharedWith: sharedWith ?? {},
+      sharedWith: {...?sharedWith},
       createdAt: now,
       expiresAt: expiresAt ?? now.add(defaultExpiration),
       availableAt: availableAt,
@@ -875,7 +883,9 @@ interface class AtCollection<T> {
   /// method's doc comment for the defaults and the null semantics.
   ///
   /// Returns the persisted item. Throws [CollectionOpException] on any
-  /// key-level failure.
+  /// key-level failure; when the item's own copy was written and a
+  /// recipient's was not, its [CollectionOpException.item] is the item
+  /// written, to retry the share with [updateSharedWith].
   Future<CItem<T>> create({
     required T obj,
     String? id,
@@ -931,9 +941,22 @@ interface class AtCollection<T> {
     // round-trip saved is the right trade.
     final results = await _put(item, unshareWithOthers: false);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results, item: _asWritten(item, results));
     }
     await _awaitLocalEmissions();
+    return item;
+  }
+
+  /// [item] naming only the recipients whose copies [results] wrote, or null
+  /// when its own copy was not written.
+  CItem<T>? _asWritten(CItem<T> item, List<OpResult> results) {
+    if (!results.any((r) => r is OpSuccess && r.atKey.sharedWith == null)) {
+      return null;
+    }
+    item.sharedWith.removeAll({
+      for (final r in results.whereType<OpFailure>())
+        if (r.atKey.sharedWith != null) r.atKey.sharedWith!.toAtsign()
+    });
     return item;
   }
 
@@ -1002,7 +1025,7 @@ interface class AtCollection<T> {
     final exists = await _selfKeyExists(id);
     final results = await _put(draft);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     if (!exists) {
       // Mirror [create]'s seen-id bookkeeping for the brand-new case.
@@ -1048,7 +1071,7 @@ interface class AtCollection<T> {
     }
     final results = await _put(item, unshareWithOthers: unshareWithOthers);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     await _awaitLocalEmissions();
   }
@@ -1090,6 +1113,9 @@ interface class AtCollection<T> {
     Set<Atsign> sharedWith, {
     bool unshareWithOthers = true,
   }) async {
+    // NOTE: a copy, because the item's own Set is cleared below and the caller
+    // may have passed that very Set.
+    final wanted = {...sharedWith};
     if (item.owner != atSign) {
       throw ArgumentError('You may not update items owned by other atSigns');
     }
@@ -1100,15 +1126,15 @@ interface class AtCollection<T> {
       );
     }
     final toUnshare = unshareWithOthers
-        ? item.sharedWith.difference(sharedWith)
+        ? item.sharedWith.difference(wanted)
         : const <Atsign>{};
-    final toShare = sharedWith.difference(item.sharedWith);
+    final toShare = wanted.difference(item.sharedWith);
     if (toUnshare.isEmpty && toShare.isEmpty) {
       // No recipient-set delta. Still align the item's own Set with
       // the caller's argument in case they passed a fresh instance.
       item.sharedWith
         ..clear()
-        ..addAll(sharedWith);
+        ..addAll(wanted);
       return;
     }
     final now = DateTime.now();
@@ -1142,11 +1168,11 @@ interface class AtCollection<T> {
       }
     }
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     item.sharedWith
       ..clear()
-      ..addAll(sharedWith);
+      ..addAll(wanted);
     await _awaitLocalEmissions();
   }
 
@@ -1164,7 +1190,7 @@ interface class AtCollection<T> {
   Future<void> delete(CItem<T> item, {bool cascade = false}) async {
     final results = await _delete(item, cascade: cascade);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     await _awaitLocalEmissions();
   }
@@ -1217,8 +1243,8 @@ interface class AtCollection<T> {
   // ───────────────────────────────────────────────────────────────────────
   // Regex builders. Three shapes cover every AtKey scan this class
   // emits; they share the [_atKeyScanPrefix] + [_escapedNamespace]
-  // pieces so the "reject `local:` keys, escape namespace dots"
-  // contract (the fix for #1942) lives in one place.
+  // pieces so the "reject `local:` and public keys, escape namespace
+  // dots" contract lives in one place.
 
   /// Regex matching **direct items** at this collection's namespace:
   /// `<prefix><idPattern>.<ns><ownerSuffix>`.
@@ -1344,10 +1370,10 @@ interface class AtCollection<T> {
   /// Fetches every item in the collection as a `List<CItem<T>>`,
   /// optionally filtered by [id] / [owner].
   ///
-  /// **Decode-error policy:** the first per-key decode failure aborts
-  /// the list with that error. If you need to continue past decode
-  /// failures, use [getItemsAsStream] directly and chain
-  /// `.handleError(...)` or collect errors yourself.
+  /// **Decode-error policy:** one record this device cannot read, such as
+  /// one sealed to a key it does not hold yet, fails the list with a
+  /// [CItemReadException] naming it. To list the rest, use
+  /// [getItemsAsStream] with an `onError` handler.
   ///
   /// Items with the same `owner+id` across self and shared copies are
   /// deduplicated and their `sharedWith` sets are unioned.
@@ -1361,10 +1387,10 @@ interface class AtCollection<T> {
   ///         .where((item) => item.obj.done)
   ///         .toList();
   ///
-  /// Per-key decode failures are yielded into the stream as **errors**
-  /// (via `yield* Stream<CItem<T>>.error(...)`), not swallowed. Good
-  /// data items keep flowing before and after each error. Callers
-  /// choose the policy:
+  /// A record this device cannot read, such as one sealed to a key it does
+  /// not hold yet, is yielded into the stream as a [CItemReadException]
+  /// error naming it and its cause, not swallowed. Good data items keep
+  /// flowing before and after each error. Callers choose the policy:
   ///
   ///   - `.toList()` / `await for` without `onError` → first error
   ///     aborts with the error thrown.
@@ -1542,9 +1568,7 @@ interface class AtCollection<T> {
         //     (see [CItem.readBy] for an example — it does this to
         //     tolerate legacy `__rr` items written in the pre-
         //     refactor wire format).
-        yield* Stream<CItem<T>>.error(
-          'getItemsAsStream decode failure on ${k.key}: $e\n$st',
-        );
+        yield* Stream<CItem<T>>.error(CItemReadException(k, e), st);
       }
     }
     if (pending != null) yield pending;
@@ -3173,6 +3197,9 @@ interface class AtCollection<T> {
   /// key-level failure — callers that want throwing semantics (like
   /// [create] and [update]) inspect the returned results and raise
   /// [CollectionOpException].
+  ///
+  /// When the self copy cannot be written, nothing else is: each recipient's
+  /// copy is returned as [OpNotAttempted].
   Future<List<OpResult>> _put(
     CItem<T> item, {
     bool unshareWithOthers = true,
@@ -3187,6 +3214,8 @@ interface class AtCollection<T> {
 
     final results = <OpResult>[];
     final selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
+    AtKey recipientKey(Atsign recipient) =>
+        AtKey.fromString('$recipient:${item.id}.$namespace$atSign');
     final md = _buildMetadata(item, now);
 
     // 1. Self copy.
@@ -3211,7 +3240,12 @@ interface class AtCollection<T> {
       _emitAncestorSubUpdated(item);
     } catch (e) {
       if (e is StoppedException) rethrow;
-      results.add(OpFailure(selfKey, CollectionOp.put, e));
+      // NOTE: a share is written only after the owner's own copy.
+      return [
+        OpFailure(selfKey, CollectionOp.put, e),
+        for (final otherAtSign in item.sharedWith)
+          OpNotAttempted(recipientKey(otherAtSign), CollectionOp.put),
+      ];
     }
 
     // 2. Diff: delete recipient copies whose atSign is no longer in
@@ -3233,9 +3267,7 @@ interface class AtCollection<T> {
 
     // 3. Recipient copies (create or overwrite).
     for (final otherAtSign in item.sharedWith) {
-      final k = AtKey.fromString(
-        '$otherAtSign:${item.id}.$namespace$atSign',
-      );
+      final k = recipientKey(otherAtSign);
       try {
         k.metadata = md;
         await atClient.put(k, jsonEncode(item.toJson()));
@@ -3669,11 +3701,6 @@ final class Query<T> {
     final all = await _collection.getItems();
     return _spec._apply(all);
   }
-
-  /// Deprecated alias for [get] — keeps existing call-sites compiling
-  /// while they migrate. Will be removed in the next minor release.
-  @Deprecated('use get() instead — fetch() will be removed in the next minor')
-  Future<List<CItem<T>>> fetch() => get();
 
   /// One-shot fetch with duplicates removed by [keyFn]. The first
   /// matching item per key is kept; subsequent items mapping to the
@@ -5093,7 +5120,7 @@ final class CItem<T> {
       );
       final results = await rr._putRecipientsOnly(receipt);
       if (results.any((r) => r is OpFailure)) {
-        throw CollectionOpException(results);
+        throw CollectionOpException<T>(results);
       }
       // Patch the in-process readers cache so a subsequent
       // wasMarkedReadByMe on this CItem instance returns true even
@@ -5146,14 +5173,32 @@ final class OpFailure extends OpResult {
   String toString() => '$atKey:${op.name}:Failure:$reason';
 }
 
+/// A key-level op that was not attempted because the item's own copy could
+/// not be written.
+final class OpNotAttempted extends OpResult {
+  OpNotAttempted(super.atKey, super.op);
+
+  @override
+  String toString() => '$atKey:${op.name}:NotAttempted';
+}
+
 /// Thrown by [AtCollection.create] / [AtCollection.update] /
 /// [AtCollection.delete] when any key-level op failed. Inspect [results]
 /// for the per-key breakdown, or [failures] / [firstFailure] for the
 /// subset that went wrong.
-final class CollectionOpException implements Exception {
+///
+/// [T] is the item type of the collection that threw it, so
+/// `on CollectionOpException<Todo> catch (e)` hands back a typed [item].
+final class CollectionOpException<T> implements Exception {
   final List<OpResult> results;
 
-  CollectionOpException(this.results);
+  /// The item [AtCollection.create] wrote when its own copy landed and a
+  /// recipient's copy did not, naming only the recipients whose copies were
+  /// written: retry the rest with [AtCollection.updateSharedWith], not
+  /// [AtCollection.create], which would write a second item. Null otherwise.
+  final CItem<T>? item;
+
+  CollectionOpException(this.results, {this.item});
 
   List<OpFailure> get failures => results.whereType<OpFailure>().toList();
 
@@ -5163,6 +5208,22 @@ final class CollectionOpException implements Exception {
   String toString() =>
       'CollectionOpException with ${failures.length} failure(s):\n'
       '  ${failures.join('\n  ')}';
+}
+
+/// A record a collection could not read, such as one sealed to a key this
+/// device does not hold yet: yielded as an error by
+/// [AtCollection.getItemsAsStream], with the stack its read failed on.
+final class CItemReadException implements Exception {
+  /// The record that could not be read.
+  final AtKey key;
+
+  /// What reading it failed with.
+  final Object cause;
+
+  CItemReadException(this.key, this.cause);
+
+  @override
+  String toString() => 'CItemReadException: could not read $key: $cause';
 }
 
 /// Multi-line human-readable dump of a [CItem] — useful for

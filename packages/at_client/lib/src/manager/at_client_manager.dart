@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
-import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -40,12 +38,6 @@ class AtClientManager {
       return _currentAtClient!;
     }
   }
-
-  @Deprecated('Use atClientManager.atClient.syncService')
-  SyncService get syncService => atClient.syncService;
-
-  @Deprecated('Use atClientManager.atClient.notificationService')
-  NotificationService get notificationService => atClient.notificationService;
 
   final _changeListeners = <AtSignChangeListener>[];
 
@@ -128,69 +120,25 @@ class AtClientManager {
 /// The default production implementation is [DefaultAtServiceFactory].
 /// Override this in tests to inject fakes or mocks without subclassing [AtClientManager].
 abstract class AtServiceFactory {
-  Future<AtClient> atClient(
-    String atSign,
-    String? namespace,
-    AtClientPreference preference,
-    AtClientManager atClientManager, {
-    required AtKeysIo atKeysIo,
-    AtLookUp? atLookUp,
-    required AtLookUpFactory lookUps,
-    required SecondaryAddressFinder secondaryAddressFinder,
-    String? enrollmentId,
-    required AtClientStorage storage,
-  });
-
-  Future<NotificationService> notificationService(
-      AtClient atClient,
-      @Deprecated('no longer needed. will be removed in a future release')
-      AtClientManager atClientManager,
+  /// The notification service for [atClient].
+  Future<NotificationService> notificationService(AtClient atClient,
       {SecondaryAddressFinder? secondaryAddressFinder});
 
-  /// The [notificationService] parameter is ignored — the sync service retrieves
-  /// its notification dependency directly from [atClient] after construction.
-  Future<SyncService> syncService(AtClient atClient,
-      AtClientManager atClientManager, NotificationService notificationService);
+  /// The sync service for [atClient], which takes its notification service
+  /// from [atClient] once built.
+  Future<SyncService> syncService(AtClient atClient);
 
   EnrollmentService enrollmentService(AtClient atClient);
 }
 
 class DefaultAtServiceFactory implements AtServiceFactory {
-  @override
-  Future<AtClient> atClient(
-    String atSign,
-    String? namespace,
-    AtClientPreference preference,
-    AtClientManager atClientManager, {
-    required AtKeysIo atKeysIo,
-    AtLookUp? atLookUp,
-    required AtLookUpFactory lookUps,
-    required SecondaryAddressFinder secondaryAddressFinder,
-    String? enrollmentId,
-    required AtClientStorage storage,
-  }) async {
-    return await AtClientImpl.create(
-      atSign,
-      namespace,
-      preference,
-      atClientManager: atClientManager,
-      atKeysIo: atKeysIo,
-      atLookUp: atLookUp,
-      lookUps: lookUps,
-      secondaryAddressFinder: secondaryAddressFinder,
-      enrollmentId: enrollmentId,
-      storage: storage,
-    );
-  }
-
   /// The notification service over [atClient]'s own transport, finding
   /// atServers with [secondaryAddressFinder] or, with none, the client's.
   ///
   /// Throws an [ArgumentError] for a client that is not an [AtClientImpl],
   /// which holds no transport to build the service with.
   @override
-  Future<NotificationService> notificationService(
-      AtClient atClient, AtClientManager atClientManager,
+  Future<NotificationService> notificationService(AtClient atClient,
       {SecondaryAddressFinder? secondaryAddressFinder}) async {
     if (atClient is! AtClientImpl) {
       throw ArgumentError.value(atClient, 'atClient',
@@ -204,11 +152,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
   }
 
   @override
-  Future<SyncService> syncService(
-      AtClient atClient,
-      @Deprecated('no longer needed. will be removed in a future release')
-      AtClientManager atClientManager,
-      NotificationService notificationService) async {
+  Future<SyncService> syncService(AtClient atClient) async {
     return await SyncServiceImpl.create(atClient);
   }
 

@@ -153,12 +153,7 @@ class NotificationServiceImpl extends NotificationService {
   final StreamController<DroppedNotification> _droppedController =
       StreamController<DroppedNotification>.broadcast();
 
-  /// Emits every notification this service gives up on without delivering
-  /// it, with the reason it logs.
-  ///
-  /// A dropped notification is otherwise indistinguishable to a subscriber
-  /// from one that was never sent. Broadcast, and it does not replay.
-  @visibleForTesting
+  @override
   Stream<DroppedNotification> get droppedEvents => _droppedController.stream;
 
   /// Logs [reason] at `warning` and emits it on [droppedEvents] for [key].
@@ -703,21 +698,11 @@ class NotificationServiceImpl extends NotificationService {
     }
   }
 
-  /// The record's name below the owner, from whichever parameter carried it.
+  /// [name], the record's name below the owner.
   ///
-  /// Throws [ArgumentError] unless exactly one parameter is supplied and the
-  /// name has an interior dot: a name with no namespace has nothing for the
-  /// notification to be encrypted under.
-  static String _requireOneName(String? idAndNamespace, String? namespace) {
-    final name = idAndNamespace ?? namespace;
-    if (idAndNamespace != null && namespace != null) {
-      throw ArgumentError(
-          'Supply idAndNamespace or namespace, not both — they name the same '
-          'value and namespace is the deprecated spelling.');
-    }
-    if (name == null || name.isEmpty) {
-      throw ArgumentError('You must supply idAndNamespace.');
-    }
+  /// Throws [ArgumentError] unless it has an interior dot: a name with no
+  /// namespace has nothing for the notification to be encrypted under.
+  static String _requireDottedName(String name) {
     final dot = name.indexOf('.');
     if (dot <= 0 || dot == name.length - 1) {
       throw ArgumentError(
@@ -732,13 +717,13 @@ class NotificationServiceImpl extends NotificationService {
   @override
   Future<String> send({
     required Atsign to,
-    String? idAndNamespace,
-    @Deprecated('Renamed to idAndNamespace') String? namespace,
+    required String idAndNamespace,
     String body = '',
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     String? cryptoProviderId,
+    String? sealToNamespace,
     DateTime? recipientCacheExpiration,
     bool ephemeral = false,
   }) async {
@@ -750,8 +735,7 @@ class NotificationServiceImpl extends NotificationService {
       throw ArgumentError('An ephemeral notification cannot be cached at the '
           'recipient: caching persists a copy there');
     }
-    // ignore: deprecated_member_use_from_same_package
-    final String name = _requireOneName(idAndNamespace, namespace);
+    final String name = _requireDottedName(idAndNamespace);
     final String key = '$to:$name$atSign';
     final AtKey atKey = AtKey.fromString(key);
     atKey.metadata.namespaceAware = false;
@@ -767,11 +751,16 @@ class NotificationServiceImpl extends NotificationService {
       ..namespace = name.substring(dot + 1);
     final String notifPayload;
     body = body.trim();
+    if (sealToNamespace != null && (body.isEmpty || !shouldEncrypt)) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'applies only to a body that is encrypted');
+    }
     if (body.isNotEmpty && shouldEncrypt) {
       String providerId;
       try {
         providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
             requestedProviderId: cryptoProviderId,
+            sealToNamespace: sealToNamespace,
             useRemoteAtServer: true,
             stampProviderId: false);
       } on NamespaceKeyUnavailableException catch (e) {
@@ -943,27 +932,10 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   void notificationValueValidation(
       NotificationParams notificationParams, NotifyVerbBuilder builder) {
-    // ignore: deprecated_member_use_from_same_package
-    switch (notificationParams.messageType) {
-      case MessageTypeEnum.key:
-        // Since value is not mandatory in AtNotification, perform validation only if
-        // value is not null.
-        if (builder.value != null &&
-            builder.value.length > atClient.getPreferences()!.maxDataSize) {
-          throw BufferOverFlowException(
-              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
-        }
-        break;
-
-      // ignore: deprecated_member_use
-      case MessageTypeEnum.text:
-        // When messageType is text, the "text" to notify is added to the key. Hence validating
-        // the key length
-        if (builder.atKey.key.length > atClient.getPreferences()!.maxDataSize) {
-          throw BufferOverFlowException(
-              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
-        }
-        break;
+    if (builder.value != null &&
+        builder.value.length > atClient.getPreferences()!.maxDataSize) {
+      throw BufferOverFlowException(
+          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
     }
   }
 
@@ -1269,11 +1241,6 @@ class NotificationServiceImpl extends NotificationService {
 /// Holds the subscriber's [StreamController] rather than looking one up at
 /// re-drive time, so a value cannot be handed to a controller other than the
 /// one its subscriber registered.
-/// A notification [NotificationServiceImpl.droppedEvents] reports as given up
-/// on: its key, empty when the frame could not be parsed into one, and the
-/// reason logged for it.
-typedef DroppedNotification = ({String key, String reason});
-
 class _ParkedNotification {
   final AtNotification notification;
   final NotificationConfig config;
