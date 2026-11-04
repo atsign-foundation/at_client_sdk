@@ -316,6 +316,103 @@ void main() {
       expect(sent, isEmpty);
     });
 
+    AtEnrollmentRequest rsaRequest(
+            ({String publicKey, String privateKey}) apkamKeyPair) =>
+        AtEnrollmentRequest(
+            session: session(),
+            appName: 'wavi',
+            deviceName: 'browser',
+            otp: 'ABC123',
+            namespaces: {'wavi': 'rw'},
+            signingAlgo: SigningAlgoType.rsa2048,
+            apkamKeyPair: apkamKeyPair);
+
+    ({String publicKey, String privateKey}) rsaPair() {
+      final kp = RsaKeyPair.generate();
+      return (
+        publicKey: kp.atPublicKey.publicKey.toString(),
+        privateKey: kp.atPrivateKey.privateKey.toString()
+      );
+    }
+
+    test(
+        'given an rsa2048 pair, when it is submitted, then its public key is '
+        'sent, the flat fields keep it and no typed material is filed',
+        () async {
+      final rsa = rsaPair();
+      final (lookUp, sent) = recordingLookUp();
+      final keys = (await AtEnrollmentImpl().submit(rsaRequest(rsa), lookUp))
+          .atAuthKeys!;
+
+      expect(paramsOf(sent.single)['apkamPublicKey'], rsa.publicKey);
+      expect(keys.apkamPublicKey.toString(), rsa.publicKey);
+      expect(keys.apkamPrivateKey.toString(), rsa.privateKey);
+      expect(keys.signingKeysFor(enrollmentId), isEmpty);
+      expect(
+          keys.keysForEnrollment(enrollmentId).where((m) =>
+              m.role == CryptographicMaterialRole.privateAuthentication ||
+              m.role == CryptographicMaterialRole.publicAuthentication),
+          isEmpty);
+    });
+
+    group('given halves of two different keypairs,', () {
+      Future<void> expectRefused(AtEnrollmentRequest Function() request) async {
+        final (lookUp, sent) = recordingLookUp();
+        await expectLater(AtEnrollmentImpl().submit(request(), lookUp),
+            throwsA(isA<AtSigningException>()));
+        expect(sent, isEmpty);
+      }
+
+      test('when mldsa65, then it is refused before sending', () async {
+        final other = await MlDsa65KeyPair.generate();
+        await expectRefused(() => legacyRequest(apkamKeyPair: (
+              publicKey: supplied.publicKey,
+              privateKey: other.atPrivateKey.privateKey
+            )));
+      });
+
+      test('when rsa2048, then it is refused before sending', () async {
+        final a = rsaPair();
+        final b = rsaPair();
+        await expectRefused(() =>
+            rsaRequest((publicKey: a.publicKey, privateKey: b.privateKey)));
+      });
+
+      test('when mldsa65 all-zero bytes, then it is refused', () async {
+        await expectRefused(() => legacyRequest(apkamKeyPair: (
+              publicKey: base64Encode(List<int>.filled(1952, 0)),
+              privateKey: base64Encode(List<int>.filled(4032, 0))
+            )));
+      });
+
+      test('when rsa2048 empty strings, then it is refused', () async {
+        await expectRefused(() => rsaRequest((publicKey: '', privateKey: '')));
+      });
+    });
+
+    test(
+        'given a base64url pair, when it is submitted, then the request and '
+        'the keyfile carry the standard-base64 spelling', () async {
+      final url = (
+        publicKey: base64Url.encode(base64Decode(supplied.publicKey)),
+        privateKey: base64Url.encode(base64Decode(supplied.privateKey))
+      );
+      expect(url.publicKey, isNot(supplied.publicKey),
+          reason: 'the fixture must actually differ in spelling');
+
+      final (lookUp, sent) = recordingLookUp();
+      final keys = (await AtEnrollmentImpl()
+              .submit(legacyRequest(apkamKeyPair: url), lookUp))
+          .atAuthKeys!;
+
+      final params = paramsOf(sent.single);
+      expect(params['apkamPublicKey'], supplied.publicKey);
+      expect(
+          (params['apsk']['keys'] as List).single['pub'], supplied.publicKey);
+      expect(keys.apkamPublicKey.toString(), supplied.publicKey);
+      expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
+    });
+
     (EnrollmentSubmitter, List<SigningAlgoType>) countingSubmitter() {
       final mints = <SigningAlgoType>[];
       return (
