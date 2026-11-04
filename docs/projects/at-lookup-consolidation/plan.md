@@ -467,7 +467,7 @@ Gone, and with them `at_chops` from at_lookup's pubspec: `atChops`,
 | `transport`              | required            | Bundles the socket, listener and connection factories with the `SecureSocketConfig` the static is named for. Required rather than defaulted, so a caller states its transport instead of inheriting one a neighbour configured; a caller wanting the TLS defaults writes `secureSocketTransport(SecureSocketConfig())` and thereby states it. |
 | `onConnect`              | optional            | Run once per new connection, before anything else is sent on it. A proxy fronting many atServers learns which one a connection is for from a `from:` sent first; at_onboarding_cli's `proxyLookUps()` is the site.                                                                              |
 | `authenticator`          | required, nullable  | The whole of auth in one value. `null` means this connection never authenticates — a real mode: `at_status_impl.dart:99` holds no key material at all, and an OTP enroll request routes through `auth: false`.                                              |
-| `clientConfig`           | optional            | at_lookup cannot build one — `AtClientConfig` lives above it. One producer exists, so every hand-built lookup sends a bare `from:@atsign` and the atServer records no client particulars.                                                                    |
+| `clientConfig`           | removed 2026-10-29  | at_lookup cannot build one — `AtClientConfig` lives above it. One producer exists, so every hand-built lookup sends a bare `from:@atsign` and the atServer records no client particulars. ⚠️ Nothing below the authenticator read it, so at_lookup 4.0.0 drops it: `authenticatorFor` takes it and sends it in `from:`. |
 | `secondaryAddressFinder` | optional            | Nominally duplicative with `rootDomain`, but it is the only carrier of the shared atDirectory cache.                                                                                                                                                        |
 
 The other side of the seam, in at_auth, where the key material, the enrollment
@@ -642,7 +642,7 @@ keyfile.
 
 ⛔ **The harness half of this is DISCHARGED, and this section said otherwise
 until 2026-08-27 — while a passage later in this same
-file said the opposite.** It read: *"`tests/at_onboarding_cli_functional_tests` has
+file said the opposite.** It read: *"`tests/at_client_cli_functional_tests` has
 **no `runLocal.sh`**, and its `docker-compose.yaml` defaults to
 `atsigncompany/virtualenv:vip` … So there is no local path to functionally
 verify anything in at_onboarding_cli."* All three clauses are false.
@@ -886,7 +886,7 @@ atServer-side implementation, or the flag's removal from at_commons.
   authenticator*; they went through `AtLookUp.withSecureSocket` and
   `_installAuthenticator` supplied one afterwards where the site needed it,
   and they were not uniform. Verify with
-  `tests/at_onboarding_cli_functional_tests/runLocal.sh` and the proxy pack
+  `tests/at_client_cli_functional_tests/runLocal.sh` and the proxy pack
   beside it.
 - **`at_onboarding_service_impl.onboard` builds its `FileAtKeysIo` without the
   passphrase**, where the read path requires one. That asymmetry is deliberate
@@ -894,7 +894,7 @@ atServer-side implementation, or the flag's removal from at_commons.
   passphrase belongs there too. It was left alone rather than changed as a side
   effect of sharing a helper; the read path's omission was a real bug and is
   fixed.
-- **`check_test_env.dart` in `tests/at_onboarding_cli_functional_tests` is dead
+- **`check_test_env.dart` in `tests/at_client_cli_functional_tests` is dead
   code.** It polls `lookup:publickey@sitaram` until it answers — state only
   pkamLoad creates — so in a suite that deliberately runs without pkamLoad it
   can never pass, and hangs for its five-minute timeout. CI does not call it.

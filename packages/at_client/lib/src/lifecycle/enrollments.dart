@@ -11,7 +11,6 @@ import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
 import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:at_commons/at_commons.dart';
-import 'package:meta/meta.dart' show experimental;
 
 /// A passcode the atServer issued or accepted, and when it stops working;
 /// [expiry] is null when the atServer's own default decides that.
@@ -135,7 +134,6 @@ class Enrollments {
   /// root, [ChainVerdict.unsigned] when none of its active keys has a link,
   /// and otherwise the verdict for a key that fails, which
   /// [ChainResult.kid] names.
-  @experimental
   Future<ChainResult> anchoring(String enrollmentId) => PqSigningChain(_client)
       .verifyChain(AtClientEnvelopeSigner(_client), enrollmentId);
 

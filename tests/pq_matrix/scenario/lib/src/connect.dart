@@ -1,16 +1,3 @@
-// `AtPkamKeyPair` is deprecated in the current at_chops and is what 3.14.0's
-// `AtChopsKeys.create` takes. The shared scenario has to compile against both,
-// so the deprecated spelling is the only one available to it.
-// ignore_for_file: deprecated_member_use
-
-import 'package:at_chops/at_chops.dart'
-    show
-        AESKey,
-        AtChops,
-        AtChopsImpl,
-        AtChopsKeys,
-        AtEncryptionKeyPair,
-        AtPkamKeyPair;
 import 'package:at_client/at_client.dart'
     show AtClient, AtClientManager, AtClientPreference;
 import 'package:at_commons/at_commons.dart' show AtConstants;
@@ -50,26 +37,12 @@ class ClientSpec {
 
 /// How an arm attaches its client to the manager.
 ///
-/// A callback rather than a branch because the current tree's
-/// `setCurrentAtSign` takes an `AtKeysIo` and 3.14.0's does not — and an arm
-/// attached without a key source performs zero post-quantum writes by design.
+/// A callback rather than a branch because each at_client takes a client's
+/// credential differently: this tree's client takes its keys as an
+/// `AtKeysIo` and no `AtChops`, and a released one authenticates a client
+/// with no key source only through an `AtChops`.
 typedef Attach = Future<AtClientManager> Function(
-    ClientSpec spec, AtClientPreference preference, AtChops atChops);
-
-/// The AtChops a demo atSign authenticates with.
-///
-/// The virtualenv's `pkamLoad` installs these atSigns' PKAM public keys, so
-/// this is the key material that atServer already trusts.
-AtChops demoAtChops(String atSign) {
-  final keys = AtChopsKeys.create(
-    AtEncryptionKeyPair.create(
-        encryptionPublicKeyMap[atSign]!, encryptionPrivateKeyMap[atSign]!),
-    AtPkamKeyPair.create(
-        pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!),
-  );
-  keys.selfEncryptionKey = AESKey(aesKeyMap[atSign]!);
-  return AtChopsImpl(keys);
-}
+    ClientSpec spec, AtClientPreference preference);
 
 /// Installs the demo atSign's key material into the local keystore.
 ///
@@ -91,25 +64,16 @@ Future<void> installDemoKeys(AtClient client, String atSign) async {
 
 /// Brings up a client for [spec] under [preference], attached by [attach].
 ///
-/// Its own [AtClientManager] rather than the singleton, whose
-/// `setCurrentAtSign` stops whichever client was current.
+/// Each attach makes its own [AtClientManager] rather than using the
+/// singleton, whose `setCurrentAtSign` in a released at_client stops
+/// whichever client was current.
 Future<AtClient> connect({
   required ClientSpec spec,
   required AtClientPreference preference,
   required Attach attach,
 }) async {
-  final manager = await attach(spec, preference, demoAtChops(spec.atSign));
+  final manager = await attach(spec, preference);
   final client = manager.atClient;
   await installDemoKeys(client, spec.atSign);
   return client;
 }
-
-/// The default attach: what compiles against **both** at_clients.
-///
-/// An arm needing the `AtKeysIo` that 3.14.0 has no parameter for supplies its
-/// own instead.
-Future<AtClientManager> attachWithoutKeySource(
-        ClientSpec spec, AtClientPreference preference, AtChops atChops) =>
-    AtClientManager(spec.atSign)
-        .setCurrentAtSign(spec.atSign, spec.namespace, preference,
-            atChops: atChops);

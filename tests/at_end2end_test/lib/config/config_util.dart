@@ -1,4 +1,4 @@
-import 'package:at_utils/at_utils.dart';
+import 'package:at_utils/at_utils_io.dart';
 import 'package:yaml/yaml.dart';
 
 class ConfigUtil {

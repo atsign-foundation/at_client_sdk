@@ -1,11 +1,8 @@
-// PqStartupGates is @experimental; this pack's PQ files drive that
-// substrate deliberately.
-// ignore_for_file: experimental_member_use
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:crypton/crypton.dart';
@@ -13,7 +10,7 @@ import 'package:crypto/crypto.dart';
 import 'package:at_auth/at_auth.dart'
     show AtAuthSession, AtKeysIo, authenticatorFor;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -151,6 +148,12 @@ class TestUtils {
           authenticator: authenticatorFor(
               InMemoryAtKeysIo.holding(atSign, keys), atSign,
               enrollmentId: enrollmentId));
+
+  /// The atDirectory this pack's atServers are found through, asked over
+  /// TLS, for a client to remember its answers in.
+  static SecondaryAddressFinder get atDirectory =>
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort);
 
   static int get rootServerPort =>
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
@@ -313,12 +316,9 @@ class TestUtils {
         current.getCurrentAtSign() == currentAtSign &&
         atKeysIo == null &&
         !current.isStopped) {
-      AtClientImpl.refuseChangedRolloutAxes(
-          running: current.getPreferences(),
-          asked: preference,
-          cacheKey:
-              AtClientImpl.instanceKey(currentAtSign, current.enrollmentId));
-      // Some other test may have messed with the preferences.
+      // Some other test may have messed with the preferences. setPreferences
+      // refuses a preference whose rollout axes differ from the running
+      // client's.
       current.setPreferences(preference);
       await loader.setEncryptionKeys(current, currentAtSign);
       return manager;
@@ -333,6 +333,8 @@ class TestUtils {
     final client = await Atsign(currentAtSign).open(
         keys: keys,
         preference: preference,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: storage ?? storageFor(currentAtSign));
     manager.use(client);

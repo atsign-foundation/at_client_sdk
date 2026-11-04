@@ -12,7 +12,6 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart'
     show bindKeyPackageToAtKeys;
-import 'package:meta/meta.dart' show experimental;
 
 /// Collects the secrets this enrollment has been sent and files the key
 /// material among them into [keysIo]. Returns how many nskey privates were
@@ -27,7 +26,6 @@ import 'package:meta/meta.dart' show experimental;
 /// `receivedSecrets` after the client is built sees no arrival event for
 /// anything that was already waiting; the secret itself is in the store, where
 /// `waitForSecret` looks first.
-@experimental
 Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
     {NskeyKeyRing? ring}) async {
   final atSign = atClient.getCurrentAtSign();

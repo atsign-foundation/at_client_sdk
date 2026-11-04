@@ -132,6 +132,16 @@ void main() {
             'directly',
         clauses: ['the data is never encapsulated directly to the nskey'],
       );
+      provenIn(
+        'tests/at_functional_test/test/pq_posture_grid_test.dart',
+        'every receiving enrollment that configures the post-quantum providers '
+            'reads what was written',
+        proves: 'against a live atServer, a record sealed to the receiving '
+            'atSign\'s namespace key by another atSign is read by every '
+            'enrollment of it that configures the providers, a non-seeding '
+            'one included, and refused only by the one that configures none',
+        clauses: ['Capability-stage installs read it'],
+      );
     });
   });
 }

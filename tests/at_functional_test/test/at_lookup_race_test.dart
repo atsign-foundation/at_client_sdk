@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:at_lookup/at_lookup_io.dart';
@@ -80,26 +81,31 @@ void main() {
         rootDomain:
             AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
         transport: secureSocketTransport(SecureSocketConfig()),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+            'vip.ve.atsign.zone', TestUtils.rootServerPort),
         authenticator: null);
-    addTearDown(atLookup.close);
+    addTearDown(atLookup.stop);
+    Future<String> lookupPublic(String key) async => VerbUtil.getFormattedValue(
+        (await atLookup.executeVerb(LookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = key
+            ..sharedBy = atSign)
+          ..auth = false))!);
 
     int numRequests = 10;
     List<String> fooGetResponses = [];
     List<String> barGetResponses = [];
     List<String> bazGetResponses = [];
     for (int i = 0; i < numRequests; i++) {
-      atLookup
-          .lookup('$fooKeyKey.$namespace', atSign, auth: false)
+      lookupPublic('$fooKeyKey.$namespace')
           .then((value) => fooGetResponses.add(value.toString()));
       await Future.delayed(Duration(milliseconds: random.nextInt(5) + 3));
 
-      atLookup
-          .lookup('$barKeyKey.$namespace', atSign, auth: false)
+      lookupPublic('$barKeyKey.$namespace')
           .then((value) => barGetResponses.add(value.toString()));
       await Future.delayed(Duration(milliseconds: random.nextInt(5) + 3));
 
-      atLookup
-          .lookup('$bazKeyKey.$namespace', atSign, auth: false)
+      lookupPublic('$bazKeyKey.$namespace')
           .then((value) => bazGetResponses.add(value.toString()));
       await Future.delayed(Duration(milliseconds: random.nextInt(5) + 3));
     }

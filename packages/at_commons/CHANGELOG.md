@@ -1,3 +1,9 @@
+## 5.25.0
+
+- chore: `VerbSyntax.stream` and `Response.isStream` are deprecated:
+  atServers no longer support the stream verb, and both are removed in
+  6.0.0.
+
 ## 5.24.0
 
 - feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
@@ -7,9 +13,6 @@
   `InfoFeature.otpList` (`otp.list`) and `InfoFeature.otpDelete`
   (`otp.delete`) in its `info` features; one that does not refuses them as a
   syntax error.
-- chore: `VerbSyntax.stream` and `Response.isStream` are deprecated:
-  atServers no longer support the stream verb, and both are removed in
-  6.0.0.
 
 ## 5.23.0
 

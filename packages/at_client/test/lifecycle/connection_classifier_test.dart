@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -64,7 +63,7 @@ void main() {
       expectClassified(
           UnAuthenticatedException(deniedText),
           AtConnectionOutcome.refused,
-          AtConnectionCause.enrollmentNotApproved,
+          AtConnectionCause.enrollmentDenied,
           'AT0025 is a denied enrollment');
       expectClassified(
           UnAuthenticatedException(pendingText),
@@ -144,10 +143,10 @@ void main() {
           AtConnectionCause.unreachable,
           'the attempt\'s own budget expiring');
       expectClassified(
-          const SocketException('Connection refused'),
+          AtIOException('WebSocket to atserver.example:443 is closed'),
           AtConnectionOutcome.offline,
           AtConnectionCause.unreachable,
-          'a raw socket failure');
+          'a transport\'s failed write, whatever its message says');
     });
 
     test(
@@ -165,10 +164,35 @@ void main() {
           AtConnectionCause.unreachable,
           'SecondaryConnectException has a code');
       expectClassified(
+          AtLookUpException('AT0004',
+              'Exception: WebSocket to atserver.example:443 is closed'),
+          AtConnectionOutcome.offline,
+          AtConnectionCause.unreachable,
+          'a transport\'s failed write, wrapped by executeVerb');
+      expectClassified(
           AtLookUpException('AT0014', 'Request timed out'),
           AtConnectionOutcome.offline,
           AtConnectionCause.unreachable,
           'an empty response is nothing answering');
+    });
+
+    test('a connection lost during a read or an authentication', () {
+      const lostRead = 'The connection went away before a response arrived';
+      const lostAuthentication = 'The connection this authentication began '
+          'on closed before it finished, so the rest of it is sent on no '
+          'other connection';
+      for (final text in [lostRead, lostAuthentication]) {
+        expectClassified(
+            ConnectionInvalidException(text),
+            AtConnectionOutcome.offline,
+            AtConnectionCause.unreachable,
+            'as pkamAuthenticate and executeCommand raise it');
+        expectClassified(
+            AtLookUpException('AT0004', 'Exception: $text'),
+            AtConnectionOutcome.offline,
+            AtConnectionCause.unreachable,
+            'as executeVerb wraps it, with a socket error\'s code');
+      }
     });
   });
 
@@ -197,6 +221,31 @@ void main() {
       expect(classifyConnectionFailure(AtException('something else')), isNull,
           reason: 'an AtException carrying neither a code nor connectivity '
               'text is not read as either');
+    });
+  });
+
+  group('Given the atServer refuses an enrollment\'s keys', () {
+    String messageFor(AtConnectionCause cause) =>
+        AtCredentialRefusedException('@alice', AtConnectionState.refused(cause))
+            .message;
+
+    test(
+        'when it is not yet approved, then the message says it awaits '
+        'approval', () {
+      expect(messageFor(AtConnectionCause.enrollmentNotApproved),
+          endsWith('; the enrollment awaits approval'));
+    });
+
+    test('when it was denied, then the message says so', () {
+      expect(messageFor(AtConnectionCause.enrollmentDenied),
+          endsWith('; the enrollment was denied'));
+    });
+
+    test('when it is revoked, then the message says neither', () {
+      final message = messageFor(AtConnectionCause.revoked);
+      expect(message, isNot(contains('awaits approval')));
+      expect(message, isNot(contains('was denied')));
+      expect(message, contains('@alice'));
     });
   });
 }

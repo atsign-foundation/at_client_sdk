@@ -110,6 +110,98 @@ void main() {
               'several after a rotation serves the one peers are sealing to');
     });
 
+    test(
+        'a start with a missing kid sends exactly one ask, and a read miss '
+        'inside the wait adds none', () async {
+      final atClient = client();
+      final missAsks = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(atClient,
+          privateFiling: await filing(),
+          fetchConveyance: () async {},
+          requestConveyance: (ns, name) async => missAsks.add((ns, name)))
+        ..askCooldown = Duration.zero;
+      final kid = nskeyKidOf(pair.publicKeyBytes);
+      ring.rememberOwn(
+          atSign,
+          namespace,
+          NskeyAdvertisement.single(
+              publicKey: pair.publicKeyBytes, alg: SecretSharingAlgos.xWing));
+      final sharing = MockPairwiseSecretSharing();
+      when(() => sharing.requestSecretsFromNamespace(any(),
+          names: any(named: 'names'))).thenAnswer((_) async => 1);
+      final waiting = Completer<Secret>();
+      when(() => sharing.waitForSecret(any(), any(),
+          timeout: any(named: 'timeout'))).thenAnswer((_) => waiting.future);
+
+      await NskeySeeding(
+              atClient: atClient, ring: ring, privateFiling: ring.privateFiling)
+          .requestMissingPrivates(sharing);
+      expect(await ring.privateHalf(atSign, namespace, kid), isNull);
+      await pumpEventQueue();
+
+      verify(() => sharing.requestSecretsFromNamespace(namespace,
+          names: any(named: 'names'))).called(1);
+      expect(missAsks, isEmpty,
+          reason: 'the start asked once, and a read miss inside that ask\'s '
+              'wait adds none, though no cooldown holds it back');
+
+      waiting.completeError(TimeoutException('no holder answered'));
+      await pumpEventQueue();
+      expect(await ring.privateHalf(atSign, namespace, kid), isNull);
+      await pumpEventQueue();
+      expect(
+          missAsks, [(namespace, '${NskeyPrivateFiling.secretNamePrefix}$kid')],
+          reason: 'the control: once the wait ends, a read miss asks');
+    });
+
+    test(
+        "a start's ask is the one a write waits on while its answer is "
+        "awaited, and a read miss's ask is not", () async {
+      final atClient = client();
+      final missAsks = <String>[];
+      final ring = PublishedNskeyKeyRing(atClient,
+          privateFiling: await filing(),
+          fetchConveyance: () async {}, requestConveyance: (ns, name) {
+        missAsks.add(name);
+        return Completer<void>().future;
+      })
+        ..askCooldown = Duration.zero;
+      final kid = nskeyKidOf(pair.publicKeyBytes);
+      ring.rememberOwn(
+          atSign,
+          namespace,
+          NskeyAdvertisement.single(
+              publicKey: pair.publicKeyBytes, alg: SecretSharingAlgos.xWing));
+      final sharing = MockPairwiseSecretSharing();
+      when(() => sharing.requestSecretsFromNamespace(any(),
+          names: any(named: 'names'))).thenAnswer((_) async => 1);
+      final waiting = Completer<Secret>();
+      when(() => sharing.waitForSecret(any(), any(),
+          timeout: any(named: 'timeout'))).thenAnswer((_) => waiting.future);
+
+      await NskeySeeding(
+              atClient: atClient, ring: ring, privateFiling: ring.privateFiling)
+          .requestMissingPrivates(sharing);
+      expect(ring, isA<AwaitsStartUpAsk>(),
+          reason: 'how a write finds the ask to wait for');
+      expect(ring.startUpAskFor(namespace, kid), isNotNull,
+          reason: "start-up asked, and its answer is awaited");
+      expect(ring.startUpAskFor(namespace.toUpperCase(), kid), isNotNull,
+          reason: 'the namespace is compared folded');
+
+      waiting.completeError(TimeoutException('no holder answered'));
+      await pumpEventQueue();
+      expect(ring.startUpAskFor(namespace, kid), isNull,
+          reason: 'its wait has ended');
+
+      expect(await ring.privateHalf(atSign, namespace, kid), isNull);
+      await pumpEventQueue();
+      expect(missAsks, ['${NskeyPrivateFiling.secretNamePrefix}$kid'],
+          reason: 'the control: a read miss asked, and that ask is waiting');
+      expect(ring.startUpAskFor(namespace, kid), isNull,
+          reason: "a read miss's ask does not hold a write up");
+    });
+
     test('does not ask when the private is already held', () async {
       final atClient = client();
       final held = await filing();
@@ -478,6 +570,14 @@ void main() {
               'the grant\'s names up conveyed it nothing');
     });
 
+    test('a grant spelt in capitals is conveyed the namespaces it covers',
+        () async {
+      expect(
+          await conveyedFor(
+              const {'SSHNP': 'r'}, ['sshnp', 'dev1.sshnp', 'notsshnp']),
+          unorderedEquals(['sshnp', 'dev1.sshnp']));
+    });
+
     test('a grant is conveyed the namespaces below it, read access included',
         () async {
       expect(
@@ -599,6 +699,11 @@ void main() {
   });
 
   group('the on-miss pull (PublishedNskeyKeyRing)', () {
+    String kid() => nskeyKidOf(pair.publicKeyBytes);
+
+    NskeyAdvertisement advertised() => NskeyAdvertisement.single(
+        publicKey: pair.publicKeyBytes, alg: SecretSharingAlgos.xWing);
+
     test('a miss on an own generation fires the injected ask, once', () async {
       final atClient = client();
       final asked = <(String, String)>[];
@@ -606,13 +711,14 @@ void main() {
         atClient,
         privateFiling: await filing(),
         requestConveyance: (ns, name) async => asked.add((ns, name)),
-      );
+      )..rememberOwn(atSign, namespace, advertised());
 
-      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
-      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      expect(await ring.privateHalf(atSign, namespace, kid()), isNull);
+      expect(await ring.privateHalf(atSign, namespace, kid()), isNull);
       await Future<void>.delayed(Duration.zero);
 
-      expect(asked, [(namespace, '${NskeyPrivateFiling.secretNamePrefix}kid1')],
+      expect(asked,
+          [(namespace, '${NskeyPrivateFiling.secretNamePrefix}${kid()}')],
           reason: 'a synced backlog fails through here in a burst, and N '
               'identical broadcasts buy nothing the first did not');
     });
@@ -624,11 +730,13 @@ void main() {
         atClient,
         privateFiling: await filing(),
         requestConveyance: (ns, name) async => asked.add((ns, name)),
-      )..askCooldown = Duration.zero;
+      )
+        ..askCooldown = Duration.zero
+        ..rememberOwn(atSign, namespace, advertised());
 
-      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      expect(await ring.privateHalf(atSign, namespace, kid()), isNull);
       await Future<void>.delayed(Duration.zero);
-      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      expect(await ring.privateHalf(atSign, namespace, kid()), isNull);
       await Future<void>.delayed(Duration.zero);
 
       expect(asked, hasLength(2),
@@ -644,11 +752,13 @@ void main() {
         atClient,
         privateFiling: await filing(),
         requestConveyance: (ns, name) async => asked.add((ns, name)),
-      )..askCooldown = const Duration(minutes: 10);
+      )
+        ..askCooldown = const Duration(minutes: 10)
+        ..rememberOwn(atSign, namespace, advertised());
 
-      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      expect(await ring.privateHalf(atSign, namespace, kid()), isNull);
       await Future<void>.delayed(Duration.zero);
-      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      expect(await ring.privateHalf(atSign, namespace, kid()), isNull);
       await Future<void>.delayed(Duration.zero);
 
       expect(asked, hasLength(1),
@@ -775,6 +885,9 @@ void main() {
 
     test('a missing private is reported, and not asked for', () async {
       final h = await holding(xWing: false);
+      // NOTE: advertised before the check, so a check that went through the
+      // read path would ask.
+      h.seeding.ring.rememberOwn(atSign, namespace, offering([xWingEntry()]));
 
       expect(
           await h.seeding

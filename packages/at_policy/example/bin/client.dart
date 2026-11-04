@@ -1,21 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_cli_commons/at_cli_commons.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 import 'package:chalkdart/chalk.dart';
 import 'common.dart';
 
 void main(List<String> args) async {
+  final argsParser = CLIBase.createArgsParser()
+    ..addOption('service-atsign',
+        mandatory: true,
+        help: "the atSign of the service this client is using");
   try {
-    var argsParser = CLIBase.argsParser
-      ..addOption('service-atsign',
-          mandatory: true,
-          help: "the atSign of the service this client is using");
-
     var serviceAtsign = argsParser.parse(args)['service-atsign'];
 
-    var atClient = (await CLIBase.fromCommandLineArgs(args)).atClient;
+    var atClient =
+        (await CLIBase.fromCommandLineArgs(args, parser: argsParser)).atClient;
 
     var rpc = AtRpcClient(
         atClient: atClient,
@@ -50,6 +49,6 @@ void main(List<String> args) async {
     }
   } catch (e) {
     print(e);
-    print(CLIBase.argsParser.usage);
+    print(argsParser.usage);
   }
 }

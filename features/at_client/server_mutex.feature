@@ -28,7 +28,15 @@ Feature: Server mutex on AtClient
     When a client of @alice asks for that lock with a ttl of 30 seconds
     Then it gets a lease expiring no later than 30 seconds after it asked
     And the atServer holds the record as immutable with a ttl of 30000 ms
-    And the record's value is the client's enrollment id
+    And the record's value is the client's enrollment id, a colon and a nonce
+      drawn once per isolate
+
+  @race
+  Scenario: Two processes of one enrollment write different lock values
+    Given two isolates, each running a client of @alice under enrollment e-1
+    When each takes a lock
+    Then each lock's value starts with "e-1:"
+    And the two values differ
 
   Scenario: A client is refused while another holds the lock
     Given another client of @alice holds "s1.session_mutexes.sshnp@alice"

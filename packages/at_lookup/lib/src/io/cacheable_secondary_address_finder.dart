@@ -1,0 +1,350 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
+
+import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+import '../cache/atdirectory_answer.dart'
+    show AtDirectoryAnswer, maxAtDirectoryAnswerBytes;
+import '../cache/secondary_address_finder.dart';
+import '../connection/base_connection.dart' show requireOneLine;
+import '../util/lookup_util.dart';
+import '../util/abandonment.dart' show Abandonment;
+import 'secure_socket_util.dart';
+
+/// Finds an atSign's atServer by asking the atDirectory at a root domain and
+/// port, and keeps each answer for an hour, or the duration it is given.
+class CacheableSecondaryAddressFinder implements SecondaryAddressFinder {
+  static const Duration defaultCacheDuration = Duration(hours: 1);
+
+  final Map<String, SecondaryAddressCacheEntry> _map = {};
+  final _logger = AtSignLogger('AtServerAddressCacheImpl');
+
+  final String _rootDomain;
+  final int _rootPort;
+  final Duration _cacheDuration;
+  late SecondaryUrlFinder _secondaryFinder;
+
+  CacheableSecondaryAddressFinder(this._rootDomain, this._rootPort,
+      {Duration? cacheDuration,
+      SecondaryUrlFinder? secondaryFinder,
+      SecureSocketConfig? socketConfig})
+      : _cacheDuration = cacheDuration ?? defaultCacheDuration {
+    _secondaryFinder = secondaryFinder ??
+        SecondaryUrlFinder(_rootDomain, _rootPort, socketConfig: socketConfig);
+  }
+
+  bool cacheContains(String atSign) {
+    return _map.containsKey(stripAtSignFromAtSign(atSign));
+  }
+
+  /// Returns the expiry time of this entry in millisecondsSinceEpoch, or null if this atSign is not in cache
+  int? getCacheExpiryTime(String atSign) {
+    atSign = stripAtSignFromAtSign(atSign);
+    if (_map.containsKey(atSign)) {
+      return _map[atSign]!.expiresAt;
+    } else {
+      return null;
+    }
+  }
+
+  @override
+  Future<SecondaryAddress> findSecondary(String atSign,
+      {Duration? timeout}) async {
+    atSign = stripAtSignFromAtSign(atSign);
+
+    // Convert the timeout into an absolute deadline once, then thread it down so
+    // the retry loop, the connect and the response-wait all share ONE budget.
+    final DateTime deadline = DateTime.now().add(
+        AtNetworkTimeouts.cap(timeout ?? AtNetworkTimeouts.defaultTimeout));
+
+    if (_cacheIsEmptyOrExpired(atSign)) {
+      // _updateCache will either populate the cache, or throw an exception
+      await _updateCache(atSign, _cacheDuration, deadline);
+    }
+    if (_map.containsKey(atSign)) {
+      // should always be true, since _updateCache will throw an exception if it fails
+      return _map[atSign]!.secondaryAddress;
+    } else {
+      // but just in case, we'll throw an exception if it's not
+      throw Exception(
+          "Failed to find atServer address for $atSign in atDirectory, in a theoretically impossible way");
+    }
+  }
+
+  bool _cacheIsEmptyOrExpired(String atSign) {
+    if (_map.containsKey(atSign)) {
+      SecondaryAddressCacheEntry entry = _map[atSign]!;
+      if (entry.expiresAt < DateTime.now().millisecondsSinceEpoch) {
+        // expiresAt is in the past - cache has expired
+        return true;
+      } else {
+        // cache has not yet expired
+        return false;
+      }
+    } else {
+      // cache is empty
+      return true;
+    }
+  }
+
+  static String stripAtSignFromAtSign(String atSign) {
+    if (atSign.startsWith('@')) {
+      atSign = atSign.replaceFirst('@', '');
+    }
+    return atSign;
+  }
+
+  static String getNotFoundExceptionMessage(String atSign) {
+    return 'No entry in atDirectory for $atSign';
+  }
+
+  static String getFailedToLookUpExceptionMessage(String atSign) {
+    return 'Failed attempt to lookup atServer address for $atSign';
+  }
+
+  Future<void> _updateCache(
+      String atSign, Duration cacheFor, DateTime deadline) async {
+    try {
+      String? secondaryUrl =
+          await _secondaryFinder.findSecondaryUrl(atSign, deadline: deadline);
+      if (secondaryUrl == null ||
+          secondaryUrl.isEmpty ||
+          secondaryUrl == 'data:null') {
+        throw SecondaryNotFoundException(getNotFoundExceptionMessage(atSign));
+      }
+      var secondaryInfo = LookUpUtil.getSecondaryInfo(secondaryUrl);
+      String secondaryHost = secondaryInfo[0];
+      int secondaryPort = int.parse(secondaryInfo[1]);
+
+      SecondaryAddress addr = SecondaryAddress(secondaryHost, secondaryPort);
+      _map[atSign] = SecondaryAddressCacheEntry(
+          addr, DateTime.now().add(cacheFor).millisecondsSinceEpoch);
+    } on AtException {
+      rethrow;
+    } on Exception catch (e) {
+      if (Abandonment.current?.isAbandoned ?? false) rethrow;
+      _logger.severe(
+          '${getFailedToLookUpExceptionMessage(atSign)} - ${e.toString()}');
+      throw AtException(e.toString());
+    }
+  }
+}
+
+/// An atServer address [CacheableSecondaryAddressFinder] keeps, and when it
+/// stops being used.
+class SecondaryAddressCacheEntry {
+  final SecondaryAddress secondaryAddress;
+
+  /// milliseconds since epoch
+  final int expiresAt;
+
+  SecondaryAddressCacheEntry(this.secondaryAddress, this.expiresAt);
+}
+
+/// When SecondaryUrlFinder tries to lookup the atServer's address from an
+/// atDirectory, it may encounter intermittent failures for various reasons -
+/// 'network weather', service glitches, etc.
+///
+/// In order to be resilient to such failures, we implement retries.
+///
+/// The static variable [retryDelaysMillis] controls
+/// (a) how many retries are done, and
+/// (b) the delay before each retry
+class SecondaryUrlFinder {
+  final String _rootDomain;
+  final int _rootPort;
+  late final AtLookupSecureSocketFactory _socketFactory;
+  late final SecureSocketConfig _socketConfig;
+
+  SecondaryUrlFinder(this._rootDomain, this._rootPort,
+      {AtLookupSecureSocketFactory? socketFactory,
+      SecureSocketConfig? socketConfig}) {
+    _socketFactory = socketFactory ?? AtLookupSecureSocketFactory();
+    _socketConfig = socketConfig ?? SecureSocketConfig();
+  }
+
+  final _logger = AtSignLogger('AtServerUrlFinder');
+
+  /// Controls
+  /// (a) how many retries are done, and
+  /// (b) the delay before each retry
+  static List<int> retryDelaysMillis = [50, 100, 150, 200];
+
+  Future<String?> findSecondaryUrl(String atSign, {DateTime? deadline}) async {
+    if (_rootDomain.startsWith("proxy:")) {
+      // In order to make it easy for clients to connect to a reverse proxy
+      // instead of doing a root lookup,  we adopt the convention that:
+      // if the rootDomain starts with 'proxy:'
+      // then the secondary domain name will be deemed to be the portion of rootDomain after 'proxy:'
+      // and the secondary port will be deemed to be the rootPort
+      return '${_rootDomain.substring("proxy:".length)}:$_rootPort';
+    }
+    deadline ??= DateTime.now().add(AtNetworkTimeouts.effectiveDefault);
+    String? address;
+    String lastExceptionMsg = '';
+    for (int i = 0; i <= retryDelaysMillis.length; i++) {
+      // Abandon the retry loop once the overall deadline has passed, instead of
+      // always running all attempts (each of which can take seconds).
+      if (!DateTime.now().isBefore(deadline)) {
+        throw AtTimeoutException('AtLookup.findAtServer for $atSign timed out'
+            '${lastExceptionMsg.isEmpty ? '' : ' : $lastExceptionMsg'}');
+      }
+      try {
+        address = await _findSecondary(atSign, deadline);
+        return address;
+      } catch (e) {
+        if (_abandoned) rethrow;
+        lastExceptionMsg = e.toString();
+        if (i < retryDelaysMillis.length) {
+          final delay = Duration(milliseconds: retryDelaysMillis[i]);
+          // Only wait for the backoff if it still fits inside the deadline.
+          if (DateTime.now().add(delay).isBefore(deadline)) {
+            _logger.info('AtLookup.findAtServer for $atSign failed with $e'
+                ' : will retry in ${retryDelaysMillis[i]} milliseconds');
+            await Future.delayed(delay);
+            continue;
+          }
+        }
+        _logger.severe('findAtServer for $atSign : $e');
+        if (e is RootServerConnectivityException) {
+          rethrow;
+        }
+      }
+    }
+    throw AtConnectException('findAtServer for $atSign : $lastExceptionMsg');
+  }
+
+  /// Whether the owner this lookup runs for has closed or stopped, which ends
+  /// it quietly rather than as a failure to retry or report.
+  static bool get _abandoned => Abandonment.current?.isAbandoned ?? false;
+
+  Future<String?> _findSecondary(String atsign, DateTime deadline) async {
+    if (atsign.startsWith('@')) atsign = atsign.replaceFirst('@', '');
+    requireOneLine('$atsign\n');
+    String? response;
+    SecureSocket? socket;
+    try {
+      _logger.finer('findAtServerUrl: received atsign: $atsign');
+      final received = BytesBuilder(copy: false);
+      String? secondary;
+      var ans = false;
+      var prompted = false;
+      AtException? refused;
+
+      // Bound the connect by whatever budget remains before the deadline.
+      final remaining =
+          AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
+      socket = await _socketFactory.createSocket(
+        _rootDomain,
+        '$_rootPort',
+        _socketConfig,
+        timeout: remaining,
+      );
+      _logger.finer('findAtServerUrl: connection to atDirectory established');
+      // listen to the received data event stream
+      // NOTE: the answer is the line after the prompt, collected across
+      // chunks, and taken only as `host:port` or `null`.
+      socket.listen((List<int> event) async {
+        _logger.finest('atDirectory socket listener received: $event');
+        if (ans || refused != null) return;
+        received.add(event);
+        if (received.length > maxAtDirectoryAnswerBytes) {
+          refused = AtException('atDirectory answer for $atsign is longer '
+              'than $maxAtDirectoryAnswerBytes bytes');
+          return;
+        }
+        final text = utf8.decode(received.toBytes(), allowMalformed: true);
+
+        if (!prompted) {
+          if (text.endsWith('@')) {
+            prompted = true;
+            received.clear();
+            socket!.write('$atsign\n');
+            await socket.flush();
+          }
+          return;
+        }
+
+        final end = text.indexOf('\n');
+        if (end < 0) return;
+        final line = text.substring(0, end).replaceAll('@', '').trim();
+        if (line == 'null') {
+          secondary = null;
+          ans = true;
+          return;
+        }
+        try {
+          final address =
+              (AtDirectoryAnswer(atsign)..add(utf8.encode(line))).address;
+          secondary = '${address.host}:${address.port}';
+          ans = true;
+        } on AtException catch (e) {
+          refused = e;
+        }
+      });
+      // Wait for the atDirectory to answer, bounded by the overall deadline
+      // (previously a fixed 30-second busy-wait, ignoring any caller budget).
+      while (DateTime.now().isBefore(deadline)) {
+        await Future.delayed(Duration(milliseconds: 5));
+        if (_abandoned) {
+          throw SocketException(
+              'atDirectory lookup for $atsign abandoned: its owner has closed or '
+              'stopped');
+        }
+        if (refused case final refusal?) throw refusal;
+        if (ans) {
+          response = secondary;
+          socket.write('@exit\n');
+          await socket.flush();
+          socket.destroy();
+          _logger.finer(
+              'findAtServerUrl got answer: $secondary and closing connection');
+          return response;
+        }
+      }
+      // .. and close the socket
+      await socket.flush();
+      socket.destroy();
+      throw AtTimeoutException('AtLookup.findAtServer timed out');
+    } on Exception catch (exception) {
+      if (_abandoned) {
+        socket?.destroy();
+        rethrow;
+      }
+      var msg = 'Connecting to $_rootDomain:$_rootPort : $exception';
+      _logger.severe(msg);
+      if (socket != null) {
+        socket.destroy();
+      }
+      throw RootServerConnectivityException(msg);
+    } catch (exception, stackTrace) {
+      var msg = 'Connecting to $_rootDomain:$_rootPort : $exception';
+      _logger.severe(msg);
+      _logger.severe(stackTrace);
+      if (socket != null) {
+        socket.destroy();
+      }
+      throw RootServerConnectivityException(msg);
+    }
+  }
+}
+
+/// Opens the raw TLS socket [SecondaryUrlFinder] asks the atDirectory over.
+///
+/// Not an [AtTransportFactory]: the atDirectory exchange is a line protocol
+/// this class writes and reads directly, and it carries its
+/// [SecureSocketConfig] per call rather than per factory. It moves to
+/// `at_lookup_io.dart` with the finder it serves.
+class AtLookupSecureSocketFactory {
+  const AtLookupSecureSocketFactory();
+
+  Future<SecureSocket> createSocket(
+      String host, String port, SecureSocketConfig socketConfig,
+      {Duration? timeout}) async {
+    return await SecureSocketUtil.createSecureSocket(host, port, socketConfig,
+        timeout: timeout);
+  }
+}

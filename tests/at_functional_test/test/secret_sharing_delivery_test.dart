@@ -1,6 +1,3 @@
-// The substrate this file exercises is @experimental.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

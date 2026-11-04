@@ -7,6 +7,9 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show pqSigningRootMintLockRecordName;
+import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
@@ -17,6 +20,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/remote_backed_client.dart';
 
 /// A bare [AtClient] mock that shadows the one in `test_utils/mocks.dart`,
 /// whose concrete `getPreferences()` override cannot be stubbed.
@@ -112,8 +116,7 @@ void main() {
                 status: entry.status)
         ])));
     });
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       // NOTE: type-test, never cast to UpdateVerbBuilder — the lock release is
       // a DeleteVerbBuilder, and a cast throws inside the mock where MintLock's
       // catch swallows it, reporting a release that never happened.
@@ -558,8 +561,7 @@ void main() {
               pub: base64Encode(winner.publicKey))
         ])));
     });
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       verbs.add(inv.positionalArguments[0] as VerbBuilder);
       return 'data:1';
     });
@@ -597,8 +599,7 @@ void main() {
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       String? publishedValue;
-      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0] as VerbBuilder;
         if (builder is! UpdateVerbBuilder ||
             builder.atKey.key == pqSigningRootMintLockRecordName) {
@@ -650,8 +651,7 @@ void main() {
         if (reads <= 2) throw KeyNotFoundException('not found');
         throw AtLookUpException('AT0011', 'cannot read');
       });
-      when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((inv) async {
+      when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
         final builder = inv.positionalArguments[0] as VerbBuilder;
         if (builder is! UpdateVerbBuilder ||
             builder.atKey.key == pqSigningRootMintLockRecordName) {
@@ -1559,6 +1559,186 @@ void main() {
           reason: 'resolving privilege costs a round trip to the enrollment '
               'record. Holding the private already settles the question, and '
               'that is the case on essentially every start of every client');
+    });
+  });
+
+  group('Given a fully privileged enrollment that mints the root', () {
+    const full = {'*': 'rw', '__manage': 'rw'};
+    late Map<String, String> remoteData;
+    late List<bool> rootPublishedWhenListed;
+
+    setUp(() {
+      remoteData = {};
+      rootPublishedWhenListed = [];
+      logs.records.clear();
+    });
+
+    /// A client of the atSign over [remoteData].
+    AtClient member(String enrollmentId) => buildRemoteBackedMockClient(
+        atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
+
+    Enrollment approved(String id, Map<String, dynamic> namespaces) =>
+        Enrollment()
+          ..enrollmentId = id
+          ..status = 'approved'
+          ..namespace = namespaces;
+
+    Future<Map<String, dynamic>> listed(String id, {AtClient? holder}) async =>
+        {
+          'enrollmentId': id,
+          'access': 'rw',
+          'metadata': {
+            if (holder != null)
+              'keyPackage': (await AtClientSecretSharing.forClient(holder)
+                      .signedKeyPackagePayload())
+                  .toJson(),
+          },
+        };
+
+    /// The minting client: its atServer writes land in [remoteData], and
+    /// `__manage` lists [roster], noting at each read whether the root record
+    /// was already there.
+    Future<AtClient> minter(
+        {required List<Enrollment> enrollments,
+        required List<Map<String, dynamic>> roster}) async {
+      final atClient = member('minter');
+      final secondary = atClient.getRemoteSecondary()!;
+      when(() => secondary.executeVerb(any(that: isA<UpdateVerbBuilder>())))
+          .thenAnswer((inv) async {
+        final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
+        remoteData['${builder.atKey}'] = '${builder.value}';
+        return 'data:1';
+      });
+      when(() => secondary.executeCommand(
+          any(that: startsWith('enroll:listns:__manage')),
+          auth: any(named: 'auth'))).thenAnswer((_) async {
+        rootPublishedWhenListed.add(
+            remoteData.keys.any((k) => k.contains(PqSigningRoot.recordName)));
+        return 'data:${jsonEncode(roster)}';
+      });
+      final service = MockEnrollmentService();
+      when(() => service.fetchEnrollmentRequests(
+              enrollmentListParams: any(named: 'enrollmentListParams')))
+          .thenAnswer((_) async => enrollments);
+      when(() => atClient.enrollmentService).thenReturn(service);
+      await AtClientSecretSharing.forClient(atClient).register();
+      return atClient;
+    }
+
+    Future<AtClientSecretSharing> registered(AtClient atClient) async {
+      final sharing = AtClientSecretSharing.forClient(atClient);
+      await sharing.register();
+      return sharing;
+    }
+
+    test(
+        'when it publishes, then its private reaches every other fully '
+        'privileged enrollment carrying a verified key package', () async {
+      final e2 = member('e2');
+      final e3 = member('e3');
+      final e5 = member('e5');
+      final e2Sharing = await registered(e2);
+      final e3Sharing = await registered(e3);
+      final e5Sharing = await registered(e5);
+      final e2Listed = await listed('e2', holder: e2);
+      final minting = await minter(enrollments: [
+        approved('minter', full),
+        approved('e2', full),
+        approved('e3', full),
+        approved('e4', full),
+        approved('e5', {'buzz': 'rw', '__manage': 'rw'}),
+      ], roster: [
+        await listed('minter'),
+        e2Listed,
+        // NOTE: e2's package listed under e3, so it names an enrollment that
+        // did not sign it.
+        {...e2Listed, 'enrollmentId': 'e3'},
+        await listed('e4'),
+        await listed('e5', holder: e5),
+      ]);
+      final root = PqSigningRoot(minting, keysIo: minting.atKeysIo);
+
+      expect(await root.mintIfAbsent(isFullyPrivileged: true), isNotNull);
+
+      expect(rootPublishedWhenListed, [true],
+          reason: 'pushed once the root is published, so a receiver finds the '
+              'root its private corresponds to');
+      expect(await e2Sharing.sweepOnce(), greaterThan(0));
+      final received =
+          e2Sharing.secretStore.getSecret('wavi', PqSigningRoot.secretName);
+      expect(received, isNotNull);
+      expect(base64Decode(received!.value),
+          (await root.signingKey(atSign))!.private);
+      expect(await e3Sharing.sweepOnce(), 0,
+          reason: 'a key package that does not verify is conveyed nothing');
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('enrollment e3') && m.contains('did not verify')),
+          hasLength(1));
+      expect(
+          logs.records.where(
+              (r) => r.level != 'INFO' && r.message.contains('enrollment e4')),
+          isEmpty,
+          reason: 'one with no key package is skipped silently');
+      expect(await e5Sharing.sweepOnce(), 0,
+          reason: 'e5 holds `__manage` without `*`, so it is not fully '
+              'privileged — the control that the roster is filtered');
+    });
+
+    test(
+        'when the push to one enrollment fails, then the mint succeeds and the '
+        'others still receive it', () async {
+      final e2 = member('e2');
+      final e6 = member('e6');
+      final e2Sharing = await registered(e2);
+      final e6Package = await AtClientSecretSharing.forClient(e6).register();
+      final minting = await minter(enrollments: [
+        approved('minter', full),
+        approved('e2', full),
+        approved('e6', full),
+      ], roster: [
+        await listed('minter'),
+        await listed('e6', holder: e6),
+        await listed('e2', holder: e2),
+      ]);
+      final toE6 = EnvelopeAddressing.fragmentFor(e6Package.keys.first.kid);
+      when(() => minting.put(
+              any(that: predicate<AtKey>((k) => '$k'.contains(toE6))), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(AtLookUpException('AT0011', 'connection closed'));
+
+      expect(
+          await PqSigningRoot(minting, keysIo: minting.atKeysIo)
+              .mintIfAbsent(isFullyPrivileged: true),
+          isNotNull);
+
+      expect(
+          logs.at('WARNING').where((m) =>
+              m.contains('Could not push the signing root private') &&
+              m.contains('enrollment e6')),
+          hasLength(1));
+      expect(await e2Sharing.sweepOnce(), greaterThan(0));
+      expect(e2Sharing.secretStore.getSecret('wavi', PqSigningRoot.secretName),
+          isNotNull,
+          reason: 'e2 is listed after e6, so one failure stops no other');
+    });
+
+    test(
+        'when this client names no namespace, then nothing is pushed and it '
+        'says so', () async {
+      final minting = await minter(
+          enrollments: [approved('minter', full)],
+          roster: [await listed('minter')]);
+      minting.getPreferences()!.namespace = null;
+
+      expect(
+          await PqSigningRoot(minting, keysIo: minting.atKeysIo)
+              .mintIfAbsent(isFullyPrivileged: true),
+          isNotNull);
+
+      expect(rootPublishedWhenListed, isEmpty);
+      expect(logs.at('WARNING').where((m) => m.contains('names no namespace')),
+          hasLength(1));
     });
   });
 }

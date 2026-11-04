@@ -10,7 +10,6 @@ class TestUtil {
   static AtClientPreference getPreferenceLocal() {
     var preference = AtClientPreference();
     preference.hiveStoragePath = 'hive/client';
-    preference.commitLogPath = 'hive/client/commit';
     preference.rootDomain = 'test.do-sf2.atsign.zone';
     return preference;
   }
@@ -18,7 +17,6 @@ class TestUtil {
   static AtClientPreference getAlicePreference() {
     var preference = AtClientPreference();
     preference.hiveStoragePath = '/home/murali/work/2020/hive/client';
-    preference.commitLogPath = '/home/murali/work/2020/hive/client/commit';
     preference.rootDomain = 'vip.ve.atsign.zone';
     return preference;
   }
@@ -26,7 +24,6 @@ class TestUtil {
   static AtClientPreference getBobPreference() {
     var preference = AtClientPreference();
     preference.hiveStoragePath = '/home/murali/work/2020/hive/client';
-    preference.commitLogPath = '/home/murali/work/2020/hive/client/commit';
     preference.rootDomain = 'vip.ve.atsign.zone';
     return preference;
   }

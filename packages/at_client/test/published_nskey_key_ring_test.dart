@@ -986,6 +986,61 @@ void main() {
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
           throwsA(isA<AtSigningVerificationException>()));
     });
+
+    group('at this atSign\'s own address', () {
+      Future<Object?> ownRecord(MockAtClient atClient) =>
+          PublishedNskeyKeyRing(atClient).publishedRecord(alice, namespace);
+
+      test('a record that does not verify reads as unpublished', () async {
+        expect(await ownRecord(client(payload: 'not json at all').atClient),
+            isNull,
+            reason: 'what reads as unpublished is what a mint may replace');
+      });
+
+      test('so does JSON that is not an object', () async {
+        expect(await ownRecord(client(payload: '[1, 2, 3]').atClient), isNull);
+      });
+
+      test('so does one whose signer publishes no _apsk', () async {
+        final c = client(
+            payload: await signedPayloadFor(bobKey),
+            apskFailure: () => AtKeyNotFoundException('no _apsk here'));
+
+        expect(await ownRecord(c.atClient), isNull);
+      });
+
+      test(
+          'a failure fetching its signer\'s _apsk is thrown, not read as '
+          'unpublished', () async {
+        final c = client(
+            payload: await signedPayloadFor(bobKey),
+            apskFailure: () =>
+                SecondaryConnectException('atServer unreachable'));
+
+        await expectLater(
+            ownRecord(c.atClient), throwsA(isA<SecondaryConnectException>()),
+            reason: 'a record whose signature could not be checked is left as '
+                'it is');
+      });
+
+      test(
+          'one that verifies and names nothing this build can encapsulate to '
+          'is thrown, not read as unpublished', () async {
+        final payload = advertisementPayload(bobKey);
+        (payload['keys'] as List)
+          ..clear()
+          ..add(unusableEntry());
+        final c = client(
+            payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+                type: EnvelopeType.nskeyRing));
+
+        await expectLater(
+            ownRecord(c.atClient),
+            throwsA(isA<AtSigningVerificationException>().having(
+                (e) => '$e', 'message', contains('cannot encapsulate to'))),
+            reason: 'an advertisement this build cannot use is left as it is');
+      });
+    });
   });
 }
 

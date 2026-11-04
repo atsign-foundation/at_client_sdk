@@ -14,6 +14,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -24,6 +25,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 class _MockAtClient extends Mock implements AtClient {
   _MockAtClient(this._preference);
@@ -79,7 +81,9 @@ void main() {
     when(() => atClient.syncService).thenReturn(syncService);
 
     local = LocalSecondary(atClient,
-        keyStore: bundle.keyValueStore, onEvent: (_) {});
+        syncQueue: memorySyncQueue(),
+        keyStore: bundle.keyValueStore,
+        onEvent: (_) {});
     local.enrollment = Enrollment()..namespace = {'*': 'rw'};
     when(() => atClient.getLocalSecondary()).thenReturn(local);
     // lastReceivedServerCommitId; also read by _getLocalCommitId.
@@ -87,9 +91,7 @@ void main() {
         .thenAnswer((_) async => AtValue()..value = '7');
 
     service = await SyncServiceImpl.create(atClient,
-        atClientManager: MockAtClientManager(),
-        remoteSecondary: remote,
-        warmStartSync: false) as SyncServiceImpl;
+        remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
 
     // The stats fetch _isInSync opens every round with.
     when(() => remote.executeVerb(any()))
@@ -112,11 +114,9 @@ void main() {
   test('a delete landing mid-push survives the push round and syncs next',
       () async {
     final key = testKey();
-    await local.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = key
-          ..value = 'v1',
-        sync: true);
+    await local.executeVerb(UpdateVerbBuilder()
+      ..atKey = key
+      ..value = 'v1');
     final queued = await local.readSyncQueueEntry(key.toString());
     expect(queued!.op, SyncQueueOp.updateAll,
         reason: 'precondition: the update is what the round will push');
@@ -131,8 +131,7 @@ void main() {
         raced = true;
         // The race, made deterministic: the batch is "on the wire" and a
         // local delete replaces the queue entry before the response lands.
-        await local.executeVerb(DeleteVerbBuilder()..atKey = testKey(),
-            sync: true);
+        await local.executeVerb(DeleteVerbBuilder()..atKey = testKey());
       }
       // The server accepts what the batch carried. data "7" so the cached
       // server commit id does not advance past the stubbed pull cursor.
@@ -173,11 +172,9 @@ void main() {
   /// flight.
   Future<void> pushOnce(String response,
       {Future<void> Function()? duringBatch}) async {
-    await local.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = testKey()
-          ..value = 'v1',
-        sync: true);
+    await local.executeVerb(UpdateVerbBuilder()
+      ..atKey = testKey()
+      ..value = 'v1');
     var batches = 0;
     when(() =>
             remote.executeCommand(any(that: startsWith('batch:')), auth: true))
@@ -197,11 +194,9 @@ void main() {
 
   test('a write landing mid-push is not warned about', () async {
     await pushOnce('data:[{"id":1,"response":{"data":"7"}}]',
-        duringBatch: () async => local.executeVerb(
-            UpdateVerbBuilder()
-              ..atKey = testKey()
-              ..value = 'v2',
-            sync: true));
+        duringBatch: () async => local.executeVerb(UpdateVerbBuilder()
+          ..atKey = testKey()
+          ..value = 'v2'));
 
     expect(await local.readSyncQueueEntry(testKey().toString()), isNotNull,
         reason: 'the premise: the newer write is still queued after the '
@@ -213,7 +208,7 @@ void main() {
 
   test('a batch the atServer refuses is still warned about', () async {
     await pushOnce('data:[{"id":1,"response":'
-        '{"error_code":"AT0003","error_message":"refused"}}]');
+        '{"error_code":"AT0002","error_message":"refused"}}]');
 
     expect(logs.at('WARNING').where((m) => m.contains('in-batch')), isNotEmpty,
         reason: 'nothing in the batch reached the atServer, and the round '

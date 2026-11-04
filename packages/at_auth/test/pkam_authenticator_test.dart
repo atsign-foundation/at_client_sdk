@@ -11,7 +11,6 @@ void main() {
     late PkamAuthenticator pkamAuthenticator;
     late MockAtLookup mockAtLookup;
     final String atSign = '@alice';
-    final String testEnrollmentId = 'testEnrollmentId';
 
     setUp(() {
       mockAtLookup = MockAtLookup();
@@ -19,30 +18,20 @@ void main() {
     });
 
     test('authenticate() should return a successful AtAuthResponse', () async {
-      when(() => mockAtLookup.pkamAuthenticate(enrollmentId: testEnrollmentId))
-          .thenAnswer((_) async => true);
+      when(() => mockAtLookup.pkamAuthenticate()).thenAnswer((_) async => true);
 
-      final result = await pkamAuthenticator.authenticate(
-        atSign,
-        mockAtLookup,
-        enrollmentId: testEnrollmentId,
-      );
+      final result = await pkamAuthenticator.authenticate(atSign, mockAtLookup);
 
       expect(result, isTrue);
     });
 
     test('authenticate() should throw UnAuthenticatedException on failure',
         () async {
-      when(() => mockAtLookup.pkamAuthenticate(
-              enrollmentId: AtConstants.enrollmentId))
+      when(() => mockAtLookup.pkamAuthenticate())
           .thenThrow(UnAuthenticatedException('Unauthenticated'));
 
       expect(
-          () async => await pkamAuthenticator.authenticate(
-                atSign,
-                mockAtLookup,
-                enrollmentId: AtConstants.enrollmentId,
-              ),
+          () async => await pkamAuthenticator.authenticate(atSign, mockAtLookup),
           throwsA(isA<UnAuthenticatedException>()));
     });
   });

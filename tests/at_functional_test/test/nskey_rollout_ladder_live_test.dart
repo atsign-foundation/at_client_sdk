@@ -1,7 +1,3 @@
-// The nskey substrate and the enrollment key-package surface are
-// @experimental; driving them is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -130,6 +126,31 @@ void main() {
     final old = await enrol('ladder-old',
         mints: const [SecretSharingAlgos.xWing],
         sealsTo: const [SecretSharingAlgos.xWing]);
+    expect(old.client.getPreferences()?.keyEstablishmentAlgorithms,
+        const [SecretSharingAlgos.xWing],
+        reason: 'the older install must really be the older build, or the add '
+            'below has nothing to add and this row passes for that');
+    await AtClientSecretSharing.forClient(old.client).register();
+
+    final oldRing = PublishedNskeyKeyRing(old.client,
+        lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero);
+    final oldSeeding = NskeySeeding(
+        atClient: old.client,
+        ring: oldRing,
+        sharing: AtClientSecretSharing.forClient(old.client),
+        privateFiling: oldRing.privateFiling);
+    await oldSeeding.seedNamespace(atSign, namespace);
+    final before = await oldRing.publishedAdvertisement(atSign, namespace);
+    expect(before, isNotNull,
+        reason: 'without a generation there is nothing '
+            'for the rollout-1 install to add to');
+    expect(before!.keys.map((k) => k.alg).toSet(), {SecretSharingAlgos.xWing},
+        reason: 'the older build can fill exactly one slot, which is what '
+            'leaves the generation short of what the newer one mints');
+    final sharedKid = before.keys.single.kid;
+
+    // NOTE: enrolled after the mint, so it is not on the roster the mint
+    // conveyed to and holds nothing of the shared generation until it asks.
     // Rollout 1 is exactly this pairing: the receive capability moves, the send
     // posture does not.
     final rolled = await enrol('ladder-new',
@@ -142,14 +163,9 @@ void main() {
     // single build twice.
     expect(rolled.enrollmentId, isNot(old.enrollmentId));
     expect(identical(rolled.client, old.client), isFalse);
-    expect(old.client.getPreferences()?.keyEstablishmentAlgorithms,
-        const [SecretSharingAlgos.xWing],
-        reason: 'the older install must really be the older build, or the add '
-            'below has nothing to add and this row passes for that');
     expect(rolled.client.getPreferences()?.keyEstablishmentAlgorithms,
         const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 
-    await AtClientSecretSharing.forClient(old.client).register();
     await AtClientSecretSharing.forClient(rolled.client).register();
 
     // NOTE: by hand, because [handDrivenConveyance] turns off the startup step
@@ -170,29 +186,15 @@ void main() {
       AtClientSecretSharing.forClient(rolled.client).stopListening();
     });
 
-    final oldRing =
-        PublishedNskeyKeyRing(old.client, lockTtl: liveMintLockTtl);
-    final oldSeeding = NskeySeeding(
-        atClient: old.client,
-        ring: oldRing,
-        privateFiling: oldRing.privateFiling);
-    await oldSeeding.seedNamespace(atSign, namespace);
-    final before = await oldRing.publishedAdvertisement(atSign, namespace);
-    expect(before, isNotNull,
-        reason: 'without a generation there is nothing '
-            'for the rollout-1 install to add to');
-    expect(before!.keys.map((k) => k.alg).toSet(), {SecretSharingAlgos.xWing},
-        reason: 'the older build can fill exactly one slot, which is what '
-            'leaves the generation short of what the newer one mints');
-    final sharedKid = before.keys.single.kid;
-
     // NOTE: nothing releases a mint lock but expiry, so the add below is
     // refused inside the window.
     await waitOutMintLock();
 
     await NskeySeeding(
             atClient: rolled.client,
-            ring: PublishedNskeyKeyRing(rolled.client, lockTtl: liveMintLockTtl))
+            ring: PublishedNskeyKeyRing(rolled.client,
+                lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
+            sharing: AtClientSecretSharing.forClient(rolled.client))
         .seedNamespace(atSign, namespace);
 
     final after = await PublishedNskeyKeyRing(approver)

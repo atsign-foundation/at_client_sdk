@@ -13,21 +13,18 @@ import 'test_utils.dart';
 /// The nskey mint interlock, watched on the wire against a live atServer.
 ///
 /// The atServer's refusal of a second create of `_nskeylock.<ns>@<atSign>` is
-/// the lock; a client that meets a lock held by another enrollment with
-/// nothing published refuses to mint rather than publishing a second
-/// generation over whatever the holder is about to write.
+/// the lock; a client that meets a lock it did not take, with nothing
+/// published, refuses to mint rather than publishing a second generation over
+/// whatever the holder is about to write.
 ///
 /// ⚠️ **Run-unique namespace, and every lock is deleted in a `finally`.** The
 /// lock is an immutable record with a two-minute ttl that nothing releases, so
 /// a leftover blocks minting for that namespace on this atSign for the rest of
 /// the run — and against a shared namespace it would block every other file.
 ///
-/// ⚠️ **The other holder is simulated by the lock's VALUE, not by a second
-/// enrollment.** `MintLock` decides whether a lock is its own by comparing the
-/// record's value against its own holder id, and `mintAndPublish` passes
-/// `ownLockIsNotContention: true` so an enrollment re-entering its own
-/// cooldown adopts rather than failing. Writing a foreign holder id is what
-/// puts this client on the loser path.
+/// ⚠️ **The other holder is simulated by writing the lock directly, not by a
+/// second client.** `MintLock` never reads the lock's value: any lock this
+/// client did not take in the call refuses it, whatever the value says.
 void main() {
   TestUtils.isolateStorage('nskey_mint_lock_live_test');
   late AtClient atClient;
@@ -93,9 +90,8 @@ void main() {
 
   test('two CONCURRENT mints by one enrolment publish one advertisement',
       () async {
-    // The width-2 case: the lock's holder token is the enrolment id, an
-    // identity rather than an instance, so two racers of the SAME enrolment
-    // both read it back, both see their own id, and both conclude they hold it.
+    // The width-2 case on one ring: the second caller waits for the first's
+    // mint and adopts what it published.
     //
     // NOTE: this must run against a live atServer — a unit fixture accepts
     // every lock write, so the refusal that triggers this never happens there.
@@ -172,5 +168,42 @@ void main() {
     expect(minted.nskeyKid, isNotEmpty);
     expect(await ring.publishedAdvertisement(atSign, namespace), isNotNull);
     await release();
+  }, timeout: Timeout(Duration(minutes: 3)));
+
+  test(
+      'a client that meets a lock naming its own enrollment refuses to mint '
+      'too', () async {
+    // A lock another process of this enrollment holds, written as a release
+    // that names the holder by its enrollment id alone would write it.
+    final ownNs = 'mintown${DateTime.now().microsecondsSinceEpoch}';
+    final ownLock =
+        nskeyMintLockKey(atSign, ownNs, ttl: const Duration(minutes: 2));
+    Future<void> releaseOwn() async =>
+        atClient.getRemoteSecondary()!.executeVerb(DeleteVerbBuilder()
+          ..atKey = ownLock
+          ..force = true);
+    await releaseOwn();
+    final ring = PublishedNskeyKeyRing(atClient);
+    expect(await ring.publishedAdvertisement(atSign, ownNs), isNull,
+        reason: 'the precondition: nothing is published, so a client that '
+            'took this lock for its own would mint');
+
+    await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+      ..atKey = ownLock
+      ..value =
+          atClient.enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
+    try {
+      await expectLater(
+          ring.mintAndPublish(ownNs),
+          throwsA(predicate((e) =>
+              e is StateError &&
+              '$e'.contains('has published no advertisement yet'))),
+          reason: 'every refusal is contention, whichever client took the '
+              'lock, so a second process of this enrollment mints nothing '
+              'while the first holds it');
+      expect(await ring.publishedAdvertisement(atSign, ownNs), isNull);
+    } finally {
+      await releaseOwn();
+    }
   }, timeout: Timeout(Duration(minutes: 3)));
 }

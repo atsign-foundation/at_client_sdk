@@ -1,7 +1,3 @@
-// The substrate and the signing root are @experimental; driving them is the
-// point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -22,7 +18,7 @@ import 'test_utils.dart';
 /// The full round trip — seeker asks, holder answers, private reaches the
 /// keyfile — is not driven here, because it needs two principals and this
 /// file has one: a seeker that lacks the root and a holder that has it. The
-/// atSign's own credential, which is what this file authenticates with, does
+/// primary enrollment, which is what this file authenticates with, does
 /// not ask for a root, since it advertises no key package for a holder to
 /// seal the answer to.
 /// `signing_root_pull_two_enrollments_test.dart` drives the round trip between

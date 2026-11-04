@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/base64_field.dart';
-import 'package:at_auth/src/keys/serialization/json_text.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -180,12 +179,10 @@ class AtKeysPassphraseEnvelopeCodec {
       try {
         decodedJson = jsonDecode(plaintext);
       } on FormatException catch (e) {
-        throw AtKeysParseException(
-            notValidJson('the decrypted atKeys file', e));
+        throw AtKeysFormatException.notJson('the decrypted atKeys file', e);
       }
       if (decodedJson is! Map<String, dynamic>) {
-        throw AtKeysParseException(
-            'Expected decrypted atKeys file to contain a JSON object');
+        throw AtKeysFormatException.notAnObject('the decrypted atKeys file');
       }
       return decodedJson;
     } catch (e) {

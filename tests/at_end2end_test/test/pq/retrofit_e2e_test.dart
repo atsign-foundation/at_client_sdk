@@ -1,7 +1,3 @@
-// The retrofit, signing-root and substrate surfaces are @experimental;
-// driving them end-to-end is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -9,7 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
@@ -17,6 +13,7 @@ import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:test/test.dart';
 
 /// UC-B1.1 / B1.2 / B1.3 — the retrofit scenarios, end to end, with the
@@ -130,7 +127,9 @@ void main() {
     final rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
         ConfigUtil.getYaml()['root_server']['port'] ?? 64);
     final enrollmentId = await Atsign(atSign)
-        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestPreferences.atDirectory);
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
@@ -189,6 +188,8 @@ void main() {
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
     );
     privileged = client;
     privilegedKeysIo = session.atKeysIo;
@@ -197,8 +198,12 @@ void main() {
     // The connection's id is written from the client's at every rebuild, and
     // every reader of "which enrollment am I" now asks the client. This is the
     // moment the two could have parted, so it is the moment they are compared.
-    // ignore: deprecated_member_use
-    expect(client.getRemoteSecondary()!.atLookUp.enrollmentId,
+    final retrofittedMetaData =
+        client.getRemoteSecondary()!.atLookUp.connection?.getMetaData();
+    expect(retrofittedMetaData, isNotNull,
+        reason: 'the retrofit must leave a live, authenticated connection '
+            'behind, or the comparison below is vacuous');
+    expect(retrofittedMetaData?.authenticatedAsEnrollmentId,
         client.enrollmentId,
         reason: 'the retrofitted connection must authenticate as the '
             'enrollment the client says it is');
@@ -270,6 +275,8 @@ void main() {
       appName: 'rf-e1',
       deviceName: 'rf-e1-$runId',
       namespaces: {'*': 'rw', '__manage': 'rw'},
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
     );
 
     expect(clone.enrollmentId, isNotNull);
@@ -381,16 +388,37 @@ void main() {
           session: await legacySession('e2'),
           preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
               posture: PqPosture.legacy, device: 'rf-e2-esc-$runId'),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestPreferences.atDirectory,
           storage: TestPreferences.getInstance()
               .storageForCoLocatedClient(atSign, device: 'rf-e2-esc-$runId'),
           appName: 'rf-e2',
           deviceName: 'rf-e2-esc-$runId',
           namespaces: {'*': 'rw', '__manage': 'rw'},
         ),
-        throwsA(anything),
-        reason: 'without this refusal any scoped keyfile could self-spawn a '
-            'fully privileged enrollment, and the retrofit would be a '
-            'privilege-escalation verb rather than an upgrade');
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0009')),
+        reason: 'a retrofit carries exactly the grants of the enrollment it '
+            'replaces, so the atServer refuses, as unauthorised, one that a '
+            'scoped enrollment submits asking for * and __manage');
+
+    final listedAfter = await owner.enrollmentService!.fetchEnrollmentRequests(
+        enrollmentListParams: EnrollmentListRequestParam());
+    expect(
+        listedAfter.where(
+            (e) => e.deviceName == 'rf-e2-$runId' && e.appName == 'rf-e2'),
+        isNotEmpty,
+        reason: 'the control: the listing holds the legacy enrollment this '
+            'row minted, so an absence below is read from a listing that '
+            'reaches this row\'s enrollments');
+    expect(
+        listedAfter.where((e) =>
+            e.deviceName == 'rf-e2-esc-$runId' &&
+            ((e.namespace?.containsKey('*') ?? false) ||
+                (e.namespace?.containsKey('__manage') ?? false))),
+        isEmpty,
+        reason: 'the refused retrofit leaves no enrollment, in any status, '
+            'holding * or __manage');
 
     final session = await legacySession('e2');
     final scoped = await selfRetrofit(
@@ -399,6 +427,8 @@ void main() {
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'rf-e2-$runId'),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
       storage: TestPreferences.getInstance()
           .storageForCoLocatedClient(atSign, device: 'rf-e2-$runId'),
       appName: 'rf-e2',

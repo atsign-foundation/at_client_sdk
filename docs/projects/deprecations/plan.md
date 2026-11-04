@@ -61,8 +61,8 @@ symbols beside them are the addresses.
 `dart analyze --fatal-infos lib test` exits 0 in every Dart member of the
 workspace, `flutter analyze` reports no `deprecated_member_use` in
 at_client_flutter, and the 4 live packs (`tests/at_functional_test`,
-`tests/at_end2end_test`, `tests/at_onboarding_cli_functional_tests` and
-`tests/at_onboarding_cli_functional_tests_proxy`) are green.
+`tests/at_end2end_test`, `tests/at_client_cli_functional_tests` and
+`tests/at_client_cli_functional_tests_proxy`) are green.
 
 The workspace is the 17 members the root `pubspec.yaml` lists: 12 packages,
 the 4 live packs and `tools/wasm_shakedown`. On 2026-09-14 every one of
@@ -109,7 +109,7 @@ copy, so it is the one that has to end up showing the right thing.
 | at_client_flutter                   | 2.0.0-rc1       |   0 |    0 |
 | tests/at_functional_test            | (unpublished)   |   0 |    0 |
 | tests/at_end2end_test               | (unpublished)   |   0 |    0 |
-| tests/at_onboarding_cli_functional_tests | (unpublished) | 0 |    0 |
+| tests/at_client_cli_functional_tests | (unpublished) | 0 |    0 |
 | at_contact                          | (see pubspec)   |   0 |    0 |
 
 41 uses on 2026-09-13, from 1403 when this plan was written and 785 when
@@ -244,7 +244,9 @@ deletable now.
 
 `isLocalStoreRequired` (*"LocalStore is always required"*), `hiveStoragePath`
 (*"Supply an `AtClientStorage` instead"*) and `commitLogPath` (*"Nothing reads
-this; the client is commit-log-free"*), all removed in the next major. Visible
+this; the client is commit-log-free"*). 4.0 removes `isLocalStoreRequired` and
+`commitLogPath`; `hiveStoragePath` stays, deprecated, until 5.0, since
+at_client_flutter's dialogs still read it when given no storage. Visible
 to the analyzer only outside at_client: 12 in `tests/at_functional_test`, 7 in
 `tests/at_end2end_test`, 4 in at_contact's `test_util.dart` and 1 in
 at_client_flutter. Inside at_client the analyzer is silent, and 30 of its
@@ -270,8 +272,8 @@ secret; nothing has read it since 3.0.5 (2021-11-15).
 `decryptPackets`, `tlsKeysSavePath` and `pathToCerts`, all *"The transport is
 the AtLookUpFactory's to configure"*, all removed in 4.0. They arrived
 deprecated with the third leg of the platform bundle: `Atsign.open`,
-`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`, `buildAtClient`
-and `AtServiceFactory.atClient` take `lookUps:`, an at_lookup
+`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs` and `buildAtClient`
+take `lookUps:` (as `AtServiceFactory.atClient` did until 4.0 removed it), an at_lookup
 `AtLookUpFactory`, and the replacement is
 `secureSocketLookUps(config: SecureSocketConfig(...))`. The default factory
 reads the three fields until they go, so a 3.x app sees no change, and every
@@ -811,8 +813,8 @@ rather than ignored: it is the bridge step 6 replaces with the keyfile.
 at_onboarding_cli's `lib` goes 33 to 34 for it (`dart analyze` in
 `packages/at_onboarding_cli`, counted by path): the ladder read gone, the
 bridge counted. Both CLI packs re-ran green with it — `./runLocal.sh 47000`
-in `tests/at_onboarding_cli_functional_tests`: +21; `./runLocal.sh 48000` in
-`tests/at_onboarding_cli_functional_tests_proxy`: +4 — so all four live packs
+in `tests/at_client_cli_functional_tests`: +21; `./runLocal.sh 48000` in
+`tests/at_client_cli_functional_tests_proxy`: +4 — so all four live packs
 have run green on this tree, on `at_virtual_env:local`. The ladder fields on the lookup are still written, as
 step 5's ruling on `remote_secondary.dart` says. `AtClient.atChops` is
 `@Deprecated`, getter and setter, with the replacement in the text. at_client's

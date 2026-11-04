@@ -1,7 +1,3 @@
-// The enrollment key-package surface is @experimental; driving it is how each
-// cell gets an enrollment of its own.
-// ignore_for_file: experimental_member_use
-
 @Timeout(Duration(minutes: 25))
 @Tags(['pq'])
 library;
@@ -10,12 +6,15 @@ import 'dart:async' show Completer;
 import 'dart:convert' show jsonDecode;
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 // ignore: implementation_imports
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;
+// ignore: implementation_imports
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 // ignore: implementation_imports
 import 'package:at_client/src/service/notification_service_impl.dart'
     show NotificationServiceImpl;
@@ -27,7 +26,7 @@ import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart'
-    show EnrolledClient, enrolAndAuthenticate;
+    show ApprovedEnrollment, EnrolledClient, enrolAndApprove;
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -210,7 +209,9 @@ void main() {
         preference: preferenceFor(slug(atSign), atSign,
             role: 'approver', posture: legacyPlusPqProviders),
         namespace: namespace,
-        storage: TestUtils.storageFor(atSign));
+        storage: TestUtils.storageFor(atSign),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory);
     await loader.setEncryptionKeys(approver, atSign);
     await AtClientSecretSharing.forClient(approver).register();
     approvers[atSign] = approver;
@@ -239,24 +240,27 @@ void main() {
   }
 
   setUpAll(() async {
+    // NOTE: every cell is approved before any client opens, and the cells
+    // that seed open last, after the others have finished starting and so
+    // registered their key packages. The first client to mint then finds
+    // every cell on the roster and conveys to each before it publishes.
+    final approved = <String, ApprovedEnrollment>{};
     for (final entry in cellSpec.entries) {
       final name = entry.key;
       final spec = entry.value;
       // The approver rides the first authorised namespace: the conveyance path
       // is namespace-scoped, and this is where the enrollee's package lands.
       final approverNamespace = spec.namespaces.keys.first;
-      stdout.writeln('##GRID## building $name on ${spec.atSign} '
+      stdout.writeln('##GRID## approving $name on ${spec.atSign} '
           'in ${spec.namespaces.keys.join("+")}');
       final approver = await approverFor(spec.atSign, approverNamespace);
       final keysIo = InMemoryAtKeysIo();
       await keysIo.write(spec.atSign, AtKeys());
       keyfiles[name] = keysIo;
-      cells[name] = await enrolAndAuthenticate(
+      approved[name] = await enrolAndApprove(
         approver: approver,
         atSign: spec.atSign,
         namespace: approverNamespace,
-        preference: preferenceFor(name, spec.atSign,
-            role: 'cell', posture: spec.posture),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         // Authorised for exactly these namespaces: `NskeySeeding` skips the
@@ -277,6 +281,17 @@ void main() {
         atKeysIo: keysIo,
         storage: TestUtils.storage,
       );
+    }
+    final opening = [
+      ...cellSpec.keys.where((n) => !cellSpec[n]!.posture.seedNamespaceKeys),
+      ...cellSpec.keys.where((n) => cellSpec[n]!.posture.seedNamespaceKeys),
+    ];
+    for (final name in opening) {
+      final spec = cellSpec[name]!;
+      cells[name] = await approved[name]!.open(preferenceFor(
+          name, spec.atSign,
+          role: 'cell', posture: spec.posture));
+      await (cells[name]!.client as AtClientImpl).pqBootstrap?.startupComplete;
       stdout.writeln('##GRID## up: $name '
           'enrolledAs=${cells[name]!.enrollmentId} '
           'runningAs=${cells[name]!.client.enrollmentId}');
@@ -422,26 +437,14 @@ void main() {
   });
 
   test(
-      'the recipient enrollment holding the namespace private reads what was '
-      'written, and its siblings are pending conveyance rather than broken',
-      () async {
-    // Three receiving enrollments share one namespace deliberately, and only
-    // ONE of them can read at this point — which is the finding, not a
-    // shortcoming of the grid.
-    //
-    // Minting a namespace key is what puts its private in a keyfile. A second
-    // enrollment starting later ADOPTS the published advertisement, which is
-    // correct — re-minting would rotate the key out from under peers that
-    // already fetched it — but adopting conveys no private. Siblings get it
-    // over the secret-sharing substrate, whose serve is driven by a HOLDER'S
-    // START-TIME SWEEP: the holder consumes pending requests when it comes up.
-    // Every client here came up in setUpAll, so no holder starts after the
-    // ask, and no answer can arrive.
-    //
-    // So "every authorised enrollment reads" is not a static property and
-    // cannot be a cell of this grid — it needs a restart. What is asserted
-    // here is exactly one reader reading, and the others failing for the
-    // conveyance-pending reason SPECIFICALLY rather than for any reason.
+      'every receiving enrollment that configures the post-quantum providers '
+      'reads what was written, and one that does not is refused for want of '
+      'them', () async {
+    // UC-B3.2: reads are universal. A receiving enrollment that configures the
+    // providers was on the roster with its key package when its atSign's
+    // namespace key was minted, so it was conveyed the private before the key
+    // was published, whether it seeds or not. One that configures none is
+    // refused on the crypto path before any key is sought.
     final readers = ['r-legacy', 'r-pqReading', 'r-pqReady', 'r-pqActive'];
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final senderName = 's-pqActive';
@@ -458,84 +461,71 @@ void main() {
         isTrue,
         reason: '$senderName could not write the record to be read back');
 
+    final names = {
+      for (final entry in cells.entries)
+        entry.value.client.enrollmentId: entry.key
+    };
+    for (final member in await AtClientSecretSharing.forClient(
+            cells['r-pqReady']!.client)
+        .directory
+        .listForNamespace(nsReady)) {
+      stdout.writeln('##GRID## roster $nsReady: '
+          '${names[member.enrollmentId] ?? member.enrollmentId} '
+          '${member.keyPackageStatus.name} kpid=${member.keyPackage?.kpid}');
+    }
+    for (final readerName in readers) {
+      final sharing = AtClientSecretSharing.forClient(cells[readerName]!.client);
+      final Set<String> kpids;
+      try {
+        kpids = sharing.heldKpids;
+      } on StateError {
+        stdout.writeln('##GRID## $readerName holds no key package');
+        continue;
+      }
+      for (final kpid in kpids) {
+        final waiting = await approvers[receiver]!.getAtKeys(
+            regex: EnvelopeAddressing.regexFor(kpid), useRemoteAtServer: true);
+        stdout.writeln('##GRID## $readerName kpid=$kpid '
+            'records waiting=${waiting.length}');
+      }
+    }
+
     final read = <String>[];
-    final pending = <String>[];
+    final refused = <String, String>{};
     for (final readerName in readers) {
       try {
         final got = await cells[readerName]!.client.get(key,
             getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
         expect(got.value, value,
             reason: '$readerName returned a value that is not what was '
-                'written, which is neither a read nor a pending conveyance');
+                'written');
         read.add(readerName);
       } on Object catch (e) {
-        // Which refusal is itself a claim about the stage: a reader that
-        // configures the providers can only be short of the key, and one that
-        // does not can only be short of the provider.
-        final expected = cellSpec[readerName]!.posture.configuresPqProviders
-            ? 'no nskey private held'
-            : 'is not registered';
-        expect('$e', contains(expected),
-            reason: '$readerName failed for a reason that is neither a '
-                'pending conveyance nor the refusal its own stage implies, '
-                'so this is a real failure: $e');
-        pending.add(readerName);
+        refused[readerName] = '$e';
       }
     }
 
-    stdout.writeln('##GRID## readback: read=$read pending=$pending');
+    stdout.writeln('##GRID## readback: read=$read refused=${refused.keys}');
 
-    // Predicted from the posture, not transcribed from a run. An enrollment
-    // that seeds ends up holding the namespace private — by minting it, or by
-    // pulling it while seeding finds one already published. One that does not
-    // seed never acquires it, and so cannot open data sealed to its own
-    // atSign's namespace key.
-    //
-    // That is not a hole: it is the pre-capability install of UC-B4.3, whose
-    // remedy is upgrading that install, and it is why a rollout seeds a stage
-    // BEFORE it switches writes over. Two routes reach it, and the grid holds
-    // one reader for each — the crypto path, where a stage configuring no
-    // post-quantum provider is refused before any key is sought, and the
-    // key-acquisition path, where a stage that configures them never acquired
-    // the namespace private.
     final shouldRead = [
       for (final r in readers)
-        if (cellSpec[r]!.posture.seedNamespaceKeys) r
+        if (cellSpec[r]!.posture.configuresPqProviders) r
     ];
-    final shouldNotRead =
-        readers.where((r) => !shouldRead.contains(r)).toList();
-
-    // ⚠️ Only the MINTER is deterministic here. A second seeding enrollment
-    // adopts the published advertisement — correct, since re-minting rotates
-    // the key out from under peers that already fetched it — and then has to
-    // be CONVEYED the private, which is served off a holder's start-time
-    // sweep. Whether that lands inside one run is a race, so naming which
-    // siblings read would be asserting a rate; only the pair below is
-    // invariant.
-    expect(read, isNotEmpty,
-        reason: 'no enrollment of $receiver could read a record sealed to its '
-            'own atSign. Seeding published an advertisement whose private half '
-            'nothing kept, so every peer sealing to this atSign is writing '
-            'data nobody can open');
-    for (final r in read) {
-      expect(cellSpec[r]!.posture.seedNamespaceKeys, isTrue,
-          reason: '$r reads $nsReady but does not seed. Then seeding is not '
-              'what governs key acquisition, and the rollout ordering this '
-              'project rests on is not what the postures describe');
+    expect(read, shouldRead,
+        reason: 'every receiver configuring the providers was conveyed the '
+            'namespace private before the key was published. Refused: '
+            '$refused');
+    for (final r in readers.where((r) => !shouldRead.contains(r))) {
+      expect(refused[r], contains('is not registered'),
+          reason: '$r configures no post-quantum provider, so it is refused '
+              'on the crypto path before any key is sought');
     }
-    for (final r in shouldNotRead) {
-      expect(pending, contains(r),
-          reason: '$r does not seed, so it can never have acquired the '
-              'namespace private and must have failed — on the crypto path '
-              'or the key-acquisition one. If it READ, the pre-capability '
-              'install of UC-B4.3 is not the failure mode the catalogue says '
-              'it is');
-    }
-    expect(shouldRead, isNotEmpty,
-        reason: 'no reader was expected to read, so this cell discriminates '
-            'nothing - the receiving side needs at least one seeding posture');
-    expect(shouldNotRead, isNotEmpty,
-        reason: 'no reader was expected to fail, so the negative arm is '
+    expect(shouldRead.where((r) => !cellSpec[r]!.posture.seedNamespaceKeys),
+        isNotEmpty,
+        reason: 'the control: a reader that does not seed is among those that '
+            'read, so what is measured is conveyance and not seeding');
+    expect(readers.where((r) => !shouldRead.contains(r)), isNotEmpty,
+        reason: 'no reader was expected to be refused, so the negative arm is '
             'absent and this would pass for a client that reads everything');
   });
 
@@ -697,8 +687,8 @@ void main() {
     // the only thing that discriminates.
     const senders = ['s-legacy', 's-pqReady', 's-pqActive'];
     const receivers = ['r-legacy', 'r-pqReady', 'r-pqActive'];
-    // Whichever receiving enrollment seeded first holds the namespace private,
-    // and the read below needs only one of them.
+    // The read below needs one receiving enrollment that holds the namespace
+    // private.
     const envelopeReader = 'r-pqReady';
     final stamp = DateTime.now().microsecondsSinceEpoch;
     // Nullable elements deliberately: a null `alg` means an envelope whose
@@ -754,12 +744,10 @@ void main() {
       stdout.writeln('##GRID## envelope $senderName emitted '
           '${emitted[senderName]}');
 
-      // Read from the atServer ONCE, by the enrollment that holds the
+      // Read from the atServer ONCE, by an enrollment that holds the
       // namespace private. The record is sealed to the receiver's namespace
-      // key, so re-reading it per receiver would measure whether that private
-      // has been CONVEYED to each sibling — a start-time-sweep race that has
-      // nothing to do with this row, and that makes the file fail
-      // intermittently on "no nskey private held".
+      // key, so re-reading it per receiver would also measure whether that
+      // private reached each sibling, which has nothing to do with this row.
       //
       // What UC-G1.15 claims is about the VERIFIER, and verification fetches
       // the signer's `_apsk`, which is public. So the wire read happens once

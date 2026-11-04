@@ -52,7 +52,7 @@ Future<void> sender(
       CItem item = await pets.create(obj: pet, sharedWith: otherAtSigns);
       progressSink.add('  ...saved.');
       return item;
-    } on CollectionOpException catch (e) {
+    } on CollectionOpException<Pet> catch (e) {
       for (final r in e.results) {
         progressSink.add(r.toString());
       }

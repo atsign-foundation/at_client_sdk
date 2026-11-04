@@ -247,5 +247,30 @@ void main() {
       expect(
           sent.map((p) => p.cryptoProviderId), [legacyCryptoProviderId, null]);
     });
+
+    test('sends the namespace key it is required to seal to', () async {
+      final client = MockAtClient();
+      final notifications = MockNotificationService();
+      when(() => client.notificationService).thenReturn(notifications);
+      when(() => client.isStopped).thenReturn(false);
+      final sent = <NotificationParams>[];
+      when(() => notifications.notify(any(),
+          checkForFinalDeliveryStatus:
+              any(named: 'checkForFinalDeliveryStatus'),
+          waitForFinalDeliveryStatus: any(named: 'waitForFinalDeliveryStatus'),
+          onSuccess: any(named: 'onSuccess'),
+          onError: any(named: 'onError'))).thenAnswer((inv) async {
+        sent.add(inv.positionalArguments[0] as NotificationParams);
+        return NotificationResult();
+      });
+
+      await _Bound(client).notify(sharedValue(), 'answer',
+          checkForFinalDeliveryStatus: false,
+          waitForFinalDeliveryStatus: false,
+          ttln: const Duration(minutes: 1),
+          sealToNamespace: 'device1.sshnp');
+
+      expect(sent.single.sealToNamespace, 'device1.sshnp');
+    });
   });
 }

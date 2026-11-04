@@ -1,14 +1,24 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 
 import 'test_util.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 void main() {
   test('sync from remote to local', () async {
     var atsign = '@alice🛠';
     var preference = TestUtil.getAlicePreference();
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atsign),
+          storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
     // // To setup encryption keys
     // await setEncryptionKeys(atsign, preference);
@@ -28,8 +38,15 @@ void main() {
   test('Parallel sync calls to remote from local', () async {
     var atsign = '@sitaram';
     var preference = TestUtil.getPreferenceLocal();
-    var atClientManager = await AtClientManager.getInstance()
-        .setCurrentAtSign(atsign, 'wavi', preference);
+    var atClientManager = AtClientManager.getInstance()
+      ..use(await buildAtClient(
+          atSign: atsign,
+          namespace: 'wavi',
+          preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atsign),
+          storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
     var syncService = atClient.syncService;
     // // To setup encryption keys

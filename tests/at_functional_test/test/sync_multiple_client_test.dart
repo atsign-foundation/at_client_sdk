@@ -5,16 +5,15 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
-import 'package:at_functional_test/src/at_demo_credentials.dart'
-    as demo_credentials;
 import 'package:at_functional_test/src/sync_service.dart';
+import 'package:at_utils/at_utils_io.dart' show StdErrLoggingHandler;
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:version/version.dart';
@@ -241,7 +240,7 @@ void mainIsolateMessageListener(dynamic data) {
 }
 
 Future<void> childIsolate(ChildIsolatePreferences clientParameters) async {
-  AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+  AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
   AtSignLogger.root_level = 'warning';
   int numberOfRepetitions = N;
   int counter = 0;
@@ -368,6 +367,8 @@ Future<dynamic> _getServerCommitEntries(String regex) async {
       preference: AtClientPreference(posture: PqPosture.legacy)
         ..rootDomain = 'vip.ve.atsign.zone'
         ..rootPort = TestUtils.rootServerPort,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestUtils.atDirectory,
       namespace: namespace,
       storage: InMemoryAtClientStorage(
           atSign: currentAtSign, closedByClient: true)));
@@ -463,7 +464,6 @@ AtClientPreference _getAtClientPreference(
   // NOTE: initAtClient refuses a preference whose posture differs from the one
   // it is passed, so this posture and the caller's must agree.
   var preference = AtClientPreference(posture: PqPosture.legacy);
-  preference.privateKey = demo_credentials.pkamPrivateKeyMap[currentAtSign];
   preference.rootDomain = 'vip.ve.atsign.zone';
   preference.rootPort = TestUtils.rootServerPort;
   preference.atClientParticulars = AtClientParticulars()

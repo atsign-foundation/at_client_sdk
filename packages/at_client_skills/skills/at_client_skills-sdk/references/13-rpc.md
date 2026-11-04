@@ -1,10 +1,10 @@
 # RPC — Structured Request/Response with AtRpc
 
 `AtRpc` / `AtRpcClient` give you a request/response abstraction between two
-atsigns, built on atProtocol notifications: requests travel as
+atsigns, built on Atsign Protocol notifications: requests travel as
 `request.<reqId>.<domain>.__rpcs.<baseNameSpace>` notifications, responses as
 `<ack|nack|success|error>.<reqId>....` notifications. Both classes are exported
-from `package:at_client/at_client.dart`.
+from `package:at_client/at_client.dart`, and so from both platform packages.
 
 **When to use RPC vs the alternatives:**
 
@@ -25,7 +25,7 @@ by the responder, not parked in RPC payloads.
 The high-level client wraps request/response correlation in a single call:
 
 ```dart
-import 'package:at_client/at_client.dart';
+import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
 final client = AtRpcClient(
   serverAtsign: '@routeplanner',

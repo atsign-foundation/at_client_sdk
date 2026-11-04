@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:at_client/src/client/at_reachability.dart';
-import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -17,28 +15,24 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
-import 'package:at_client/src/stream/at_stream_response.dart';
-import 'package:at_client/src/stream/file_transfer_object.dart';
-import 'package:at_client/src/stream/stream_verb_retired.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  /// Returns a [RemoteSecondary] to communicate with user's cloud secondary server.
+  /// The connection this client sends verbs to its atServer on.
+  ///
+  /// You should not use this. If you have to, because nothing else does what
+  /// you need, please file a feature request at
+  /// https://github.com/atsign-foundation/at_client_sdk/issues so that there
+  /// is an alternative.
   RemoteSecondary? getRemoteSecondary();
 
+  /// The local store this client reads and writes first.
+  ///
+  /// You should not use this. If you have to, because nothing else does what
+  /// you need, please file a feature request at
+  /// https://github.com/atsign-foundation/at_client_sdk/issues so that there
+  /// is an alternative.
   LocalSecondary? getLocalSecondary();
-
-  /// The persistence bundle backing this client when it runs on a Hive
-  /// storage, the default or one the app passed; `null` on any other storage
-  /// or before it has opened.
-  /// Commit-log-free: `persistenceBundle.keyValueStore.commitLog` is always
-  /// `null` on the client. Callers must not close it: the storage that holds
-  /// it closes it, when the client stops for a storage built with
-  /// `closedByClient: true`, else when its owner closes the storage.
-  @Deprecated('Read the keystore from the AtClientStorage the client was '
-      'given; removed in 4.0')
-  AtPersistenceBundle? get persistenceBundle;
 
   /// Stream of [DataEvent]s — `DataUpdated` for every successful local
   /// keystore mutation that passes through the update path,
@@ -75,26 +69,26 @@ abstract class AtClient {
   /// you, and it is idempotent and cheap when there is nothing to do.
   ///
   /// A concurrent call in this process, or this client's own PQ startup,
-  /// waits for a mint already in flight and adopts what it published.
-  /// ⚠️ **Two processes of one enrollment are not excluded**: the mint lock's
-  /// holder token is the enrollment id, so each reads the lock back as its own
-  /// and mints; the two advertisements carry different key material, and a
-  /// peer that fetched in between holds a generation the owner may no longer
-  /// be able to open.
+  /// waits for a mint already in flight and adopts what it published. Another
+  /// process that is minting, of this enrollment or another, holds the mint
+  /// lock: a call that meets it mints nothing and answers
+  /// [AtReachability.failed] while nothing is published, and a process that
+  /// stopped before publishing leaves the lock held until its ttl runs out.
   ///
   /// Answers rather than throws for the three cases that are configuration and
   /// not failure — a posture that does not seed, a namespace this enrollment
-  /// cannot hold a key for, and a client with no key source to file a private
-  /// half in. Read [AtReachabilityResult.isReachable] rather than comparing the
-  /// outcome, and [AtReachabilityResult.holdsPrivate] for whether this client
-  /// can also open what peers seal there.
+  /// cannot hold a key for, and an enrollment carrying no key package. Read
+  /// [AtReachabilityResult.isReachable] rather than comparing the outcome, and
+  /// [AtReachabilityResult.holdsPrivate] for whether this client can also open
+  /// what peers seal there.
   ///
   /// Nothing is left in flight when this returns [AtReachability.published]:
-  /// the advertisement is an awaited remote write rather than a local-first
-  /// put, so a peer's `plookup` finds it on return. Conveying the private half
-  /// to this atSign's other enrollments is awaited too, and a failure there is
-  /// logged rather than fatal — an enrollment that seeds the namespace asks for
-  /// it at its next start, and any other at the first read that misses it.
+  /// the private half is conveyed to this atSign's other enrollments before the
+  /// advertisement is written, and the advertisement is an awaited remote write
+  /// rather than a local-first put, so a peer's `plookup` finds it on return.
+  /// An enrollment the conveyance cannot reach is logged rather than fatal; it
+  /// asks for the private at its next start, or at the first read that misses
+  /// it.
   ///
   /// [timeout] bounds the whole operation, which may take several round
   /// trips. On [AtReachability.timedOut] nothing is known about whether the
@@ -102,26 +96,9 @@ abstract class AtClient {
   Future<AtReachabilityResult> ensureReachable(String namespace,
       {Duration timeout = const Duration(seconds: 30)});
 
-  /// The `AtChops` this client encrypts, decrypts and signs with: derived from
-  /// its keyfile at construction, or injected.
-  @Deprecated(
-      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
-      'and it derives what it needs from that; nothing outside at_client needs '
-      'the AtChops it holds. Removed with the AtChops compatibility API in the '
-      'next major release.')
-  set atChops(AtChops? atChops);
-
-  @Deprecated(
-      'Build the client from a keyfile, AtClientImpl.create(atKeysIo:), '
-      'and it derives what it needs from that; nothing outside at_client needs '
-      'the AtChops it holds. Removed with the AtChops compatibility API in the '
-      'next major release.')
-  AtChops? get atChops;
-
-  /// The client's key source (`package:at_auth`), injected at construction
-  /// via `AtClientImpl.create(atKeysIo:)`. `CryptoRuntime` threads it to
-  /// providers as `CryptoContext.io`. Null until injected — there is no
-  /// default source.
+  /// The client's key source (`package:at_auth`), given at construction
+  /// through `AtClientImpl.create(atKeysIo:)`, which requires one.
+  /// `CryptoRuntime` threads it to providers as `CryptoContext.io`.
   AtKeysIo? get atKeysIo;
 
   /// Enrollment id for apkam enrolled clients
@@ -141,9 +118,14 @@ abstract class AtClient {
 
   EnrollmentService? get enrollmentService;
 
-  /// Sets the preferences such as sync strategy, storage path etc., for the client.
+  /// Sets the preferences this client reads, such as its namespace and its
+  /// post-quantum posture. A client below its posture floor is raised to it
+  /// again, on its own copy of [preference].
   void setPreferences(AtClientPreference preference);
 
+  /// The preferences this client runs on. A client raised to its posture
+  /// floor runs on its own copy of the preference it was given, so a setting
+  /// changes through this or [setPreferences], not through that object.
   AtClientPreference? getPreferences();
 
   /// Whether [stop] has run.
@@ -165,10 +147,9 @@ abstract class AtClient {
   /// connection, whose state ends as `offline(stopped)`. Every connection the
   /// client opened is closed by the time this returns, the monitor's and
   /// sync's included, and so is one it was handed. The client's claim on its
-  /// storage is released; storage built with `closedByClient: true`, and the
-  /// Hive store opened from `preference.hiveStoragePath`, is closed, while
-  /// storage the caller supplied otherwise stays open for the caller to
-  /// close.
+  /// storage is released; storage built with `closedByClient: true` is
+  /// closed, while storage the caller supplied otherwise stays open for the
+  /// caller to close.
   ///
   /// Does not drain: work in flight is not awaited, and fails with
   /// [StoppedException] where the stop cut it off. A sync round is abandoned
@@ -177,7 +158,7 @@ abstract class AtClient {
   /// waits until `syncService.isInSync()` answers true.
   ///
   /// After this, a read or write of local storage throws [StoppedException],
-  /// and the services are gone: reading one throws [StateError].
+  /// and the services are gone: reading one throws [StoppedException] too.
   ///
   /// A stopped client cannot be restarted, and the atSign can be opened
   /// again at once: the refusal of a second live client for the same
@@ -190,8 +171,6 @@ abstract class AtClient {
   /// phone.persona@alice where 'persona' is the namespace. If you want to save by ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
   /// Additional metadata can be set using [AtKey.metadata]
-  ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
   ///
   /// [putRequestOptions] allows additional options to be provided. See [PutRequestOptions]
   ///
@@ -226,7 +205,6 @@ abstract class AtClient {
   ///             sharedWith='@bob'
   ///    put(key, '+1 999 9999');
   /// ```
-  /// Starting version 3.0.0 [isDedicated] is deprecated
   /// Throws [AtValueException] if invalid value type is found
   ///
   /// Throws [AtKeyException] if invalid key or metadata is found
@@ -238,16 +216,22 @@ abstract class AtClient {
   /// Throws [AtPrivateKeyNotFoundException] if encryption private key is not found
   ///
   /// Throws [AtPublicKeyNotFoundException] if encryption public key is not found
+  ///
+  /// At `PqPosture.pqActive`, a put made right after the client opens, before
+  /// its start-up has published the namespace key the value is sealed to,
+  /// waits for that key, at most 30 seconds, and then throws
+  /// `NamespaceKeyUnavailableException` naming it if it is still not
+  /// published. Start-up publishes that key only after its earlier steps
+  /// finish, so the 30 seconds cover those too. Stopping the client ends the
+  /// wait with [StoppedException].
   Future<bool> put(AtKey key, dynamic value,
-      {bool isDedicated = false, PutRequestOptions? putRequestOptions});
+      {PutRequestOptions? putRequestOptions});
 
   /// Used to store the textual data into the keystore.
   /// Updates value of [AtKey.key] is if it is already present. Otherwise creates a new key. Set [AtKey.sharedWith] if the key
   /// has to be shared with another atSign.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice will be saved as
   /// phone.persona@alice where 'persona' is the namespace.
-  ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
   ///
   /// [putRequestOptions] allows additional options to be provided. See [PutRequestOptions]
   ///
@@ -310,7 +294,6 @@ abstract class AtClient {
   /// Get the value of [AtKey.key] from user's cloud secondary if [AtKey.sharedBy] is set. Otherwise looks up the key from local secondary.
   /// If the key was stored with public access, set [AtKey.metadata.isPublic] to true. If the key was shared with another atSign set [AtKey.sharedWith]
   ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
   /// ```
   /// e.g alice is current atsign
   /// llookup:phone@alice
@@ -372,8 +355,7 @@ abstract class AtClient {
   ///
   /// Throws [AtClientException] if the cloud secondary is invalid or not reachable
   ///
-  Future<AtValue> get(AtKey key,
-      {bool isDedicated = false, GetRequestOptions? getRequestOptions});
+  Future<AtValue> get(AtKey key, {GetRequestOptions? getRequestOptions});
 
   /// Gets the metadata of [AtKey.key]
   /// ```
@@ -395,12 +377,12 @@ abstract class AtClient {
   /// ```
   Future<Metadata?> getMeta(AtKey key);
 
-  /// Delete the [key] from user's local secondary and syncs the delete to cloud secondary if client's sync preference is immediate.
+  /// Deletes [key] from local storage, and sync later pushes the removal to
+  /// the atServer; [DeleteRequestOptions.useRemoteAtServer] sends it to the
+  /// atServer directly.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
-  ///
-  /// [isDedicated] is currently ignored and will be removed in next major version
   ///
   /// [deleteRequestOptions] allows additional options to be provided. See [DeleteRequestOptions]
   /// ```
@@ -443,8 +425,7 @@ abstract class AtClient {
   ///             ..metadata = metaData
   ///   delete(key);
   ///```
-  Future<bool> delete(AtKey key,
-      {bool isDedicated = false, DeleteRequestOptions? deleteRequestOptions});
+  Future<bool> delete(AtKey key, {DeleteRequestOptions? deleteRequestOptions});
 
   /// Does a key exist
   Future<bool> keyExists(AtKey key, bool? useRemoteAtServer);
@@ -489,132 +470,18 @@ abstract class AtClient {
     bool useRemoteAtServer = false,
   });
 
-  /// Notifies the [AtKey] with the [sharedWith] user of the atsign. Optionally, operation, value and metadata can be set along with key to notify.
-  ///```
-  ///e.g alice is the current atsign
-  /// notify:update:@bob:phone@alice:+1 999 9999
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith='@bob'
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// notify:update:ttl:60000:ttb:30000:@bob:phone@alice:+1 999 9999
-  ///   var metaData = Metadata()..ttl='60000'
-  ///                  ..ttb='30000'
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith='@bob'
-  ///             ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  ///
-  /// var atKey = AtKey()..key = 'phone@alice'
-  ///                    ..sharedWith = '@bob'
-  ///                    ..sharedBy = ‘@alice’
-  /// Sending Notification with Notification Strategy ‘ALL’ and priority low
-  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
-  ///                       priority: PriorityEnum.low,
-  ///                      strategy: StrategyEnum.all);
-  ///
-  /// Sending Notification with Notification Strategy ‘Latest N’ and priority high
-  /// await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update,
-  ///                       priority: PriorityEnum.high,
-  ///                       strategy: StrategyEnum.latest,
-  ///                       latestN:3,
-  ///                       Notifier: ‘wavi’);
-  ///```
-  ///[Deprecated] Use [AtClient.notificationService]
-  @Deprecated("Use NotificationService")
-  Future<bool> notify(AtKey key, String value, OperationEnum operation,
-      {MessageTypeEnum? messageType,
-      PriorityEnum? priority,
-      StrategyEnum? strategy,
-      int? latestN,
-      String? notifier,
-      bool isDedicated = false});
-
-  /// Notifies the [NotificationParams.atKey] to [notificationParams.atKey.sharedWith] user
-  /// of the atSign. Optionally, operation, value and metadata can be set along with key to
-  /// notify.
-  ///
-  ///* Throws [LateInitializationError] when [NotificationParams.atKey] is not initialized
-  ///* Throws [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
-  ///invalid metadata is provided.
-  ///* Throws [InvalidAtSignException] on invalid [NotificationParams.atKey.sharedWith] or [NotificationParams.atKey.sharedBy]
-  ///* Throws [AtClientException] when keys to encrypt the data are not found.
-  ///* Throws [AtClientException] when [notificationParams.notifier] is null when [notificationParams.strategy] is set to latest.
-  ///* Throws [AtClientException] when fails to connect to cloud secondary server.
-  ///
-  ///e.g alice is the current atsign
-  ///
-  /// 1. To notify a update of key to @bob
-  /// ```dart
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.update
-  ///                                                .._messageType = MessageTypeEnum.key;
-  ///   notifyChange(notificationParams);
-  /// ```
-  /// 2. To notify and cache a key - value in @bob
-  /// ```dart
-  ///   var metaData = Metadata()..ttr='6000000';
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///                    ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.update
-  ///                                                .._value = value
-  ///                                                .._messageType = MessageTypeEnum.key;
-  ///   notifyChange(notificationParams);
-  ///```
-  ///3. To notify a deletion of a key to @bob.
-  ///```dart
-  ///   var key = AtKey()..key='phone'
-  ///                    ..sharedWith='@bob'
-  ///   var notificationParams = NotificationParams().._atKey = key
-  ///                                                .._operation = OperationEnum.delete
-  ///                                                .._messageType = MessageTypeEnum.key;
-  ///   notifyChange(notificationParams);
-  ///```
-  ///[Deprecated] Use [NotificationService.notify]
-  @Deprecated("Use [NotificationService.notify]")
-  Future<String?> notifyChange(NotificationParams notificationParams);
-
-  /// Notifies the [AtKey] with the list of [sharedWith] user's of the atsign. Optionally, operation, value and metadata can be set along with the key to notify.
-  /// ```
-  /// e.g alice is the current atsign
-  /// notify:all:update:@bob,@colin:phone@alice:+1 999 9999
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith= json.encode(['@bob',@colin])
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// notify:update:ttl:60000:ttb:30000:@bob,@colin:phone@alice:+1 999 9999
-  ///   var metaData = Metadata()..ttl='60000'
-  ///                  ..ttb='30000'
-  ///   var key = AtKey()..key='phone'
-  ///             ..sharedWith= json.encode(['@bob',@colin])
-  ///             ..metadata=metaData
-  ///   var value='+1 999 9999'
-  ///   var operation=OperationEnum.update
-  ///   notify(key, value, operation);
-  /// ```
-  @Deprecated('Use NotificationService')
-  Future<String> notifyAll(AtKey atKey, String value, OperationEnum operation);
-
   ///Returns the status of the notification
   ///```
   ///notify:status:75037ac4-6a15-43cc-ba66-e621bb2a6366
   ///
-  /// var atKey = AtKey()..key = 'phone@bob'
+  /// var atKey = AtKey()..key = 'phone'
   ///                    ..sharedWith = '@alice'
-  ///                    ..sharedBy = ‘@bob’
-  /// Execute the notify verb
-  /// var notificationId = await atClient.notify(atKey, ‘+1 987 986 2233’, OperationEnum.update);
-  ///  Get the status for notificationId
-  ///   notifyStatus(notificationId);
+  ///                    ..sharedBy = '@bob';
+  /// Send the notification
+  /// var result = await atClient.notificationService.notify(
+  ///     NotificationParams.forUpdate(atKey, value: '+1 987 986 2233'));
+  ///  Get the status for its id
+  ///   notifyStatus(result.notificationID);
   ///
   ///```
   Future<String> notifyStatus(String notificationId);
@@ -640,31 +507,6 @@ abstract class AtClient {
   ///     notifyList(fromDate: 2021-01-28, toDate: 2021-01-29, regex: phone);
   ///```
   Future<String> notifyList({String? fromDate, String? toDate, String? regex});
-
-  /// Creates a monitor connection to atSign's cloud secondary server.Whenever a notification is created on the server, monitor receives
-  /// the notification on the client.
-  /// Optionally a regular expression and be passed to filter the notifications
-  /// [deprecated] Use [NotificationService.subscribe]
-  @Deprecated("Obsolete. Use the NotificationService")
-  Future<void> startMonitor(String privateKey, Function acceptStream,
-      {String? regex});
-
-  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
-  /// so nothing is sent.
-  @Deprecated(streamVerbRetiredDeprecation)
-  Future<AtStreamResponse> stream(String sharedWith, String filePath,
-      {String namespace});
-
-  /// Throws [UnsupportedError]: atServers no longer support the stream verb,
-  /// so no connection is opened.
-  @Deprecated(streamVerbRetiredDeprecation)
-  Future<void> sendStreamAck(
-      String streamId,
-      String fileName,
-      int fileLength,
-      String senderAtSign,
-      Function streamCompletionCallBack,
-      Function streamReceiveCallBack);
 
   static const defaultSppExpiry = Duration(minutes: 5);
 
@@ -700,58 +542,6 @@ abstract class AtClient {
   /// ```
   ///
   Future<AtResponse> getOTP();
-
-  /// No longer does anything; retained for source compatibility.
-  ///
-  /// The client is commit-log-free, so there is no commit log to compact.
-  /// This is now a no-op and will be removed in a future major release.
-  @Deprecated(
-      'Commit-log compaction was removed with the commit-log-free keystore; '
-      'this is now a no-op and will be removed in a future major release')
-  Future<void> startCompactionJob({Duration? commitLogCompactionDuration});
-
-  /// No longer does anything; retained for source compatibility.
-  ///
-  /// The client is commit-log-free, so there is no commit log compaction job
-  /// to stop. This is now a no-op and will be removed in a future major
-  /// release.
-  @Deprecated(
-      'Commit-log compaction was removed with the commit-log-free keystore; '
-      'this is now a no-op and will be removed in a future major release')
-  Future<void> stopCompactionJob();
-
-  /// Uploads list of [files] to filebin and shares the file download url with [sharedWithAtSigns]
-  /// returns map containing key of each sharedWithAtSign and value of [FileTransferObject]
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<Map<String, FileTransferObject>> uploadFile(
-      List<File> files, List<String> sharedWithAtSigns);
-
-  /// Downloads the list of files for a given [transferId] shared by [sharedByAtSign]
-  /// Optionally you can pass [downloadPath] to download the files.
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<List<File>> downloadFile(String transferId, String sharedByAtSign,
-      {String? downloadPath});
-
-  /// re uploads file in [fileTransferObject.fileUrl]
-  /// returns list of [FileStatus] which contains upload status of each file.
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<List<FileStatus>> reuploadFiles(
-      List<File> files, FileTransferObject fileTransferObject);
-
-  /// re sends file notifications to [sharedWithAtSigns]
-  /// returns [Map<String, FileTransferObject>] which contains transfer status for each atsign.
-  @Deprecated(
-      'Method will be removed from SDK since method is moved to app layer')
-  Future<Map<String, FileTransferObject>> shareFiles(
-      List<String> sharedWithAtSigns,
-      String key,
-      String fileUrl,
-      String encryptionKey,
-      List<FileStatus> fileStatus,
-      {DateTime? date});
 
   /// Note - this method name is misleading as 'current' implies the atSign
   /// could change - but an AtClient should only ever have one atSign.
@@ -812,6 +602,8 @@ abstract class AtClient {
   ///   NOT visible on the watch streams.
   /// - [EventSource.both] subscribes to both and emits events from
   ///   each as they arrive — no de-duplication.
+  ///
+  /// Throws [StoppedException] after [stop].
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {

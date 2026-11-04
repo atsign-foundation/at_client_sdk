@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 /// An atServer for [atSign] that answers `from:` with a challenge and the
 /// `cram:` that follows with [cramReply], reached through a real
-/// `AtLookupImpl` over a [SecureSocket] it scripts.
+/// `AtLookupImpl` over an [AtTransport] it scripts.
 class FakeCramAtServer {
   FakeCramAtServer(this.atSign, {required this.cramReply});
 
@@ -28,8 +26,7 @@ class FakeCramAtServer {
         authenticator: null,
         secondaryAddressFinder: _FixedAddress(),
         transport: AtLookupTransport(
-          secureSocketConfig: SecureSocketConfig(),
-          socketFactory: _SocketFactory(this),
+          transportFactory: _TransportFactory(this),
         ),
       );
 
@@ -46,35 +43,26 @@ class FakeCramAtServer {
   }
 }
 
-class _Socket implements SecureSocket {
-  _Socket(this._server);
+class _Transport implements AtTransport {
+  _Transport(this._server);
 
   final FakeCramAtServer _server;
-  final StreamController<Uint8List> _inbound = StreamController<Uint8List>();
+  final StreamController<List<int>> _inbound = StreamController<List<int>>();
 
   @override
-  StreamSubscription<Uint8List> listen(void Function(Uint8List event)? onData,
-          {Function? onError, void Function()? onDone, bool? cancelOnError}) =>
-      _inbound.stream.listen(onData,
-          onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  String get description => '127.0.0.66:6464';
 
   @override
-  void write(Object? object) => _received('$object');
+  Stream<List<int>> get inbound => _inbound.stream;
 
   @override
-  void writeln([Object? object = '']) => _received('$object\n');
-
-  @override
-  void add(List<int> data) => _received(utf8.decode(data));
-
-  void _received(String command) {
+  void add(List<int> bytes) {
+    final command = utf8.decode(bytes);
     _server.written.add(command);
     final reply = _server._replyTo(command);
     if (reply == null) return;
     scheduleMicrotask(() {
-      if (!_inbound.isClosed) {
-        _inbound.add(Uint8List.fromList(utf8.encode('$reply\n')));
-      }
+      if (!_inbound.isClosed) _inbound.add(utf8.encode('$reply\n'));
     });
   }
 
@@ -82,43 +70,23 @@ class _Socket implements SecureSocket {
   Future<void> flush() async {}
 
   @override
+  bool get isOpen => !_inbound.isClosed;
+
+  @override
   void destroy() {
     if (!_inbound.isClosed) _inbound.close();
   }
-
-  @override
-  Future<void> close() async => destroy();
-
-  @override
-  bool setOption(SocketOption option, bool enabled) => true;
-
-  @override
-  InternetAddress get remoteAddress => InternetAddress('127.0.0.66');
-
-  @override
-  int get remotePort => 6464;
-
-  @override
-  InternetAddress get address => InternetAddress('127.0.0.1');
-
-  @override
-  int get port => 0;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
-      '_Socket does not implement ${invocation.memberName}');
 }
 
-class _SocketFactory extends AtLookupSecureSocketFactory {
-  _SocketFactory(this._server);
+class _TransportFactory implements AtTransportFactory {
+  _TransportFactory(this._server);
 
   final FakeCramAtServer _server;
 
   @override
-  Future<SecureSocket> createSocket(
-          String host, String port, SecureSocketConfig socketConfig,
+  Future<AtTransport> connect(String host, String port,
           {Duration? timeout}) async =>
-      _Socket(_server);
+      _Transport(_server);
 }
 
 class _FixedAddress extends SecondaryAddressFinder {

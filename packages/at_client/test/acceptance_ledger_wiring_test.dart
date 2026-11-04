@@ -295,7 +295,7 @@ void main() {
     const runners = [
       'tests/at_functional_test/runLocal.sh',
       'tests/at_end2end_test/runLocal.sh',
-      'tests/at_onboarding_cli_functional_tests/runLocal.sh',
+      'tests/at_client_cli_functional_tests/runLocal.sh',
     ];
 
     for (final path in runners) {

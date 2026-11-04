@@ -48,9 +48,9 @@ class AtOnboardingRequest extends AuthRequest {
   ///
   /// `mldsa65` makes the atSign PQ-native from activation: the keypair is
   /// filed as typed material under the enrollment id and the flat
-  /// `apkamPublicKey` / `apkamPrivateKey` fields stay empty, so a reader
-  /// asking [AtKeys.authenticationFor] for the flat fields fails loudly
-  /// instead of signing an ML-DSA key with the RSA routine.
+  /// `apkamPublicKey` / `apkamPrivateKey` fields stay empty, so
+  /// [AtKeys.authenticationKeyPairFor] answers it only with its own algorithm
+  /// and nothing signs an ML-DSA key with the RSA routine.
   SigningAlgoType signingAlgoType;
 
   // Default root domain and port
@@ -73,7 +73,10 @@ class AtOnboardingRequest extends AuthRequest {
   /// major, once every first-party downstream writes PQ by default.
   ///
   /// Setting it false makes a legacy peer's send to this atSign unsupported:
-  /// there is no `public:publickey` for them to encrypt to. It also leaves the
+  /// there is no `public:publickey` for them to encrypt to. It leaves
+  /// at_client's `AtClient.put` of a public value throwing
+  /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+  /// encryption private key. It also leaves the
   /// keyfile with no `selfEncryptionKey`, which is correct — with no legacy
   /// flat fields to protect there is nothing for it to encrypt, and a
   /// passphrase envelope is what protects the typed material at rest.

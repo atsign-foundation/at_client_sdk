@@ -12,44 +12,71 @@ opened.
 ## 1. The verbs
 
 ```dart
-import 'package:at_client/at_client.dart';
-import 'package:at_client/hive.dart';
+import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
 final keys = FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys');
-final preference = AtClientPreference()
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';
+final preference = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';
 final storage = HiveAtClientStorage(
     atSign: '@alice', storagePath: dir.path, closedByClient: true);
+final lookUps = secureSocketLookUps();
+final finder = CacheableSecondaryAddressFinder(
+    preference.rootDomain, preference.rootPort);
 
 // Log in on keys the app already holds.
 final client = await Atsign('@alice').open(
-    keys: keys, preference: preference, storage: storage);
+    keys: keys, preference: preference, storage: storage,
+    lookUps: lookUps, secondaryAddressFinder: finder);
 
 // Onboard a newly registered atSign with its CRAM secret; the keys it mints
 // land in `keys`, and the client opens on them.
 final owner = await Atsign('@alice').activate(
-    cramSecret: secret, keys: keys, preference: preference, storage: storage);
+    cramSecret: secret, keys: keys, preference: preference, storage: storage,
+    lookUps: lookUps, secondaryAddressFinder: finder);
 
 // Enroll this app with an atSign whose keys another device holds. The
 // request is filed in `keys` as pending, so a restart resumes it.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
-    device: 'phone', namespaces: {'my_namespace': 'rw'}, keys: keys,
-    preference: preference);
+    device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
+    preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
 final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
+// pending.cancel() abandons the enrollment: that wait throws once the
+// pending keys are gone from `keys`, as a denial's are, so resumeEnrollment
+// finds nothing. It throws when `keys` cannot remove them; call it again.
+// Call it when the user confirms they give up on the request (a Cancel
+// button).
+// pending.stop() ends the wait and keeps the request: call it from a
+// dispose() that only leaves the screen, and resumeEnrollment picks the
+// request up later. The request stays on the atServer until its manager
+// decides it, or it expires, which removes the pending keys as a denial
+// does. Tell the atSign's manager to deny a cancelled request: an approval
+// after cancel creates an enrollment nobody can use, which the manager
+// would then revoke. Both return once any client the wait opened has
+// stopped: when pending.approved says the approval landed first, open the
+// atSign on `keys` at once.
 final resumed = await Atsign('@alice').resumeEnrollment(
-    app: 'my_app', device: 'phone', keys: keys, preference: preference);
+    app: 'my_app', device: 'phone', keys: keys, preference: preference,
+    lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending
+// With no app or device, it resumes the one pending enrollment `keys` holds.
 
 // Which enrollment a keys store authenticates as, without building a client.
-final principal = await Atsign('@alice').authenticatesAs(keys: keys);
+final principal = await Atsign('@alice').authenticatesAs(keys: keys,
+    rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
+    lookUps: lookUps, secondaryAddressFinder: finder);
 ```
 
-`open` also takes `lookUps:` ([section 3](#3-connections)), `serviceFactory:`
-(a process that must not sync hands in `ServiceFactoryWithNoOpSyncService`
-from `at_cli_commons`), `atLookUp:` (a connection the caller already holds)
-and `connectBudget:` (how long the one connect attempt waits before the
-client comes back offline, 5 s by default).
+In at_client 4.0 every verb is handed what it builds a client from, and the
+compiler insists: `storage:` on `open`, `activate` and `pending.client`, and
+`lookUps:` ([section 3](#3-connections)) with `secondaryAddressFinder:` on
+`open`, `activate`, `enroll`, `resumeEnrollment` and `authenticatesAs`. A CLI program takes its
+keys and store from `CliKeys.fileFor(atSign)` and
+`CliKeys.storageFor(atSign, program: ...)`. `open` also takes
+`serviceFactory:` (a process that must not sync hands in
+`ServiceFactoryWithNoOpSyncService` from `at_client_cli`), `atLookUp:` (a
+connection the caller already holds) and `connectBudget:` (how long the one
+connect attempt waits before the client comes back offline, 5 s by default).
 
 **What can refuse:**
 
@@ -57,19 +84,24 @@ client comes back offline, 5 s by default).
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
 | `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
+| `AtEnrollmentPendingException`  | `resumeEnrollment` found several pending enrollments matching what it was given                          | Name both `app` and `device`                                  |
+| `AtNoCredentialException`       | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                 | Enroll again                                                  |
+| `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |
 | `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
-| `AtEnrollmentException`         | `pending.client(...)`: the request was denied                                                            | Tell the user; a new `enroll` is a new request                |
-| `ArgumentError`                 | No `storage:`, and no `hiveStoragePath` or `isLocalStoreRequired` false                                  | Pass a storage                                                |
+| `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired                                                | Tell the user; a new `enroll` is a new request                |
+| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
+| `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
+| `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
 
 ---
 
 ## 2. Storage
 
 A client holds one `AtClientStorage`, and one store is held by one live client.
-Each backend comes from its own import: `HiveAtClientStorage` from
-`package:at_client/hive.dart`, `SqliteAtClientStorage` from
-`package:at_client/sqlite.dart` and `InMemoryAtClientStorage` from
-`package:at_client/memory.dart`.
+Both platform packages re-export `HiveAtClientStorage`, the durable store
+native apps use; `CliKeys.storageFor(atSign, program:)` is one at the path
+`CLIBase` uses. Both also re-export the other backends,
+`SqliteAtClientStorage` and `InMemoryAtClientStorage`.
 
 ```dart
 HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: true)
@@ -79,13 +111,15 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
   what an app wants: it picks the location and has nothing to tear down.
 - Omit it and the store is **borrowed**: `stop()` detaches from it and the
   caller closes it. Use this only when something else shares the store.
-- With no `storage:`, a Hive store opens under the deprecated
-  `preference.hiveStoragePath`; with no path either, or with
-  `isLocalStoreRequired` false, the verb is refused with an `ArgumentError`
-  before it spends a CRAM secret or waits for an approval. `commitLogPath` is
-  deprecated and unread; the client is commit-log-free.
+- `storage:` is required, so a verb without one does not compile. at_client
+  ignores the deprecated `preference.hiveStoragePath`: to keep the store a 3.x
+  app used, pass that folder as `storagePath`. The Flutter dialogs, given no
+  storage, still open Hive under `hiveStoragePath` while the app sets it, and
+  otherwise in the app support directory. at_client 4.0 removed
+  `commitLogPath`; the client is commit-log-free.
 - **Every process, and every client, needs its own store.** Two clients on one
-  Hive location is refused; two processes on one location corrupt it.
+  Hive location is refused, and a second process on a Hive store another
+  holds is refused with `AtStorageInUseException` naming the location.
 - The store also keeps the last atServer address the atDirectory answered, so
   a start that cannot reach the atDirectory still finds the atServer.
 
@@ -96,10 +130,12 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
 The third platform-supplied thing, beside the keys store and the storage
 bundle: an `AtLookUpFactory` that builds **every** connection the client
 opens - its own, its sync service's, its monitor's and the one a retrofit
-re-derives on - so an application chooses the transport once.
+re-derives on - so an application chooses the transport once. The fourth is
+the `SecondaryAddressFinder` each of those connections asks where the atServer
+is.
 
 ```dart
-// TLS on TCP, the default; the config is where TLS settings now live.
+// TLS on TCP; the config is where TLS settings now live.
 lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = '/certs')
 
 // Behind a proxy that routes on the atSign: send `from:` first on every connection.
@@ -107,20 +143,28 @@ lookUps: secureSocketLookUps(onConnect: (c) => c.sendSync('from:@alice\n'))
 
 // A factory of your own: any AtLookUp implementation, another transport.
 AtLookupMuxable mine({required atSign, required rootDomain, required authenticator,
-    secondaryAddressFinder, clientConfig = const {}}) => ...;
+    secondaryAddressFinder}) => ...;
 ```
 
 - Each call names what the connection is for: the atSign, the root domain,
-  the authenticator (null for a connection that never authenticates), an
-  optional address finder and the client config. The factory captures how
-  bytes travel.
+  the authenticator (null for a connection that never authenticates) and an
+  optional address finder. The factory captures how bytes travel; what a
+  connection announces about the client travels in its authenticator's
+  `from:`.
 - The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
-  and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through.
-  `AtOnboardingPreference.lookUps` is what the CLI uses with none: the proxy
-  factory when the root domain names a proxy, TLS otherwise.
-- `AtClientPreference.decryptPackets`, `pathToCerts` and `tlsKeysSavePath`
-  are deprecated: the transport is the factory's to configure. The default
-  factory reads them until they go.
+  and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through. With
+  none, the dialogs use `secureSocketLookUps()`, and `CLIBase` uses
+  at_client_cli's `lookUpsFor(rootDomain)`: `proxyLookUps()` when the root
+  domain names a proxy (`proxy:host:port`), TLS otherwise.
+- at_client 4.0 removed `AtClientPreference.decryptPackets`, `pathToCerts` and
+  `tlsKeysSavePath`: the transport is the factory's to configure, through the
+  `SecureSocketConfig` given to `secureSocketLookUps(config:)`.
+- `secondaryAddressFinder:` is usually
+  `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`,
+  which asks the atDirectory over TLS. The client remembers its answer in its
+  storage, so a later start with the atDirectory unreachable still finds the
+  atServer. `FixedSecondaryAddressFinder(host, port)` names an atServer
+  outright.
 - A test's factory reaches all of a client's connections, where a lookup
   injected through `atLookUp:` reaches only the client's own.
 
@@ -151,7 +195,7 @@ await client.connection.awaitOnline(budget: const Duration(seconds: 30),
 | `offline` | `unreachable`                                                     | No network, or the atDirectory / atServer did not answer; local store served           |
 | `offline` | `noAtServer`                                                      | The atDirectory answered: this atSign has no atServer (not activated, or reset)        |
 | `offline` | `stopped`                                                         | `stop()` ran; the last change emitted                                                  |
-| `refused` | `revoked`, `unauthenticated`, `invalidEnrollment`, `enrollmentNotApproved`, `otherRefusal` | The atServer rejected the keys; revocation landing mid-life arrives here too |
+| `refused` | `revoked`, `unauthenticated`, `invalidEnrollment`, `enrollmentNotApproved`, `enrollmentDenied`, `otherRefusal` | The atServer rejected the keys; revocation landing mid-life arrives here too |
 
 Every verb the client runs on its own connection keeps the state current, so
 an app rarely needs `attempt()`; it subscribes to `changes` and renders.
@@ -166,10 +210,9 @@ the client the app switches to via `AtClientManager.listenToAtSignChange`.
 runs on its own from the moment the client is built:
 
 - a round on every **stats notification** the atServer sends (its commit id
-  moved), and every `AtClientPreference.syncIntervalMins` (default 10) as a
-  fallback;
+  moved), and on a 30-second timer as a fallback;
 - `sync()` requests a round now; requests coalesce, so a burst of calls is one
-  round;
+  round, and calls made while a round runs share one more round once it ends;
 - `isInSync()` asks the atServer fresh and answers whether nothing is left to
   push and the local store has everything the client's sync filter admits;
 - `isSyncInProgress`, and `addProgressListener(SyncProgressListener)` for
@@ -180,8 +223,8 @@ Set `AtClientPreference.syncRegex` to your namespace ([11-sync.md](11-sync.md)).
 Reads are local; writes apply locally at once and push in the background, and
 a write made offline pushes when the atServer is reached.
 
-`AtClientManager.getInstance().syncService` is deprecated: the service is the
-client's.
+`AtClientManager.getInstance().syncService` is gone in 4.0: the service is
+the client's.
 
 ---
 
@@ -191,7 +234,7 @@ client's.
 
 ```dart
 final sub = client.notificationService
-    .subscribe(regex: r'\.my_namespace@', shouldDecrypt: true)
+    .subscribe(regex: r'\.my_app@', shouldDecrypt: true)
     .listen((n) => handle(n));
 ```
 
@@ -204,10 +247,11 @@ final sub = client.notificationService
   `currentListenerStateStream` to emit `NotificationListenerState.listening`.
 - The monitor reconnects on its own after a network loss until
   `stopListening()`; `currentListenerState` says where it is.
-- `send(to:, namespace:, body:, expiration:)` for fire-and-forget; `notify(...)`
-  for the full `NotificationParams`. A `notify` that does not wait for the
-  final status (`waitForFinalDeliveryStatus: false`) reports a failure through
-  `onError`; either way, a stop ends the status poll and the result says so.
+- `send(to:, idAndNamespace:, body:, expiration:)` for fire-and-forget;
+  `notify(...)` for the full `NotificationParams`. A `notify` that does not
+  wait for the final status (`waitForFinalDeliveryStatus: false`) reports a
+  failure through `onError`; either way, a stop ends the status poll and the
+  result says so.
 - `stopAllSubscriptions()` cancels every subscription and, by default, the
   monitor. `stop()` on the client does this for you.
 
@@ -222,8 +266,8 @@ AtClientManager.getInstance().use(client);   // for code that reads .atClient
 - `use` makes a client current and notifies `AtSignChangeListener`s. It does
   **not** stop the previous current client: an app that keeps two open and
   switches has not finished with either.
-- `setCurrentAtSign` and `fromAuthSession` are deprecated: they built the
-  client for the caller. Build it with a verb, then `use` it.
+- at_client 4.0 removed `setCurrentAtSign` and `fromAuthSession`, which built
+  the client for the caller. Build it with a verb, then `use` it.
 - `reset()` is a test hook, not a logout.
 
 **Stopping:**
@@ -268,6 +312,6 @@ await client.stop();
 ## Canonical examples
 
 <!-- pyml disable-num-lines 3 md013-->
-- [packages/at_client/README.md](../../../../at_client/README.md) — "atSign lifecycle" and "In code: one import, four verbs"
+- [packages/at_client/README.md](../../../../at_client/README.md) — "atSign lifecycle (short version)" and "In code: four verbs"
 - [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — the four flows, `_adopt`
 - [packages/at_client/example/bin/](../../../../at_client/example/bin/) — CLI programs opened through `CLIBase`

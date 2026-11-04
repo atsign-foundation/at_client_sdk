@@ -181,6 +181,7 @@ void main() {
 
     /// Catalogue: features/at_client/stream_verb_retired.feature
     test('at_lookup takes a response starting stream: as unexpected', () async {
+      when(() => mockOutBoundConnection.close()).thenAnswer((_) async {});
       await outboundMessageListener
           .messageHandler('stream:@bob:phone@alice\n@alice@'.codeUnits);
       await expectLater(

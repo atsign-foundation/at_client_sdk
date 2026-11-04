@@ -6,7 +6,6 @@ import 'package:at_client/src/client/request_options.dart'
 import 'package:at_commons/at_commons.dart' show AtKey, StoppedException;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('CurrentCkPointer');
 
@@ -17,7 +16,6 @@ final _logger = AtSignLogger('CurrentCkPointer');
 /// sender's own generation its sibling copy was sealed to (`ownNskeyKid`,
 /// null when it has none). `ownRecorded` is false for a pointer with no
 /// `ownNskeyKid` field, which names no generation either way.
-@experimental
 typedef CurrentCk = ({
   String ckKid,
   String nskeyKid,
@@ -32,7 +30,6 @@ typedef CurrentCk = ({
 /// so a sibling enrollment neither reads nor overwrites it and a rotation
 /// replaces only the calling enrollment's key. A client with no enrollment id
 /// has no such namespace and keeps no pointer.
-@experimental
 class CurrentCkPointer {
   const CurrentCkPointer();
 

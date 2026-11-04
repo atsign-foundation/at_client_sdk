@@ -73,6 +73,11 @@ Feature: AtLookUp.close() closes the connection, and stop() ends the lookup
     Then its connection is closed before the client's first command, so the client's next login is as the new enrollment
     And nothing that needs authentication runs on the lookup before that login completes
 
+  Scenario: A command on a lookup a retrofit is taking over does not log in as the legacy enrollment
+    Given a lookup, logged in as the legacy enrollment, that a self-retrofit was submitted on
+    When another user of the lookup sends a command needing authentication as the retrofit closes its connection
+    Then that command fails rather than logging in, and the retrofitted client runs on a connection logged in as the new enrollment
+
   Scenario: A stopped monitor ends its lookup at once
     Given a monitor whose notification start is in flight
     When the notification service stops

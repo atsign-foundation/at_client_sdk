@@ -14,10 +14,12 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 class _MockAtClient extends Mock implements AtClient {}
 
@@ -51,6 +53,7 @@ void main() {
     events = <DataEvent>[];
     local = LocalSecondary(
       atClient,
+      syncQueue: memorySyncQueue(),
       keyStore: bundle.keyValueStore,
       onEvent: events.add,
     );
@@ -229,7 +232,9 @@ void main() {
       await local.executeVerb(put('p1', 'v', ttbMs: 3600 * 1000));
 
       final fresh = LocalSecondary(atClient,
-          keyStore: local.keyStore, onEvent: events.add);
+          syncQueue: memorySyncQueue(),
+          keyStore: local.keyStore,
+          onEvent: events.add);
       expect(await fresh.nextAvailableAt(), isNotNull);
       expect(
         approximate((await fresh.nextAvailableAt())!,

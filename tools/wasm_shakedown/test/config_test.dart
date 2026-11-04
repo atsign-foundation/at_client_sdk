@@ -2,6 +2,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -245,6 +246,17 @@ void main() {
       expect(control.environment, webEnvironment);
     });
 
+    test('a control through a dependency, and none by default', () {
+      expect(_parse(_valid())['at_auth']!.controls.single.throughPackage,
+          isNull);
+      final config = _parse(_valid('''    - barrel: package:at_auth/at_auth.dart
+      reaches_library: dart:io
+      through_package: at_utils
+      because: the native logging branch
+'''));
+      expect(config['at_auth']!.controls.single.throughPackage, 'at_utils');
+    });
+
     test('allowed_offenders omitted, meaning none', () {
       expect(_parse(_valid())['at_auth']!.ratchets.single.allowedOffenders,
           isEmpty);
@@ -265,6 +277,30 @@ void main() {
           '      because: the filesystem code\n');
       expect(config.unresolvableBarrels(resolvePackageRoots()),
           contains('package:at_auth/renamed.dart'));
+    });
+  });
+
+  group('resolvePackageRootsWith', () {
+    test('takes only the named package from its own directory', () {
+      final temp = Directory.systemTemp.createTempSync('wasm_shakedown_cfg_');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      Directory('${temp.path}/.dart_tool').createSync();
+      File('${temp.path}/.dart_tool/package_config.json')
+          .writeAsStringSync(jsonEncode({
+        'configVersion': 2,
+        'packages': [
+          {'name': 'detached', 'rootUri': '..', 'packageUri': 'lib/'},
+          {'name': 'wasm_shakedown', 'rootUri': '../hosted_copy'},
+        ],
+      }));
+
+      final workspace = resolvePackageRoots();
+      final roots = resolvePackageRootsWith({'detached': temp});
+
+      expect(roots['detached'], '${temp.path}/lib/');
+      expect(roots['wasm_shakedown'], workspace['wasm_shakedown'],
+          reason: 'the directory also lists other packages; they keep the '
+              'workspace copy');
     });
   });
 

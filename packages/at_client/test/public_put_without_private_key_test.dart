@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -36,6 +36,9 @@ void main() {
         AtClientPreference()
           ..namespace = 'unit'
           ..rootDomain = 'test.atsign.wtf',
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder:
+            CacheableSecondaryAddressFinder('test.atsign.wtf', 64),
         remoteSecondary: remote,
         storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
         atKeysIo: keys);

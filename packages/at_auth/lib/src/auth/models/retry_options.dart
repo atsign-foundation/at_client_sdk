@@ -16,8 +16,8 @@ class RetryOptions {
   /// because a newly-registered atSign can take minutes to be provisioned. This
   /// bounds the loop and is deliberately NOT clamped to
   /// `AtNetworkTimeouts.maxAllowed` — that cap applies to individual network
-  /// operations. Note [maxRetries] no longer bounds this loop; this deadline
-  /// does (the loop retries every [retryDelay] until the budget is spent).
+  /// operations. [maxRetries] does not bound this loop; this deadline does
+  /// (the loop retries every [retryDelay] until the budget is spent).
   final Duration? overallTimeout;
 
   const RetryOptions(

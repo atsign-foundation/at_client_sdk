@@ -186,11 +186,10 @@ void main() {
       'UC-G3.6 · a legacy enrollment\'s authentication keypair signs data in '
       'memory only', () {
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
-        'falls back to the APKAM authentication keypair with no key source',
-        proves: 'the fallback is built from atChops rather than read from the '
-            'keyfile — this client has no key source at all, so nothing could '
-            'have been filed for it to find',
-        clauses: ['built from `atChops` on the call']);
+        'the keyfile\'s APKAM keypair answers a keyfile client',
+        proves: 'the authentication keypair the keyfile holds is what signs '
+            'for an enrollment with no signing material',
+        clauses: ['read on the call from the keyfile']);
     provenIn('packages/at_client/test/apkam_signing_keys_test.dart',
         'the keyfile\'s signing material wins over the authentication keypair',
         proves: 'the control: the fallback is a fallback, not a preference');
@@ -321,7 +320,7 @@ void main() {
   test('UC-G3.11 · a pre-enrollment atSign gives itself a first enrollment',
       () {
     provenIn(
-        'tests/at_onboarding_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
+        'tests/at_client_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
         'a pre-enrollment atSign at a post-quantum posture gives itself its '
             'first enrollment',
         proves: 'the whole row against a real atServer, and it reads the '
@@ -337,7 +336,7 @@ void main() {
           'its own retrofit, so sibling clones',
         ]);
     provenIn(
-        'tests/at_onboarding_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
+        'tests/at_client_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart',
         'the same atSign shape at a legacy posture does not',
         proves: 'the control, live, on the same fixture with only the posture '
             'differing — and it can go red while every assertion above stays '
@@ -750,7 +749,7 @@ void main() {
       'UC-G3.25 · the approver\'s view shows whether each enrollment is '
       'anchored', () {
     provenIn(
-        'packages/at_onboarding_cli/test/auth_cli_list_test.dart',
+        'packages/at_client_cli/test/auth_cli_list_test.dart',
         'at_activate list shows whether each approved enrollment is anchored, '
             'naming a key that fails',
         proves: 'the CLI view: an Anchored column reading anchored, unsigned, '

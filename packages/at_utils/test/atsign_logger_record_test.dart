@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils_io.dart'
+    show CLILoggingHandler, FileLoggingHandler, StdErrLoggingHandler;
 import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 
@@ -14,6 +16,7 @@ void main() {
   late AtSignLogger logger;
 
   setUp(() {
+    AtSignLogger.root_level = 'info';
     handler = _KeepingHandler();
     logger = AtSignLogger('records', loggingHandler: handler);
   });

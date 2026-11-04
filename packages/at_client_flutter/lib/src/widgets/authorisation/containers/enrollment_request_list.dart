@@ -27,7 +27,6 @@ class EnrollmentRequestList extends StatefulWidget {
 
   /// Whether an approved enrollment's keys are anchored; with none it asks
   /// `client.enrollments.anchoring`.
-  // ignore: experimental_member_use
   final Future<ChainResult> Function(String enrollmentId)? anchoring;
 
   @override
@@ -124,7 +123,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     final load = ++_approvedLoads;
     final List<({Enrollment enrollment, String anchored})> rows;
     try {
-      // ignore: experimental_member_use
       final anchoring = widget.anchoring ?? _client.enrollments.anchoring;
       final approved = await _client.enrollments.list(
         statuses: const [EnrollmentStatus.approved],
@@ -157,7 +155,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   /// not be read.
   Future<({Enrollment enrollment, String anchored})> _anchoredRow(
     Enrollment enrollment,
-    // ignore: experimental_member_use
     Future<ChainResult> Function(String enrollmentId) anchoring,
   ) async {
     try {
@@ -194,7 +191,6 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
         });
         _showFeedbackOverlay(request, EnrollmentStatus.approved);
       }
-      // ignore: experimental_member_use
     } on EnrollmentConveyanceException catch (e) {
       // NOTE: the approval itself succeeded and only conveying the secret
       // failed, so the request leaves the list and the message stands as-is.

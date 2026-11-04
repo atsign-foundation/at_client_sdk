@@ -18,20 +18,26 @@ void main() {
         'asks once', () async {
       final atClient = MockAtClient();
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final advertised = NskeyAdvertisement.single(
+          publicKey: (await kem.keyPairFromSeed(kem.newSeed())).publicKey,
+          alg: SecretSharingAlgos.xWing);
+      final kid = advertised.nskeyKid;
       final asked = <String>[];
       final ring =
           PublishedNskeyKeyRing(atClient, requestConveyance: (ns, name) async {
         asked.add(name);
         throw SecondaryConnectException('the atServer cannot be reached');
       })
-            ..askCooldown = const Duration(minutes: 10);
+            ..askCooldown = const Duration(minutes: 10)
+            ..rememberOwn(alice, namespace, advertised);
 
-      expect(await ring.privateHalf(alice, namespace, 'kid1'), isNull);
+      expect(await ring.privateHalf(alice, namespace, kid), isNull);
       await pumpEventQueue();
       expect(asked, hasLength(1),
           reason: 'the control: the first read asked, and the ask failed');
 
-      expect(await ring.privateHalf(alice, namespace, 'kid1'), isNull);
+      expect(await ring.privateHalf(alice, namespace, kid), isNull);
       await pumpEventQueue();
 
       expect(asked, hasLength(1),

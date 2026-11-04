@@ -12,7 +12,7 @@ import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_commons/at_commons.dart';
-import 'package:meta/meta.dart' show visibleForTesting;
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 
 // NOTE: the nskey data path is public surface — these types are what
 // `CryptoConfig.nskey` requires, returns and throws, so they have to reach the
@@ -23,7 +23,8 @@ export 'package:at_client/src/crypto/nskey/content_key.dart';
 export 'package:at_client/src/crypto/nskey/content_key_eviction.dart';
 export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
-export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    hide heldOwnAfterStartUpAsk;
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 export 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
@@ -89,8 +90,10 @@ class NskeyPrivateUnavailableException extends AtDecryptionException {
 ///
 /// A content key is sealed to this atSign's own key only for a generation whose
 /// private this client holds, and only to the public half that private derives.
-/// Never answered by falling back to the legacy path. Writes in [namespace] go
-/// through once this client holds the private, which
+/// Thrown once the client has fetched the conveyance records addressed to it
+/// and asked the other enrollments, so the private has not been conveyed to
+/// this enrollment yet. Never answered by falling back to the legacy path.
+/// Writes in [namespace] go through once this client holds the private, which
 /// `AtReachabilityResult.holdsPrivate` reports.
 class NskeyPrivateNotHeldException extends AtEncryptionException {
   final String atSign;
@@ -98,9 +101,8 @@ class NskeyPrivateNotHeldException extends AtEncryptionException {
   final String nskeyKid;
 
   NskeyPrivateNotHeldException(this.atSign, this.namespace, this.nskeyKid)
-      : super('refusing to seal to $atSign:$namespace generation $nskeyKid: '
-            'a client seals to its own atSign\'s namespace key only once it '
-            'holds the private half');
+      : super('the private key for $atSign:$namespace generation $nskeyKid '
+            'has not yet been conveyed to this enrollment');
 }
 
 /// A record identifying one filed nskey private, as [SignalsPrivateFiling]
@@ -281,10 +283,18 @@ class CryptoConfig {
   /// rather than assembling a set here, because building one needs the client
   /// and this is also called *during* construction.
   static CryptoConfig forClient(AtClient? atClient) {
-    final named = atClient?.getPreferences()?.crypto;
-    if (named != null && named is! _EraDefaultSentinel) return named;
+    final named = namedFor(atClient);
+    if (named != null) return named;
     if (atClient == null) return const CryptoConfig.legacy();
     return _eraDefaults.of(atClient) ?? const CryptoConfig.legacy();
+  }
+
+  /// The config [atClient]'s app named, or null when it takes its era's
+  /// default.
+  @internal
+  static CryptoConfig? namedFor(AtClient? atClient) {
+    final named = atClient?.getPreferences()?.crypto;
+    return named is _EraDefaultSentinel ? null : named;
   }
 
   /// Per-client era defaults, held beside the client and never resolved into
@@ -296,8 +306,7 @@ class CryptoConfig {
   /// Idempotent — a re-used cached client keeps the set it was built with, so
   /// its content-key cache and key ring survive re-creation.
   static void adoptEraDefault(AtClient atClient, CryptoConfig config) {
-    final named = atClient.getPreferences()?.crypto;
-    if (named != null && named is! _EraDefaultSentinel) return;
+    if (namedFor(atClient) != null) return;
     _eraDefaults.adoptIfAbsent(atClient, config);
   }
 
@@ -428,8 +437,11 @@ abstract interface class PreparesWrites {
   /// way: a local-first record cannot satisfy a value that went straight to
   /// the atServer, because it does not arrive until the next sync. Null means
   /// the caller expressed no preference and the client default applies.
+  ///
+  /// [sealToNamespace], for a share, is the namespace of the recipient's
+  /// namespace key it must be sealed to, with no other level tried.
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-      {bool? useRemoteAtServer});
+      {bool? useRemoteAtServer, String? sealToNamespace});
 }
 
 /// Implemented by a [CryptoProvider] that can only handle some keys.

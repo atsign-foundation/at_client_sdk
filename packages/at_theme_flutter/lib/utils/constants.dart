@@ -10,8 +10,6 @@ class MixedConstants {
   // for production server
   static const String ROOT_DOMAIN = 'root.atsign.org';
 
-  static String devAPIKey = '477b-876u-bcez-c42z-6a3d';
-
   static const String theme_key = 'theme_data_of_Self';
 
   static const String TERMS_CONDITIONS = 'https://atsign.com/terms-conditions/';

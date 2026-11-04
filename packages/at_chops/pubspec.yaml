@@ -1,25 +1,34 @@
 name: at_chops
-description: Package for Atsign Protocol cryptographic and hashing operations
-version: 4.0.0-rc.1
+description: Package for at_protocol cryptographic and hashing operations
+version: 3.7.1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_chops
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
 
 environment:
   sdk: ^3.6.0
+resolution: workspace
 
 dependencies:
-  # HMAC-SHA256 for the HKDF core (`src/hashing/hkdf_core.dart`).
+  args: ^2.6.0
+  encrypt: ^5.0.3
+  crypton: ^2.2.1
   crypto: ^3.0.5
+  ecdsa: ^0.1.0
+  elliptic: ^0.3.10
   pointycastle: ^3.9.1
   at_commons: ^5.6.0
-  at_utils: ^3.0.19
+  at_utils: ">=3.0.19 <5.0.0"
   cryptography: ^2.7.0
   meta: ^1.9.0
+  better_cryptography: ^1.0.0+1
   ffi: ^2.1.0
   pqcrypto: ^0.3.0
 
 dev_dependencies:
+  # Used only by example/zariot — FFI-based, and keeping it out of
+  # `dependencies` keeps dart:ffi off every consumer's resolved graph.
+  dart_periphery: ^0.9.5
   lints: ^6.0.0
   test: ^1.25.0
   collection: ^1.19.1

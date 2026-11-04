@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
@@ -23,6 +23,9 @@ Future<void> main(List<String> args) async {
       ..rootDomain = '127.0.0.1'
       ..rootPort = int.parse(port)
       ..namespace = 'exit',
+    lookUps: secureSocketLookUps(),
+    secondaryAddressFinder:
+        CacheableSecondaryAddressFinder('127.0.0.1', int.parse(port)),
     storage: HiveAtClientStorage(
         atSign: atSign, storagePath: storagePath, closedByClient: true),
     connectBudget: const Duration(milliseconds: 300),

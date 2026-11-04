@@ -14,7 +14,7 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -140,8 +140,8 @@ void main() {
               'CRAM exchange, not this check, refuses an activated atSign');
     });
 
-    test('Test onboard - cramAuthenticate returns false', () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+    test('Test onboard - CRAM authentication returns false', () async {
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(false));
       when(() => mockAtLookUp
               .executeCommand(any(that: isNot(startsWith('lookup:publickey')))))
@@ -150,20 +150,23 @@ void main() {
           .thenAnswer((_) => Future.value('data:2'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
 
+      // NOTE: a key store, so the refusal asserted is the CRAM one and not the
+      // missing-atKeysIo guard that follows it.
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
-          signingAlgoType: SigningAlgoType.rsa2048);
+          signingAlgoType: SigningAlgoType.rsa2048,
+          atKeysIo: InMemoryAtKeysIo());
 
-      expect(
+      await expectLater(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
-          throwsA(isA<AtAuthenticationException>()));
+          throwsA(isA<AtAuthenticationException>().having((e) => e.message,
+              'message', contains('Cram authentication failed'))));
     });
 
     test('an enrollment refusal surfaces the underlying reason in the message',
         () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -190,7 +193,7 @@ void main() {
 
     test('Test onboard with appName and deviceName set in onboarding request',
         () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -200,8 +203,7 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
@@ -231,13 +233,12 @@ void main() {
       // however the id is passed to `pkamAuthenticate`, the atServer
       // authenticates the connection as `pkamLegacy` against the default PKAM
       // public key, and the two ends disagree about who is on the connection.
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
@@ -282,14 +283,13 @@ void main() {
 
     test('the activation PKAM goes over the same lookup, so it is not closed',
         () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async {});
       when(() => mockAtLookUp.close()).thenAnswer((_) async {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
@@ -307,7 +307,7 @@ void main() {
     });
 
     test('Test onboard with default appName and deviceName', () async {
-      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+      when(() => mockAtLookUp.pkamAuthenticate())
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
@@ -317,8 +317,7 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any(),
-          enrollmentId: "abc123")).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))

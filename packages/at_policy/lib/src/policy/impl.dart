@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart' hide StringBuffer;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_policy/at_policy.dart';
-import 'package:at_utils/at_logger.dart';
 
 ///
 class PolicyServiceImpl with AtClientBindings implements PolicyService {

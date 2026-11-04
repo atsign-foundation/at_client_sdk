@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 

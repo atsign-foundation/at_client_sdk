@@ -1,6 +1,5 @@
-/// The in-memory [AtClientStorage]: a SQLite database that is never written to
-/// disk, so it needs the native SQLite library at runtime. A separate import,
-/// like each storage backend.
+/// The in-memory [AtClientStorage], in pure Dart: nothing reaches disk, and
+/// it needs no native library. A separate import, like each storage backend.
 library;
 
 export 'package:at_client/src/storage/memory/in_memory_at_client_storage.dart';

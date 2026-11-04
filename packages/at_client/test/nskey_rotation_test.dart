@@ -1,7 +1,3 @@
-// A client with no key source signs from its AtChops, and the key source is what
-// several tests here vary, so this file names the AtChops on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -11,7 +7,13 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
-import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
+import 'package:at_client/at_client_mixins.dart'
+    show
+        AtClientEnvelopeSigner,
+        EnrollmentDirectory,
+        KeyPackage,
+        NamespaceMember,
+        PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
@@ -20,10 +22,30 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 
 class MockAtClient extends Mock implements AtClient {}
 
 class MockSharing extends Mock implements PairwiseSecretSharing {}
+
+/// A roster listing only the rotating enrollment, with a key package, in every
+/// namespace, which is what lets a rotation mint at all.
+class _RotatorListed implements EnrollmentDirectory {
+  _RotatorListed(this.keyPackage);
+
+  final KeyPackage keyPackage;
+
+  @override
+  Future<List<NamespaceMember>> listForNamespace(String namespace,
+          {Set<String> excludeEnrollmentIds = const {}}) async =>
+      [
+        NamespaceMember(
+            enrollmentId: 'enroll-a', access: 'rw', keyPackage: keyPackage)
+      ];
+
+  @override
+  Future<DateTime?> lastRevokedAt(String namespace) async => null;
+}
 
 class FakeSecret extends Fake implements Secret {}
 
@@ -36,6 +58,20 @@ void main() {
   const namespace = 'app_1.my_apps';
 
   final logs = RecordedLogs();
+  late KeyPackage rotatorPackage;
+
+  setUpAll(() async {
+    final pair = await XWingKeyPair.generate();
+    rotatorPackage = KeyPackage(
+        enrollmentId: 'enroll-a',
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: pair.publicKeyBytes)
+        ]);
+  });
 
   setUpAll(() {
     registerFallbackValue(AtKey());
@@ -80,14 +116,20 @@ void main() {
     final published = <String>[];
     // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace.
     final advertised = <String, String>{};
-    final chops = AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
+    final pair = RsaKeyPair.generate();
+    final local = MockLocalSecondary();
+    when(() => atClient.getLocalSecondary()).thenReturn(local);
+    when(() => local.getPkamPublicKey())
+        .thenAnswer((_) async => pair.atPublicKey.publicKey);
+    when(() => local.getPkamPrivateKey())
+        .thenAnswer((_) async => pair.atPrivateKey.privateKey);
 
-    when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
     when(() => atClient.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.atKeysIo).thenAnswer(
+        (_) => keysHoldingApkam(atSign, atClient.enrollmentId, pair));
     when(() => atClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
@@ -98,16 +140,14 @@ void main() {
       // Anything but `__nskey` is the `_apsk` an advertisement's signature is
       // checked against.
       if (key.key != '__nskey') {
-        return AtValue()
-          ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+        return AtValue()..value = pair.atPublicKey.publicKey;
       }
       final serving = advertised[key.namespace];
       if (serving == null) throw AtKeyNotFoundException('$key');
       return AtValue()..value = serving;
     });
 
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0];
       if (builder is UpdateVerbBuilder) {
         final key = builder.atKey.key;
@@ -163,6 +203,8 @@ void main() {
     // through noSuchMethod into a non-nullable type and the push below would
     // never happen, with `dart analyze` clean.
     when(() => mock.secretStore).thenReturn(SecretStore());
+    when(() => mock.directory).thenReturn(_RotatorListed(rotatorPackage));
+    when(() => mock.enrollmentId).thenReturn('enroll-a');
     when(() => mock.pushSecretToNamespaceMembers(any(),
             excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
         .thenAnswer((inv) async {

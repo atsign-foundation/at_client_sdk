@@ -7,7 +7,6 @@ import 'test_utils/mocks.dart';
 void main() {
   group('CryptoRuntime', () {
     late MockAtClient mockAtClient;
-    late MockAtChops mockAtChops;
     late _RecordingProvider legacyProvider;
     late _RecordingProvider customProvider;
 
@@ -21,10 +20,8 @@ void main() {
 
     setUp(() {
       mockAtClient = MockAtClient();
-      mockAtChops = MockAtChops();
       legacyProvider = _RecordingProvider('legacy');
       customProvider = _RecordingProvider('custom');
-      when(() => mockAtClient.atChops).thenReturn(mockAtChops);
       configure([legacyProvider, customProvider]);
     });
 
@@ -270,7 +267,7 @@ class _PreparingProvider extends _RecordingProvider implements PreparesWrites {
 
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-      {bool? useRemoteAtServer}) async {
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
     prepareCalls++;
     lastUseRemoteAtServer = useRemoteAtServer;
   }

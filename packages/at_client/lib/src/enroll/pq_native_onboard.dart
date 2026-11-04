@@ -8,8 +8,8 @@ import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
-import 'package:meta/meta.dart' show experimental;
+import 'package:at_lookup/at_lookup.dart'
+    show AtLookUpFactory, AtLookupMuxable, SecondaryAddressFinder;
 
 export 'package:at_client/src/enroll/first_enrollment.dart';
 
@@ -34,8 +34,10 @@ export 'package:at_client/src/enroll/first_enrollment.dart';
 ///   to create the root at all;
 /// - the **legacy** RSA encryption keypair, `selfEncryptionKey` and
 ///   `public:publickey`, **by default**. Pass [mintLegacyMaterial] false only
-///   if you know better; it makes a legacy peer's send to this atSign
-///   unsupported.
+///   if you know better: it makes a legacy peer's send to this atSign
+///   unsupported, and `AtClient.put` of a public value throws
+///   `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+///   encryption private key.
 ///
 /// The signing-root step runs inside its own guard: the activation has already
 /// succeeded by then, and failing the whole onboard over it would leave a live
@@ -43,8 +45,9 @@ export 'package:at_client/src/enroll/first_enrollment.dart';
 ///
 /// [atKeysIo] must be writable, since the activation mints the keys it holds.
 /// [atLookUp] is the connection to activate over; normally omitted, in which
-/// case the atServer is found through the atDirectory and waited for.
-@experimental
+/// case [lookUps] builds one to the atServer [secondaryAddressFinder] finds,
+/// and waits for it. Both serve the activated client too, as `Atsign.open`
+/// describes.
 Future<AtClientManager> pqNativeOnboard({
   required String atSign,
   required String cramSecret,
@@ -58,8 +61,10 @@ Future<AtClientManager> pqNativeOnboard({
   /// The store the activated client opens. An activation builds the
   /// atSign's first client, so there is no earlier holder to inherit
   /// from and the caller supplies it.
-  AtClientStorage? storage,
+  required AtClientStorage storage,
   AtLookupMuxable? atLookUp,
+  required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
 }) async {
   if (atKeysIo is! WrittenAtKeysIo) {
     throw ArgumentError.value(
@@ -82,7 +87,9 @@ Future<AtClientManager> pqNativeOnboard({
       device: deviceName,
       mintLegacyMaterial: mintLegacyMaterial,
       signingAlgo: SigningAlgoType.mldsa65,
-      atLookUp: atLookUp);
+      atLookUp: atLookUp,
+      lookUps: lookUps,
+      secondaryAddressFinder: secondaryAddressFinder);
   final adopting = manager ?? AtClientManager.getInstance();
   adopting.use(client);
   return adopting;

@@ -122,7 +122,7 @@ CI emits the stream from five jobs across two workflows
 (`grep -n 'file-reporter json' .github/workflows/*.yaml`): `unit_at_client`,
 `functional_tests`, `pqe2e_tests` and `legacy_server_tests` in `at_client_sdk.yaml`
 and the `build_and_test` matrix in `at_libraries.yaml`. The CLI pack's job
-(`functional_tests_at_onboarding_cli` in `at_libraries.yaml`) runs with no
+(`functional_tests_at_client_cli` in `at_libraries.yaml`) runs with no
 reporter and no upload, although it is a declared live pack with 3 citations, so a
 CI-rendered ledger can never show those rows exercised. Rendering is a local step
 (`tools/acceptance_ledger.sh`), by decision.
@@ -276,7 +276,7 @@ one-shot CRAM constraint that otherwise forces the retirement rule in
 
 The repo already contains two Gherkin files, and nothing has ever read them:
 `tests/at_functional_test/test_scenarios/atclient_apkam.feature` (4 scenarios) and
-`tests/at_onboarding_cli_functional_tests/test_scenarios/apkam/onboarding_cli.feature`
+`tests/at_client_cli_functional_tests/test_scenarios/apkam/onboarding_cli.feature`
 (6 scenarios), both added by Murali in March 2024; the first was hand-edited in June
 2025 to track an atServer error-code change, so it is maintained prose with no
 runner. `git grep -n -P '\.feature|test_scenarios' -- ':!*.feature'` returns nothing,

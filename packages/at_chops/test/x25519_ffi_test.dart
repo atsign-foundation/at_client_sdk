@@ -1,6 +1,7 @@
 @Tags(['ffi'])
 library;
 
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -44,12 +45,14 @@ void main() {
       final pureAlgo = X25519PureDartAlgo.instance;
       final ffiAlgo = X25519FfiAlgo.fromLib(lib);
 
-      final alice = await pureAlgo.generateKeyPair();
-      final bob = await pureAlgo.generateKeyPair();
+      final X25519KeyPair alice = await X25519KeyPair.generate();
+      final X25519KeyPair bob = await X25519KeyPair.generate();
 
-      final Uint8List ssPure =
-          await pureAlgo.dh(alice.privateKey, bob.publicKey);
-      final Uint8List ssFfi = await ffiAlgo.dh(alice.privateKey, bob.publicKey);
+      final Uint8List alicePriv = base64Decode(alice.atPrivateKey.privateKey);
+      final Uint8List bobPub = base64Decode(bob.atPublicKey.publicKey);
+
+      final Uint8List ssPure = await pureAlgo.dh(alicePriv, bobPub);
+      final Uint8List ssFfi = await ffiAlgo.dh(alicePriv, bobPub);
 
       expect(ssPure, equals(ssFfi));
     });

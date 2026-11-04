@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
+import 'package:at_client_cli/at_client_cli.dart' show AtActivate;
 
-Future<void> main(List<String> args) async {
-  exit(await auth_cli.main(args));
-}
+Future<void> main(List<String> args) async => exit(await AtActivate.main(args));

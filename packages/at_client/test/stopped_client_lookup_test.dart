@@ -6,8 +6,11 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/fake_at_server.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
-/// An [AtLookUp] that is not an [AtLookupMuxable], so it can only be closed.
+/// An [AtLookUp] that is not an [AtLookupMuxable]: it carries no
+/// notifications, and stops like any other.
 class _PlainLookUp extends Mock implements AtLookUp {}
 
 /// Catalogue: features/at_lookup/close_and_stop.feature
@@ -18,6 +21,8 @@ void main() {
     final server = FakeAtServer(atSign: '@stopped');
     final client = await AtClientImpl.create(
         '@stopped', 'wavi', AtClientPreference()..monitorAutoStart = false,
+        secondaryAddressFinder: defaultAtDirectory,
+        atKeysIo: noKeysFor('@stopped'),
         lookUps: server.lookUps,
         storage: InMemoryAtClientStorage(
             atSign: '@stopped', closedByClient: true)) as AtClientImpl;
@@ -44,11 +49,13 @@ void main() {
     final plain = _PlainLookUp();
     when(() => plain.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((_) async => 'data:ok');
+    when(plain.stop).thenAnswer((_) async {});
     when(() => plain.executeVerb(any())).thenAnswer((_) async => 'data:ok');
-    when(() => plain.cramAuthenticate(any())).thenAnswer((_) async => true);
     when(plain.close).thenAnswer((_) async {});
     final client = await AtClientImpl.create(
             '@plain', 'wavi', AtClientPreference()..monitorAutoStart = false,
+            secondaryAddressFinder: defaultAtDirectory,
+            atKeysIo: noKeysFor('@plain'),
             atLookUp: plain,
             lookUps: server.lookUps,
             storage:
@@ -65,12 +72,9 @@ void main() {
     await expectLater(remote.sync(0), throwsA(isA<StoppedException>()));
     await expectLater(remote.executeVerb(StatsVerbBuilder()),
         throwsA(isA<StoppedException>()));
-    await expectLater(
-        remote.authenticateCram('secret'), throwsA(isA<StoppedException>()));
     verify(() => plain.executeCommand(any(), auth: any(named: 'auth')))
         .called(1);
     verifyNever(() => plain.executeVerb(any()));
-    verifyNever(() => plain.cramAuthenticate(any()));
-    verify(plain.close).called(1);
+    verify(plain.stop).called(1);
   });
 }

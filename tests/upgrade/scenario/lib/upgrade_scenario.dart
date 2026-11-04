@@ -6,8 +6,7 @@
 /// the library directly.
 library;
 
-export 'package:pq_matrix_scenario/connect.dart'
-    show ClientSpec, attachWithoutKeySource, connect;
+export 'package:pq_matrix_scenario/connect.dart' show ClientSpec, connect;
 
 export 'src/catalogue.dart';
 export 'src/lifecycle.dart';

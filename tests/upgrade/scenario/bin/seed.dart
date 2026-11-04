@@ -1,6 +1,7 @@
 import 'dart:convert' show jsonEncode;
 import 'dart:io';
 
+import 'package:pq_matrix_scenario/released.dart' show attachWithDemoAtChops;
 import 'package:upgrade_scenario/upgrade_scenario.dart';
 
 /// Seeds a store with whichever at_client the calling package resolves, then
@@ -33,7 +34,7 @@ Future<void> main(List<String> args) async {
   final client = await connect(
       spec: spec,
       preference: upgradePreference(spec),
-      attach: attachWithoutKeySource);
+      attach: attachWithDemoAtChops);
   final facts =
       await seed(client, me: me, peer: peer, namespace: spec.namespace);
   final observed =

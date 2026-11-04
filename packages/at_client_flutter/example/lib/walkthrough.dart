@@ -1,16 +1,27 @@
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';
-import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:example/main.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 final namespace = 'at_client_flutter_example';
 final AtSignLogger _logger = AtSignLogger(namespace);
-final RegistrarService registrar = RegistrarService(
-  registrarUrl: "my.atsign.com",
-  apiKey: "477b-876u-bcez-c42z-6a3d",
-);
+
+/// The registrar API key this example is built with:
+/// `flutter run --dart-define=REGISTRAR_API_KEY=<your key>`.
+const String registrarApiKey = String.fromEnvironment('REGISTRAR_API_KEY');
+
+/// What the example says when it was built with no registrar API key.
+const String missingRegistrarApiKey =
+    'This build has no registrar API key. An app developer can create one '
+    'via the registrar at my.atsign.com; pass it with '
+    '--dart-define=REGISTRAR_API_KEY=<your key>.';
+
+/// The registrar new atSigns are activated through, or null when the example
+/// was built with no API key.
+final RegistrarService? registrar = registrarApiKey.isEmpty
+    ? null
+    : RegistrarService(registrarUrl: 'my.atsign.com', apiKey: registrarApiKey);
 
 final KeychainStorage keychainStorage = KeychainStorage();
 
@@ -33,6 +44,14 @@ Future<T?> _safeExecute<T>(
 
 /// This method is an example of how an application creates their own customized onboarding flow
 Future<void> onboard(BuildContext context) async {
+  final service = registrar;
+  if (service == null) {
+    _logger.warning(missingRegistrarApiKey);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text(missingRegistrarApiKey)));
+    return;
+  }
   await _safeExecute('onboard', () async {
     _logger.info('Step 1: Showing AtSignSelectionDialog');
     final selection = await AtSignSelectionDialog.show(context);
@@ -47,7 +66,7 @@ Future<void> onboard(BuildContext context) async {
     var cramKey = await RegistrarCramDialog.show(
       context,
       selection.atSign,
-      registrar: registrar,
+      registrar: service,
     );
     if (!context.mounted || cramKey == null) {
       _logger.warning(
@@ -235,7 +254,7 @@ Future<void> exportKeys(BuildContext context) async {
     }
 
     _logger.info('Writing keys to file');
-    atKeysIo.write(atsign, atKeys);
+    await atKeysIo.write(atsign, atKeys);
     _logger.info('Keys exported successfully');
 
     if (context.mounted) {

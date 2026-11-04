@@ -1,14 +1,10 @@
-// The substrate, the nskey surface and the rotation levers are @experimental;
-// driving them is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show ckConveyanceKey, ckSiblingCopyKey;
@@ -98,7 +94,7 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: liveMintLockTtl),
+          privateFiling: filing, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
     );
   }
 
@@ -364,8 +360,7 @@ void main() {
           TestUtils.lookUpAs(atSign, enrolled.keys,
         enrollmentId: enrolled.enrollmentId);
       try {
-        final accepted =
-            await lookup.pkamAuthenticate(enrollmentId: enrolled.enrollmentId);
+        final accepted = await lookup.pkamAuthenticate();
         return accepted ? 'accepted' : 'refused without a reason';
       } catch (e) {
         return '$e';
@@ -585,12 +580,14 @@ void main() {
         keys: peerKeys,
         preference:
             TestUtils.getPreference(peer, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: ns,
         storage: TestUtils.storageForPrincipal(peer, 'snd-peer'));
     addTearDown(peerClient.stop);
     await PublishedNskeyKeyRing(peerClient,
             privateFiling: NskeyPrivateFiling(keysIo: peerKeys, atSign: peer),
-            lockTtl: liveMintLockTtl)
+            lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero)
         .mintAndPublish(ns);
 
     final g1 = await writer.ring.mintAndPublish(ns);

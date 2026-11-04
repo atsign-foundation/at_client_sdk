@@ -1,3 +1,7 @@
+## 0.1.1
+
+- chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.
+
 ## 0.1.0
 
 - feat: initial, experimental release. The contracts below may change in any

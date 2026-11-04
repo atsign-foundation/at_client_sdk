@@ -4,7 +4,6 @@ import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
-import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -17,14 +16,11 @@ abstract interface class AtAuth {
 
   factory AtAuth.create(
       {required AtLookupMuxable atLookUp,
-      // ignore: deprecated_member_use
-      AtChops? atChops,
       CramAuthenticator? cramAuthenticator,
       PkamAuthenticator? pkamAuthenticator,
       AtEnrollment? atEnrollmentBase}) {
     return AtAuthImpl(
         atLookUp: atLookUp,
-        atChops: atChops,
         cramAuthenticator: cramAuthenticator,
         pkamAuthenticator: pkamAuthenticator,
         atEnrollment: atEnrollmentBase);

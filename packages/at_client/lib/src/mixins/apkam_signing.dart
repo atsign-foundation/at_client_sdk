@@ -1,20 +1,21 @@
 import 'dart:async' show Completer;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, KeyEntryStatus, publicKeyKidOfBase64;
-// ignore: deprecated_member_use
-import 'package:at_chops/at_chops.dart' show AtPkamKeyPair, SigningAlgoType;
+    show
+        AtKeys,
+        AtKeysSourceAbsentException,
+        KeyEntryStatus,
+        publicKeyKidOfBase64;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions, PutRequestOptions;
 import 'package:at_commons/at_commons.dart'
-    show AtClientException, AtKey, AtKeyNotFoundException, EnrollmentConstants;
+    show AtKey, AtKeyNotFoundException, EnrollmentConstants;
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, apskUri, canSignEnvelopeWith;
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show signingAlgoOf;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 /// The tail of each client's `_apsk` write chain, so [serialiseApskWrite] can
@@ -150,7 +151,9 @@ mixin ApkamSigning {
 
   /// The keys this client signs content with, strongest algorithm first:
   /// those of its client data signing keys that have a link, while any do, and
-  /// otherwise every one it holds. Never empty.
+  /// otherwise every one it holds. Never empty: throws
+  /// [AtKeyNotFoundException] when it holds no key to sign with, as when it has
+  /// no keyfile, and a keyfile that cannot be read throws that read's error.
   ///
   /// Which keys have a link is what [rememberOwnLinkedKids] last recorded;
   /// until something has, every held key signs.
@@ -158,13 +161,12 @@ mixin ApkamSigning {
   /// Sourced from the keyfile through [AtClient.atKeysIo] and read on every
   /// call: a cached copy goes stale the moment an `enroll:update` rotates the
   /// material, and signing with a key the keyfile has retired produces a
-  /// signature that verifies against nothing. `atChops` is not a source — it
-  /// carries the APKAM **authentication** keypair, which is separate material.
+  /// signature that verifies against nothing.
   ///
-  /// Falls back to that authentication keypair when the enrollment holds no
-  /// signing material this build can sign with, or when the client has no key
-  /// source at all. [apskEntries] advertises that key on exactly the same
-  /// condition, so what signs and what is advertised cannot drift apart.
+  /// Falls back to the authentication keypair when the enrollment holds no
+  /// signing material this build can sign with. [apskEntries] advertises that
+  /// key on exactly the same condition, so what signs and what is advertised
+  /// cannot drift apart.
   ///
   /// ⚠️ A mint files its new key before it publishes it, so between those two
   /// writes this answers a key the advertisement does not name yet. An
@@ -172,7 +174,13 @@ mixin ApkamSigning {
   /// lands first, once the next start's republish does.
   Future<List<ApkamSigningKeys>> get signingKeys async {
     final held = await heldSigningKeys;
-    if (held.isEmpty) return [(await authenticationSigningKey)!];
+    if (held.isEmpty) {
+      return [
+        await authenticationSigningKey ??
+            (throw AtKeyNotFoundException('${atClient.getCurrentAtSign()} '
+                'holds no key enrollment $enrollmentId can sign with'))
+      ];
+    }
 
     final linkedKids = _ownLinkedKids[atClient];
     if (linkedKids == null) return held;
@@ -185,8 +193,7 @@ mixin ApkamSigning {
 
   /// The APKAM **authentication** keypair as a signing key: the keyfile's for
   /// [enrollmentId] — typed material first, the flat pair as `rsa2048`
-  /// otherwise — else the client's `AtChops` keypair, for a client built
-  /// without a key source; null when it holds neither.
+  /// otherwise — or null when it holds neither.
   ///
   /// Two jobs, one key, for as long as an enrollment holds no signing material
   /// of its own: it authenticates the connection and it signs what the
@@ -198,41 +205,33 @@ mixin ApkamSigning {
   Future<ApkamSigningKeys?> get authenticationSigningKey async {
     final fromKeyfile = (await _readKeyfile('authentication key'))
         ?.authenticationKeyPairFor(enrollmentId);
-    if (fromKeyfile != null) {
-      return ApkamSigningKeys(
-        algorithm: fromKeyfile.algorithm,
-        publicKey: fromKeyfile.publicKey,
-        privateKey: fromKeyfile.privateKey,
-      );
-    }
-    // NOTE: the door for a client built from an AtChops and no keyfile.
-    final keyPair = atClient.atChops?.atChopsKeys.atPkamKeyPair;
-    if (keyPair == null) return null;
+    if (fromKeyfile == null) return null;
     return ApkamSigningKeys(
-      algorithm: signingAlgoOf(atClient),
-      publicKey: keyPair.atPublicKey.publicKey,
-      privateKey: keyPair.atPrivateKey.privateKey,
+      algorithm: fromKeyfile.algorithm,
+      publicKey: fromKeyfile.publicKey,
+      privateKey: fromKeyfile.privateKey,
     );
   }
 
-  /// [atClient]'s keyfile, or null when it has no key source or the read
-  /// fails; a failure is logged naming [purpose], and the caller falls back.
+  /// [atClient]'s keyfile, or null when it has no key source or no keyfile;
+  /// the absence is logged naming [purpose]. A keyfile that exists and cannot
+  /// be read throws.
   Future<AtKeys?> _readKeyfile(String purpose) async {
     final io = atClient.atKeysIo;
     final atSign = atClient.getCurrentAtSign();
     if (io == null || atSign == null) return null;
     try {
       return await io.read(atSign);
-    } on Object catch (e) {
-      logger.warning('Cannot read $atSign\'s keyfile for its $purpose ($e) — '
-          'falling back to the APKAM authentication key');
+    } on AtKeysSourceAbsentException catch (e) {
+      logger.warning('$atSign has no keyfile to read its $purpose from ($e)');
       return null;
     }
   }
 
   /// What the keyfile holds for [enrollmentId], filtered to what this build
-  /// can sign an envelope with. Empty when the client has no key source, when
-  /// the read fails, or when the enrollment holds none.
+  /// can sign an envelope with. Empty when the client has no key source or no
+  /// keyfile, or when the enrollment holds none; a keyfile that cannot be read
+  /// throws.
   Future<List<ApkamSigningKeys>> get heldSigningKeys async {
     final keys = await _readKeyfile('signing keys');
     if (keys == null) return const [];
@@ -261,8 +260,8 @@ mixin ApkamSigning {
   /// filter asks what *this* build can sign with, and these entries exist for
   /// *other* parties to verify with.
   ///
-  /// Empty when the client has no key source, when the read fails, or when
-  /// nothing has been withdrawn from service.
+  /// Empty when the client has no key source or no keyfile, or when nothing
+  /// has been withdrawn from service; a keyfile that cannot be read throws.
   Future<
       List<
           ({
@@ -270,89 +269,16 @@ mixin ApkamSigning {
             String publicKey,
             KeyEntryStatus status
           })>> get withdrawnSigningKeys async {
-    final io = atClient.atKeysIo;
-    final atSign = atClient.getCurrentAtSign();
-    if (io == null || atSign == null) return const [];
+    final keys = await _readKeyfile('withdrawn signing keys');
+    if (keys == null) return const [];
 
-    try {
-      final keys = await io.read(atSign);
-      return [
-        for (final key in keys.withdrawnSigningKeysFor(enrollmentId))
-          (
-            algorithm: key.algorithm,
-            publicKey: key.publicKey,
-            status: KeyEntryStatus.of(key.status),
-          ),
-      ];
-    } on Object catch (e) {
-      logger.warning('Cannot read $atSign\'s withdrawn signing keys ($e) — '
-          'advertising without them, so anything they signed will not verify '
-          'until a later publish succeeds');
-      return const [];
-    }
-  }
-
-  /// The APKAM authentication keypair's halves, as at_client 3.14.0 returned
-  /// them.
-  ///
-  /// Kept for a caller written against that version — they read the same
-  /// place it did, `AtClient.atChops`. Two reasons they are deprecated, and
-  /// the first is the one that bites:
-  ///
-  /// - **`_apsk` stops advertising this key** once the enrollment holds
-  ///   signing keys of its own ([apskEntries] lists the authentication key
-  ///   only while there are none), so a signature made with it verifies
-  ///   against nothing. That is why a post-quantum posture makes these shout.
-  /// - a key per algorithm is the model now, so one key cannot describe what
-  ///   this enrollment signs with; [signingKeys] is the replacement, and
-  ///   [publicSigningKeyValue] is what gets advertised.
-  ///
-  /// Throws when this enrollment authenticates with anything but `rsa2048`:
-  /// the slot then holds base64 raw bytes of a post-quantum key, and handing
-  /// those to a caller expecting an RSA key is a corrupted value rather than
-  /// a policy mismatch. Also throws when the client holds no APKAM keypair at
-  /// all, which 3.14.0 met with a null-check failure.
-  @Deprecated('Read signingKeys instead: `_apsk` stops advertising the '
-      'authentication key once this enrollment holds signing keys of its own, '
-      'so what this returns may verify against nothing. Removed with '
-      'AtClient.atChops in at_client 4.0.')
-  String get publicSigningKey => _authenticationKeyPair().atPublicKey.publicKey;
-
-  /// The private half of [publicSigningKey]; everything said there applies.
-  @Deprecated('Sign with signingKeys instead: `_apsk` stops advertising the '
-      'authentication key once this enrollment holds signing keys of its own, '
-      'so signatures made with this may verify against nothing. Removed with '
-      'AtClient.atChops in at_client 4.0.')
-  String get privateSigningKey =>
-      _authenticationKeyPair().atPrivateKey.privateKey;
-
-  /// The keypair behind the two deprecated accessors, with the refusals and
-  /// the warning they share.
-  // ignore: deprecated_member_use
-  AtPkamKeyPair _authenticationKeyPair() {
-    final algorithm = signingAlgoOf(atClient);
-    if (algorithm != SigningAlgoType.rsa2048) {
-      throw AtClientException.message(
-          '${atClient.getCurrentAtSign()} authenticates enrollment '
-          '$enrollmentId with ${algorithm.name}, so this accessor would hand '
-          'back base64 ${algorithm.name} bytes where an RSA key is expected. '
-          'Read signingKeys, which reports every key with its algorithm.');
-    }
-    // ignore: deprecated_member_use_from_same_package
-    final keyPair = atClient.atChops?.atChopsKeys.atPkamKeyPair;
-    if (keyPair == null) {
-      throw AtClientException.message(
-          '${atClient.getCurrentAtSign()} holds no APKAM keypair, so this '
-          'accessor has nothing to return. Read signingKeys, which sources '
-          'the keyfile.');
-    }
-    if (atClient.getPreferences()?.posture.configuresPqProviders ?? false) {
-      logger.shout(
-          'publicSigningKey/privateSigningKey read under a posture that '
-          'configures post-quantum providers: `_apsk` may no longer advertise '
-          'this key for enrollment $enrollmentId, and anything signed with it '
-          'would then verify against nothing. Read signingKeys instead.');
-    }
-    return keyPair;
+    return [
+      for (final key in keys.withdrawnSigningKeysFor(enrollmentId))
+        (
+          algorithm: key.algorithm,
+          publicKey: key.publicKey,
+          status: KeyEntryStatus.of(key.status),
+        ),
+    ];
   }
 }

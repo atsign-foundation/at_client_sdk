@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/transport.dart';
 
 const _owner = '@alice';
 const _namespace = 'sshrvd';
@@ -129,9 +130,9 @@ void main() {
     when(() => atClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
-    service =
-        await NotificationServiceImpl.create(atClient, monitor: _FakeMonitor())
-            as NotificationServiceImpl;
+    service = await NotificationServiceImpl.create(atClient,
+        monitor: _FakeMonitor(),
+        secondaryAddressFinder: defaultAtDirectory) as NotificationServiceImpl;
   });
 
   tearDown(() async {

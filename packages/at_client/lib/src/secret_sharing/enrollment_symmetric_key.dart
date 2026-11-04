@@ -19,17 +19,20 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_envelope.dart'
     show SecretEnvelope;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, EnvelopeType, SignedEnvelope, verifyEnvelope;
+    show
+        apskUri,
+        EnvelopeType,
+        requireApskEnrollmentId,
+        SignedEnvelope,
+        verifyEnvelope;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 /// The reserved [Secret] name under which an approver conveys a new
 /// enrollment's `apkamSymmetricKey`.
 ///
 /// Carries the per-enrollment prefix, so it is never forwarded to the next
 /// enrollment this one approves — it is addressed to exactly one device.
-@experimental
 const String enrollmentApkamSymmetricKeySecretName =
     '${PairwiseSecretSharing.perEnrollmentSecretPrefix}apkamSymmetricKey';
 
@@ -54,7 +57,6 @@ final AtSignLogger _logger = AtSignLogger('EnrollmentSymmetricKey');
 /// itself, checked against the signing enrollment's published `_apsk`. Without
 /// the signature, anyone who read the public key package could seal a symmetric
 /// key of their choosing to this enrollment.
-@experimental
 Stream<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
   String atSign, {
   Duration timeout = const Duration(seconds: 30),
@@ -269,6 +271,7 @@ Future<void> _verifyAgainstApsk(
         'Envelope names no enrollment, so there is no _apsk to check its '
         'signature against');
   }
+  requireApskEnrollmentId(claimed);
   // NOTE: an absent `_apsk` does not come back null — the atServer answers
   // AT0015 and at_lookup throws it.
   final String? response = await atLookUp

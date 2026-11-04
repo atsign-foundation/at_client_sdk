@@ -58,18 +58,20 @@ To read a leaf item after a `CSubItemUpdated` event, use `getDescendant()`.
 
 ## 4. Unhandled Decode Errors in `getItemsAsStream()`
 
-**Problem:** A single corrupt or schema-mismatched item in the keystore causes
-an unhandled stream error that terminates the stream and may crash the widget.
+**Problem:** A single item this device cannot read, corrupt or sealed to a
+namespace key it does not hold yet, causes an unhandled stream error that
+terminates the stream and may crash the widget.
 
-**Fix:** Chain `.handleError()` to log-and-skip corrupt items, or use
+**Fix:** Chain `.handleError()` to log-and-skip such items, or use
 `getItems()` if you want the entire list or nothing:
 
 ```dart
-// Silent-skip pattern — omit `test:` to catch all stream errors,
-// since the SDK yields decode failures as plain string errors, not a named type
+// Silent-skip pattern: each unreadable item is a CItemReadException
+// carrying its key and the error its read failed with
 collection
     .getItemsAsStream()
-    .handleError((e) => logger.warning('decode error: $e'))
+    .handleError((e) => logger.warning('unreadable: $e'),
+        test: (e) => e is CItemReadException)
     .listen((item) { ... });
 
 // All-or-nothing (a single decode failure aborts the entire list)
@@ -212,12 +214,12 @@ silent mismatches or runtime errors. Direct string comparisons between
 atsigns also fail when one has `@` and the other doesn't.
 
 **Fix:** Use the `Atsign` extension type (from `at_commons`, re-exported by
-`at_client`) in your own method signatures. When you receive a string from
-user input or an external source, call `.toAtsign()` to normalise and
-validate it:
+`at_client` and so by both platform packages) in your own method signatures.
+When you receive a string from user input or an external source, call
+`.toAtsign()` to normalise and validate it:
 
 ```dart
-import 'package:at_client/at_client.dart'; // re-exports Atsign
+import 'package:at_client_cli/at_client_cli.dart'; // or at_client_flutter; both re-export Atsign
 
 // ✓ In your own APIs — use Atsign, not String
 Future<void> shareWith(Atsign recipient) async {
@@ -242,6 +244,6 @@ missing, and **silently strips dots from the domain part** (e.g.
 strings, and reserved characters — surface this to the user rather than
 swallowing it.
 
-**Note on spelling:** The SDK spells the type as `Atsign` (not `AtSign`) and
-the concept as `atsign` (not `atSign`). Use these spellings consistently in
-your own code.
+**Note on spelling:** The SDK spells the type `Atsign` (not `AtSign`), and
+names and parameters `atSign` (`getCurrentAtSign`, `atSign:`). Use these
+spellings consistently in your own code.

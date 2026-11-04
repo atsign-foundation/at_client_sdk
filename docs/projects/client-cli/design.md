@@ -8,15 +8,13 @@ command line), the approving side, and helpers — every path handing back the
 
 ## Status
 
-Draft, 2026-09-13. One decision is ruled: **D1, the timing** — gkc ruled on
-2026-09-13 that this happens now, as at_onboarding_cli's 2.0: `at_client_cli`
-1.0.0 publishes together with the shims `at_onboarding_cli` 2.0.0 and
-`at_cli_commons` 4.0.0. The remaining decisions in
-[section 6](#6-decisions-to-make) are **paused** until gkc has brought his
-colleagues up to speed; nothing is built until they are ruled. The measurements in
-[section 1](#1-what-exists-today-measured) were taken on branch
-`gkc-client-lifecycle` at the tip that holds at_onboarding_cli 2.0.0-rc1 and
-at_cli_commons 3.1.2, against pub.dev's published 1.16.1-rc1 and 3.1.1.
+Adopted 2026-10-28 for at_client 4.0.0's release. Every decision in
+[section 6](#6-decisions-to-make) is ruled, and [`decisions.md`](decisions.md)
+holds the rulings; where a ruling differs from this design, the ruling holds.
+The measurements in [section 1](#1-what-exists-today-measured) were taken on
+2026-09-13 on branch `gkc-client-lifecycle`, at the tip that holds
+at_onboarding_cli 2.0.0-rc1 and at_cli_commons 3.1.2, against pub.dev's
+published 1.16.1-rc1 and 3.1.1; ruling 5 re-measures the adapter's use.
 
 ## 1. What exists today, measured
 
@@ -89,7 +87,7 @@ One package, `packages/at_client_cli`, `package:at_client_cli/at_client_cli.dart
 lib/at_client_cli.dart          re-exports at_client and RegistrarService; exports everything below
 lib/src/keys/                   the file keys store conventions: default keyfile path, passphrase, the local-store path
 lib/src/cli_base.dart           CLIBase (unchanged API): the standard flags → an open AtClient
-lib/src/commands/               the at_activate commands as a library: activate(args) → exit code, one class per command
+lib/src/commands/               the at_activate commands, run by AtActivate.main(args) → exit code; one class per command follows in a minor (ruling 3)
 lib/src/register/               at_register
 lib/src/util/                   getHomeDirectory, getUserName, standardAtClientStoragePath, …; ServiceFactoryWithNoOpSyncService, once
 bin/at_activate.dart            calls the library
@@ -109,23 +107,33 @@ final client = (await CLIBase.fromCommandLineArgs(args, namespace: 'my_app')).at
 exit(await AtActivate.main(args));
 
 // A program that opens on the conventional keyfile without arg parsing.
+final preference = AtClientPreference()..namespace = 'my_app';
 final client = await Atsign('@alice').open(
     keys: CliKeys.fileFor('@alice'),          // ~/.atsign/keys/@alice_key.atKeys
-    preference: AtClientPreference()..namespace = 'my_app',
-    storage: CliKeys.storageFor('@alice'));   // ~/.atsign/storage/...
+    preference: preference,
+    storage: CliKeys.storageFor('@alice', program: 'my_app'),   // CLIBase's store
+    lookUps: lookUpsFor(preference.rootDomain),                   // CLIBase's transport
+    secondaryAddressFinder: CacheableSecondaryAddressFinder(
+        preference.rootDomain, preference.rootPort));
 ```
+
+`createAtClient` stays, with at_onboarding_cli 2.0.0-rc8's parameters: it is
+the client at_activate's commands open, which NoPorts opens too
+([ruling 6](decisions.md#6-three-helpers-go-with-no-shim-and-createatclient-stays)).
 
 What goes, because at_client has it or nobody uses it: the
 `AtOnboardingService` adapter (its three members are `CLIBase` and
-`Atsign.open`), `createAtClient` (a second `CLIBase`), `OnboardingUtil`'s
-registrar HTTP (at_auth's `RegistrarService` makes the same calls: `getFreeAtSign`, `registerPerson`, `sendActivationOtp`, `verifyActivation`), `AuthKeyType`
+`Atsign.open`), `OnboardingUtil` as
+API (its free-atSign v3 calls stay private behind `at_register` and `onboard`;
+see [ruling 6](decisions.md#6-three-helpers-go-with-no-shim-and-createatclient-stays)), `AuthKeyType`
 (the legacy keyfile field names, which at_auth owns), `AtOnboardingException`
 and friends, `printFullParserUsage`, `MySyncProgressListener` (a
 `SyncProgressListener` that prints; six files use it, three of them this repo's own examples).
 `AtOnboardingPreference` goes with the adapter: its fields are either
 `AtClientPreference`'s, the keys-and-store conventions above, or `lookUps`,
-which stays a parameter of `CLIBase` and the commands, with `proxyLookUps()`
-beside `secureSocketLookUps()` as the two factories a program picks from.
+which stays a parameter of `CLIBase` and the commands, with
+`lookUpsFor(rootDomain)` choosing between `proxyLookUps()` and
+`secureSocketLookUps()` by the root domain, as `CLIBase` does.
 
 ## 3. Getting there
 
@@ -171,16 +179,16 @@ branch. That is a decision for gkc ([section 6](#6-decisions-to-make), D1).
 | `at_cli_commons/lib/src/utils.dart`                               | `lib/src/util/`                                | unchanged                                                                                      |
 | `at_cli_commons/lib/src/service_factories.dart`                   | `lib/src/util/`                                | the one copy; at_onboarding_cli's unexported twin goes                                          |
 | `at_cli_commons/lib/src/sync_listener.dart`                       | removed                                        | six files, three of them this repo's examples; a `SyncProgressListener` is four lines          |
-| `at_onboarding_cli/lib/src/cli/auth_cli*.dart`                    | `lib/src/commands/`                            | `main` becomes `AtActivate.main(args)`, public; one class per command behind it                |
+| `at_onboarding_cli/lib/src/cli/auth_cli*.dart`                    | `lib/src/commands/`                            | `main` becomes `AtActivate.main(args)`, public; one class per command behind it follows in a minor, keeping `AuthCliArgs` and `AuthCliCommand` as they are (ruling 3) |
 | `at_onboarding_cli/lib/src/register_cli/`, `util/register_api_*` | `lib/src/register/`                            | `at_register`                                                                                  |
 | `at_onboarding_cli/lib/src/util/at_onboarding_preference.dart`   | `lib/src/keys/`                                | the keys-and-store conventions (`atKeysFilePath`, `passPhrase`, `storagePath`, `storageFor`) as a small type; the rest is `AtClientPreference`, and `lookUps` becomes a parameter of `CLIBase` and the commands |
 | `at_onboarding_cli/lib/src/util/proxy_lookups.dart`              | `lib/src/util/`                                | `proxyLookUps()`, unchanged                                                                    |
 | `at_onboarding_cli/lib/src/util/home_directory_util.dart`        | merged into `lib/src/util/`                    | one home-directory helper                                                                      |
 | `at_onboarding_cli/lib/src/onboard/`                              | removed                                        | the adapter; ruling 6's callers move to `CLIBase` or `Atsign.open` at the bump                 |
 | `at_onboarding_cli/lib/src/util/create_at_client_cli.dart`       | removed                                        | `CLIBase`                                                                                      |
-| `at_onboarding_cli/lib/src/util/onboarding_util.dart`            | removed                                        | at_auth's `RegistrarService`; `onboard`'s email path calls it                                  |
+| `at_onboarding_cli/lib/src/util/onboarding_util.dart`            | `lib/src/register/`, unexported                | the free-atSign v3 calls `at_register` and `onboard` make; not at_auth's `RegistrarService`, which is v4 |
 | `at_onboarding_cli/lib/src/util/{auth_key_type,at_onboarding_exceptions,print_full_parser_usage}.dart` | removed | no callers outside                                                                     |
-| `tests/at_onboarding_cli_functional_tests*`                       | `tests/at_client_cli_functional_tests*`        | the packs, their CI jobs in `at_libraries.yaml`, and the `runLocal.sh` runners                 |
+| `tests/at_client_cli_functional_tests*`                       | `tests/at_client_cli_functional_tests*`        | the packs, their CI jobs in `at_libraries.yaml`, and the `runLocal.sh` runners                 |
 | `.github/workflows/at_libraries.yaml` matrix entries              | one entry                                      |                                                                                                |
 
 ## 5. Migration for programs
@@ -198,17 +206,23 @@ Future<void> main(List<String> args) async => exit(await AtActivate.main(args));
 final svc = AtOnboardingServiceImpl('@alice', pref)..authenticate();   // before
 final client = await Atsign('@alice').open(                          // after
     keys: CliKeys.fileFor('@alice', passPhrase: pass),
-    preference: AtClientPreference()..namespace = 'my_app',
-    storage: CliKeys.storageFor('@alice'));
+    preference: preference,
+    storage: CliKeys.storageFor('@alice', program: 'my_app'),
+    lookUps: lookUpsFor(preference.rootDomain),
+    secondaryAddressFinder: CacheableSecondaryAddressFinder(
+        preference.rootDomain, preference.rootPort));
 
 // AtOnboardingPreference: the conventions, not a preference
 final pref = AtOnboardingPreference()..atKeysFilePath = p..storagePath = s;   // before
-final keys = FileAtKeysIo(filePath: (_) => p);                              // after
-final storage = HiveAtClientStorage(atSign: '@alice', storagePath: s, closedByClient: true);
-// pref.lookUps: pass lookUps: proxyLookUps() (or a factory of your own) to CLIBase or the verb
+final keys = CliKeys.fileFor('@alice', path: p);                            // after
+final storage = CliKeys.storageFor('@alice', program: 'my_app', path: s);
+// pref.lookUps: pass lookUps: lookUpsFor(rootDomain) (or a factory of your own) to CLIBase or the verb
 ```
 
 ## 6. Decisions to make
+
+All eight are ruled in [`decisions.md`](decisions.md): D1 as ruling 1, D2 as 2,
+D3 as 4, D4 as 8, D5 as 5, D6 as 7, D7 as 6 and D8 as 11.
 
 | Id | Question                                                                                          | Recommendation                                                                                                                                                              |
 | -- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -218,7 +232,7 @@ final storage = HiveAtClientStorage(atSign: '@alice', storagePath: s, closedByCl
 | D4 | The binaries: keep `at_activate` and `at_register`, or one `at_client_cli` binary with subcommands? | Keep both names; scripts and READMEs across the ecosystem invoke them. The library entry points are what change.                                                            |
 | D5 | Does `AtOnboardingService` survive as a shim member, or end with ruling 6's callers moving?       | End it in the shim generation: the shim re-exports `at_client_cli`, and the adapter's 5 call sites move to `open` or `CLIBase` at the bump; ruling 6 is amended to say so. |
 | D6 | The keys-and-store conventions: a small type (`CliKeys`), or free functions beside `getHomeDirectory`? | A small type with the two builders and the passphrase, so a program has one place to look; the existing free path helpers stay for the 10 files that use them.           |
-| D7 | Drop `MySyncProgressListener`, `AuthKeyType`, `OnboardingUtil`, `createAtClient` outright, or shim them for one release? | Drop them all: `RegistrarService` already makes `OnboardingUtil`'s four calls, and none of the others has a caller a dependency bump cannot fix.                          |
+| D7 | Drop `MySyncProgressListener`, `AuthKeyType`, `OnboardingUtil`, `createAtClient` outright, or shim them for one release? | Drop the first three from the API, since none has a caller a dependency bump cannot fix; `createAtClient` stays, with at_onboarding_cli 2.0.0-rc8's parameters (amended 2026-10-29). `OnboardingUtil`'s v3 calls stay private: `RegistrarService` is v4 and makes none of them. |
 | D8 | Where the design and rulings live once ruled                                                       | `docs/projects/client-cli/` with a `decisions.md` in the lifecycle ledger's shape, and a pointer row in the PQ plan's P1 band while it is in flight.                       |
 
 ## 7. Relationship to the other plans

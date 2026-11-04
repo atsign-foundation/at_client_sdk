@@ -21,16 +21,12 @@
 /// handle, so the test waits for the last step's wire marker.
 library;
 
-// A client built from an AtChops beside a key source holding no credential is
-// the shape under test, so this file names the AtChops on purpose.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:hive/hive.dart';
 import 'package:mocktail/mocktail.dart';
@@ -39,6 +35,8 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recording_remote.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -139,8 +137,9 @@ void main() {
         // NOTE: named rather than defaulted — the default posture runs no
         // post-quantum startup at all, and this exercises exactly that startup.
         AtClientPreference(posture: PqPosture.pqReady)
-          ..hiveStoragePath = storageDir
-          ..commitLogPath = '$storageDir/commit',
+          ..hiveStoragePath = storageDir,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         enrollmentId: 'e-1',
         remoteSecondary: buildRecordingRemote(
             events: events,
@@ -155,10 +154,7 @@ void main() {
                 'status': 'approved',
               }
             }),
-        atChops: AtChopsImpl(AtChopsKeys.create(
-            AtChopsUtil.generateAtEncryptionKeyPair(),
-            AtChopsUtil.generateAtPkamKeyPair())),
-        atKeysIo: keysIo,
+        atKeysIo: keysIo, storage: hiveStoreAt(atSign, storageDir),
       );
 
   /// Files a client data signing key for `e-1` in [io], so its `_apsk` lists

@@ -8,6 +8,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/transport.dart';
 
 const _owner = '@alice';
 const _namespace = 'wavi';
@@ -129,7 +130,8 @@ void main() {
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
     return await NotificationServiceImpl.create(atClient,
-        monitor: _FakeMonitor()) as NotificationServiceImpl;
+        monitor: _FakeMonitor(),
+        secondaryAddressFinder: defaultAtDirectory) as NotificationServiceImpl;
   }
 
   setUp(() async {

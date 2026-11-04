@@ -1,6 +1,3 @@
-// The substrate and the chain are deliberately marked @experimental.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -93,7 +90,8 @@ void main() {
       enrolApproveAndCount(Map<String, String> namespaces) async {
     final otp = (await atClient.getOTP()).response;
     Map<String, dynamic>? built;
-    final build = enrollmentKeyPackageBuilder(atSign);
+    final build = enrollmentKeyPackageBuilder(atSign,
+        signingAlgo: SigningAlgoType.mldsa65);
 
     final response = await AtEnrollment.create().submit(
       AtEnrollmentRequest.pq(
@@ -106,9 +104,8 @@ void main() {
         // RSA-decrypting one that no enrollee is running to have produced.
         metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-        // pq is the key exchange; the enrollment still authenticates with an
-        // RSA-2048 APKAM keypair.
-        signingAlgo: SigningAlgoType.rsa2048,
+        // NOTE: at_auth refuses rsa2048 with the pq exchange.
+        signingAlgo: SigningAlgoType.mldsa65,
       ),
       TestUtils.unauthenticatedLookUp(atSign),
     );

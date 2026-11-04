@@ -1,13 +1,10 @@
-// The enrollment key-package surface is @experimental; enrolling drives it.
-// ignore_for_file: experimental_member_use
-
 @Timeout(Duration(minutes: 15))
 @Tags(['pq'])
 library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
@@ -40,6 +37,8 @@ void main() {
             atSign, loader.createAtKeysFromDemoKeys(atSign)),
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(approver, atSign);
@@ -48,6 +47,8 @@ void main() {
 
   /// One enrolment at [signingAlgo], under a pqActive preference so that the
   /// client would retrofit if its key material were not already strong enough.
+  /// An rsa2048 enrolment goes under the legacy key exchange, which at_auth
+  /// requires of rsa2048.
   Future<({String enrolledAs, String runningAs, AtKeys keys})> enrolAt(
       SigningAlgoType signingAlgo, String label) async {
     final keysIo = InMemoryAtKeysIo();
@@ -64,6 +65,9 @@ void main() {
       deviceName: 'pqnat-$label-$runId',
       atKeysIo: keysIo,
       signingAlgo: signingAlgo,
+      keyExchangeMode: signingAlgo == SigningAlgoType.rsa2048
+          ? EnrollmentKeyExchangeMode.legacy
+          : EnrollmentKeyExchangeMode.pq,
       storage: TestUtils.storage,
     );
     final runningAs = enrolled.client.enrollmentId!;
@@ -102,8 +106,8 @@ void main() {
     // ignore: deprecated_member_use
     expect(native.keys.apkamPublicKey, isNotNull,
         reason: 'the flat fields carry this enrollment\'s own keypair too, '
-            'which is what lets the approval handshake build one AtChops '
-            'holding both it and the symmetric key');
+            'so every reader resolves to the same keypair whichever way it '
+            'looks');
 
     // The control. Without it, "did not retrofit" would pass for a build where
     // nothing retrofits at all - including one where the posture is ignored.

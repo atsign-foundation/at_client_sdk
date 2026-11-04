@@ -1,11 +1,12 @@
 @Tags(['ffi'])
 library;
 
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
-import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:test/test.dart';
 
@@ -20,7 +21,7 @@ Uint8List _hex(String s) {
 String _toHex(Uint8List b) =>
     b.map((int x) => x.toRadixString(16).padLeft(2, '0')).join();
 
-Uint8List _keyFromHex(String hex) => _hex(hex);
+AESKey _keyFromHex(String hex) => AESKey(base64Encode(_hex(hex)));
 
 /// NIST SP 800-38A F.5 uses one plaintext for every CTR vector.
 const String _nistPlaintextHex = '6bc1bee22e409f96e93d7e117393172a'
@@ -42,7 +43,7 @@ void main() {
       }
     });
 
-    AesCtrFfiCipher makeCipher(Uint8List key, InitialisationVector iv) {
+    AesCtrFfiCipher makeCipher(AESKey key, InitialisationVector iv) {
       if (lib == null) fail('libcrypto not available on this host');
       return AesCtrFfiCipher.fromLib(lib, key, iv);
     }
@@ -103,7 +104,7 @@ void main() {
     /// delivers, so the keystream offset must survive chunk boundaries that
     /// fall inside an AES block.
     test('chunked update equals one-shot update at any chunk size', () {
-      final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
+      final AESKey key = AESKey.generate(32);
       final InitialisationVector iv = InitialisationVector.random(16);
       final Uint8List plaintext =
           Uint8List.fromList(List<int>.generate(4096, (int i) => i & 0xff));
@@ -133,7 +134,7 @@ void main() {
     });
 
     test('empty input is a no-op and does not advance the keystream', () {
-      final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
+      final AESKey key = AESKey.generate(32);
       final InitialisationVector iv = InitialisationVector.random(16);
       final AesCtrFfiCipher cipher = makeCipher(key, iv);
       try {
@@ -154,7 +155,7 @@ void main() {
     test('a growing chunk stays correct across buffer reallocation', () {
       // The scratch buffers only ever grow, so this walks every reallocation
       // path in one instance.
-      final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
+      final AESKey key = AESKey.generate(32);
       final InitialisationVector iv = InitialisationVector.random(16);
       final Uint8List plaintext =
           Uint8List.fromList(List<int>.generate(2080, (int i) => i & 0xff));
@@ -186,7 +187,7 @@ void main() {
     group('updateView', () {
       test('matches update at the same keystream position, at any chunk size',
           () {
-        final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
+        final AESKey key = AESKey.generate(32);
         final InitialisationVector iv = InitialisationVector.random(16);
         final Uint8List plaintext = Uint8List.fromList(
             List<int>.generate(4096, (int i) => i & 0xff));
@@ -221,7 +222,7 @@ void main() {
 
       test('grows the buffer correctly for a chunk past the 256 KiB floor',
           () {
-        final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
+        final AESKey key = AESKey.generate(32);
         final InitialisationVector iv = InitialisationVector.random(16);
         final Uint8List plaintext = Uint8List.fromList(
             List<int>.generate(600 * 1024, (int i) => i & 0xff));
@@ -247,7 +248,7 @@ void main() {
       test('stays correct across geometric buffer growth', () {
         // Walks the buffer through several reallocations, including past
         // the 256 KiB floor, the same way the `update` growth test does.
-        final Uint8List key = AesCtrEncryptionAlgo(32).generateKey();
+        final AESKey key = AESKey.generate(32);
         final InitialisationVector iv = InitialisationVector.random(16);
         final Uint8List plaintext = Uint8List.fromList(
             List<int>.generate(600 * 1024, (int i) => i & 0xff));
@@ -279,7 +280,7 @@ void main() {
       test('a view is invalidated by the next update call (documented '
           'contract)', () {
         final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+            makeCipher(AESKey.generate(32), InitialisationVector.random(16));
         try {
           final Uint8List firstView = cipher.updateView(_hex(_nistPlaintextHex));
           final Uint8List firstSnapshot = Uint8List.fromList(firstView);
@@ -305,21 +306,21 @@ void main() {
     group('lifecycle', () {
       test('update after dispose throws', () {
         final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+            makeCipher(AESKey.generate(32), InitialisationVector.random(16));
         cipher.dispose();
         expect(() => cipher.update(Uint8List(4)), throwsA(isA<StateError>()));
       });
 
       test('dispose is idempotent', () {
         final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+            makeCipher(AESKey.generate(32), InitialisationVector.random(16));
         cipher.dispose();
         expect(cipher.dispose, returnsNormally);
       });
 
       test('dispose before any update releases cleanly', () {
         final AesCtrFfiCipher cipher =
-            makeCipher(AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector.random(16));
+            makeCipher(AESKey.generate(32), InitialisationVector.random(16));
         expect(cipher.dispose, returnsNormally);
       });
     });
@@ -329,7 +330,7 @@ void main() {
         for (final int length in <int>[0, 12, 15, 17, 32]) {
           expect(
               () => makeCipher(
-                  AesCtrEncryptionAlgo(32).generateKey(), InitialisationVector(Uint8List(length))),
+                  AESKey.generate(32), InitialisationVector(Uint8List(length))),
               throwsA(isA<AtEncryptionException>()),
               reason: '$length-byte IV was accepted');
         }
@@ -338,8 +339,8 @@ void main() {
       test('a key that is not 16, 24 or 32 bytes throws', () {
         for (final int length in <int>[8, 20, 31, 33, 64]) {
           expect(
-              () => makeCipher(
-                  Uint8List(length), InitialisationVector.random(16)),
+              () => makeCipher(AESKey(base64Encode(Uint8List(length))),
+                  InitialisationVector.random(16)),
               throwsA(isA<AtEncryptionException>()),
               reason: '$length-byte key was accepted');
         }

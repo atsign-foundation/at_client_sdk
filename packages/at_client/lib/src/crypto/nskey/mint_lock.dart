@@ -4,11 +4,11 @@ import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/server_mutex.dart';
 import 'package:at_commons/at_commons.dart' show AtKey, StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('MintLock');
 
-/// Serialises minting a key record between an atSign's own enrollments.
+/// Serialises minting a key record between an atSign's own clients, two
+/// processes of one enrollment among them.
 ///
 /// The records this guards are mutable, so the interlock cannot be their own
 /// immutability: it is a server mutex, a separate short-ttl immutable self key
@@ -16,14 +16,13 @@ final _logger = AtSignLogger('MintLock');
 /// lock key and hands it here, ttl and all.
 ///
 /// The winner carries its [ServerMutexLease] into its critical section and
-/// refuses to publish once it is spent. The election bounds when enrollments
+/// refuses to publish once it is spent. The election bounds when clients
 /// attempt, not how long the winner takes, so a holder that overran the ttl
-/// would publish on top of the enrollment that legitimately won the next one.
+/// would publish on top of the client that legitimately won the next one.
 ///
 /// A lock is a protocol, not a guarantee — it narrows a window to the ttl, so
 /// every caller still reconciles what it holds against what is published rather
 /// than trusting that holding the lock made it the only writer.
-@experimental
 class MintLock {
   final AtClient atClient;
 
@@ -31,10 +30,8 @@ class MintLock {
   /// record.
   ///
   /// Instance, not process: a `MintLock` is built per [PublishedNskeyKeyRing],
-  /// so callers that do not share a ring are not guarded against each other.
-  /// The wire lock cannot express this — its value is the enrolment id, an
-  /// identity rather than an instance, so two racers of the same enrolment each
-  /// read it back, see their own id, and conclude they hold it.
+  /// so a caller on another ring meets the wire lock instead, and is refused
+  /// like any other client.
   final Map<String, Future<void>> _inFlight = {};
 
   MintLock(this.atClient);
@@ -46,21 +43,14 @@ class MintLock {
   /// it, or the two answers become one.
   ///
   /// The winner never releases the lock; the ttl does. So "held" does not mean
-  /// another enrollment is minting: a client that took the lock and exited
-  /// before publishing loses to its own token for the rest of the ttl, and
-  /// unless [ownLockIsNotContention] is set nothing here reads the lock's value
-  /// to tell the two apart. That release depends on an atServer which stops
-  /// refusing a create once the record has expired; one that keeps refusing
-  /// makes the cooldown permanent.
-  ///
-  /// [ownLockIsNotContention] lets a caller whose critical section is
-  /// idempotent proceed when the lock it meets is one this same enrollment took
-  /// earlier in the cooldown. It is off by default because rotation is not
-  /// idempotent, and rate-limiting it is what holding the lock for the full ttl
-  /// is for; a caller that opts in must read what is published before writing.
+  /// another client is minting, and nothing here reads the lock's value to
+  /// tell: every refusal is contention, whichever client took the lock. A
+  /// client that took it and stopped before publishing is refused on its next
+  /// start until the ttl runs out. That release depends on an atServer which
+  /// stops refusing a create once the record has expired; one that keeps
+  /// refusing makes the cooldown permanent.
   Future<T?> withLock<T>(
-      AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
-      {bool ownLockIsNotContention = false}) async {
+      AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint) async {
     // NOTE: declining rather than returning the winner's result keeps one
     // meaning for a null — "you did not mint".
     final inFlightKey = lockKey.toString();
@@ -85,14 +75,12 @@ class MintLock {
     try {
       final ttl = Duration(milliseconds: ttlMillis);
       final (lease, refused) = await _take(lockKey, ttl);
-      final held = lease ??
-          (ownLockIsNotContention ? await _ownLease(lockKey, ttl) : null);
-      if (held == null) {
+      if (lease == null) {
         _logger.info('Could not take $lockKey, so nothing is minted under it '
             'this time: $refused');
         return null;
       }
-      return await mint(held);
+      return await mint(lease);
     } finally {
       // NOTE: released only once the mint has published, so a waiter that wakes
       // here re-reads an advertisement that is already on the atServer.
@@ -116,32 +104,5 @@ class MintLock {
       // the lock being held.
       return (null, e);
     }
-  }
-
-  /// A lease on the lock that refused us when this enrollment already holds
-  /// it, ending at the lock's expiry as this client's clock reads it or [ttl]
-  /// after the read, whichever is sooner; otherwise null. A client clock
-  /// behind the atServer's lets that lease outlast the lock by the difference.
-  ///
-  /// The winner never releases — the ttl does — so a client that mints and then
-  /// re-enters within the cooldown loses the election to itself; the cooldown
-  /// covers an ordinary restart. Proceeding is safe only because every caller
-  /// reads what is published before minting, and a read that cannot say whose
-  /// lock it is answers null.
-  Future<ServerMutexLease?> _ownLease(AtKey lockKey, Duration ttl) async {
-    final ServerMutexLease? lease;
-    try {
-      lease = await atClient.ownServerMutexLease(lockKey, ttl: ttl);
-    } catch (e) {
-      if (e is StoppedException || e is Error) rethrow;
-      _logger.finer('Could not read $lockKey to check ownership: $e');
-      return null;
-    }
-    if (lease != null) {
-      _logger.info('$lockKey is this enrollment\'s own lock, taken earlier in '
-          'its cooldown — proceeding until it expires rather than treating '
-          'ourselves as a loser');
-    }
-    return lease;
   }
 }

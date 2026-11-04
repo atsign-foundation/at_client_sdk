@@ -100,8 +100,7 @@ void main() {
     final remote = MockRemoteSecondary();
     when(() => atClient.enrollmentId).thenReturn('e-1');
     when(() => atClient.getRemoteSecondary()).thenReturn(remote);
-    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => remote.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as VerbBuilder;
       if (builder is! UpdateVerbBuilder) {
         throw StateError('unexpected verb: ${builder.runtimeType}');

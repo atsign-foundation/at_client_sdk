@@ -6,6 +6,9 @@
 
 # at_policy
 
+Upgrading from 1.x: see [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md).
+
+
 ## Introduction
 The at_policy library provides generic scaffolding for building policy 
 management services which policy enforcement endpoints communicate with via 

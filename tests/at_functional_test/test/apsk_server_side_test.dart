@@ -1,11 +1,8 @@
-// The enrollment fixture is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
@@ -130,8 +127,7 @@ void main() {
 
     try {
       expect(
-          await attackerLookup.pkamAuthenticate(
-              enrollmentId: attacker.enrollmentId),
+          await attackerLookup.pkamAuthenticate(),
           true,
           reason: 'the attacker enrollment is approved and must authenticate, '
               'or nothing below tests write restriction');
@@ -254,17 +250,14 @@ void main() {
   });
 
   test(
-      'an rsa2048 enrollment that heals an ML-DSA signing key signs its key '
+      'an mldsa65 enrollment that heals an ML-DSA signing key signs its key '
       'package again', () async {
-    // The rollout path: an existing rsa2048 enrollment whose preference comes
-    // to name an ML-DSA signing key. Its package was signed by the rsa2048
-    // authentication key, which leaves `_apsk` the moment the enrollment holds
-    // a signing key of its own.
     final keysIo = InMemoryAtKeysIo();
     final enrolled = await enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
       namespace: namespace,
+      signingAlgo: SigningAlgoType.mldsa65,
       preference: TestUtils.getPreference(atSign,
           dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
           posture: PqPosture.legacy),
@@ -278,7 +271,7 @@ void main() {
     final reconciled =
         await SigningKeyMinting(enrolled.client).reconcileSigningKeys();
     expect(reconciled.minted, [SigningAlgoType.mldsa65],
-        reason: 'precondition: a signing key was minted, so the rsa2048 '
+        reason: 'precondition: a signing key was minted, so the mldsa65 '
             'authentication key has left `_apsk`');
 
     await expectTheHealedPackageIsSignedAgain(enrolled);
@@ -324,6 +317,8 @@ void main() {
         preference:
             TestUtils.getPreference(peerAtSign, posture: PqPosture.legacy)
               ..namespace = namespace,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(peerAtSign));
     addTearDown(peer.stop);

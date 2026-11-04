@@ -18,7 +18,6 @@ import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
 import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/lifecycle/lookups.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -28,8 +27,6 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show signingAlgoOf;
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
@@ -37,7 +34,8 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show parseCkConveyanceKey;
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_auth/at_auth.dart' show authenticatorForChops;
+import 'package:at_client/src/client/remote_secondary.dart'
+    show clientAuthenticator;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
@@ -85,7 +83,7 @@ class NotificationServiceImpl extends NotificationService {
   @override
   Atsign get atSign => atClient.atSign;
 
-  late SecondaryAddressFinder secondaryAddressFinder;
+  final SecondaryAddressFinder secondaryAddressFinder;
 
   /// Notifications held back because the nskey private that opens them has not
   /// been filed yet, keyed by the generation they are waiting for.
@@ -155,12 +153,7 @@ class NotificationServiceImpl extends NotificationService {
   final StreamController<DroppedNotification> _droppedController =
       StreamController<DroppedNotification>.broadcast();
 
-  /// Emits every notification this service gives up on without delivering
-  /// it, with the reason it logs.
-  ///
-  /// A dropped notification is otherwise indistinguishable to a subscriber
-  /// from one that was never sent. Broadcast, and it does not replay.
-  @visibleForTesting
+  @override
   Stream<DroppedNotification> get droppedEvents => _droppedController.stream;
 
   /// Logs [reason] at `warning` and emits it on [droppedEvents] for [key].
@@ -298,14 +291,19 @@ class NotificationServiceImpl extends NotificationService {
   ///   builds reports `online` into each time it reaches `listening`; the
   ///   caller that built the client passes it, since this service holds the
   ///   client as its interface and the interface's double has none.
+  /// - [secondaryAddressFinder] finds the atServer of each atSign a
+  ///   notification goes to, and the monitor's own.
   /// - [lookUps] builds the monitor's connection; the caller passes the
-  ///   client's own factory for the same reason, and TLS on TCP is the
-  ///   default when none arrives.
+  ///   client's own factory for the same reason. Required unless [monitor]
+  ///   is given; an [ArgumentError] otherwise.
   static Future<NotificationService> create(AtClient atClient,
       {Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder,
+      required SecondaryAddressFinder secondaryAddressFinder,
       AtConnection? connection,
       AtLookUpFactory? lookUps}) async {
+    if (monitor == null && lookUps == null) {
+      throw ArgumentError.notNull('lookUps');
+    }
     return NotificationServiceImpl._(
         atClient: atClient,
         monitor: monitor,
@@ -319,7 +317,7 @@ class NotificationServiceImpl extends NotificationService {
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder,
+      required this.secondaryAddressFinder,
       AtConnection? connection,
       AtLookUpFactory? lookUps})
       : myStatsNotifKey = 'statsNotification.${atClient.atSign}',
@@ -328,13 +326,7 @@ class NotificationServiceImpl extends NotificationService {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
 
-    this.secondaryAddressFinder = secondaryAddressFinder ??
-        CacheableSecondaryAddressFinder(atClient.getPreferences()!.rootDomain,
-            atClient.getPreferences()!.rootPort);
-
     final preference = atClient.getPreferences()!;
-    final chops = atClient.atChops;
-    lookUps ??= defaultLookUps(preference);
     this.monitor = monitor ??
         Monitor(
           atSign: atSign,
@@ -343,25 +335,15 @@ class NotificationServiceImpl extends NotificationService {
           // `atClient.getRemoteSecondary()!.atLookUp` here instead would
           // collapse the two sockets into one - a one-line change, and NOT
           // safe yet, for the reason Monitor's `lookUp` gives.
-          lookUp: lookUps(
+          lookUp: lookUps!(
             atSign: atSign,
             rootDomain:
                 AtRootDomain(preference.rootDomain, preference.rootPort),
-            // Reproduces exactly what Monitor's own PKAM did: the same
-            // AtChops, the same signing and hashing algorithms, the same
-            // enrollment id. `null` when there is no signer, which fails the
-            // same way the old code did - it threw at connect time rather
-            // than authenticating with nothing.
-            authenticator: chops == null
-                ? null
-                : authenticatorForChops(
-                    atSign,
-                    chops,
-                    enrollmentId: atClient.enrollmentId,
-                    signingAlgo: signingAlgoOf(atClient),
-                    hashingAlgo: preference.hashingAlgoType,
-                  ),
-            secondaryAddressFinder: this.secondaryAddressFinder,
+            authenticator: clientAuthenticator(atSign,
+                atKeysIo: atClient.atKeysIo,
+                cramSecret: preference.cramSecret,
+                enrollmentId: atClient.enrollmentId),
+            secondaryAddressFinder: secondaryAddressFinder,
           )
             // The muxable heartbeats now, so the preference has to reach it or
             // it is silently ignored - and at_lookup's own default is 30s
@@ -716,21 +698,11 @@ class NotificationServiceImpl extends NotificationService {
     }
   }
 
-  /// The record's name below the owner, from whichever parameter carried it.
+  /// [name], the record's name below the owner.
   ///
-  /// Throws [ArgumentError] unless exactly one parameter is supplied and the
-  /// name has an interior dot: a name with no namespace has nothing for the
-  /// notification to be encrypted under.
-  static String _requireOneName(String? idAndNamespace, String? namespace) {
-    final name = idAndNamespace ?? namespace;
-    if (idAndNamespace != null && namespace != null) {
-      throw ArgumentError(
-          'Supply idAndNamespace or namespace, not both — they name the same '
-          'value and namespace is the deprecated spelling.');
-    }
-    if (name == null || name.isEmpty) {
-      throw ArgumentError('You must supply idAndNamespace.');
-    }
+  /// Throws [ArgumentError] unless it has an interior dot: a name with no
+  /// namespace has nothing for the notification to be encrypted under.
+  static String _requireDottedName(String name) {
     final dot = name.indexOf('.');
     if (dot <= 0 || dot == name.length - 1) {
       throw ArgumentError(
@@ -745,13 +717,13 @@ class NotificationServiceImpl extends NotificationService {
   @override
   Future<String> send({
     required Atsign to,
-    String? idAndNamespace,
-    @Deprecated('Renamed to idAndNamespace') String? namespace,
+    required String idAndNamespace,
     String body = '',
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     String? cryptoProviderId,
+    String? sealToNamespace,
     DateTime? recipientCacheExpiration,
     bool ephemeral = false,
   }) async {
@@ -763,8 +735,7 @@ class NotificationServiceImpl extends NotificationService {
       throw ArgumentError('An ephemeral notification cannot be cached at the '
           'recipient: caching persists a copy there');
     }
-    // ignore: deprecated_member_use_from_same_package
-    final String name = _requireOneName(idAndNamespace, namespace);
+    final String name = _requireDottedName(idAndNamespace);
     final String key = '$to:$name$atSign';
     final AtKey atKey = AtKey.fromString(key);
     atKey.metadata.namespaceAware = false;
@@ -780,11 +751,16 @@ class NotificationServiceImpl extends NotificationService {
       ..namespace = name.substring(dot + 1);
     final String notifPayload;
     body = body.trim();
+    if (sealToNamespace != null && (body.isEmpty || !shouldEncrypt)) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'applies only to a body that is encrypted');
+    }
     if (body.isNotEmpty && shouldEncrypt) {
       String providerId;
       try {
         providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
             requestedProviderId: cryptoProviderId,
+            sealToNamespace: sealToNamespace,
             useRemoteAtServer: true,
             stampProviderId: false);
       } on NamespaceKeyUnavailableException catch (e) {
@@ -956,27 +932,10 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   void notificationValueValidation(
       NotificationParams notificationParams, NotifyVerbBuilder builder) {
-    // ignore: deprecated_member_use_from_same_package
-    switch (notificationParams.messageType) {
-      case MessageTypeEnum.key:
-        // Since value is not mandatory in AtNotification, perform validation only if
-        // value is not null.
-        if (builder.value != null &&
-            builder.value.length > atClient.getPreferences()!.maxDataSize) {
-          throw BufferOverFlowException(
-              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
-        }
-        break;
-
-      // ignore: deprecated_member_use
-      case MessageTypeEnum.text:
-        // When messageType is text, the "text" to notify is added to the key. Hence validating
-        // the key length
-        if (builder.atKey.key.length > atClient.getPreferences()!.maxDataSize) {
-          throw BufferOverFlowException(
-              'The length of value exceeds the maximum allowed length. Maximum buffer size is ${atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
-        }
-        break;
+    if (builder.value != null &&
+        builder.value.length > atClient.getPreferences()!.maxDataSize) {
+      throw BufferOverFlowException(
+          'The length of value exceeds the maximum allowed length. Maximum buffer size is ${atClient.getPreferences()!.maxDataSize} bytes. Found ${builder.value.toString().length} bytes');
     }
   }
 
@@ -1282,11 +1241,6 @@ class NotificationServiceImpl extends NotificationService {
 /// Holds the subscriber's [StreamController] rather than looking one up at
 /// re-drive time, so a value cannot be handed to a controller other than the
 /// one its subscriber registered.
-/// A notification [NotificationServiceImpl.droppedEvents] reports as given up
-/// on: its key, empty when the frame could not be parsed into one, and the
-/// reason logged for it.
-typedef DroppedNotification = ({String key, String reason});
-
 class _ParkedNotification {
   final AtNotification notification;
   final NotificationConfig config;

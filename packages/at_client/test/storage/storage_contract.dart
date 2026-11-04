@@ -192,5 +192,33 @@ void runStorageContract(
       await s.close();
       expect(s.isAttached, isFalse);
     });
+
+    test(
+        'when a keystore held past close is read or written, then each '
+        'operation throws', () async {
+      final atSign = '@${backend}c10';
+      final s = storageFor(atSign);
+      await s.attach(FakeClient(atSign, 'e1'));
+      final keyStore = s.keyStore;
+      final key = 'public:note$atSign';
+      await keyStore.put(key, AtData()..data = 'before');
+      expect((await keyStore.get(key))?.data, 'before',
+          reason: 'the control: the keystore answers while open');
+      await s.close();
+
+      final operations = <String, Future<Object?> Function()>{
+        'get': () => keyStore.get(key),
+        'exists': () => keyStore.exists(key),
+        'getKeys': () => keyStore.getKeys(),
+        'put': () => keyStore.put(key, AtData()..data = 'after'),
+        'create': () =>
+            keyStore.create('public:other$atSign', AtData()..data = 'after'),
+        'remove': () => keyStore.remove(key),
+      };
+      for (final MapEntry(key: name, value: operation) in operations.entries) {
+        await expectLater(operation(), throwsA(anything),
+            reason: '$name on a closed keystore');
+      }
+    });
   });
 }

@@ -1,7 +1,3 @@
-// The nskey surface and the substrate are @experimental; driving them is the
-// point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

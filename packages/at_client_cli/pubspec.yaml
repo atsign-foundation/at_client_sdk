@@ -1,0 +1,41 @@
+name: at_client_cli
+description: The Atsign Protocol for Dart command-line programs, daemons and servers - CLIBase, and the at_activate and at_register tools.
+version: 1.0.0
+repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_cli
+homepage: https://atsign.com
+documentation: https://docs.atsign.com/
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+executables:
+  at_activate: at_activate
+  at_register: at_register
+
+dependencies:
+  args: ^2.6.0
+  at_auth: ^4.0.0
+  at_chops: ^3.0.0
+  at_client: ^4.0.0
+  at_commons: ^5.6.0
+  at_lookup: ^4.0.0
+  at_utils: ^4.0.0
+  chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
+  duration: ^4.0.3
+  http: ^1.2.1
+  image: ^4.1.7
+  logging: ^1.2.0
+  meta: ^1.16.0
+  path: ^1.9.0
+  version: ^3.0.2
+  zxing2: ^0.2.0
+
+dev_dependencies:
+  at_persistence_secondary_server: ^5.4.0
+  alfred: ^1.1.2+1
+  lints: ^6.0.0
+  test: ^1.25.0
+  at_demo_data: ^1.2.0
+  mocktail: ^1.0.4
+  build_version: ^2.1.1

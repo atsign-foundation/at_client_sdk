@@ -4,11 +4,13 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
-import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart' show CryptoRuntime;
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show heldOwnAfterStartUpAsk;
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         ckConveyanceMarker,
@@ -101,6 +103,10 @@ class CkManager {
   /// the caller knows to re-resolve.
   Future<bool> Function(String namespace)? rotateOwnNamespaceKeyIfAsked;
 
+  /// The client's start-up seeding, which a write that finds no namespace key
+  /// waits on while it is still to come. Null waits for nothing.
+  StartUpSeeding? startUpSeeding;
+
   CkManager(
       {required this.cache,
       required this.keyRing,
@@ -128,13 +134,54 @@ class CkManager {
   /// Cuts are serialised within this manager only: two processes of one
   /// enrollment writing at once can each cut a key, and the pointer keeps
   /// whichever was recorded last.
-  Future<void> ensureCurrent(CryptoContext context, AtKey valueKey,
-      {bool? useRemoteAtServer}) async {
+  ///
+  /// A share is sealed to the recipient's key at the most specific level of
+  /// [valueKey]'s name the recipient advertises one at
+  /// ([NskeyResolver.resolveShare]), or with [sealToNamespace] at that
+  /// namespace alone; what this client holds does not enter into it, and a
+  /// share does not wait for start-up. [sealToNamespace] is refused for a
+  /// write to this client's own atSign, and for a namespace [valueKey]'s name
+  /// does not end with after a dot.
+  ///
+  /// When a write to this client's own atSign finds no key published and
+  /// [startUpSeeding] is still to seed a namespace covering [valueKey], it
+  /// waits for that seeding, at most [StartUpSeeding.wait], and resolves
+  /// again. It waits the same way when the key it found is broader than a
+  /// namespace start-up has said it will seed covering [valueKey]. When it
+  /// holds no private for its key and start-up is asking for one, it waits
+  /// for that ask and its answer before cutting a content key, within
+  /// [StartUpSeeding.wait] of the write's start, so other writes' cuts never
+  /// queue behind the wait.
+  ///
+  /// Returns the level this write starts at, which for a share is the value's
+  /// own namespace as [NskeyResolver.startLevelOf] widens it, and the
+  /// namespace of the content key it is to be sealed under, or null for a key
+  /// with no owner or namespace.
+  Future<({String namespace, String ckNs})?> ensureCurrent(
+      CryptoContext context, AtKey valueKey,
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
-    final namespace = valueKey.namespace;
-    if (owner == null || owner.isEmpty || namespace == null) return;
-
-    final advertised = await resolver.resolve(owner, namespace);
+    if (owner == null || owner.isEmpty || valueKey.namespace == null) {
+      if (sealToNamespace != null) {
+        throw ArgumentError.value(
+            sealToNamespace,
+            'sealToNamespace',
+            'applies only to a key with an owner and a namespace, and '
+                '${valueKey.key} has ${owner == null || owner.isEmpty ? 'no owner' : 'no namespace'}');
+      }
+      return null;
+    }
+    final until = StartUpSeeding.boundFromNow();
+    final holder = context.atClient.getCurrentAtSign();
+    final sharing = _isShare(owner, holder);
+    if (sealToNamespace != null) {
+      _refuseUnlessSealable(valueKey, sealToNamespace, sharing: sharing);
+    }
+    final found = sharing
+        ? await _shareKey(owner, valueKey, sealToNamespace)
+        : await _ownKey(holder, owner, valueKey);
+    final namespace = found.namespace;
+    final advertised = found.advertised;
     if (advertised == null) {
       // NOTE: failing in this pre-pass is what keeps a cold start recoverable —
       // the caller can still route the write to legacy, which it could not do
@@ -142,7 +189,13 @@ class CkManager {
       throw NamespaceKeyUnavailableException(owner, namespace);
     }
     final ckNs = advertised.namespace;
-    final ownGeneration = await _ownGenerationHeld(context, owner, ckNs);
+    final chosen = (
+      namespace:
+          sharing ? await resolver.startLevelOf(holder, valueKey) : namespace,
+      ckNs: ckNs,
+    );
+    final ownGeneration =
+        await _ownGenerationHeld(context, owner, ckNs, valueKey);
     final current = cache.current(owner, ckNs);
     if (current != null &&
         cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid) {
@@ -156,7 +209,7 @@ class CkManager {
         // NOTE: with no recorded cut time the policy is not asked at all,
         // rather than told the key is fresh.
         final cutAt = cache.currentCutAt(owner, ckNs);
-        if (cutAt == null) return;
+        if (cutAt == null) return chosen;
         final replace = await ckRotationPolicy(CkRotationContext(
           destination: owner,
           namespace: ckNs,
@@ -164,7 +217,7 @@ class CkManager {
           cutAt: cutAt,
           now: DateTime.now().toUtc(),
         ));
-        if (!replace) return;
+        if (!replace) return chosen;
         _logger.info('The rotation policy asked for a fresh content key for '
             '$owner:$ckNs, replacing ${current.ckKid} cut at $cutAt');
       }
@@ -173,7 +226,7 @@ class CkManager {
     if (current == null) {
       final resumed = await _resumeCurrent(
           context, valueKey, owner, ckNs, advertised.nskeyKid, ownGeneration);
-      if (resumed) return;
+      if (resumed) return chosen;
     }
 
     var target = advertised;
@@ -189,9 +242,27 @@ class CkManager {
 
     await _cutAndConvey(context, valueKey, owner, ckNs, target.nskeyKid,
         keyAlgo: target.alg,
+        until: until,
         useRemoteAtServer: useRemoteAtServer,
         replacing: current?.ckKid,
         ownGeneration: ownGeneration);
+    return chosen;
+  }
+
+  /// Waits until [until], before the cut takes its turn, for start-up's ask
+  /// for the private of [owner]'s own generation a cut in [ckNs] seals to
+  /// under [keyAlgo], and throws as sealing would when it is still not held,
+  /// so no cut waits while holding the turn.
+  Future<void> _awaitOwnPrivate(String owner, String ckNs, String keyAlgo,
+      {required DateTime until}) async {
+    final usable =
+        (await keyRing.currentPublic(owner, ckNs))?.usableFor([keyAlgo]);
+    if (usable == null) return;
+    if (await heldOwnAfterStartUpAsk(keyRing, owner, ckNs, usable.kid,
+            until: until) ==
+        null) {
+      throw NskeyPrivateNotHeldException(owner, ckNs, usable.kid);
+    }
   }
 
   /// Rotates the content key for the destination [valueKey] addresses: cuts a
@@ -213,16 +284,19 @@ class CkManager {
     bool? useRemoteAtServer,
   }) async {
     final owner = valueKey.sharedWith ?? valueKey.sharedBy;
-    final namespace = valueKey.namespace;
-    if (owner == null || owner.isEmpty || namespace == null) {
+    if (owner == null || owner.isEmpty || valueKey.namespace == null) {
       throw AtKeyException(
           'cannot rotate a content key for a record with no owner or '
           'namespace: $valueKey');
     }
-
-    final advertised = await resolver.resolve(owner, namespace);
+    final until = StartUpSeeding.boundFromNow();
+    final holder = context.atClient.getCurrentAtSign();
+    final found = _isShare(owner, holder)
+        ? await _shareKey(owner, valueKey, null)
+        : await _rotationOwnKey(holder, owner, valueKey);
+    final advertised = found.advertised;
     if (advertised == null) {
-      throw NamespaceKeyUnavailableException(owner, namespace);
+      throw NamespaceKeyUnavailableException(owner, found.namespace);
     }
     final ckNs = advertised.namespace;
 
@@ -241,6 +315,7 @@ class CkManager {
 
     return _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
         keyAlgo: advertised.alg,
+        until: until,
         useRemoteAtServer: useRemoteAtServer,
         force: true);
   }
@@ -253,6 +328,9 @@ class CkManager {
   /// sealed to [nskeyKid] whose sibling copy rests on [ownGeneration] where
   /// the caller holds one, returns that key instead of cutting a second one,
   /// unless [force] asks for a fresh one regardless.
+  ///
+  /// A cut for this client's own atSign first waits, until [until], for any
+  /// start-up ask for its key's private, as [_awaitOwnPrivate] does.
   Future<ContentKey> _cutAndConvey(
     CryptoContext context,
     AtKey valueKey,
@@ -260,24 +338,29 @@ class CkManager {
     String ckNs,
     String nskeyKid, {
     required String keyAlgo,
+    required DateTime until,
     bool? useRemoteAtServer,
     String? replacing,
     String? ownGeneration,
     bool force = false,
-  }) =>
-      _inTurn(() async {
-        final current = cache.current(owner, ckNs);
-        if (!force &&
-            current != null &&
-            current.ckKid != replacing &&
-            cache.currentNskeyKid(owner, ckNs) == nskeyKid &&
-            (ownGeneration == null ||
-                cache.currentOwnNskeyKid(owner, ckNs) == ownGeneration)) {
-          return current;
-        }
-        return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
-            keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
-      });
+  }) async {
+    if (!_isShare(owner, context.atClient.getCurrentAtSign())) {
+      await _awaitOwnPrivate(owner, ckNs, keyAlgo, until: until);
+    }
+    return _inTurn(() async {
+      final current = cache.current(owner, ckNs);
+      if (!force &&
+          current != null &&
+          current.ckKid != replacing &&
+          cache.currentNskeyKid(owner, ckNs) == nskeyKid &&
+          (ownGeneration == null ||
+              cache.currentOwnNskeyKid(owner, ckNs) == ownGeneration)) {
+        return current;
+      }
+      return _cutAndConveyInTurn(context, valueKey, owner, ckNs, nskeyKid,
+          keyAlgo: keyAlgo, useRemoteAtServer: useRemoteAtServer);
+    });
+  }
 
   Future<ContentKey> _cutAndConveyInTurn(
     CryptoContext context,
@@ -302,7 +385,8 @@ class CkManager {
         // the recipient before its key does.
         ..useRemoteAtServer = useRemoteAtServer ?? false,
     );
-    final ownNskeyKid = await _conveySiblingCopy(context, owner, ckNs, ck,
+    final ownNskeyKid = await _conveySiblingCopy(
+        context, valueKey, owner, ckNs, ck,
         useRemoteAtServer: useRemoteAtServer ?? false);
 
     // NOTE: promoted only once the record is durable — a failed conveyance left
@@ -325,6 +409,8 @@ class CkManager {
     try {
       sync = context.atClient.syncService;
     } on StateError {
+      return;
+    } on StoppedException {
       return;
     }
     await collectUnusedOnceCaughtUp(sync, () => this, context);
@@ -353,10 +439,29 @@ class CkManager {
   /// caught up, the one refusal a later pass can overcome; a pass that does not
   /// look for another reason answers 0, as [collectUnused] does.
   ///
+  /// Passes run one at a time, and one asked for while another waits to start
+  /// joins it. A pass checks sync and scans local storage without holding up
+  /// cuts, and takes their turn only to delete.
+  ///
   /// Visible so a test can tell a pass sync refused from one that answered.
   @visibleForTesting
-  Future<int?> tryCollect(CryptoContext context) =>
-      _inTurn(() => _collectUnused(context));
+  Future<int?> tryCollect(CryptoContext context) {
+    final waiting = _waitingPass;
+    if (waiting != null) return waiting;
+    final pass = _collecting.then((_) {
+      _waitingPass = null;
+      return _collectUnused(context);
+    });
+    _waitingPass = pass;
+    _collecting = pass.then((_) {}, onError: (_) {});
+    return pass;
+  }
+
+  /// The pass waiting to start, which a pass asked for meanwhile joins.
+  Future<int?>? _waitingPass;
+
+  /// Completes once every pass begun here so far has finished.
+  Future<void> _collecting = Future<void>.value();
 
   Future<int?> _collectUnused(CryptoContext context) async {
     final atClient = context.atClient;
@@ -406,19 +511,55 @@ class CkManager {
         current.contains(ckKid) ||
         cited.contains(ckKid) ||
         now.difference(supersededAt[ckKid]!) < supersededCkGrace);
+    if (cut.isEmpty) return 0;
+    return _inTurn(() => _deleteUnlessCurrent(context, cut));
+  }
+
+  /// Deletes each of [cut]'s records and evicts its key, unless the key is
+  /// current now or this enrollment's pointer for its scope names it, and
+  /// returns how many keys went.
+  ///
+  /// Runs in turn, where no cut is half done, so a key a cut conveyed while
+  /// the scan ran is current by now. Deletes from local storage, whatever the
+  /// app's preference, and sync carries them to the atServer.
+  Future<int> _deleteUnlessCurrent(CryptoContext context,
+      Map<String, List<({String key, Map<String, dynamic> about})>> cut) async {
+    final current = cache.currentKids;
+    final kept = <String>{};
+    for (final MapEntry(key: ckKid, value: records) in cut.entries) {
+      final scope = _scopeOf(records.first.key, records.first.about);
+      if (current.contains(ckKid) ||
+          (scope != null && await _pointerNames(context, scope, ckKid))) {
+        kept.add(ckKid);
+      }
+    }
+    cut.removeWhere((ckKid, _) => kept.contains(ckKid));
 
     for (final MapEntry(key: ckKid, value: records) in cut.entries) {
       for (final record in records) {
-        await context.atClient.delete(AtKey.fromString(record.key));
+        await context.atClient.delete(AtKey.fromString(record.key),
+            deleteRequestOptions: DeleteRequestOptions()
+              ..useRemoteAtServer = false);
         final scope = _scopeOf(record.key, record.about);
         if (scope != null) cache.evict(scope.owner, scope.ckNs, ckKid);
       }
     }
     if (cut.isNotEmpty) {
-      _logger.info('Collected ${cut.length} content key(s) $enrollmentId cut '
-          'and nothing cites any more: ${cut.keys.join(', ')}');
+      _logger.info('Collected ${cut.length} content key(s) '
+          '${context.atClient.enrollmentId} cut and nothing cites any more: '
+          '${cut.keys.join(', ')}');
     }
     return cut.length;
+  }
+
+  /// Whether this enrollment's pointer for [scope], read from local storage,
+  /// names [ckKid].
+  Future<bool> _pointerNames(CryptoContext context,
+      ({String owner, String ckNs}) scope, String ckKid) async {
+    final key = pointer?.keyFor(context.atClient, scope.owner, scope.ckNs);
+    final store = context.atClient.getLocalSecondary()?.keyStore;
+    if (key == null || store == null) return false;
+    return _ckKidIn((await store.get(key.toString()))?.data) == ckKid;
   }
 
   /// Why local storage cannot answer "does any record cite this key?"
@@ -503,47 +644,209 @@ class CkManager {
 
   /// Completes once every cut and collection begun here so far has finished.
   @visibleForTesting
-  Future<void> get idle => _turn;
+  Future<void> get idle async {
+    await _collecting;
+    await _turn;
+  }
 
-  /// Runs [work] once every cut and collection already begun here has
-  /// finished, so a collection never sees a key conveyed but not yet current.
+  /// Runs [work] once every cut and collection delete already begun here has
+  /// finished, so a collection never deletes a key conveyed but not yet
+  /// current.
   Future<T> _inTurn<T>(Future<T> Function() work) {
     final result = _turn.then((_) => work());
     _turn = result.then((_) {}, onError: (_) {});
     return result;
   }
 
-  /// `sender|ckNs` → when the sender was found to hold no key covering ckNs.
-  final Map<String, DateTime> _noOwnKeyAt = {};
+  /// The key a rotation of [valueKey]'s content key in this client's own
+  /// atSign [owner] is sealed to, found from its start level with no wait.
+  Future<({String namespace, ResolvedNskey? advertised})> _rotationOwnKey(
+      String? holder, String owner, AtKey valueKey) async {
+    final namespace = await resolver.startLevelOf(holder, valueKey);
+    return (
+      namespace: namespace,
+      advertised: await resolver.resolve(owner, namespace)
+    );
+  }
 
-  /// The sender's own nskey generation covering [ckNs] that a CK shared with
-  /// [destination] should now rest on: the advertised one, once this
-  /// enrollment holds its private.
+  /// Whether a write whose owner is [owner], by a client of [holder], is a
+  /// share: the owner is another atSign.
+  static bool _isShare(String owner, String? holder) =>
+      holder != null && owner.toAtsign() != holder.toAtsign();
+
+  /// Throws unless [sealToNamespace] can apply to a write of [valueKey]: a
+  /// share, whose key's name ends with it after a dot.
+  static void _refuseUnlessSealable(AtKey valueKey, String sealToNamespace,
+      {required bool sharing}) {
+    if (!sharing) {
+      throw ArgumentError.value(
+          sealToNamespace,
+          'sealToNamespace',
+          'applies only to a share, and ${valueKey.key} is written to this '
+              "client's own atSign");
+    }
+    if (!NskeyResolver.shareLevelsOf(valueKey)
+        .contains(sealToNamespace.toLowerCase())) {
+      throw ArgumentError.value(
+          sealToNamespace,
+          'sealToNamespace',
+          'is not a namespace the name ${valueKey.key}.${valueKey.namespace} '
+              'ends with');
+    }
+  }
+
+  /// The recipient's key a share of [valueKey] to [owner] is sealed to, and
+  /// the level its search started at: [sealToNamespace] alone when set, the
+  /// most specific level of the key's name otherwise.
+  Future<({String namespace, ResolvedNskey? advertised})> _shareKey(
+      String owner, AtKey valueKey, String? sealToNamespace) async {
+    if (sealToNamespace != null) {
+      final namespace = sealToNamespace.toLowerCase();
+      return (
+        namespace: namespace,
+        advertised: await resolver.resolveRequired(owner, namespace)
+      );
+    }
+    final levels = NskeyResolver.shareLevelsOf(valueKey);
+    return (
+      namespace:
+          levels.isEmpty ? valueKey.namespace!.toLowerCase() : levels.first,
+      advertised: await resolver.resolveShare(owner, valueKey)
+    );
+  }
+
+  /// The key a write of [valueKey] to this client's own atSign [owner] is
+  /// sealed to, and the level its search started at, after waiting for
+  /// [startUpSeeding] as [ensureCurrent] describes.
+  Future<({String namespace, ResolvedNskey? advertised})> _ownKey(
+      String? holder, String owner, AtKey valueKey) async {
+    // NOTE: read before the search, so a seeding that ends during it is
+    // searched for again rather than missed.
+    final seeding = startUpSeeding?.isFinished == false;
+    var namespace = await resolver.startLevelOf(holder, valueKey);
+
+    var advertised = await resolver.resolve(owner, namespace);
+    if (advertised == null) {
+      final waited = seeding
+          ? await _afterStartUpSeeding(holder, valueKey, namespace)
+          : null;
+      if (waited != null) {
+        namespace = await resolver.startLevelOf(holder, valueKey);
+        advertised = await resolver.resolve(owner, namespace);
+        if (advertised == null) {
+          final failure = startUpSeeding?.failureFor(waited.covering);
+          if (failure != null) {
+            throw NamespaceKeyUnavailableException(owner, waited.covering,
+                because: 'this client\'s start-up could not publish it: '
+                    '$failure');
+          }
+          if (waited.timedOut) {
+            throw NamespaceKeyUnavailableException(owner, waited.covering,
+                because: 'this client\'s start-up has not yet published it, '
+                    '${waited.waited?.inSeconds} seconds after the write '
+                    'began waiting; a later write succeeds once it is '
+                    'published');
+          }
+        }
+      } else {
+        final failure = startUpSeeding?.failureFor(namespace);
+        if (failure != null) {
+          throw NamespaceKeyUnavailableException(owner, namespace,
+              because: 'this client\'s start-up could not publish it: '
+                  '$failure');
+        }
+      }
+    } else if (seeding &&
+        await _seedingBeyond(holder, valueKey, advertised.namespace)) {
+      namespace = await resolver.startLevelOf(holder, valueKey);
+      advertised = await resolver.resolve(owner, namespace);
+    }
+    return (namespace: namespace, advertised: advertised);
+  }
+
+  /// The namespace [startUpSeeding] seeds that covers [valueKey], once its
+  /// seeding step has finished or [StartUpSeeding.wait] has passed, or null
+  /// at once when it seeds none. `timedOut` says the wait passed first, after
+  /// `waited`.
+  Future<({String covering, bool timedOut, Duration? waited})?>
+      _afterStartUpSeeding(
+          String? holder, AtKey valueKey, String namespace) async {
+    final seeding = startUpSeeding;
+    if (seeding == null || holder == null) return null;
+    try {
+      final covering =
+          await seeding.covering('${valueKey.key}.${valueKey.namespace}');
+      return covering == null
+          ? null
+          : (covering: covering, timedOut: false, waited: null);
+    } on TimeoutException catch (e) {
+      return (
+        covering: e.message ?? namespace,
+        timedOut: true,
+        waited: e.duration
+      );
+    }
+  }
+
+  /// Whether [startUpSeeding] was still to seed a namespace that covers
+  /// [valueKey] more specifically than [found], and has since finished or run
+  /// out of time, so the write resolves again.
+  Future<bool> _seedingBeyond(
+      String? holder, AtKey valueKey, String found) async {
+    final seeding = startUpSeeding;
+    if (seeding == null || holder == null) return false;
+    try {
+      return await seeding.coveringBeyond(
+              '${valueKey.key}.${valueKey.namespace}', found) !=
+          null;
+    } on TimeoutException {
+      return true;
+    }
+  }
+
+  /// The level [sender]'s copy of a key it shares in [valueKey] is sealed
+  /// at: the most specific namespace it holds a namespace private for that
+  /// the key's whole name ends with after a dot, never a reserved one, or
+  /// null when it holds none.
   ///
-  /// Null for a CK that is not shared, when the sender has no key covering
-  /// [ckNs], and while the advertised generation's private has not reached this
+  /// Read from the namespaces this enrollment holds, so it asks nothing of the
+  /// atServer.
+  Future<String?> _ownLevel(String sender, AtKey valueKey) async {
+    final name = '${valueKey.key}.${valueKey.namespace}'.toLowerCase();
+    String? level;
+    for (final held in await keyRing.heldNamespaces(sender)) {
+      final namespace = held.toLowerCase();
+      if (NskeyResolver.isReserved(namespace)) continue;
+      if (name.endsWith('.$namespace') &&
+          (level == null || namespace.length > level.length)) {
+        level = namespace;
+      }
+    }
+    return level;
+  }
+
+  /// Whether a key at [level] covers [ckNs]: is it, or a namespace it ends
+  /// with after a dot.
+  static bool _covers(String level, String ckNs) =>
+      ckNs == level || ckNs.endsWith('.$level');
+
+  /// The sender's own nskey generation at its own level for [valueKey] that a
+  /// CK shared with [destination] in [ckNs] should now rest on: the
+  /// advertised one, once this enrollment holds its private.
+  ///
+  /// Null for a CK that is not shared, when the sender holds no level covering
+  /// both, and while the advertised generation's private has not reached this
   /// enrollment; a null never replaces a CK. Asking for the private is what
   /// pulls a generation this enrollment missed from its sibling enrollments.
-  /// Finding no key covering [ckNs] is remembered for the resolver's
-  /// `missMemory`, while the current CK toward [destination] rests on no own
-  /// generation.
-  Future<String?> _ownGenerationHeld(
-      CryptoContext context, String destination, String ckNs) async {
+  Future<String?> _ownGenerationHeld(CryptoContext context, String destination,
+      String ckNs, AtKey valueKey) async {
     final sender = context.atClient.getCurrentAtSign();
-    if (sender == null || destination == sender) return null;
-    final scope = '$sender|$ckNs';
-    final missed = _noOwnKeyAt[scope];
-    if (missed != null &&
-        DateTime.now().difference(missed) < resolver.missMemory &&
-        cache.currentOwnNskeyKid(destination, ckNs) == null) {
-      return null;
-    }
+    if (sender == null || !_isShare(destination, sender)) return null;
     try {
-      final own = await resolver.resolve(sender, ckNs);
-      if (own == null) {
-        _noOwnKeyAt[scope] = DateTime.now();
-        return null;
-      }
+      final level = await _ownLevel(sender, valueKey);
+      if (level == null || !_covers(level, ckNs)) return null;
+      final own = await resolver.resolveAt(sender, level);
+      if (own == null) return null;
       final held =
           await keyRing.privateHalf(sender, own.namespace, own.nskeyKid);
       return held == null ? null : own.nskeyKid;
@@ -558,33 +861,63 @@ class CkManager {
   }
 
   /// Conveys [ck], shared with [destination], a second time — to this atSign's
-  /// own key covering [ckNs] — so its other enrollments, and this one after a
-  /// restart, can open it, and returns the own generation it was sealed to.
+  /// own key at its own level for [valueKey] — so its other enrollments, and
+  /// this one after a restart, can open it, and returns the own generation it
+  /// was sealed to.
   ///
   /// Sealed here and written as it is, because the put pipeline replaces the
-  /// `appMetadata` that names the recipient. An atSign holding no key covering
-  /// [ckNs] mints one there first, at the recipient's level rather than the
-  /// value's own; where it makes none, the share goes without a copy and this
-  /// returns null. While the advertised generation's private has not reached
-  /// this enrollment, the copy is sealed to the generation its keys in [ckNs]
-  /// already rest on, or goes without one when none is recorded.
-  Future<String?> _conveySiblingCopy(
-      CryptoContext context, String destination, String ckNs, ContentKey ck,
+  /// `appMetadata` that names the recipient; the record keeps the recipient's
+  /// level [ckNs] in its name, and its `ns` names the level it was sealed to.
+  /// Nothing is minted for it. The share goes without a copy, and this returns
+  /// null, while this client's start-up has yet to publish a key covering
+  /// [valueKey], when no namespace it holds covers [valueKey], and when the
+  /// recipient's level is broader than this client's own. While the
+  /// advertised generation's private has not reached this enrollment, the
+  /// copy is sealed to the generation its keys in [ckNs] already rest on, or
+  /// goes without one when none is recorded.
+  Future<String?> _conveySiblingCopy(CryptoContext context, AtKey valueKey,
+      String destination, String ckNs, ContentKey ck,
       {required bool useRemoteAtServer}) async {
     final sender = context.atClient.getCurrentAtSign();
-    if (sender == null || destination == sender) return null;
-    var own = await resolver.resolve(sender, ckNs);
+    if (sender == null || !_isShare(destination, sender)) return null;
+    final name = '${valueKey.key}.${valueKey.namespace}';
+    final String? level;
+    try {
+      level = await _ownLevel(sender, valueKey);
+    } on StoppedException {
+      rethrow;
+    } catch (e) {
+      _logger.warning('Could not read which namespace keys $sender holds, so '
+          'the content key ${ck.ckKid} shared with $destination has no sibling '
+          'copy: $e');
+      return null;
+    }
+    if (level == null) {
+      _logger.warning(startUpSeeding?.isFinished == false
+          ? '$sender\'s start-up has not yet published a namespace key '
+              'covering $name, so the content key ${ck.ckKid} shared with '
+              '$destination goes without a sibling copy; the first share after '
+              'it has gets a fresh key with one'
+          : 'No namespace key $sender holds covers $name, so the content key '
+              '${ck.ckKid} shared with $destination has no sibling copy: no '
+              'other enrollment of $sender can open what it shares, and this '
+              'one cuts a fresh key after a restart');
+      return null;
+    }
+    if (!_covers(level, ckNs)) {
+      _logger.warning('$destination\'s key for $name is at $ckNs, broader '
+          'than $sender\'s own level $level, so the content key ${ck.ckKid} '
+          'shared with $destination has no sibling copy: no other enrollment '
+          'of $sender can open what it shares, and this one cuts a fresh key '
+          'after a restart');
+      return null;
+    }
+    final own = await resolver.resolveAt(sender, level);
     if (own == null) {
-      final reached = await context.atClient.ensureReachable(ckNs);
-      if (reached.isReachable) own = await resolver.resolve(sender, ckNs);
-      if (own == null) {
-        _logger.warning('$sender holds no namespace key covering $ckNs and '
-            'made none, because ${_whyNoKey(reached, ckNs)}, so the content '
-            'key ${ck.ckKid} shared with $destination has no sibling copy: '
-            'no other enrollment of $sender can open what it shares, and this '
-            'one cuts a fresh key after a restart');
-        return null;
-      }
+      _logger.warning('$sender holds a namespace private for $level and '
+          'advertises no key there, so the content key ${ck.ckKid} shared with '
+          '$destination has no sibling copy');
+      return null;
     }
     var alg = own.alg;
     String? sealTo;
@@ -644,19 +977,6 @@ class CkManager {
     }
     return null;
   }
-
-  static String _whyNoKey(AtReachabilityResult reached, String ckNs) =>
-      switch (reached.outcome) {
-        AtReachability.postureDoesNotSeed => 'seedNamespaceKeys is off',
-        AtReachability.noKeySource =>
-          'this client has no key source to file one in',
-        AtReachability.notAuthorised => '$ckNs can never hold a key',
-        AtReachability.timedOut => 'minting one timed out',
-        AtReachability.failed => 'minting one failed: ${reached.error}',
-        AtReachability.alreadyReachable ||
-        AtReachability.published =>
-          'a key is published there that this client could not resolve',
-      };
 
   /// Deletes the conveyance records carrying [ckKid] — for a shared key, the
   /// recipient's and the sibling copy — and drops the key from this client's

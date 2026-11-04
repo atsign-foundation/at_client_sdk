@@ -7,7 +7,9 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart';
@@ -89,6 +91,8 @@ void main() {
           preference: AtClientPreference(posture: PqPosture.legacy)
             ..rootDomain = 'vip.ve.atsign.zone'
             ..rootPort = TestUtils.rootServerPort,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           namespace: namespace,
           app: 'wavi',
           device: 'pixel1',
@@ -278,7 +282,8 @@ void main() {
     expect(otp, isNotNull);
     // create first enrollment request
     RemoteSecondary? secondRemoteSecondary =
-        RemoteSecondary(atSign, getClient2Preferences());
+        RemoteSecondary(atSign, getClient2Preferences(),
+            lookUps: secureSocketLookUps());
     // Fresh per request, and the two below must differ: the atServer refuses a
     // request whose key any stored enrollment already holds, so two requests
     // sharing one key make the second fail.
@@ -356,6 +361,8 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: InMemoryAtKeysIo(),
           preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           signingAlgo: SigningAlgoType.rsa2048);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -492,7 +499,9 @@ void main() {
           () => Atsign(atSign).authenticatesAs(
               keys: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
               rootDomain:
-                  AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)),
+                  AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
+                      lookUps: secureSocketLookUps(),
+                      secondaryAddressFinder: TestUtils.atDirectory),
           throwsA(predicate((e) =>
               '$e'.contains('AT0025') &&
               '$e'.contains('${atEnrollmentResponse.enrollmentId} is denied'))));
@@ -512,6 +521,8 @@ void main() {
           namespaces: {'wavi': 'r'},
           keys: InMemoryAtKeysIo(),
           preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           signingAlgo: SigningAlgoType.rsa2048);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -710,6 +721,8 @@ void main() {
           keys: ownerKeysIo,
           preference:
               TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           namespace: namespace,
           app: 'wavi',
           device: 'pixel-onboard',
@@ -749,6 +762,8 @@ void main() {
           keys: InMemoryAtKeysIo(),
           preference:
               TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           signingAlgo: SigningAlgoType.rsa2048);
       expect(pending.enrollmentId, isNotEmpty);
 

@@ -99,4 +99,27 @@ class EnrollmentApprover {
     return AtEnrollmentResponse(enrollmentJsonMap['enrollmentId'],
         getEnrollStatusFromString(enrollmentJsonMap['status']));
   }
+
+  /// Revokes [enrollmentRequestDecision]'s approved enrollment, for the
+  /// submitter to withdraw a self-enrollment whose keys it could not save;
+  /// the approving side's own verb is at_client's `client.enrollments.revoke`.
+  ///
+  /// Throws [AtEnrollmentException] carrying the atServer's answer when it
+  /// refuses.
+  Future<AtEnrollmentResponse> revoke(
+      EnrollmentRequestDecision enrollmentRequestDecision,
+      AtLookUp atLookUp) async {
+    final command = (EnrollVerbBuilder()
+          ..enrollmentId = enrollmentRequestDecision.enrollmentId
+          ..operation = EnrollOperationEnum.revoke
+          ..force = enrollmentRequestDecision.force)
+        .buildCommand();
+    final response = await atLookUp.executeCommand(command, auth: true);
+    if (response == null || !response.startsWith('data:')) {
+      throw AtEnrollmentException('${command.trim()} was refused: $response');
+    }
+    final decoded = jsonDecode(response.substring('data:'.length));
+    return AtEnrollmentResponse(
+        decoded['enrollmentId'], getEnrollStatusFromString(decoded['status']));
+  }
 }

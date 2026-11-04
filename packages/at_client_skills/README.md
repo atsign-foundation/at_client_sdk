@@ -1,9 +1,10 @@
 # at_client_skills
 
 AI agent skill for the [Atsign](https://atsign.com) `at_client` SDK. Gives AI
-coding agents accurate, up-to-date knowledge of `at_client` and
-`at_client_flutter` — covering `AtCollection<T>`, auth flows, querying,
-sub-collections, testing patterns, and common pitfalls.
+coding agents accurate, up-to-date knowledge of at_client 4.0 and the platform
+packages an app builds on, `at_client_cli` and `at_client_flutter` — covering
+`AtCollection<T>`, auth flows, querying, sub-collections, testing patterns,
+and common pitfalls.
 
 Works with Claude Code, Cursor, GitHub Copilot, Cline, and any agent supporting
 the [agentskills.io](https://agentskills.io) specification.
@@ -69,18 +70,22 @@ This requires `~/.pub-cache/bin` on your `PATH`.
 - `watchWithTree` / `watchWithSub` for deep multi-level hierarchies
 - `at_client_flutter` auth — all 4 dialog flows (CRAM, atKeys file,
   device keychain, APKAM)
-- `AtClientManager` post-auth setup
-- Package selection guide
+- The `AtClient` lifecycle — the `Atsign` verbs (`open`, `activate`,
+  `enroll`), the storage, transport and atDirectory finder every client is
+  opened with, the connection state, and stopping
+- Package selection guide — one platform package per app (`at_client_cli` or
+  `at_client_flutter`)
 - Domain-object patterns (`toJson`/`fromJson`, `registerFactory`, `typeTag`)
 - Unit testing without a live atServer (`collections_test_hooks.dart`)
 - Architecture decision guide: `AtCollection<T>` vs Notifications + SQLite
 - RPC between atsigns (`AtRpc` / `AtRpcClient` request/response)
-- Headless agents and multi-instance coordination (`CLIBase`, server mutex,
-  no-sync scaling)
+- Headless agents and multi-instance coordination (`CLIBase`, `CliKeys`,
+  server mutex, no-sync scaling)
 - Remote vs local atServer operations (`remoteLocalPref`, `useRemoteAtServer`,
   `bypassCache`)
-- Deprecation guide: `AtCollectionModel`, `at_common_flutter`,
-  `at_backupkey_flutter`
+- Removals and deprecations: what at_client 4.0 removed (`AtCollectionModel`,
+  `setCurrentAtSign`, the at_onboarding_cli and at_cli_commons APIs, ...),
+  `at_common_flutter`, `at_backupkey_flutter`
 
 ## Keeping it up to date
 

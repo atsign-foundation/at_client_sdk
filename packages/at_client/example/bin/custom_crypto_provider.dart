@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_cli_commons/at_cli_commons.dart';
-import 'package:at_client/at_client.dart';
-import 'package:at_onboarding_cli/at_onboarding_cli.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 
 import 'package:at_client_examples/init_example_context.dart';
 
@@ -72,8 +70,8 @@ class XorCryptoProvider implements CryptoProvider {
 //                         names an unregistered provider throws
 //                         CryptoProviderNotRegistered.
 // ---------------------------------------------------------------------------
-AtOnboardingPreference buildPreference() {
-  return AtOnboardingPreference()
+AtClientPreference buildPreference() {
+  return AtClientPreference()
     ..crypto = CryptoConfig(
       defaultProviderId: XorCryptoProvider.providerId,
       providers: [XorCryptoProvider()],

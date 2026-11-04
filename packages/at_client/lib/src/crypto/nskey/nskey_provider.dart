@@ -5,6 +5,12 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/backends/crypto_backends.dart'
     show xWingKem;
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show heldOwnAfterStartUpAsk;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show requireRecordAtSign, requireRecordKid, requireRecordNamespace;
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart'
+    show StartUpSeeding;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
@@ -52,10 +58,14 @@ class NskeyRecipientKind {
 /// anything, and is as current as this is.
 ///
 /// There is no post-quantum fallback to offer: the only atSign-level key is a
-/// signing root, which cannot receive an encapsulation. The escape hatch is the
-/// legacy path, and it is opt-in
-/// ([AtClientPreference.allowLegacyCryptoFallback]) because a silent downgrade
-/// to RSA is exactly what this design exists to stop.
+/// signing root, which cannot receive an encapsulation. Below
+/// `PqPosture.pqActive`, `AtClientPreference.allowLegacyCryptoFallback` sends
+/// such a write by the legacy path instead; at `pqActive` nothing does, since
+/// a silent downgrade to RSA is what that posture refuses.
+///
+/// When this client's own start-up has yet to publish the key, a write waits
+/// for it first, at most 30 seconds; this then says so, and a later write
+/// succeeds once the key is published.
 class NamespaceKeyUnavailableException extends AtEncryptionException {
   /// The atSign whose namespace key is missing — the recipient for a share, or
   /// the writer for self data.
@@ -63,11 +73,13 @@ class NamespaceKeyUnavailableException extends AtEncryptionException {
 
   final String namespace;
 
-  NamespaceKeyUnavailableException(this.atSign, this.namespace)
-      : super('$atSign has no published nskey for "$namespace" — that '
-            'namespace has not been used or authorised there, so there is no '
-            'post-quantum key to seal a content key to. Reaching it needs the '
-            'legacy path, which must be opted into explicitly.');
+  /// [because], when given, says why in place of the usual explanation.
+  NamespaceKeyUnavailableException(this.atSign, this.namespace,
+      {String? because})
+      : super('$atSign has no published nskey for "$namespace" — '
+            '${because ?? 'that namespace has not been used or authorised '
+                'there, so there is no post-quantum key to seal a content key '
+                'to'}.');
 }
 
 /// Layer 2 of the nskey data path: conveys a symmetric content key.
@@ -192,10 +204,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       // derives. A peer's private is never held, so a share can rest only on
       // the advertisement's signature.
       if (nskeyOwner == context.atClient.getCurrentAtSign()) {
-        final held =
-            await keyRing.privateHalf(nskeyOwner, namespace, usable.kid) == null
-                ? null
-                : await keyRing.heldPublic(nskeyOwner, namespace, usable.kid);
+        final held = await heldOwnAfterStartUpAsk(
+            keyRing, nskeyOwner, namespace, usable.kid,
+            until: StartUpSeeding.boundFromNow());
         if (held == null) {
           throw NskeyPrivateNotHeldException(nskeyOwner, namespace, usable.kid);
         }
@@ -267,7 +278,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // NOTE: the record states its own namespace, because a conveyance key
     // re-parsed from the wire mis-splits a multi-segment one — both the private
     // lookup and the HPKE binding would then be wrong.
-    final namespace = additional?['ns'] as String? ?? _namespaceOf(atKey);
+    final namespace = requireRecordNamespace(
+        additional?['ns'] as String? ?? _namespaceOf(atKey), 'namespace');
     final filedUnder = _filingScopeOf(atKey, additional, nskeyOwner, namespace);
 
     final nskeyKid = additional?['nskeyKid'];
@@ -276,8 +288,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           'an $nskeyCryptoProviderId record must name the nskey generation it '
           'was sealed to in appMetadata.nskeyKid');
     }
+    requireRecordKid(nskeyKid, 'nskeyKid');
 
-    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid);
+    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid,
+        writtenBy: _recordOwnerOf(atKey));
     if (private == null) {
       // NOTE: the notification service parks on this type and re-drives it when
       // the private is filed, so the retry must not depend on the wording.
@@ -285,8 +299,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           nskeyOwner,
           namespace,
           nskeyKid,
-          'this client is not authorised for the namespace, or has not yet '
-          'received that generation');
+          'its private key has not yet been conveyed to this enrollment, or '
+          'this enrollment is not authorised for the namespace');
     }
 
     final Uint8List ckBytes;
@@ -348,7 +362,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       throw AtDecryptionException('a sibling copy must name the recipient and '
           'the namespace its key is filed under, as destination and ckNs');
     }
-    return (owner: destination, namespace: ckNs);
+    return (
+      owner: requireRecordAtSign(destination, 'destination'),
+      namespace: requireRecordNamespace(ckNs, 'ckNs'),
+    );
   }
 
   static bool _hasRecipient(AtKey atKey) {

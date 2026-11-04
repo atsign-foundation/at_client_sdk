@@ -85,7 +85,6 @@ void main() {
                 required AtRootDomain rootDomain,
                 required AtAuthenticator? authenticator,
                 SecondaryAddressFinder? secondaryAddressFinder,
-                Map<String, dynamic> clientConfig = const {},
               }) {
                 connectionsAsked++;
                 throw StateError('the atServer was asked for');

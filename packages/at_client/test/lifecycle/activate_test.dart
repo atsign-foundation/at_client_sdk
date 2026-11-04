@@ -2,13 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
+import 'package:at_chops/at_chops.dart' show SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
+import 'package:at_lookup/at_lookup.dart'
+    show AtAuthenticator, AtCommandExecutor;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/key_package_filing.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -27,6 +33,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
+    registerFallbackValue((AtCommandExecutor _) async => true);
   });
 
   setUp(() {
@@ -61,8 +68,11 @@ void main() {
   ({MockAtLookupImpl lookUp, List<String> sent}) atServer() {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
-    when(() => lookUp.cramAuthenticate(any())).thenAnswer((invocation) async =>
-        invocation.positionalArguments.first == cramSecret);
+    final installed = <AtAuthenticator?>[];
+    when(() => lookUp.authenticator = any()).thenAnswer((invocation) {
+      installed.add(invocation.positionalArguments.first as AtAuthenticator?);
+      return null;
+    });
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
@@ -84,9 +94,13 @@ void main() {
       throw StateError('the mocked atServer has no answer for: '
           '${builder.buildCommand()}');
     });
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => true);
+    // The first authenticator installed is the CRAM leg's, and it runs
+    // against this atServer, which accepts the digest of cramSecret over its
+    // challenge and nothing else; the PKAM legs after it are accepted.
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async =>
+        installed.length == 1
+            ? installed.single!(_CramAtServer(cramSecret))
+            : true);
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
@@ -104,10 +118,13 @@ void main() {
         cramSecret: cramSecret,
         keys: store,
         preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
         app: 'wavi',
         device: 'laptop',
         onProgress: (event) => progress.add(event.msg),
-        atLookUp: server.lookUp);
+        atLookUp: server.lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
 
     final keys = await store.read(atSign);
     expect(keys.holdsAuthenticationMaterial, isTrue);
@@ -156,7 +173,10 @@ void main() {
         appName: 'wavi',
         deviceName: 'pq-native',
         manager: manager,
-        atLookUp: server.lookUp);
+        storage: hiveStoreAt(atSign, dir.path),
+        atLookUp: server.lookUp,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory());
     expect(adopted, same(manager));
 
     final keys = await store.read(atSign);
@@ -174,6 +194,29 @@ void main() {
         reason: 'the request that creates the record carries the key package');
   });
 
+  test('an activation files its first key package under its enrollment id',
+      () async {
+    final store = InMemoryAtKeysIo();
+    final server = atServer();
+
+    await pqNativeOnboard(
+        atSign: atSign,
+        cramSecret: cramSecret,
+        preference: await preference(),
+        atKeysIo: store,
+        appName: 'wavi',
+        deviceName: 'pq-native',
+        manager: AtClientManager(atSign),
+        storage: hiveStoreAt(atSign, dir.path),
+        atLookUp: server.lookUp,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory());
+
+    final request = server.sent.where((c) => c.startsWith('enroll:')).single;
+    expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
+        kid: advertisedKid(request));
+  });
+
   test('the provisioning wait ends when its budget is spent', () async {
     // No atLookUp: the activation polls the preference's atDirectory, which
     // refuses every connection, until the budget runs out.
@@ -183,8 +226,11 @@ void main() {
             cramSecret: cramSecret,
             keys: InMemoryAtKeysIo(),
             preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
             provisioningBudget: const Duration(milliseconds: 600),
-            provisioningPollInterval: const Duration(milliseconds: 100)),
+            provisioningPollInterval: const Duration(milliseconds: 100),
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtTimeoutException>()));
     expect(DateTime.now().difference(started),
         lessThan(const Duration(seconds: 10)),
@@ -200,34 +246,36 @@ void main() {
             cramSecret: 'not-it',
             keys: store,
             preference: await preference(),
-            atLookUp: server.lookUp),
-        throwsA(isA<AtAuthenticationException>()));
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: server.lookUp,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
+        throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+            'message', startsWith('Cram authentication failed for $atSign'))));
     await expectLater(
         () => store.read(atSign), throwsA(isA<AtKeysSourceAbsentException>()),
         reason: 'nothing was minted for a secret the atServer refused');
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
   });
-  test(
-      'a preference asking for no local store, with none passed, is refused '
-      'before the CRAM secret is spent', () async {
-    final server = atServer();
-    final pref = await preference()
-      ..isLocalStoreRequired = false;
+}
 
-    await expectLater(
-        () => Atsign(atSign).activate(
-            cramSecret: cramSecret,
-            keys: InMemoryAtKeysIo(),
-            preference: pref,
-            app: 'wavi',
-            device: 'laptop',
-            atLookUp: server.lookUp),
-        throwsA(isA<ArgumentError>()));
+/// Answers `from:` with a challenge, and `cram:` with success only for the
+/// digest of [secret] over that challenge.
+class _CramAtServer implements AtCommandExecutor {
+  static const _challenge = 'challenge-for-the-test';
+  final String secret;
 
-    expect(server.sent, isEmpty,
-        reason: 'refused after the activation, the one-time secret is spent '
-            'on keys no client can open; so the refusal comes first');
-    verifyNever(() => server.lookUp.cramAuthenticate(any()));
-  });
+  _CramAtServer(this.secret);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    if (command.startsWith('from:')) return 'data:$_challenge';
+    final expected =
+        SHA512HashingAlgo().hash(utf8.encode('$secret$_challenge'));
+    return command.trim() == 'cram:$expected'
+        ? 'data:success'
+        : 'error:AT0401-Exception: the CRAM digest did not match';
+  }
 }

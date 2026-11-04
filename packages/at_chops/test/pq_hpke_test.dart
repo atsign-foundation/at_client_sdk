@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops_ffi.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:test/test.dart';
 
@@ -21,8 +21,6 @@ final class _FixedKem implements AtKemAlgorithm {
   final Uint8List _ct;
   _FixedKem(this._ss, this._ct);
   @override
-  String get name => 'fixed-kem-test-double';
-  @override
   Future<({Uint8List publicKey, Uint8List secretKey})>
       generateKeyPair() async =>
           throw UnsupportedError('not used in this test');
@@ -40,34 +38,6 @@ final class _FixedKem implements AtKemAlgorithm {
   Future<Uint8List> decapsulate(
           Uint8List secretKey, Uint8List ciphertext) async =>
       _ss;
-}
-
-/// KEM double whose encapsulate and decapsulate throw [_error], so a test can
-/// check which backend failures [pqSeal] and [pqOpen] translate and which they
-/// let through.
-final class _ThrowingKem implements AtKemAlgorithm {
-  final Object _error;
-  _ThrowingKem(this._error);
-  @override
-  String get name => 'throwing-kem-test-double';
-  @override
-  Future<({Uint8List publicKey, Uint8List secretKey})>
-      generateKeyPair() async =>
-          throw UnsupportedError('not used in this test');
-  @override
-  Uint8List newSeed() => throw UnsupportedError('not used in this test');
-  @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
-          Uint8List seed) async =>
-      throw UnsupportedError('not used in this test');
-  @override
-  Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
-          Uint8List publicKey) async =>
-      throw _error;
-  @override
-  Future<Uint8List> decapsulate(
-          Uint8List secretKey, Uint8List ciphertext) async =>
-      throw _error;
 }
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
@@ -217,72 +187,12 @@ void main() {
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
 
-    test('a low-order X25519 point in the KEM ciphertext → malformedEnvelope',
-        () async {
-      final kem = AtPqc.xWing;
-      final kp = await kem.generateKeyPair();
-      final envelope =
-          await pqSeal(kem, kp.publicKey, _utf8('payload'), info: _noInfo);
-      final ctLen = (envelope[1] << 8) | envelope[2];
-      final bad = Uint8List.fromList(envelope)
-        ..fillRange(3 + ctLen - 32, 3 + ctLen, 0);
-      expect(() => pqOpen(kem, kp.secretKey, bad, info: _noInfo),
-          _opensWith(PqOpenFailure.malformedEnvelope));
-    },
-        skip: AtPqc.xWing is XWingPureDartAlgo
-            ? 'the pure-Dart backend does not reject low-order points'
-            : null);
-
     test('a secret key of the wrong length → malformedEnvelope', () async {
       final kp = await xwing.generateKeyPair();
       final envelope =
           await pqSeal(xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
       expect(() => pqOpen(xwing, Uint8List(7), envelope, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
-    });
-  });
-
-  group('backend failures are not relabelled as bad input', () {
-    // A well-formed envelope, so pqOpen reaches decapsulation.
-    Future<Uint8List> sealedEnvelope() => pqSeal(
-        _FixedKem(Uint8List(32),
-            Uint8List.fromList(List<int>.generate(1120, (i) => i & 0xff))),
-        Uint8List(0),
-        _utf8('payload'),
-        info: _noInfo);
-
-    test('pqOpen: rejected KEM input → malformedEnvelope', () async {
-      final envelope = await sealedEnvelope();
-      expect(
-          () => pqOpen(_ThrowingKem(KemInputRejectedException('low-order')),
-              Uint8List(0), envelope,
-              info: _noInfo),
-          _opensWith(PqOpenFailure.malformedEnvelope));
-    });
-
-    test('pqOpen: a backend StateError propagates unchanged', () async {
-      final envelope = await sealedEnvelope();
-      expect(
-          () => pqOpen(_ThrowingKem(StateError('EVP_PKEY_CTX_new failed')),
-              Uint8List(0), envelope, info: _noInfo),
-          throwsA(isA<StateError>()
-              .having((e) => e.message, 'message', 'EVP_PKEY_CTX_new failed')));
-    });
-
-    test('pqSeal: rejected recipient key → PqSealException', () {
-      expect(
-          () => pqSeal(_ThrowingKem(KemInputRejectedException('low-order')),
-              Uint8List(0), _utf8('payload'),
-              info: _noInfo),
-          throwsA(isA<PqSealException>()));
-    });
-
-    test('pqSeal: a backend StateError propagates unchanged', () {
-      expect(
-          () => pqSeal(_ThrowingKem(StateError('EVP_PKEY_CTX_new failed')),
-              Uint8List(0), _utf8('payload'),
-              info: _noInfo),
-          throwsA(isA<StateError>()));
     });
   });
 

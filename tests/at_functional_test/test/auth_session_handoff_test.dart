@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/sync_service.dart';
 import 'package:test/test.dart';
@@ -10,8 +10,8 @@ import 'test_utils.dart';
 ///
 /// The point of this test — which a unit suite can't prove — is that the
 /// client builds its OWN connection from the [AtKeysIo] source alone: no
-/// signer and no connection are injected from anywhere. If the client's
-/// derived `AtChops` PKAMs on its fresh socket, a put/get round-trip succeeds.
+/// signer and no connection are injected from anywhere. If the client PKAMs
+/// from those keys on its fresh socket, a put/get round-trip succeeds.
 void main() {
   TestUtils.isolateStorage('auth_session_handoff_test');
   late String atSign;
@@ -30,11 +30,12 @@ void main() {
     );
 
     // 1. Open the client on the source. Nothing else is handed across: the
-    //    client derives its own AtChops from the keys and PKAMs on a fresh
-    //    socket.
+    //    client PKAMs from the keys on a fresh socket.
     final atClient = await Atsign(atSign).open(
         keys: atKeysIo,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     AtClientManager.getInstance().use(atClient);

@@ -15,11 +15,11 @@ environment:
 dependencies:
   # The floor is the released version the published arm pins, so this package
   # cannot compile against anything 3.14.0 lacks.
-  at_client: ">=3.14.0 <4.0.0"
+  at_client: ">=3.14.0 <5.0.0"
   at_chops: ">=3.0.0 <4.0.0"
   at_commons: ">=5.5.0 <6.0.0"
   at_demo_data: ^1.2.0
-  at_utils: ">=3.2.0 <4.0.0"
+  at_utils: ">=3.2.0 <5.0.0"
   # The RSA parse UC-G1.14 turns on: `RSAPublicKey.fromString` is the call
   # at_chops makes when it verifies a pkam signature.
   crypton: ^2.2.1

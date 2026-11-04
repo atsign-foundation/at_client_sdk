@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_cli_commons/at_cli_commons.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_examples/domain_objects.dart';
 import 'package:at_client_examples/todos_tui/presets.dart';
 import 'package:at_client_examples/todos_tui/theme.dart';
+import 'package:at_client_examples/todos_tui/todos_collection.dart';
 import 'package:at_client_examples/todos_tui/types.dart';
 import 'package:nocterm/nocterm.dart';
 
@@ -13,7 +13,8 @@ void main(List<String> args) async {
   final AtClient atClient =
       (await CLIBase.fromCommandLineArgs(
         args,
-        namespace: 'todos.demos',
+        namespace: todosNamespace,
+        preference: todosPreference(),
       )).atClient;
 
   // Default read preference is local — the at_client SDK keeps a
@@ -193,14 +194,7 @@ class _TodosAppState extends State<TodosApp> {
 
   Future<void> _initCollections() async {
     final ns = atClient.getPreferences()!.namespace!;
-    collection = await atClient.collection<Todo>(
-      'todos.$ns',
-      const Duration(days: 365),
-      eventSource: EventSource.both,
-      fromJson: Todo.fromJson,
-      typeTag: 'Todo',
-      cleanupOrphansOnCreation: true,
-    );
+    collection = await openTodos(atClient);
     // Legacy-notes probe: prior versions stored notes in a sibling
     // top-level collection; report any surviving keys without
     // migrating them.

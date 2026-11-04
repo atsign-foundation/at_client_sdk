@@ -8,13 +8,11 @@ import 'package:logging/logging.dart' as logging;
 class AtSignLogger {
   late logging.Logger logger;
   String? _level;
-  static String _root_level = 'info';
+  static String _root_level = 'warning';
   bool _hierarchicalLoggingEnabled = false;
 
   static final ConsoleLoggingHandler consoleLoggingHandler =
       ConsoleLoggingHandler();
-  static final StdErrLoggingHandler stdErrLoggingHandler =
-      StdErrLoggingHandler();
 
   /// The default logging handler to log events.
   ///
@@ -139,6 +137,8 @@ class AtSignLogger {
     _hierarchicalLoggingEnabled = value;
   }
 
+  /// The level each logger constructed after this is set logs at;
+  /// `warning` until a program sets it.
   static set root_level(String rootLevel) {
     _root_level = rootLevel.toLowerCase();
     logging.Logger.root.level = LogLevel.level[_root_level] ??

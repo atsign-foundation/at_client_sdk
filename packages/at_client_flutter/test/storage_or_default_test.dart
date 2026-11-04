@@ -66,15 +66,9 @@ void main() {
     );
   });
 
-  test('no store when the preference asks for none', () async {
-    // ignore: deprecated_member_use
-    final preference = AtClientPreference()..isLocalStoreRequired = false;
-    expect(await storageOrDefault('@alice', preference, null), isNull);
-  });
-
   test('a store kept in the support directory is found', () async {
-    // NOTE: written as at_client's own default writes it for an app that set
-    // hiveStoragePath to its support directory.
+    // NOTE: the store an app that set hiveStoragePath to its support
+    // directory already has.
     final before = HiveAtClientStorage(
       atSign: '@alice',
       storagePath: support.path,
@@ -84,11 +78,7 @@ void main() {
     await before.keyStore.put('phone.wavi@alice', AtData()..data = 'kept');
     await before.close();
 
-    final after = (await storageOrDefault(
-      'alice',
-      AtClientPreference(),
-      null,
-    ))!;
+    final after = await storageOrDefault('alice', AtClientPreference(), null);
     addTearDown(after.close);
     await after.attach(clientOf('@alice'));
 

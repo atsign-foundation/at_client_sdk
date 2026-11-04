@@ -3,7 +3,7 @@
 ///     dart run wasm_shakedown
 ///     dart run wasm_shakedown --package at_auth
 ///     dart run wasm_shakedown --config path/to/gates.yaml
-///     dart run wasm_shakedown --resolve-from at_chops=packages/at_chops
+///     dart run wasm_shakedown --resolve-from PACKAGE=DIR
 ///
 /// Named for the package, so it is the default entry point and needs no
 /// `:suffix`. The gated set comes from `.github/wasm_gates.yaml` unless
@@ -108,13 +108,7 @@ Future<void> main(List<String> args) async {
       ? config.gates
       : config.gates.where((g) => only.contains(g.package)).toList();
 
-  // A union, not a replacement: a --resolve-from directory resolves its own
-  // package (and wins, being spread last) while the workspace still resolves
-  // every other gate in the same config.
-  final roots = {
-    ...resolvePackageRoots(),
-    for (final dir in resolveRoots.values) ...resolvePackageRoots(from: dir),
-  };
+  final roots = resolvePackageRootsWith(resolveRoots);
 
   final scopedConfig = GateConfig(gates, config.path);
   final unresolvable = scopedConfig.unresolvableBarrels(roots);

@@ -1,0 +1,7 @@
+# Every .atKeys file a run generates. Emptied at the start of each run —
+# see test/utils/test_keys_dir.dart.
+/test/.tmp_keys/
+
+# Local secondary storage left behind when a test uses a relative path.
+/storage/
+/test/storage/

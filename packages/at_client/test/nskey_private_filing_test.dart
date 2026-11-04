@@ -12,6 +12,8 @@ import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/nskey_generation.dart';
+
 /// Moving an arriving nskey private out of the transit buffer and into AtKeys.
 void main() {
   const atSign = '@alice';
@@ -27,42 +29,82 @@ void main() {
     return (io, NskeyPrivateFiling(keysIo: io, atSign: atSign));
   }
 
-  Secret nskeySecret(String kid, {String? ns}) => Secret(
+  Secret nskeySecret(({String kid, Uint8List seed}) generation, {String? ns}) =>
+      Secret(
         namespace: ns ?? namespace,
-        name: '${NskeyPrivateFiling.secretNamePrefix}$kid',
-        value: base64Encode(privateBytes),
+        name: '${NskeyPrivateFiling.secretNamePrefix}${generation.kid}',
+        value: base64Encode(generation.seed),
       );
 
   test('an arriving private is filed into AtKeys, keyed by namespace and kid',
       () async {
     final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
 
-    expect(await filer.file(nskeySecret('kid-one')), isTrue);
+    expect(await filer.file(nskeySecret(generation)), isTrue);
 
     final keys = await io.read(atSign);
     final material = keys.getAtSignKey(
-        NskeyPrivateFiling.keyIdFor(namespace, 'kid-one'),
+        NskeyPrivateFiling.keyIdFor(namespace, generation.kid),
         CryptographicMaterialRole.privateDecapsulation);
     expect(material, isNotNull,
         reason: 'this is the only copy that survives a restart — the transit '
             'store is in-memory by design');
-    expect(material!.bytes.bytes, privateBytes);
+    expect(material!.bytes.bytes, generation.seed);
     expect(material.algorithm, CryptographicMaterialAlgorithm.xWing);
+  });
+
+  test('a private for a namespace spelt in capitals is filed under it folded',
+      () async {
+    final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
+
+    expect(
+        await filer.file(nskeySecret(generation, ns: 'App_1.My_Apps')), isTrue);
+
+    final keys = await io.read(atSign);
+    expect(keys.atSignKeys.map((m) => m.keyId),
+        contains('nskey.app_1.my_apps.${generation.kid}'));
+  });
+
+  test(
+      'a private an earlier release filed under its namespace in capitals is '
+      'read under the namespace folded', () async {
+    final io = InMemoryAtKeysIo();
+    final generation = await nskeyGeneration();
+    await io.write(
+        atSign,
+        AtKeys()
+          ..addKey(CryptographicMaterial(
+            keyId: 'nskey.App_1.My_Apps.${generation.kid}',
+            role: CryptographicMaterialRole.privateDecapsulation,
+            algorithm: CryptographicMaterialAlgorithm.xWing,
+            bytes: AtBytes(generation.seed),
+            createdAt: DateTime.now().toUtc(),
+          )));
+    final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+
+    expect(await filer.read(namespace, generation.kid), isNotNull);
+    expect(await filer.readSeed(namespace, generation.kid), isNotNull);
+    expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+        [generation.kid]);
   });
 
   test('the same kid in two namespaces files as two keys', () async {
     final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
 
-    await filer.file(nskeySecret('shared-kid'));
-    await filer.file(nskeySecret('shared-kid', ns: 'other'));
+    await filer.file(nskeySecret(generation));
+    await filer.file(nskeySecret(generation, ns: 'other'));
 
     final keys = await io.read(atSign);
     expect(
-        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'shared-kid'),
+        keys.getAtSignKey(
+            NskeyPrivateFiling.keyIdFor(namespace, generation.kid),
             CryptographicMaterialRole.privateDecapsulation),
         isNotNull);
     expect(
-        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor('other', 'shared-kid'),
+        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor('other', generation.kid),
             CryptographicMaterialRole.privateDecapsulation),
         isNotNull,
         reason: 'kids are truncated hashes and are not unique across '
@@ -72,9 +114,10 @@ void main() {
 
   test('a re-delivered private is not filed twice', () async {
     final (_, filer) = await filing();
+    final generation = await nskeyGeneration();
 
-    expect(await filer.file(nskeySecret('kid-one')), isTrue);
-    expect(await filer.file(nskeySecret('kid-one')), isFalse,
+    expect(await filer.file(nskeySecret(generation)), isTrue);
+    expect(await filer.file(nskeySecret(generation)), isFalse,
         reason: 'the substrate converges by re-sending, so arrival has to be '
             'idempotent — AtKeys.addKey rejects a duplicate outright');
   });
@@ -82,17 +125,12 @@ void main() {
   test('with nothing published, a seed is filed under the KEM its length names',
       () async {
     final (io, filer) = await filing();
-    final mlKemSeed = Uint8List.fromList(List<int>.generate(64, (i) => i));
+    final earlier = await nskeyGeneration(SecretSharingAlgos.mlKem1024);
 
-    expect(
-        await filer.file(Secret(
-            namespace: namespace,
-            name: '${NskeyPrivateFiling.secretNamePrefix}kid-earlier',
-            value: base64Encode(mlKemSeed))),
-        isTrue);
+    expect(await filer.file(nskeySecret(earlier)), isTrue);
 
     final material = (await io.read(atSign)).getAtSignKey(
-        NskeyPrivateFiling.keyIdFor(namespace, 'kid-earlier'),
+        NskeyPrivateFiling.keyIdFor(namespace, earlier.kid),
         CryptographicMaterialRole.privateDecapsulation);
     expect(material!.algorithm, CryptographicMaterialAlgorithm.mlKem1024,
         reason: 'an earlier generation is no longer published, and filing its '
@@ -238,11 +276,12 @@ void main() {
 
   test('only nskey privates are filed; other secrets pass through', () async {
     final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
 
     expect(
         await filer.filePending([
           Secret(namespace: namespace, name: 'an-app-token', value: 'v'),
-          nskeySecret('kid-two'),
+          nskeySecret(generation),
         ]),
         1);
 
@@ -251,7 +290,8 @@ void main() {
         reason: 'the substrate carries opaque secrets and this only claims its '
             'own — an app secret is none of the crypto layer\'s business');
     expect(
-        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'kid-two'),
+        keys.getAtSignKey(
+            NskeyPrivateFiling.keyIdFor(namespace, generation.kid),
             CryptographicMaterialRole.privateDecapsulation),
         isNotNull);
   });
@@ -260,8 +300,10 @@ void main() {
     final (io, filer) = await filing();
 
     expect(
-        await filer
-            .filePending([nskeySecret('gen-one'), nskeySecret('gen-two')]),
+        await filer.filePending([
+          nskeySecret(await nskeyGeneration()),
+          nskeySecret(await nskeyGeneration())
+        ]),
         2,
         reason: 'data written under a superseded key is still readable, and '
             'only its own private opens it — a client given the current '
@@ -273,7 +315,7 @@ void main() {
 
   test('re-draining the same store files nothing twice', () async {
     final (_, filer) = await filing();
-    final held = [nskeySecret('kid-three')];
+    final held = [nskeySecret(await nskeyGeneration())];
 
     expect(await filer.filePending(held), 1);
     expect(await filer.filePending(held), 0,
@@ -364,6 +406,127 @@ void main() {
     expect(await filer.filedFor(namespace), isEmpty);
   });
 
+  group('Given the namespaces a filing lists as held', () {
+    test(
+        'when the keyfile cannot be read, then each call in the next 10 '
+        'seconds throws the read\'s error, from that one read', () async {
+      final io = _CountingUnreadableKeysIo();
+      final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+
+      expect(io.reads, 1);
+    });
+
+    test('a read is kept for a minute, and a failed one for 10 seconds', () {
+      final filer =
+          NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+
+      expect(filer.namespacesReadEvery, const Duration(minutes: 1));
+      expect(filer.namespacesRetryEvery, const Duration(seconds: 10));
+    });
+
+    test(
+        'when a failed read\'s window has passed, then the next call reads the '
+        'keyfile again', () async {
+      final io = _CountingUnreadableKeysIo();
+      final filer = NskeyPrivateFiling(
+          keysIo: io, atSign: atSign, namespacesRetryEvery: Duration.zero);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+
+      expect(io.reads, 2);
+    });
+
+    test('when there is no keyfile, then it lists nothing', () async {
+      final filer =
+          NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+
+      expect(await filer.filedNamespaces(), isEmpty);
+    });
+
+    test(
+        'when another process files a private on the same keyfile, then it is '
+        'listed once the window has passed', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      final here = NskeyPrivateFiling(
+          keysIo: io, atSign: atSign, namespacesReadEvery: Duration.zero);
+      final there = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      expect(await here.filedNamespaces(), isEmpty);
+
+      expect(
+          await there.store(
+              namespace: 'todos.demos',
+              nskeyKid: 'kid1',
+              seed: NskeySeed(privateBytes)),
+          isTrue);
+
+      expect(await here.filedNamespaces(), contains('todos.demos'));
+    });
+
+    test(
+        'when this filing finds a private already filed, then it is listed at '
+        'once', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      final here = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      final there = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      expect(await here.filedNamespaces(), isEmpty);
+      await there.store(
+          namespace: 'todos.demos',
+          nskeyKid: 'kid1',
+          seed: NskeySeed(privateBytes));
+
+      expect(
+          await here.store(
+              namespace: 'todos.demos',
+              nskeyKid: 'kid1',
+              seed: NskeySeed(privateBytes)),
+          isFalse);
+
+      expect(await here.filedNamespaces(), contains('todos.demos'));
+    });
+
+    test(
+        'when a second call arrives while the first read of the keyfile is in '
+        'flight, then both list what it holds, from that one read', () async {
+      final io = _HeldKeysIo();
+      await io.write(atSign, AtKeys());
+      await NskeyPrivateFiling(keysIo: io, atSign: atSign).store(
+          namespace: 'todos.demos',
+          nskeyKid: 'kid1',
+          seed: NskeySeed(privateBytes));
+      final here = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      io
+        ..held = Completer<void>()
+        ..reads = 0;
+
+      final first = here.filedNamespaces();
+      final second = here.filedNamespaces();
+      io.held!.complete();
+
+      expect(await second, contains('todos.demos'));
+      expect(await first, contains('todos.demos'));
+      expect(io.reads, 1);
+    });
+
+    test('when the client stops as the keyfile is read, then it says so',
+        () async {
+      final filer =
+          NskeyPrivateFiling(keysIo: _StoppedKeysIo(), atSign: atSign);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<StoppedException>()));
+    });
+  });
+
   group('a key source that cannot be read is not an empty one', () {
     test('a source holding nothing yet reads as a genuine absence', () async {
       final filing =
@@ -410,6 +573,37 @@ void main() {
       expect(await filing.readAll(), isEmpty);
     });
   });
+}
+
+/// A keyfile that cannot be read, counting how often a read is tried.
+/// A key source whose reads wait for [held] to complete, counting them.
+class _HeldKeysIo extends InMemoryAtKeysIo {
+  Completer<void>? held;
+  int reads = 0;
+
+  @override
+  Future<AtKeys> read(String atsign) async {
+    reads++;
+    await held?.future;
+    return super.read(atsign);
+  }
+}
+
+/// A key source whose client has stopped.
+class _StoppedKeysIo extends _UnreadableKeysIo {
+  @override
+  Future<AtKeys> read(String atsign) async =>
+      throw StoppedException('the client for $atsign has stopped');
+}
+
+class _CountingUnreadableKeysIo extends _UnreadableKeysIo {
+  int reads = 0;
+
+  @override
+  Future<AtKeys> read(String atsign) {
+    reads++;
+    return super.read(atsign);
+  }
 }
 
 /// A key source that exists and cannot be parsed.

@@ -1,9 +1,5 @@
-// The enrollment key-package surface is @experimental; driving it is the
-// point of this helper.
-// ignore_for_file: experimental_member_use
-
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:at_functional_test/src/enrollment_approval.dart';
@@ -79,8 +75,11 @@ class EnrolledClient {
   Future<void> stop() => client.stop();
 }
 
-/// Enrols a new APKAM enrollment on [atSign], approves it from [approver], and
-/// returns a client authenticated as it.
+/// Enrols a new APKAM enrollment on [atSign] and approves it from [approver],
+/// opening no client; [ApprovedEnrollment.open] opens one.
+///
+/// Approving every enrollment before opening any client lets the first
+/// client to mint find all of them on the roster.
 ///
 /// [approver] must be a privileged client able to issue a passcode and
 /// approve.
@@ -104,20 +103,20 @@ class EnrolledClient {
 /// [signingAlgo] is the algorithm the enrollment's APKAM **authentication**
 /// keypair is minted under, a different axis from the key EXCHANGE above: how
 /// the symmetric key travels and which algorithm authenticates the connection
-/// are separate questions. Under the default `rsa2048` a client whose posture
-/// wants better retrofits itself on first construction and comes up on a new
-/// enrollment id; pass `mldsa65` for one that is post-quantum from birth and
-/// therefore never retrofits.
+/// are separate questions, save that at_auth refuses `rsa2048` with the pq
+/// exchange. It defaults to `mldsa65` for the pq exchange, post-quantum from
+/// birth and never retrofitting, and to `rsa2048` for the legacy exchange,
+/// which a client whose posture wants better retrofits on first construction,
+/// coming up on a new enrollment id: the production shape of a retrofit.
 ///
 /// [namespaces] overrides the grants requested, which defaults to `rw` on
 /// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
 /// privileged enrollment — the class entitled to hold the signing root, and
 /// the only one a holder will serve per-enrollment material to.
-Future<EnrolledClient> enrolAndAuthenticate({
+Future<ApprovedEnrollment> enrolAndApprove({
   required AtClient approver,
   required String atSign,
   required String namespace,
-  required AtClientPreference preference,
   required String rootDomain,
   required int rootPort,
 
@@ -129,11 +128,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
   String? deviceName,
   Map<String, String>? namespaces,
   AtKeysIo? atKeysIo,
-  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+  SigningAlgoType? signingAlgo,
   EnrollmentKeyExchangeMode keyExchangeMode = EnrollmentKeyExchangeMode.pq,
-
-  /// The connection the client is opened on, instead of one it builds.
-  AtLookUp? atLookUp,
 }) async {
   final otp = (await approver.enrollments.otp()).value;
 
@@ -151,11 +147,13 @@ Future<EnrolledClient> enrolAndAuthenticate({
   );
 
   final legacyMode = keyExchangeMode == EnrollmentKeyExchangeMode.legacy;
+  final algo = signingAlgo ??
+      (legacyMode ? SigningAlgoType.rsa2048 : SigningAlgoType.mldsa65);
 
   Map<String, dynamic>? built;
   // NOTE: the key package is signed by the APKAM keypair this enrolment is
   // about to submit, so the builder must be told the same algorithm.
-  final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: signingAlgo);
+  final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: algo);
 
   final submission = secureSocketLookUps()(
     atSign: atSign,
@@ -180,7 +178,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
               deviceName: resolvedDeviceName,
               namespaces: namespaces ?? {namespace: 'rw'},
               otp: otp,
-              signingAlgo: signingAlgo,
+              signingAlgo: algo,
             )
           : AtEnrollmentRequest.pq(
               session: session,
@@ -191,7 +189,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
               metadataBuilder: (keysIo) async => built = await build(keysIo),
               apkamSymmetricKeyResolver:
                   enrollmentApkamSymmetricKeyResolver(atSign),
-              signingAlgo: signingAlgo,
+              signingAlgo: algo,
             ),
       submission,
     );
@@ -208,13 +206,6 @@ Future<EnrolledClient> enrolAndAuthenticate({
       atSign: atSign, rootDomain: AtRootDomain(rootDomain, rootPort));
 
   final keys = (response.session ?? session).atKeysIo;
-  final client = await Atsign(atSign).open(
-      keys: keys,
-      preference: preference
-        ..rootDomain = rootDomain
-        ..rootPort = rootPort,
-      storage: storage.forPrincipal(atSign, resolvedDeviceName),
-      atLookUp: atLookUp);
 
   // Null in legacy mode: only the pq metadataBuilder populates `built`, and
   // there is no key package to read a kid out of.
@@ -223,10 +214,96 @@ Future<EnrolledClient> enrolAndAuthenticate({
       : ((SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload
               as Map)['keys'] as List)
           .single['kid'] as String;
-  return EnrolledClient(
-    client: client,
+  return ApprovedEnrollment._(
+    atSign: atSign,
     enrollmentId: response.enrollmentId,
-    kpidOrNull: kpid,
+    deviceName: resolvedDeviceName,
+    keysIo: keys,
     keys: await keys.read(atSign),
+    kpidOrNull: kpid,
+    rootDomain: rootDomain,
+    rootPort: rootPort,
+    storage: storage,
   );
 }
+
+/// An enrollment [enrolAndApprove] has approved, with no client open on it.
+class ApprovedEnrollment {
+  final String atSign;
+  final String enrollmentId;
+  final String deviceName;
+  final AtKeysIo keysIo;
+  final AtKeys keys;
+  final String? kpidOrNull;
+  final String rootDomain;
+  final int rootPort;
+  final FunctionalStorage storage;
+
+  ApprovedEnrollment._({
+    required this.atSign,
+    required this.enrollmentId,
+    required this.deviceName,
+    required this.keysIo,
+    required this.keys,
+    required this.kpidOrNull,
+    required this.rootDomain,
+    required this.rootPort,
+    required this.storage,
+  });
+
+  /// Opens a client authenticated as this enrollment, on [atLookUp] when one
+  /// is given.
+  Future<EnrolledClient> open(AtClientPreference preference,
+      {AtLookUp? atLookUp}) async {
+    final client = await Atsign(atSign).open(
+        keys: keysIo,
+        preference: preference
+          ..rootDomain = rootDomain
+          ..rootPort = rootPort,
+        storage: storage.forPrincipal(atSign, deviceName),
+        atLookUp: atLookUp,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder:
+            CacheableSecondaryAddressFinder(rootDomain, rootPort));
+    return EnrolledClient(
+      client: client,
+      enrollmentId: enrollmentId,
+      kpidOrNull: kpidOrNull,
+      keys: keys,
+    );
+  }
+}
+
+/// Enrols a new APKAM enrollment on [atSign], approves it from [approver], and
+/// returns a client authenticated as it; see [enrolAndApprove].
+Future<EnrolledClient> enrolAndAuthenticate({
+  required AtClient approver,
+  required String atSign,
+  required String namespace,
+  required AtClientPreference preference,
+  required String rootDomain,
+  required int rootPort,
+  required FunctionalStorage storage,
+  String? deviceName,
+  Map<String, String>? namespaces,
+  AtKeysIo? atKeysIo,
+  SigningAlgoType? signingAlgo,
+  EnrollmentKeyExchangeMode keyExchangeMode = EnrollmentKeyExchangeMode.pq,
+
+  /// The connection the client is opened on, instead of one it builds.
+  AtLookUp? atLookUp,
+}) async =>
+    (await enrolAndApprove(
+      approver: approver,
+      atSign: atSign,
+      namespace: namespace,
+      rootDomain: rootDomain,
+      rootPort: rootPort,
+      storage: storage,
+      deviceName: deviceName,
+      namespaces: namespaces,
+      atKeysIo: atKeysIo,
+      signingAlgo: signingAlgo,
+      keyExchangeMode: keyExchangeMode,
+    ))
+        .open(preference, atLookUp: atLookUp);

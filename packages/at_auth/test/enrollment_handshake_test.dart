@@ -2,6 +2,7 @@
 // file names the ladder on purpose.
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -56,6 +57,9 @@ enum Poll {
 
   /// The atServer answered: PKAM succeeded, so the enrollment was approved.
   approved,
+
+  /// The connection's owner stopped it, so nothing more goes over it.
+  stopped,
 }
 
 void main() {
@@ -95,7 +99,7 @@ void main() {
     final sealedSelfKey = await sealed(aesKeyMap[atSign]!);
 
     final polled = <Poll>[];
-    when(() => lookup.pkamAuthenticate(enrollmentId: '123'))
+    when(() => lookup.pkamAuthenticate())
         .thenAnswer((_) async {
       final outcome =
           polled.length < script.length ? script[polled.length] : Poll.approved;
@@ -118,6 +122,8 @@ void main() {
               'Failed connecting to $atSign. error:AT0028:enrollment_id: 123 is expired or invalid');
         case Poll.approved:
           return true;
+        case Poll.stopped:
+          throw StoppedException('the connection was stopped');
       }
     });
     when(() => lookup.executeCommand(
@@ -163,6 +169,118 @@ void main() {
           maxRetries: maxRetries,
           retryInterval: const Duration(milliseconds: 1),
           logProgress: false);
+
+  /// Catalogue: features/at_client/pending_enrollment_cancel.feature
+  group('Given a wait for approval', () {
+    test('A stopped connection ends the wait at once', () async {
+      final (response, lookup, polled) =
+          await rig([Poll.pending, Poll.stopped, Poll.stopped]);
+
+      await expectLater(
+          waitFor(response, lookup, 5), throwsA(isA<StoppedException>()));
+
+      expect(polled, [Poll.pending, Poll.stopped],
+          reason: 'a stopped connection spends no retry budget');
+    });
+
+    test(
+        'when its cancel signal completes, then the wait ends at once, '
+        'before another poll', () async {
+      final (response, lookup, polled) =
+          await rig(List.filled(1000, Poll.pending));
+      final cancel = Completer<void>();
+
+      final waiting = expectLater(
+          AtEnrollmentImpl().waitForApproval(response,
+              atLookup: lookup,
+              retryInterval: const Duration(seconds: 30),
+              logProgress: false,
+              cancelled: cancel.future),
+          throwsA(isA<StoppedException>()));
+      while (polled.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      cancel.complete();
+      await waiting.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the wait slept out its pause after the '
+              'cancel'));
+
+      expect(polled.length, 1,
+          reason: 'no poll starts once the wait is cancelled');
+    });
+
+    test('A cancel signal that fails ends the wait', () async {
+      final (response, lookup, polled) =
+          await rig(List.filled(1000, Poll.pending));
+      final cancel = Completer<void>();
+
+      final waiting = expectLater(
+          AtEnrollmentImpl().waitForApproval(response,
+              atLookup: lookup,
+              retryInterval: const Duration(seconds: 30),
+              logProgress: false,
+              cancelled: cancel.future),
+          throwsA(isA<StoppedException>()));
+      while (polled.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      cancel.completeError(StateError('the signal failed'));
+      await waiting.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the wait went on after its cancel signal '
+              'failed'));
+
+      expect(polled.length, 1,
+          reason: 'no poll starts once the signal has failed');
+    });
+
+    test(
+        'when its cancel signal has already completed, then no poll runs and '
+        'the wait ends', () async {
+      final (response, lookup, polled) = await rig([Poll.approved]);
+
+      await expectLater(
+          AtEnrollmentImpl().waitForApproval(response,
+              atLookup: lookup,
+              retryInterval: const Duration(milliseconds: 1),
+              logProgress: false,
+              cancelled: Future<void>.value()),
+          throwsA(isA<StoppedException>()));
+
+      expect(polled, isEmpty);
+    });
+
+    test(
+        'when it is cancelled while a poll that approves is in flight, then '
+        'the wait ends with the cancel and fetches no keys', () async {
+      final (response, lookup, _) = await rig([Poll.approved]);
+      final answering = Completer<bool>();
+      var polls = 0;
+      when(() => lookup.pkamAuthenticate()).thenAnswer((_) {
+        polls++;
+        return answering.future;
+      });
+      final cancel = Completer<void>();
+
+      final waiting = expectLater(
+          AtEnrollmentImpl().waitForApproval(response,
+              atLookup: lookup,
+              retryInterval: const Duration(milliseconds: 1),
+              logProgress: false,
+              cancelled: cancel.future),
+          throwsA(isA<StoppedException>()));
+      while (polls == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      cancel.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      answering.complete(true);
+      await waiting;
+
+      expect(response.atAuthKeys!.defaultEncryptionPrivateKey, isNull,
+          reason: 'the approval landed after the cancel, so nothing was '
+              'fetched for it');
+    });
+  });
 
   group('the retry budget', () {
     test('is never spent by an enrollment nobody has decided yet', () async {
@@ -306,9 +424,6 @@ void main() {
       // The setter call, not the stored value: a mock does not keep what is
       // assigned to it.
       verify(() => lookup.authenticator = any(that: isNotNull)).called(1);
-      verifyNever(() => lookup.atChops = any());
-      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.rsa2048);
-      verifyNever(() => lookup.signingAlgoType = SigningAlgoType.mldsa65);
     });
 
     test('and that authenticator signs the PKAM with the enrollment keypair',

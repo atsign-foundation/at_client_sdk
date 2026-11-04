@@ -10,15 +10,16 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/enrollment_approval.dart';
 import 'package:at_end2end_test/src/run_marker.dart';
 import 'package:at_end2end_test/src/setup_outcome.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -178,7 +179,10 @@ void main() {
         // suite's clients open on.
         expect(
             await Atsign(currentAtSign).authenticatesAs(
-                keys: session.atKeysIo, rootDomain: rootDomain),
+                keys: session.atKeysIo,
+                rootDomain: rootDomain,
+                lookUps: secureSocketLookUps(),
+                secondaryAddressFinder: TestPreferences.atDirectory),
             atEnrollmentResponse.enrollmentId);
         print(
             'Completed enrollment setup of the atSign: $currentAtSign with enrollment Id: ${atEnrollmentResponse.enrollmentId} with access to ${enrollmentRequest.namespaces}');

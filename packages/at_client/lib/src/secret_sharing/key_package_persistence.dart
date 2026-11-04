@@ -4,6 +4,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysIo,
+        AtKeysSourceAbsentException,
         CryptographicMaterial,
         CryptographicMaterialRole,
         CryptographicMaterialStatus;
@@ -15,7 +16,6 @@ import 'package:at_client/src/secret_sharing/key_package_registration.dart'
     show KeyPackageRegistration, PersistedApkamKeys, PersistedEncKey;
 import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('KeyPackagePersistence');
 
@@ -28,7 +28,6 @@ final _logger = AtSignLogger('KeyPackagePersistence');
 /// [enrollmentId] scopes the adoption to this client's own enrollment: a
 /// retrofitted keyfile serves two principals, and each must adopt its OWN
 /// package, never its co-tenant's — see [keyPackageMaterial].
-@experimental
 void bindKeyPackageToAtKeys(
   KeyPackageRegistration registration, {
   required AtKeysIo keysIo,
@@ -40,7 +39,8 @@ void bindKeyPackageToAtKeys(
 }
 
 /// The KEM enc seeds [atSign]'s keyfile holds for its key packages, or null
-/// if it holds none.
+/// if it holds none or there is no keyfile; a keyfile that exists and cannot
+/// be read throws.
 ///
 /// A superseded package is adopted alongside the live one, carrying whatever
 /// status the keyfile gives it, so a client restarting after a rotation can
@@ -55,9 +55,9 @@ Future<PersistedApkamKeys?> _load(
   final AtKeys keys;
   try {
     keys = await keysIo.read(atSign);
-  } catch (e) {
-    _logger.info('No readable AtKeys for $atSign, so this client generates a '
-        'key package rather than adopting one: $e');
+  } on AtKeysSourceAbsentException catch (e) {
+    _logger.info('No AtKeys for $atSign, so this client generates a key '
+        'package rather than adopting one: $e');
     return null;
   }
 
@@ -88,7 +88,6 @@ Future<PersistedApkamKeys?> _load(
 
 /// The live private half of a key package in [keys], or null — the first entry
 /// of [keyPackageMaterials], which is where the selection rule lives.
-@experimental
 CryptographicMaterial? keyPackageMaterial(AtKeys keys,
         {String? enrollmentId}) =>
     keyPackageMaterials(keys, enrollmentId: enrollmentId).firstOrNull;
@@ -111,13 +110,14 @@ CryptographicMaterial? keyPackageMaterial(AtKeys keys,
 /// key is not something to advertise to peers or to keep answering on.
 ///
 /// [enrollmentId] scopes the selection, and the tagged and untagged sets do not
-/// mix: a retrofitted keyfile carries an untagged package alongside a tagged
-/// one. A client takes its own tagged packages if it has any, falls back to the
-/// untagged ones, and NEVER takes one tagged for a different enrollment.
+/// mix. An untagged package sits beside tagged ones in a keyfile where a new
+/// device's enrollment filed its first package untagged, as development builds
+/// did before that path tagged it, and a tagged key was filed later. A client
+/// takes its own tagged packages if it has any, falls back to the untagged
+/// ones, and NEVER takes one tagged for a different enrollment.
 /// Merging the two sets, or newest-wins across the whole file, would hand a
 /// client restarting on a shared keyfile an address its own enrollment record
 /// never advertised.
-@experimental
 List<CryptographicMaterial> keyPackageMaterials(AtKeys keys,
     {String? enrollmentId}) {
   bool isKeyEstablishment(CryptographicMaterial m) =>

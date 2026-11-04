@@ -1,4 +1,7 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_auth/at_auth.dart' show RetryOptions;
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/at_client_mixins.dart'
+    show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_client/hive.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
@@ -10,14 +13,18 @@ import 'package:path_provider/path_provider.dart';
 /// the app's support directory, the one at_client_mobile's examples gave
 /// `hiveStoragePath`, so an app that followed them finds its store.
 ///
-/// Null when [preference] asks for no local store and none was passed, which
-/// at_client refuses.
-Future<AtClientStorage?> storageOrDefault(
+/// The default store is the same whichever enrollment of [atSign] opens it,
+/// so an app that holds more than one enrollment over time passes each its
+/// own [storage].
+///
+/// A verb that takes `storage:` and is not on [AtsignFlows], such as
+/// `PendingEnrollment.client`, takes it from here.
+Future<AtClientStorage> storageOrDefault(
   String atSign,
-  AtClientPreference preference,
+  AtClientPreference preference, [
   AtClientStorage? storage,
-) async {
-  if (storage != null || !preference.isLocalStoreRequired) return storage;
+]) async {
+  if (storage != null) return storage;
   final path =
       // ignore: deprecated_member_use
       preference.hiveStoragePath ??
@@ -42,46 +49,89 @@ class AtsignSelection {
       '${rootDomain.rootPort}';
 }
 
-/// The lifecycle verbs the dialogs run, as one object a test can stand in
-/// for: the verbs themselves are extension methods on `Atsign`, which no
-/// mock can intercept.
+/// The `Atsign` lifecycle verbs with this package's platform defaults, for an
+/// app with its own UI: the store is [storageOrDefault]'s unless the app
+/// passes `storage`, each connection goes over TLS on TCP unless it passes
+/// `lookUps`, and the atServer is the one the atDirectory the preference
+/// names gives for the atSign.
+///
+/// The dialogs run their verbs through one, given as their `flows`, so a
+/// widget test can stand in for the verbs, which as extension methods on
+/// `Atsign` no mock can intercept.
 class AtsignFlows {
   const AtsignFlows();
 
+  /// `Atsign.activate`: activates [atSign] with its [cramSecret], filing its
+  /// first keys in [keys], and hands back the client opened on them.
+  ///
+  /// [namespace], [app], [device], [mintLegacyMaterial], [signingAlgo],
+  /// [provisioningBudget], [provisioningPollInterval], [onProgress] and
+  /// [connectBudget] are as `Atsign.activate`, with its defaults.
   Future<AtClient> activate(
     String atSign, {
     required String cramSecret,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
+    String? namespace,
     AtClientStorage? storage,
-    AtLookUpFactory? lookUps,
+    String app = firstEnrollmentAppName,
+    String device = firstEnrollmentDeviceName,
+    bool? mintLegacyMaterial,
+    SigningAlgoType? signingAlgo,
+    Duration? provisioningBudget,
+    Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
+    AtLookUpFactory? lookUps,
+    Duration connectBudget = AtConnection.defaultBudget,
   }) async => Atsign(atSign).activate(
     cramSecret: cramSecret,
     keys: keys,
     preference: preference,
+    namespace: namespace,
     storage: await storageOrDefault(atSign, preference, storage),
-    lookUps: lookUps,
+    app: app,
+    device: device,
+    mintLegacyMaterial: mintLegacyMaterial,
+    signingAlgo: signingAlgo,
+    provisioningBudget: provisioningBudget,
+    provisioningPollInterval: provisioningPollInterval,
     onProgress: onProgress,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
+    connectBudget: connectBudget,
   );
 
+  /// `Atsign.open`: opens a client for [atSign] on the keys in [keys].
+  ///
+  /// [namespace], [serviceFactory] and [connectBudget] are as `Atsign.open`,
+  /// with its defaults.
   Future<AtClient> open(
     String atSign, {
     required AtKeysIo keys,
     required AtClientPreference preference,
+    String? namespace,
     AtClientStorage? storage,
     AtLookUpFactory? lookUps,
+    AtServiceFactory? serviceFactory,
+    Duration connectBudget = AtConnection.defaultBudget,
   }) async => Atsign(atSign).open(
     keys: keys,
     preference: preference,
+    namespace: namespace,
     storage: await storageOrDefault(atSign, preference, storage),
-    lookUps: lookUps,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
+    serviceFactory: serviceFactory,
+    connectBudget: connectBudget,
   );
 
+  /// `Atsign.resumeEnrollment`: the request already filed in [keys] and
+  /// awaiting approval, or null when there is none. Each of [app] and
+  /// [device] given narrows the search; with neither, [keys] must hold one.
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
-    required String app,
-    required String device,
+    String? app,
+    String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookUpFactory? lookUps,
@@ -90,9 +140,16 @@ class AtsignFlows {
     device: device,
     keys: keys,
     preference: preference,
-    lookUps: lookUps,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
   );
 
+  /// `Atsign.enroll`: asks [atSign]'s atServer, with [otp], to enroll this
+  /// device for [namespaces], filing the request's keys in [keys]; the
+  /// returned enrollment's `client` opens once it is approved.
+  ///
+  /// [signingAlgo], [keyExchangeMode] and [apkamKeysExpiry] are as
+  /// `Atsign.enroll`.
   Future<PendingEnrollment> enroll(
     String atSign, {
     required String otp,
@@ -103,6 +160,7 @@ class AtsignFlows {
     required AtClientPreference preference,
     SigningAlgoType? signingAlgo,
     EnrollmentKeyExchangeMode? keyExchangeMode,
+    Duration? apkamKeysExpiry,
     AtLookUpFactory? lookUps,
   }) => Atsign(atSign).enroll(
     otp: otp,
@@ -113,8 +171,16 @@ class AtsignFlows {
     preference: preference,
     signingAlgo: signingAlgo,
     keyExchangeMode: keyExchangeMode,
-    lookUps: lookUps,
+    apkamKeysExpiry: apkamKeysExpiry,
+    lookUps: lookUps ?? secureSocketLookUps(),
+    secondaryAddressFinder: _atDirectoryOf(preference),
   );
+
+  SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
+      CacheableSecondaryAddressFinder(
+        preference.rootDomain,
+        preference.rootPort,
+      );
 }
 
 /// [preference] with [rootDomain] stamped on it, so a client opened under it

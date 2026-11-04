@@ -210,6 +210,31 @@ void main() {
         throwsA(isA<AtDecryptionException>()),
       );
     });
+
+    test('a read hands the key ring the atSign that wrote the record',
+        () async {
+      final alice1 = authorisedClient();
+      final ck = ContentKey(_randomKeyBytes());
+      final conveyanceKey = ckConveyanceKey(ck.ckKid);
+      final sealedCk =
+          await alice1.nskey.encrypt(context, conveyanceKey, ck.toBase64());
+      final ring = _WriterRecordingRing();
+      final reader = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+
+      final ownRecord = syncedConveyance(conveyanceKey);
+      final sharedByBob = syncedConveyance(conveyanceKey)
+        ..sharedBy = '@bob'
+        ..sharedWith = owner;
+      for (final record in [ownRecord, sharedByBob]) {
+        await expectLater(reader.decrypt(context, record, sealedCk),
+            throwsA(isA<AtDecryptionException>()));
+      }
+
+      expect(ring.writers, [owner, '@bob'],
+          reason: 'the ring pulls a generation no own advertisement names '
+              'only for a record its own atSign wrote, so it has to be told '
+              'who wrote each one');
+    });
   });
 
   group('own keys are sealed to only when this client holds the private', () {
@@ -224,6 +249,8 @@ void main() {
           provider.encrypt(context, ckConveyanceKey(ck.ckKid), ck.toBase64()),
           throwsA(isA<NskeyPrivateNotHeldException>()
               .having((e) => e.nskeyKid, 'nskeyKid', kid)
+              .having((e) => e.message, 'message',
+                  contains('has not yet been conveyed to this enrollment'))
               .having((e) => e, 'type',
                   isNot(isA<NamespaceKeyUnavailableException>()))),
           reason: 'the legacy fallback catches NamespaceKeyUnavailable, so '
@@ -886,3 +913,16 @@ Future<({String sealed, AtKey key})> _seal(
 
 Uint8List _randomKeyBytes() =>
     Uint8List.fromList(base64Decode(AESKey.generate(32).key));
+
+/// A ring holding nothing, which records the writer each lookup names.
+class _WriterRecordingRing extends InMemoryNskeyKeyRing {
+  final writers = <String?>[];
+
+  @override
+  Future<NskeyDecapsulationKey?> privateHalf(
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy}) async {
+    writers.add(writtenBy);
+    return null;
+  }
+}

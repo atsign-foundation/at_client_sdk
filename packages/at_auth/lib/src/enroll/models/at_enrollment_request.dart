@@ -96,16 +96,15 @@ abstract class EnrollmentRequest {
 /// authorization to access the specified namespaces in the request. Conversely, if the request is disapproved, the requesting
 /// app is denied login access.
 class AtEnrollmentRequest extends EnrollmentRequest {
-  /// The authenticated session of the app submitting this enrollment request.
+  /// The session of the app submitting this enrollment request.
   ///
-  /// When supplied, it is the source of the request's [atSign] and [rootDomain],
-  /// and its [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
+  /// It is the source of the request's [atSign] and [rootDomain], and its
+  /// [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
   /// persisted and handed back on the [AtEnrollmentResponse.session] after
-  /// approval. Prefer this over the deprecated `atSign`/`rootDomain` params.
-  final AtAuthSession? session;
+  /// approval.
+  final AtAuthSession session;
 
   Map<String, String> namespaces;
-  String? encryptedAPKAMSymmetricKey;
   String otp;
   Duration? apkamKeysExpiryDuration;
 
@@ -154,24 +153,22 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// The algorithm this enrollment's APKAM **authentication** keypair is
   /// minted under, and the value that rides `EnrollParams.signingAlgo`.
   ///
-  /// **Required, with no default, on purpose.** It used to be absent
-  /// entirely: an app enrolling over OTP always got RSA-2048 and had no way to
-  /// ask otherwise, so on an atSign whose deployment had moved to
-  /// post-quantum, every install still created an RSA-authenticating
-  /// enrollment which the client then retrofitted away — leaving a discarded
-  /// enrollment behind, and an RSA credential valid for the atServer's grace
-  /// window. Giving it a default would have let a caller inherit an algorithm
-  /// it never chose, which is the state that produced the defect.
+  /// **Required, with no default, on purpose:** a default would let a caller
+  /// inherit an algorithm it never chose. On an atSign whose deployment
+  /// authenticates post-quantum, an RSA-authenticating enrollment is one the
+  /// client then retrofits away, leaving it behind: revoked when its
+  /// replacement first authenticates if it is scoped, and valid for good if
+  /// it is fully privileged.
   ///
   /// ⚠️ **The name says "signing" and means *authentication*.** The wire field
-  /// has been called `signingAlgo` since before an enrollment had signing keys
-  /// of its own, and renaming it is a multi-repo seam against a released
+  /// is `signingAlgo`, and renaming it is a multi-repo seam against a released
   /// atServer that reads an absent field as `rsa2048`. The name stays out
   /// there; nothing on this side repeats the mistake.
   ///
-  /// Independent of [keyExchangeMode]: how the symmetric key travels and which
-  /// algorithm authenticates the connection are separate questions, and both
-  /// constructors take this for that reason.
+  /// Chosen separately from [keyExchangeMode], since how the symmetric key
+  /// travels and which algorithm authenticates the connection are separate
+  /// questions, with one exception: [AtEnrollmentRequest.pq] refuses
+  /// `rsa2048`.
   final SigningAlgoType signingAlgo;
 
   /// How this request conveys the enrollment's symmetric key.
@@ -191,30 +188,18 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// is also how an approver seals this atSign's existing secrets to the new
   /// device, which is a separate question from how the symmetric key travels.
   AtEnrollmentRequest({
-    this.session,
-    @Deprecated('Provide `session` instead; its atSign is used.')
-    String? atSign,
-    @Deprecated('Provide `session` instead; its rootDomain is used.')
-    AtRootDomain? rootDomain,
+    required this.session,
     required super.appName,
     required super.deviceName,
-    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
-    super.apkamPublicKey,
     required this.otp,
     required this.namespaces,
-    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
-    this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
     required this.signingAlgo,
     super.advertisedSigningKey,
   })  : keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
         apkamSymmetricKeyResolver = null,
-        super(
-          atSign: _atSignOf(session, atSign),
-          rootDomain:
-              session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
-        );
+        super(atSign: session.atSign, rootDomain: session.rootDomain);
 
   /// A pq-mode enrollment request: nothing RSA-wrapped rides it. The approver
   /// mints the symmetric key and encapsulates it to the key package this
@@ -228,16 +213,11 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// requirements instead, so the two ways of getting this wrong stopped being
   /// reachable states.
   ///
-  /// The atSign is sourced exactly as it is for a legacy request: a [session]
-  /// if there is one, else the deprecated loose `atSign`. A request that only
-  /// wants the key exchange — one that inspects what it advertised and never
-  /// waits for approval — has nowhere to persist keys and needs no session.
+  /// Throws [ArgumentError] for a [signingAlgo] of `rsa2048`, before anything
+  /// is sent: an enrollment whose keys travel post-quantum authenticates
+  /// post-quantum too.
   AtEnrollmentRequest.pq({
-    this.session,
-    @Deprecated('Provide `session` instead; its atSign is used.')
-    String? atSign,
-    @Deprecated('Provide `session` instead; its rootDomain is used.')
-    AtRootDomain? rootDomain,
+    required this.session,
     required super.appName,
     required super.deviceName,
     required this.otp,
@@ -247,24 +227,22 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     required Stream<String> Function(AtKeys keys, AtLookUp atLookUp)
         this.apkamSymmetricKeyResolver,
     this.apkamKeysExpiryDuration,
-    required this.signingAlgo,
+    required SigningAlgoType signingAlgo,
     super.advertisedSigningKey,
-  })  : keyExchangeMode = EnrollmentKeyExchangeMode.pq,
-        encryptedAPKAMSymmetricKey = null,
-        super(
-          atSign: _atSignOf(session, atSign),
-          rootDomain:
-              session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
-        );
+  })  : signingAlgo = _authenticatingPostQuantum(signingAlgo),
+        keyExchangeMode = EnrollmentKeyExchangeMode.pq,
+        super(atSign: session.atSign, rootDomain: session.rootDomain);
 
-  /// The one rule for where a request's atSign comes from, shared by both
-  /// constructors: the session if there is one, else the deprecated parameter,
-  /// else a refusal — a request with no atSign has no atServer to reach.
-  static String _atSignOf(AtAuthSession? session, String? atSign) =>
-      session?.atSign ??
-      atSign ??
-      (throw ArgumentError(
-          'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)'));
+  /// [signingAlgo], unless it is `rsa2048`, which a pq request refuses.
+  static SigningAlgoType _authenticatingPostQuantum(
+          SigningAlgoType signingAlgo) =>
+      signingAlgo == SigningAlgoType.rsa2048
+          ? throw ArgumentError.value(
+              signingAlgo,
+              'signingAlgo',
+              'rsa2048 cannot authenticate an enrollment that uses the pq key '
+                  'exchange; use mldsa65, or the legacy key exchange')
+          : signingAlgo;
 }
 
 /// An APKAM-authenticated self-enrollment: the request an already-enrolled
@@ -365,11 +343,9 @@ class FirstEnrollmentRequest extends EnrollmentRequest {
   /// signingAlgo: SigningAlgoType.mldsa65,
   /// keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first)`.
   ///
-  /// ⚠️ **This used to add that `metadata.keyPackage` is "written by the
-  /// request that creates the record and never afterwards".** Not since
-  /// 2026-08-19: at_client's `KeyPackageMinting` amends it by the enrollment's
-  /// own self-only `enroll:update`, so the record's metadata is no longer
-  /// write-once.
+  /// ⚠️ **The record's `metadata.keyPackage` is not write-once:** at_client's
+  /// `KeyPackageMinting` amends it later through the enrollment's own
+  /// self-only `enroll:update`.
   ///
   /// Requires [atKeys], because a builder both reads the APKAM keypair it
   /// signs with and **writes back** the material it minted.

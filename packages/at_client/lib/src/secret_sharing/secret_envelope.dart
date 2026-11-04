@@ -1,6 +1,5 @@
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
-import 'package:meta/meta.dart' show experimental;
 
 /// The encrypted payload one client of an atSign sends to another (addressed
 /// to a specific APKAM keypair). The whole envelope is additionally wrapped in
@@ -15,7 +14,6 @@ import 'package:meta/meta.dart' show experimental;
 /// for crypto agility: today [sealed] is an at_chops `pqSeal` envelope (KEM
 /// encapsulation + AEAD over an HKDF key schedule, suite per the envelope's
 /// version byte); a future suite changes the id, not the schema.
-@experimental
 class SecretEnvelope {
   static const int currentVersion = 2;
 

@@ -230,7 +230,6 @@ void main() {
     });
 
     when(() => mockAtClient.delete(any(),
-            isDedicated: any(named: 'isDedicated'),
             deleteRequestOptions: any(named: 'deleteRequestOptions')))
         .thenAnswer((inv) async {
       final key = inv.positionalArguments[0] as AtKey;
@@ -525,6 +524,29 @@ void main() {
 
       expect(c.written, hasLength(conveyed));
       expect(coldCache.current(owner, namespace)?.ckKid, cut);
+    });
+
+    test(
+        'every path through the pre-pass hands back the level and the content '
+        'key\'s namespace the write is sealed at', () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      const chosen = (namespace: namespace, ckNs: namespace);
+
+      expect(
+          await c.manager.ensureCurrent(c.context, selfValue('treaty')), chosen,
+          reason: 'a key cut and conveyed');
+      expect(
+          await c.manager.ensureCurrent(c.context, selfValue('treaty')), chosen,
+          reason: 'a key already current');
+      expect(
+          await c
+              .coldManager(ContentKeyCache())
+              .ensureCurrent(c.context, selfValue('treaty')),
+          chosen,
+          reason: 'a key resumed after a restart');
     });
 
     test('a restart after the widening resumes rather than cutting another',
@@ -1532,49 +1554,36 @@ void main() {
       expect(c.cache.current(bob, namespace)!.ckKid, first);
     });
 
-    test(
-        'when it shares with @bob again within 15 minutes, then it does not '
-        'look its own key up again', () async {
+    test('when it shares with @bob, then it looks nothing of its own up',
+        () async {
       final ring = _CountingRing();
       final c = client(keyRing: ring);
-      when(() => c.context.atClient
-              .ensureReachable(any(), timeout: any(named: 'timeout')))
-          .thenAnswer((_) async =>
-              const AtReachabilityResult(AtReachability.postureDoesNotSeed));
       ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
       List<String> ownLookups() =>
           ring.lookups.where((l) => l.startsWith('$owner|')).toList();
 
       await c.manager.ensureCurrent(c.context, sharedValue('pact'));
-      final before = ownLookups().length;
-      expect(before, isPositive,
-          reason: 'the control: the first share looked for its own key');
-
       await c.manager.ensureCurrent(c.context, sharedValue('pact'));
 
-      expect(ownLookups().skip(before), isEmpty,
-          reason: 'it found no own key a moment ago, and a key it does not '
-              'hold never replaces the one it shares, so asking again buys '
-              'nothing');
+      expect(ring.lookups.where((l) => l.startsWith('$bob|')), isNotEmpty,
+          reason: 'the control: the shares looked bob\'s key up');
+      expect(ownLookups(), isEmpty,
+          reason: 'its own level is read from the namespaces it holds, and it '
+              'holds none, so there is nothing of its own to ask about');
     });
 
     test(
-        'when a share mints its own key G1 and G2 then arrives, then the next '
-        'share within 15 minutes cuts a fresh key sealed to G2', () async {
+        'when its own key moves from G1 to G2, then the next share cuts a fresh '
+        'key sealed to G2', () async {
       final c = client();
-      String? g1;
-      when(() => c.context.atClient.ensureReachable(any(),
-          timeout: any(named: 'timeout'))).thenAnswer((_) async {
-        g1 = c.ring.seedKeypair(owner, namespace,
-            publicKey: aliceNskey.publicKeyBytes,
-            privateKey: aliceNskey.privateKeyBytes);
-        return const AtReachabilityResult(AtReachability.published);
-      });
+      final g1 = c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
       c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
       await c.manager.ensureCurrent(c.context, sharedValue('pact'));
       final first = c.cache.current(bob, namespace)!.ckKid;
       expect(c.cache.currentOwnNskeyKid(bob, namespace), g1,
-          reason: 'the control: the share minted G1 and sealed its copy there');
+          reason: 'the control: the share sealed its copy to G1');
 
       final rotated = await XWingKeyPair.generate();
       final g2 = c.ring.seedKeypair(owner, namespace,
@@ -1583,8 +1592,7 @@ void main() {
       await c.manager.ensureCurrent(c.context, sharedValue('pact'));
 
       expect(c.cache.current(bob, namespace)!.ckKid, isNot(first),
-          reason: 'it holds an own key now, so finding none before the mint '
-              'says nothing about it');
+          reason: 'its own generation moved, so the copy must rest on G2');
       expect(c.cache.currentOwnNskeyKid(bob, namespace), g2);
     });
   });

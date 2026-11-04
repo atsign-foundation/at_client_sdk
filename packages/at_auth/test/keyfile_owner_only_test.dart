@@ -26,6 +26,7 @@ void main() {
 
   setUpAll(() {
     // NOTE: set before anything in this file calls FileAtKeysIo.
+    AtSignLogger.root_level = 'info';
     AtSignLogger.defaultLoggingHandler = logs;
   });
 

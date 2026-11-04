@@ -1,4 +1,4 @@
-// `EnvelopeSigning` carries at_client's `@experimental` marker in both builds.
+// `EnvelopeSigning` carries at_client 3.14.0's `@experimental` marker.
 // UC-G1.14's claim is about what a DEPLOYED reader makes of a rollout-1
 // `_apsk`, and only that reader's own code path can settle it.
 // ignore_for_file: experimental_member_use

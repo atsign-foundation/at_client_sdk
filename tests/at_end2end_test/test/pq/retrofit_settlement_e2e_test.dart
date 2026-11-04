@@ -1,7 +1,3 @@
-// The self-retrofit and enrollment surfaces are @experimental; driving them is
-// the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -9,7 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/enrollment_approval.dart';
@@ -116,7 +112,10 @@ void main() {
     final snapshot = preRetrofitPathFor(label);
     final path = File(snapshot).existsSync() ? snapshot : pathFor(label);
     return Atsign(atSign).authenticatesAs(
-        keys: FileAtKeysIo(filePath: (_) => path), rootDomain: rootDomain());
+        keys: FileAtKeysIo(filePath: (_) => path),
+        rootDomain: rootDomain(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestPreferences.atDirectory);
   }
 
   /// Retrofits [label] and gives the successor one authentication of its own,
@@ -132,14 +131,19 @@ void main() {
         rootDomain: rootDomain(),
         atKeysIo: keysIo,
         namespace: namespace,
-        enrollmentId: await Atsign(atSign)
-            .authenticatesAs(keys: keysIo, rootDomain: rootDomain()));
+        enrollmentId: await Atsign(atSign).authenticatesAs(
+            keys: keysIo,
+            rootDomain: rootDomain(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestPreferences.atDirectory));
     final client = await selfRetrofit(
       // Explicit because the parameter default is the RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
           posture: PqPosture.legacy, device: 'cap-$label-$runId'),
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: TestPreferences.atDirectory,
       storage: TestPreferences.getInstance()
           .storageForCoLocatedClient(atSign, device: 'cap-$label-$runId'),
       appName: 'cap-$label',

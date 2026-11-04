@@ -1,7 +1,3 @@
-// The substrate and the nskey surface are @experimental; driving them is the
-// point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -86,7 +82,7 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: liveMintLockTtl),
+          privateFiling: filing, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
     );
   }
 
@@ -102,7 +98,7 @@ void main() {
           sharing: minter.sharing,
           privateFiling: minter.filing,
         ).seedNamespace(atSign, ns, askRotationPolicy: false),
-        isTrue,
+        NskeySeedOutcome.minted,
         reason: 'the precondition: $ns is fresh, so this call mints it');
     final published = await minter.ring.publishedAdvertisement(atSign, ns);
     expect(published, isNotNull);

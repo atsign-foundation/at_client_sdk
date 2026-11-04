@@ -1,7 +1,3 @@
-// The nskey and enrollment surfaces are @experimental; driving them from
-// another package is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 

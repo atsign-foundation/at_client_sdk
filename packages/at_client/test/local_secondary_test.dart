@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
@@ -14,6 +17,10 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/memory_sync_queue.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 class MockSecondaryKeyStore extends Mock
     implements AtKeyValueStore<String, AtData, AtMetaData?> {
@@ -54,8 +61,8 @@ class MockSecondaryKeyStore extends Mock
     return Stream.fromIterable(keysInKeyStore);
   }
 
-  // The scan tests only exercise getKeys; reads (used incidentally by
-  // AtChops bootstrap during AtClientImpl.create) resolve to null.
+  // The scan tests only exercise getKeys; reads (used incidentally by the
+  // key-material read during AtClientImpl.create) resolve to null.
   @override
   Future<AtData?> get(String key) async => null;
 
@@ -74,6 +81,18 @@ class MockSecondaryKeyStore extends Mock
   Future<Stream<String>> peekNewlyAvailable(
           {required DateTime since, DateTime? asOf, int? limit}) async =>
       const Stream.empty();
+}
+
+/// An in-memory storage whose keystore is [_keyStore], so a client built on
+/// it reads exactly what that keystore answers.
+class _MockKeyStoreStorage extends InMemoryAtClientStorage {
+  _MockKeyStoreStorage(this._keyStore, {required super.atSign})
+      : super(closedByClient: true);
+
+  final AtKeyValueStore<String, AtData, AtMetaData?> _keyStore;
+
+  @override
+  AtKeyValueStore<String, AtData, AtMetaData?> get keyStore => _keyStore;
 }
 
 class MockAtClientImpl extends Mock implements AtClientImpl {
@@ -116,15 +135,17 @@ void main() {
     });
 
     test('test get private key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
       final success = await localSecondary.putValue(
@@ -134,15 +155,17 @@ void main() {
     });
 
     test('test get public key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final pkamPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -152,15 +175,17 @@ void main() {
     });
 
     test('test get encryption private key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPrivateKey =
           RSAKeypair.fromRandom().privateKey.toString();
@@ -172,15 +197,17 @@ void main() {
     });
 
     test('test get encryption public key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final encryptionPublicKey = RSAKeypair.fromRandom().publicKey.toString();
       final success = await localSecondary.putValue(
@@ -191,15 +218,17 @@ void main() {
     });
 
     test('test get self encryption key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final selfEncryptionKey = EncryptionUtil.generateAESKey();
       final success = await localSecondary.putValue(
@@ -223,15 +252,17 @@ void main() {
     });
 
     test('test update verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -239,22 +270,23 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      final executeResult =
-          await localSecondary.executeVerb(verbBuilder, sync: false);
+      final executeResult = await localSecondary.executeVerb(verbBuilder);
       expect(executeResult, isNotNull);
       expect(executeResult!.startsWith('data:'), true);
     });
 
     test('test update verb builder max key length check', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -264,8 +296,7 @@ void main() {
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
       expect(
-          () async =>
-              await localSecondary.executeVerb(verbBuilder, sync: false),
+          () async => await localSecondary.executeVerb(verbBuilder),
           throwsA(predicate((dynamic e) =>
               e is DataStoreException &&
               e.message ==
@@ -274,15 +305,17 @@ void main() {
 
     test('test update verb builder max key length check for cached key',
         () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       var key = TestUtils.createRandomString(250);
       final verbBuilder = UpdateVerbBuilder()
@@ -294,8 +327,7 @@ void main() {
             ..isPublic = true))
         ..value = 'alice@gmail.com';
       expect(
-          () async =>
-              await localSecondary.executeVerb(verbBuilder, sync: false),
+          () async => await localSecondary.executeVerb(verbBuilder),
           throwsA(predicate((dynamic e) =>
               e is DataStoreException &&
               e.message ==
@@ -303,15 +335,17 @@ void main() {
     });
 
     test('test llookup verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -319,27 +353,29 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      await localSecondary.executeVerb(verbBuilder, sync: false);
+      await localSecondary.executeVerb(verbBuilder);
       final llookupVerbBuilder = LLookupVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
       final llookupResult =
-          await localSecondary.executeVerb(llookupVerbBuilder, sync: false);
+          await localSecondary.executeVerb(llookupVerbBuilder);
       expect(llookupResult, 'data:alice@gmail.com');
     });
 
     test('test delete verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -347,32 +383,34 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      await localSecondary.executeVerb(verbBuilder, sync: false);
+      await localSecondary.executeVerb(verbBuilder);
       final deleteVerbBuilder = DeleteVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      await localSecondary.executeVerb(deleteVerbBuilder, sync: false);
+      await localSecondary.executeVerb(deleteVerbBuilder);
       final llookupVerbBuilder = LLookupVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      expect(localSecondary.executeVerb(llookupVerbBuilder, sync: false),
+      expect(localSecondary.executeVerb(llookupVerbBuilder),
           throwsA(isA<KeyNotFoundException>()));
     });
 
     test('test scan verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
       final verbBuilder_1 = UpdateVerbBuilder()
         ..atKey = (AtKey()
@@ -380,16 +418,15 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@gmail.com';
-      await localSecondary.executeVerb(verbBuilder_1, sync: false);
+      await localSecondary.executeVerb(verbBuilder_1);
       final verbBuilder_2 = UpdateVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'phone'
           ..sharedBy = atSign)
         ..value = '+101-202-303';
-      await localSecondary.executeVerb(verbBuilder_2, sync: false);
+      await localSecondary.executeVerb(verbBuilder_2);
       final scanVerbBuilder = ScanVerbBuilder();
-      final scanResult =
-          await localSecondary.executeVerb(scanVerbBuilder, sync: false);
+      final scanResult = await localSecondary.executeVerb(scanVerbBuilder);
       final scanJson = jsonDecode(scanResult!);
       print(scanJson);
       expect(scanJson.contains('phone$atSign'), true);
@@ -415,15 +452,17 @@ void main() {
     /// cleared in the outer setUp).
     Future<LocalSecondary> buildLocalSecondary() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/commit';
+        ..hiveStoragePath = 'test/hive';
       final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          atClientManager: atClientManager);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       return LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
           keyStore: atClient.getLocalSecondary()!.keyStore);
     }
 
@@ -441,7 +480,7 @@ void main() {
 
     test('cleared after a successful update', () async {
       final localSecondary = await buildLocalSecondary();
-      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      await localSecondary.executeVerb(updateBuilderFor('email'));
       expect(localSecondary.writesInProgressForTest, isEmpty);
       expect(localSecondary.isWriteInProgress('public:email$atSign'), false);
     });
@@ -459,21 +498,20 @@ void main() {
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'v';
-      await expectLater(
-          () async => await localSecondary.executeVerb(builder, sync: false),
+      await expectLater(() async => await localSecondary.executeVerb(builder),
           throwsA(isA<DataStoreException>()));
       expect(localSecondary.writesInProgressForTest, isEmpty);
     });
 
     test('cleared after a delete', () async {
       final localSecondary = await buildLocalSecondary();
-      await localSecondary.executeVerb(updateBuilderFor('email'), sync: false);
+      await localSecondary.executeVerb(updateBuilderFor('email'));
       final deleteBuilder = DeleteVerbBuilder()
         ..atKey = (AtKey()
           ..key = 'email'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      await localSecondary.executeVerb(deleteBuilder, sync: false);
+      await localSecondary.executeVerb(deleteBuilder);
       expect(localSecondary.writesInProgressForTest, isEmpty);
     });
 
@@ -489,23 +527,22 @@ void main() {
     late LocalSecondary localSecondary;
     late AtClient atClient;
     final String namespace = 'validate_get_keys';
-    final preference = AtClientPreference()
-      ..syncRegex = '.$namespace'
-      ..hiveStoragePath =
-          '*&@should not be used by these tests, we will mock local storage'
-      ..commitLogPath = 'test/hive/commit';
+    final preference = AtClientPreference()..syncRegex = '.$namespace';
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
 
       mockSecondaryKeyStore = MockSecondaryKeyStore();
       atClient = await AtClientImpl.create(atSign, namespace, preference,
-          atClientManager: AtClientManager(atSign),
-          localSecondaryKeyStore: mockSecondaryKeyStore);
-      localSecondary =
-          LocalSecondary(atClient, keyStore: mockSecondaryKeyStore);
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference),
+          atKeysIo: noKeysFor(atSign),
+          storage: _MockKeyStoreStorage(mockSecondaryKeyStore, atSign: atSign));
+      localSecondary = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(), keyStore: mockSecondaryKeyStore);
     });
 
     tearDown(() async {
+      await atClient.stop();
       AtClientImpl.atClientInstanceMap.remove(atSign);
     });
 
@@ -974,12 +1011,12 @@ void main() {
     Future<AtClient> client({String? enrollmentId}) async {
       remote = MockRemoteSecondary();
       final c = await AtClientImpl.create(
-          atSign,
-          'wavi',
-          AtClientPreference()
-            ..hiveStoragePath = 'test/hive'
-            ..commitLogPath = 'test/hive/commit',
-          remoteSecondary: remote);
+          atSign, 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor(atSign),
+          remoteSecondary: remote,
+          storage: hiveStoreAt(atSign, 'test/hive'));
       c.syncService = MockSyncService();
       c.enrollmentId = enrollmentId;
       return c;
@@ -1028,9 +1065,8 @@ void main() {
   });
 }
 
-// The AtClient owns its commit-log-free persistence bundle (created
-// by `AtClientImpl.create`, since `isLocalStoreRequired` defaults to
-// true). Tests build their own client, so setup only needs to evict
+// The AtClient owns its commit-log-free persistence bundle, created
+// by `AtClientImpl.create`. Tests build their own client, so setup only needs to evict
 // any cached instance so storage is reopened fresh.
 Future<void> setupLocalStorage(String storageDir, String atSign) async {
   AtClientImpl.atClientInstanceMap.remove(atSign);

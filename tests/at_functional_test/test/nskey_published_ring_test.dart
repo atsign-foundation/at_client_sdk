@@ -73,7 +73,7 @@ void main() {
     final ns = uniqueNs();
     // NOTE: the cold-start mint below holds the lock, and the rotation that
     // follows is refused until it lapses.
-    final ring = PublishedNskeyKeyRing(atClient, lockTtl: liveMintLockTtl);
+    final ring = PublishedNskeyKeyRing(atClient, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero);
     // NOTE: the second generation comes from the rotation lever, not a second
     // mint — a mint that loses the lock adopts the winner and reports success,
     // so it cannot fail the way rotation fails.

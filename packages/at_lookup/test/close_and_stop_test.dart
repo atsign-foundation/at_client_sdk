@@ -6,25 +6,25 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'at_lookup_test_utils.dart';
-import 'fake_at_server_socket.dart';
+import 'fake_at_server_transport.dart';
 
 /// Catalogue: features/at_lookup/close_and_stop.feature
 void main() {
   const host = '127.0.0.1';
   const port = 12345;
 
-  late List<FakeAtServerSocket> sockets;
+  late List<FakeAtServerTransport> sockets;
   late MockSecondaryAddressFinder addressFinder;
-  late MockSecureSocketFactory socketFactory;
+  late _TransportFactory transportFactory;
   late List<AtCommandExecutor> authentications;
 
   /// While set, the atServer's address is not answered until it completes.
   Completer<void>? findGate;
 
-  /// While set, a socket is not handed out until it completes.
+  /// While set, a transport is not handed out until it completes.
   Completer<void>? connectGate;
 
-  /// While set, every new socket's flushes wait for it.
+  /// While set, every new transport's flushes wait for it.
   Completer<void>? flushGate;
 
   /// Past the first notification reconnect delay of one second.
@@ -37,18 +37,16 @@ void main() {
     connectGate = null;
     flushGate = null;
     addressFinder = MockSecondaryAddressFinder();
-    socketFactory = MockSecureSocketFactory();
-    registerFallbackValue(SecureSocketConfig());
-    when(() => addressFinder.findSecondary('@alice')).thenAnswer((_) async {
-      await findGate?.future;
-      return SecondaryAddress(host, port);
-    });
-    when(() => socketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) async {
-      final s = FakeAtServerSocket()..flushGate = flushGate;
+    transportFactory = _TransportFactory((h, p) async {
+      expect('$h:$p', '$host:$port');
+      final s = FakeAtServerTransport()..flushGate = flushGate;
       sockets.add(s);
       await connectGate?.future;
       return s;
+    });
+    when(() => addressFinder.findSecondary('@alice')).thenAnswer((_) async {
+      await findGate?.future;
+      return SecondaryAddress(host, port);
     });
   });
 
@@ -62,10 +60,7 @@ void main() {
               return true;
             },
         secondaryAddressFinder: addressFinder,
-        transport: AtLookupTransport(
-          secureSocketConfig: SecureSocketConfig(),
-          socketFactory: socketFactory,
-        ),
+        transport: AtLookupTransport(transportFactory: transportFactory),
       );
 
   /// Sends [command] and answers it the way the atServer would.
@@ -485,4 +480,16 @@ void main() {
             'authentication on the old one reports');
     await atLookup.stop();
   });
+}
+
+/// Connects through [onConnect], so each test decides what a new connection
+/// is.
+class _TransportFactory implements AtTransportFactory {
+  final Future<AtTransport> Function(String host, String port) onConnect;
+
+  _TransportFactory(this.onConnect);
+
+  @override
+  Future<AtTransport> connect(String host, String port, {Duration? timeout}) =>
+      onConnect(host, port);
 }

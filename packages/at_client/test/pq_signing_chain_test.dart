@@ -2091,8 +2091,7 @@ class _GrantedLock extends MintLock {
 
   @override
   Future<T?> withLock<T>(
-          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint,
-          {bool ownLockIsNotContention = false}) =>
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint) =>
       mint(ServerMutexLease(
           lockKey, DateTime.now().add(const Duration(minutes: 1))));
 }

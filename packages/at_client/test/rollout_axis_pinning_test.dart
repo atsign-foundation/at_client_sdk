@@ -1,14 +1,13 @@
-import 'package:at_client/at_client.dart';
+import 'dart:async';
+
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 /// A client that already exists keeps the rollout axes it was built under, and
 /// a caller handing over different ones is refused rather than ignored.
-///
-/// Two paths hand back a client that already exists, and only one is the cache:
-/// `AtClientManager.setCurrentAtSign` short-circuits on a same-atSign call
-/// carrying no override argument and returns without calling
-/// `AtClientImpl.create` at all, so a guard on the cache alone would miss the
-/// ordinary path.
 void main() {
   const atSign = '@alice';
 
@@ -20,8 +19,7 @@ void main() {
           posture: posture ?? PqPosture.legacy,
           authenticationKeyAlgorithm: authenticationKeyAlgorithm,
           dataSigningKeyAlgorithms: dataSigningKeyAlgorithms)
-        ..hiveStoragePath = 'test/hive'
-        ..commitLogPath = 'test/hive/path';
+        ..hiveStoragePath = 'test/hive';
 
   /// The same, but holding a data signing key.
   ///
@@ -234,11 +232,20 @@ void main() {
     });
 
     test('and the cache actually asks it', () async {
-      final first = await AtClientImpl.create(atSign, 'wavi', signing());
+      final storage = hiveStoreFor(atSign, signing());
+      final first = await AtClientImpl.create(atSign, 'wavi', signing(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(signing()),
+          atKeysIo: noKeysFor(atSign),
+          storage: storage);
 
       await expectLater(
           AtClientImpl.create(atSign, 'wavi',
-              signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+              signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: defaultAtDirectory,
+              atKeysIo: noKeysFor(atSign),
+              storage: storage),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('authenticationKeyAlgorithm'))));
 
@@ -246,30 +253,24 @@ void main() {
       // every second create.
       expect(
           identical(
-              await AtClientImpl.create(atSign, 'wavi', signing()), first),
+              await AtClientImpl.create(atSign, 'wavi', signing(),
+                  lookUps: secureSocketLookUps(),
+                  secondaryAddressFinder: atDirectoryOf(signing()),
+                  atKeysIo: noKeysFor(atSign),
+                  storage: storage),
+              first),
           isTrue);
-    });
-
-    test('and the manager\'s same-atSign short-circuit asks it too', () async {
-      // NOTE: with no override argument setCurrentAtSign returns the client it
-      // already has without calling create, so a throw here is proof that the
-      // second guard fired — nothing else on this path can raise one.
-      final manager = AtClientManager(atSign);
-      await manager.setCurrentAtSign(atSign, 'wavi', preference());
-
-      await expectLater(
-          manager.setCurrentAtSign(atSign, 'wavi', preference(posture: strict)),
-          throwsA(isA<ArgumentError>().having(
-              (e) => '$e', 'message', contains('disallowLegacyEncryption'))));
-
-      await manager.setCurrentAtSign(atSign, 'wavi', preference());
     });
 
     test('and so does setPreferences, which names its replacement', () async {
       // NOTE: the substrate read these axes at a startup that has already run,
       // so accepting a replacement would leave the client reporting a stage it
       // never applied.
-      final client = await AtClientImpl.create(atSign, 'wavi', preference());
+      final client = await AtClientImpl.create(atSign, 'wavi', preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference()),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference()));
 
       expect(
           () => client.setPreferences(preference(
@@ -280,6 +281,32 @@ void main() {
       // The control: everything outside the rollout axes is still replaced.
       client.setPreferences(preference()..syncBatchSize = 42);
       expect(client.getPreferences()!.syncBatchSize, 42);
+    });
+
+    test('setPreferences throws its refusal to the caller, at the call',
+        () async {
+      final client = await AtClientImpl.create(atSign, 'wavi', preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(preference()),
+          atKeysIo: noKeysFor(atSign),
+          storage: hiveStoreFor(atSign, preference()));
+
+      Object? thrown;
+      final uncaught = <Object>[];
+      await runZonedGuarded(() async {
+        try {
+          client.setPreferences(preference(
+              dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65}));
+        } catch (e) {
+          thrown = e;
+        }
+        await Future<void>.delayed(Duration.zero);
+      }, (e, _) => uncaught.add(e));
+
+      expect(thrown, isA<ArgumentError>(),
+          reason: 'a refused preference throws to the caller at the call');
+      expect(uncaught, isEmpty,
+          reason: 'and nothing escapes as an unhandled error');
     });
 
     test('a client with no preference at all is not refused', () {

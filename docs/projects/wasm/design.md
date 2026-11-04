@@ -155,8 +155,8 @@ default.
 | Site                                                                        | What it does                                                                                                                                                                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection built by the default `secureSocketLookUps` factory ends here**; an application-supplied `AtLookUpFactory` ends wherever it chooses. |
-| `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
-| `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
+| `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`. Removed in at_lookup 4.0.0.                                                                                                 |
+| `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup. Native only from at_lookup 4.0.0 (`at_lookup_io.dart`).                                                                                               |
 
 **The ABI leak** is the interface, not the implementation:
 
@@ -199,8 +199,9 @@ much of it at_client owns. Re-derive it before scoping the transport work.
 equivalent. Two escape hatches already exist — `SecondaryAddressFinder` is an abstract
 interface, and the `rootDomain: 'proxy:<host>'` convention bypasses root lookup
 entirely. Either unblocks development; a production browser client needs a WebSocket-
-or HTTPS-reachable directory endpoint, which is an open question in
-[`decisions.md`](decisions.md).
+or HTTPS-reachable directory endpoint. at_lookup 4.0.0 resolves this (OQ-7 in
+[`decisions.md`](decisions.md)): `HttpsSecondaryAddressFinder` asks the atDirectory's
+HTTPS face, pending CORS headers there.
 
 ### 2.2 Storage bootstrap
 
@@ -623,7 +624,7 @@ tries to open it. The type system never objects.
 **Design, as landed.** The preference stays what it is — serialisable tuning — and the
 platform capabilities travel beside it as named parameters on every entry point
 (`Atsign.open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`,
-`buildAtClient`, `AtServiceFactory.atClient`), held on the client and handed to
+`buildAtClient`), held on the client and handed to
 everything under it. Three legs, the **platform bundle**:
 
 | Leg        | Parameter  | Type                          | Ruled                                                                 | The core's one default seam                                                 |
@@ -641,9 +642,9 @@ will move out. And a platform implementer is three objects handed to the doors, 
 fork of at_client: `at_client_web` is a WebSocket `AtLookupMuxable` behind a factory, a
 SQLite-wasm `AtClientStorage` and an IndexedDB `WrittenAtKeysIo`. The two candidates
 this section once weighed — `CryptoConfig` on the preference, and `AtServiceFactory`
-as the DI hook — were not chosen: `AtServiceFactory.atClient` takes the bundle rather
-than owning it, so its one shipping override keeps working, and the preference carries
-no live object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
+as the DI hook — were not chosen: `AtServiceFactory.atClient` took the bundle rather
+than owning it, until at_client 4.0 removed it, and the preference carries no live
+object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
 D-15 its answers for the two legs that have shipped.
 
 The filesystem paths in the table above are what the legs replace, each deprecated when

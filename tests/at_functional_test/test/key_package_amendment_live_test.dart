@@ -1,13 +1,10 @@
-// The enrollment key-package surface is @experimental; driving it is the point.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, verifyEnvelope;
@@ -306,7 +303,9 @@ void main() {
     expect(
         await Atsign(atSign).authenticatesAs(
             keys: keysIo,
-            rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort)),
+            rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory),
         enrollmentId,
         reason: 'the device keyfile must resolve to $enrollmentId and '
             're-authenticate as it, or the amendment below would be '
@@ -322,6 +321,8 @@ void main() {
     return Atsign(atSign).open(
         keys: keysIo,
         preference: preference,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageForPrincipal(atSign, enrollmentId));
   }
@@ -450,11 +451,15 @@ void main() {
       expect(
           await Atsign(atSign).authenticatesAs(
               keys: keyfiles[device]!,
-              rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort)),
+              rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
+              lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: TestUtils.atDirectory),
           client.enrollmentId);
       final sender = await Atsign(atSign).open(
           keys: keyfiles[device]!,
           preference: preference,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           namespace: namespace,
           storage: TestUtils.storageForPrincipal(atSign, client.enrollmentId));
 

@@ -7,33 +7,28 @@ environment:
   sdk: ">=3.7.0"
 
 dependencies:
-  at_client: ^3.11.0
-  at_cli_commons: ^3.1.0
+  at_client: ^4.0.0
+  at_client_cli: ^1.0.0
   at_commons: ^5.8.0
-  at_onboarding_cli: ^2.0.0-rc1
-  at_utils: ^3.4.0
+  at_utils: ^4.0.0
   args: ^2.5.0
   nocterm: ^0.6.0
 
-# TODO(at_chops-4.0.0): restore the `at_chops: path: ../../at_chops` override
-# below once at_client has migrated off the at_chops 3.x facade — 4.0.0 removed
-# AtChops/AtChopsImpl/AtChopsUtil and the AtSigning*/AtEncryption* result types,
-# which at_client still uses. Until then this example builds against the
-# published at_chops 3.x, which means it does NOT exercise local at_chops
-# changes.
 dependency_overrides:
+  at_chops:
+    path: ../../at_chops
   at_client:
     path: ../../at_client
-  at_cli_commons:
-    path: ../../at_cli_commons
+  at_client_cli:
+    path: ../../at_client_cli
   at_commons:
     path: ../../at_commons
   at_lookup:
     path: ../../at_lookup
   at_auth:
     path: ../../at_auth
-  at_onboarding_cli:
-    path: ../../at_onboarding_cli
+  at_utils:
+    path: ../../at_utils
 
 dev_dependencies:
   lints: ^6.1.0

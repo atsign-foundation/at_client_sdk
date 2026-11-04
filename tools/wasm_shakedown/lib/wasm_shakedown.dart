@@ -223,6 +223,18 @@ Map<String, String> resolvePackageRoots({Directory? from}) {
   };
 }
 
+/// The workspace's roots, with each package in [own] resolved from its own
+/// directory instead.
+///
+/// Only the named package moves: that directory's package config lists every
+/// other package too, and those keep the workspace's copy.
+Map<String, String> resolvePackageRootsWith(Map<String, Directory> own) => {
+      ...resolvePackageRoots(),
+      for (final MapEntry(key: package, value: dir) in own.entries)
+        if (resolvePackageRoots(from: dir)[package] case final root?)
+          package: root,
+    };
+
 /// An `import`/`export` with its optional `if (...)` alternatives.
 final _directive = RegExp(
   r'''^\s*(?:import|export)\s+(['"][^'"]+['"](?:\s+if\s*\([^)]*\)\s*['"][^'"]+['"])*)''',

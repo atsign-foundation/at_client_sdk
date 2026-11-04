@@ -16,6 +16,7 @@ import 'package:at_auth/at_auth.dart'
 import 'package:collection/collection.dart' show ListEquality;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, RsaSignatureAlgo, SigningAlgoType;
+import 'package:at_client/src/util/at_key_grammar.dart' show isIdShaped;
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException, EnrollmentConstants;
 
@@ -33,6 +34,14 @@ const String apskRecordName = '_apsk';
 String apskUri(String atSign, String enrollmentId) =>
     'public:$apskRecordName.$enrollmentId.'
     '${EnrollmentConstants.perEnrollmentApproved}$atSign';
+
+/// [enrollmentId] when it can name an `_apsk` record; throws
+/// [AtSigningVerificationException], quoting it on one line, otherwise.
+String requireApskEnrollmentId(String enrollmentId) {
+  if (isIdShaped(enrollmentId)) return enrollmentId;
+  throw AtSigningVerificationException('${jsonEncode(enrollmentId)} is not '
+      'an enrollment id, so it names no $apskRecordName record');
+}
 
 /// The envelope's payload version, carried inside each protected header where
 /// the signature covers it.
@@ -70,7 +79,11 @@ enum EnvelopeType {
   nskeyRing('at-nskey-ring+jws'),
 
   /// A sealed secret addressed to one enrollment's key package.
-  secretEnvelope('at-secret-envelope+jws');
+  secretEnvelope('at-secret-envelope+jws'),
+
+  /// A client's record, in its own local storage, that it verified its own
+  /// namespace-key advertisement. Never sent.
+  verifiedAdvertisement('at-verified-advertisement+jws');
 
   const EnvelopeType(this.typ);
 

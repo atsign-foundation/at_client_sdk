@@ -1,11 +1,35 @@
 # CHANGELOG
 
-## 2.0.0-rc7
+## 2.0.0
 
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: `EnrollmentStore` is removed, as `EnrollmentData` was.
+- feat: `package:at_client_flutter/at_client_flutter.dart` also re-exports the
+  SQLite and in-memory stores and at_client's mixins (`AtClientInvitations`,
+  `EnrollmentUpdater`), so an app needs no second SDK import.
+- feat: `AtsignFlows` and `storageOrDefault` are exported: an app with its own
+  UI activates, opens and enrolls with the dialogs' store, transport and
+  atDirectory in one call, still passing any other option its `Atsign` verb
+  takes, such as `provisioningBudget`, and a widget test can give a dialog
+  its own `flows`.
+- feat: an app catches a keyfile that is not valid JSON as
+  `AtKeysFormatException` and shows its `reason` and `position`.
 - feat: `EnrollmentRequestList` lists the approved enrollments below the
   pending requests, each showing whether its keys are anchored to the atSign's
   signing root.
-- build: requires `at_client` ^3.15.0-rc9.
+- feat: `at_client_flutter.dart` re-exports `at_client_io.dart`, so an app
+  importing it has `FileAtKeysIo`, `secureSocketLookUps` and
+  `CacheableSecondaryAddressFinder`.
+- fix: leaving `ApkamActivationDialog` while it waits for approval keeps the
+  request, which the next show resumes without a passcode, and the atSign can
+  be opened again afterwards. Its Cancel button abandons the request once the
+  user confirms, and names the enrollment to ask the manager to deny.
+- feat: `PkamDialog`, given keys that hold only an enrollment awaiting
+  approval, waits for the approval and returns the client, rather than
+  failing.
+- build: requires `at_client` ^4.0.0.
+- build: requires `at_persistence_secondary_server` ^5.4.0.
+- chore(deps): at_utils ^4.0.0
 
 ## 2.0.0-rc6
 

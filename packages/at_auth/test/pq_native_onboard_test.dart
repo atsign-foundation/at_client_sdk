@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
@@ -9,7 +10,7 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -24,6 +25,21 @@ class FakeVerbBuilder extends Fake implements VerbBuilder {}
 class FakeAtLookUp extends Fake implements AtLookupImpl {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
+
+/// Runs an installed [AtAuthenticator] for real and records what it sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
+}
 
 class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
@@ -70,13 +86,12 @@ void main() {
         mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
             auth: any(named: 'auth'))).thenAnswer(
         (_) async => throw AtLookUpException('AT0015', 'key not found'));
-    when(() => mockAtLookUp.cramAuthenticate(cramSecret))
+    when(() => mockAtLookUp.pkamAuthenticate())
         .thenAnswer((_) async => true);
     when(() => mockAtLookUp.executeVerb(any()))
         .thenAnswer((_) async => 'data:2');
     when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-    when(() => mockPkam.authenticate(any(), any(),
-            enrollmentId: any(named: 'enrollmentId')))
+    when(() => mockPkam.authenticate(any(), any()))
         .thenAnswer((_) async => true);
     when(() => mockAtEnrollment.submit(any(), any())).thenAnswer((_) async =>
         AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved));
@@ -161,6 +176,33 @@ void main() {
           reason: 'the key advertised to the atServer and the key kept in the '
               'keyfile must be the same one, or the atSign can never '
               'authenticate');
+    });
+
+    test('the activation PKAM signs with the ML-DSA key it advertised',
+        () async {
+      await atAuth.onboard(
+          requestFor(signingAlgo: SigningAlgoType.mldsa65), cramSecret);
+      final installed = verify(() => mockAtLookUp.authenticator = captureAny())
+          .captured
+          .cast<AtAuthenticator>();
+      const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581$atSign'
+          ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+      final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
+
+      expect(await installed.last(executor), isTrue);
+
+      final pkam = executor.sent.last;
+      expect(pkam, startsWith('pkam:signingAlgo:mldsa65:'));
+      expect(pkam, contains(':enrollmentId:$enrollmentId:'));
+      expect(
+          MlDsa65PureDartAlgo.verifyBytesSync(
+              Uint8List.fromList(utf8.encode(challenge)),
+              signature: base64Decode(
+                  pkam.substring(pkam.lastIndexOf(':') + 1).trim()),
+              publicKey: base64Decode(submittedRequest().apkamPublicKey!)),
+          isTrue,
+          reason: 'the activation PKAM must verify under the key the '
+              'enrollment request advertised');
     });
 
     test('legacy material is minted and publickey published, by DEFAULT',

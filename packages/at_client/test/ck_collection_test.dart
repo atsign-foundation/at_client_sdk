@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart'
     show collectUnusedOnceCaughtUp;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -10,6 +11,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 /// Local storage as a keystore holds it: canonical key strings, each with its
 /// value and the metadata sync carried in.
@@ -17,15 +19,46 @@ class _Store extends Mock
     implements AtKeyValueStore<String, AtData, AtMetaData?> {
   final Map<String, AtData> data = {};
 
+  /// How many scans have asked for the keys.
+  int scans = 0;
+
+  /// The key whose metadata read parks until [_release] completes,
+  /// completing [_reached] when the read gets there.
+  String? _parkAt;
+  Completer<void>? _reached;
+  Completer<void>? _release;
+
+  /// Parks the next scan when it reads [key]'s metadata, or the first record's
+  /// when [key] is null; [reached] completes there, and [release] lets it go
+  /// on.
+  ({Future<void> reached, Completer<void> release}) parkScanAt([String? key]) {
+    _parkAt = key ?? data.keys.first;
+    _reached = Completer<void>();
+    _release = Completer<void>();
+    return (reached: _reached!.future, release: _release!);
+  }
+
   @override
-  Future<Stream<String>> getKeys({String? regex}) async => Stream.fromIterable(
-      data.keys.where((k) => regex == null || RegExp(regex).hasMatch(k)));
+  Future<Stream<String>> getKeys({String? regex}) async {
+    scans++;
+    // NOTE: a snapshot, as every keystore at_client runs on returns one.
+    return Stream.fromIterable(data.keys
+        .where((k) => regex == null || RegExp(regex).hasMatch(k))
+        .toList());
+  }
 
   @override
   Future<AtData?> get(String key) async => data[key];
 
   @override
-  Future<AtMetaData?> getMeta(String key) async => data[key]?.metaData;
+  Future<AtMetaData?> getMeta(String key) async {
+    if (key == _parkAt) {
+      _parkAt = null;
+      _reached!.complete();
+      await _release!.future;
+    }
+    return data[key]?.metaData;
+  }
 }
 
 class _FakeListener extends Fake implements SyncProgressListener {}
@@ -60,6 +93,7 @@ void main() {
     CryptoContext context,
     _Store store,
     List<String> deleted,
+    List<DeleteRequestOptions?> deleteOptions,
     MockAtClient client,
     MockSyncService sync,
     Completer<void> Function() parkNextConveyance,
@@ -84,8 +118,8 @@ void main() {
     when(() => client.getCurrentAtSign()).thenReturn(alice);
     when(() => client.enrollmentId).thenReturn(enrolledAs);
     final store = _Store();
-    when(() => client.getLocalSecondary())
-        .thenReturn(LocalSecondary(client, keyStore: store));
+    when(() => client.getLocalSecondary()).thenReturn(
+        LocalSecondary(client, syncQueue: memorySyncQueue(), keyStore: store));
     final sync = MockSyncService();
     when(() => client.syncService).thenReturn(sync);
     when(() => sync.isInSync()).thenAnswer((_) async => true);
@@ -114,12 +148,14 @@ void main() {
       return true;
     });
     final deleted = <String>[];
+    final deleteOptions = <DeleteRequestOptions?>[];
     when(() => client.delete(any(),
-            isDedicated: any(named: 'isDedicated'),
             deleteRequestOptions: any(named: 'deleteRequestOptions')))
         .thenAnswer((inv) async {
       final key = (inv.positionalArguments[0] as AtKey).toString();
       deleted.add(key);
+      deleteOptions.add(
+          inv.namedArguments[#deleteRequestOptions] as DeleteRequestOptions?);
       store.data.remove(key);
       return true;
     });
@@ -132,6 +168,7 @@ void main() {
       context: CryptoContext(atClient: client),
       store: store,
       deleted: deleted,
+      deleteOptions: deleteOptions,
       client: client,
       sync: sync,
       parkNextConveyance: () => parked = Completer<void>(),
@@ -361,7 +398,7 @@ void main() {
       expect(await a.manager.collectUnused(a.context), 0);
     });
 
-    test('a collection waits for a cut in progress', () async {
+    test("A collection's deletes wait for a cut in progress", () async {
       final a = enrolled();
       final release = a.parkNextConveyance();
       final cutting = a.manager.ensureCurrent(a.context, shared());
@@ -376,6 +413,164 @@ void main() {
           reason: 'run between the conveyance and its promotion, it would '
               'delete a key the next value cites');
       expect(a.deleted, isEmpty);
+    });
+  });
+
+  group('Given a collection pass and the cut queue', () {
+    /// Whether [future] has completed after the event queue has run dry, read
+    /// from state rather than waited for.
+    Future<bool> doneOnceIdle(Future<Object?> future) async {
+      var done = false;
+      unawaited(future.then((_) => done = true));
+      await pumpEventQueue(times: 100);
+      return done;
+    }
+
+    test(
+        'A cut that arrives while a collection pass is scanning completes '
+        'before the scan finishes', () async {
+      final a = enrolled();
+      await a.manager.ensureCurrent(a.context, shared());
+      final park = a.store.parkScanAt();
+      final pass = a.manager.tryCollect(a.context);
+      await park.reached;
+
+      final cut = a.manager.ensureCurrent(a.context, shared(to: carol));
+
+      expect(await doneOnceIdle(cut), isTrue,
+          reason: 'the cut went ahead while the scan was parked');
+      expect(a.cache.current(carol, namespace), isNotNull);
+      park.release.complete();
+      expect(await pass, isNotNull, reason: 'the pass finishes once released');
+    });
+
+    test(
+        "A cut that arrives while the pass's sync check is waiting completes "
+        'too', () async {
+      final a = enrolled();
+      await a.manager.ensureCurrent(a.context, shared());
+      final asked = Completer<void>();
+      final answer = Completer<bool>();
+      when(() => a.sync.isInSync()).thenAnswer((_) {
+        if (!asked.isCompleted) asked.complete();
+        return answer.future;
+      });
+      final pass = a.manager.tryCollect(a.context);
+      await asked.future;
+
+      final cut = a.manager.ensureCurrent(a.context, shared(to: carol));
+
+      expect(await doneOnceIdle(cut), isTrue,
+          reason: 'the cut went ahead while the sync check waited');
+      answer.complete(true);
+      await pass;
+    });
+
+    test('A key cut or made current during the scan is never deleted',
+        () async {
+      for (final arm in ['cache', 'pointer']) {
+        final a = enrolled();
+        await a.manager.ensureCurrent(a.context, shared());
+        final key = a.cache.current(bob, namespace)!;
+        final nskeyKid = a.cache.currentNskeyKid(bob, namespace)!;
+        final pointer = Map.fromEntries(
+            a.store.data.entries.where((e) => e.key.startsWith('__ckcur.')));
+        expect(pointer, hasLength(1), reason: arm);
+        a.store.data.removeWhere((k, _) => pointer.containsKey(k));
+        a.cache.evict(bob, namespace, key.ckKid);
+        cite(a.store, 'unrelated0000000', name: 'zz');
+        final park = a.store.parkScanAt('$bob:zz.$namespace$alice');
+        final pass = a.manager.tryCollect(a.context);
+        await park.reached;
+
+        if (arm == 'cache') {
+          a.cache.putAsCurrent(bob, namespace, key, nskeyKid);
+        } else {
+          a.store.data.addAll(pointer);
+        }
+        park.release.complete();
+        await pass;
+
+        expect(a.deleted, isEmpty, reason: arm);
+        expect(a.store.data.keys, containsAll(conveyancesOf(key.ckKid)),
+            reason: arm);
+      }
+    });
+
+    test(
+        'Offline after a rotation, the next share is not held by the sync '
+        'check', () async {
+      final a = enrolled();
+      await a.manager.ensureCurrent(a.context, shared());
+      final asked = Completer<void>();
+      when(() => a.sync.isInSync()).thenAnswer((_) {
+        if (!asked.isCompleted) asked.complete();
+        return Completer<bool>().future;
+      });
+      await a.manager.rotateContentKey(a.context, shared());
+      await asked.future;
+
+      final cut = a.manager.ensureCurrent(a.context, shared(to: carol));
+
+      expect(await doneOnceIdle(cut), isTrue,
+          reason: 'the share went ahead while the sync check had no answer');
+      expect(a.deleted, isEmpty);
+    });
+
+    test(
+        'Collection passes run one at a time, and a pass asked for while '
+        'another waits joins it', () async {
+      final a = enrolled();
+      await a.manager.ensureCurrent(a.context, shared());
+      final superseded = a.cache.current(bob, namespace)!.ckKid;
+      a.store.data.removeWhere((k, _) => k.startsWith('__ckcur.'));
+      a.cache.evict(bob, namespace, superseded);
+      final park = a.store.parkScanAt();
+      final first = a.manager.tryCollect(a.context);
+      await park.reached;
+
+      final second = a.manager.tryCollect(a.context);
+      final third = a.manager.tryCollect(a.context);
+      park.release.complete();
+      await Future.wait([first, second, third]);
+
+      expect(a.store.scans, 2, reason: 'the third joined the second');
+      expect(a.deleted.toSet().length, a.deleted.length,
+          reason: 'nothing is deleted twice');
+    });
+
+    test('A key superseded during the scan is kept for its grace', () async {
+      final a = enrolled(supersededCkGrace: null);
+      await a.manager.ensureCurrent(a.context, shared());
+      final superseded = a.cache.current(bob, namespace)!.ckKid;
+      final park = a.store.parkScanAt();
+      final pass = a.manager.tryCollect(a.context);
+      await park.reached;
+
+      final rotation = a.manager.rotateContentKey(a.context, shared());
+      park.release.complete();
+      await rotation;
+      await pass;
+      await a.manager.idle;
+
+      expect(a.store.data.keys, containsAll(conveyancesOf(superseded)),
+          reason: 'a value prepared under it may not have landed yet');
+    });
+
+    test(
+        "A pass deletes from local storage, whatever the app's remote "
+        'preference', () async {
+      final a = enrolled();
+      a.client.getPreferences().remoteLocalPref = RemoteLocalPref.remoteOnly;
+      await a.manager.ensureCurrent(a.context, shared());
+      conveyance(a.store, 'orphan0000000000', cutBy: enrollmentId);
+
+      expect(await a.manager.collectUnused(a.context), 1);
+
+      expect(a.deleteOptions, isNotEmpty);
+      expect(
+          a.deleteOptions.map((o) => o?.useRemoteAtServer), everyElement(false),
+          reason: 'a delete in the cut queue never waits on the atServer');
     });
   });
 
@@ -422,15 +617,6 @@ void main() {
 
       expect(await a.manager.collectUnused(a.context), 0);
       expect(a.deleted, isEmpty);
-    });
-
-    test('but not on one whose preference asks for no local store', () async {
-      final a = await withGarbage(
-          (client, _) => client.getPreferences().isLocalStoreRequired = false);
-
-      expect(a.deleted, hasLength(2),
-          reason: 'the client keeps the store it was given whatever the '
-              'preference says, so that store answers completely');
     });
 
     test('on a client with no enrollment id', () async {

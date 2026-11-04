@@ -84,12 +84,11 @@ void main() {
               'interlock now that the root record itself is mutable');
       expect(key.metadata.ttl, 15000,
           reason: 'deliberately NOT the shared two-minute mintLockTtl that the '
-              'nskey lock above still carries. This path does not pass '
-              'ownLockIsNotContention, so the ttl is also how long a client '
-              'that took the lock and exited before publishing is refused on '
-              'its next start — and two enrollments racing to mint the root is '
-              'not a situation normal operation produces, while a short-lived '
-              'client relaunching is');
+              'nskey lock above still carries. The ttl is also how long a '
+              'client that took the lock and exited before publishing is '
+              'refused on its next start — and two clients racing to mint the '
+              'root is not a situation normal operation produces, while a '
+              'short-lived client relaunching is');
       expect(key.metadata.isPublic, isFalse,
           reason: 'a self key — nobody but the owner writes the owner\'s '
               'records, so there is nothing to share');
@@ -959,6 +958,8 @@ void main() {
       expect(EnvelopeType.keyPackage.typ, 'at-key-package+jws');
       expect(EnvelopeType.nskeyRing.typ, 'at-nskey-ring+jws');
       expect(EnvelopeType.secretEnvelope.typ, 'at-secret-envelope+jws');
+      expect(EnvelopeType.verifiedAdvertisement.typ,
+          'at-verified-advertisement+jws');
 
       // Every value is distinct — the whole mechanism is that two uses cannot
       // be confused, and two enum entries sharing a spelling would confuse
