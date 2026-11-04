@@ -47,8 +47,13 @@ Two stages fix that:
    atServer in an envelope that only this device's hardware can open. Nothing
    secret sits on the device at rest.
 
-Recovery is through keychain or passkey sync only: an item synced from a Mac to
-an iPhone is fine, but there is no manual export to another device.
+Recovery depends on the tier, and only the passkey tier recovers by syncing. A
+Secure Enclave key can't sync (a keychain item backed by the Secure Enclave
+can't be synchronisable), so for hw-kem a lost device means its server-held
+document can't be opened. Recovery is enrolling a new device and having an
+existing one approve it. A synced passkey does re-derive the same keys on
+another device ([section 9](#9-the-browser-as-the-only-device)). There is no
+manual export to another device in any tier.
 
 ## 2. What the hardware offers
 
@@ -103,14 +108,17 @@ Tiers rank differently by role, because the threats differ:
 
 | Role                        | Order                                  | Why                                                                                                 |
 | --------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Key encapsulation (the document) | hw-kem, hw-prf-seed, software     | the envelope sits on the atServer for years, so "harvest now, decrypt later" dominates: post-quantum first |
+| Key encapsulation (the document) | hw-kem, hw-prf-seed (HMAC-based PRFs; ECDH-based PRFs rank below hw-kem and are classical), software | the envelope sits on the atServer for years, so "harvest now, decrypt later" dominates: post-quantum first |
 | Authentication (PKAM)       | hardware signing, hw-prf-seed, software | a forgery can't be harvested for later, and the key can be rotated: non-exportable first         |
 
 Within a tier the strongest algorithm wins, using
 `SigningAlgoType.strongestFirst` for signing and the posture's key-establishment
 order for encapsulation. The choice is recorded and never silently downgraded,
-matching the trusted-devices rule of "record, refuse, don't fall back". A
-`PqPosture` setting of `custody: required` refuses the software tier.
+by the rule that a weaker tier is recorded, never silently substituted: if the
+chosen tier is unavailable the operation is refused, not retried with a lower
+one. (The trusted-devices decision record that would hold this rule doesn't
+exist yet; writing it is the `docs` row of [section 11](#11-changes-by-package).)
+A `PqPosture` setting of `custody: required` refuses the software tier.
 
 ## 5. The seam: SecurityPlatform
 
@@ -140,8 +148,11 @@ abstract interface class CustodySession {
 }
 ```
 
-It is a new, non-sealed interface in at_auth, because `AtKeysIo` is sealed and
-platform packages can't subtype it. It holds no keys and isn't a registry.
+It is a new, non-sealed interface in at_auth. `AtKeysIo` is sealed, but
+`WrittenAtKeysIo` is an open abstract subclass that platform packages already
+extend (at_client_flutter's `KeychainAtKeysIo`), so storage can be plugged in
+without it. The seam is separate because holding keys by handle is a different
+job from storing a document. It holds no keys and isn't a registry.
 `CustodyKey` is an opaque `{platformId, ref, publicKey, role, algorithm}`, so a
 future remote custodian (an identity provider's key, say) fits without an
 interface change. The platform is injected through the same doors as storage:
@@ -183,8 +194,13 @@ final class SecurityPlatformKeySource implements AtKeysKeySource {
   `session.decapsulate`.
 - **PRF-backed sources** (WebAuthn PRF, TPM HMAC, Keystore HMAC, Secure Enclave
   ECDH) wrap with AES-256-GCM under `HKDF(prf, "atkeys-kek")`, the label
-  `design.md` section 8 already uses. The key is symmetric, so it is already
-  post-quantum.
+  `design.md` section 8 already uses. For the HMAC-based PRFs the key is
+  symmetric, so it is already post-quantum. Secure Enclave ECDH against a fixed
+  point is not: its output is only as secret as a P-256 private key, so anyone
+  holding the public half (which stays in the keychain, which narrows the
+  exposure) and a quantum computer can recompute the KEK. For a document that
+  sits on the atServer for years, ECDH-PRF ranks below hw-kem and counts as
+  classical.
 - The constructor rejects a key whose role is `privateAuthentication`, which
   keeps the rule from [section 3](#3-why-a-signature-cant-be-the-secret) out of
   the caller's hands.
@@ -214,6 +230,10 @@ that namespace the right home:
 - Revoking or deleting the enrollment moves its per-enrollment data to `.r.__e`
   or `.d.__e`, so the record goes with it.
 - It needs no server change.
+
+Expiry is a third case. An expired enrollment's data stays at `.a.__e` until the
+expiry sweep runs, up to about 10.5 minutes today; that is fixed by
+[at_server#2831](https://github.com/atsign-foundation/at_server/issues/2831).
 
 The approver's secret-sharing envelope can't serve instead. `__ssenv`
 envelopes are deleted once consumed (`pairwise_secret_sharing.dart`), including
@@ -292,6 +312,10 @@ the PRF, or an enrollment whose credential is the passkey. There is a third:
 - **Revocation** is enrollment revocation, as with any device. This closes
   the unauthenticated-read and revocation threats that gate (a) leaves open
   ([`prf-server-keys-blob.md`](prf-server-keys-blob.md#open)).
+- **One enrollment across synced devices.** A synced passkey derives the same
+  APKAM key on every device it reaches, so they all authenticate as one
+  enrollment, the atServer can't tell them apart, and revoking it signs them
+  all out.
 - **Eviction loses nothing.** IndexedDB becomes a cache: after it is cleared,
   the passkey re-derives the PKAM key and the atServer supplies the document.
 - **The cost:** the PKAM key sits in page memory for the session, the same
@@ -307,11 +331,18 @@ and that is accepted here as the recovery route.
 
 ## 10. Open questions
 
+The wire format of ecc PKAM is settled from trunk and isn't open: at_chops'
+`EccSigningAlgo.sign` signs the SHA-256 of the challenge and returns the code
+units of `toCompactHex()` (r‖s as hex), `pkam:` carries that base64-encoded,
+the public key is hex, and at_server's `ApkamSignatureVerifier` goes through
+the same code. Secure Enclave and TPM output (DER, or CryptoKit's raw r‖s) must
+be converted to compact hex. A pin test still guards it
+([section 11](#11-changes-by-package)).
+
 | Question | How to settle it |
 | --- | --- |
 | Does the Secure Enclave's ML-DSA-65 signature verify with the pure-Dart verifier (context string, pure or pre-hash)? | A macOS 26 probe that signs and verifies in Dart |
 | Do Secure Enclave ML-KEM-1024 public-key bytes give the same key-package id as ours? | The same probe |
-| Is ecc PKAM on the wire DER or raw r‖s, and does SE/TPM output match? | A pin test against at_server trunk |
 | Does NCrypt PCP expose HMAC on Windows TPMs, or only ECDH_ZGen? | A Windows probe |
 | Can the atServer update a record conditionally? | Shared with `design.md` section 10; multi-writer rewraps need it |
 | Is the custody tier worth recording in the enrollment record, so policy can require hardware later? | A decision for at_server; not blocking |
@@ -322,14 +353,14 @@ and that is accepted here as the recovery route.
 
 | Package | Change |
 | --- | --- |
-| at_chops | ML-DSA-65 `keyPairFromSeed` (pure Dart and FFI); `pqOpen` with an external decapsulator; ECDSA DER and raw conversion; one HKDF helper for the custody labels |
+| at_chops | ML-DSA-65 `keyPairFromSeed` (pure Dart and FFI); `pqOpen` with an external decapsulator; conversion of ECDSA DER and raw r‖s output (Secure Enclave, TPM) to the compact hex `EccSigningAlgo` emits; one HKDF helper for the custody labels |
 | at_auth | `SecurityPlatform`, `CustodySession`, `CustodyKey`, `SoftwareSecurityPlatform`, `SecurityPlatformKeySource`; a tier selector; a `custody` field in keyfile material; the four raw-key signing paths routed through custody; the `_pkam` injected-signer path stops assuming RSA-2048 |
 | at_client | no keyless path: custody keys reach the client only through the `AtKeysIo` it is given, which must be a `WrittenAtKeysIo`; ES256 in `envelope_signature.dart`; key packages advertise the custody encapsulation key; a server-backed store at `atkeys.<enrollmentId>.a.__e`; `open`, `activate` and `enroll` go through the session; `PqPosture.custody` |
 | at_client_flutter | A federated `at_security_platform` plugin for Darwin (CryptoKit), Android (Keystore) and Windows (NCrypt); `KeychainAtKeysIo` keeps only references and public halves |
 | at_client_wasm | `WebAuthnSecurityPlatform` on the existing passkey port, as in [section 9](#9-the-browser-as-the-only-device) |
 | at_onboarding_cli | `--security tpm2\|software`, with a tpm2-tss FFI platform in its own package |
 | at_commons, at_lookup | none; the PKAM grammar already carries `ecc_secp256r1` and `mldsa65` |
-| at_server | none required; a pin test for ecc signature encoding |
+| at_server | none required; a pin test that ecc PKAM signatures are compact hex |
 | docs | a trusted-devices decision record that separates APKAM custody from the device-assertion credential, which must never be a PKAM key |
 
 The order that keeps each step shippable: at_chops primitives, then the at_auth
