@@ -1,4 +1,6 @@
 ## 4.0.0
+- fix: at_utils needs chalkdart 2.3.0 or later; the colours it uses are not
+  in earlier versions.
 - feat: `AtSignLogger` logs at `warning` until a program sets `root_level`, so
   a program that sets no level no longer prints the SDK's info lines.
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
