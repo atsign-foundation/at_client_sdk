@@ -264,11 +264,26 @@ void main() {
   });
 
   group('Given @alice publishes a namespace key of its own', () {
+    /// [keys] are on @alice's atServer. at_activate's client never syncs, so
+    /// its local store holds none of them, and a scan that does not show
+    /// hidden keys omits every `public:_` one, so only a remote scan showing
+    /// hidden keys finds them, and only those its regex matches.
     void publishing(List<String> Function() keys) => when(() => client.getKeys(
-            regex: any(named: 'regex'),
-            showHiddenKeys: any(named: 'showHiddenKeys'),
-            useRemoteAtServer: any(named: 'useRemoteAtServer')))
-        .thenAnswer((_) async => keys());
+                regex: any(named: 'regex'),
+                showHiddenKeys: any(named: 'showHiddenKeys'),
+                useRemoteAtServer: any(named: 'useRemoteAtServer')))
+            .thenAnswer((invocation) async {
+          final named = invocation.namedArguments;
+          if (named[#useRemoteAtServer] != true ||
+              named[#showHiddenKeys] != true) {
+            return <String>[];
+          }
+          final regex = named[#regex] as String?;
+          return [
+            for (final key in keys())
+              if (regex == null || RegExp(regex).hasMatch(key)) key
+          ];
+        });
 
     /// Runs `at_activate approve` for B and hands back what it printed to
     /// stderr.

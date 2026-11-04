@@ -661,7 +661,14 @@ void main() {
                       contains('a client at PqPosture.legacy'),
                       contains(symmetricAesGcmCryptoProviderId),
                       isNot(contains('CryptoConfig'))))));
-      expect(c.ring.lookedUp, isEmpty);
+      // NOTE: a legacy client resolves CryptoConfig.legacy(), which holds no
+      // key ring, so `c.ring` is never asked; a lookup it made would read
+      // through the client itself.
+      verifyNever(() => atClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions')));
+      verifyNever(() => atClient.get(any()));
+      verifyNever(() => atClient.getRemoteSecondary());
+      verifyNever(() => atClient.getLocalSecondary());
     });
 
     test(

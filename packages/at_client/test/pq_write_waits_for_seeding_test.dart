@@ -843,4 +843,32 @@ void main() {
               'hold a write up');
     });
   });
+
+  test(
+      "A write that waited for seeding waits for start-up's ask only for what "
+      'is left of the same bound',
+      timeout: const Timeout(Duration(seconds: 10)), () async {
+    StartUpSeeding.wait = const Duration(seconds: 2);
+    final ring = _AskingRing()..startUpAsksPending = Completer<void>().future;
+    final c = _Client(ring)..seeding.seeding({'todos.demos'});
+    wire(c);
+    final started = DateTime.now();
+
+    final writing = expectLater(
+        write(c, _built('x', 'todos.demos')),
+        throwsA(isA<NskeyPrivateNotHeldException>().having(
+            (e) => e.message, 'message', contains('has not yet been conveyed'))));
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    // NOTE: start-up adopts another enrollment's generation, whose private
+    // this enrollment does not yet hold, and its ask for it is still to come.
+    final pair = await XWingKeyPair.generate();
+    ring.seedPublicOnly(_alice, 'todos.demos', publicKey: pair.publicKeyBytes);
+    c.seeding.finish();
+    await writing;
+
+    expect(DateTime.now().difference(started),
+        lessThan(const Duration(milliseconds: 2900)),
+        reason: "the wait for start-up's ask takes only what the wait for "
+            'seeding left of the bound, not a bound of its own');
+  });
 }

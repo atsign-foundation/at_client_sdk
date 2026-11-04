@@ -202,6 +202,27 @@ void main() {
         reason: 'it mints no RSA-2048 client data signing key');
   });
 
+  test(
+      'A client the floor lifts off an RSA-2048 credential retrofits to '
+      'ML-DSA-65', () async {
+    final io = await keyfile(algorithm: CryptographicMaterialAlgorithm.rsa2048);
+    await holdNamespaceKey(io, 'k1.sensor');
+
+    final client =
+        await start(configured(PqPosture.legacy), io, atServer().remote);
+
+    expect(floorWarnings(), [contains('is raised to its pqReady floor')]);
+    expect(client.getPreferences()!.authenticationKeyAlgorithm,
+        SigningAlgoType.mldsa65);
+    expect(
+        logs.at('INFO'),
+        contains(contains(
+            'authenticates with rsa2048 and this posture requires mldsa65; '
+            'retrofitting')),
+        reason: 'settling reads the raised preference, so the client it lifts '
+            're-enrolls itself');
+  });
+
   test('The floor holds at a start with no atServer', () async {
     final io = await keyfile();
     await holdNamespaceKey(io, 'k1.sensor');

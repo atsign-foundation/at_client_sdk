@@ -499,7 +499,7 @@ void main() {
       final c = buildCollection<String>();
       await expectLater(
         c.create(obj: 'x', id: 'fail-me'),
-        throwsA(isA<CollectionOpException>()),
+        throwsA(isA<CollectionOpException<String>>()),
       );
     });
 
@@ -515,10 +515,12 @@ void main() {
       return refused;
     }
 
-    Future<CollectionOpException> thrownBy(Future<Object?> op) async {
+    /// The exception [op] throws, caught the way the class doc says an app
+    /// catches it: typed by the collection's item type.
+    Future<CollectionOpException<String>> thrownBy(Future<Object?> op) async {
       try {
         await op;
-      } on CollectionOpException catch (e) {
+      } on CollectionOpException<String> catch (e) {
         return e;
       }
       fail('the write returned instead of throwing CollectionOpException');
@@ -653,6 +655,27 @@ void main() {
       expect(bobCopiesOf('b1'), 1,
           reason: "updateSharedWith(e.item!, set) writes @bob's copy of the "
               'new item');
+    });
+
+    test(
+        'A create whose share fails for one recipient hands back the item '
+        'naming the recipients written', () async {
+      final written = storeRefusingBob(() => true);
+      final carol = '@carol'.toAtsign();
+      final c = buildCollection<String>();
+
+      final thrown = await thrownBy(
+          c.create(obj: 'm', id: 'm1', sharedWith: {bob, carol}));
+
+      expect(thrown.item?.sharedWith, {carol},
+          reason: "@carol's copy was written and @bob's was not");
+      expect(written.keys.where((k) => k.startsWith('@carol:m1.')),
+          hasLength(1));
+
+      await c.update(thrown.item!);
+      expect(written.keys.where((k) => k.startsWith('@carol:m1.')),
+          hasLength(1),
+          reason: "an update of the item handed back keeps @carol's copy");
     });
 
     test(
@@ -855,6 +878,18 @@ void main() {
     });
 
     test(
+        'a failed recipient write throws a CollectionOpException typed by '
+        "the collection's item type", () async {
+      when(() => atClient.put(any(), any())).thenThrow(Exception('boom'));
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'sw-fail', sharedWith: {});
+      await expectLater(
+        c.updateSharedWith(item, {bob}),
+        throwsA(isA<CollectionOpException<String>>()),
+      );
+    });
+
+    test(
         'pure recipient changes do not emit a local CItemUpdated on '
         'this collection', () async {
       // Subscribe BEFORE the call so any synchronous emit lands.
@@ -955,7 +990,7 @@ void main() {
       final c = buildCollection<String>();
       await expectLater(
         c.create(obj: 'x', id: 'abc'),
-        throwsA(isA<CollectionOpException>()),
+        throwsA(isA<CollectionOpException<String>>()),
       );
     });
   });
@@ -1067,7 +1102,7 @@ void main() {
       final c = buildCollection<String>();
       await expectLater(
         c.upsert(id: 'u4', obj: 'x'),
-        throwsA(isA<CollectionOpException>()),
+        throwsA(isA<CollectionOpException<String>>()),
       );
     });
   });
@@ -1600,7 +1635,8 @@ void main() {
 
       final c = buildCollection<String>();
       final item = c.draft(obj: 'x', id: 'delme');
-      await expectLater(c.delete(item), throwsA(isA<CollectionOpException>()));
+      await expectLater(
+          c.delete(item), throwsA(isA<CollectionOpException<String>>()));
     });
 
     test(
@@ -2012,6 +2048,39 @@ void main() {
         receiptWrites.single,
         isNot(matches(RegExp(r'^[^:]+\.__rr\.'))),
         reason: 'no self-copy of __rr receipt should be written',
+      );
+    });
+
+    test(
+        "a failed receipt write throws a CollectionOpException typed by the "
+        "item's type", () async {
+      final bobKey = AtKey.fromString('idf.$namespace$bobStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((invocation) async {
+        final regex = invocation.namedArguments[#regex] as String;
+        if (regex.contains('__rr')) return <AtKey>[];
+        return [bobKey];
+      });
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        final k = invocation.positionalArguments.first as AtKey;
+        if (k.toString().contains('__rr')) {
+          throw Exception('no such key');
+        }
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'v'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => atClient.put(any(), any())).thenThrow(Exception('boom'));
+
+      final c = buildCollection<String>();
+      final fromBob = (await c.getItems()).single;
+      await expectLater(
+        fromBob.markReadByMe(),
+        throwsA(isA<CollectionOpException<String>>()),
       );
     });
 
