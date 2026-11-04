@@ -38,11 +38,12 @@ void main() {
   final namespace = 'rotation$runId';
 
   setUpAll(() async {
-    // NOTE: the SECOND atSign, not the first. These tests create enrollments
-    // and REVOKE one, and both are shared state the rest of the suite reads:
-    // every enroll:listns walks the whole roster, and a revoked enrollment's
-    // _apsk is deleted for good.
-    atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    // NOTE: an atSign no other file uses. Every rotation conveys to each
+    // enrollment the atSign lists for the namespace, under a mint lock sized to
+    // that roster, so enrollments other files leave behind would size both by
+    // file order; and these tests revoke enrollments, whose _apsk is deleted
+    // for good.
+    atSign = ConfigUtil.getYaml()['atSign']['rotationAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager = await TestUtils.initAtClient(atSign, namespace,
