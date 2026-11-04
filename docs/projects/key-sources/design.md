@@ -140,8 +140,24 @@ with an all-applications access list can be read without a prompt by any
 binary the same team signs, and keeps working across upgrades, while an
 unsigned binary is refused. The team does the gating rather than the access
 list, which fits the keychain's partition list recording the creator's team,
-though I haven't inspected the partition list directly. The trust boundary is
-therefore everything Atsign signs, not only the NoPorts CLIs.
+though I haven't inspected the partition list directly.
+
+That refusal doesn't make the trust boundary everything Atsign signs, though,
+because of two of the entitlements these binaries carry:
+`com.apple.security.cs.allow-dyld-environment-variables` and
+`com.apple.security.cs.disable-library-validation`
+([`entitlements.plist`](probes/macos_keychain/entitlements.plist)). Together
+they switch off the hardened runtime's refusal of `DYLD_INSERT_LIBRARIES` and
+of libraries not signed by the same team. Any process running as the user can
+then start an Atsign-signed binary with `DYLD_INSERT_LIBRARIES` pointing at its
+own ad-hoc dylib, and the dylib's code runs with Atsign's code identity and
+team, which is what the keychain checks. With these entitlements the boundary
+is any process running as the user, the same exposure as the
+`/usr/bin/security` route above. `run_signed.sh` now has an arm that injects
+[`inject.c`](probes/macos_keychain/inject.c) into the second signed binary to
+measure this; it wasn't in the run recorded in the table. The keychain key
+source is only worth more than the file if every binary Atsign signs with
+access to the item drops both entitlements, and stays without them.
 
 Two things aren't covered. The arms used an Apple Development certificate
 rather than Atsign's Developer ID. And I expect an unattended Mac running
@@ -268,7 +284,7 @@ for a daemon that has nowhere better to keep a key (see
 | Linux daemon            | a 32-byte key sealed with `systemd-creds` (TPM where there is one, the host key where not), delivered by `LoadCredentialEncrypted=` and read from `$CREDENTIALS_DIRECTORY` | yes, see [section 3](#3-measurements)                                                                          |
 | Container or Kubernetes | a key in an environment variable or a mounted secret; read-only injection suits a key, and not the writable document                                                       | no                                                                                                             |
 | Cloud VM                | a cloud KMS (AWS, GCP or Azure) wraps and unwraps, and the instance's cloud identity is the first secret                                                                   | no; a daemon would then need the KMS reachable to start                                                        |
-| macOS desktop           | a 32-byte key in the login keychain, created by a team-signed binary with an all-applications access list; an unsigned build uses the file, or `/usr/bin/security`         | yes: every binary the team signs reads it without a prompt, across upgrades, and unsigned binaries are refused |
+| macOS desktop           | a 32-byte key in the login keychain, created by a team-signed binary with an all-applications access list; an unsigned build uses the file, or `/usr/bin/security`         | yes: every binary the team signs reads it without a prompt, across upgrades, and unsigned binaries are refused; but with NoPorts' current entitlements any same-user process can inject code into a team-signed binary and read it too (see [section 3](#team-signed-builds)) |
 | Windows                 | DPAPI (`CryptProtectData`), scoped to the user or the machine                                                                                                              | no                                                                                                             |
 | Browser                 | a passkey's PRF output, or a non-extractable WebCrypto key; see [section 8](#8-the-browser)                                                                                | no                                                                                                             |
 
@@ -368,7 +384,11 @@ evicted unless the site holds persistent storage.
 ## 9. What this does not protect
 
 A running daemon holds its unwrapped keys in memory, so root on that host, or
-anything that can read the process, has them. In a browser, script running on
+anything that can read the process, has them. On macOS, while Atsign-signed
+binaries carry `allow-dyld-environment-variables` and
+`disable-library-validation`, any process running as the user can inject code
+into one of them and read the keychain key (see
+[section 3](#team-signed-builds)). In a browser, script running on
 the page's origin can use the key while the page is open. And none of it
 narrows what one enrollment can decrypt: as
 [section 2](#2-what-exists-today) shows, a legacy enrollment carries the
@@ -380,6 +400,7 @@ atSign-wide encryption keys.
 | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Is the partition list what gates the macOS reads?                                                                      | Inspect a probe item's partition list without raising a dialog                            |
 | Does Atsign's Developer ID behave as the Apple Development certificate did?                                            | `run_signed.sh` with Atsign's Developer ID identity                                       |
+| Does an ad-hoc dylib injected into a team-signed binary read the all-applications item, and does dropping `allow-dyld-environment-variables` and `disable-library-validation` stop it without breaking Dart AOT binaries? | `run_signed.sh`'s injection arm, then again with both entitlements removed from `entitlements.plist` |
 | Can a Mac daemon started before anyone logs in read the login keychain?                                                | An `sshnpd` LaunchDaemon with its key in the login keychain, booted with no one logged in |
 | Does DPAPI behave as expected for a service account?                                                                   | A Windows probe, which hasn't been run                                                    |
 | Does a real TPM bind the seal to the boot state?                                                                       | `systemd-creds` on hardware with a TPM, with a PCR policy                                 |
