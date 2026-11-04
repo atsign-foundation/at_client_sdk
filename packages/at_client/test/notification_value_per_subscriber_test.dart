@@ -44,10 +44,14 @@ class _StrictProvider extends CryptoProvider {
   /// While false, decryption waits for a key that has not been filed yet.
   bool filed = true;
 
+  /// Runs at the start of every decryption.
+  void Function()? onDecrypt;
+
   @override
   Future<String> decrypt(
       CryptoContext context, AtKey atKey, String value) async {
     decrypts++;
+    onDecrypt?.call();
     if (!filed) {
       throw NskeyPrivateUnavailableException(
           _owner, _namespace, _kid, 'not yet received that generation');
@@ -266,8 +270,9 @@ void main() {
     });
 
     test(
-        'when both ask for the same decryption, then they share one '
-        'subscription and both receive the notification', () async {
+        'when both ask for the same decryption, then each has a subscription '
+        'of its own and both receive the notification, from one decryption',
+        () async {
       final first = <String?>[];
       final second = <String?>[];
       service
@@ -279,7 +284,7 @@ void main() {
 
       await deliver(_frame(key));
 
-      expect(service.getStreamListenersCount(), 1);
+      expect(service.getStreamListenersCount(), 2);
       expect(first, [_plaintext]);
       expect(second, [_plaintext]);
       expect(provider.decrypts, 1);
@@ -314,6 +319,50 @@ void main() {
       expect(raw, [_ciphertext],
           reason: 'the re-drive is for the subscriber that waited, not the '
               'one already served');
+    });
+
+    test(
+        'when both ask for the same decryption and the first changes the '
+        'notification it receives, then the second sees it as it arrived',
+        () async {
+      final second = <String?>[];
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => n.value = 'changed by the first subscriber');
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => second.add(n.value));
+
+      await deliver(_frame(key));
+
+      expect(second, [_plaintext],
+          reason: 'each subscribe call gets its own copy of the notification, '
+              'whatever another call with the same regex and decryption does '
+              'to its own');
+    });
+  });
+
+  group('Given three subscribers matching one notification', () {
+    test(
+        'when the first cancels on receiving it, then the third still '
+        'receives it', () async {
+      final third = <String?>[];
+      late final StreamSubscription<AtNotification> first;
+      first = service
+          .subscribe(regex: r'discover_response')
+          .listen((_) => first.cancel());
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((_) {});
+      service
+          .subscribe(regex: r'discover_response')
+          .listen((n) => third.add(n.value));
+
+      await deliver(_frame(key));
+
+      expect(third, [_ciphertext],
+          reason: 'a subscription released during a delivery must not end '
+              'that delivery for the subscriptions after it');
     });
   });
 
@@ -395,6 +444,46 @@ void main() {
 
     expect(seen, [_plaintext]);
     expect(provider.decrypts, 1);
+  });
+
+  group('Given a decrypting subscription waiting for its key', () {
+    test(
+        'when one of two subscriptions waiting on a notification cancels, then '
+        'only the other stays parked', () async {
+      provider.filed = false;
+      final leaving = service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((_) {});
+      service
+          .subscribe(regex: r'\.sshrvd@alice', shouldDecrypt: true)
+          .listen((_) {});
+      await deliver(_frame(key));
+      expect(service.parkedCount, 2, reason: 'precondition: both parked');
+
+      await leaving.cancel();
+
+      expect(service.parkedCount, 1,
+          reason: 'a subscription releases the notifications parked for it '
+              'when its last listener cancels, and only those');
+    });
+
+    test(
+        'when it is cancelled while its notification is being decrypted, then '
+        'nothing is parked for it', () async {
+      provider.filed = false;
+      late final StreamSubscription<AtNotification> leaving;
+      leaving = service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((_) {});
+      provider.onDecrypt = () => leaving.cancel();
+
+      await deliver(_frame(key));
+
+      expect(provider.decrypts, 1, reason: 'precondition: decryption began');
+      expect(service.parkedCount, 0,
+          reason: 'a notification parked for a released subscription is held '
+              'for nobody, and nothing releases it');
+    });
   });
 
   group('Given subscriptions whose every listener has cancelled', () {
@@ -480,6 +569,39 @@ void main() {
       expect(seen, [_plaintext],
           reason: 'the earlier listener leaving must not end a subscription '
               'another caller holds and has yet to listen to');
+    });
+
+    test(
+        'when the same stream is listened to again, then it receives '
+        'notifications', () async {
+      final stream =
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true);
+      await stream.listen((_) {}).cancel();
+
+      final seen = <String?>[];
+      stream.listen((n) => seen.add(n.value));
+      await deliver(_frame(key));
+
+      expect(seen, [_plaintext],
+          reason: 'listening to a released subscription\'s stream again holds '
+              'it again');
+    });
+  });
+
+  group('Given a stream subscribe returned before the service stopped', () {
+    test('when it is listened to after the stop, then it ends', () async {
+      final stream =
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true);
+      service.stopAllSubscriptions();
+
+      var ended = false;
+      stream.listen((_) {}, onDone: () => ended = true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(ended, isTrue,
+          reason: 'a stopped service delivers nothing again, so a stream '
+              'listened to after the stop ends rather than waiting forever');
+      expect(service.getStreamListenersCount(), 0);
     });
   });
 
