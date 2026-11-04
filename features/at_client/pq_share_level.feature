@@ -24,9 +24,12 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
   with allowLegacyCryptoFallback: every send requires its <device>.sshnp, and
   a daemon advertising nothing there gets legacy through the fallback. The
   other is pqReady with allowLegacyCryptoFallback, which writes legacy by
-  default: per send, the program asks canSealTo, and requests the
-  namespace-key provider with sealToNamespace when it answers true, and
-  legacy otherwise.
+  default: per send, the program asks canSealTo, and sends with
+  sealToNamespace when it answers true, and legacy otherwise. A share with
+  sealToNamespace that names no provider is sealed with the namespace-key
+  provider wherever the client's config registers it, as pqReady and above
+  do; one whose config does not is refused, naming the posture or the
+  config.
   A key the recipient advertises, once found, is used for 15 minutes without
   a lookup, and for up to 15 minutes more, with a warning, while a re-fetch
   fails with anything but a not-found; one its atServer no longer has is
@@ -287,6 +290,21 @@ Feature: At pqActive, a share is sealed to the most specific namespace key the r
     Given canSealTo answered true for bob and d1.sshnp, and bob since withdrawing that key while still advertising sshnp
     When alice notifies bob of npt_request.d1.sshnp under the namespace-key provider, requiring d1.sshnp
     Then it is sent with legacy encryption, a warning names the fallback, and bob's sshnp key seals nothing
+
+  Scenario: At pqReady, a send requiring a namespace and naming no provider is sealed to the recipient's key there
+    Given a pqReady client and a recipient advertising a namespace key at "d1.sensor"
+    When it sends with sealToNamespace "d1.sensor" and no provider
+    Then the notification is sealed to that key and the recipient opens it
+
+  Scenario: At legacy, a share requiring a namespace and naming no provider is refused naming the posture
+    Given alice's client at legacy, and bob advertising a key for d1.sensor
+    When alice shares reading.d1.sensor with bob, requiring d1.sensor and naming no provider
+    Then the write throws ArgumentError naming legacy, and nothing is looked up
+
+  Scenario: A share requiring a namespace and naming no provider, under a config without the namespace-key provider, is refused naming the config
+    Given alice's client given a CryptoConfig that registers no namespace-key provider, and bob advertising a key for d1.sensor
+    When alice shares reading.d1.sensor with bob, requiring d1.sensor and naming no provider
+    Then the write throws ArgumentError naming the CryptoConfig, and nothing is looked up
 
   Scenario: The writer's copy is sealed to her key at her own level
     Given bob advertising notes.todos.demos, and alice holding a key for todos.demos

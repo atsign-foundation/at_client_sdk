@@ -152,6 +152,45 @@ void main() {
         reason: 'no client is left open');
   });
 
+  test('An atServer not reached names the atDirectory address and what failed',
+      () async {
+    const atSign = '@clioutagenamed';
+    await writeKeys(atSign);
+
+    await expectLater(
+        open(
+            atSign,
+            answering(() async => throw SecondaryConnectException(
+                'could not connect to the atServer'))),
+        throwsA(isA<SecondaryServerConnectivityException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('atDirectory 127.0.0.1:$port'),
+                contains('could not connect to the atServer')))));
+  });
+
+  test('A keyfile left with no credential is refused at once, and says so',
+      () async {
+    const atSign = '@clinocredential';
+    await FileAtKeysIo(filePath: (_) => keysPath).write(atSign, AtKeys());
+    var pkamAttempts = 0;
+    final err = _CapturedStderr();
+
+    await expectLater(
+        IOOverrides.runZoned(
+            () => open(
+                atSign,
+                answering(() async {
+                  pkamAttempts++;
+                  return true;
+                })),
+            stderr: () => err),
+        throwsA(isA<AtNoCredentialException>()));
+    expect(err.text, contains('holds no credential'),
+        reason: 'the program says why on stderr');
+    expect(pkamAttempts, 0, reason: 'no connection is attempted');
+  });
+
   group('Given a keyfile holding only its enrollment request', () {
     const atSign = approvingAtSign;
     late List<String> wrapped;
@@ -282,3 +321,15 @@ class _Captured implements Stdout {
 }
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
+
+class _CapturedStderr extends Fake implements Stdout {
+  final List<String> written = [];
+
+  String get text => written.join();
+
+  @override
+  void write(Object? object) => written.add('$object');
+
+  @override
+  void writeln([Object? object = '']) => written.add('$object\n');
+}

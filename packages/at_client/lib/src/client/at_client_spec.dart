@@ -18,9 +18,20 @@ import 'package:at_client/src/service/encryption_service.dart';
 
 /// Interface for a client application that can communicate with a secondary server.
 abstract class AtClient {
-  /// Returns a [RemoteSecondary] to communicate with user's cloud secondary server.
+  /// The connection this client sends verbs to its atServer on.
+  ///
+  /// You should not use this. If you have to, because nothing else does what
+  /// you need, please file a feature request at
+  /// https://github.com/atsign-foundation/at_client_sdk/issues so that there
+  /// is an alternative.
   RemoteSecondary? getRemoteSecondary();
 
+  /// The local store this client reads and writes first.
+  ///
+  /// You should not use this. If you have to, because nothing else does what
+  /// you need, please file a feature request at
+  /// https://github.com/atsign-foundation/at_client_sdk/issues so that there
+  /// is an alternative.
   LocalSecondary? getLocalSecondary();
 
   /// Stream of [DataEvent]s — `DataUpdated` for every successful local
@@ -108,9 +119,13 @@ abstract class AtClient {
   EnrollmentService? get enrollmentService;
 
   /// Sets the preferences this client reads, such as its namespace and its
-  /// post-quantum posture.
+  /// post-quantum posture. A client below its posture floor is raised to it
+  /// again, on its own copy of [preference].
   void setPreferences(AtClientPreference preference);
 
+  /// The preferences this client runs on. A client raised to its posture
+  /// floor runs on its own copy of the preference it was given, so a setting
+  /// changes through this or [setPreferences], not through that object.
   AtClientPreference? getPreferences();
 
   /// Whether [stop] has run.

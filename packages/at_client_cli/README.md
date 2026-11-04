@@ -88,13 +88,21 @@ The remaining commands run on the keyfile `-k` names (that one by default):
 what a client built for it does post-quantum (see the
 [at_client README](../at_client/README.md#post-quantum-cryptography)).
 An unnamed `--posture` is at_client's default on every command (`legacy`
-today), and `onboard` and `enroll` say which posture they ran at. Approving
+today), and `onboard` and `enroll` say so when they take it. Approving
 a post-quantum enrollment needs the post-quantum providers, so under `legacy`
 at_client refuses such an approval when it reads the request; pass
 `--posture pqReady` to approve one. `enroll --key-exchange legacy|pq`
 chooses how the enrollment's symmetric key travels, for the approver that
 will pick the request up; `pq` needs `--posture pqReady` or `pqActive`, since
 an rsa2048 enrollment with the pq key exchange is refused.
+
+On an atSign that has published any namespace key, enroll a device with
+`--posture pqReady` or above, so its approval conveys the namespace keys. A
+device enrolled at the legacy key exchange whose app runs at pqReady or above
+re-enrolls itself at its first start and asks the atSign's other enrollments
+for those keys, which only an enrollment online at the time can answer; one
+whose app runs legacy reads none of the atSign's post-quantum data. `approve`
+warns when it approves such a request, and approves it as asked.
 
 ## APKAM enrollment
 
@@ -162,7 +170,10 @@ A program that does not take `CLIBase`'s flags calls at_client's verbs
 itself. The one import carries them, since at_client_cli re-exports
 at_client's native API, its storage backends and mixins, the registrar and
 the logging handlers. `CliKeys` gives the verbs the keyfile and store a command-line
-program keeps:
+program keeps. Unless it sets `AtSignLogger.root_level`, such a program logs
+only the SDK's warnings, to stdout;
+`AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler()` sends them to
+stderr:
 
 ```dart
 import 'package:at_client_cli/at_client_cli.dart';

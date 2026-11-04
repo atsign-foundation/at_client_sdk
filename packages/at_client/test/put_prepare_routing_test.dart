@@ -10,18 +10,43 @@ import 'test_utils/transport.dart';
 
 /// Records the route a put hands the provider's prepare step, which is the
 /// route any record the provider writes there (a content key's conveyance)
-/// takes.
+/// takes, and the namespace it is required to seal to.
 class _PreparingProvider extends CryptoProvider implements PreparesWrites {
+  _PreparingProvider([this.id = 'preparing-provider']);
+
   @override
-  String get id => 'preparing-provider';
+  final String id;
 
   final List<bool?> routes = [];
+
+  final List<String?> sealedTo = [];
 
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
       {bool? useRemoteAtServer, String? sealToNamespace}) async {
     routes.add(useRemoteAtServer);
+    sealedTo.add(sealToNamespace);
   }
+
+  @override
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return value;
+  }
+
+  @override
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      value;
+}
+
+/// Stands in for the legacy provider, so a put routed to it is told by the
+/// provider id it is written under.
+class _Legacy extends CryptoProvider {
+  @override
+  String get id => legacyCryptoProviderId;
 
   @override
   Future<String> encrypt(
@@ -49,14 +74,16 @@ void main() {
     when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:1');
   });
 
-  Future<AtClientImpl> client(RemoteLocalPref remoteLocalPref) async {
+  Future<AtClientImpl> client(RemoteLocalPref remoteLocalPref,
+      {PqPosture posture = PqPosture.legacy, String? defaultProviderId}) async {
     final built = await AtClientImpl.create(
             '@alice',
             'wavi',
-            AtClientPreference()
+            AtClientPreference(posture: posture)
               ..remoteLocalPref = remoteLocalPref
               ..crypto = CryptoConfig(
-                  defaultProviderId: provider.id, providers: [provider]),
+                  defaultProviderId: defaultProviderId ?? provider.id,
+                  providers: [provider, _Legacy()]),
             lookUps: secureSocketLookUps(),
             secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor('@alice'),
@@ -92,5 +119,27 @@ void main() {
         putRequestOptions: PutRequestOptions()..useRemoteAtServer = true);
 
     expect(provider.routes, [true]);
+  });
+
+  test(
+      'a put requiring a namespace and naming no provider is written under the '
+      'namespace-key provider', () async {
+    provider = _PreparingProvider(symmetricAesGcmCryptoProviderId);
+    final atClient = await client(RemoteLocalPref.remoteOnly,
+        posture: PqPosture.pqReady, defaultProviderId: legacyCryptoProviderId);
+
+    await atClient.put(
+        AtKey.fromString('@bob:reading.d1.sensor@alice'), 'value',
+        putRequestOptions: PutRequestOptions()
+          ..useRemoteAtServer = true
+          ..sealToNamespace = 'd1.sensor');
+
+    expect(provider.sealedTo, ['d1.sensor']);
+    final sent = verify(() =>
+            remote.executeVerb(captureAny(that: isA<UpdateVerbBuilder>())))
+        .captured
+        .single as UpdateVerbBuilder;
+    expect(sent.atKey.metadata.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId);
   });
 }

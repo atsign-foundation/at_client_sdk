@@ -456,6 +456,12 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
   rebuild it with `PqPosture.pqActive` and roll that out.
 - A preference that names no posture rides the SDK's default: `legacy` in
   4.0, `pqReady` from a later 4.x and `pqActive` from 5.0.
+- A client never runs below its floor. A keyfile holding a namespace key's
+  private sets `pqReady`; an ML-DSA-65 data signing key sets `pqActive`.
+  Configured lower, the client logs a warning and is raised on
+  authentication, data signing, and reading and writing post-quantum. It
+  seeds no namespace keys and mints no signing root that its configured
+  posture would not, and `disallowLegacyEncryption` stays as configured.
 - Under `pqActive`, a client whose enrollment is granted `*` holds a
   namespace key only for `preference.namespace`; with none set it has nothing
   to write with. A collection's namespace therefore ends with `.` and
@@ -464,15 +470,19 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
   atServer (see **offline** below).
 - Under `pqActive`, a write made right after the client opens, before its
   start-up has published the namespace key, waits up to 30 seconds for it,
-  then throws `NamespaceKeyUnavailableException` naming that key.
+  then throws `NamespaceKeyUnavailableException` naming that key. One made
+  while start-up is yet to ask, or is asking, the atSign's other enrollments
+  for the key's private waits up to 30 seconds in all for the answer, then
+  throws `NskeyPrivateNotHeldException`.
 - A program whose peers are a mixed fleet, some advertising a namespace key
   and some not, builds `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
   false)` and sets `allowLegacyCryptoFallback`: each send requires the peer's
   namespace with `sealToNamespace`, and a peer advertising nothing there gets
   legacy encryption. A `pqReady` client with `allowLegacyCryptoFallback` can
-  instead ask `canSealTo` before each send and request
-  `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where it answers
-  true.
+  instead ask `canSealTo` before each send and send with `sealToNamespace`
+  where it answers true: with no `cryptoProviderId`, `sealToNamespace`
+  selects the namespace-key provider wherever the client's config registers
+  it, as `pqReady` and above do.
 - The at_client README's "Post-quantum cryptography" section has the full
   ladder and what each stage switches on.
 
@@ -497,13 +507,15 @@ await client.connection.attempt();                  // try again now
   The one refusal that **throws** (`AtOpenRefusedException`) is the first open
   of these keys on a device: nothing is held locally, so there is nothing to
   serve. Keys holding only a pending enrollment throw
-  `AtEnrollmentPendingException` — call `resumeEnrollment`.
+  `AtEnrollmentPendingException` — call `resumeEnrollment`. Keys holding
+  neither, as a denial, a cancel or an expiry leaves them, throw
+  `AtNoCredentialException` at once — enroll again.
 - **`stopped`**: what `current` reads after `stop()`; `changes` is done.
 
 **Services — both belong to the client, start with it and stop with it:**
 
 - `client.syncService` runs on its own: on every stats notification from the
-  atServer and every `syncIntervalMins`. `sync()` expedites a round,
+  atServer and on a 30-second timer. `sync()` expedites a round,
   `isInSync()` asks the atServer fresh, `addProgressListener` observes.
   at_client 4.0 removed the `AtClientManager` getters for these services.
 - `client.notificationService.subscribe(regex:, shouldDecrypt:)` — the monitor
@@ -596,7 +608,11 @@ atClient.notificationService
 ```
 
 `subscribeFiltered` matches `sample.my_app` and any id before it, decrypts
-each value, and drops a notification from any other sender. Plain
+each value, and drops a notification from any other sender, and one it
+cannot decrypt. Each drop is logged at warning and emitted on
+`notificationService.droppedEvents`. A notification a `legacy` client
+cannot open is lost; one configured `pqReady` or above reads the ones that
+follow. Plain
 `subscribe(regex:, shouldDecrypt:)` takes every sender, and its
 `shouldDecrypt` defaults to `false`, which hands back each value still
 encrypted.

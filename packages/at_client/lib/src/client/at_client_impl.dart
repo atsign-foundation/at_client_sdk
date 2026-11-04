@@ -29,6 +29,8 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeedOutcome, NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/posture_floor.dart';
+import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -69,6 +71,18 @@ class AtClientImpl implements AtClient {
   AtClientPreference? _preference;
 
   AtClientPreference? get preference => _preference;
+
+  /// The preference this client was given or last set, which [preference]
+  /// raises to [_postureFloor] where it is below it.
+  AtClientPreference? _configuredPreference;
+
+  /// The floor this client's start found its posture held to, or null.
+  PqPosture? _postureFloor;
+
+  /// The preference this client was given or last set, before its posture
+  /// floor raised anything; [preference] is what it runs on.
+  @internal
+  AtClientPreference? get configuredPreference => _configuredPreference;
   late final Atsign _atSign;
 
   @override
@@ -761,10 +775,7 @@ class AtClientImpl implements AtClient {
                 'storage, and a built client never changes storage. Pass the '
                 'storage it holds');
       }
-      refuseChangedRolloutAxes(
-          running: atClientImpl.getPreferences(),
-          asked: preferences,
-          cacheKey: cacheKey);
+      atClientImpl._refuseChangedRolloutAxes(preferences, cacheKey: cacheKey);
       await atClientImpl.start();
       // Re-using a cached AtClient skips _init. Adopt the supplied preference's
       // crypto config so providers (and a changed defaultProviderId) added
@@ -830,6 +841,7 @@ class AtClientImpl implements AtClient {
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
     _preference?.namespace ??= namespace;
+    _configuredPreference = preference;
     // If the app configured a process-wide network timeout, apply it as the
     // single default that bounds every atServer connect / atDirectory lookup /
     // operation. Only mutates the global when explicitly set, so the built-in
@@ -989,6 +1001,9 @@ class AtClientImpl implements AtClient {
     // Using ??= because we may be injecting a RemoteSecondary
     _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
 
+    // NOTE: before settling, which retrofits to the posture this sets.
+    await _applyPostureFloor();
+
     // NOTE: must run before anything deriving from the enrollment id is built.
     await _settleEnrollmentIdentity();
 
@@ -1003,8 +1018,9 @@ class AtClientImpl implements AtClient {
     // config's nskey providers read through the bootstrap's key ring, the same
     // ring the startup steps mint into and file from.
     //
-    // A stage that configures no post-quantum providers runs NONE of the
-    // startup: no wire write, no subscription, no change to the keyfile. Keyed
+    // A stage that, after the posture floor, configures no post-quantum
+    // providers runs NONE of the startup: no wire write, no subscription, no
+    // change to the keyfile. Keyed
     // on the axis rather than on `posture == PqPosture.legacy`, so a
     // deployment that builds its own posture with the providers off gets the
     // same client.
@@ -1012,6 +1028,8 @@ class AtClientImpl implements AtClient {
       this,
       keysIo: _atKeysIo,
       gates: _preference?.resolvedPqStartupGates ?? const PqStartupGates(),
+      createsSigningRoot:
+          _configuredPreference?.posture.configuresPqProviders ?? true,
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),
@@ -1485,14 +1503,32 @@ class AtClientImpl implements AtClient {
   /// call this — so accepting them here would leave the client *reporting* a
   /// stage it never applied.
   ///
-  /// Everything else is replaced, `crypto` included.
+  /// Everything else is replaced, `crypto` included. The axes are compared
+  /// with the preference this client was given and with the one it runs on,
+  /// which [getPreferences] returns, and the client goes on running at the
+  /// floor its start found.
   @override
   void setPreferences(AtClientPreference preference) {
-    refuseChangedRolloutAxes(
-        running: _preference,
-        asked: preference,
+    _refuseChangedRolloutAxes(preference,
         cacheKey: instanceKey('$_atSign', enrollmentId));
-    _preference = preference;
+    if (_configuredPreference?.rolloutDifferencesFrom(preference).isEmpty ??
+        true) {
+      _configuredPreference = preference;
+    }
+    final floor = _postureFloor;
+    _preference = floor == null ? preference : preference.raisedTo(floor);
+  }
+
+  /// Refuses [asked] unless its rollout axes match the preference this client
+  /// was given or, once its posture floor raised it, the one it runs on.
+  void _refuseChangedRolloutAxes(AtClientPreference asked,
+      {required String cacheKey}) {
+    if (_postureFloor != null &&
+        (_preference?.rolloutDifferencesFrom(asked).isEmpty ?? false)) {
+      return;
+    }
+    refuseChangedRolloutAxes(
+        running: _configuredPreference, asked: asked, cacheKey: cacheKey);
   }
 
   Future<bool> persistPrivateKey(String privateKey) async {
@@ -2036,8 +2072,9 @@ class AtClientImpl implements AtClient {
   /// posture asking for [wanted].
   ///
   /// **A posture is a floor, never a downgrade.** Key material wins, so
-  /// `PqPosture.legacy` means "do not drive an upgrade" rather than "return to
-  /// legacy", and cannot un-retrofit an atSign that has already moved.
+  /// `PqPosture.legacy` means "do not drive an upgrade beyond the floor its key
+  /// material sets" rather than "return to legacy", and cannot un-retrofit an
+  /// atSign that has already moved.
   ///
   /// "Stronger" is at_chops' own total order rather than a judgement made
   /// here: a signer and a verifier that disagreed about it would negotiate
@@ -2068,6 +2105,65 @@ class AtClientImpl implements AtClient {
             deviceName: '$firstEnrollmentDeviceName-${Uuid().v4()}',
             grants: const {'*': 'rw', '__manage': 'rw'},
           );
+
+  /// Raises this client's preference to the posture floor its enrollment's
+  /// key material sets, warning when that raises anything.
+  Future<void> _applyPostureFloor() async {
+    final configured = _preference!;
+    final AtKeys keys;
+    try {
+      keys = await _atKeysIo.read(_atSign);
+    } on Exception catch (e) {
+      _logger.warning('Could not read the keyfile, so $_atSign cannot tell '
+          'its posture floor and runs as configured: $e');
+      return;
+    }
+    final floor = floorOfKeyMaterial(
+        keys, enrollmentId ?? EnrollmentConstants.primaryEnrollmentId);
+    if (floor == null) return;
+    final raised = configured.raisedTo(floor);
+    if (identical(raised, configured)) return;
+    _postureFloor = floor;
+    _preference = raised;
+    final floorName =
+        identical(floor, PqPosture.pqActive) ? 'pqActive' : 'pqReady';
+    _logger.warning('$_atSign is configured ${postureName(configured.posture)} '
+        'and is raised to its $floorName floor, set by the key material its '
+        'enrollment holds: ${_raisedSettings(configured, raised).join(', ')}');
+  }
+
+  /// The settings [raised] runs differently from [configured].
+  static List<String> _raisedSettings(
+      AtClientPreference configured, AtClientPreference raised) {
+    String algorithms(Set<SigningAlgoType> set) =>
+        '{${set.map((a) => a.name).join(', ')}}';
+    return [
+      if (raised.authenticationKeyAlgorithm !=
+          configured.authenticationKeyAlgorithm)
+        'authenticationKeyAlgorithm ${raised.authenticationKeyAlgorithm.name}',
+      if (raised.dataSigningKeyAlgorithms.length !=
+              configured.dataSigningKeyAlgorithms.length ||
+          !raised.dataSigningKeyAlgorithms
+              .containsAll(configured.dataSigningKeyAlgorithms))
+        'dataSigningKeyAlgorithms '
+            '${algorithms(raised.dataSigningKeyAlgorithms)}',
+      for (final (name, before, after) in [
+        (
+          'configuresPqProviders',
+          configured.posture.configuresPqProviders,
+          raised.posture.configuresPqProviders
+        ),
+        (
+          'writesPqByDefault',
+          configured.posture.writesPqByDefault,
+          raised.posture.writesPqByDefault
+        ),
+      ])
+        if (before != after) '$name $after',
+      if (raised.posture.keyExchangeMode != configured.posture.keyExchangeMode)
+        'keyExchangeMode ${raised.posture.keyExchangeMode.name}',
+    ];
+  }
 
   /// Settles the enrollment this client runs as, before anything that derives
   /// from it is built.

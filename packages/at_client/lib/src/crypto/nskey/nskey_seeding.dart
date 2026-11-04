@@ -598,7 +598,8 @@ class NskeySeeding {
                 _logger.info('No holder answered for $name in '
                     '$owner:$namespace within the wait; a later answer is '
                     'filed as it arrives ($e)');
-              }));
+              }),
+              atStartUp: true);
         }
       } catch (e) {
         if (e is StoppedException) rethrow;

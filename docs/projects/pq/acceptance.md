@@ -963,7 +963,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** when an own advertisement the client holds names G1, it fetches the conveyance
   records addressed to it from the atServer, files the private one carries, and the write
   is sealed to G1, or the read opens.
-- **Then:** when none it holds names G1, it first reads
+- **Then:** when none it holds names G1, and the record that names G1 is not one `@alice`
+  wrote, it first reads
   `public:__nskey.app_1.my_apps@alice` from the atServer, at most once per `askCooldown`
   (5 s) per namespace, and only in a namespace whose own advertisement it holds, whose
   nskey private its keyfile holds, or which this enrollment's own grants name as its
@@ -971,11 +972,21 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   that cannot reach the atServer is tried again by the first miss after the cooldown,
   and with G1 still unnamed the client neither fetches nor asks, and the miss fails as
   below.
+- **Then:** when `@alice` wrote the record that names G1, the client reads no
+  advertisement: in a namespace it knows by any of those three routes, it fetches its own
+  conveyance records and then asks for G1 as for a generation an own advertisement names,
+  under the same cooldowns. So an enrollment that re-enrolled itself after a rotation
+  reads what `@alice` wrote before it, once an enrollment still holding G1 answers. A
+  record another atSign sealed naming a generation no own advertisement names is refused
+  with no fetch and no ask.
 - **Then:** with no record waiting, it asks the other enrollments for G1's private.
 - **Then:** the put then fails with `NskeyPrivateNotHeldException`, saying the private key
   for `@alice:app_1.my_apps` generation G1 has not yet been conveyed to this enrollment; a
   read fails with `NskeyPrivateUnavailableException`, the type a parked notification is
-  re-driven on.
+  re-driven on. A put made while the client's start-up is yet to ask for G1, or is waiting
+  for the answer to its own ask, first waits for that ask and its answer, at most
+  `StartUpSeeding.wait` (30 s) in all, and goes on once it is filed; an ask a miss made
+  does not hold a put up.
 - **Then:** concurrent misses share one fetch, whichever generations they name.
 - **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch does not fetch again,
   whichever generation it names, and the startup collection does not start that
@@ -997,7 +1008,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   shared record names its own namespace and generation, so what a miss costs the atServer
   is bounded by what this atSign holds, grants and advertises: nothing for a namespace the
   client holds nothing for and is not granted, one read per cooldown for a generation not
-  advertised, and one fetch per cooldown and one ask per wait for one that is.
+  advertised, and one fetch per cooldown and one ask per wait for one that is. A record
+  `@alice` wrote can name only a generation one of `@alice`'s own enrollments minted, so
+  treating its generation as advertised keeps that bound, while a record another atSign
+  sealed costs no more than the read.
 - **Impl/verify:** unit rows in `packages/at_client/test/nskey_private_fetch_test.dart`,
   `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live,
   `tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart`.
@@ -4588,8 +4602,9 @@ Threats, answered for the whole set:
   spelled in the bare form. The control is `PqPosture.legacy`, where an empty
   set is exactly what the posture means and is accepted.
   *And* an explicit **`authenticationKeyAlgorithm` weaker than the posture
-  names is refused**: a posture is a floor, and an app that must not move names
-  `PqPosture.legacy` rather than weakening an axis of a stronger posture.
+  names is refused**: a posture is a floor, and an app that wants less names
+  `PqPosture.legacy` rather than weakening an axis of a stronger posture, and
+  is still raised to the floor its own key material sets.
 
   ⚠️ **The floor rule reads ONE axis.** A `dataSigningKeyAlgorithms` weaker
   than the posture names

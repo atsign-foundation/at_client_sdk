@@ -2359,12 +2359,15 @@ them.
 The value is composed client-side and travels on `EnrollParams.apsk`. The
 atServer stores it verbatim on the enrollment record, writes its JSON encoding
 unaltered at approval, and rewrites it when `enroll:update` carries a new one.
-Absent means no `_apsk` is published at all. Capped by the atServer at 20KB
-encoded; a longer value is refused rather than truncated.
+Absent means no `_apsk` is published at all. The atServer limits the whole
+enrollment record, `_apsk` included, to 500 KB, and refuses a record that
+would exceed it rather than truncating it.
 
 **No mint ever withdraws a key, and that is what makes the advertisement safe to
 read at any moment.** A mint adds the algorithms the in-use set names and the
-enrollment lacks, and retires the ones it no longer names — and a retired entry
+enrollment lacks, and retires the ones it no longer names, except that a held
+key stronger than every algorithm the set names stays active and, while one is
+held, nothing is minted — and a retired entry
 stays advertised, because `SigningKeyMinting._publish` composes `withdrawn` from
 the keys being retired *plus* everything the keyfile already records as
 withdrawn, and `verifyEnvelope` tries every advertised key for the resolved
@@ -2863,8 +2866,37 @@ Both are constructor refusals in `AtClientPreference`, and both narrow
 - **No axis may be weaker than the posture it is named against.** A posture is
   a floor; an override lowering an axis below it is what a floor prevents.
   Left legal, deliberately: a `dataSigningKeyAlgorithms` weaker than the
-  posture names, which mints rsa2048 and keeps `_apsk` bare — coherent, and not
-  extended without a ruling.
+  posture names. An enrollment holding no stronger client data signing key
+  mints rsa2048 and keeps `_apsk` bare; one holding an ML-DSA-65 key keeps it
+  active and mints nothing, because key material wins.
+- **A client never runs below its floor.** The floor is what its enrollment's
+  key material sets: `pqActive` for an active ML-DSA-65 client data signing
+  key, and `pqReady` for any namespace-key private. A start configured below it
+  warns and is raised per setting: `authenticationKeyAlgorithm`, the strongest
+  of `dataSigningKeyAlgorithms`, `configuresPqProviders`, `writesPqByDefault`,
+  and `keyExchangeMode`. `seedNamespaceKeys`, `disallowLegacyEncryption`,
+  `mintLegacyMaterial`, `sealsToKeyAlgorithms`, `keyEstablishmentAlgorithms`
+  and the `allowLegacyCryptoFallback` preference stay as configured. The floor
+  is derived from the keyfile at every start and never stored, so a start with
+  no atServer applies it too.
+  - Seeding and the signing root are never raised: each publishes a permanent
+    record for the atSign that the client's configuration did not ask for. A
+    raised client seeds no namespace keys and mints no signing root that its
+    configured posture would not, and still reaches its atSign's keys and the
+    root's private by conveyance or by asking. Built first without the root
+    half, a raised fully privileged client minted the atSign's root at start,
+    leaving its private in the keyfile of an app configured legacy.
+  - Built and withdrawn for 4.0: a second input from what the atSign
+    advertises, `pqReady` for any `public:__nskey.*` it publishes itself, read
+    by one authenticated scan at start and recorded in the keyfile so a start
+    with no atServer kept it. The live packs showed it raising every legacy
+    client of an atSign once any client published a namespace key: 160 raises
+    in one functional run, with 61 functional and 19 end-to-end failures, the
+    end-to-end ones from raised clients seeding and stranding a namespace's
+    mint lock. It is deferred until after 4.0.
+  - Rejected: raising a named stage to the whole higher stage, which would
+    make a `pqReady` client at a `pqActive` floor refuse writes to a
+    destination with no namespace key.
 
 #### 9.8.6 A pre-enrollment atSign retrofits into a first enrollment
 

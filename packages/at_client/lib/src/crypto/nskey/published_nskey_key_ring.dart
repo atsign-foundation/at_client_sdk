@@ -1,4 +1,4 @@
-import 'dart:async' show StreamSubscription, unawaited;
+import 'dart:async' show Completer, StreamSubscription, unawaited;
 import 'dart:convert' show jsonDecode, jsonEncode;
 import 'dart:typed_data' show Uint8List;
 
@@ -250,7 +250,11 @@ typedef NskeyAfterPublish = Future<NskeyAdvertisement?> Function(
 /// secret-sharing substrate is what supplies them to an enrollment that did
 /// not run [mintAndPublish] itself.
 class PublishedNskeyKeyRing
-    implements NskeyKeyRing, LooksUpLevelsTogether, SignalsPrivateFiling {
+    implements
+        NskeyKeyRing,
+        LooksUpLevelsTogether,
+        SignalsPrivateFiling,
+        AwaitsStartUpAsk {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
 
@@ -325,7 +329,8 @@ class PublishedNskeyKeyRing
   }
 
   /// Broadcasts a pull request for a missing own-atSign private, when
-  /// [privateHalf] comes up empty for a generation this atSign has published.
+  /// [privateHalf] comes up empty for a generation this atSign has published,
+  /// or one named by a record this atSign wrote.
   ///
   /// The request is store-and-forward: any current holder answers when it next
   /// runs, and whoever supplies this owns waiting for the answer and filing it
@@ -366,6 +371,10 @@ class PublishedNskeyKeyRing
 
   /// The asks whose answer is still awaited, by whichever route they went out.
   final Map<_OwnGeneration, Future<void>> _outstanding = {};
+
+  /// Those of [_outstanding] the client's start-up made, keyed with the
+  /// namespace folded.
+  final Map<_OwnGeneration, Future<void>> _startUpAsks = {};
 
   /// How many namespaces this ring asked about within the last [askCooldown].
   @visibleForTesting
@@ -1039,7 +1048,10 @@ class PublishedNskeyKeyRing
       if (failure != null) {
         final stale = _withinGrace(_remote[scope],
             owner: owner, namespace: namespace, failure: failure);
-        if (stale == null) throw failure;
+        if (stale == null) {
+          Error.throwWithStackTrace(
+              failure, answer.stack ?? StackTrace.current);
+        }
         return (namespace: namespace, advertisement: stale);
       }
       final payload = answer.payload;
@@ -1091,15 +1103,15 @@ class PublishedNskeyKeyRing
 
   /// What [owner] publishes at each of [namespaces], read from the atServer
   /// in one batch: each one's advertisement bytes, a null payload where the
-  /// atServer has none, or the failure that kept it from saying which.
-  Future<Map<String, ({String? payload, Object? failure})>> _publishedAt(
-      String owner, List<String> namespaces) async {
-    Map<String, ({String? payload, Object? failure})> failingAll(
-            Object failure) =>
-        {
-          for (final namespace in namespaces)
-            namespace: (payload: null, failure: failure)
-        };
+  /// atServer has none, or the failure that kept it from saying which, with
+  /// the stack it was raised with when it was caught here.
+  Future<Map<String, ({String? payload, Object? failure, StackTrace? stack})>>
+      _publishedAt(String owner, List<String> namespaces) async {
+    Map<String, ({String? payload, Object? failure, StackTrace? stack})>
+        failingAll(Object failure, [StackTrace? stack]) => {
+              for (final namespace in namespaces)
+                namespace: (payload: null, failure: failure, stack: stack)
+            };
     final remote = _atClient.getRemoteSecondary();
     if (remote == null) {
       return failingAll(
@@ -1125,14 +1137,15 @@ class PublishedNskeyKeyRing
       entries = jsonDecode((answer ?? '').replaceFirst(RegExp('^data:'), ''));
     } on StoppedException {
       rethrow;
-    } on Exception catch (e) {
-      return failingAll(e);
+    } on Exception catch (e, stack) {
+      return failingAll(e, stack);
     }
     if (entries is! List) {
       return failingAll(AtException('the batch of lookups of $owner\'s '
           'namespace keys was answered with something other than a list'));
     }
-    final published = <String, ({String? payload, Object? failure})>{};
+    final published =
+        <String, ({String? payload, Object? failure, StackTrace? stack})>{};
     for (final entry in entries) {
       final id = entry is Map ? entry['id'] : null;
       final response = entry is Map ? entry['response'] : null;
@@ -1149,16 +1162,17 @@ class PublishedNskeyKeyRing
       }
       final value = record is Map ? record['data'] : null;
       published[namespaces[id]] = value is String
-          ? (payload: value, failure: null)
+          ? (payload: value, failure: null, stack: null)
           : code == 'AT0015'
-              ? (payload: null, failure: null)
+              ? (payload: null, failure: null, stack: null)
               : (
                   payload: null,
                   failure: code is String
                       ? AtExceptionUtils.get(
                           code, '${response['error_message'] ?? code}')
                       : AtException('the lookup of $owner\'s namespace key '
-                          'at ${namespaces[id]} was answered with no data')
+                          'at ${namespaces[id]} was answered with no data'),
+                  stack: null
                 );
     }
     for (final namespace in namespaces) {
@@ -1167,7 +1181,8 @@ class PublishedNskeyKeyRing
           () => (
                 payload: null,
                 failure: AtException('the batch gave no answer for the '
-                    'lookup of $owner\'s namespace key at $namespace')
+                    'lookup of $owner\'s namespace key at $namespace'),
+                stack: null
               ));
     }
     return published;
@@ -1383,15 +1398,22 @@ class PublishedNskeyKeyRing
     return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
   }
 
+  /// A miss on an own generation fetches this enrollment's conveyance records
+  /// and then asks the other enrollments, when an own advertisement names the
+  /// generation, or when this atSign wrote the record ([writtenBy]) in a
+  /// namespace [_knowsOwn] accepts.
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-      String owner, String namespace, String nskeyKid) async {
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy}) async {
     final held = await heldPrivateHalf(owner, namespace, nskeyKid);
     if (held != null || !_isOwn(owner)) return held;
     if (!_askOnReadMiss) return null;
 
-    // NOTE: no fetch and no ask for a generation no own advertisement names.
-    if (!await _advertisedOwn(namespace, nskeyKid)) return null;
+    // NOTE: no fetch and no ask for a generation no own advertisement names,
+    // unless this atSign wrote the record that names it.
+    final ownRecord = _isOwn(writtenBy) && await _knowsOwn(namespace);
+    if (!ownRecord && !await _advertisedOwn(namespace, nskeyKid)) return null;
 
     await _fetchOnMiss(namespace, nskeyKid).timeout(fetchOnMissTimeout,
         onTimeout: () => _logger.info('The fetch of the conveyance records '
@@ -1688,16 +1710,43 @@ class PublishedNskeyKeyRing
 
   /// Records an ask for `(namespace, nskeyKid)` whose answer is awaited until
   /// [outstanding] completes, so a read miss meanwhile asks nothing more.
+  /// [atStartUp] marks the client's start-up as the asker, the one ask a
+  /// write that misses waits for.
   @internal
   void noteOutstandingAsk(
-      String namespace, String nskeyKid, Future<void> outstanding) {
+      String namespace, String nskeyKid, Future<void> outstanding,
+      {bool atStartUp = false}) {
     final generation = (namespace: namespace, nskeyKid: nskeyKid);
+    final folded = (namespace: namespace.toLowerCase(), nskeyKid: nskeyKid);
     _askedAt[generation] = DateTime.now();
     _outstanding[generation] = outstanding;
+    if (atStartUp) _startUpAsks[folded] = outstanding;
     unawaited(outstanding.then((_) {}, onError: (Object _) {}).whenComplete(() {
       if (identical(_outstanding[generation], outstanding)) {
         _outstanding.remove(generation);
       }
+      if (identical(_startUpAsks[folded], outstanding)) {
+        _startUpAsks.remove(folded);
+      }
     }));
   }
+
+  @override
+  Future<void>? startUpAskFor(String namespace, String nskeyKid) =>
+      _startUpAsks[(namespace: namespace.toLowerCase(), nskeyKid: nskeyKid)];
+
+  Completer<void>? _startUpAsking;
+
+  /// This client's start-up is to ask for the own privates it lacks, until
+  /// [startUpAsked].
+  void startUpWillAsk() => _startUpAsking ??= Completer<void>();
+
+  /// This client's start-up has made its asks, or will make none.
+  void startUpAsked() {
+    final asking = _startUpAsking;
+    if (asking != null && !asking.isCompleted) asking.complete();
+  }
+
+  @override
+  Future<void>? get startUpAsksPending => _startUpAsking?.future;
 }

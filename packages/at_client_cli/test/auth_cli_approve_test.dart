@@ -47,7 +47,10 @@ void main() {
 
   /// Serves B as pending until it is approved, then with [statusAfter] and
   /// [expiresAt], or with no expiresAt at all when that is null.
-  void serveB({String? expiresAt, String statusAfter = 'approved'}) {
+  void serveB(
+      {String? expiresAt,
+      String statusAfter = 'approved',
+      Map<String, dynamic> request = const {}}) {
     client = _MockAtClient();
     service = _MockEnrollmentService();
     approvals = [];
@@ -64,6 +67,7 @@ void main() {
                 'apkamKeysExpiryInMillis': 3600000,
                 if (approvals.isNotEmpty && expiresAt != null)
                   'expiresAt': expiresAt,
+                ...request,
               })
                 ..enrollmentId = b
             ]);
@@ -257,5 +261,106 @@ void main() {
       expect(err.text, contains('$a.new.enrollments.__manage@alice'),
           reason: 'the failed approval is reported');
     }, timeout: const Timeout(Duration(seconds: 5)));
+  });
+
+  group('Given @alice publishes a namespace key of its own', () {
+    /// [keys] are on @alice's atServer. at_activate's client never syncs, so
+    /// its local store holds none of them, and a scan that does not show
+    /// hidden keys omits every `public:_` one, so only a remote scan showing
+    /// hidden keys finds them, and only those its regex matches.
+    void publishing(List<String> Function() keys) => when(() => client.getKeys(
+                regex: any(named: 'regex'),
+                showHiddenKeys: any(named: 'showHiddenKeys'),
+                useRemoteAtServer: any(named: 'useRemoteAtServer')))
+            .thenAnswer((invocation) async {
+          final named = invocation.namedArguments;
+          if (named[#useRemoteAtServer] != true ||
+              named[#showHiddenKeys] != true) {
+            return <String>[];
+          }
+          final regex = named[#regex] as String?;
+          return [
+            for (final key in keys())
+              if (regex == null || RegExp(regex).hasMatch(key)) key
+          ];
+        });
+
+    /// Runs `at_activate approve` for B and hands back what it printed to
+    /// stderr.
+    Future<String> approveB() async {
+      final args = AuthCliArgs().createApproveCommandParser().parse(
+          ['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
+      final out = _CapturedStdout();
+      final err = _CapturedStdout();
+      await IOOverrides.runZoned(() => auth_cli.approve(args, client),
+          stdout: () => out, stderr: () => err);
+      return err.text;
+    }
+
+    const legacyExchange = {'encryptedAPKAMSymmetricKey': 'd3JhcHBlZA=='};
+
+    test(
+        'Approving a request at the legacy key exchange on an atSign that '
+        'publishes a namespace key warns', () async {
+      serveB(request: legacyExchange);
+      publishing(() => ['public:__nskey.wavi@alice']);
+
+      final warned = await approveB();
+
+      expect(warned, contains('approving it conveys none of '),
+          reason: 'it says the approval conveys no namespace key');
+      expect(warned,
+          contains('run at pqReady or above, it re-enrolls at its first start'),
+          reason: 'and what the device does at each posture');
+      expect(warned, contains('request again with --posture pqReady'),
+          reason: 'and how to convey them');
+      final revoke = RegExp(r'revoke it with `at_activate revoke ([^`]*)`')
+          .firstMatch(warned)
+          ?.group(1);
+      expect(revoke, isNotNull,
+          reason: 'naming the step that still applies once it is approved');
+      final parsed = AuthCliArgs()
+          .createParserForCommand(AuthCliCommand.revoke)
+          .parse(revoke!.split(' '));
+      expect(parsed[AuthCliArgs.argNameAtSign], '@alice',
+          reason: 'a revoke command at_activate accepts as printed');
+      expect(parsed[AuthCliArgs.argNameEnrollmentId], b);
+      expect(warned, isNot(contains('deny it')),
+          reason: 'a deny finds nothing pending once approve has run');
+      expect(warned.trimRight(), endsWith('Approving as asked.'));
+      expect(approvals, [b], reason: 'and approves the request as asked');
+    });
+
+    test('a request at the pq key exchange is approved without the warning',
+        () async {
+      serveB(request: {
+        'metadata': {'keyPackage': 'signed-envelope'}
+      });
+      publishing(() => ['public:__nskey.wavi@alice']);
+
+      expect(await approveB(), isNot(contains('legacy key exchange')));
+      expect(approvals, [b]);
+    });
+
+    test(
+        'an atSign holding only a cached copy of another atSign\'s key '
+        'approves without the warning', () async {
+      serveB(request: legacyExchange);
+      publishing(
+          () => ['cached:public:__nskey.wavi@bob', 'public:__nskey.wavi@bob']);
+
+      expect(await approveB(), isNot(contains('legacy key exchange')));
+      expect(approvals, [b]);
+    });
+
+    test(
+        'an atSign whose namespace keys cannot be read approves without the '
+        'warning', () async {
+      serveB(request: legacyExchange);
+      publishing(() => throw AtException('the atServer cannot be reached'));
+
+      expect(await approveB(), isNot(contains('legacy key exchange')));
+      expect(approvals, [b]);
+    });
   });
 }

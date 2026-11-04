@@ -153,12 +153,7 @@ class NotificationServiceImpl extends NotificationService {
   final StreamController<DroppedNotification> _droppedController =
       StreamController<DroppedNotification>.broadcast();
 
-  /// Emits every notification this service gives up on without delivering
-  /// it, with the reason it logs.
-  ///
-  /// A dropped notification is otherwise indistinguishable to a subscriber
-  /// from one that was never sent. Broadcast, and it does not replay.
-  @visibleForTesting
+  @override
   Stream<DroppedNotification> get droppedEvents => _droppedController.stream;
 
   /// Logs [reason] at `warning` and emits it on [droppedEvents] for [key].
@@ -1246,11 +1241,6 @@ class NotificationServiceImpl extends NotificationService {
 /// Holds the subscriber's [StreamController] rather than looking one up at
 /// re-drive time, so a value cannot be handed to a controller other than the
 /// one its subscriber registered.
-/// A notification [NotificationServiceImpl.droppedEvents] reports as given up
-/// on: its key, empty when the frame could not be parsed into one, and the
-/// reason logged for it.
-typedef DroppedNotification = ({String key, String reason});
-
 class _ParkedNotification {
   final AtNotification notification;
   final NotificationConfig config;

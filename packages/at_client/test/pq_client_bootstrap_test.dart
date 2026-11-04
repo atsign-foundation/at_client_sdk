@@ -232,6 +232,70 @@ void main() {
       expect(swept, 0, reason: 'an unprivileged client must not sweep');
     });
 
+    test(
+        "start-up's asks are pending from its start until its ask step has "
+        'run', () async {
+      final keysIo = MockAtKeysIo();
+      final readGate = Completer<Never>();
+      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
+      final sweeping = Completer<void>();
+      final sweepGate = Completer<int>();
+      final bootstrap = build(
+          keysIo: keysIo,
+          privilege: _FakePrivilege(true),
+          sweep: () {
+            sweeping.complete();
+            return sweepGate.future;
+          });
+      expect(bootstrap.ring.startUpAsksPending, isNull,
+          reason: 'nothing is pending before start-up begins');
+
+      final startup = bootstrap.startup();
+      final pending = bootstrap.ring.startUpAsksPending;
+      expect(pending, isNotNull, reason: 'pending from its first step');
+      var asked = false;
+      unawaited(pending!.then((_) => asked = true));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(asked, isFalse,
+          reason: 'its first step is parked, so it has yet to ask');
+
+      readGate.completeError(Exception('the test releases the parked read'));
+      await sweeping.future.timeout(const Duration(seconds: 5));
+      await Future<void>.delayed(Duration.zero);
+      expect(asked, isTrue,
+          reason: 'done once its ask step has run, while a later step is '
+              'still parked');
+      sweepGate.complete(0);
+      await startup;
+    });
+
+    test('a start-up that will not ask leaves nothing pending', () async {
+      final bootstrap =
+          build(keysIo: MockAtKeysIo(), gates: const PqStartupGates.inert());
+
+      await bootstrap.startup();
+
+      expect(bootstrap.ring.startUpAsksPending, isNull);
+    });
+
+    test("stop() ends what start-up's asks hold up", () async {
+      final keysIo = MockAtKeysIo();
+      final readGate = Completer<Never>();
+      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
+      final bootstrap = build(keysIo: keysIo);
+      final startup = bootstrap.startup();
+      var asked = false;
+      unawaited(bootstrap.ring.startUpAsksPending!.then((_) => asked = true));
+
+      bootstrap.stop();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(asked, isTrue,
+          reason: 'a write waiting on start-up\'s asks is let go at once');
+      readGate.completeError(Exception('the test releases the parked read'));
+      await startup;
+    });
+
     test('stop() between steps halts the startup', () async {
       // Parks the first step: hydration reads the keyfile, so the read's
       // future is this test's hold on the sequence.
@@ -408,6 +472,49 @@ void main() {
       expect(written, contains(PqSigningRoot.recordName),
           reason: 'the pair this enrollment filed is the root, and nothing '
               'else on a start would ever publish it');
+    });
+
+    test(
+        'a privileged start that may not create the signing root publishes '
+        'none a stop kept from publishing', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write('@bootstrap🛠', AtKeys());
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      await PqSigningRoot(client, keysIo: keysIo)
+          .store('@bootstrap🛠', pair.secretKey, public: pair.publicKey);
+      final remote = MockRemoteSecondary();
+      final lookUp = MockAtLookUp();
+      final written = <String>[];
+      when(() => client.getRemoteSecondary()).thenReturn(remote);
+      when(() => remote.atLookUp).thenReturn(lookUp);
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
+        final builder = inv.positionalArguments[0];
+        if (builder is UpdateVerbBuilder) written.add(builder.atKey.key);
+        return 'data:1';
+      });
+
+      await PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+        createsSigningRoot: false,
+        gates: const PqStartupGates(
+          hydrateHeldSecrets: false,
+          collectConveyedKeys: false,
+          startEnvelopeListener: false,
+          mintInUseSigningKeys: false,
+          reconcileKeyPackage: false,
+          seedNamespaceKeys: false,
+          requestMissingPrivates: false,
+          anchorOwnKeys: false,
+          sweepUnanchoredEnrollments: false,
+          reconcileEnrollmentSnapshot: false,
+          askOnReadMiss: false,
+        ),
+      ).startup();
+
+      expect(written, isNot(contains(PqSigningRoot.recordName)));
     });
 
     test(

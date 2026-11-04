@@ -5,8 +5,12 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/backends/crypto_backends.dart'
     show xWingKem;
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show heldOwnAfterStartUpAsk;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show requireRecordAtSign, requireRecordKid, requireRecordNamespace;
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart'
+    show StartUpSeeding;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
@@ -200,10 +204,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       // derives. A peer's private is never held, so a share can rest only on
       // the advertisement's signature.
       if (nskeyOwner == context.atClient.getCurrentAtSign()) {
-        final held =
-            await keyRing.privateHalf(nskeyOwner, namespace, usable.kid) == null
-                ? null
-                : await keyRing.heldPublic(nskeyOwner, namespace, usable.kid);
+        final held = await heldOwnAfterStartUpAsk(
+            keyRing, nskeyOwner, namespace, usable.kid,
+            until: StartUpSeeding.boundFromNow());
         if (held == null) {
           throw NskeyPrivateNotHeldException(nskeyOwner, namespace, usable.kid);
         }
@@ -287,7 +290,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     }
     requireRecordKid(nskeyKid, 'nskeyKid');
 
-    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid);
+    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid,
+        writtenBy: _recordOwnerOf(atKey));
     if (private == null) {
       // NOTE: the notification service parks on this type and re-drives it when
       // the private is filed, so the retry must not depend on the wording.

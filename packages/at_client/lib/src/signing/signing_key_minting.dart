@@ -27,7 +27,10 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 /// Brings an enrollment's signing keys into line with
 /// [AtClientPreference.dataSigningKeyAlgorithms] — minting one for every
 /// algorithm the set names and the enrollment does not hold, and retiring
-/// every one it holds that the set no longer names.
+/// every one it holds that the set no longer names. A held key stronger than
+/// every algorithm the set names is the exception: it stays active, and while
+/// the enrollment holds one nothing is minted, so a weaker set never
+/// downgrades it.
 ///
 /// A key is filed before it is published, so a stop between the two leaves
 /// the keyfile holding it and the next start's `_apsk` republish advertises
@@ -55,6 +58,8 @@ class SigningKeyMinting with ApkamSigning {
   /// Mints, advertises and files what the in-use set names and the enrollment
   /// lacks; retires what it holds and the set no longer names, leaving a
   /// retired key advertised so that what it already signed still verifies.
+  /// A held key stronger than every algorithm the set names is neither retired
+  /// nor joined by a minted one.
   ///
   /// Returns both lists, each empty when there was nothing to do — as with an
   /// empty in-use set, which is inert, or a client with no key source.
@@ -84,24 +89,42 @@ class SigningKeyMinting with ApkamSigning {
     // from ever being minted.
     final authenticationIsAlsoTheSigningKey = held.isEmpty &&
         (await authenticationSigningKey)?.algorithm == SigningAlgoType.rsa2048;
+    // NOTE: a posture never downgrades a held key. One stronger than every
+    // algorithm the set names stays active, and while one is held nothing is
+    // minted.
+    final strongestWanted = SigningAlgoType.strongestOf(wanted)!;
+    bool inService(SigningAlgoType algorithm) =>
+        wanted.contains(algorithm) || _outranks(algorithm, strongestWanted);
+    final stronger = [
+      for (final key in held)
+        if (_outranks(key.algorithm, strongestWanted)) key.algorithm
+    ];
     final missing = [
-      for (final algorithm in SigningAlgoType.strongestFirst)
-        if (wanted.contains(algorithm) &&
-            !held.any((key) => key.algorithm == algorithm) &&
-            !(authenticationIsAlsoTheSigningKey &&
-                algorithm == SigningAlgoType.rsa2048))
-          algorithm
+      if (stronger.isEmpty)
+        for (final algorithm in SigningAlgoType.strongestFirst)
+          if (wanted.contains(algorithm) &&
+              !held.any((key) => key.algorithm == algorithm) &&
+              !(authenticationIsAlsoTheSigningKey &&
+                  algorithm == SigningAlgoType.rsa2048))
+            algorithm
     ];
     final superseded = [
       for (final key in held)
-        if (!wanted.contains(key.algorithm)) key
+        if (!inService(key.algorithm)) key
     ];
+    if (stronger.isNotEmpty) {
+      logger.info('Keeping the ${stronger.map((a) => a.name).join(', ')} '
+          'client data signing key(s) of $enrollmentId active and minting '
+          'nothing for the in-use set '
+          '{${wanted.map((a) => a.name).join(', ')}}: a held key stronger than '
+          'everything the set names is never downgraded');
+    }
     if (missing.isEmpty && superseded.isEmpty) return nothing;
 
     final minted = [for (final algorithm in missing) await _mint(algorithm)];
     final keeping = [
       for (final key in held)
-        if (wanted.contains(key.algorithm)) key
+        if (inService(key.algorithm)) key
     ];
     if (missing.isNotEmpty) {
       logger.info('Minted ${missing.map((a) => a.name).join(', ')} signing '
@@ -237,6 +260,12 @@ class SigningKeyMinting with ApkamSigning {
       await _retire(io, atSign, key.algorithm);
     }
   }
+
+  /// Whether [algorithm] comes before [other] in
+  /// [SigningAlgoType.strongestFirst].
+  static bool _outranks(SigningAlgoType algorithm, SigningAlgoType other) =>
+      SigningAlgoType.strongestFirst.indexOf(algorithm) <
+      SigningAlgoType.strongestFirst.indexOf(other);
 
   /// [keys] ordered by [SigningAlgoType.strongestFirst], the order an
   /// advertisement lists them in.

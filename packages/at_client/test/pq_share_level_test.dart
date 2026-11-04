@@ -592,6 +592,112 @@ void main() {
     });
   });
 
+  group('Given a share requiring a namespace that names no provider', () {
+    /// Alice's client at [posture], given [crypto] when the app names one.
+    void at(PqPosture posture, {CryptoConfig? crypto}) {
+      atClient = MockAtClient(posture: posture);
+      when(() => atClient.getCurrentAtSign()).thenReturn(_alice);
+      atClient.getPreferences().namespace = 'sensor';
+      if (crypto != null) atClient.getPreferences().crypto = crypto;
+      context = CryptoContext(atClient: atClient);
+    }
+
+    /// A notification of [key] requiring d1.sensor, naming no provider.
+    Future<NotifyVerbBuilder> send(AtKey key) {
+      key.metadata.isEncrypted = true;
+      return NotificationRequestTransformer(atClient).transform(
+          NotificationParams.forUpdate(key,
+              value: 'memo', sealToNamespace: 'd1.sensor'));
+    }
+
+    test(
+        'At pqReady, a send requiring a namespace and naming no provider is '
+        "sealed to the recipient's key there", () async {
+      final pair = await XWingKeyPair.generate();
+      final c = _Client(_Ring());
+      final bobs = c.ring
+          .seedPublicOnly(_bob, 'd1.sensor', publicKey: pair.publicKeyBytes);
+      final bob = _Client(_Ring()
+        ..seedKeypair(_bob, 'd1.sensor',
+            publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes));
+      at(PqPosture.pqReady,
+          crypto: CryptoConfig(
+            defaultProviderId: legacyCryptoProviderId,
+            providers: [c.data, c.nskey],
+            keyRing: c.ring,
+          ));
+      wire(c);
+      final key = AtKey.fromString('$_bob:reading.d1.sensor$_alice');
+
+      final builder = await send(key);
+
+      expect(sealedTo(_bob, 'd1.sensor'), bobs);
+      final conveyance = store.values.singleWhere(
+          (r) => r.key.toString().startsWith('$_bob:'),
+          orElse: () => fail('no conveyance to bob'));
+      await bob.nskey.decrypt(context, conveyance.key, conveyance.value);
+      final fromWire = AtKey.fromString(key.toString())
+        ..metadata.appMetadata = key.metadata.appMetadata;
+      expect(await bob.data.decrypt(context, fromWire, builder.value!), 'memo',
+          reason: 'bob opens it');
+    });
+
+    test(
+        'At legacy, a share requiring a namespace and naming no provider is '
+        'refused naming the posture', () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'd1.sensor');
+      at(PqPosture.legacy);
+      wire(c);
+
+      await expectLater(
+          send(AtKey.fromString('$_bob:reading.d1.sensor$_alice')),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'sealToNamespace')
+              .having(
+                  (e) => e.message,
+                  'message',
+                  allOf(
+                      contains('a client at PqPosture.legacy'),
+                      contains(symmetricAesGcmCryptoProviderId),
+                      isNot(contains('CryptoConfig'))))));
+      // NOTE: a legacy client resolves CryptoConfig.legacy(), which holds no
+      // key ring, so `c.ring` is never asked; a lookup it made would read
+      // through the client itself.
+      verifyNever(() => atClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions')));
+      verifyNever(() => atClient.get(any()));
+      verifyNever(() => atClient.getRemoteSecondary());
+      verifyNever(() => atClient.getLocalSecondary());
+    });
+
+    test(
+        'A share requiring a namespace and naming no provider, under a config '
+        'without the namespace-key provider, is refused naming the config',
+        () async {
+      final c = _Client(_Ring());
+      await publish(c.ring, _bob, 'd1.sensor');
+      at(PqPosture.pqReady,
+          crypto: CryptoConfig(
+            defaultProviderId: c.nskey.id,
+            providers: [c.nskey],
+            keyRing: c.ring,
+          ));
+      wire(c);
+
+      await expectLater(
+          send(AtKey.fromString('$_bob:reading.d1.sensor$_alice')),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'sealToNamespace')
+              .having(
+                  (e) => e.message,
+                  'message',
+                  allOf(contains('CryptoConfig'),
+                      contains(symmetricAesGcmCryptoProviderId)))));
+      expect(c.ring.lookedUp, isEmpty);
+    });
+  });
+
   group(
       "Given alice's client right after opening, before start-up has "
       'published any key', () {
@@ -1342,15 +1448,34 @@ void main() {
     });
 
     test(
+        'Given a lookup that fails with no cached advertisement to stand in, '
+        'when a share asks, then the failure keeps the stack it was raised '
+        'with', () async {
+      net.reachable = false;
+      Object? thrown;
+      StackTrace? stack;
+      try {
+        await share(AtKey.fromString('$_bob:x.todos.demos$_alice'));
+      } catch (e, s) {
+        thrown = e;
+        stack = s;
+      }
+
+      expect(thrown, isA<SecondaryConnectException>());
+      expect('$stack', contains('requireReachable'),
+          reason: 'the stack names where the lookup failed');
+    });
+
+    test(
         'A key fresh when the walk began seals the share, even if it expires '
         'during the lookup', () async {
       net.records.remove('public:__nskey.todos.demos$_bob');
-      final alice = aliceOver(
-          ttl: const Duration(milliseconds: 400), shareMiss: Duration.zero);
+      const ttl = Duration(seconds: 2);
+      final alice = aliceOver(ttl: ttl, shareMiss: Duration.zero);
       await shareBy(alice, AtKey.fromString('$_bob:x.todos.demos$_alice'));
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      // NOTE: a lookup as long as the window ends it during the lookup.
       net
-        ..batchDelay = const Duration(milliseconds: 400)
+        ..batchDelay = ttl
         ..batches.clear();
 
       final chosen =

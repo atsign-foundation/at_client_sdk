@@ -2,6 +2,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/posture_floor.dart' show postureName;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -52,8 +53,8 @@ class CryptoRuntime {
       String? sealToNamespace,
       bool? useRemoteAtServer,
       bool stampProviderId = true}) async {
-    final providerId =
-        providerIdFor(_atClient, requestedProviderId, atKey: atKey);
+    final providerId = providerIdFor(_atClient, requestedProviderId,
+        atKey: atKey, sealToNamespace: sealToNamespace);
     if (stampProviderId) {
       atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
     }
@@ -142,10 +143,18 @@ class CryptoRuntime {
   /// ([HandlesSelectively]), a *defaulted* id falls back to the legacy provider, while an
   /// *explicitly requested* id throws instead — quietly writing under another
   /// scheme is how an app comes to believe data is post-quantum when it is not.
+  ///
+  /// A write with [sealToNamespace] and no [requested] id uses
+  /// [symmetricAesGcmCryptoProviderId], and is refused with an [ArgumentError]
+  /// naming the posture or the config when the client's config does not
+  /// register it.
   static String providerIdFor(AtClient atClient, String? requested,
-      {AtKey? atKey}) {
+      {AtKey? atKey, String? sealToNamespace}) {
     final config = CryptoConfig.forClient(atClient);
-    final id = requested ?? config.defaultProviderId;
+    final id = requested ??
+        (sealToNamespace == null
+            ? config.defaultProviderId
+            : _sealingProviderId(atClient, config, sealToNamespace));
     if (atKey == null) return id;
     if (id == legacyProviderId) {
       refuseLegacyIfDisallowed(atClient, atKey, id,
@@ -171,6 +180,23 @@ class CryptoRuntime {
       return legacyProviderId;
     }
     return id;
+  }
+
+  static String _sealingProviderId(
+      AtClient atClient, CryptoConfig config, String sealToNamespace) {
+    if (config.lookup(symmetricAesGcmCryptoProviderId) != null) {
+      return symmetricAesGcmCryptoProviderId;
+    }
+    final posture = atClient.getPreferences()?.posture;
+    throw ArgumentError.value(
+        sealToNamespace,
+        'sealToNamespace',
+        CryptoConfig.namedFor(atClient) != null || posture == null
+            ? 'needs the $symmetricAesGcmCryptoProviderId provider, which '
+                "this client's CryptoConfig does not register"
+            : 'needs the $symmetricAesGcmCryptoProviderId provider, which a '
+                'client at ${postureName(posture)} does not configure; '
+                'PqPosture.pqReady and above do');
   }
 
   /// Throw if [providerId] is the legacy provider and [atClient] set
@@ -285,6 +311,19 @@ class CryptoRuntime {
     String lookupReason,
   ) {
     final ids = [legacyProviderId, ...config.providers.map((p) => p.id)];
+    final posture = _atClient.getPreferences()?.posture;
+    if (posture != null &&
+        !posture.configuresPqProviders &&
+        (id == nskeyCryptoProviderId ||
+            id == symmetricAesGcmCryptoProviderId)) {
+      final notification = lookupReason == 'notify';
+      return 'Crypto provider "$id" is not registered: this client runs at '
+          '${postureName(posture)}, which reads no post-quantum data'
+          '${notification ? ', so this notification is lost' : ''}. Configure '
+          'PqPosture.pqReady or above to read '
+          '${notification ? 'later ones' : 'it'}. Lookup reason: '
+          '$lookupReason. Registered providers: ${ids.join(', ')}.';
+    }
     return 'Crypto provider "$id" is not registered. '
         'Lookup reason: $lookupReason. '
         'Registered providers: ${ids.join(', ')}. '

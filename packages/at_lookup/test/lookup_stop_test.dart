@@ -30,6 +30,7 @@ void main() {
 
   setUpAll(() {
     AtSignLogger.defaultLoggingHandler = recorded;
+    AtSignLogger.root_level = 'info';
   });
 
   late FakeAtServerTransportFactory transportFactory;

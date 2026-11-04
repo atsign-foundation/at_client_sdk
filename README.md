@@ -158,7 +158,8 @@ secrets to it rather than wrapping them with RSA. A client whose posture
 asks for a stronger authentication key than its enrollment holds
 re-enrolls itself at its first start, filing the new enrollment in the
 same keys store beside the legacy fields. ML-DSA authentication needs an
-atServer that verifies it; a `legacy` client makes no such demand.
+atServer that verifies it; a `legacy` client makes no such demand unless
+its key material raises it to a floor.
 
 The default posture moves one stage at a time — `legacy` through 4.0,
 `pqReady` from a later 4.x release, `pqActive` at 5.0 — because a record may only be
@@ -202,3 +203,33 @@ supporting the [agentskills.io](https://agentskills.io) specification.
 ## Maintainers
 
 [Atsign Foundation core devs](https://github.com/orgs/atsign-foundation/teams/atcoredevs)
+
+## Appendix: why a posture is a floor
+
+A posture only ever moves a client up. A preference cannot name an
+authentication key weaker than its posture names, and a client never gives
+up a stronger key it already holds, whatever posture it is later built with.
+
+A client's own keyfile sets a floor too: a namespace key's private sets
+`pqReady`, and an active ML-DSA-65 data signing key sets `pqActive`. A client
+configured below that floor runs at the floor and logs a warning saying what
+was raised. It is not refused, because everything that names no posture runs
+at the default, `legacy`: `AtClientPreference()`, `CLIBase`, `at_activate`,
+and any tool or service that opens a keyfile without naming one. A refusal
+would stop exactly those, often a tool opening a keyfile that an app has
+already moved up, while a raised client loses nothing it cannot get back.
+
+A raised client never seeds namespace keys or mints the atSign's signing root
+unless its own posture would have. Each is a permanent record for the atSign,
+and a floor never creates one the client was not configured to create.
+
+4.0 keeps `legacy` as the default. With `pqActive` as the default, every tool
+that names no posture would upgrade whatever keyfile it opened, refuse writes
+to peers that publish no namespace key, and onboard keyfiles that releases
+before 4.0 cannot read.
+
+The default moves as [the ladder](#post-quantum-cryptography) says: `pqReady`
+from a later 4.x release, then `pqActive` at 5.0. From 5.0, a client
+explicitly configured below its floor is planned to be refused rather than
+raised. A 4.x release may add that refusal as an opt-in for deployments that
+want it sooner.

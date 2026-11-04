@@ -1086,12 +1086,23 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     stderr.writeln('No matching enrollment(s) found');
     return approved;
   }
+  final warnsOfLegacyExchange = toApprove.any(_atLegacyKeyExchange) &&
+      await _publishesNamespaceKey(atClient);
   // Iterate through the requests, approve each one
   for (final er in toApprove) {
     final eId = er.enrollmentId!;
     stdout.writeln('Approving enrollmentId $eId'
         ' with appName "${er.appName}"'
         ' and deviceName "${er.deviceName}"');
+    if (warnsOfLegacyExchange && _atLegacyKeyExchange(er)) {
+      stderr.writeln('Warning: $eId asks at the legacy key exchange, so '
+          'approving it conveys none of ${atClient.getCurrentAtSign()}\'s '
+          'namespace keys. Run legacy, it reads none of the atSign\'s '
+          'post-quantum data; run at pqReady or above, it re-enrolls at its '
+          'first start and asks for them. To convey them, revoke it with '
+          '`at_activate revoke -a ${atClient.getCurrentAtSign()} -i $eId` '
+          'and request again with --posture pqReady. Approving as asked.');
+    }
     // NOTE: approving is also when this atSign's secrets are sealed to the new
     // device's key package, which is why it goes through the client.
     final record = await atClient.enrollments.approve(eId);
@@ -1109,6 +1120,28 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     }
   }
   return approved;
+}
+
+/// Whether [request] was made at the legacy key exchange: it carries a
+/// wrapped symmetric key and no key package.
+bool _atLegacyKeyExchange(Enrollment request) =>
+    request.metadata?['keyPackage'] == null &&
+    (request.encryptedAPKAMSymmetricKey?.isNotEmpty ?? false);
+
+/// Whether [atClient]'s atSign publishes a namespace key of its own, as its
+/// atServer answers; false when that cannot be read.
+Future<bool> _publishesNamespaceKey(AtClient atClient) async {
+  final atSign = atClient.getCurrentAtSign()?.toAtsign();
+  if (atSign == null) return false;
+  try {
+    final keys = await atClient.getKeys(
+        regex: r'__nskey\.', showHiddenKeys: true, useRemoteAtServer: true);
+    return keys.any((key) =>
+        key.startsWith('public:__nskey.') &&
+        AtKey.fromString(key).sharedBy?.toAtsign() == atSign);
+  } on Exception {
+    return false;
+  }
 }
 
 Future<int> autoApprove(ArgResults ar, AtClient atClient) async {

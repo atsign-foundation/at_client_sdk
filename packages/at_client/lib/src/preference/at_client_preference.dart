@@ -3,6 +3,8 @@ import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
+import 'package:at_client/src/preference/posture_floor.dart'
+    show raisedDataSigning, strongerOf;
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -26,8 +28,10 @@ class AtClientPreference {
   /// axis set as a group, and a floor an explicit axis may raise but not lower.
   ///
   /// ⚠️ An existing enrollment holding an authentication key weaker than this
-  /// asks for is retrofitted at the next start, with no opt-out; an app that
-  /// must not move names [PqPosture.legacy].
+  /// asks for is retrofitted at the next start, with no opt-out. An app that
+  /// wants less names [PqPosture.legacy] rather than weakening an axis of a
+  /// stronger posture, and is still raised to the floor its own key material
+  /// sets.
   final PqPosture posture;
 
   /// Which of the post-quantum startup's steps this client runs, or null to
@@ -122,8 +126,58 @@ class AtClientPreference {
           'authenticationKeyAlgorithm',
           'is weaker than ${posture.authenticationKeyAlgorithm.name}, which '
               'this posture names. A posture is a floor: name a posture that '
-              'wants ${asked.name}, or PqPosture.legacy to stay where you are');
+              'wants ${asked.name}, or PqPosture.legacy, which drives no '
+              'upgrade beyond the floor its keyfile\'s key material sets');
     }
+  }
+
+  /// A copy of this preference raised to [floor]: [posture] as
+  /// [PqPosture.raisedTo] raises it, [authenticationKeyAlgorithm] and
+  /// [dataSigningKeyAlgorithms] the same way, and every other field, the
+  /// never-raised [seedNamespaceKeys] among them, as it is. This preference
+  /// itself when nothing is raised.
+  @internal
+  AtClientPreference raisedTo(PqPosture floor) {
+    final raisedPosture = posture.raisedTo(floor);
+    final authentication = strongerOf(
+        authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm);
+    final dataSigning = raisedDataSigning(
+        dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms);
+    if (identical(raisedPosture, posture) &&
+        authentication == authenticationKeyAlgorithm &&
+        identical(dataSigning, dataSigningKeyAlgorithms)) {
+      return this;
+    }
+    return AtClientPreference(
+        posture: raisedPosture,
+        pqStartupGates: pqStartupGates,
+        authenticationKeyAlgorithm: authentication,
+        dataSigningKeyAlgorithms: dataSigning,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms,
+        keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
+      // ignore: deprecated_member_use_from_same_package
+      ..hiveStoragePath = hiveStoragePath
+      ..cramSecret = cramSecret
+      ..namespace = namespace
+      ..rootDomain = rootDomain
+      ..rootPort = rootPort
+      ..networkTimeout = networkTimeout
+      ..maxDataSize = maxDataSize
+      ..syncRegex = syncRegex
+      ..syncBatchSize = syncBatchSize
+      ..syncPageLimit = syncPageLimit
+      ..fileEncryptionChunkSize = fileEncryptionChunkSize
+      ..monitorHeartbeatInterval = monitorHeartbeatInterval
+      ..monitorHeartbeatResponseTimeout = monitorHeartbeatResponseTimeout
+      ..monitorSilenceTimeout = monitorSilenceTimeout
+      ..monitorAutoStart = monitorAutoStart
+      ..expiryCheckTimeInterval = expiryCheckTimeInterval
+      ..fetchOfflineNotifications = fetchOfflineNotifications
+      ..atClientParticulars = atClientParticulars
+      ..remoteLocalPref = remoteLocalPref
+      ..crypto = crypto
+      ..allowLegacyCryptoFallback = allowLegacyCryptoFallback
+      ..seedNamespaceKeys = seedNamespaceKeys;
   }
 
   /// Where [other] would change what a **running** client does — one line per
@@ -253,15 +307,14 @@ class AtClientPreference {
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
 
-  /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
-  int syncIntervalMins = 10;
-
-  /// The process-wide default network timeout: the maximum wall-clock the SDK
-  /// will spend reaching/using the atServer (connect + retries + waiting for a
-  /// response) before giving up. When set on the `AtClientPreference` used to
-  /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
-  /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
-  /// the existing default (30s) applies.
+  /// The process-wide default network timeout: the timeout for each network
+  /// operation the SDK makes, such as a connect, an atDirectory lookup, or the
+  /// wait for a response's next bytes. One SDK call can make several in
+  /// sequence, so its wall-clock can be a multiple of this. When set on the
+  /// `AtClientPreference` used to create an `AtClient`, it becomes
+  /// `AtNetworkTimeouts.defaultTimeout` for the whole process (capped at
+  /// `AtNetworkTimeouts.maxAllowed`, 60s). When null, the existing default
+  /// (30s) applies.
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
@@ -323,7 +376,10 @@ class AtClientPreference {
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
   /// Fetch the notifications received while the client was offline, from the
-  /// last one it received. Defaults to true.
+  /// last one it received; a store that has received none starts from when its
+  /// client first started, so a new device or a reinstall gets nothing sent
+  /// before it. Notifications are not a history: keep history in records.
+  /// Defaults to true.
   ///
   /// Set to false to ignore those. Notifications received since the client's
   /// notification service was created are delivered once either way, including
