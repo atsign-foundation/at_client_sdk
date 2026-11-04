@@ -22,24 +22,6 @@ void main() {
             .decrypt(base64Decode(encryptedAesKey)));
     expect(decryptedAesKey, aesKey);
   });
-  test(
-      'A test to verify encrypting AES key with at_chops and decryption with EncryptionUtil',
-      () async {
-    // Generate RSA key pair. Generate AES key. Encrypt AES key with the RSA algorithm class (uses RSA public key)
-    // Decrypt encryptedAESKey with EncryptionUtil using RSA private key
-    var encryptionKeyPair = RsaKeyPair.generate();
-    var encryptionPrivateKey = encryptionKeyPair.atPrivateKey.privateKey;
-    var aesKey = AESKey.generate(32).key;
-
-    var encryptedAesKey = base64Encode(
-        RsaEncryptionAlgo.fromKeyPair(encryptionKeyPair)
-            .encrypt(utf8.encode(aesKey)));
-
-    var decryptedAesKey =
-        //ignore: deprecated_member_use_from_same_package
-        EncryptionUtil.decryptKey(encryptedAesKey, encryptionPrivateKey);
-    expect(decryptedAesKey, aesKey);
-  });
 
   test(
       'A test to verify data encryption with encryption util and decryption with at_chops',

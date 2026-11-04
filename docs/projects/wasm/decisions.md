@@ -513,8 +513,8 @@ authenticator or null, an optional `SecondaryAddressFinder`, the client config) 
 `AtLookupMuxable`; `secureSocketLookUps({config, onConnect})` in `at_lookup_io.dart` is
 the default over TLS on TCP and the one file in at_lookup's io barrel that names the
 transport. Every entry point into at_client — `Atsign.open`, `activate`, `enroll`,
-`resumeEnrollment`, `authenticatesAs`, `buildAtClient`, `AtServiceFactory.atClient` —
-takes `lookUps:` beside `keys:` and `storage:`; the client holds it, and its own
+`resumeEnrollment`, `authenticatesAs`, `buildAtClient`, and `AtServiceFactory.atClient`
+until at_client 4.0 removed it — takes `lookUps:` beside `keys:` and `storage:`; the client holds it, and its own
 connection, sync's, the monitor's, the activation and enrollment handshakes and the
 connection a retrofit re-derives on all come from it. The eight decisions behind the
 shape (a function rather than a bundle object; the doors rather than the preference;

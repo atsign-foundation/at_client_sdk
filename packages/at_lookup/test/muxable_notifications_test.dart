@@ -37,6 +37,7 @@ void main() {
   final recorded = _RecordedLogs();
 
   setUpAll(() {
+    AtSignLogger.root_level = 'info';
     AtSignLogger.defaultLoggingHandler = recorded;
   });
 

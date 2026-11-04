@@ -6,7 +6,7 @@ import 'package:test/test.dart';
 class MockAtClient extends Mock implements AtClient {}
 
 /// How a client's PKAM signing algorithm resolves: the recorded key-material
-/// resolution first, then the preference, then rsa2048.
+/// resolution first, then rsa2048, the algorithm of a flat keyfile.
 void main() {
   group('the resolved-signing-algo record', () {
     test('answers with the recorded resolution', () {
@@ -16,25 +16,15 @@ void main() {
       expect(resolvedSigningAlgoFor(client), SigningAlgoType.mldsa65);
     });
 
-    test('falls back to the preference when nothing was recorded', () {
+    test('falls back to rsa2048 when nothing was recorded', () {
       final client = MockAtClient();
-      when(() => client.getPreferences()).thenReturn(AtClientPreference()
-        // ignore: deprecated_member_use
-        ..signingAlgoType = SigningAlgoType.ecc_secp256r1);
-      expect(signingAlgoOf(client), SigningAlgoType.ecc_secp256r1);
+      expect(signingAlgoOf(client), SigningAlgoType.rsa2048);
       expect(resolvedSigningAlgoFor(client), isNull,
           reason: 'the fallback is not a resolution');
     });
 
-    test('defaults to rsa2048 with no record and no preference', () {
-      final client = MockAtClient();
-      when(() => client.getPreferences()).thenReturn(null);
-      expect(signingAlgoOf(client), SigningAlgoType.rsa2048);
-    });
-
     test('a null record clears back to the fallback', () {
       final client = MockAtClient();
-      when(() => client.getPreferences()).thenReturn(null);
       recordResolvedSigningAlgo(client, SigningAlgoType.mldsa65);
       recordResolvedSigningAlgo(client, null);
       expect(signingAlgoOf(client), SigningAlgoType.rsa2048);
@@ -44,7 +34,6 @@ void main() {
     test('two clients of one atSign keep separate records', () {
       final a = MockAtClient();
       final b = MockAtClient();
-      when(() => b.getPreferences()).thenReturn(null);
       recordResolvedSigningAlgo(a, SigningAlgoType.mldsa65);
       expect(signingAlgoOf(a), SigningAlgoType.mldsa65);
       expect(signingAlgoOf(b), SigningAlgoType.rsa2048);

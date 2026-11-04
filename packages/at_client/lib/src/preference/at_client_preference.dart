@@ -3,12 +3,13 @@ import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
+import 'package:at_client/src/preference/posture_floor.dart'
+    show raisedDataSigning, strongerOf;
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show canSignEnvelopeWith;
 import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 
@@ -27,8 +28,10 @@ class AtClientPreference {
   /// axis set as a group, and a floor an explicit axis may raise but not lower.
   ///
   /// ⚠️ An existing enrollment holding an authentication key weaker than this
-  /// asks for is retrofitted at the next start, with no opt-out; an app that
-  /// must not move names [PqPosture.legacy].
+  /// asks for is retrofitted at the next start, with no opt-out. An app that
+  /// wants less names [PqPosture.legacy] rather than weakening an axis of a
+  /// stronger posture, and is still raised to the floor its own key material
+  /// sets.
   final PqPosture posture;
 
   /// Which of the post-quantum startup's steps this client runs, or null to
@@ -123,8 +126,58 @@ class AtClientPreference {
           'authenticationKeyAlgorithm',
           'is weaker than ${posture.authenticationKeyAlgorithm.name}, which '
               'this posture names. A posture is a floor: name a posture that '
-              'wants ${asked.name}, or PqPosture.legacy to stay where you are');
+              'wants ${asked.name}, or PqPosture.legacy, which drives no '
+              'upgrade beyond the floor its keyfile\'s key material sets');
     }
+  }
+
+  /// A copy of this preference raised to [floor]: [posture] as
+  /// [PqPosture.raisedTo] raises it, [authenticationKeyAlgorithm] and
+  /// [dataSigningKeyAlgorithms] the same way, and every other field, the
+  /// never-raised [seedNamespaceKeys] among them, as it is. This preference
+  /// itself when nothing is raised.
+  @internal
+  AtClientPreference raisedTo(PqPosture floor) {
+    final raisedPosture = posture.raisedTo(floor);
+    final authentication = strongerOf(
+        authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm);
+    final dataSigning = raisedDataSigning(
+        dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms);
+    if (identical(raisedPosture, posture) &&
+        authentication == authenticationKeyAlgorithm &&
+        identical(dataSigning, dataSigningKeyAlgorithms)) {
+      return this;
+    }
+    return AtClientPreference(
+        posture: raisedPosture,
+        pqStartupGates: pqStartupGates,
+        authenticationKeyAlgorithm: authentication,
+        dataSigningKeyAlgorithms: dataSigning,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms,
+        keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
+      // ignore: deprecated_member_use_from_same_package
+      ..hiveStoragePath = hiveStoragePath
+      ..cramSecret = cramSecret
+      ..namespace = namespace
+      ..rootDomain = rootDomain
+      ..rootPort = rootPort
+      ..networkTimeout = networkTimeout
+      ..maxDataSize = maxDataSize
+      ..syncRegex = syncRegex
+      ..syncBatchSize = syncBatchSize
+      ..syncPageLimit = syncPageLimit
+      ..fileEncryptionChunkSize = fileEncryptionChunkSize
+      ..monitorHeartbeatInterval = monitorHeartbeatInterval
+      ..monitorHeartbeatResponseTimeout = monitorHeartbeatResponseTimeout
+      ..monitorSilenceTimeout = monitorSilenceTimeout
+      ..monitorAutoStart = monitorAutoStart
+      ..expiryCheckTimeInterval = expiryCheckTimeInterval
+      ..fetchOfflineNotifications = fetchOfflineNotifications
+      ..atClientParticulars = atClientParticulars
+      ..remoteLocalPref = remoteLocalPref
+      ..crypto = crypto
+      ..allowLegacyCryptoFallback = allowLegacyCryptoFallback
+      ..seedNamespaceKeys = seedNamespaceKeys;
   }
 
   /// Where [other] would change what a **running** client does — one line per
@@ -241,30 +294,9 @@ class AtClientPreference {
       'closedByClient: true) for the same store. Removed in 5.0.0.')
   String? hiveStoragePath;
 
-  /// Syncing strategy of the client [SyncStrategy]
-  /// [Deprecated] Use [SyncService]
-  @Deprecated("Use [SyncService]")
-  SyncStrategy? syncStrategy;
-
-  bool _isLocalStoreRequired = true;
-
-  /// Read by nothing: every client is given its storage.
-  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
-      'Removed in 5.0.0.')
-  bool get isLocalStoreRequired => _isLocalStoreRequired;
-
-  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
-      'Removed in 5.0.0.')
-  set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
-
   /// The atSign's CRAM secret, read by a `RemoteSecondary` built without an
   /// `AtKeysIo`; a client authenticates from its `AtKeysIo` and ignores it.
   String? cramSecret;
-
-  /// Private key of the atSign.
-  @Deprecated('A client authenticates from its AtKeysIo; only a '
-      'RemoteSecondary built without one reads this. Removed in 5.0.0.')
-  String? privateKey;
 
   /// Specifies the namespace of an app.
   String? namespace;
@@ -275,15 +307,14 @@ class AtClientPreference {
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
 
-  /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
-  int syncIntervalMins = 10;
-
-  /// The process-wide default network timeout: the maximum wall-clock the SDK
-  /// will spend reaching/using the atServer (connect + retries + waiting for a
-  /// response) before giving up. When set on the `AtClientPreference` used to
-  /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
-  /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
-  /// the existing default (30s) applies.
+  /// The process-wide default network timeout: the timeout for each network
+  /// operation the SDK makes, such as a connect, an atDirectory lookup, or the
+  /// wait for a response's next bytes. One SDK call can make several in
+  /// sequence, so its wall-clock can be a multiple of this. When set on the
+  /// `AtClientPreference` used to create an `AtClient`, it becomes
+  /// `AtNetworkTimeouts.defaultTimeout` for the whole process (capped at
+  /// `AtNetworkTimeouts.maxAllowed`, 60s). When null, the existing default
+  /// (30s) applies.
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
@@ -345,31 +376,17 @@ class AtClientPreference {
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
   /// Fetch the notifications received while the client was offline, from the
-  /// last one it received. Defaults to true.
+  /// last one it received; a store that has received none starts from when its
+  /// client first started, so a new device or a reinstall gets nothing sent
+  /// before it. Notifications are not a history: keep history in records.
+  /// Defaults to true.
   ///
   /// Set to false to ignore those. Notifications received since the client's
   /// notification service was created are delivered once either way, including
   /// any that arrived before its monitor connected.
   bool fetchOfflineNotifications = true;
 
-  @Deprecated('No longer needed. at_chops will be used by default')
-  bool useAtChops = true;
-
   AtClientParticulars atClientParticulars = AtClientParticulars();
-
-  /// Signing algorithm to use for pkam authentication.
-  ///
-  /// Consulted only for a legacy enrollment whose keyfile carries no typed
-  /// signing material; where typed material exists the client resolves the
-  /// algorithm from the keyfile and this value never overrides it.
-  @Deprecated('The signing algorithm is resolved from the enrollment\'s key '
-      'material; this value is only a fallback for legacy keyfiles with no '
-      'typed signing material')
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
-
-  /// Hashing algorithm once used for pkam authentication.
-  @Deprecated('Has no effect: pkam signs with SHA-256. Removed in 5.0.0.')
-  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
   /// Set this to [RemoteLocalPref.remoteOnly]
   /// if you require all data operations (get / put / delete) to be performed
@@ -450,14 +467,4 @@ enum RemoteLocalPref {
   /// Note that if the application is syncing, then the change will be pulled
   /// to local from remote as part of the sync process.
   remoteOnly,
-}
-
-@Deprecated("Use SyncService")
-enum SyncStrategy {
-  /// Sync local keys immediately to secondary server for update and delete commands.
-  immediate,
-  onDemand,
-
-  /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].
-  scheduled
 }

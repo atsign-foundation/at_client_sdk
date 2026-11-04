@@ -83,7 +83,7 @@ authentication a fixed key set and gets back the keys, a live connection and
 a crypto engine. **C** is the loose `atSign`, `rootDomain`, `apkamPublicKey`
 and `encryptedAPKAMSymmetricKey` parameters of `AtEnrollmentRequest`'s
 constructors, deprecated in favour of a `session` that carries the atSign and
-a key destination. **D** is `AtEnrollmentResponse.atSign`, `.rootDomain` and
+a key destination, and removed in at_auth 4.0. **D** is `AtEnrollmentResponse.atSign`, `.rootDomain` and
 `.atAuthKeys`: the enrollment's identity and its completed keys, handed back
 on the response rather than written to the store the app named.
 
@@ -710,7 +710,7 @@ ask the same one.
 | Package             | Change                                                                                                                                                                                                                              |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | at_lookup           | `AtLookUpFactory` beside `withSecureSocket`; `secureSocketLookUps` in `at_lookup_io.dart`; `withSecureSocket(onConnect:)`. A minor: nothing existing changes.                                                                        |
-| at_client           | `buildAtClient(lookUps:)`, `AtClientImpl.lookUps`, `AtServiceFactory.atClient(lookUps:)`; the five construction sites call it; `open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs` take `lookUps:`; the preference's three TLS fields deprecated in favour of the factory's config. |
+| at_client           | `buildAtClient(lookUps:)`, `AtClientImpl.lookUps`, `AtServiceFactory.atClient(lookUps:)` (removed in 4.0); the five construction sites call it; `open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs` take `lookUps:`; the preference's three TLS fields deprecated in favour of the factory's config. |
 | at_client_flutter   | `AtsignFlows` and the three lifecycle dialogs take `lookUps:`; the README points at at_client's factory example.                                                                                                                  |
 | at_cli_commons      | `CLIBase.fromCommandLineArgs(lookUps:)`, the preference's with none; the README's "Choosing the transport" section.                                                                                                                 |
 | at_onboarding_cli   | `AtOnboardingPreference.lookUps`; the commands, `createAtClient` and the onboarding service pass it to every verb; `proxyLookUps()` replaces `_proxyLookUp`; `status`'s public-key lookup uses it.                                    |

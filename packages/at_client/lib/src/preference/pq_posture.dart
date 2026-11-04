@@ -1,6 +1,9 @@
 import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/src/preference/posture_floor.dart'
+    show raisedDataSigning, strongerOf;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:meta/meta.dart' show internal;
 
 /// How far into the post-quantum rollout a client runs — every rollout axis set
 /// as one value, applied at construction through `AtClientPreference.posture`.
@@ -54,6 +57,10 @@ class PqPosture {
   /// True in every named stage: when an atSign can stop holding legacy keys is
   /// an ecosystem-floor question no client-side stage can answer, so only a
   /// deployment that controls every client of its namespaces flips it.
+  ///
+  /// False leaves `AtClient.put` of a public value throwing
+  /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+  /// encryption private key.
   final bool mintLegacyMaterial;
 
   /// The key-establishment algorithms this client will seal to, strongest first
@@ -138,6 +145,73 @@ class PqPosture {
     );
   }
 
+  /// This posture with each setting that [floor] sets more strongly raised to
+  /// the floor's: the authentication key algorithm, the data signing set when
+  /// its strongest algorithm is weaker than the floor's, configuring and
+  /// writing post-quantum, and the pq key exchange. Every other axis, seeding
+  /// namespace keys among them, stays as it is, and a posture at or above
+  /// [floor] on all of these is returned unchanged.
+  @internal
+  PqPosture raisedTo(PqPosture floor) {
+    final raised = (
+      authentication: strongerOf(
+          authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm),
+      dataSigning: raisedDataSigning(
+          dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms),
+      configures: configuresPqProviders || floor.configuresPqProviders,
+      writes: writesPqByDefault || floor.writesPqByDefault,
+      exchange: floor.keyExchangeMode == EnrollmentKeyExchangeMode.pq
+          ? EnrollmentKeyExchangeMode.pq
+          : keyExchangeMode,
+    );
+    if (raised.authentication == authenticationKeyAlgorithm &&
+        identical(raised.dataSigning, dataSigningKeyAlgorithms) &&
+        raised.configures == configuresPqProviders &&
+        raised.writes == writesPqByDefault &&
+        raised.exchange == keyExchangeMode) {
+      return this;
+    }
+    return copyWith(
+      authenticationKeyAlgorithm: raised.authentication,
+      dataSigningKeyAlgorithms: raised.dataSigning,
+      configuresPqProviders: raised.configures,
+      writesPqByDefault: raised.writes,
+      keyExchangeMode: raised.exchange,
+    );
+  }
+
+  /// This posture with each axis given replaced, refused as [PqPosture.new]
+  /// refuses a combination.
+  PqPosture copyWith({
+    SigningAlgoType? authenticationKeyAlgorithm,
+    Set<SigningAlgoType>? dataSigningKeyAlgorithms,
+    bool? seedNamespaceKeys,
+    EnrollmentKeyExchangeMode? keyExchangeMode,
+    bool? writesPqByDefault,
+    bool? configuresPqProviders,
+    bool? disallowLegacyEncryption,
+    bool? mintLegacyMaterial,
+    List<String>? sealsToKeyAlgorithms,
+    List<String>? keyEstablishmentAlgorithms,
+  }) =>
+      PqPosture(
+        authenticationKeyAlgorithm:
+            authenticationKeyAlgorithm ?? this.authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms:
+            dataSigningKeyAlgorithms ?? this.dataSigningKeyAlgorithms,
+        seedNamespaceKeys: seedNamespaceKeys ?? this.seedNamespaceKeys,
+        keyExchangeMode: keyExchangeMode ?? this.keyExchangeMode,
+        writesPqByDefault: writesPqByDefault ?? this.writesPqByDefault,
+        configuresPqProviders:
+            configuresPqProviders ?? this.configuresPqProviders,
+        disallowLegacyEncryption:
+            disallowLegacyEncryption ?? this.disallowLegacyEncryption,
+        mintLegacyMaterial: mintLegacyMaterial ?? this.mintLegacyMaterial,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms ?? this.sealsToKeyAlgorithms,
+        keyEstablishmentAlgorithms:
+            keyEstablishmentAlgorithms ?? this.keyEstablishmentAlgorithms,
+      );
+
   const PqPosture._({
     required this.authenticationKeyAlgorithm,
     required this.dataSigningKeyAlgorithms,
@@ -152,7 +226,8 @@ class PqPosture {
   });
 
   /// A client built before any of this: classical throughout, driving no
-  /// upgrade, and unable to read post-quantum data at all.
+  /// upgrade, and unable to read post-quantum data at all, unless its
+  /// keyfile's own post-quantum key material raises it to a floor.
   ///
   /// ⚠️ A record sealed to this atSign's namespace key is refused with
   /// `CryptoProviderNotRegistered`; an app that must read post-quantum data
@@ -195,7 +270,9 @@ class PqPosture {
   /// ⚠️ Adoptable only by a deployment that controls every client of its
   /// namespaces and has seeded them — a destination with no published namespace
   /// key, and a write whose key carries no namespace, are both refused rather
-  /// than written with the legacy provider.
+  /// than written with the legacy provider. A write made before this client's
+  /// own start-up has published its namespace key waits for it first, at most
+  /// 30 seconds.
   static const PqPosture pqActive = PqPosture._(
     authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
     dataSigningKeyAlgorithms: {SigningAlgoType.mldsa65},

@@ -27,7 +27,7 @@ Future<bool> loginWithKeychain(BuildContext context) async {
     atSign: selection.atSign,
     rootDomain: selection.rootDomain,
     keys: KeychainAtKeysIo(),
-    preference: _preference(),
+    preference: todosPreference(),
   );
   if (client == null) return false;
 
@@ -47,7 +47,7 @@ Future<bool> loginWithFile(BuildContext context) async {
     context,
     atSign: atSign,
     keys: atKeysIo,
-    preference: _preference(),
+    preference: todosPreference(),
     backupKeys: [KeychainAtKeysIo()],
   );
   if (client == null) return false;
@@ -71,7 +71,7 @@ Future<bool> loginWithApkam(BuildContext context) async {
     appName: _namespace,
     deviceName: 'default',
     namespaces: {_namespace: 'rw'},
-    preference: _preference(),
+    preference: todosPreference(),
     keys: KeychainAtKeysIo(),
   );
   if (client == null) return false;
@@ -80,12 +80,22 @@ Future<bool> loginWithApkam(BuildContext context) async {
   return true;
 }
 
+/// Stops the current client, which this app owns, then clears it, so a
+/// sign-in that follows meets no client still live for the old atSign. The
+/// client is cleared even when stopping it throws.
 Future<void> logout() async {
-  AtClientManager.getInstance().reset();
+  final manager = AtClientManager.getInstance();
+  try {
+    await manager.atClient.stop();
+  } finally {
+    manager.reset();
+  }
 }
 
-AtClientPreference _preference() =>
-    AtClientPreference()..namespace = _namespace;
+/// The preference this app's client runs under: post-quantum, in the
+/// namespace the CLI todos example shares todos in.
+AtClientPreference todosPreference() =>
+    AtClientPreference(posture: PqPosture.pqActive)..namespace = _namespace;
 
 /// Every dialog hands back a client the app owns. This app keeps one current
 /// client in [AtClientManager], since its screens read it from there.

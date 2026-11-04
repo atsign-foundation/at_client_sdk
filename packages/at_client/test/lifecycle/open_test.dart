@@ -449,11 +449,7 @@ void main() {
 /// supplies.
 class _NoSyncFactory extends DefaultAtServiceFactory {
   @override
-  Future<SyncService> syncService(
-          AtClient atClient,
-          AtClientManager atClientManager,
-          NotificationService notificationService) async =>
-      _NoSync();
+  Future<SyncService> syncService(AtClient atClient) async => _NoSync();
 }
 
 class _NoSync implements SyncService {
@@ -473,8 +469,5 @@ class _NoSync implements SyncService {
   void removeProgressListener(SyncProgressListener listener) {}
 
   @override
-  void setOnDone(Function onDone) {}
-
-  @override
-  void sync({Function? onDone, Function? onError}) {}
+  void sync() {}
 }

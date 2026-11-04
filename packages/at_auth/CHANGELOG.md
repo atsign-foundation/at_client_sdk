@@ -23,12 +23,22 @@
   `getFreeAtsignByCategory`, `registerPerson` and `validatePerson`, and
   `HttpMethod` loses `get`, with the `RegistrarService` methods that used
   them.
-- BREAKING: `authenticatorForChops` is removed, and `authenticatorFor` no
+- breaking: `authenticatorForChops` is removed, and `authenticatorFor` no
   longer takes `chops` or `signingAlgo`: it signs with the keypair the keys
   hold, under the algorithm they name.
-- BREAKING: `AtKeys.authenticationFor` is removed; use
+- breaking: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
+- feat: `waitForApproval` takes `cancelled`: once it completes, with a value
+  or an error, no further poll starts and the wait throws `StoppedException`. A stopped connection
+  ends the wait at once, rather than spending the retry budget.
 - build: requires `at_utils` ^4.0.0 and `at_lookup` ^4.0.0.
+- feat: `AtKeys.unfileLegacyEnrollment` drops what `fileLegacyMaterial`
+  filed for an enrollment that is gone, and nothing another enrollment
+  filed.
+- breaking: `AtEnrollmentRequest` and `AtEnrollmentRequest.pq` require a
+  `session`. Their deprecated `atSign`, `rootDomain`, `apkamPublicKey` and
+  `encryptedAPKAMSymmetricKey` parameters are removed, as is the
+  `encryptedAPKAMSymmetricKey` field, which nothing read.
 - breaking: `AtEnrollmentRequest.pq` refuses `rsa2048` with an
   `ArgumentError`, before anything is sent: an enrollment that takes its keys
   post-quantum authenticates with `mldsa65`. An `rsa2048` request uses the
@@ -40,6 +50,8 @@
   `.bak` and `.pre-v1` copies written beside it take the owner and group of
   the keyfile as it was read, and root does not rewrite a keyfile that is a
   symbolic link or anything other than a regular file.
+- fix: a keyfile write that removes a pending enrollment, as a cancelled or
+  denied request's does, keeps no copy of it in `.bak`.
 - fix: a keyfile at_auth 3.3.0 wrote, which carries `version`, its atSign and
   an empty `keys` array, can be updated or flushed without adding typed key
   material; it is rewritten in the flat shape.

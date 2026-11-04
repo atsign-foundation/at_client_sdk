@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
@@ -794,16 +796,6 @@ void main() {
           ':@bob:a.b.c@alice:enc:hello\n');
     });
 
-    test('the deprecated parameter is the same value, split the same way',
-        () async {
-      await (await service())
-          .send(to: '@bob'.toAtsign(), namespace: 'a.b.c', body: 'hello');
-
-      expect(recorder.seen!.namespace, 'b.c',
-          reason: 'the rename is a rename — a caller that has not migrated '
-              'must not get different crypto');
-    });
-
     test('a name with no dot is refused at the call site', () async {
       final s = await service();
 
@@ -830,24 +822,6 @@ void main() {
             reason: '"$bad" has a dot but leaves one half empty, and an empty '
                 'namespace declines exactly as a missing one does');
       }
-    });
-
-    test('both spellings at once is refused, and so is neither', () async {
-      final s = await service();
-
-      await expectLater(
-          () => s.send(
-              to: '@bob'.toAtsign(),
-              idAndNamespace: 'a.b',
-              namespace: 'c.d',
-              body: 'hi'),
-          throwsA(isA<ArgumentError>()),
-          reason: 'silently preferring one would make the migration '
-              'unreviewable — a half-migrated call site would keep working '
-              'while sending under the wrong name');
-
-      await expectLater(() => s.send(to: '@bob'.toAtsign(), body: 'hi'),
-          throwsA(isA<ArgumentError>()));
     });
   });
 
@@ -1133,6 +1107,34 @@ void main() {
           () => notificationServiceImpl.notificationValueValidation(
               notificationParams, notifyVerbBuilder),
           throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
+    });
+
+    test(
+        'A notification value of exactly maxDataSize is sent, and one longer '
+        'is refused with BufferOverFlowException', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()..maxDataSize = 10);
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
+            ..sharedWith('@alice'))
+          .build();
+      NotifyVerbBuilder builderCarrying(String value) => NotifyVerbBuilder()
+        ..useAtKeyToString = true
+        ..atKey = atKey
+        ..value = value;
+
+      notificationServiceImpl.notificationValueValidation(
+          NotificationParams.forUpdate(atKey, value: '0123456789'),
+          builderCarrying('0123456789'));
+      expect(
+          () => notificationServiceImpl.notificationValueValidation(
+              NotificationParams.forUpdate(atKey, value: '0123456789a'),
+              builderCarrying('0123456789a')),
+          throwsA(isA<BufferOverFlowException>()));
     });
 
     test(

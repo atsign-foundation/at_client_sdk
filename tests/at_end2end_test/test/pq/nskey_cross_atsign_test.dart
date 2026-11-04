@@ -589,6 +589,16 @@ void main() {
     // advertisement for a key bob never minted, carrying no signature. Written
     // straight to bob's atServer, which is where alice reads it from.
     final substituted = await XWingKeyPair.generate();
+    // Put bob's genuine, signed advertisement back however this test ends, so
+    // the atServer is not left holding the substituted one for the files that
+    // share this namespace.
+    Future<void> restoreGenuine() async {
+      await bobRemote.executeVerb(UpdateVerbBuilder()
+        ..atKey = nskeyAdvertisementKey(bob, namespace)
+        ..value = genuine);
+    }
+
+    addTearDown(restoreGenuine);
     await bobRemote.executeVerb(UpdateVerbBuilder()
       ..atKey = nskeyAdvertisementKey(bob, namespace)
       ..value = jsonEncode({
@@ -623,11 +633,7 @@ void main() {
           'nobody proved bob minted',
     );
 
-    // Put bob's genuine, signed advertisement back, so the atServer is not left
-    // holding the substituted one.
-    await bobRemote.executeVerb(UpdateVerbBuilder()
-      ..atKey = nskeyAdvertisementKey(bob, namespace)
-      ..value = genuine);
+    await restoreGenuine();
     aliceSide.ring.forgetRemote(bob, namespace);
     expect((await aliceSide.ring.currentPublic(bob, namespace))?.nskeyKid,
         genuineKid,

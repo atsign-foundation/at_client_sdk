@@ -198,7 +198,10 @@ void main() {
 
       final response = await AtEnrollmentImpl().submit(
           AtEnrollmentRequest(
-              atSign: atSign,
+              session: AtAuthSession(
+                  atSign: atSign,
+                  rootDomain: AtRootDomain.atsignDomain,
+                  atKeysIo: InMemoryAtKeysIo()),
               appName: 'wavi',
               deviceName: 'iphone',
               otp: 'ABC123',

@@ -29,8 +29,12 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 20));
         return SecondaryAddress('test.test.test', 12345);
       });
-      AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
-          secondaryAddressFinder: finder, transportFactory: transportFactory);
+      AtLookupImpl atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain('test.test.test', 64),
+          authenticator: null,
+          transport: AtLookupTransport(transportFactory: transportFactory),
+          secondaryAddressFinder: finder) as AtLookupImpl;
 
       await Future.wait([
         atLookup.createConnection(),
@@ -47,8 +51,12 @@ void main() {
     test(
         'test AtLookupImpl closes invalid connections before creating new ones',
         () async {
-      AtLookupImpl atLookup = AtLookupImpl('@alice', 'test.test.test', 64,
-          secondaryAddressFinder: finder, transportFactory: transportFactory);
+      AtLookupImpl atLookup = AtLookUp.withTransport(
+          atSign: '@alice',
+          rootDomain: AtRootDomain('test.test.test', 64),
+          authenticator: null,
+          transport: AtLookupTransport(transportFactory: transportFactory),
+          secondaryAddressFinder: finder) as AtLookupImpl;
       expect(atLookup.transportFactory.runtimeType.toString(),
           "FakeAtServerTransportFactory");
 

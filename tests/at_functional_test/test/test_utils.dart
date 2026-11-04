@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/functional_storage.dart';
 import 'package:crypton/crypton.dart';
@@ -315,12 +316,9 @@ class TestUtils {
         current.getCurrentAtSign() == currentAtSign &&
         atKeysIo == null &&
         !current.isStopped) {
-      AtClientImpl.refuseChangedRolloutAxes(
-          running: current.getPreferences(),
-          asked: preference,
-          cacheKey:
-              AtClientImpl.instanceKey(currentAtSign, current.enrollmentId));
-      // Some other test may have messed with the preferences.
+      // Some other test may have messed with the preferences. setPreferences
+      // refuses a preference whose rollout axes differ from the running
+      // client's.
       current.setPreferences(preference);
       await loader.setEncryptionKeys(current, currentAtSign);
       return manager;

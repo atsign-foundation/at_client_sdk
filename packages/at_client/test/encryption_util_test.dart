@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:crypton/crypton.dart';
 import 'package:test/test.dart';
@@ -70,9 +73,10 @@ void main() {
       var rsaKeyPair = RSAKeypair.fromRandom();
       var encryptedKey =
           EncryptionUtil.encryptKey(aesKey, rsaKeyPair.publicKey.toString());
-      // ignore: deprecated_member_use_from_same_package
-      var decryptedKey = EncryptionUtil.decryptKey(
-          encryptedKey, rsaKeyPair.privateKey.toString());
+      var decryptedKey = utf8.decode((RsaEncryptionAlgo()
+            ..atPrivateKey =
+                AtPrivateKey.fromString(rsaKeyPair.privateKey.toString()))
+          .decrypt(base64Decode(encryptedKey)));
       expect(decryptedKey, aesKey);
     });
   });

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
@@ -42,9 +43,8 @@ void main() {
     test(
         'the lookup it builds is a muxable carrying an authenticator, not a '
         'lookup with credentials parked on it', () async {
-      final preference = AtClientPreference()..privateKey = 'dummy_private_key';
-      final remoteSecondary =
-          RemoteSecondary(atsign, preference, lookUps: secureSocketLookUps());
+      final remoteSecondary = RemoteSecondary(atsign, AtClientPreference(),
+          privateKey: 'dummy_private_key', lookUps: secureSocketLookUps());
 
       expect(remoteSecondary.atLookUp, isA<AtLookupMuxable>(),
           reason: 'withSecureSocket returns the muxable, which is the only '
@@ -140,9 +140,8 @@ void main() {
           lookUps: secureSocketLookUps(),
           atKeysIo:
               keysHoldingApkam(atSign, null, pkamKeyPairFor(atSign, null))),
-      'privateKey': () => RemoteSecondary(
-          atSign, preference()..privateKey = 'unused',
-          lookUps: secureSocketLookUps()),
+      'privateKey': () => RemoteSecondary(atSign, preference(),
+          privateKey: 'unused', lookUps: secureSocketLookUps()),
       'cramSecret': () => RemoteSecondary(
           atSign, preference()..cramSecret = 'unused',
           lookUps: secureSocketLookUps()),

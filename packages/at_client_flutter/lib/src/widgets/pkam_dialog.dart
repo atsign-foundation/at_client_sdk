@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart'
     show AtKeysFileOverwriteException, AtKeysIo, WrittenAtKeysIo;
 import 'package:at_client/at_client.dart';
@@ -29,6 +31,11 @@ import 'package:flutter/material.dart';
 /// The client comes back online, offline or refused, and its `connection`
 /// says which; only a refusal on a device that has never held the atSign
 /// online is a failure here.
+///
+/// Keys holding only an enrollment awaiting approval, in a store that can be
+/// written, are waited on as `ApkamActivationDialog` waits: the client opens
+/// once the request is approved, and leaving stops the wait and keeps the
+/// request.
 ///
 /// Returns:
 /// - The `AtClient`, or null if the process fails or is cancelled.
@@ -100,6 +107,7 @@ class PkamDialog extends StatefulWidget {
 
 class _PkamDialogState extends State<PkamDialog> {
   final AtSignLogger _logger = AtSignLogger('PkamDialog');
+  PendingEnrollment? _waitingOn;
 
   @override
   void initState() {
@@ -111,13 +119,8 @@ class _PkamDialogState extends State<PkamDialog> {
 
   Future<void> _authenticate() async {
     try {
-      final client = await widget.flows.open(
-        widget.atSign,
-        keys: widget.keys,
-        preference: under(widget.preference, widget.rootDomain),
-        storage: widget.storage,
-        lookUps: widget.lookUps,
-      );
+      final client = await _openOrResume();
+      if (client == null) return;
       await _backUp();
       if (widget.onAuthenticationComplete != null) {
         widget.onAuthenticationComplete!(client);
@@ -146,6 +149,86 @@ class _PkamDialogState extends State<PkamDialog> {
     }
   }
 
+  /// The client opened on the keys, or, when they hold only an enrollment
+  /// awaiting approval in a store that can be written, the client it opens
+  /// once approved; null when the user left first.
+  Future<AtClient?> _openOrResume() async {
+    final preference = under(widget.preference, widget.rootDomain);
+    try {
+      return await widget.flows.open(
+        widget.atSign,
+        keys: widget.keys,
+        preference: preference,
+        storage: widget.storage,
+        lookUps: widget.lookUps,
+      );
+    } on AtEnrollmentPendingException {
+      final keys = widget.keys;
+      if (keys is! WrittenAtKeysIo) rethrow;
+      final pending = await widget.flows.resumeEnrollment(
+        widget.atSign,
+        keys: keys,
+        preference: preference,
+        lookUps: widget.lookUps,
+      );
+      if (pending == null) rethrow;
+      return _awaitApproval(pending, preference);
+    }
+  }
+
+  Future<AtClient?> _awaitApproval(
+    PendingEnrollment pending,
+    AtClientPreference preference,
+  ) async {
+    if (!mounted) {
+      await _stop(pending);
+      return null;
+    }
+    setState(() => _waitingOn = pending);
+    try {
+      final client = await pending.client(
+        preference,
+        storage: await storageOrDefault(
+          widget.atSign,
+          preference,
+          widget.storage,
+        ),
+      );
+      if (!mounted) {
+        // NOTE: nothing receives a client opened after the user left, and
+        // while it is live the atSign cannot be opened again.
+        await client.stop();
+        return null;
+      }
+      return client;
+    } on StoppedException {
+      if (!mounted) return null;
+      rethrow;
+    } finally {
+      _waitingOn = null;
+    }
+  }
+
+  /// Stops [pending]'s wait and keeps the request. A failure is logged,
+  /// since the dialog is gone and there is nobody to tell.
+  Future<void> _stop(PendingEnrollment pending) async {
+    try {
+      await pending.stop();
+    } catch (e) {
+      _logger.warning(
+        'Could not stop the wait for enrollment ${pending.enrollmentId} of '
+        '${widget.atSign}: $e',
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    final waitingOn = _waitingOn;
+    if (waitingOn != null) unawaited(_stop(waitingOn));
+    super.dispose();
+  }
+
   /// Copies the keys the client opened on into each backup store that does
   /// not already hold the atSign.
   Future<void> _backUp() async {
@@ -168,7 +251,10 @@ class _PkamDialogState extends State<PkamDialog> {
         padding: const EdgeInsets.all(16.0),
         child: LoadingDialog(
           title: widget.title ?? "Authenticating via pkam",
-          description: widget.description ?? "Validating your atKeys...",
+          description: _waitingOn == null
+              ? widget.description ?? "Validating your atKeys..."
+              : 'Waiting for approval of enrollment '
+                    '${_waitingOn!.enrollmentId}..',
           themeData: Theme.of(context),
         ),
       ),

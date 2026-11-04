@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';

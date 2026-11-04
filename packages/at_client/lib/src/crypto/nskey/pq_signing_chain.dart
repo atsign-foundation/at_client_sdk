@@ -594,8 +594,8 @@ class PqSigningChain {
 
   /// Reads this enrollment's own `_apsk` and records which of its keys have a
   /// link, for content signing to prefer; returns the record, or null when it
-  /// has none. A client running as the atSign's own credential is treated as
-  /// the atSign itself, never as an enrollment, so it reads none.
+  /// has none. A client on the primary enrollment is treated as the atSign
+  /// itself, so it reads none.
   Future<ApskRecord?> refreshOwnLinks() async {
     final id = _atClient.enrollmentId;
     if (isAtSignCredential(id)) return null;

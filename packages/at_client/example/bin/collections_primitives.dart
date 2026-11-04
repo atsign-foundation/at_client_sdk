@@ -63,7 +63,7 @@ Future<void> sender(
       sharedWith: otherAtSigns,
     );
     progressSink.add('  ...saved.');
-  } on CollectionOpException catch (e) {
+  } on CollectionOpException<Map> catch (e) {
     for (final r in e.results) {
       progressSink.add(r.toString());
     }
@@ -76,7 +76,7 @@ Future<void> sender(
       sharedWith: otherAtSigns,
     );
     progressSink.add('  ...saved.');
-  } on CollectionOpException catch (e) {
+  } on CollectionOpException<String> catch (e) {
     for (final r in e.results) {
       progressSink.add(r.toString());
     }

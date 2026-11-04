@@ -1,4 +1,6 @@
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/transformer/request_transformer/get_request_transformer.dart';
