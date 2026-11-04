@@ -396,4 +396,112 @@ void main() {
     expect(seen, [_plaintext]);
     expect(provider.decrypts, 1);
   });
+
+  group('Given subscriptions whose every listener has cancelled', () {
+    const secondKey = '@alice:discover_response_2.$_namespace@alice';
+
+    test(
+        'when 100 distinct regexes have each been subscribed and cancelled, '
+        'then the service holds as many subscriptions as before them',
+        () async {
+      final baseline = service.getStreamListenersCount();
+      final listeners = [
+        for (var i = 0; i < 100; i++)
+          service.subscribe(regex: 'conversation_$i\\.').listen((_) {})
+      ];
+      expect(service.getStreamListenersCount(), baseline + 100,
+          reason: 'precondition: a subscription with a listener is held');
+
+      for (final listener in listeners) {
+        await listener.cancel();
+      }
+
+      expect(service.getStreamListenersCount(), baseline,
+          reason: 'a subscription nobody listens to must be released, or one '
+              'is held for each distinct regex the client ever subscribed, '
+              'and every notification is matched against each');
+    });
+
+    test(
+        'when a notification arrives that only a cancelled decrypting '
+        'subscription matches, then it is not decrypted', () async {
+      await service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((_) {})
+          .cancel();
+
+      await deliver(_frame(key));
+
+      expect(provider.decrypts, 0,
+          reason: 'nobody receives the plaintext, so decrypting it is work '
+              'done for a subscriber that has gone');
+    });
+
+    test(
+        'when a live subscriber\'s notifications wait for their key, then the '
+        'cancelled subscription takes no room from them in the park', () async {
+      final maxParked = NotificationServiceImpl.maxParked;
+      addTearDown(() => NotificationServiceImpl.maxParked = maxParked);
+      NotificationServiceImpl.maxParked = 2;
+      provider.filed = false;
+      final dropped = <DroppedNotification>[];
+      service.droppedEvents.listen(dropped.add);
+      await service
+          .subscribe(regex: r'\.sshrvd@alice', shouldDecrypt: true)
+          .listen((_) {})
+          .cancel();
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((_) {});
+
+      await deliver(_frame(key));
+      await deliver(_frame(secondKey));
+
+      expect(dropped, isEmpty,
+          reason: 'the park holds two and the live subscriber waits on two; '
+              'a share parked for a subscription nobody listens to evicts one '
+              'of them, and nothing re-delivers it');
+      expect(service.parkedCount, 2);
+    });
+
+    test(
+        'when a stream subscribe returned for the same regex is listened to '
+        'afterwards, then it receives notifications', () async {
+      final earlier =
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true);
+      final later =
+          service.subscribe(regex: r'discover_response', shouldDecrypt: true);
+      await earlier.listen((_) {}).cancel();
+
+      final seen = <String?>[];
+      later.listen((n) => seen.add(n.value));
+      await deliver(_frame(key));
+
+      expect(seen, [_plaintext],
+          reason: 'the earlier listener leaving must not end a subscription '
+              'another caller holds and has yet to listen to');
+    });
+  });
+
+  test(
+      'control: a live subscriber alone waits in the park without a drop, '
+      'with the same park bound and notifications', () async {
+    // NOTE: without this arm, the park test above could be red for a bound
+    // the live subscriber overflows alone.
+    final maxParked = NotificationServiceImpl.maxParked;
+    addTearDown(() => NotificationServiceImpl.maxParked = maxParked);
+    NotificationServiceImpl.maxParked = 2;
+    provider.filed = false;
+    final dropped = <DroppedNotification>[];
+    service.droppedEvents.listen(dropped.add);
+    service
+        .subscribe(regex: r'discover_response', shouldDecrypt: true)
+        .listen((_) {});
+
+    await deliver(_frame(key));
+    await deliver(_frame('@alice:discover_response_2.$_namespace@alice'));
+
+    expect(dropped, isEmpty);
+    expect(service.parkedCount, 2);
+  });
 }
