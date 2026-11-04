@@ -1,3 +1,10 @@
+## 4.1.0
+
+- feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
+  enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
+  private half does not sign for its public half is refused with
+  `AtSigningException` before `enroll:request` is sent.
+
 ## 4.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
@@ -5,10 +12,6 @@
   `AtKeysFormatException`, a `FormatException` whose `reason` and `position`
   say why and at which character, and which holds none of the file's text. A
   JSON value that is not an object no longer fails as a `TypeError`.
-- feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
-  enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
-  private half does not sign for its public half is refused with
-  `AtSigningException` before `enroll:request` is sent.
 - fix: after `CramAuthenticator.authenticate` the lookup's own authenticator
   is back in place, and a second CRAM authentication on a lookup already
   running one throws `StateError`.
