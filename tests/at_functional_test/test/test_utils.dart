@@ -13,7 +13,10 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyMintLockKey;
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_commons/at_builders.dart' show LLookupVerbBuilder;
 
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:test/test.dart';
@@ -75,12 +78,35 @@ final legacyPlusPqProviders = PqPosture(
 /// overrun a one-second ttl mid-mint.
 const liveMintLockTtl = Duration(seconds: 5);
 
-/// Waits until a mint lock taken just before has expired on the atServer.
+/// Waits until the atServer no longer holds the mint lock on [namespace] of
+/// [client]'s atSign, whatever ttl it was taken with, reading it as [client].
 ///
-/// Past the ttl rather than exactly it: the atServer starts counting when it
-/// stores the record, after the client sent it.
-Future<void> waitOutMintLock() =>
-    Future.delayed(liveMintLockTtl + const Duration(milliseconds: 500));
+/// Throws a [TimeoutException] if the lock is still held after [timeout], and
+/// rethrows any failure to read it other than the record being absent.
+Future<void> waitOutMintLock(AtClient client, String namespace,
+    {Duration timeout = const Duration(seconds: 60)}) async {
+  final lock = nskeyMintLockKey(client.getCurrentAtSign()!, namespace);
+  final remote = client.getRemoteSecondary()!;
+  final waited = Stopwatch()..start();
+  while (true) {
+    try {
+      // NOTE: an expired record the atServer has not yet swept answers
+      // `data:null`; a create is accepted from that moment.
+      final answer =
+          await remote.executeVerb(LLookupVerbBuilder()..atKey = lock);
+      if (answer == 'data:null') return;
+    } on KeyNotFoundException {
+      return;
+    }
+    if (waited.elapsed >= timeout) {
+      throw TimeoutException(
+          'the atServer still holds the mint lock $lock after '
+          '${waited.elapsed}',
+          timeout);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+  }
+}
 
 Future<void> awaitMonitorListening(NotificationServiceImpl notifications,
     {Duration timeout = const Duration(seconds: 60)}) async {

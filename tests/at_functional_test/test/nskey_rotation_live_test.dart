@@ -173,7 +173,7 @@ void main() {
       sharing: rotator.sharing,
     );
 
-    await waitOutMintLock();
+    await waitOutMintLock(rotator.enrolled.client, namespace);
 
     final outcome = await rotation.rotateNamespaceKey(namespace,
         excludeEnrollmentIds: {excluded.enrolled.enrollmentId});
@@ -280,7 +280,7 @@ void main() {
 
     // The control: the same call is accepted once the cooldown has lapsed, so
     // the refusal above is the lock and not an enrollment that cannot rotate.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
     final rotated = (await owner.ring.rotate(ns)).rotated;
     expect(rotated.nskeyKid, isNot(minted.nskeyKid));
   });
@@ -519,7 +519,7 @@ void main() {
     // NOTE: revokeEnrollmentAndRotate revokes FIRST, so a rotation refused by
     // the cooldown would leave the enrollment cut off but still holding the
     // live generation.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
 
     final outcomes = await NskeyRotation(
       atClient: owner.enrolled.client,
@@ -625,7 +625,7 @@ void main() {
         reason: 'the control: before the rotation the writer\'s key rests on '
             'the generation every enrollment with access holds');
 
-    await waitOutMintLock();
+    await waitOutMintLock(writer.enrolled.client, ns);
     final outcomes = await NskeyRotation(
       atClient: operator.enrolled.client,
       ring: operator.ring,
@@ -683,7 +683,7 @@ void main() {
     final target = await holder('bck-target', namespaces: {ns: 'rw'});
 
     final before = await owner.ring.mintAndPublish(ns);
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
 
     // Revoked and NOT rotated: the half-finished state, produced by driving the
     // revoke alone rather than through the lever that composes the two.
@@ -709,7 +709,7 @@ void main() {
 
     // The control: the rotation took a fresh server stamp, so the same
     // revocation is no longer later than it and the next start rotates nothing.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
     expect(await seeding.rotateIfRevoked(atSign, ns), isFalse);
     expect((await owner.ring.publishedAdvertisement(atSign, ns))?.nskeyKid,
         after?.nskeyKid);

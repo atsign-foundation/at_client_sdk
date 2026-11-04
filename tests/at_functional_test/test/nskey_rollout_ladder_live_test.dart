@@ -188,7 +188,7 @@ void main() {
 
     // NOTE: nothing releases a mint lock but expiry, so the add below is
     // refused inside the window.
-    await waitOutMintLock();
+    await waitOutMintLock(old.client, namespace);
 
     await NskeySeeding(
             atClient: rolled.client,

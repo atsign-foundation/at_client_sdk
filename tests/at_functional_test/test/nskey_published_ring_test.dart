@@ -78,7 +78,7 @@ void main() {
     // mint — a mint that loses the lock adopts the winner and reports success,
     // so it cannot fail the way rotation fails.
     final first = await ring.mintAndPublish(ns);
-    await waitOutMintLock();
+    await waitOutMintLock(atClient, ns);
     final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),

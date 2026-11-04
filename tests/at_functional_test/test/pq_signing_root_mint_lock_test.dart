@@ -155,7 +155,7 @@ void main() {
     // rather than a second mint, so what proves the record mutable is the
     // operation that actually depends on it being mutable.
     final first = await ring.mintAndPublish(ns);
-    await waitOutMintLock();
+    await waitOutMintLock(atClient, ns);
     final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),
