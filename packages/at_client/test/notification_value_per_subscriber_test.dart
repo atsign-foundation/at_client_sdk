@@ -83,7 +83,8 @@ class _SignallingRing extends InMemoryNskeyKeyRing
 }
 
 String _frame(String key,
-        {MessageTypeEnum messageType = MessageTypeEnum.key}) =>
+        {MessageTypeEnum messageType = MessageTypeEnum.key,
+        String? pubKeyHash}) =>
     'notification: ${jsonEncode({
           'id': 'n-${key.hashCode}',
           'key': key,
@@ -97,6 +98,9 @@ String _frame(String key,
           'metadata': {
             AtConstants.appMetadata: Metadata.encodeAppMetadata(
                 AppMetadata(providerId: 'strict-provider')),
+            if (pubKeyHash != null)
+              AtConstants.sharedWithPublicKeyHash:
+                  jsonEncode({'hash': pubKeyHash, 'hashingAlgo': 'sha256'}),
           },
         })}\n';
 
@@ -365,6 +369,25 @@ void main() {
     });
 
     test(
+        'when both ask for the same decryption and the first changes the '
+        'public key hash of the notification it receives, then the second '
+        'sees it as it arrived', () async {
+      final second = <String?>[];
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => n.metadata!.pubKeyHash!.hash = 'changed-by-first');
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => second.add(n.metadata!.pubKeyHash!.hash));
+
+      await deliver(_frame(key, pubKeyHash: 'arrived'));
+
+      expect(second, ['arrived'],
+          reason: 'a subscription\'s copy of a notification carries its own '
+              'public key hash');
+    });
+
+    test(
         'when both wait for their key on as many notifications as the park '
         'holds, then none is dropped', () async {
       final maxParked = NotificationServiceImpl.maxParked;
@@ -562,6 +585,30 @@ void main() {
       expect(outcome, _plaintext,
           reason: 'what one subscription does to its copy must not change '
               'the notification another is still waiting to receive');
+    });
+
+    test(
+        'when another subscription changes the public key hash of the same '
+        'notification, then it is delivered as it arrived once the key is '
+        'filed', () async {
+      provider.filed = false;
+      final delivered = Completer<String?>();
+      service
+          .subscribe(regex: r'discover_response')
+          .listen((n) => n.metadata!.pubKeyHash!.hash = 'changed-by-other');
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => delivered.complete(n.metadata!.pubKeyHash!.hash));
+      await deliver(_frame(key, pubKeyHash: 'arrived'));
+      expect(service.parkedCount, 1, reason: 'precondition: it parked');
+
+      provider.filed = true;
+      ring.announce();
+
+      expect(await delivered.future.timeout(const Duration(seconds: 10)),
+          'arrived',
+          reason: 'a parked notification is held as it arrived, whatever '
+              'another subscription does to its own copy');
     });
 
     test(

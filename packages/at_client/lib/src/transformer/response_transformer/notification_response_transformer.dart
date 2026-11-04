@@ -101,7 +101,8 @@ class NotificationResponseTransformer
       n.isEncrypted == true;
 
   /// A copy of [n] that shares nothing mutable with it: its
-  /// [AtNotification.metadata] is copied too, app metadata included.
+  /// [AtNotification.metadata] is copied too, app metadata and public key
+  /// hash included.
   static AtNotification copyOf(AtNotification n) => AtNotification(
       n.id, n.key, n.from, n.to, n.epochMillis, n.messageType, n.isEncrypted,
       value: n.value,
@@ -113,7 +114,11 @@ class NotificationResponseTransformer
   static Metadata? _copyOfMetadata(Metadata? metadata) {
     if (metadata == null) return null;
     final appMetadata = metadata.appMetadata;
+    final pubKeyHash = metadata.pubKeyHash;
     return metadata.copy()
+      ..pubKeyHash = pubKeyHash == null
+          ? null
+          : PublicKeyHash(pubKeyHash.hash, pubKeyHash.hashingAlgo)
       ..appMetadata = appMetadata == null
           ? null
           : AppMetadata.fromJson(jsonDecode(jsonEncode(appMetadata)));
