@@ -646,6 +646,40 @@ void main() {
     });
 
     test(
+        'when it cancels while its own parked notification is re-driven, '
+        'then its notification is reported as dropped', () async {
+      provider.filed = false;
+      final dropped = <DroppedNotification>[];
+      service.droppedEvents.listen(dropped.add);
+      // Registered first, so its entry is the one being decrypted when it
+      // cancels.
+      final leaving = service
+          .subscribe(regex: r'\.sshrvd@alice', shouldDecrypt: true)
+          .listen((_) {});
+      final delivered = Completer<String?>();
+      service
+          .subscribe(regex: r'discover_response', shouldDecrypt: true)
+          .listen((n) => delivered.complete(n.value));
+      await deliver(_frame(key));
+      expect(service.parkedCount, 2, reason: 'precondition: both parked');
+
+      provider.filed = true;
+      provider.onDecrypt = () {
+        provider.onDecrypt = null;
+        leaving.cancel();
+      };
+      ring.announce();
+      expect(await delivered.future.timeout(const Duration(seconds: 10)),
+          _plaintext,
+          reason: 'precondition: the re-drive ran');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(dropped.map((d) => d.key), [key],
+          reason: 'whether a notification given up with its listener is '
+              'reported must not depend on which listener registered first');
+    });
+
+    test(
         'when it is cancelled while its notification is being decrypted, then '
         'nothing is parked for it', () async {
       provider.filed = false;

@@ -176,7 +176,10 @@ class NotificationServiceImpl extends NotificationService {
   /// sees. The regex is matched first wherever the key
   /// is not itself ciphertext, so a subscription that does not receive the
   /// notification decrypts nothing.
-  Future<void> _deliver(
+  ///
+  /// Returns whether [n] was for this subscription, which is true even when
+  /// its listener cancelled before it could be given the notification.
+  Future<bool> _deliver(
       AtNotification n,
       NotificationConfig config,
       StreamController controller,
@@ -188,16 +191,17 @@ class NotificationServiceImpl extends NotificationService {
         (config.regex == emptyRegex || hasRegexMatch(key, config.regex));
 
     final keyIsCiphertext = NotificationResponseTransformer.decryptsKey(n);
-    if (!keyIsCiphertext && !matches(n.key)) return;
+    if (!keyIsCiphertext && !matches(n.key)) return false;
     final transformed = await transforms.putIfAbsent(
         keyIsCiphertext || config.shouldDecrypt,
         () => NotificationResponseTransformer(atClient).transform(Tuple()
           ..one = n
           ..two = config));
-    if (keyIsCiphertext && !matches(transformed.key)) return;
+    if (keyIsCiphertext && !matches(transformed.key)) return false;
     if (!controller.isClosed) {
       controller.add(NotificationResponseTransformer.copyOf(transformed));
     }
+    return true;
   }
 
   /// Holds [n] until the generation it needs is filed.
@@ -295,12 +299,18 @@ class NotificationServiceImpl extends NotificationService {
         continue;
       }
       try {
-        await _deliver(
+        final forThisListener = await _deliver(
             parked.notification,
             parked.config,
             parked.controller,
             transformsByNotification.putIfAbsent(
                 parked.notification, () => {}));
+        // NOTE: a listener that cancelled while its own entry was being
+        // decrypted was not given the notification; adding to its cancelled
+        // controller is a silent no-op.
+        if (forThisListener && !_subscriptions.containsKey(parked.controller)) {
+          _dropReleased(parked);
+        }
       } catch (e) {
         if (isStopped) return;
         _drop(
@@ -1156,7 +1166,7 @@ class NotificationServiceImpl extends NotificationService {
       parked.notification.key,
       'Dropping parked notification ${parked.notification.key} for a '
       'subscription to "${parked.config.regex}": its listener cancelled '
-      'before the key arrived');
+      'before it could be delivered');
 
   @override
   Future<NotificationResult> getStatus(String notificationId) async {
