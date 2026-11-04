@@ -177,9 +177,17 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   ///
   /// Both halves are encoded as a mint under [signingAlgo] encodes them: for
   /// `mldsa65`, base64 of the raw 1952-byte public and 4032-byte secret keys.
-  /// An `mldsa65` pair of any other shape is refused with
-  /// `AtSigningException`, and a pair under a [signingAlgo] other than
-  /// `rsa2048` or `mldsa65` with `ArgumentError`, before anything is sent.
+  ///
+  /// Before anything is sent, the private half signs a fixed string through
+  /// the signer a `pkam:` uses and the signature must verify against the
+  /// public half. A pair that is malformed, or whose halves do not belong
+  /// together, is refused with `AtSigningException`; a pair under a
+  /// [signingAlgo] other than `rsa2048` or `mldsa65` with `ArgumentError`.
+  /// Both halves are then re-encoded as standard base64, so a base64url pair
+  /// is sent, published and stored in one spelling.
+  ///
+  /// Whoever supplies the pair decides this enrollment's authentication
+  /// signing key, so it must come from the enrolling device.
   ///
   /// Null mints a fresh keypair under [signingAlgo].
   final ({String publicKey, String privateKey})? apkamKeyPair;

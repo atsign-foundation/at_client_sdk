@@ -355,7 +355,7 @@ void main() {
           isEmpty);
     });
 
-    group('given halves of two different keypairs,', () {
+    group('given a supplied pair that does not work,', () {
       Future<void> expectRefused(AtEnrollmentRequest Function() request) async {
         final (lookUp, sent) = recordingLookUp();
         await expectLater(AtEnrollmentImpl().submit(request(), lookUp),
@@ -363,7 +363,9 @@ void main() {
         expect(sent, isEmpty);
       }
 
-      test('when mldsa65, then it is refused before sending', () async {
+      test(
+          'when its mldsa65 halves come from two keypairs, then it is refused '
+          'before sending', () async {
         final other = await MlDsa65KeyPair.generate();
         await expectRefused(() => legacyRequest(apkamKeyPair: (
               publicKey: supplied.publicKey,
@@ -371,21 +373,27 @@ void main() {
             )));
       });
 
-      test('when rsa2048, then it is refused before sending', () async {
+      test(
+          'when its rsa2048 halves come from two keypairs, then it is refused '
+          'before sending', () async {
         final a = rsaPair();
         final b = rsaPair();
         await expectRefused(() =>
             rsaRequest((publicKey: a.publicKey, privateKey: b.privateKey)));
       });
 
-      test('when mldsa65 all-zero bytes, then it is refused', () async {
+      test(
+          'when it is mldsa65 all-zero bytes, then it is refused before sending',
+          () async {
         await expectRefused(() => legacyRequest(apkamKeyPair: (
               publicKey: base64Encode(List<int>.filled(1952, 0)),
               privateKey: base64Encode(List<int>.filled(4032, 0))
             )));
       });
 
-      test('when rsa2048 empty strings, then it is refused', () async {
+      test(
+          'when it is two empty rsa2048 strings, then it is refused before '
+          'sending', () async {
         await expectRefused(() => rsaRequest((publicKey: '', privateKey: '')));
       });
     });
@@ -504,23 +512,21 @@ void main() {
                   'status': 'pending'
                 })}'));
 
-    when(() =>
-        mockAtLookUp.executeCommand(
-            any(
-                that: startsWith(
-                    'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
-            auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': sealer.encrypt(encryptionPrivateKey, iv: iv)
-        })));
+    when(() => mockAtLookUp.executeCommand(
+        any(
+            that: startsWith(
+                'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
+        auth:
+            true)).thenAnswer((_) async => Future.value(
+        jsonEncode({'value': sealer.encrypt(encryptionPrivateKey, iv: iv)})));
 
-    when(() =>
-        mockAtLookUp.executeCommand(
-            any(
-                that: startsWith(
-                    'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
-            auth: true)).thenAnswer((_) async => Future.value(jsonEncode({
-          'value': sealer.encrypt(selfEncryptionKey, iv: iv)
-        })));
+    when(() => mockAtLookUp.executeCommand(
+        any(
+            that: startsWith(
+                'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
+        auth:
+            true)).thenAnswer((_) async => Future.value(
+        jsonEncode({'value': sealer.encrypt(selfEncryptionKey, iv: iv)})));
     when(() => mockAtLookUp.pkamAuthenticate())
         .thenAnswer((_) => Future.value(true));
 
@@ -575,12 +581,11 @@ void main() {
         atSign: atSign,
       );
 
-      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
-          enrollmentRequestDecision, mockAtLookUp,
-          approverKeys: (
-            encryptionPrivateKey: encryptionPrivateKey,
-            selfEncryptionKey: selfEncryptionKey
-          ));
+      AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
+          .approve(enrollmentRequestDecision, mockAtLookUp, approverKeys: (
+        encryptionPrivateKey: encryptionPrivateKey,
+        selfEncryptionKey: selfEncryptionKey
+      ));
 
       expect(atEnrollmentResponse.enrollmentId,
           '4be2d358-074d-4e3b-99f3-64c4da01532f');
@@ -910,7 +915,8 @@ void main() {
               'conveyance needs it in every mode');
     });
 
-    test('the default key exchange mode is EnrollmentKeyExchangeMode.legacy', () async {
+    test('the default key exchange mode is EnrollmentKeyExchangeMode.legacy',
+        () async {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await AtEnrollmentImpl().submit(requestWith(null), mockAtLookUp);
