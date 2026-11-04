@@ -1,3 +1,10 @@
+## 4.0.1
+
+- fix: a notification subscription is released once its last listener
+  cancels.
+- fix: a change one subscriber makes to a notification is no longer seen by
+  another subscribed with the same regex and `shouldDecrypt`.
+
 ## 4.0.0
 
 - feat: the first release with post-quantum cryptography, chosen by
