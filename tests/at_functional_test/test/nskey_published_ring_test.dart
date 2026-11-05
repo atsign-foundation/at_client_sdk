@@ -99,6 +99,35 @@ void main() {
     expect(await ring.privateHalf(atSign, ns, second.nskeyKid), isNotNull);
   });
 
+  test(
+      'a cold-start mint whose filing takes 8 s still publishes inside the '
+      'live mint lock',
+      timeout: const Timeout(Duration(minutes: 1)), () async {
+    final ns = uniqueNs();
+    const slowFiling = Duration(seconds: 8);
+    final ring = PublishedNskeyKeyRing(atClient,
+        lockTtl: liveMintLockTtl,
+        lockBudgetPerMember: liveMintLockBudgetPerMember);
+    // NOTE: the hold runs inside the mint lock, after the lock is taken and
+    // before the advertisement is published.
+    ring.privateFiling!.holdBeforeStore =
+        () => Future<void>.delayed(slowFiling);
+
+    final minting = Stopwatch()..start();
+    final minted = await ring.mintAndPublish(ns);
+    minting.stop();
+
+    expect(minting.elapsed, greaterThanOrEqualTo(slowFiling),
+        reason: 'the control: the filing was held inside the mint, so the '
+            'publish below happened after the hold and not before it');
+    expect(
+        (await PublishedNskeyKeyRing(atClient)
+                .publishedAdvertisement(atSign, ns))
+            ?.nskeyKid,
+        minted.nskeyKid,
+        reason: 'the generation minted is the one the atServer publishes');
+  });
+
   test('a namespace nobody minted for resolves to nothing', () async {
     expect(
         await PublishedNskeyKeyRing(atClient).currentPublic(atSign, uniqueNs()),
