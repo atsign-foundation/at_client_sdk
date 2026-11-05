@@ -733,6 +733,8 @@ nothing while there is no VFS.
 dart2wasm the default AES path resolves to pure Dart regardless of thread. See
 [`design.md`](design.md) §C1.
 
+> **Amended 2026-11-02 (browser notifications).** The V1 monitor runs on the main thread of one **leader tab**. The leader is elected by a Web Lock named `at-monitor:<atSign>:<enrollmentId>`, and it forwards the raw `notification:` lines (still ciphertext) to the other tabs over a `BroadcastChannel`. Each tab decrypts on its own. Moving the monitor into a worker or SharedWorker is a **path to explore** in V2, not a commitment, because the whole AtClient and its keys would have to move into the worker too. Tracked in [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439).
+
 ---
 
 ### D-20 — The JS/TS surface is **`Promise`-returning for every protocol operation**; no synchronous escape hatch (2026-08-30)
@@ -861,6 +863,21 @@ into **resume**.
 **Not yet implemented.** at_client exposes only the `fetchOfflineNotifications` bool, which
 is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
 the bool's deprecation are a follow-up at_client change.
+
+> **Amended 2026-11-02 (browser notifications, [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439)).**
+>
+> - **The browser default is now *connect*, not *window(1h)*.** The browser preset sets `fetchOfflineNotifications = false`, so it needs no at_client change. Without a checkpoint, *window(1h)* replays the same hour on every reload.
+> - **A reconnect supervisor goes with it.** While the tab is open, the monitor never gives up. It retries once the cause of the disconnect is fixed:
+>
+>   | Cause | Retry when |
+>   | --- | --- |
+>   | Network down | the `online` event fires |
+>   | atServer down or closed | after a capped, jittered backoff |
+>   | Auth fails, or the enrollment is not yet approved or is revoked | on an explicit retry or an enrollment-status change, never in a hot loop |
+>
+>   The facade sees the state: `connecting`, `connected` or `waiting: <reason>`.
+> - **The since filter becomes inclusive** (at_server [#2922](https://github.com/atsign-foundation/at_server/issues/2922), pending). The exclusive filter loses a notification stamped in the same millisecond as the checkpoint, so the "not an off-by-one" note above is superseded.
+> - **Dedupe by notification id is mandatory.** Use a bounded set of about 1k ids, and skip the id `'-1'` that every stats notification carries. It must be released before the server change, or older clients see their last notification again on every reconnect.
 
 ### D-25 — Client storage is the app's choice; at_client keeps a Hive default until 4.0 (2026-10-07)
 
@@ -1259,7 +1276,7 @@ session. This is also the browser replacement for `root.atsign.org:64`.
 
 | Dependency | State |
 | --- | --- |
-| CORS on the atDirectory's HTTPS face | The server code sends `Access-Control-Allow-Origin: *` on every HTTP answer since at_root_server 2.3.0 (sourced from at_server, not verifiable from this repo; [at_server#2894](https://github.com/atsign-foundation/at_server/pull/2894), merged 2026-10-23). Open: 2.3.0 deployed to `root.atsign.org`, which the repos cannot show. Only the finder's `fetch` needs it; WebSocket opens are not subject to CORS |
+| CORS on the atDirectory's HTTPS face | The server code sends `Access-Control-Allow-Origin: *` on every HTTP answer since at_root_server 2.3.0 (sourced from at_server, not verifiable from this repo; [at_server#2894](https://github.com/atsign-foundation/at_server/pull/2894), merged 2026-10-23). Open: 2.3.0 deployed to `root.atsign.org`, which the repos cannot show, and an allowlist of origins in place of `*`, [at_server#2921](https://github.com/atsign-foundation/at_server/issues/2921). Only the finder's `fetch` needs it; WebSocket opens are not subject to CORS |
 | Prod HTTPS lookup | The prod atDirectory's `:443` listener is not live; `:64` answers only in the raw protocol |
 
 **OQ-8 — How far does the `AtConnection` break reach outside this repo?** In-repo
@@ -1315,6 +1332,8 @@ already builds. Must be decided before the browser lane ships notifications.
 **Resolution.** Neither option as posed: replay becomes a policy (D-24). The browser bundle
 defaults to *window(1h)*, which bounds the replay with no checkpoint store at all. The
 IndexedDB record stands, but only for a browser client that opts into *resume*.
+
+> **Corrected 2026-11-02.** The premise above is wrong. The method is `notification_service_impl.dart:428`, and under `RemoteWriteThroughKeyStore` (in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430)) `exists` **throws** `UnsupportedError`; it does not silently succeed. `Monitor.currentWatermark` catches the throw and returns null. A null watermark sends `monitor:` with no epoch, which means "since now". So every reconnect **loses the gap**, which fails X-R4e; the failure is not an unbounded replay. The browser default is now *connect*, which keeps an in-memory cursor across reconnects (D-24, amended 2026-11-02).
 
 ### OQ-14 — Do the registrar asks land?
 
@@ -1389,3 +1408,5 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-10-28 | **PB-0 reservation dropped.** No D-numbers are held for PB-0's unfiled rulings (the portal-requirements routing, R-5); they take the next free numbers when filed. The old reservation of D-26..D-28 also collided with D-26 (SimpleOPFS). |
 | 2026-10-30 | **K-14..K-16 ruled.** K-14: no document replica; IndexedDB holds the hint only (closes the open replica question). K-15: the portal-cut envelope (R-5/R-6) is not a browser bootstrap; APKAM enrollment (`5vf.7`) is the only one, `cut_keys` stays dev-only (closes the Q-3 remainder). K-16: K-13 a deferred behind Q-10 and `2fk`, first release PRF-only; no-WebAuthn takes the no-PRF path and is deferred with it. |
 | 2026-10-31 | **K-17 ruled; K-10 amended.** The pointer moves from `atkeysv` to a per-passkey namespace `ns = HKDF(P, "atkeys-ns\|<atSign>")`; enrollments request `<ns>:rw` instead of `atkeysv:rw`. Closes bead `m0j` (cross-enrollment overwrite) except for CRAM. Cost: the approver sees an opaque namespace. |
+| 2026-11-02 | **Browser notifications ruled; D-19 and D-24 amended; OQ-13 corrected** ([#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439)). V1 is Tier 1 only. The monitor runs in a leader tab elected by a Web Lock, and a `BroadcastChannel` carries the ciphertext lines to the other tabs. A worker monitor is a path to explore. The browser default replay is *connect*, with a reconnect supervisor. The atServer's since filter becomes inclusive ([at_server#2922](https://github.com/atsign-foundation/at_server/issues/2922)), and dedupe by notification id becomes mandatory. Directory CORS is [at_server#2921](https://github.com/atsign-foundation/at_server/issues/2921). Deferred to V2: Tier 2 tickle push, the worker monitor and Chrome Android OS notifications. OS notifications are opt-in. |
+| 2026-11-05 | Doc set brought current: #2214 closed, superseded by [#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415) (4.0.0 package set; #2399's transport reached trunk through it). The remote-only classes and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430), with CI in [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431) and tracking in [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437). Every wasm-gated barrel now has 0 blocked packages. |

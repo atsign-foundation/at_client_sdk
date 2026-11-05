@@ -1037,7 +1037,7 @@ Commits:
 
 | Item | Owner | Blocks |
 |---|---|---|
-| The 3 inherited blocked packages (`at_lookup`, `at_utils`, `chalkdart`) | PB-1 / PB-2 (#2214, #2399) | A fully io-free graph. The gate ratchets at 3 until then |
+| ~~The 3 inherited blocked packages (`at_lookup`, `at_utils`, `chalkdart`)~~ | Done: landed with the 4.0.0 package set ([#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415), which superseded #2214 and carried #2399) | Every gated barrel is at 0 blocked packages (`.github/wasm_gates.yaml`) |
 | `tools/wasm_shakedown/README.md` still says `at_client` owns 7 offenders and lists only `at_chops` and `at_auth` as gated | Whoever next touches the tool | Nothing. The yaml is correct; only the README is stale |
 | The CHANGELOG omits `RemoteSecondary.addStreamData` and `EncryptionService.encryptFileInChunks` / `decryptFileInChunks` | This PR, if wanted | Nothing. `RemoteSecondary` is exported from `at_client.dart`, so `addStreamData` was public |
 | `at_client_io.dart` exports only the io helpers. D-5 "Native implementations live in `_io` barrels, not new packages" describes each `_io` barrel as "exporting the neutral barrel plus the native implementations" | Your call: amend D-5 or re-export `at_client.dart` | Nothing. Consumers import both barrels today |
@@ -1117,7 +1117,7 @@ The change is in `.github/wasm_gates.yaml`, under `at_client`:
 | `remote_only.dart` | 1097 | 0 / 0 | 3 / 3 | ok |
 
 - **`min_files_walked`** guards against a false pass. If the walk broke and found 0 files, it would also find 0 offenders.
-- **The 3 blocked packages** are `at_lookup`, `at_utils` and `chalkdart`. They are inherited, and PB-1/PB-2 own them (#2214, #2399).
+- **The 3 blocked packages** were `at_lookup`, `at_utils` and `chalkdart`. They cleared with the 4.0.0 package set (#2415, which superseded #2214); every gated barrel is now at 0.
 
 ---
 
@@ -1310,7 +1310,7 @@ sequenceDiagram
 
 | Item | Owner | Blocks |
 |---|---|---|
-| The 3 inherited blocked packages (`at_lookup`, `at_utils`, `chalkdart`) | PB-1 / PB-2 (#2214, #2399) | A fully io-free graph. The gate ratchets at 3 until then |
+| ~~The 3 inherited blocked packages (`at_lookup`, `at_utils`, `chalkdart`)~~ | Done: landed with the 4.0.0 package set ([#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415), which superseded #2214 and carried #2399) | Every gated barrel is at 0 blocked packages (`.github/wasm_gates.yaml`) |
 | Whether to cherry-pick the 6b `get` fix onto stage2b (#2259) | Your call. #2259 is untouched for now | Nothing. The fix reaches trunk through the stack either way |
 | `update:meta:` in `StatefulFakeServer` | Whoever next needs it in a test | Nothing today. The fake throws `UnimplementedError` for it |
 | X-R2 against a **real** atServer | Later, in the functional/e2e lane | Nothing for PB-3. The fake covers the client-side contract |

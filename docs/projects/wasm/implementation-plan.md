@@ -1043,14 +1043,14 @@ The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above
 | PB-5 H | Portal and ephemeral sessions; `HealOutcome` | W1 | #2338 | open |
 | PB-5 J | `@JSExport` dev harness + `build.sh` (js and wasm compiles required) | J1 (dev only) | #2341 | open |
 | PB-5 N | K-10 pointer + K-11 document replacing the shared `unlocks[]` copy | — | not started | build is bd `5vf.1`–`5vf.7`; rulings K-1..K-17 (K-6, K-8 superseded 2026-10-27; K-12 fallbacks ruled by K-13) |
-| PB-5 M | Notifications in the browser, D-24 `window(1h)` | — | not started | draft plan |
+| PB-5 M | Notifications in the browser: leader tab, D-24 *connect* + reconnect supervisor (ruled 2026-11-02) | — | not started | [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439) |
 | PB-6 | `@atsign/at-client-web` TypeScript facade | J1–J8 | not started | draft plan; gated on OQ-16 |
 | PB-7 / L | First live browser session on a real hostname; the five live paths | W3 → T4.1, T4.2 | not started | step 0a (paths 1–3) passed on Chrome headless + local atServer; step 0a′ reruns after N |
 | R-5 | Portal requirements letter (the never-filed PB-0 routing) | D2 | not started | draft |
 
 **What changed against the task lists above.**
 
-- **W1's package name.** Ruled 2026-10-18: the Dart package is `at_client_wasm` (the package is not on trunk yet; see the PB-5 rows above). `at_client_web` in D-4/D-8 and older text means this package. The JS facade stays `@atsign/at-client-web`, a separate npm name.
+- **W1's package name.** Ruled 2026-10-18: the Dart package is `at_client_wasm` (the package is in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430), CI in #2431, tracked by #2437). `at_client_web` in D-4/D-8 and older text means this package. The JS facade stays `@atsign/at-client-web`, a separate npm name.
 - **W4 is done** (D-26): SimpleOPFS, one directory per (atSign, enrollmentId); D4 not triggered. A SQLite bundle is V2.
 - **D2 (browser onboarding) is no longer deferred.** It is K-1..K-17 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
 - **Order of what is left:** review and land the stack → PB-5 N (so no code ships against the superseded `unlocks[]` design) → PB-7 live paths → PB-5 M → PB-6.

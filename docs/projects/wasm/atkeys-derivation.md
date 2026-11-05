@@ -2,7 +2,7 @@
 
 **Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-13 (fallbacks) ruled 2026-10-28
 **Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
-**Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2427, not on trunk)
+**Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2427, merged to gkc's branch `gkc-published-vip-verifies-mldsa`, not on trunk)
 
 ## Summary
 
