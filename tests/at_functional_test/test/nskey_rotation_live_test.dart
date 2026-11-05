@@ -140,7 +140,8 @@ void main() {
   test(
       'UC-A5.1(b) · a rotation publishes a successor, pushes it to the '
       'survivor, and leaves the excluded enrollment on the old generation',
-      () async {
+      // It waits out a whole liveMintLockTtl.
+      timeout: const Timeout(Duration(minutes: 1)), () async {
     final rotator = await holder('rot-rotator');
     final survivor = await holder('rot-survivor');
     final excluded = await holder('rot-excluded');
@@ -256,7 +257,9 @@ void main() {
             'revocation would have bought nothing');
   });
 
-  test('a rotation inside the mint lock\'s cooldown is refused', () async {
+  test('a rotation inside the mint lock\'s cooldown is refused',
+      // It waits out a whole liveMintLockTtl.
+      timeout: const Timeout(Duration(minutes: 1)), () async {
     // NOTE: this cannot be a unit test — the interlock IS the atServer
     // refusing a second create of an immutable record, and a mocked
     // executeVerb accepts the second take happily.
@@ -505,7 +508,9 @@ void main() {
 
   test(
       'UC-A5.3 · revokeEnrollmentAndRotate revokes first, then supersedes the '
-      'generation the revoked enrollment held', () async {
+      'generation the revoked enrollment held',
+      // It waits out a whole liveMintLockTtl.
+      timeout: const Timeout(Duration(minutes: 1)), () async {
     // NOTE: its OWN namespace, because this needs a genuine cold start — the
     // owner retains the private for the superseded generation only if it
     // minted it, and on a warm namespace `mintAndPublish` ADOPTS the live

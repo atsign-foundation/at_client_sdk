@@ -71,12 +71,10 @@ final legacyPlusPqProviders = PqPosture(
 /// mint takes the lock, a rotation of the same namespace is refused until it
 /// lapses, and a test that rotates must wait it out with [waitOutMintLock].
 ///
-/// NOTE: it must outlast a whole mint on the slowest CI runner, because the
-/// holder carries the lock's lease and abandons rather than publishing once the
-/// ttl has elapsed. A mint against a local virtualenv measures in tens of
-/// milliseconds, but a runner running the pack at half its usual speed has
-/// overrun a one-second ttl mid-mint.
-const liveMintLockTtl = Duration(seconds: 5);
+/// NOTE: it must outlast a whole cold-start mint on a runner several times
+/// slower than usual, because the holder carries the lock's lease and abandons
+/// rather than publishing once the ttl has elapsed.
+const liveMintLockTtl = Duration(seconds: 15);
 
 /// What each enrollment listed for a namespace adds to a live test's mint
 /// lock when the mint conveys before it publishes.
