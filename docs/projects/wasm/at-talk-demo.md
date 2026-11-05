@@ -1,6 +1,6 @@
 # at_talk in the browser — demo
 
-**Status:** two-way chat working through the dev proxy (2026-10-27); the direct path ran browser → CLI once on production atSigns (2026-11-03) · **Bead:** `at_client_sdk-5q6` · **Code:** `at_client_wasm` and the remote-only classes, in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437))
+**Status:** two-way chat working through the dev proxy (2026-10-27); the direct path ran browser → CLI once on production atSigns (2026-11-03) · **Bead:** `at_client_sdk-5q6` · **Code:** the session opener, both transports (`devTransport`) and the peer-key fix are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)); the chat page `web/talk.html` is on the unpushed branch `st/wasm/at-talk-demo`, not yet in a PR. #2430's `web/index.html?direct=1` passes the same options but has not been run in a browser.
 
 A Chrome tab (`web/talk.html` on the `at_client_wasm` dev harness) chats end-to-end encrypted with an `at_talk` CLI. Two transports, chosen once per page load:
 
@@ -38,7 +38,7 @@ flowchart LR
 
 | Piece | How |
 |---|---|
-| page | `tool/build.sh`, then serve `build/` on `127.0.0.1:8080` with `Cache-Control: no-store`. Open `http://localhost:8080/talk.html?direct=1` (add `&root=host:port` for a non-production root, `&wasm=1` for dart2wasm). |
+| page | `talk.html` from `st/wasm/at-talk-demo`; `tool/build.sh`, then serve `build/` on `127.0.0.1:8080` with `Cache-Control: no-store`. Open `http://localhost:8080/talk.html?direct=1` (add `&root=host:port` for a non-production root, `&wasm=1` for dart2wasm). |
 | keys | the atSign's `.atKeys`, loaded by the dev harness |
 | CLI | the Dart `at_talk` example, or the C one from `at_c/examples/desktop/at_talk` with the fixes in [at_c#728](https://github.com/atsign-foundation/at_c/issues/728) |
 

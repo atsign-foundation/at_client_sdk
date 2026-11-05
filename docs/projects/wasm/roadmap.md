@@ -293,7 +293,7 @@ ruling that a removed default is preferable to a conditional default.
 
 ## 6. The phase trajectory at a glance
 
-| Phase                   | What lands                                                                                                                         | Gate it turns on | Status as of 2026-10-18 (phase 5 keys line 2026-10-27)                                   |
+| Phase                   | What lands                                                                                                                         | Gate it turns on | Status as of 2026-11-05                                   |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
 | **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               | **Landed** ([#2149], [#2183]); `at_client` is gated too (`.github/wasm_gates.yaml`)        |
 | **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **Landed** — S4–S6 ([#2162]); S1–S3 superseded by the transport work ([#2163], [#2164])  |
