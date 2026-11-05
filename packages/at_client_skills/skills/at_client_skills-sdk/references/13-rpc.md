@@ -1,10 +1,10 @@
 # RPC — Structured Request/Response with AtRpc
 
 `AtRpc` / `AtRpcClient` give you a request/response abstraction between two
-atsigns, built on atProtocol notifications: requests travel as
+atsigns, built on Atsign Protocol notifications: requests travel as
 `request.<reqId>.<domain>.__rpcs.<baseNameSpace>` notifications, responses as
 `<ack|nack|success|error>.<reqId>....` notifications. Both classes are exported
-from `package:at_client/at_client.dart`.
+from `package:at_client/at_client.dart`, and so from both platform packages.
 
 **When to use RPC vs the alternatives:**
 
@@ -25,7 +25,7 @@ by the responder, not parked in RPC payloads.
 The high-level client wraps request/response correlation in a single call:
 
 ```dart
-import 'package:at_client/at_client.dart';
+import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 
 final client = AtRpcClient(
   serverAtsign: '@routeplanner',
@@ -182,10 +182,13 @@ an `sshnpd` consults, answering auth-check requests over RPC.
 ## Multiple server instances
 
 Run N instances of the same responder atsign and set `enableRequestMutex:
-true`: each incoming request is raced through an immutable mutex key, so
-exactly one instance responds. This is the packaged form of the immutable-mutex
-pattern — read [14-multi-agent.md](14-multi-agent.md) when building
-multi-instance agents, RPC-based or not.
+true`: each incoming request is raced through a server mutex
+(`tryAcquireServerMutex`), so exactly one instance responds. It needs an
+atServer from p3.13.0; on an older one every lock is refused, so a responder
+with the mutex on handles no requests. This is the packaged form of the
+server-mutex pattern — read
+[14-multi-agent.md](14-multi-agent.md) when building multi-instance agents,
+RPC-based or not.
 
 ## AtCollection-first boundary
 

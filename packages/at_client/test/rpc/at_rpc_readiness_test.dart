@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -136,7 +135,7 @@ void main() {
         onError: any(named: 'onError'),
         onSentToSecondary:
             any(named: 'onSentToSecondary'))).thenThrow(
-        StoppedException('the lookup for @alice has been closed'));
+        StoppedException('the lookup for @alice has been stopped'));
     final AtRpc rpc = rpcFor(isClient: false);
     final sent = Stopwatch()..start();
 

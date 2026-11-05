@@ -16,7 +16,7 @@ void main() {
   });
 
   test('it names what stopped', () {
-    expect('${StoppedException('the lookup for @alice is closed')}',
-        'StoppedException: the lookup for @alice is closed');
+    expect('${StoppedException('the lookup for @alice has been stopped')}',
+        'StoppedException: the lookup for @alice has been stopped');
   });
 }

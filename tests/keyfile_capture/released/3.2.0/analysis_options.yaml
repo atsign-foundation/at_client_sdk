@@ -1,0 +1,8 @@
+include: package:lints/recommended.yaml
+
+linter:
+  rules:
+    camel_case_types: true
+    unnecessary_string_interpolations: true
+    await_only_futures: true
+    unawaited_futures: true

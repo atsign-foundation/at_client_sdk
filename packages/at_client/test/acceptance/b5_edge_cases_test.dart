@@ -347,8 +347,9 @@ void main() {
         () {
       // GIVEN alice published an nskey advertisement.
       // WHEN  alice herself resolves and verifies it.
-      // THEN  she takes the same path a peer takes; an unminted namespace
-      //       resolves to nothing rather than to an error or a guess.
+      // THEN  she takes the same path a peer takes, though a re-read of bytes
+      //       she already verified is not verified again; an unminted
+      //       namespace resolves to nothing rather than to an error or a guess.
       provenIn('tests/at_functional_test/test/nskey_published_ring_test.dart',
           'the owner verifies her own advertisement the same way a peer would',
           proves: 'one verify path means a defect in verification cannot hide '
@@ -356,6 +357,16 @@ void main() {
               'cross-atSign are the same code" tested rather than aspirational',
           clauses: [
             'she takes the **same verify path a peer takes**',
+          ]);
+      provenIn('packages/at_client/test/published_nskey_key_ring_test.dart',
+          'an unchanged re-read is not verified again',
+          proves: 'a re-read of her own advertisement returning the bytes '
+              'already verified is re-read but not re-verified, counted on a '
+              'verifier that delegates to the real one; its sibling tests hold '
+              'the other arms — a changed own advertisement and a peer\'s '
+              'unchanged one are both verified again',
+          clauses: [
+            'is not verified again, while a peer\'s always',
           ]);
       provenIn(
         'tests/at_functional_test/test/nskey_published_ring_test.dart',

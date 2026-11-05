@@ -61,13 +61,13 @@ symbols beside them are the addresses.
 `dart analyze --fatal-infos lib test` exits 0 in every Dart member of the
 workspace, `flutter analyze` reports no `deprecated_member_use` in
 at_client_flutter, and the 4 live packs (`tests/at_functional_test`,
-`tests/at_end2end_test`, `tests/at_onboarding_cli_functional_tests` and
-`tests/at_onboarding_cli_functional_tests_proxy`) are green.
+`tests/at_end2end_test`, `tests/at_client_cli_functional_tests` and
+`tests/at_client_cli_functional_tests_proxy`) are green.
 
 The workspace is the 17 members the root `pubspec.yaml` lists: 12 packages,
 the 4 live packs and `tools/wasm_shakedown`. On 2026-09-14 every one of
 them reports no `deprecated_member_use`. The decided floors — at_auth's 16
-uses in `lib` and at_client's 25, named under
+uses in `lib` and at_client's 28, named under
 [step 3](#step-3-at_auth-builds-the-carrier-inside-400-rc2) and in the
 status paragraph of [section 4](#4-order-of-work) — each sit under a
 line-level `// ignore: deprecated_member_use`, so the recipe counts them at
@@ -96,7 +96,7 @@ recorded it as having none. Treat an example as a member for counting
 and for compiling, and remember two of them are red for reasons that predate
 this work: `example/` imports three packages its pubspec never declares, and
 its `apkam_example.dart` has omitted a required `signingAlgo` since
-`4.0.0-rc1`. `examples/todos` is a canonical example the tree tells authors to
+`4.0.0-rc1`. `example/todos` is a canonical example the tree tells authors to
 copy, so it is the one that has to end up showing the right thing.
 
 ## 1. Where the debt is
@@ -109,7 +109,7 @@ copy, so it is the one that has to end up showing the right thing.
 | at_client_flutter                   | 2.0.0-rc1       |   0 |    0 |
 | tests/at_functional_test            | (unpublished)   |   0 |    0 |
 | tests/at_end2end_test               | (unpublished)   |   0 |    0 |
-| tests/at_onboarding_cli_functional_tests | (unpublished) | 0 |    0 |
+| tests/at_client_cli_functional_tests | (unpublished) | 0 |    0 |
 | at_contact                          | (see pubspec)   |   0 |    0 |
 
 41 uses on 2026-09-13, from 1403 when this plan was written and 785 when
@@ -244,7 +244,9 @@ deletable now.
 
 `isLocalStoreRequired` (*"LocalStore is always required"*), `hiveStoragePath`
 (*"Supply an `AtClientStorage` instead"*) and `commitLogPath` (*"Nothing reads
-this; the client is commit-log-free"*), all removed in the next major. Visible
+this; the client is commit-log-free"*). 4.0 removes `isLocalStoreRequired` and
+`commitLogPath`; `hiveStoragePath` stays, deprecated, until 5.0, since
+at_client_flutter's dialogs still read it when given no storage. Visible
 to the analyzer only outside at_client: 12 in `tests/at_functional_test`, 7 in
 `tests/at_end2end_test`, 4 in at_contact's `test_util.dart` and 1 in
 at_client_flutter. Inside at_client the analyzer is silent, and 30 of its
@@ -254,13 +256,24 @@ own test files set `hiveStoragePath`; those are found by
 location together, with `closedByClient: true` where the client is meant to
 close it.
 
+Since [D-25](../wasm/decisions.md#d-25--client-storage-is-the-apps-choice-at_client-keeps-a-hive-default-until-40-2026-10-07)
+the flag is read only when a client is given no storage, and false is then
+refused, so a 3.x app that sets it false already has to pass storage. D-25
+also deprecated `AtClientImpl.create(localSecondaryKeyStore:)` and
+`AtClient.persistenceBundle`, both removed in 4.0 with the rest. Nothing
+outside at_client uses either; inside it, only tests use them, listed by
+`grep -rlE 'localSecondaryKeyStore:|\.persistenceBundle' packages/at_client/test`.
+`AtClientPreference.keyStoreSecret` is deprecated beside them, and nothing in
+this tree sets it. at_client 1.0.0 to 3.0.4 passed it to the Hive vault as its
+secret; nothing has read it since 3.0.5 (2021-11-15).
+
 ### F6, the `AtClientPreference` transport fields (declared in at_client)
 
 `decryptPackets`, `tlsKeysSavePath` and `pathToCerts`, all *"The transport is
 the AtLookUpFactory's to configure"*, all removed in 4.0. They arrived
 deprecated with the third leg of the platform bundle: `Atsign.open`,
-`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`, `buildAtClient`
-and `AtServiceFactory.atClient` take `lookUps:`, an at_lookup
+`activate`, `enroll`, `resumeEnrollment`, `authenticatesAs` and `buildAtClient`
+take `lookUps:` (as `AtServiceFactory.atClient` did until 4.0 removed it), an at_lookup
 `AtLookUpFactory`, and the replacement is
 `secureSocketLookUps(config: SecureSocketConfig(...))`. The default factory
 reads the three fields until they go, so a 3.x app sees no change, and every
@@ -341,8 +354,14 @@ Docker), and each step's test tree clears in the same commit as its lib. A
 step that touches a lifecycle seam runs all 4 live packs before it commits.
 
 **Where this stands on 2026-09-13.** Steps 0 to 7 are done. Step 4's last
-piece, `LocalSecondary`'s `AtChops` tier, went on 2026-09-13: the key
-getters read the key source and the keystore, the PKAM getters reaching the
+piece, `LocalSecondary`'s `AtChops` tier, went on 2026-09-13 and came back on
+2026-10-06 as the last tier, behind the key source and the keystore:
+at_onboarding_cli 1.16.0 allows at_client 3.15, builds its client from an
+`AtChops` with no key source, and writes the keys to the keystore only after
+the build returns, so the tier is what holds them in between. It counts an
+empty value as absent, because at_auth fills a keypair an `AtChops` was built
+without with empty strings. The key getters read the key source, then the
+keystore, then the `AtChops`, the PKAM getters reaching the
 source through `authenticationKeyPairFor` so a keypair filed under an
 algorithm this build cannot sign with is refused rather than fallen through
 to the keystore, and a public write with no encryption private key anywhere
@@ -368,14 +387,15 @@ approval rather than from the response.
 **What remains in `lib`, and why it is the floor.** at_auth's 16 are step
 3's table: the injected-signer branches and `AtChops` in the signatures
 that carry them, the door a hardware-backed signer comes through. at_client's
-25 are the `AtChops` carrier — `_atChops`, `AtClient.atChops`, the
-preference-only bridge `_createAtChops` builds from a keystore, and
+28 are the `AtChops` carrier — `_atChops`, `AtClient.atChops`, the
+preference-only bridge `_createAtChops` builds from a keystore,
+`LocalSecondary`'s last key tier, which reads an injected `AtChops`, and
 `RemoteSecondary`'s `atChops` plumbing — the four ladder writes and three
 ladder reads in `remote_secondary.dart` that step 5's ruling keeps, and
 `ApkamSigning`'s two reinstated `AtPkamKeyPair` accessors. Every one leaves
 at the major that removes `AtClient.atChops`, and none can be moved before
 it without breaking a published caller. Each carries a line-level
-`// ignore: deprecated_member_use` — 14 lines in at_auth, 23 in at_client,
+`// ignore: deprecated_member_use` — 14 lines in at_auth, 26 in at_client,
 since a line can hold more than one use — and never a file-level one, so a
 new use beside them still reports.
 
@@ -386,7 +406,8 @@ first lines: at_auth's `at_authenticator_test`, `auth_wiring_test` and
 `enrollment_handshake_test`; at_client's `apkam_signing_keys_test`,
 `apkam_signing_deprecated_pair_test`, `signing_algo_threading_test`,
 `no_atkeysio_inertness_test`, `nskey_minting_test`, `nskey_rotation_test`,
-`startup_call_order_test` and `seeding_files_private_test`; and the three
+`startup_call_order_test`, `seeding_files_private_test` and
+`injected_atchops_keys_test`; and the three
 fixtures that hand the client a placeholder signer because the bridge that
 builds a client's AtChops from a keyfile insists on a credential
 (`legacy_encryption_decryption_test`, `legacy_client_refusal_test`,
@@ -551,6 +572,14 @@ before the algorithm is reached — which means the check can only fire on key
 material that disagrees with the algorithm its own envelope names. A signature
 made that way never verified against a reader that trusts the label, so the
 refusal turns a silent cross-implementation failure into a local error.
+
+PKAM sign-in is the one exception (gkc, 2026-10-12). at_auth's authenticators,
+from a keys file or a bare private key, sign the `from:` challenge with a
+1024-bit RSA PKAM key under `rsa2048`, so atSigns whose keys were cut at that
+size still authenticate; the atServer verifies an `rsa2048` PKAM signature
+whatever the key's size. Every other RSA size but 2048 is still refused there,
+and `RsaSignatureAlgo` itself, `signPkamChallenge` and the `enroll:update`
+possession proof are unchanged.
 
 **The public-data signature signs with the caller's encryption private key**,
 not with an APKAM signing key. The plan read `_signPublicData` as moving to
@@ -784,8 +813,8 @@ rather than ignored: it is the bridge step 6 replaces with the keyfile.
 at_onboarding_cli's `lib` goes 33 to 34 for it (`dart analyze` in
 `packages/at_onboarding_cli`, counted by path): the ladder read gone, the
 bridge counted. Both CLI packs re-ran green with it — `./runLocal.sh 47000`
-in `tests/at_onboarding_cli_functional_tests`: +21; `./runLocal.sh 48000` in
-`tests/at_onboarding_cli_functional_tests_proxy`: +4 — so all four live packs
+in `tests/at_client_cli_functional_tests`: +21; `./runLocal.sh 48000` in
+`tests/at_client_cli_functional_tests_proxy`: +4 — so all four live packs
 have run green on this tree, on `at_virtual_env:local`. The ladder fields on the lookup are still written, as
 step 5's ruling on `remote_secondary.dart` says. `AtClient.atChops` is
 `@Deprecated`, getter and setter, with the replacement in the text. at_client's
@@ -799,8 +828,9 @@ read the field gained infos on purpose: at_onboarding_cli 32 to 33 in `lib`,
 at_functional_test 279 to 283 in `test`, at_end2end_test 45 to 48 in `lib`,
 the two CLI packs and at_client_flutter none. The last piece of step 4, the
 `AtChopsKeys` getter on `LocalSecondary` and its "from atChops" tier, went
-on 2026-09-13, and the live packs showed the two things a unit tree could
-not: the onboarding-CLI pack's contract test that a keyfile client answers
+on 2026-09-13 (the tier came back on 2026-10-06 as the last one, for the
+reason in the status paragraph of section 4), and the live packs showed the
+two things a unit tree could not: the onboarding-CLI pack's contract test that a keyfile client answers
 the keyfile's PKAM keys through `LocalSecondary`, which the tier had been
 serving, and the functional pack's opt-out arm, whose public write had been
 refused by the transformer only because the tier handed it an empty key.
@@ -1179,8 +1209,10 @@ names them. What the deprecation pass kept is everything that outlived them:
   deprecation pass is for, and leaves the fields exercised by nothing but an
   external app;
 - **`InMemoryAtKeysIo.holding(atSign, keys)`**, for a caller that has keys and
-  needs a source. at_auth wraps a fixed key set this way internally, so it is
-  the same object the authentication would have built;
+  needs a source for one handshake or authentication, as at_auth and
+  at_client use it internally. It is never the store a client runs on: nothing
+  it holds survives the process, so outside a test it draws an analyzer
+  warning, and a client's keys belong in a durable `WrittenAtKeysIo`;
 - **`AuthResponse.enrollmentId` answers from the session as well as the keys**
   — the fix that made a keyfile-sourced authentication report its enrollment
   at all, where it had read the keys alone. The type went internal with the

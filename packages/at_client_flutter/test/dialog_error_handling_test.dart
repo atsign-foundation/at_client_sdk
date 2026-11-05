@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/apkam_dialog.dart';
 import 'package:at_client_flutter/src/widgets/cram_dialog.dart';
@@ -6,6 +7,9 @@ import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
+import 'fake_path_provider.dart';
 
 class MockAtsignFlows extends Mock implements AtsignFlows {}
 
@@ -15,15 +19,20 @@ class MockPendingEnrollment extends Mock implements PendingEnrollment {}
 
 class FakeAtClientPreference extends Fake implements AtClientPreference {}
 
+class FakeAtClientStorage extends Fake implements AtClientStorage {}
+
 /// The three dialogs over the lifecycle verbs: a failure is shown and the
 /// dialog answers as it always has, and what reaches the verb is what the
 /// caller asked for. The verbs are async, so a failure reaches a dialog as a
 /// failed future, which is how the stubs fail.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const supportPath = '/app/support';
   setUpAll(() {
     registerFallbackValue(InMemoryAtKeysIo());
     registerFallbackValue(FakeAtClientPreference());
+    registerFallbackValue(FakeAtClientStorage());
+    PathProviderPlatform.instance = FakePathProvider(supportPath);
   });
 
   late MockAtsignFlows flows;
@@ -232,6 +241,8 @@ void main() {
       when(
         () => pending.client(any(), storage: any(named: 'storage')),
       ).thenAnswer((_) async => client);
+      when(() => pending.cancel()).thenAnswer((_) async {});
+      when(() => pending.stop()).thenAnswer((_) async {});
 
       Object? result = 'unset';
       await pumpOpener(
@@ -258,6 +269,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(result, same(client));
+      await tester.pump();
+      expect(find.byType(ApkamActivationDialog), findsNothing);
+      verifyNever(() => pending.cancel());
+      verifyNever(() => pending.stop());
       final keys = verify(
         () => flows.enroll(
           '@alice',
@@ -323,6 +338,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(result, same(client));
+      final storage = verify(
+        () => pending.client(any(), storage: captureAny(named: 'storage')),
+      ).captured.single;
+      expect(
+        storage,
+        isA<HiveAtClientStorage>()
+            .having((s) => s.storagePath, 'storagePath', supportPath)
+            .having((s) => s.atSign, 'atSign', '@alice')
+            .having((s) => s.closedByClient, 'closedByClient', isTrue),
+        reason:
+            'an app passing no storage gets this package\'s default, which '
+            'the client closes when it stops',
+      );
       verifyNever(
         () => flows.enroll(
           any(),

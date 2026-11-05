@@ -14,7 +14,8 @@ void main() {
     test('Test generate AESKey - 128 bit random generation', () {
       final aesKey_1 = AESKey.generate(16);
       final aesKey_2 = AESKey.generate(16);
-      expect(aesKey_1, isNot(aesKey_2));
+      // AESKey has no ==, so compare the key material, not the instances.
+      expect(aesKey_1.key, isNot(aesKey_2.key));
     });
     test('Test generate AESKey - 256 bit', () {
       final aesKey = AESKey.generate(32);
@@ -23,7 +24,7 @@ void main() {
     test('Test generate AESKey - 256 bit random generation', () {
       final aesKey_1 = AESKey.generate(32);
       final aesKey_2 = AESKey.generate(32);
-      expect(aesKey_1, isNot(aesKey_2));
+      expect(aesKey_1.key, isNot(aesKey_2.key));
     });
     test('check random key generated length for 128 bit key', () {
       final aesKey = AESKey.generate(16);

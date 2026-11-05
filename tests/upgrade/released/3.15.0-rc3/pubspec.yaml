@@ -1,0 +1,20 @@
+name: upgrade_released_3_15_0_rc3
+publish_to: none
+description: >-
+  The upgrade check's old client: at_client 3.15.0-rc3 as pub.dev ships it.
+version: 1.0.0
+
+# Deliberately NOT a workspace member, and deliberately WITHOUT
+# dependency_overrides: anything inside the workspace resolves at_client by
+# path, and this arm has to run what pub.dev ships. pubspec.lock is committed,
+# so a changed result is a finding rather than a different transitive set.
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  # Exact, not a caret range: this arm stays on the version it names until
+  # somebody deliberately moves it.
+  at_client: 3.15.0-rc3
+  upgrade_scenario:
+    path: ../../scenario

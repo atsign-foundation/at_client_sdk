@@ -131,8 +131,8 @@ void main() {
         ..metadata = (Metadata()
           ..appMetadata = AppMetadata(providerId: legacyCryptoProviderId));
 
-      // NOTE: the legacy provider fails on this fixture anyway — no shared
-      // key, no atChops — so assert on which failure, not that one happened.
+      // NOTE: the legacy provider fails on this fixture anyway, which holds
+      // no key material, so assert on which failure, not that one happened.
       await expectLater(
           () => CryptoRuntime(atClient).decryptForGet(key, 'ciphertext'),
           throwsA(isNot(isA<LegacyEncryptionRefusedException>())),
@@ -176,8 +176,8 @@ void main() {
         ..metadata.appMetadata =
             AppMetadata(providerId: legacyCryptoProviderId);
 
-      // NOTE: the legacy provider fails on this fixture anyway (no atChops),
-      // so assert on which failure, not that one happened.
+      // NOTE: the legacy provider fails on this fixture anyway, which holds
+      // no key material, so assert on which failure, not that one happened.
       await expectLater(
           () => CryptoRuntime(atClient).encryptForPut(key, 'secret'),
           throwsA(isNot(isA<LegacyEncryptionRefusedException>())),

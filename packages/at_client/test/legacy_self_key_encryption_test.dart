@@ -1,4 +1,6 @@
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:test/test.dart';
@@ -42,6 +44,34 @@ void main() {
     var decryptionResult =
         await selfKeyDecryption.decrypt(selfKey, encryptedValue);
     expect(decryptionResult, location);
+  });
+  test('each encryption with a reused self key takes a new IV', () async {
+    var selfKeyEncryption = SelfKeyEncryption(mockAtClient);
+    var selfKeyDecryption = SelfKeyDecryption(mockAtClient);
+    var aliceSelfEncryptionKey = AESKey.generate(32).key;
+    when(() => mockLocalSecondary.getEncryptionSelfKey())
+        .thenAnswer((_) => Future.value(aliceSelfEncryptionKey));
+    AtKey location() => AtKey()
+      ..sharedBy = '@alice'
+      ..key = 'location';
+    const preset = 'AAAAAAAAAAAAAAAAAAAAAA==';
+    final selfKey = location()..metadata.ivNonce = preset;
+
+    final first = await selfKeyEncryption.encrypt(selfKey, 'New Jersey');
+    final firstIv = selfKey.metadata.ivNonce;
+    final second = await selfKeyEncryption.encrypt(selfKey, 'New Mexico');
+    final secondIv = selfKey.metadata.ivNonce;
+
+    expect(firstIv, isNot(preset),
+        reason: 'an IV already on the key is replaced, never reused');
+    expect(secondIv, isNot(firstIv),
+        reason: 'this AES is CTR, so two values under the self key and one IV '
+            'would share a keystream');
+    expect(
+        await selfKeyDecryption.decrypt(
+            location()..metadata.ivNonce = firstIv, first),
+        'New Jersey');
+    expect(await selfKeyDecryption.decrypt(selfKey, second), 'New Mexico');
   });
   test(
       'test to check self key encryption throws exception when passed value is not string type',

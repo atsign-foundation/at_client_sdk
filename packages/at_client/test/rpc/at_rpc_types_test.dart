@@ -4,6 +4,25 @@ import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
 Future<void> main() async {
+  group('AtRpcReq.create', () {
+    test('ids made back to back are all different', () {
+      final ids = [for (var i = 0; i < 10000; i++) AtRpcReq.create({}).reqId];
+      expect(ids.toSet(), hasLength(ids.length),
+          reason: 'requests sent at the same moment, by this client or '
+              'another, must not share an id: a shared one hands a caller '
+              'another\'s response, or is refused by the request mutex');
+    });
+
+    test('an id is a non-negative integer that survives JSON anywhere', () {
+      for (var i = 0; i < 10000; i++) {
+        final id = AtRpcReq.create({}).reqId;
+        expect(id, inInclusiveRange(0, 9007199254740991),
+            reason: 'the request key matches it with \\d+, and a value above '
+                '2^53 loses precision in a JavaScript JSON reader');
+      }
+    });
+  });
+
   // Test that AtRpcResp payloads are JSON parsable
   group('AtRpcResp', () {
     group('Non-deep payload', () {

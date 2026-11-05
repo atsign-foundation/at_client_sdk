@@ -55,7 +55,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**97 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 98 use cases and 108 scenarios —
+**119 PROVEN · 0 BLOCKED · 2 WITHDRAWN** across 121 use cases and 130 scenarios —
 several rows carry more than one.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -79,11 +79,14 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A2.4  | The key package advertises the KEM the deployment configured                        | PROVEN    | `a2_enrollment_test.dart`    |
 | UC-A2.5  | An enrollment amends its own key package (`enroll:update`)                          | PROVEN    | `key_package_amendment_live_test.dart` |
 | UC-A2.6  | Only the enrollment itself may amend its metadata                                   | PROVEN    | `key_package_amendment_live_test.dart` |
+| UC-A2.7  | An enrollment that exchanges keys post-quantum authenticates post-quantum           | PROVEN    | `a2_enrollment_test.dart`    |
 | UC-A3.1  | Self write/read, namespace key already exists                                       | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.2  | A client mints and publishes the nskey for each namespace it is authorised for      | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.3  | Self write with no namespace key has no PQ fallback                                 | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.4  | Self notification (encrypted value)                                                 | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.5  | The published nskey advertisement names its KEM and what it can open                | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.6  | A client that needs a private it does not hold fetches it, else asks, else fails    | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.7  | A namespace key's private reaches every listed enrollment before anyone can seal to it | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A4.1  | alice → bob, both PQ-native, bob has the namespace key                              | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.2  | alice → bob where bob has no namespace key → the share fails                        | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.3  | Multi-enrollment both ends                                                          | PROVEN    | `a4_shared_data_test.dart`   |
@@ -97,6 +100,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A5.4  | The content-key lever is a policy the application supplies                         | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.5  | The namespace-key lever is asked at exactly two points                             | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.6  | Where a lever is not asked, and where a yes is refused out loud                    | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.7  | A content key follows both namespace keys it rests on                              | PROVEN    | `a5_rotation_test.dart`      |
 | UC-B0.1  | A PQ-capable client cannot PQ-upgrade against a legacy atServer                     | PROVEN    | `b0_server_prereq_test.dart` |
 | UC-B1.1  | First client retrofit (`alice1`)                                                    | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B1.2  | Second install on a copied keyfile (`alice1c`)                                      | PROVEN    | `b1_retrofit_test.dart`      |
@@ -162,14 +166,33 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G3.1  | Every creation door files the private half, not just the public one                | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.2  | The algorithm minted is the one kept, so the first start rewrites nothing          | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.3  | The `_apsk` form follows the algorithm, and nothing else decides it                | PROVEN    | `g3_data_signing_key_test.dart` |
-| UC-G3.4  | A link is bound to the exact `_apsk` string, and a republish breaks it             | PROVEN    | `g3_data_signing_key_test.dart` |
-| UC-G3.5  | What an approver conveys is decided by possession as well as privilege             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.4  | WITHDRAWN — a link was bound to the exact `_apsk` string                           | WITHDRAWN | — |
+| UC-G3.5  | An approver links each key of the enrollment it approves, straight after           | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.6  | A legacy enrollment's authentication keypair signs data in memory only             | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.7  | The reconcile treats rsa2048 as already held, and only rsa2048                     | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.8  | No signer waits on a mint                                                          | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.9  | Two coherence rules, refused at construction before any I/O                        | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.10 | A no-PQ-provider client refuses the work and leaves the enrolment repairable       | PROVEN    | `g3_data_signing_key_test.dart` |
 | UC-G3.11 | A pre-enrollment atSign gives itself a first enrollment                            | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.12 | A link vouches for one key, so a change to another key leaves it standing          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.13 | The kind of a link follows from its signer                                         | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.14 | `enroll:link` admits only the target or a caller that could approve it             | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.15 | `enroll:link` checks structure, and writes all or nothing                          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.16 | A link replaces only the link its writer found                                     | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.17 | Any other write of an `_apsk` keeps its links                                      | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.18 | An enrollment links a key it adds, with one already linked, first                  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.19 | A chain link is signed only by a linked key, a root link only by the root          | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.20 | Content is signed with the keys that have links, while there are any               | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.21 | An enrollment's authentication key takes no links, and gives none                  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.22 | A fully privileged enrollment mints a missing root at start, and anchors           | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.23 | A root holder's sweep gives every key without a sound root link one                | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.24 | The walk follows keys, and stops at a cycle                                        | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.25 | The approver's view shows whether each enrollment is anchored                      | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.26 | Links never travel by envelope, and the old link fields are gone                   | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.27 | Without `enroll:link` on the atServer, nothing is linked and all else works        | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.28 | A bare RSA client data signing key is linked like a listed one                     | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.29 | An `enroll:update` cannot make B's client data signing key its authentication key  | PROVEN    | `g3_data_signing_key_test.dart` |
+| UC-G3.30 | A link vouches for the key it names, not for every key under its `kid`             | PROVEN    | `g3_data_signing_key_test.dart` |
 
 ---
 
@@ -223,7 +246,7 @@ Substrate mechanics are cited to `design.md`; substrate-related rulings to
 
 **Evidence standard — what counts as proof.** A row is proven by a test that
 drives a **real atServer**: `tests/at_functional_test`, `tests/at_end2end_test`
-or `tests/at_onboarding_cli_functional_tests`. A proof that runs in-process is
+or `tests/at_client_cli_functional_tests`. A proof that runs in-process is
 acceptable **only where a live test would be prohibitively costly or
 impossible**, and the bar for that is "there is no atServer
 in the loop at all" — parsing, format composition, provider selection, crypto
@@ -424,13 +447,13 @@ per keyfile/install):
     which. **Both are registered on every client**
     ([UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open)),
     because the KEM is the *recipient's* choice. `recipientKind` is
-    `nskey` and nothing else; self and inbound both seal to the one nskey. The
-    `root-pqpublickey` variant is withdrawn along with the cold-start KEM. `ns` is the
+    `nskey` and nothing else; self and inbound both seal to the one nskey. `ns` is the
     resolved namespace the conveyance lives at.
-  - `at/symmetric/AES/GCM` → `{providerId, ckKid, iv, ns, ckNs}` — application data
-    AES-256-GCM under a CK, cited by `ckKid`. `ns` is the value's own full namespace
-    and is what the AAD binds; `ckNs` is where the CK lives, and differs from `ns`
-    whenever resolution walked up.
+  - `at/symmetric/AES/GCM` → `{providerId, ckKid, salt, iv, ns, ckNs}` — application
+    data AES-256-GCM under a key derived from a CK and the value's own `salt`, the CK
+    cited by `ckKid`. A value with no `salt` is read under the CK itself. `ns` is the level
+    the write's walk started at, and the AAD binds the value's whole name; `ckNs` is where
+    the CK lives, and differs from `ns` whenever resolution walked up from there.
   The umbrella for `at/nskey` + `at/symmetric/AES/GCM` is the **nskey data path**.
 
 **atServer PQ capabilities** (Part A and B both assume `aS = pq` unless stated):
@@ -544,9 +567,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      single active `rsa2048` entry, and the `{v, keys:[…]}` **array** otherwise — which
      a pq-native E2 is, since it advertises `mldsa65`
      ([section 16](#16-g1--signature-agility-and-the-rollout-matrix) tabulates the three
-     postures). What chains it to the root is the **approval-chain link** `alice1` signs
-     and conveys, which E2 stamps onto its own `_apsk` **metadata** at first run — the
-     value itself is untouched either way.
+     postures). What chains it to the root are the **links** `alice1` writes for each
+     of E2's keys through `enroll:link` straight after approving — root links when it
+     holds the signing root, chain links when one of its own keys walks to the root,
+     and none when it has neither — into the record's **metadata**; the value itself
+     is untouched in every case.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under
        `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
@@ -567,13 +592,19 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `alice2.APKAM = pq`, `nskey.app_1.my_apps@alice⁻¹ = ✓`,
     `nskey.app_2.my_apps@alice⁻¹ = ✗`, key package registered. `root⁻¹ = ✗` for a
     namespace-scoped E2 — the root is held only by fully privileged enrollments.
-  - E2's `_apsk` carries a chain link that `verifyChain` walks to the signing
-    root, so a reader can chain an advertised key back to the atSign's own
-    anchor rather than to whatever the atServer served — the link rides the record's
-    **metadata**, leaving the `_apsk` **value** exactly what apps already parse.
+  - E2's `_apsk` carries a link for each key E2 signs with, which `verifyChain`
+    walks to the signing root, so a reader can chain an advertised key back to the
+    atSign's own anchor rather than to whatever the atServer served — the links ride
+    the record's **metadata**, leaving the `_apsk` **value** exactly what apps
+    already parse.
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
+  - An E2 granted only `*` is approved too. Every envelope addressed to E2 goes
+    in a namespace E2 may read and `alice1` may write: the namespaces E2 was
+    granted first, then `alice1`'s `preference.namespace`, then the namespaces
+    `alice1` was granted. When none qualifies, `alice1` refuses before
+    approving.
 
 ### 3.2 UC-A2.2 — Second host using the *same* keyfile (copied keyfile, E1)
 
@@ -721,6 +752,28 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   them: it is a claim about what a *sender* stamps, which only a real peer and a real
   atServer can show, and it is cited to `key_package_amendment_live_test.dart`.
 
+### 3.7 UC-A2.7 — An enrollment that exchanges keys post-quantum authenticates post-quantum
+
+- **Given:** an app enrolling on `@alice`, through `at_activate enroll`, a Flutter flow,
+  `Atsign.enroll` or `AtEnrollmentRequest.pq` directly; or a program building a
+  `PqPosture` of its own.
+- **When:** the enrollment request pairs an `rsa2048` APKAM key with the pq key exchange.
+- **Then:** it is refused where it is built, naming both `rsa2048` and the pq key
+  exchange, and nothing reaches the atServer.
+- **When:** a `PqPosture` pairs `rsa2048` authentication with the pq key exchange, or
+  seeds namespace keys without the pq key exchange.
+- **Then:** the constructor throws, naming both.
+- **Then (the arm that stays):** an `rsa2048` request under the legacy key exchange is
+  accepted. It is the shape a retrofit starts from, and it carries no key package unless
+  its caller adds one.
+- **Why:** an `rsa2048` enrollment that advertised a key package retrofits at its first
+  start onto a successor with a key package of its own, so whatever was conveyed to the
+  first is sealed to a key the running client never reads.
+- **Impl/verify:** unit rows: `packages/at_auth/test/enrollment_test.dart` for the
+  request, `packages/at_client/test/pq_posture_test.dart` for the posture, and
+  `packages/at_client/test/lifecycle/enroll_pq_test.dart` for `Atsign.enroll` refusing
+  before it connects.
+
 ## 4. A3 · E2EE within one atSign (self data) + self notification
 
 ### 4.1 UC-A3.1 — Self write/read, namespace key already exists
@@ -729,7 +782,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   `public:__nskey.app_1.my_apps@alice`; `alice1`, `alice2` hold its private.
 - **When:** `alice1` does `put <k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
-  1. Cut a symmetric **content key (CK)**; encrypt the value with it (AES-256-GCM under the CK).
+  1. Cut a symmetric **content key (CK)**; encrypt the value under a key derived from it and a fresh per-value salt (AES-256-GCM).
   2. **Convey the CK once** (`at/nskey`): seal the CK to @alice's **nskey** under the
      KEM that nskey's own advertisement names, and write it as its own CK-conveyance
      record, stamping `appMetadata = {providerId: at/nskey/XWING, recipientKind:
@@ -737,7 +790,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      `alg` is `ml-kem-1024`.
      (Skip if the CK is already conveyed to that generation.)
   3. Write the **data** value (`at/symmetric/AES/GCM`): stamp
-     `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, iv}`; the value carries
+     `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, salt, iv}`; the value carries
      **no** inline sealed CK. Write; sync.
 - **Then:**
   - `alice2` syncs both records: the `at/nskey` provider decapsulates the CK with the
@@ -761,32 +814,38 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice1` starts and seeds its authorised namespaces
   (`AtClientImpl._init` → `NskeySeeding.seed()`, opt-in via
   `AtClientPreference.seedNamespaceKeys`). An APKAM client learns its namespaces from its own
-  enrollment record; a legacy PKAM client has exactly one, its `preference.namespace`.
+  enrollment record, and mints only when that record carries a verified key package; a
+  client on the atSign's own credential carries none and mints nothing
+  ([UC-A3.7](#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)).
 - **Steps:**
-  1. `alice1` takes the `_nskeylock.app_1.my_apps@alice` lock (short-ttl, immutable
-     create — so a concurrent enrollment loses and re-reads), **re-reads the
-     advertisement under the lock** in case a sibling published while it was
-     racing, mints the **one** `app_1.my_apps` nskey keypair — under the first
-     algorithm `AtClientPreference.keyEstablishmentAlgorithms` names — publishes its
-     public half **immediately** as the APKAM-signed
-     `public:__nskey.app_1.my_apps@alice` carrying `{v, createdAt, keys:[…],
-     suites}`, and holds the private. It does **not** release the lock: the ttl
-     does, which is what makes it an election token with a cooldown rather than a
-     mutex.
-  2. Convey the CK once via the nskey data path (as A3.1): seal the CK to the nskey
+  1. `alice1` reads the `app_1.my_apps` roster (`enroll:listns:app_1.my_apps`), verifying
+     each member's advertised key package's APKAM signature against its `_apsk`
+     ([section 13](#13-cross-cutting-acceptance-applies-to-all-flows)), and sizes the
+     mint lock's ttl from it
+     ([UC-A3.7](#47-uc-a37--a-namespace-keys-private-reaches-every-listed-enrollment-before-anyone-can-seal-to-it)).
+  2. It takes the `_nskeylock.app_1.my_apps@alice` lock (immutable create — so a
+     concurrent enrollment loses and re-reads), **re-reads the advertisement under the
+     lock** in case a sibling published while it was racing, mints the **one**
+     `app_1.my_apps` nskey keypair — under the first algorithm
+     `AtClientPreference.keyEstablishmentAlgorithms` names — and files the private.
+  3. **Push** the nskey private per-enrollment to every ≥`r` member on the roster:
+     `pqSeal` it to each member's key package (addressed by `kpid`), put on
+     `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies the
+     envelope signature, then correspondence against
+     `public:__nskey.app_1.my_apps@alice` once it is published, and `putIfNewer`s.
+  4. Only then publish the public half as the APKAM-signed
+     `public:__nskey.app_1.my_apps@alice` carrying `{v, createdAt, keys:[…], suites}`.
+     It does **not** release the lock: the ttl does, which is what makes it an
+     election token with a cooldown rather than a mutex.
+  5. Convey the CK once via the nskey data path (as A3.1): seal the CK to the nskey
      (`recipientKind: nskey`) in an `at/nskey` record; write the data under
      `at/symmetric/AES/GCM`.
-  3. **Push** the nskey private per-enrollment to every ≥`r` member: call
-     `enroll:listns:app_1.my_apps`, verify each member's advertised key package's
-     APKAM signature against its `_apsk` ([section 13](#13-cross-cutting-acceptance-applies-to-all-flows)), `pqSeal` the private to each member's
-     key package (addressed by `kpid`), put on
-     `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies
-     the envelope
-     signature, then correspondence against the published
-     `public:__nskey.app_1.my_apps@alice`, and `putIfNewer`s.
 - **Then:**
   - `public:__nskey.app_1.my_apps@alice` exists and resolves on a `plookup`, and
     `alice2` obtains the nskey private and reads.
+  - The push reaches every enrollment with at least `r` on the namespace, a `*`
+    enrollment and one granted a namespace above it included, and no enrollment
+    granted only another namespace.
   - **The namespace is not enumerable**: an unauthenticated `scan` of `@alice`, with
     and without `showhidden`, returns no `public:__nskey.…` key. A guaranteed protocol
     property, covered here as a regression guard.
@@ -833,8 +892,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Given:** `@alice` pq-native; `alice1`, `alice2` PQ; `alice2` running a monitor.
 - **When:** `alice1` does `notify` to `@alice` (self) carrying an encrypted value.
 - **Steps:**
-  1. Encrypt the notification value exactly as a self put: AES-256-GCM under a CK
-     (`at/symmetric/AES/GCM`, cited by `ckKid`); convey the CK once via an `at/nskey`
+  1. Encrypt the notification value exactly as a self put: AES-256-GCM under a key
+     derived from a CK and a per-value salt (`at/symmetric/AES/GCM`, cited by `ckKid`); convey the CK once via an `at/nskey`
      record sealed to the nskey (`recipientKind: nskey`, the only kind).
   2. Stamp `appMetadata.providerId` on the **notification** payload; send `notify:`.
   3. atServer queues/delivers; `alice2`'s monitor receives the notification frame.
@@ -870,8 +929,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     absent-means-the-hybrid hatch**: `PackageKey.fromJson` returns null unless `alg` is
     a string, and the reader refuses what is left;
   - the correspondence check on an arriving private re-derives the public half **through
-    the advertised KEM** rather than assuming X-Wing. A seed arrives as bare bytes, and 32
-    or 64 of them are valid for one KEM or the other, so the bytes alone cannot say which.
+    the advertised KEM** rather than assuming X-Wing. With nothing published under the
+    private's kid, as for an earlier generation, the seed's length names the KEM: X-Wing
+    takes exactly 32 bytes and ML-KEM-1024 exactly 64, and a seed of any other length is
+    refused. A seed already filed under a label its length contradicts is **opened under
+    the KEM its length names**.
 - **Then (the version is negotiated, not fixed):** `suites` says which sealing
   constructions the owner can **open**, which `alg` does not determine — a KEM key opens
   every construction built on that KEM. An X-Wing owner therefore receives
@@ -892,6 +954,134 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   its server-gated `__ssenv` refusal ("an `app_2.my_apps`-only client is refused the
   `app_1.my_apps` nskey private" is a live-atServer assertion, not a client-only one).
 
+### 4.6 UC-A3.6 — A client that needs a private it does not hold fetches it, else asks, else fails
+
+- **Given:** `@alice` publishes generation G1 of the nskey for `app_1.my_apps`, a
+  conveyance record for G1 sealed to E2's key package may be waiting on the atServer, and
+  E2's client has not filed G1's private.
+- **When:** E2's client puts or gets a value in `app_1.my_apps`.
+- **Then:** when an own advertisement the client holds names G1, it fetches the conveyance
+  records addressed to it from the atServer, files the private one carries, and the write
+  is sealed to G1, or the read opens.
+- **Then:** when none it holds names G1, and the record that names G1 is not one `@alice`
+  wrote, it first reads
+  `public:__nskey.app_1.my_apps@alice` from the atServer, at most once per `askCooldown`
+  (5 s) per namespace, and only in a namespace whose own advertisement it holds, whose
+  nskey private its keyfile holds, or which this enrollment's own grants name as its
+  keyfile records them (never `*`, and never for the atSign's own credential); a read
+  that cannot reach the atServer is tried again by the first miss after the cooldown,
+  and with G1 still unnamed the client neither fetches nor asks, and the miss fails as
+  below.
+- **Then:** when `@alice` wrote the record that names G1, the client reads no
+  advertisement: in a namespace it knows by any of those three routes, it fetches its own
+  conveyance records and then asks for G1 as for a generation an own advertisement names,
+  under the same cooldowns. So an enrollment that re-enrolled itself after a rotation
+  reads what `@alice` wrote before it, once an enrollment still holding G1 answers. A
+  record another atSign sealed naming a generation no own advertisement names is refused
+  with no fetch and no ask.
+- **Then:** with no record waiting, it asks the other enrollments for G1's private.
+- **Then:** the put then fails with `NskeyPrivateNotHeldException`, saying the private key
+  for `@alice:app_1.my_apps` generation G1 has not yet been conveyed to this enrollment; a
+  read fails with `NskeyPrivateUnavailableException`, the type a parked notification is
+  re-driven on. A put made while the client's start-up is yet to ask for G1, or is waiting
+  for the answer to its own ask, first waits for that ask and its answer, at most
+  `StartUpSeeding.wait` (30 s) in all, and goes on once it is filed; an ask a miss made
+  does not hold a put up.
+- **Then:** concurrent misses share one fetch, whichever generations they name.
+- **Then:** a miss within `askCooldown` (5 s) of an on-miss fetch does not fetch again,
+  whichever generation it names, and the startup collection does not start that
+  cooldown.
+- **Then:** the client asks about each generation at most once per `askCooldown`, and not
+  again while an earlier ask for it, from a miss or from the client's start, is still
+  waiting for its answer, for up to `conveyanceWait` (5 minutes); a miss on a second
+  generation in the namespace asks for that one too, and the client forgets a generation
+  once its cooldown has passed.
+- **Then:** with `askOnReadMiss` off, `PqStartupGates.inert()` among them, a miss sends
+  nothing to the atServer: no read, no fetch and no ask.
+- **Then:** a fetch that meets a record the startup collection is still filing waits, up to
+  `fetchOnMissTimeout` (10 s), for a sweep already filing it, rather than skipping it.
+  Past that the miss asks and fails while the fetch goes on, and a private it then files
+  releases whatever parked waiting for it.
+- **Why:** a record already on the atServer needs no other enrollment to be online, so
+  only a private nobody has conveyed yet is asked for. `Atsign.open` does not wait for the
+  startup collection, so the fetch is what lets a write straight after it go through. A
+  shared record names its own namespace and generation, so what a miss costs the atServer
+  is bounded by what this atSign holds, grants and advertises: nothing for a namespace the
+  client holds nothing for and is not granted, one read per cooldown for a generation not
+  advertised, and one fetch per cooldown and one ask per wait for one that is. A record
+  `@alice` wrote can name only a generation one of `@alice`'s own enrollments minted, so
+  treating its generation as advertised keeps that bound, while a record another atSign
+  sealed costs no more than the read.
+- **Impl/verify:** unit rows in `packages/at_client/test/nskey_private_fetch_test.dart`,
+  `nskey_data_path_test.dart` and `pairwise_secret_sharing_test.dart`; live,
+  `tests/at_functional_test/test/nskey_fetch_on_miss_live_test.dart`.
+
+### 4.7 UC-A3.7 — A namespace key's private reaches every listed enrollment before anyone can seal to it
+
+- **Given:** E1, E2 and E3 of `@alice` hold `rw` on `app_1.my_apps` and carry verified key
+  packages in their enrollment records, `primary` is listed with none, and no nskey is
+  published for the namespace.
+- **When:** E1 mints the nskey for `app_1.my_apps`, rotates it, or adds a key to it.
+- **Then:** a conveyance record for each new private, sealed to E2's and E3's key
+  packages, is on the atServer before `public:__nskey.app_1.my_apps@alice` names it, so
+  publishing is the commit point.
+- **Then:** a listed enrollment with no key package, `primary` among them, is skipped
+  silently.
+- **Then:** a listed enrollment whose key package fails verification is conveyed nothing
+  and named in a warning.
+- **Then:** a listed enrollment the push cannot reach, because its key package shares no
+  suite with E1's or because the push to it fails, is named in a warning with the
+  generation and the reason, and the mint publishes anyway: the conveyance is best
+  effort, and that enrollment gets the private as UC-A3.6 says.
+- **Then:** the mint lock's ttl is a ceiling: the ring's own ttl plus a per-member budget
+  for each enrollment listed before the lock is taken and each key conveyed, twice over
+  for a mint or a rotation, which may rotate again under the same lock, never past the
+  atServer's 15-minute limit, and a minter that has spent it does not publish.
+- **Then:** a revocation touching the namespace between the roster read and the
+  conveyance's last read of it stops the publish, and the generation E1 filed is retired,
+  so the next mint is a fresh one.
+- **Then:** a revocation landing after that read and before the publish is recorded in
+  E1's keyfile against the published generation, and E1 rotates at once, under the same
+  lock, onto a generation conveyed to the roster as it is then; if that rotation fails,
+  the mint still answers the generation it published, the failure is logged at
+  `severe`, and E1's next start makes the rotation.
+- **Then:** a mint that finds nothing published always mints a fresh generation, and
+  first retires every private filed for the namespace, whichever enrollment minted it;
+  a retired private still opens what was sealed to it.
+- **Then:** a client that meets the mint lock, another process of E1's own enrollment
+  among them, mints nothing and retires nothing while the lock is held, so E1's next
+  process seals to the generation the holder publishes; a client that stopped between
+  taking the lock and publishing is refused until the lock's ttl runs out.
+- **Then:** a minter whose own entry carries no verified key package mints nothing and
+  says why, and `ensureReachable` answers `AtReachability.noKeyPackage`.
+- **Then:** a receiver files a conveyed private whose generation is not yet published only
+  when its seed derives the kid it was conveyed under; any other seed is refused, so the
+  real one, conveyed later, is filed.
+- **Then, for the signing root:** a fully privileged enrollment that mints the root
+  pushes its private, once the root is published, to every other approved, fully
+  privileged enrollment carrying a verified key package; it skips one with none, names
+  one whose package fails verification, and logs a failed push without failing the mint.
+- **Why:** a minter that dies after publishing must not leave a generation whose private
+  nobody else holds, and a client that carries no key package can be conveyed nothing,
+  so it must not publish a key others seal to.
+- **Cross-ref:** an enrollment approved between the roster read and the publish is not
+  on the roster, and its approval conveys it the private
+  ([UC-A2.1](#31-uc-a21--new-enrollment-approved-by-an-online-enrollment-pq-safe-enrollapprove));
+  two minters are serialised by the lock
+  ([UC-B5.4](#124-uc-b54--two-enrollments-race-to-mint-a-namespaces-nskey)).
+- **Impl/verify:** unit rows in `packages/at_client/test/nskey_minting_test.dart`,
+  `pre_publish_conveyance_test.dart`, `pairwise_secret_sharing_test.dart`,
+  `nskey_filing_published_key_test.dart`, `seeding_files_private_test.dart`,
+  `nskey_seed_lock_covers_rotation_test.dart`, `pq_signing_root_test.dart`,
+  `mint_lock_self_contention_test.dart` and
+  `signing_root_pushed_to_approved_only_test.dart`; live,
+  `nskey_seeding_live_test.dart` for a client on the atSign's own credential,
+  `nskey_fetch_on_miss_live_test.dart` for the order, by the atServer's own clock, and
+  `nskey_mint_lock_live_test.dart` for a lock that names E1's own enrollment. The root
+  is pushed after its publish rather than before because a receiver files a conveyed
+  root private only against a published root; filing one pending until the record
+  confirms it is owed in 4.1.
+
 ## 5. A4 · E2EE across atSigns (shared data) + cross-atSign notification
 
 ### 5.1 UC-A4.1 — alice → bob, both PQ-native, bob has the namespace key
@@ -904,18 +1094,22 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   1. `plookup` `public:__nskey.app_1.my_apps@bob`, verify its APKAM signature, and note
      the advertised `nskeyKid`. Cut a symmetric **CK for @bob** — CKs are per
      recipient — or reuse the current one if it was conveyed to that same generation.
-     Encrypt the value with it (AES-256-GCM under the CK).
+     Encrypt the value under a key derived from it and a fresh per-value salt (AES-256-GCM).
   2. **Convey the CK once** (`at/nskey`, `recipientKind: nskey`): seal it to **bob's
      published nskey** under the KEM *bob's* advertisement names — never alice's own
      configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
      — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
-     sealed to.
+     sealed to. Seal it again to **alice's own** nskey at her own level, the most
+     specific namespace she holds a key for that covers the value, never a
+     reserved one, as the
+     **sibling copy** `<ckKid>.__ck.<ckNs>@alice`, which names bob in its
+     `appMetadata`. Nothing is minted for it: an alice holding no key there yet, or
+     whose level does not cover bob's, shares without the copy, with a warning.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
 
-  ⛔ **This `put` writes no self-copy.** `AtClient.put` writes one value and
-  one CK conveyance, and that conveyance is sealed to **bob** — `nskey_cross_atsign_test`
-  asserts alice cannot open it, on the grounds that if she could, her own scope would
-  have been handed bob's content key. Writing a second copy for the sender is
+  ⛔ **This `put` writes one value, and no copy of it for alice.** Alice's
+  enrollments read that value itself, opening its CK from the sibling copy; bob's
+  conveyance stays sealed to bob. Writing a second copy of the value is
   **AtCollection's** behaviour, a separate earlier `put` to a plain self key, and
   AtCollection is a *consumer* of this API whose behaviour these rows do not
   assert. A row about `put` or `notify` is about **self→self or
@@ -924,13 +1118,16 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `bob1`, `bob2` decapsulate bob's CK record with bob's nskey private and read. The
     same nskey private opens every CK record sealed to that nskey, so which of bob's
     enrollments reads is immaterial — the reads differ by record-owner, not by key.
-    ⚠️ There is no self-copy for alice to read here; alice's own reading of her own
-    data is [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists), the
-    self→self mirror of this row.
+  - `alice1` after a restart, and every other enrollment of alice, read the shared
+    value, opening its CK from the sibling copy and never from bob's conveyance; the
+    restarted `alice1` goes on writing under the CK it had.
   - PQ end to end; data values `providerId = at/symmetric/AES/GCM`, CK conveyances
     `at/nskey`; no RSA on any path.
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
     enrollment cannot fetch the ciphertext (server-gated) nor decrypt.
+  - Bob can tell how each value was shared with him without decrypting it:
+    the provider it names, whether that is post-quantum, and the KEM and suite
+    its CK was conveyed under. A value alice wrote legacy reads as legacy.
 
 ### 5.2 UC-A4.2 — alice → bob where bob has no namespace key → the share fails
 
@@ -953,9 +1150,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice2` shares with `@bob`.
 - **Then:** all of bob's authorised enrollments read the shared record, whichever of
   alice's enrollments wrote it; no authorised enrollment on the receiving side is left
-  unable to decrypt. There is no self-copy: the self→self mirror, alice's own
-  enrollments reading alice's own data, is
-  [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists).
+  unable to decrypt. Every enrollment of alice reads it as well, whichever of them
+  wrote it, opening its CK from the sibling copy.
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
@@ -988,6 +1184,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - Offline-then-online bob still decrypts the queued notification (key held, or
     pulled if it arrived meanwhile).
   - `appMetadata` is present on the notification frame; signal-only notifications are unaffected.
+  - Bob can answer in the scheme the notification arrived in: the notification
+    names the provider its value was read under, `legacy` when the sender
+    stamped none, and a reply he sends under that provider goes out in it.
 
 ### 5.5 UC-A4.5 — A sender follows the recipient's advertised algorithm, not its own preference
 
@@ -1021,10 +1220,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal).
 
   ⚠️ **The property is not that only one KEM is on offer**, but that the offer is
-  authenticated and the order reading it is fixed. `KeyPackageMinting` mints a keypair
-  for every configured algorithm and republishes the package by `enroll:update`, and the
-  `reconcileKeyPackage` startup step adds one after a preference edit with no rotation
-  involved.
+  authenticated and the order reading it is fixed. `KeyPackageMinting` files a keypair
+  for every configured algorithm, the client's own where it holds one, and republishes
+  the package by `enroll:update`, and the `reconcileKeyPackage` startup step adds one
+  after a preference edit with no rotation involved.
 
   ⚠️ **A migration is always two rollouts** ([section 17](#17-g2--crypto-agility--add-never-replace)).
   What a key per algorithm removes is not the second rollout but the *unbounded wait
@@ -1125,26 +1324,34 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   generation.
 - **Then (b):** new CKs are sealed to the successor nskey and their conveyances carry
   the new `nskeyKid`; each surviving enrollment **retains** the prior private, so
-  retained history still opens. A peer notices at its next `ensureCurrent`: it
-  re-`plookup`s, sees the changed `nskeyKid`, and cuts a fresh CK to the successor.
+  retained history still opens. A peer notices at its first `ensureCurrent` once its
+  cached advertisement is `advertisementTtl` (15 minutes) old: it re-`plookup`s, sees
+  the changed `nskeyKid`, and cuts a fresh CK to the successor. A re-fetch that cannot
+  reach an answer keeps sealing to the cached generation for at most
+  `advertisementStaleGrace` (15 more minutes) and then fails the write, so a peer seals
+  to a superseded generation for no longer than the two together; a re-fetch answered
+  not-found stops sealing to that peer at once.
   **Without that re-fetch the revocation does not hold** — a peer still sealing to the
   superseded generation hands the revoked enrollment a key it can open, so the
   bounded-exposure assertion is part of this case, not an optimisation. This is the
   heavier, O(n)-per-enrollment revocation + post-compromise-security lever — **not
   cheap**, and **distinct** from CK rotation.
 - **Then (b), late joiner:** an enrollment approved *after* the rotation is pushed
-  **every generation its approver holds** for the namespaces it was approved for, not
-  only the live one — so retained history opens immediately, with no pull round trip and
-  no dependence on a holder being online at that moment. `requestSecret` remains the
-  backstop for a joiner the push missed: on meeting a retained `__ck` naming an
-  `nskeyKid` it does not hold, it pulls that generation and opens it.
+  **every generation its approver holds**, not only the live one, in every namespace its
+  grant covers and its approver may write — `*` covers all of them, and a grant covers the
+  namespaces below it, read access included — so retained history opens immediately,
+  with no pull round trip and no dependence on a holder being online at that moment. An
+  approver granted only `r` on a namespace cannot write an envelope there, so it skips
+  that namespace and the approval still completes. `requestSecret` remains the backstop
+  for a joiner the push missed: on meeting a retained `__ck` naming an `nskeyKid` it
+  does not hold, it pulls that generation and opens it.
 
   ⚠️ **Forward secrecy for a namespace's past is the CK lever in *When (a)* above**,
   where deleting the old conveyance record is what makes old-CK-era
   data unreadable. Once that record is gone an old nskey private opens nothing, so
   withholding it from a joiner would cost a round trip and buy no secrecy;
-  `conveyHeldPrivatesTo` reads `NskeyPrivateFiling.readAllFor(namespace)` and sends
-  every entry.
+  `conveyHeldPrivatesTo` reads every private `NskeyPrivateFiling` holds in a namespace
+  the grant covers and the approver may write, and sends every entry.
 
 ### 6.2 UC-A5.2 — Per-enrollment auth revocation
 
@@ -1254,9 +1461,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
   ⚠️ **The cut is bounded, not instantaneous.** A peer keeps sealing content keys
   to the superseded generation until its next `ensureCurrent` sees the changed
-  `nskeyKid`, and the revoked holder can still open those. The exposure is the
-  advertisement's freshness window plus one content-key lifetime — UC-A5.1's
-  **Then (b)** calls that part of the case rather than an optimisation.
+  `nskeyKid`, and the revoked holder can still open those. The exposure is
+  `advertisementTtl` plus `advertisementStaleGrace` — UC-A5.1's **Then (b)**
+  calls that part of the case rather than an optimisation.
 
   **Stranding.** Three rules bear on it. An enrollment may not revoke itself
   without `force`, and a revoker must be authorised for every namespace in the
@@ -1279,11 +1486,20 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   the replacement edge; a caller reaches the cascade by APPROVAL, having been
   approved somewhere beneath the target.
 
+- **Then, what a remaining enrollment shares next:** once it holds the new
+  generation's private, it opens only under generations E2 never held, because a
+  content key follows the sender's own rotation as well as the destination's — see
+  [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on).
+- **Then, which namespaces rotate:** every namespace E2's grants cover that the
+  revoking client holds a key for, one nested under a granted namespace included,
+  such as `chat.app` under `app`.
 - **Cross-ref:** `design.md` [§1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) (CK rotation vs nskey-keypair rotation).
 - **Impl/verify (A5.x):** **B-2**.
   A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
-  (both positions of the retention knob); A5.1(b), A5.2 and A5.3's first clause
-  by `tests/at_functional_test/test/nskey_rotation_live_test.dart`.
+  (both positions of the retention knob); A5.1(b), A5.2, A5.3's first clause and
+  [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)'s main Then by
+  `tests/at_functional_test/test/nskey_rotation_live_test.dart`, and UC-A5.7's
+  other clauses by `packages/at_client/test/ck_manager_test.dart`.
   ⚠️ **`enroll:listns` takes no `excludeEnrollmentIds` parameter**, and UC-A5.2's
   Then says it does; the exclusion is achieved by the revocation, as above, and
   that clause is owed a fix.
@@ -1296,7 +1512,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 The two levers UC-A5.1 names are fired by *someone*, and that someone is the
 application: `CryptoConfig` carries a `CkRotationPolicy` and an
-`NskeyRotationPolicy`, both `@experimental` but public. The SDK asks rather than
+`NskeyRotationPolicy`, both public. The SDK asks rather than
 carrying a schedule, because a namespace holding a chat history and one holding
 a device's last-seen timestamp want different answers and only the application
 knows which is which. Design in
@@ -1321,18 +1537,24 @@ knows which is which. Design in
   so a restart does not present every key to the policy as freshly cut, and two
   devices reading the same record reach the same answer.
 - **Then, what a yes does:** a fresh content key is cut and conveyed, and the
-  superseded conveyance record is **retained** — which is what lets an
-  enrollment that joins later read what was written before it. Retention is the
-  per-namespace history knob of UC-A5.1's lever (a), and the SDK's own lever
-  does not delete on the application's behalf.
-- **Then, the default:** `rotateCkAfterOneWeek` — replace once the key is a
-  week old, with the boundary **inclusive** (`age >= 7 days`). A week rather
-  than a day because every replacement writes a record that is then retained,
-  so a short period accumulates records for the lifetime of the atSign; rather
-  than a month because a week is already the period this design measures an
-  envelope's life in.
+  superseded key's conveyances are **kept while any record cites it** — which
+  is what lets an enrollment that joins later read what was written before it
+  — and for **`supersededCkGrace`** after the cut of the key that replaced it,
+  or after its own cut when nothing replaced it, 8 days by default, so a
+  recipient can still open a notification sent under it; they are deleted by
+  the enrollment that cut it once neither holds. Deleting a key that records
+  still cite is UC-A5.1's lever (a), which the SDK never pulls on the
+  application's behalf.
+- **Then, the default:** `rotateCkAfterOneYear` — replace once the key is a
+  year old, with the boundary **inclusive** (`age >= 365 days`). Each value is
+  encrypted under its own key, derived from the content key and a fresh salt,
+  so no usage limit bounds a content key's life, and revocation replaces it
+  through [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)
+  rather than through the timer. A year is NIST SP 800-57 Part 1's suggested
+  cryptoperiod for a key-derivation key, which is what a content key is.
+  `rotateCkAfterOneWeek` is there for an application that wants a week.
 
-### 6.5 UC-A5.5 — The namespace-key lever fires on a cause, and is asked at exactly two points
+### 6.5 UC-A5.5 — The namespace-key lever is asked at exactly two points
 
 - **Given:** an application that supplied an `NskeyRotationPolicy`.
 - **When:** the client runs.
@@ -1343,8 +1565,8 @@ knows which is which. Design in
   content key is sealed to the fresh generation. Asking on every write would put
   the question on the hot path; asking later would seal to a generation about to
   be superseded.
-- **Then, the second ask:** once per authorised namespace at every client
-  start, which is what reaches an application that only ever writes to peers and
+- **Then, the second ask:** once per authorised namespace this enrollment may
+  write at every client start, which is what reaches an application that only ever writes to peers and
   so never takes the first path.
 - **Then, and there is no third:** `seedNamespace` is also reached from
   `AtClient.ensureReachable`, and that route **does not ask** — it passes
@@ -1364,9 +1586,14 @@ knows which is which. Design in
   **retained** so records sealed to it still open, and the successor is conveyed
   to every authorised enrollment. This is UC-A5.1's lever (b) — O(n) per
   enrollment, and not cheap.
-- **Then, the default:** `neverRotateNskey` — false at any age. A policy that
-  always says no rather than an absent one, so every call site asks
-  unconditionally and there is no null to forget.
+- **Then, the default:** `rotateNskeyAfterOneYear` — replace a generation once
+  its advertisement says it was minted a year ago, with the boundary
+  **inclusive**. Revocation rotates on its own cause; the yearly rotation is
+  what heals a compromise nobody detected, and a year sits in NIST SP 800-57
+  Part 1's 1-to-2-year range for a public key-transport key. Each rotation
+  conveys to every authorised enrollment and makes each peer cut one content
+  key. `neverRotateNskey` is there for an application that leaves rotation to
+  revocation and to itself.
 
 ### 6.6 UC-A5.6 — Where a lever is deliberately not asked, and where a yes is refused out loud
 
@@ -1380,8 +1607,7 @@ deliberate skip with a reason, not an oversight.
   replacement, and there is no generation to have an opinion about.
 - **Then, the start-of-client ask follows the posture:** it runs only where
   `AtClientPreference.seedNamespaceKeys` is true, so it never runs at
-  `PqPosture.legacy`, and a client with no key source seeds nothing whatever the
-  posture asks for.
+  `PqPosture.legacy`.
 - **Then, a yes with nowhere to convey is refused, and refused LOUDLY:** the
   policy is consulted **before** the substrate check, deliberately. A client
   with no secret-sharing substrate or private filing that replaced its namespace
@@ -1392,6 +1618,59 @@ deliberate skip with a reason, not an oversight.
   application that configured a policy and sees nothing happen needs to read.
 - **Then, a policy that throws rotates nothing:** the exception is caught,
   logged at warning, and the published generation stands.
+- **Then, a namespace this enrollment may only read is not asked about:** a
+  start neither asks the policy nor takes the mint lock there, since it could not
+  write the successor; an enrollment that may write there does both.
+
+### 6.7 UC-A5.7 — A content key follows both namespace keys it rests on
+
+A shared content key is sealed twice: to the destination's namespace key, and, as
+a sibling copy, to the sender's own, so the sender's other enrollments can open
+what it shares. A revocation rotates the namespace keys the revoked enrollment
+held. A content key is replaced when either generation it rests on moves on. Design in
+[`design.md` 1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).
+
+- **@race:** two writes racing a rotation cut one key. A write a remaining
+  enrollment begins before the rotation reaches it goes out under the key it held
+  until then; that window is the conveyance's latency. A write it begins once it
+  holds the new generation never takes a key another write is still cutting for
+  the old one. A restart between a cut and its pointer write cuts a fresh key.
+- **@replay:** out of scope. At this time atServers are assumed trustworthy:
+  which generation a sender seals to rests on the advertisements its atServer
+  serves, on either side. A version 2 envelope opens only for the namespace,
+  sender and recipient it names; an exact re-delivery is the atServer's to
+  refuse, as above.
+- **@dos:** nothing here runs before authentication. Each write reads the cached
+  advertisement and the filed private, or, where the sender holds no key of its
+  own covering the namespace, remembers that for 15 minutes; a missing private is
+  asked for only when the client's own advertisement names its generation, at most
+  once per generation per cooldown and not while an earlier ask for it is waiting,
+  as UC-A3.6 says, a failed ask included, and a cut happens at most once per
+  destination, namespace and generation change.
+- **Given:** `@alice` has enrollments E1, E2 and E3 with `rw` on `buzz`. E1 has a
+  current content key toward `@bob` in `buzz`, whose sibling copy is sealed to
+  Alice's generation G1.
+- **When:** E3 calls `revokeEnrollmentAndRotate(E2)`, and E1 then writes a value
+  shared with `@bob` in `buzz`.
+- **Then:** the value cites a fresh content key whose sibling copy is sealed to
+  Alice's new generation G2, and E2's G1 private opens neither that key's
+  conveyance nor its sibling copy.
+- **Then, racing writes:** two writes E1 starts at once after the rotation cut
+  one content key, and `@bob` opens both values.
+- **Then, inside the window:** while G2 is advertised and E1 does not yet hold its
+  private, E1 keeps its current key and asks Alice's other enrollments for G2's
+  private. A write that needs a fresh key meanwhile succeeds: its sibling copy is
+  sealed to G1, the generation E1's keys in `buzz` already rest on, or goes
+  without one when none of them records an own generation. Once E1 both holds
+  G2's private and sees it advertised, whichever arrived first, its next write
+  cuts a fresh key sealed to G2.
+- **Then, the policy is not asked:** a `CkRotationPolicy` that always answers no
+  does not stop the replacement.
+- **Then, across a restart:** E1 resumes a content key only when its pointer
+  names the destination's current generation and records the sender's own, and
+  that own generation is the one E1 both sees advertised and holds the private
+  for, whenever there is one. A pointer with no own-generation field resumes
+  nothing.
 
 ## 7. B0 · Prerequisite — atServer upgrade
 
@@ -1592,7 +1871,7 @@ map and be refused rather than obeyed.
   (the startup route, four arms on one throwaway atSign),
   `tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart` (the
   explicit `selfRetrofit` route) and
-  `tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart`
+  `tests/at_client_cli_functional_tests/test/pq_native_enroll_test.dart`
   (`at_activate list`, the shipped binary).
   `tests/at_end2end_test/test/pq/retrofit_e2e_test.dart`
   drives the signing-root step in-flow (privileged mint, clone request+verify,
@@ -1635,6 +1914,14 @@ map and be refused rather than obeyed.
   second legacy enrollment minted at the same moment, which no retrofit ever
   parented, still authenticates afterwards, as do a freshly minted one and the
   PQ enrollment the retrofit created.
+  `tests/at_client_cli_functional_tests/test/pq_retrofit_save_refused_test.dart`
+  proves the same settlement for a scoped predecessor enrolled over an OTP: once
+  its replacement has logged in, a copy of its keyfile is refused at open with
+  `AT0027`, a session left open as it is closed at its next command, and an
+  un-revoked predecessor's second retrofit is refused as already replaced. The
+  same file proves that a retrofit whose keyfile refuses its save after approval
+  revokes the new enrollment where the predecessor may revoke it, reports the
+  refused revoke where it may not, and retrofits again at the next start.
 
 ## 10. B3 · Mixed-PQ within one atSign
 
@@ -1698,8 +1985,10 @@ map and be refused rather than obeyed.
   (`NamespaceKeyUnavailableException(@bob, app_1.my_apps)`), unless the app opted
   into `allowLegacyCryptoFallback` — in which case it goes out **legacy** to bob's
   `publickey` (per-value symmetric key RSA-wrapped inline, the monolithic legacy
-  model), and the *first write after bob's key appears* is PQ with no flag to
-  flip. Never a silent downgrade: the app chose the fallback or the app sees the
+  model), and the *first write after bob's key appears and the 30-second miss
+  window has passed* is PQ with no flag to flip; a program that asks
+  `canSealTo` finds the key at once, which ends the remembered miss, so its
+  next write is PQ. Never a silent downgrade: the app chose the fallback or the app sees the
   refusal. `put` writes no self-copy record; whether alice can write in her own scope
   while bob is unreachable is
   [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists)'s question, not
@@ -1721,8 +2010,9 @@ map and be refused rather than obeyed.
   legacy-interop **opt-out** refuses it — deliberately, and loudly.
 - **Impl/verify:**
   `tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, three atSigns
-  the test CRAM-activates itself: a pre-PQ one (default signing algorithm, so no
-  signing root — asserted against the PQ-native one as a control), a PQ-native
+  the test CRAM-activates itself: a pre-PQ one (default signing algorithm, and
+  the pack's clients skip the start-time root step, so no signing root —
+  asserted against the PQ-native one as a control), a PQ-native
   one, and a PQ-native one activated with `mintLegacyMaterial: false`. Inbound,
   outbound (refused by name, then opted-in and stamped legacy, then read by the
   peer) and the opt-out all covered. It is in the **functional** pack, not
@@ -1756,8 +2046,11 @@ map and be refused rather than obeyed.
   and the write goes via the **nskey data path** — `at/nskey` conveys the CK
   sealed to bob's published nskey (`recipientKind: nskey`),
   `at/symmetric/AES/GCM` encrypts the data. Cold start (or the fallback, if
-  opted-in) ends for bob **without any action from alice**: the recipient's key
-  appearing is the whole trigger.
+  opted-in) ends for bob **without any action from alice** once the 30-second
+  window in which a share remembers finding nothing has passed: the
+  recipient's key appearing is the trigger. A program that asks `canSealTo`
+  finds the key at once, which ends the remembered miss, so its next share is
+  PQ.
 
 - **Cross-ref:** `design.md` [section 1.6](design.md#16-the-uniform-data-flow--cold-start--resolutionordering) (cold start), [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d) (the two-release model);
   `roadmap.md` (migration philosophy).
@@ -1968,8 +2261,12 @@ answer is the only thing standing between them.
 - **Then:** she takes the **same verify path a peer takes** — no owner
   shortcut. One path means a defect in verification cannot hide behind the
   common case, and it is what makes "same-atSign and cross-atSign are the same
-  code" a tested property rather than an aspiration. A namespace nobody minted
-  for resolves to nothing rather than to an error or a guess.
+  code" a tested property rather than an aspiration. A re-read whose bytes are
+  the ones she already verified is not verified again, while a peer's always
+  is: verifying fetches her enrollment's `_apsk` from the atServer, so her own
+  writes would otherwise stop once she had been offline longer than
+  `advertisementTtl`. A namespace nobody minted for resolves to nothing rather
+  than to an error or a guess.
 
 - **Cross-ref:** [UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open).
 - **Impl/verify:** **SS-4** + **B-1**.
@@ -1990,15 +2287,17 @@ These invariants are testable against **every** UC above:
   `CryptoProviderNotRegistered`, exactly as a build predating those providers
   refuses it. The stage runs none of the post-quantum startup at all — it
   collects nothing, files nothing and publishes nothing, so it is not conveyed
-  nskey privates either. The advertisement step is switched off wherever the
-  posture configures no post-quantum providers, and the encapsulation keypair
-  its startup mints is held in memory for the process and never filed.
-  ⚠️ **A key package rides every key-exchange mode**, and a package is
-  registered at every client start whatever the posture: what registers one for
-  a client holding none is `KeyPackageRegistration.register()` on the
-  conveyed-key collection step, which is ungated, while `reconcileKeyPackage`
-  is gated. No post-quantum key is conveyed under RSA in any mode — every
-  conveyance is KEM-sealed, with no classical branch.
+  nskey privates either: it mints no encapsulation keypair and advertises no key
+  package.
+  ⚠️ **A key package rides every key-exchange mode.** An enrollment whose request
+  carried none, as one under the legacy exchange does, is given one at its first
+  start under a posture configuring the providers:
+  `KeyPackageRegistration.register()` on the conveyed-key collection step holds
+  one, and `reconcileKeyPackage` files that one under the enrollment's id and
+  advertises it, so the enrollment advertises the package it holds
+  ([ruling 158](detail/decisions.md#158-a-key-package-reconcile-advertises-the-package-the-client-holds-2026-10-29)).
+  No post-quantum key is conveyed under RSA in any mode — every conveyance is
+  KEM-sealed, with no classical branch.
 - **No silent scheme substitution, in either direction.** The SDK never chooses
   post-quantum behind the app's back (writing PQ is the app's release decision —
   a capability-stage client writes with the legacy provider however much it can read), and never
@@ -2017,7 +2316,7 @@ These invariants are testable against **every** UC above:
   an error. Present on stored keys
   **and** notification frames (with the no-`ns` shapes: `at/nskey` →
   `{providerId, recipientKind, ckKid}`; `at/symmetric/AES/GCM` →
-  `{providerId, ckKid, iv}`).
+  `{providerId, ckKid, salt, iv}`).
 - **No RSA in any confidentiality path** for a fully-PQ interaction (auth, enrollment
   conveyance, self, shared, notification).
 - **ML-DSA APKAM auth is record-authoritative.** PQ auth verifies against the
@@ -2093,8 +2392,8 @@ proven. The problem is legibility rather than coverage.
 | **at_client `dart test`** | data-path providers (`at/nskey`, `at/symmetric/AES/GCM`), CK cache, round-trip equality. Run with `--concurrency=1`. |
 | **`tests/at_functional_test`** | same-atSign self keys, enroll / `listns` round-trip, `__ssenv` delivery, and the rollout matrix. `docker compose down` before each run; cap runs at 180000 ms. |
 | **`tests/at_end2end_test`** | cross-atSign shares and notifications, retrofit, the capability→active transition. |
-| **`tests/at_onboarding_cli_functional_tests`** | CRAM activation through the CLI, and the only place a client is built from a `PqPosture` in two arms. |
-| **`tests/at_onboarding_cli_functional_tests_proxy`** | the CLI against a proxied atServer. |
+| **`tests/at_client_cli_functional_tests`** | CRAM activation through the CLI, and the only place a client is built from a `PqPosture` in two arms. |
+| **`tests/at_client_cli_functional_tests_proxy`** | the CLI against a proxied atServer. |
 
 #### The in-package files the citations lean on
 
@@ -2116,8 +2415,10 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
 | `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2**. |
 | `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
-| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneWeek` with its period pinned as a raw literal and its boundary inclusive, and `neverRotateNskey` at any age — plus that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
+| `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneYear` and `rotateNskeyAfterOneYear`, each with its period pinned as a raw literal and its boundary inclusive — that every config the SDK builds carries them, the weekly and never alternatives, and that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
 | `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
+| `packages/at_client/test/nskey_private_ask_test.dart` | that asking the atSign's other enrollments for an own namespace-key private it does not hold keeps its cooldown when the ask fails, so a read miss cannot ask on every write. |
+| `packages/at_client/test/nskey_own_seal_test.dart` | that a content key sealed to the atSign's own namespace key goes to the public half the held private derives, never to the one the atServer serves, including for a generation this client minted with nowhere to file its private. |
 | `packages/at_client/test/legacy_client_refusal_test.dart` | that a legacy-only install — one whose posture registers no post-quantum providers at all — refuses a record stamped `at/symmetric/AES/GCM`, asserted on `CryptoProviderNotRegistered` and on its message naming the id, with the same install reading a `legacy`-stamped record as the control. Cited by **UC-B4.3**. |
 | `packages/at_client/test/nskey_ladder_refusal_test.dart` | one generation advertising both X-Wing and ML-KEM-1024, and two writers differing only in `sealsToKeyAlgorithms`: each stamps its own conveyance provider, and a sibling install holding only the X-Wing conveyance provider cannot open the ML-KEM-sealed record — refused with `CryptoProviderNotRegistered` naming the missing id and listing what it does hold, with the same sibling opening an X-Wing record as the control. Cited by **UC-G2.11** and **UC-G2.10**. |
 | `packages/at_client/test/nskey_seeding_test.dart` | the namespace-key policy&#39;s second ask point and every condition under which it is skipped or its yes declined: nothing published, the posture not seeding, no substrate to convey over, and a policy that throws. Cited by **UC-A5.5** and **UC-A5.6**. |
@@ -2147,7 +2448,7 @@ Three `provenIn` citations reach a CLI pack, over two rows: **UC-G3.11** cites
 `pq_native_enroll_test.dart` once. None reaches the **proxy** pack.
 
 Re-derive rather than quoting:
-`git grep -c at_onboarding_cli_functional_tests -- packages/at_client/test/acceptance`.
+`git grep -c at_client_cli_functional_tests -- packages/at_client/test/acceptance`.
 The CLI pack's two-arm posture differential — the best live evidence for
 UC-C1.6 and a second live proof of UC-A1.1 — is still invisible from this
 catalogue. The strict matcher gives **194** live `test()` declarations across
@@ -2281,8 +2582,9 @@ encryption time so the guarantee does not rest on which call path a write took.
 has never executed.
 
 **Arm 2, the posture grid.**
-`tests/at_functional_test/test/pq_posture_grid_test.dart`, 7 `test()` calls over
-9 enrollments on 2 atSigns. Sender posture × receiver **readiness**, in **one
+`tests/at_functional_test/test/pq_posture_grid_test.dart`, one enrollment per cell
+on 2 atSigns, every cell approved before any client opens and the seeding cells
+opened last. Sender posture × receiver **readiness**, in **one
 process** in `tests/at_functional_test`, exercising self and cross-atSign puts,
 gets, and notification send and receive. The data-path axis is receiver
 *readiness* rather than receiver posture, because a posture axis cannot express
@@ -2363,8 +2665,10 @@ namespace the write targets.
 configures no post-quantum provider. That leaves the write claim untouched — a
 sender is refused for a missing advertised key, never for the recipient's
 stage — and the read side is exercised separately by the grid's readback row, where
-`r-legacy` is refused on the crypto path and `r-pqReading` on the
-key-acquisition path.
+`r-legacy` is refused on the crypto path and every receiver that configures the
+providers reads, `r-pqReading` included: it was on the roster when the namespace key
+was minted, so it was conveyed the private before the key was published
+([UC-B3.2](#102-uc-b32--the-apps-active-release-flips-self-data-to-the-nskey-path)).
 
 So the data path grid is **sender posture × receiver readiness**, and the
 envelope grid stays **sender posture × receiver posture** — because there the
@@ -2474,7 +2778,7 @@ pieces:
 - Every runner emits the runner's own JSON stream, opt-in:
   `ACCEPTANCE_REPORT=<path> ./runLocal.sh`, wired into all three of
   `at_functional_test`, `at_end2end_test` and
-  `at_onboarding_cli_functional_tests`. A run without it is byte-for-byte what
+  `at_client_cli_functional_tests`. A run without it is byte-for-byte what
   it was. The unit suites need no wiring — `dart test --file-reporter json:…`
   in `packages/at_client` and `packages/at_auth` covers the 67 citations that
   point at them.
@@ -2509,9 +2813,10 @@ unit sources and renders, or `--with-live` runs the three live packs as well.
 `packages/at_client/test/acceptance_ledger_wiring_test.dart`, across **both**
 workflows: each emitting job still carries its reporter flag, `unit_at_client`
 still sets `ACCEPTANCE_LEDGER`, every emitter still uploads with
-`if: ${{ always() }}`, at_libraries' matrix upload still names
-`matrix.package` so its eight legs cannot overwrite one another, and each
-runner still gates the reporter on `ACCEPTANCE_REPORT`.
+`if: ${{ always() }}`, at_libraries' matrix upload still names its leg's
+index so its legs cannot overwrite one another and still takes the report of
+every package the leg ran, and each runner still gates the reporter on
+`ACCEPTANCE_REPORT`.
 ⚠️ **The rail's predicates read the workflow with comments stripped**, which is
 not a detail: an upload step is preceded by a comment explaining it, that
 comment names the very strings the predicates look for — this section's own
@@ -2691,9 +2996,9 @@ Four residues this catalogue states rather than hides:
 
 - **UC-B0.1** belongs to the `legacy_server_tests` job and cannot be a cell
   until arm 4 exists.
-- **UC-B2.2** needs the grace-0 secondary that only
-  `tests/at_end2end_test/runLocal.sh` provisions, so the functional pack cannot
-  host it.
+- **UC-B2.2** is proven only in the e2e pack
+  (`retrofit_retirement_e2e_test.dart`); no atServer setting ties it there, and
+  moving it to the functional pack has not been tried.
 - **UC-C1.4**'s Given is unprovable live.
 - **The 3 vacuous-at-legacy rows** — UC-A4.3, UC-B5.4 and UC-B1.3 — have an
   invariant Then and a Given that legacy cannot satisfy: a posture configuring
@@ -2836,8 +3141,9 @@ the number its own dartdoc enumerates under "The axes", and the number that
 differs between `legacy` and `pqActive` are three different figures.
 
 ⚠️ **A bare preference runs the `legacy` posture**, byte-identical to the
-pre-posture SDK, and runs no post-quantum startup at all. The ladder is 3.x
-`legacy`, 4.x `pqReady`, 5.x `pqActive`: an app that wants a later stage names
+pre-posture SDK, and runs no post-quantum startup at all. The ladder is `legacy`
+through 4.0, `pqReady` from a later 4.x release, `pqActive` at 5.x: an app that
+wants a later stage names
 one; an app that must stay put names nothing.
 
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
@@ -3437,12 +3743,13 @@ is where its missing lever lives.
 ### 17.5 UC-G2.5 — An nskey rotation mints fresh material and carries nothing forward
 
 - **Given:** a namespace whose current generation holds keys for one or more
-  algorithms, and a rotation is due — because the application asked for one
-  (whatever it decides on; the SDK carries no clock and no cadence for this
-  lever), or because a revocation touched an enrollment granted this namespace
-  after the namespace's advertisement was last rotated.
-  ⚠️ **Not "the generation's age"** — age is not an nskey trigger; an age-shaped
-  *application* policy stays expressible, an age-shaped SDK trigger does not.
+  algorithms, and a rotation is due — because the rotation policy said yes (the
+  default, `rotateNskeyAfterOneYear`, does once a generation is a year old, and an
+  application's own policy decides on whatever it likes), or because a revocation
+  touched an enrollment granted this namespace after the namespace's advertisement
+  was last rotated.
+  ⚠️ **Age decides only through the policy** — a revocation-driven rotation
+  consults no clock, and the yearly default is a policy an application replaces.
   ⚠️ **And not "created before a revocation"** — the generation's payload
   `createdAt` is the minting client's own clock, and comparing it to a
   server-stamped moment is the trap.
@@ -3467,8 +3774,8 @@ is where its missing lever lives.
     is how a peer learns a rotation happened at all — a sender never sees a
     recipient's decapsulation fail — and it is also the **bound**: until each peer
     re-resolves it goes on sealing to the superseded generation, which the
-    revoked holder can still open. The exposure is the advertisement's freshness
-    window plus one content-key lifetime, which is
+    revoked holder can still open. The exposure is `advertisementTtl` plus
+    `advertisementStaleGrace`, which is
     [UC-A5.1](#61-uc-a51--rotate-a-namespace-key-post-compromise)'s **Then (b)**
     and not an optimisation;
   - **a client decides a rotation is due without coordinating with another
@@ -3503,7 +3810,8 @@ is where its missing lever lives.
     serves. On this side `Enrollment.fromJSON` keeps `status`, an `add` asserts
     the advertisement record's own `updatedAt` back while a rotation takes a
     fresh one, and `NskeySeeding.rotateIfRevoked` puts the comparison at every
-    client start.
+    client start, for each namespace the client's grants name and each one
+    nested under them that it holds a key for and may write.
     ⛔ **There is no `revokedAt` stamp on the enrollment record.** An enrollment
     record's ttl IS the APKAM key-expiry posture, so a stamp living on it is
     reaped with the record; `EnrollDataStoreValue`'s one time-shaped field is
@@ -3522,15 +3830,26 @@ is where its missing lever lives.
     `approved`, making the test vacuously false forever.
 
     ⚠️ **Why the rotation ignores the policy.** `NskeyRotationPolicy` governs
-    *discretionary* rotation, and its shipped default is `neverRotateNskey`,
-    which returns false unconditionally. A revocation-driven rotation that asked
-    it would be inert for every application that has not opted in — and the
-    rotation is the only thing that cuts a revoked enrollment off from data
-    sealed to the generation it already holds.
+    *discretionary* rotation, and its shipped default,
+    `rotateNskeyAfterOneYear`, says yes only once a generation is a year old.
+    A revocation-driven rotation that asked it would wait up to a year, or for
+    ever under `neverRotateNskey` — and the rotation is the only thing that cuts
+    a revoked enrollment off from data sealed to the generation it already
+    holds.
 
-    ⚠️ **Age is not an nskey trigger at all** — the SDK carries no clock for
-    this lever, and an application deciding it is time is a *cause* rather than
-    a schedule;
+    ⚠️ **Age is the default policy's trigger, never the revocation's** — the
+    revocation-driven rotation needs no clock, and the yearly one is asked only
+    at the two points
+    [UC-A5.5](#65-uc-a55--the-namespace-key-lever-is-asked-at-exactly-two-points)
+    names;
+  - **where the `enroll:infons` answer also carries `lastKeyHolderRevokedAt`,
+    that is the revocation moment the client compares**: the latest revocation
+    of an enrollment granted the namespace whose record has ever carried a key
+    package, since only those are conveyed its private. A null there means no
+    such revocation, not a missing answer; an answer without the key, from an
+    atServer that does not serve it, is read from `lastRevokedAt`; and a value
+    that is not a timestamp is refused, as `lastRevokedAt`'s is. So revoking an
+    enrollment that never held a key package owes no rotation;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It publishes nothing, and the question is put again at its next
     start or at the next content key it conveys to a namespace key **this
@@ -3659,9 +3978,11 @@ is where its missing lever lives.
     strands it until the next start re-signs it. The premise holds because a
     posture move **replaces** the enrollment: reaching a
     PQ posture retrofits an rsa2048 credential into a new enrollment owning a
-    signing key from birth, and the superseded enrollment keeps its own `_apsk`
-    record — published with no TTL and deleted by nothing — so what its
-    authentication key signed goes on verifying;
+    signing key from birth. A superseded predecessor that is not fully
+    privileged has its `_apsk` moved to `.r.__e` at its successor's first
+    authentication, so what its authentication key signed stops verifying and
+    is refused as revoked or superseded rather than as a missing key; a fully
+    privileged predecessor keeps its record at `.a.__e`;
   - ⚠️ **an nskey entry is never retired in place, and its retirement is
     GENERATIONAL.** A rotation simply does not mint that algorithm again, and
     what opens history is the previous generation's private, still held — not a
@@ -3872,9 +4193,8 @@ is where its missing lever lives.
 Design in [`design.md` 9.8](design.md#98-the-data-signing-key-an-enrollment-owns-from-birth).
 
 Section 16 covers what an `_apsk` record *means* to a reader. This cluster
-covers the key it names: where it comes from, what has to agree about its
-spelling, and what breaks when the record changes under a signature that
-vouched for it.
+covers the keys it names: where they come from, what has to agree about their
+spelling, and the links that vouch for each of them.
 
 Every row below is written against the production path rather than the design,
 because a clause can be **false** rather than untested and both read the same
@@ -3883,16 +4203,13 @@ way from outside.
 ⛔ **There is no "no mint at all when there is no enrollment id" row**, because
 there is no such mechanism: the commit that would have created it was dropped,
 since publishing `_apsk`
-directly under `primary`, with no enrollment record to route it through, is a
+directly under `primary`, without routing it through an enrollment record, is a
 working, pinned capability that the guard would have deleted.
 
 [UC-G3.3](#uc-g33--the-form-_apsk-takes-follows-the-algorithm-and-nothing-else-may-decide-it)
 comes from
 [`design.md` 9.8.2](design.md#982-the-form-_apsk-takes-follows-the-algorithm-and-nothing-else),
-and is the rule the two composers were breaking. The `_apsk`-mismatch refusals
-are not a row of their own — they are the five comparisons inside
-[UC-G3.4](#uc-g34--a-link-is-bound-to-the-exact-_apsk-string-and-a-republish-breaks-it),
-which is the same mechanism stated once.
+and is the rule the two composers were breaking.
 
 ### 18.1 Creation
 
@@ -3945,70 +4262,292 @@ which is the same mechanism stated once.
   consumer base64-decodes — and both spell anything else as the **array**.
   *And* a second condition on either side is a defect, not a refinement: the
   client republishes on any difference, so a disagreement rewrites the record
-  and discards whatever was bound to its old value.
+  at the client's first start.
 
   ⚠️ **A second condition fires only on the case it is wrong about.** Forcing
   the array whenever a key package is present, on the grounds that a bare value
   cannot state the algorithm of whatever signed the package, is wrong where that
   signer is rsa2048 — the bare value states exactly it — and redundant where it
   is not, the algorithm having already chosen the array. What is left is an
-  rsa2048-advertising enrollment in pq key-exchange mode, which
-  `--posture legacy --key-exchange pq` reaches: the client rewrites `_apsk` at
-  its first start and discards the chain link the approver just conveyed.
+  rsa2048-advertising enrollment carrying a key package, which a legacy request
+  with a key package reaches (a pq request refuses rsa2048, UC-A2.7): the
+  client rewrites `_apsk` at its first start.
 
-### 18.2 The chain over the record
+### 18.2 Links, one per key
 
-#### UC-G3.4 — a link is bound to the exact `_apsk` string, and a republish breaks it
-  *Given* an approver that has conveyed a signing link for an enrollment, the
-  link signing `{v, childEnrollmentId, apkamPublicKey}` where `apkamPublicKey`
-  is the enrollee's entire published `_apsk` value.
-  *When* that value changes — a mint republishing, or any other writer
-  composing a different spelling.
-  *Then* every one of `PqSigningChain`'s **five** whole-string comparisons
-  fails: a conveyed **chain** link is refused naming the mismatch, a conveyed
-  **root** link is refused naming the mismatch, the walk reports a chain link
-  **broken** rather than anchored, the walk reports a root link **broken**
-  rather than anchored, and an enrollment whose own key moved **re-anchors
-  itself** rather than publishing a link that vouches for a value it no longer
-  holds.
-  *And* the break is not recoverable by the record alone:
-  `publishPublicSigningKey` writes the value on its own and does not carry over
-  the `appMetadata` a link rides, so the enrollment goes from `chained` to
-  `unsigned` with nothing re-conveying it.
+A link vouches for one key an enrollment's `_apsk` lists. It names that key,
+`{v: 2, enrollmentId, kid, alg, pub}`, and the `kid` of the key that signed
+it, and it lives in the record's `appMetadata` under `apskLinks`, keyed by the
+`kid` it vouches for. `enroll:link` is the only operation that writes one.
 
-  ⚠️ **`apkamPublicKey` is a misleading name and a remnant**, accurate only when
-  `_apsk` held the APKAM public key alone. It is a member of the signed preimage,
-  so renaming it changes what verifies. Four of the five comparisons refuse with
-  a message; the fifth refuses silently.
+Threats, answered for the whole set:
 
-#### UC-G3.5 — what an approver conveys is decided by possession as well as privilege
-  *Given* an approver servicing an enrolment whose key package verifies.
-  *Then* a fully privileged approver **holding the signing-root private**
-  conveys a **root** link, signed with the atSign's ML-DSA-65 root key and so
-  posture-invariant.
-  *And* a fully privileged approver with **no** root private that holds a data
-  signing key of its own conveys a **chain** link signed with that key — which
-  is not "root link or nothing" for that arm, because nothing re-attempts a link
-  for an enrolment approved while its approver was unpossessed.
-  *And* a fully privileged approver holding **neither** conveys **no link at
-  all**, and everything else still flows — signing with the APKAM
-  authentication key would produce a link that is *dropped* rather than
-  retired, and so silently unverifiable for ever.
-  *And* an approver that is **not** fully privileged conveys a chain link
-  signed with its own signing keys.
+- **@race:** two vouchers, or a voucher and a sweep, writing one key's link
+  (compare-and-set on `expect`, UC-G3.16); `enroll:link` against a republish of
+  the same `_apsk` (serialised, UC-G3.17); two fully privileged enrollments
+  minting a root (the existing `_rootlock`, UC-G3.22).
+- **@replay:** a link names its target enrollment, `kid`, `alg` and public key,
+  so it can only be written onto that key (UC-G3.15) and vouches for no other
+  (UC-G3.30), and a link copied to another atSign is checked against that
+  atSign's own records. Re-sending a link already stored changes nothing.
+- **@dos:** only the target or a caller passing the approve gate can write
+  (UC-G3.14); one link per advertised `kid`, each at most 16 KiB, and both the
+  call and the `_apsk` record with all its links within the 500 KiB
+  enrollment-record limit (UC-G3.15).
+- **Forgery:** the atServer stores a link without checking its signature, so a
+  stored link is a claim the walk checks: a root link against the atSign's own
+  published root keys, a chain link against the signer's entry for its `kid`,
+  from which the walk continues (UC-G3.13, UC-G3.19); a link naming another key
+  reads broken (UC-G3.30).
+- **Impersonation:** only the target, a caller that could approve it, or a CRAM
+  connection writes a link (UC-G3.14), so any writer but the target itself
+  holds the authority to approve or revoke it; an authentication key takes no
+  link and signs none (UC-G3.21).
 
-  ⚠️ **`isFullyPrivileged` requires `w` on both `*` and `__manage` while
-  approval takes only `__manage`**, so the second arm is an ordinary case rather
-  than an edge: a `__manage`-only approver approves without being fully
-  privileged.
+#### UC-G3.4 — WITHDRAWN: a link was bound to the exact `_apsk` string
+  **Withdrawn.** A link now vouches for one key, not the whole value; see
+  [UC-G3.12](#uc-g312--a-link-vouches-for-one-key-so-a-change-to-another-key-leaves-it-standing).
+
+  It read: *given an approver that has conveyed a signing link for an
+  enrollment, the link signing `{v, childEnrollmentId, apkamPublicKey}` where
+  `apkamPublicKey` is the enrollee's entire published `_apsk` value, when that
+  value changes, then every whole-string comparison fails, and the break is
+  not recoverable by the record alone.*
+
+#### UC-G3.5 — an approver links each key of the enrollment it approves, straight after approving
+  *Given* an approver that passes the approve gate for enrollment B and holds
+  the signing root's private key or a key of its own that walks to the root,
+  and B's `_apsk` advertising keys K1 and K2 in the list form.
+  *When* it approves B.
+  *Then* it calls `enroll:link` once for B, carrying a link for K1 and one for
+  K2, each stating that it expects the key to have no link yet.
+  *And* the links are root links, signed with the signing root, when the
+  approver holds the root's private key, and chain links, each signed with a
+  key of its own that walks to the root, when it doesn't.
+  *And* B's record holds one link per `kid`, and the walk from either key
+  reads **anchored**.
+  *And* an approver with neither sends no `enroll:link`, and the approval
+  completes as before.
+
+#### UC-G3.12 — a link vouches for one key, so a change to another key leaves it standing
+  *Given* B anchored, with links for K1 and K2.
+  *When* B advertises a new key K3, or retires K2, through `enroll:update`.
+  *Then* K1's link is still on the record and the walk from K1 still reads
+  **anchored**.
+  *And* a retired K2, still advertised, keeps its link, so what it signed
+  still walks to the root.
+
+#### UC-G3.13 — the kind of a link follows from its signer
+  *Given* on B's record, a link signed by a key whose `kid` is an active or
+  retired key of `public:pq_signing_root@<atSign>`, and a link signed by a key
+  of enrollment A's `_apsk`.
+  *When* the walk checks them.
+  *Then* the first is checked against that root key only, under the
+  `at-root-link:` prefix, and reads **anchored**; the second is checked against
+  that `kid` in A's `_apsk` and the walk continues from it.
+  *And* a link naming a root `kid` that fails its check reads **broken** and is
+  never tried as a chain link, and a link naming no signer `kid` reads
+  **broken**.
+
+#### UC-G3.14 — `enroll:link` admits only the target or a caller that could approve it
+  *Given* enrollment C without `__manage`, and enrollment D holding `__manage`
+  but not every namespace B holds at B's access.
+  *When* C or D calls `enroll:link` for B.
+  *Then* the atServer refuses it, and nothing is written.
+  *And* B calling `enroll:link` on its own keys is admitted without `__manage`;
+  a caller passing the approve gate is admitted; and so is a CRAM connection,
+  as for `enroll:approve`.
+
+#### UC-G3.15 — `enroll:link` checks structure, and writes all or nothing
+  *Given* B approved, its `_apsk` advertising K1 and K2.
+  *When* one call carries a well-formed link for K1 and any of: a link for an
+  unadvertised K9, or for a key not spelt in padded standard base64; a link
+  whose payload names another enrollment, or another `kid`, `alg` or public
+  key; a link over 16 KiB; or the call, or B's `_apsk` record with every link
+  it would then hold, is over the 500 KiB limit.
+  *Then* the whole call is refused, naming what failed, and K1's link is not
+  written either.
+  *And* a call for an enrollment that isn't approved is refused.
+  *And* a call carrying well-formed links for K1 and K2 writes both.
+
+#### UC-G3.16 — a link replaces only the link its writer found
+  *Given* key K1 on B carries a link L1.
+  *When* a voucher sends a new link for K1 with a copy of the link it found on
+  K1, and that copy is "none" or a link other than L1.
+  *Then* the atServer refuses the call, and L1 stays on K1.
+  *And* when the copy it sends is L1, its new link replaces L1.
+  *And* when two vouchers each find no link on K1 and each send a new link
+  with the copy "none", the first to arrive is written and the second is
+  refused; the second reads B's `_apsk` again and keeps the link it now finds,
+  unless that link is a chain link and its own is a root link, when it sends
+  its root link again, with a copy of that chain link.
+
+  The copy is `enroll:link`'s `expect`: the exact link JSON the voucher read,
+  or null, compared as JSON by the atServer.
+
+#### UC-G3.17 — any other write of B's `_apsk` keeps B's links
+  *Given* B's `_apsk` record carries links for K1 and K2.
+  *When* B's `_apsk` is written any way other than `enroll:link`: an
+  `enroll:update` republish that adds K3, or a put of the record, including
+  one from an older client that still sends the old version 1 link fields.
+  *Then* the links for K1 and K2 are still on the record afterwards,
+  unchanged, whatever that write sent.
+  *And* when the new value no longer lists K2 at all, K2's link is removed in
+  the same write.
+  *And* when an `enroll:link` for K1 and a republish that removes K1 arrive
+  together, the atServer handles one and then the other, so afterwards K1 has
+  no link and no other link has been lost.
+
+#### UC-G3.18 — an enrollment links a key it adds, using one it has already linked, before signing with it
+  *Given* B, whose key K1 has a link, minting a new key K2.
+  *When* B advertises K2 in its `_apsk`.
+  *Then* B writes K2's link itself, with `enroll:link` on its own record, the
+  link signed with K1; and the walk from K2 reads **anchored**, through K1.
+  *And* until K2's link is on the record, B signs content with K1 only.
+  *And* when B later retires K1, K1's link stays, so what K1 signed still walks
+  to the root.
+  *And* when the change that adds K2 also retires K1, and K1 has a link but
+  K2's link cannot be written, B keeps K1 in service and signs with it, and
+  retires K1 only once a later start has linked K2 with it. A K1 without a
+  link retires as before.
+
+#### UC-G3.19 — a chain link is signed only by a key that has a link, and a root link only by the root
+  *Given* an enrollment A that holds neither the signing root's private key
+  nor any key with a link.
+  *When* A would vouch for B, at approval or later.
+  *Then* A writes no link for B.
+  *And* every chain link on any record was signed by a key that had a link of
+  its own when it signed, so the walk from any linked key reaches a root link,
+  unless a key on the way has since been revoked or has expired.
+
+#### UC-G3.20 — content is signed with the keys that have links, while there are any
+  *Given* B holding K1, which has a link, and K2, which has none yet.
+  *When* B signs content: a secret envelope, a key package after approval, or a
+  namespace-key advertisement.
+  *Then* the content carries one signature, made with K1; once K2 has a link,
+  it carries two, one made with each key.
+  *And* an enrollment with no key that has a link signs with every key it
+  holds, as it does today.
+  *And* the key package signed at `enroll:request` is signed as today, since no
+  link can exist before approval.
+
+  Whether content should carry several signatures at all is a separate
+  decision.
+
+#### UC-G3.21 — an enrollment's authentication key takes no links, and gives none
+  *Given* B holding no client data signing key of its own, so its `_apsk` is
+  its APKAM authentication key, published bare or listed alone in the list form.
+  *When* an approver or a root holder's sweep would link B, or B would vouch
+  for another enrollment.
+  *Then* no link is written for that key, and the atServer refuses one if
+  asked, since the key is the one the enrollment record holds as its
+  `apkamPublicKey`; B signs no link with it; and the walk from B reads
+  **unsigned**.
+  *And* once B mints a client data signing key and publishes it, that key is
+  linked like any other.
+
+#### UC-G3.22 — a fully privileged enrollment mints a missing signing root when it starts, and anchors the atSign
+  *Given* an atSign that publishes no signing root, with a fully privileged
+  enrollment F and other approved enrollments.
+  *When* F starts.
+  *Then* F mints the signing root, root-links its own keys, and then
+  root-links every key on the atSign's other enrollments that has no root
+  link, all through `enroll:link`.
+  *And* when two fully privileged enrollments start together, only one root is
+  published.
+  *And* an enrollment that isn't fully privileged mints nothing.
+
+  "Every key" leaves out an authentication key, which takes no link
+  (UC-G3.21); a bare RSA client data signing key is one
+  ([UC-G3.28](#uc-g328--a-bare-rsa-client-data-signing-key-is-linked-like-a-listed-one)).
+
+#### UC-G3.23 — a root holder's sweep gives every key without a sound root link one
+  *Given* an atSign with a signing root; a fully privileged enrollment F
+  holding the root's private key; and keys on other enrollments that have a
+  chain link, no link at all, or a root link that fails its check.
+  *When* F starts.
+  *Then* each of those keys gets a root link from F through `enroll:link`, each
+  call carrying a copy of the link F found on the key, or "none".
+  *And* a key whose root link passes its check is left as it is.
+
+#### UC-G3.24 — the walk follows keys, and stops at a cycle
+  *Given* two keys, on two enrollments, whose chain links each name the other
+  as signer.
+  *When* the walk runs from either key.
+  *Then* it reads **broken**, and stops.
+  *And* a voucher never links a key that its own key's chain already passes
+  through.
+
+#### UC-G3.25 — the approver's view shows whether each enrollment is anchored
+  *Given* enrollments whose keys read **anchored**, **unsigned** and
+  **broken**, including one with an anchored key and a new key not yet linked.
+  *When* `at_activate list` runs, and when `EnrollmentRequestList` lists them
+  below its pending requests.
+  *Then* a row shows **anchored** when every key the enrollment signs with
+  walks to the root, **unsigned** when it has no linked key, and otherwise the
+  walk's verdict for a key that fails, naming that key.
+  *And* the enrollment whose new key isn't linked yet shows **anchored**, since
+  it doesn't sign with that key yet.
+
+#### UC-G3.26 — links never travel by envelope, and the old link fields are gone
+  *Given* an approval, a key an enrollment adds, and a root holder's sweep.
+  *When* each of them links keys.
+  *Then* every link is written through `enroll:link`; no link is sent in an
+  envelope, and no client stamps one.
+  *And* no client writes or reads the old version 1 link fields,
+  `apskChainLink` and `apskRootLink`.
+
+#### UC-G3.27 — on an atServer without `enroll:link`, nothing is linked and everything else works
+  *Given* an atServer that refuses `enroll:link` as an operation it doesn't
+  know.
+  *When* an approval, a key an enrollment adds, or a root holder's sweep would
+  write links.
+  *Then* no link is written, and every enrollment reads **unsigned**.
+  *And* the approval, the key addition and the start complete as they do
+  today, and content is signed as it is today.
+  *And* a root holder's sweep stops at the first such refusal, so a start sends
+  that atServer one `enroll:link` rather than one per approved enrollment, and
+  logs the refusal once.
+
+#### UC-G3.28 — a bare RSA client data signing key is linked like a listed one
+  *Given* B on the `pqReady` posture, authenticating with ML-DSA-65, whose
+  `_apsk` is the RSA-2048 client data signing key it minted, published bare.
+  *When* an approver links B, and later B, with that key linked, vouches for
+  another enrollment.
+  *Then* the atServer and the walk both treat the bare value as one `rsa2048`
+  entry, whose `kid` they derive from the key the way every other `kid` is
+  derived; the link is written, the walk from B reads **anchored**, and B's
+  own link signed with that key is accepted.
+  *And* when B moves to `pqActive`, mints an ML-DSA-65 client data signing key and
+  lists both, retiring the RSA one, the RSA key keeps the same `kid` and keeps its
+  link.
+
+#### UC-G3.29 — an `enroll:update` cannot make B's client data signing key its authentication key
+  *Given* B's enrollment and its `_apsk`.
+  *When* an `enroll:update` by B would leave K1 both as B's `apkamPublicKey`
+  and listed in B's `_apsk` beside another key, or carrying a link, whether
+  it installs K1, republishes the `_apsk`, or both.
+  *Then* the atServer refuses the update, naming K1, and nothing is written.
+  *And* an update that leaves K1 as the only key B's `_apsk` lists, with no
+  link, is accepted, as for an enrollment holding no client data signing key
+  of its own.
+
+#### UC-G3.30 — a link vouches for the key it names, not for every key under its `kid`
+  *Given* B's `_apsk` listing two entries under one `kid`, K1 and K1′, whose
+  keys differ, and on that `kid` a link whose payload names K1's `alg` and
+  `pub`.
+  *When* the walk runs from K1′.
+  *Then* it reads **broken**, since the link names another key.
+  *And* the walk from K1, through the same link, reads **anchored** when that
+  link is a root link that passes its check.
 
 ### 18.3 The one keypair a legacy enrollment has
 
 #### UC-G3.6 — a legacy enrollment's authentication keypair signs data in memory only
   *Given* an enrollment holding no typed `sign:` material.
   *When* something asks `ApkamSigning.signingKeys` what may sign.
-  *Then* it answers with the APKAM **authentication** keypair, built from
-  `atChops` on the call and **never filed** as signing material — so
+  *Then* it answers with the APKAM **authentication** keypair, read on the
+  call from the keyfile, and **never filed** as signing material — so
   `AtKeys.signingKeysFor` still returns nothing for that enrollment, and
   `apskEntries` advertises that same key on exactly the same condition, which
   is what keeps what signs and what is advertised from drifting apart.
@@ -4063,8 +4602,9 @@ which is the same mechanism stated once.
   spelled in the bare form. The control is `PqPosture.legacy`, where an empty
   set is exactly what the posture means and is accepted.
   *And* an explicit **`authenticationKeyAlgorithm` weaker than the posture
-  names is refused**: a posture is a floor, and an app that must not move names
-  `PqPosture.legacy` rather than weakening an axis of a stronger posture.
+  names is refused**: a posture is a floor, and an app that wants less names
+  `PqPosture.legacy` rather than weakening an axis of a stronger posture, and
+  is still raised to the floor its own key material sets.
 
   ⚠️ **The floor rule reads ONE axis.** A `dataSigningKeyAlgorithms` weaker
   than the posture names

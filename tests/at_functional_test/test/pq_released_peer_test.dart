@@ -1,7 +1,3 @@
-// The enrollment key-package surface is @experimental; driving it is how each
-// stage gets an enrollment whose `_apsk` a released peer can be asked about.
-// ignore_for_file: experimental_member_use
-
 @Timeout(Duration(minutes: 15))
 @Tags(['pq'])
 library;
@@ -9,7 +5,7 @@ library;
 import 'dart:convert' show LineSplitter, jsonDecode;
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
@@ -104,6 +100,8 @@ void main() {
             atSign, loader.createAtKeysFromDemoKeys(atSign)),
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageFor(atSign));
     await loader.setEncryptionKeys(approver, atSign);
@@ -115,6 +113,9 @@ void main() {
         atSign: atSign,
         namespace: namespace,
         preference: TestUtils.getPreference(atSign, posture: entry.value),
+        // NOTE: the stage's own exchange, as `Atsign.enroll` takes it: the
+        // legacy cell must authenticate, and so advertise, RSA-2048.
+        keyExchangeMode: entry.value.keyExchangeMode,
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         // `(appName, deviceName)` is one-shot server state, so a second run
@@ -123,9 +124,8 @@ void main() {
             '${DateTime.now().microsecondsSinceEpoch}',
         storage: TestUtils.storage,
       );
-      // NOTE: the id the client RUNS as, not the one it was enrolled as — a pq
-      // posture retrofits during construction and advertises its `_apsk` under
-      // the new id.
+      // NOTE: the id the client RUNS as, which is the id its `_apsk` is
+      // advertised under.
       stdout.writeln('##RELPEER## ${entry.key} runs as '
           '${cells[entry.key]!.client.enrollmentId}');
     }

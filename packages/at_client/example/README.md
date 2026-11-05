@@ -21,6 +21,15 @@ dart run bin/collections_primitives.dart --help
 
 `--role` and `--other-at-signs` can be abbreviated as `-R` and `-O`.
 
+The collections, notifications and RPC examples run at `PqPosture.pqActive`,
+as a new app should, so both sides of an example must run it to read what
+the other shares. The at_client
+README's [Post-quantum cryptography](../README.md#post-quantum-cryptography)
+section says what that needs. A sender shares only with an atSign that has
+published a key for `examples.demos`, which an atSign does the first time it
+runs any of these examples, so start the receiver first; a sender started
+before then waits up to five minutes for it.
+
 ### Collections — primitives
 Share `String` and `Map` values between atSigns.
 ```bash
@@ -52,12 +61,16 @@ dart run bin/collections_binary.dart -R receiver -O @sender
 ### Collections — todos app
 Interactive terminal-based shared todo list, built on the `nocterm`
 widget framework. There is an equivalent Flutter app at
-[`packages/at_client_flutter/examples/todos/`](../../at_client_flutter/examples/todos/README.md)
+[`packages/at_client_flutter/example/todos/`](../../at_client_flutter/example/todos/README.md)
 — the two apps have been deliberately given a similar UX so you
 can A/B the same scenarios across keyboard-driven and mouse-driven
 front-ends, and their wire formats are byte-compatible so logging
 into both with two atSigns and sharing a todo from one shows it
-live in the other.
+live in the other. Both run at `PqPosture.pqActive` in namespace
+`todos.demos`, and both open their collection through
+`lib/todos_tui/todos_collection.dart`'s settings: the Flutter app's
+`test/todos_examples_pq_test.dart` imports that file to share todos both
+ways with this app's calls.
 
 The app is a split-pane TUI: filter chips / dashboard counts header,
 list of todos on the left (keyboard-navigable), live detail pane on
@@ -117,7 +130,7 @@ examples above. It demonstrates **picking the right tool for the
 job**: high-frequency observations don't belong in a typed shared
 dataset — they belong on a transient delivery channel
 (notifications) feeding a database designed for time series. The
-companion [Flutter dashboard](../../at_client_flutter/examples/dockerstats/README.md)
+companion [Flutter dashboard](../../at_client_flutter/example/dockerstats/README.md)
 shows the full pipeline: subscribe, persist every sample to
 SQLite (no roll-up, no compaction at rest), and render charts off
 the local store with one SQL `GROUP BY` aggregation per
@@ -148,7 +161,7 @@ prints one line per arriving sample, useful for verifying
 publisher↔receiver round-trip without launching the dashboard. The
 full app design, query-time aggregation semantics, and seed-DB
 workflow are in the
-[Flutter dashboard's README](../../at_client_flutter/examples/dockerstats/README.md).
+[Flutter dashboard's README](../../at_client_flutter/example/dockerstats/README.md).
 
 ### Notifications
 Fire-and-forget messaging via `NotificationService`.

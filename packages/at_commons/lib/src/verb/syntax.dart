@@ -111,6 +111,7 @@ class VerbSyntax {
       r'(:(?<epochMillis>\d+))?'
       r'( (?<regex>.+))?'
       r'$';
+  @Deprecated('atServers no longer support the stream verb; removed in 6.0.0')
   static const stream =
       r'^stream:((?<operation>init|send|receive|done|resume))?((@(?<receiver>[^@:\s]+)))?( ?namespace:(?<namespace>[\w-]+))?( ?startByte:(?<startByte>\d+))?( (?<streamId>[\w-]*))?( (?<fileName>.* ))?((?<length>\d*))?$';
 
@@ -123,6 +124,7 @@ class VerbSyntax {
       r'(:latestN:(?<latestN>\d+))?'
       r'(:notifier:(?<notifier>[^\s:]+))?'
       r'(:ttln:(?<ttln>\d+))?'
+      '$_notificationExpiryAndPersistence'
       '$metadataFragment'
       r':((?<publicScope>public)|(@(?<forAtSign>[^:@\s]+)))'
       r':(?<atKey>[^:@]((?!:{2})[^@])+)'
@@ -142,15 +144,27 @@ class VerbSyntax {
       r'(?:ccd:(?<ccd>true|false+):)?'
       r'(?<forAtSign>(([^:\s])+)?(,([^:\s]+))*)'
       r'(:(?<atKey>[^@:\s]+))(@(?<atSign>[^@:\s]+))?(:(?<value>.+))?$';
+
+  /// The notification's own expiry (`eAtn`, in `eAt`'s format) and whether it
+  /// is ephemeral (a bare `eph`, present or absent), which notify carries after
+  /// ttln.
+  static const _notificationExpiryAndPersistence =
+      r'(:eAtn:(?<notificationExpiresAt>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z))?'
+      r'(:(?<ephemeral>eph))?';
   static const batch = r'^batch:(?<json>.+)$';
   static const info = r'^info(:(brief|mtls|mtlsbrief))?$';
   static const noOp = r'^noop:(?<delayMillis>\d+)$';
   static const notifyRemove = r'notify:remove:(?<id>[\w\d\-\_]+)';
   static const enroll =
       // The non-capturing group (?::)? matches ":" if the operation is request|approve|deny|revoke
-      r'^enroll:(?<operation>(?:(request|approve|deny|revoke|listns|infons|list|fetch|unrevoke|delete|update)))(:(?<force>force))?(:(?<listNamespace>[^:{\n]+))?(?::)?((?<enrollParams>.+)|(<=list:)<enrollParams>.?)?$';
-  static const otp =
-      r'^otp:(?<operation>get|put)(:(?<otp>(?<=put:)\w{6,}))?(:(?:ttl:(?<ttl>\d+)))?$';
+      r'^enroll:(?<operation>(?:(request|approve|deny|revoke|listns|infons|list|fetch|unrevoke|delete|update|link)))(:(?<force>force))?(:(?<listNamespace>[^:{\n]+))?(?::)?((?<enrollParams>.+)|(<=list:)<enrollParams>.?)?$';
+  static const otp = r'^otp:(?<operation>get|put|list|delete)'
+      // A passcode only after put: or delete: (where spp names the SPP)
+      r'(:(?<otp>(?<=put:)\w{6,}|(?<=delete:)(?:spp|\w{6,})))?'
+      // delete must have taken a passcode
+      r'(?<=^otp:(?:get|put|put:\w{6,}|list|delete:spp|delete:\w{6,}))'
+      // :ttl: only after get and put
+      r'(:(?:(?<=^otp:(?:get|put|put:\w{6,}):)ttl:(?<ttl>\d+)))?$';
   static const keys = r'^keys:((?<operation>put|get|delete):?)'
       r'(?:(?<visibility>public|private|self):?)?'
       r'(?:namespace:(?<namespace>[a-zA-Z0-9_]+):?)?'

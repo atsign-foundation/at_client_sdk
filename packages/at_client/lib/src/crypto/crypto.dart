@@ -12,17 +12,19 @@ import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_commons/at_commons.dart';
-import 'package:meta/meta.dart' show visibleForTesting;
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 
 // NOTE: the nskey data path is public surface — these types are what
 // `CryptoConfig.nskey` requires, returns and throws, so they have to reach the
 // package barrel.
-export 'package:at_client/src/crypto/nskey/ck_manager.dart';
+export 'package:at_client/src/crypto/nskey/ck_manager.dart'
+    hide collectUnusedOnceCaughtUp;
 export 'package:at_client/src/crypto/nskey/content_key.dart';
 export 'package:at_client/src/crypto/nskey/content_key_eviction.dart';
 export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
-export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    hide heldOwnAfterStartUpAsk;
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
 export 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
@@ -39,6 +41,7 @@ export 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 export 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
 export 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
+export 'package:at_client/src/crypto/received_scheme.dart';
 
 /// The id of the built-in legacy (pre-pluggable) encryption scheme — the
 /// default provider and the fallback for records with no `appMetadata`.
@@ -82,6 +85,26 @@ class NskeyPrivateUnavailableException extends AtDecryptionException {
             '$nskeyKid — $reason');
 }
 
+/// This client was asked to seal a content key to its own atSign's nskey
+/// generation [nskeyKid] without holding that generation's private half.
+///
+/// A content key is sealed to this atSign's own key only for a generation whose
+/// private this client holds, and only to the public half that private derives.
+/// Thrown once the client has fetched the conveyance records addressed to it
+/// and asked the other enrollments, so the private has not been conveyed to
+/// this enrollment yet. Never answered by falling back to the legacy path.
+/// Writes in [namespace] go through once this client holds the private, which
+/// `AtReachabilityResult.holdsPrivate` reports.
+class NskeyPrivateNotHeldException extends AtEncryptionException {
+  final String atSign;
+  final String namespace;
+  final String nskeyKid;
+
+  NskeyPrivateNotHeldException(this.atSign, this.namespace, this.nskeyKid)
+      : super('the private key for $atSign:$namespace generation $nskeyKid '
+            'has not yet been conveyed to this enrollment');
+}
+
 /// A record identifying one filed nskey private, as [SignalsPrivateFiling]
 /// reports it.
 typedef FiledNskeyPrivate = ({String owner, String namespace, String nskeyKid});
@@ -101,7 +124,8 @@ abstract interface class SignalsPrivateFiling {
 
 /// Selects and configures the crypto providers for an [AtClient].
 class CryptoConfig {
-  /// Provider used when an [AtKey] carries no `appMetadata.providerId`.
+  /// The provider a put or notification the SDK encrypts uses when it names no
+  /// `cryptoProviderId`.
   final String defaultProviderId;
 
   /// The provider instances the SDK resolves against, in addition to the
@@ -123,22 +147,31 @@ class CryptoConfig {
   /// namespace should be replaced before anything else is written under it.
   ///
   /// Answered per namespace, and independently of [nskeyRotationPolicy].
-  /// Defaults to [rotateCkAfterOneWeek].
+  /// Defaults to [rotateCkAfterOneYear].
   final CkRotationPolicy ckRotationPolicy;
+
+  /// How long a superseded content key is kept after the key that replaced it
+  /// was cut, even when nothing in local storage cites it.
+  ///
+  /// Defaults to [defaultSupersededCkGrace], the longest an atServer keeps a
+  /// notification, so a recipient can still open one sent just before a
+  /// rotation.
+  final Duration supersededCkGrace;
 
   /// Asked whether a namespace key this atSign owns should be replaced.
   ///
-  /// Defaults to [neverRotateNskey]: replacing one costs a conveyance to every
-  /// authorised enrollment and makes every peer cut a fresh content key, so
-  /// nothing in the SDK fires it on a schedule.
+  /// Defaults to [rotateNskeyAfterOneYear]. Replacing one costs a conveyance to
+  /// every authorised enrollment and makes every peer cut a fresh content key,
+  /// which once a year is small.
   final NskeyRotationPolicy nskeyRotationPolicy;
 
   const CryptoConfig({
     required this.defaultProviderId,
     this.providers = const [],
     this.keyRing,
-    this.ckRotationPolicy = rotateCkAfterOneWeek,
-    this.nskeyRotationPolicy = neverRotateNskey,
+    this.ckRotationPolicy = rotateCkAfterOneYear,
+    this.supersededCkGrace = defaultSupersededCkGrace,
+    this.nskeyRotationPolicy = rotateNskeyAfterOneYear,
   });
 
   /// Legacy-only — the default for un-migrated apps.
@@ -146,8 +179,9 @@ class CryptoConfig {
       : defaultProviderId = legacyCryptoProviderId,
         providers = const [],
         keyRing = null,
-        ckRotationPolicy = rotateCkAfterOneWeek,
-        nskeyRotationPolicy = neverRotateNskey;
+        ckRotationPolicy = rotateCkAfterOneYear,
+        supersededCkGrace = defaultSupersededCkGrace,
+        nskeyRotationPolicy = rotateNskeyAfterOneYear;
 
   /// The distinguished "the app named nothing" marker — the default value of
   /// [AtClientPreference.crypto].
@@ -177,10 +211,11 @@ class CryptoConfig {
   factory CryptoConfig.nskey(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
-          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
-          NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
+          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneYear,
+          Duration supersededCkGrace = defaultSupersededCkGrace,
+          NskeyRotationPolicy nskeyRotationPolicy = rotateNskeyAfterOneYear}) =>
       _nskeySet(keyRing, symmetricAesGcmCryptoProviderId, sealsToKeyAlgorithms,
-          ckRotationPolicy, nskeyRotationPolicy);
+          ckRotationPolicy, supersededCkGrace, nskeyRotationPolicy);
 
   /// The nskey providers wired for **reading**, with writes still going out
   /// under [legacyCryptoProviderId].
@@ -193,10 +228,11 @@ class CryptoConfig {
   factory CryptoConfig.readsNskeyWritesLegacy(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
-          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
-          NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
+          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneYear,
+          Duration supersededCkGrace = defaultSupersededCkGrace,
+          NskeyRotationPolicy nskeyRotationPolicy = rotateNskeyAfterOneYear}) =>
       _nskeySet(keyRing, legacyCryptoProviderId, sealsToKeyAlgorithms,
-          ckRotationPolicy, nskeyRotationPolicy);
+          ckRotationPolicy, supersededCkGrace, nskeyRotationPolicy);
 
   /// One [ContentKeyCache] shared by the manager and both providers.
   static CryptoConfig _nskeySet(
@@ -204,12 +240,14 @@ class CryptoConfig {
       String defaultProviderId,
       List<String> sealsToKeyAlgorithms,
       CkRotationPolicy ckRotationPolicy,
+      Duration supersededCkGrace,
       NskeyRotationPolicy nskeyRotationPolicy) {
     final cache = ContentKeyCache();
     return CryptoConfig(
       defaultProviderId: defaultProviderId,
       keyRing: keyRing,
       ckRotationPolicy: ckRotationPolicy,
+      supersededCkGrace: supersededCkGrace,
       nskeyRotationPolicy: nskeyRotationPolicy,
       providers: [
         // NOTE: both KEM providers are registered on every client whatever
@@ -227,7 +265,8 @@ class CryptoConfig {
               cache: cache,
               keyRing: keyRing,
               sealsToKeyAlgorithms: sealsToKeyAlgorithms,
-              ckRotationPolicy: ckRotationPolicy),
+              ckRotationPolicy: ckRotationPolicy,
+              supersededCkGrace: supersededCkGrace),
         ),
       ],
     );
@@ -244,10 +283,18 @@ class CryptoConfig {
   /// rather than assembling a set here, because building one needs the client
   /// and this is also called *during* construction.
   static CryptoConfig forClient(AtClient? atClient) {
-    final named = atClient?.getPreferences()?.crypto;
-    if (named != null && named is! _EraDefaultSentinel) return named;
+    final named = namedFor(atClient);
+    if (named != null) return named;
     if (atClient == null) return const CryptoConfig.legacy();
     return _eraDefaults.of(atClient) ?? const CryptoConfig.legacy();
+  }
+
+  /// The config [atClient]'s app named, or null when it takes its era's
+  /// default.
+  @internal
+  static CryptoConfig? namedFor(AtClient? atClient) {
+    final named = atClient?.getPreferences()?.crypto;
+    return named is _EraDefaultSentinel ? null : named;
   }
 
   /// Per-client era defaults, held beside the client and never resolved into
@@ -259,8 +306,7 @@ class CryptoConfig {
   /// Idempotent — a re-used cached client keeps the set it was built with, so
   /// its content-key cache and key ring survive re-creation.
   static void adoptEraDefault(AtClient atClient, CryptoConfig config) {
-    final named = atClient.getPreferences()?.crypto;
-    if (named != null && named is! _EraDefaultSentinel) return;
+    if (namedFor(atClient) != null) return;
     _eraDefaults.adoptIfAbsent(atClient, config);
   }
 
@@ -391,8 +437,11 @@ abstract interface class PreparesWrites {
   /// way: a local-first record cannot satisfy a value that went straight to
   /// the atServer, because it does not arrive until the next sync. Null means
   /// the caller expressed no preference and the client default applies.
+  ///
+  /// [sealToNamespace], for a share, is the namespace of the recipient's
+  /// namespace key it must be sealed to, with no other level tried.
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-      {bool? useRemoteAtServer});
+      {bool? useRemoteAtServer, String? sealToNamespace});
 }
 
 /// Implemented by a [CryptoProvider] that can only handle some keys.

@@ -39,18 +39,16 @@ void main() {
       );
       provenIn(
         'packages/at_client/test/pq_signing_chain_test.dart',
-        'climbs a chain link to an anchored parent',
-        proves: 'the walk itself: verifyChain returns anchored and states the '
-            'path it took, so the chain is self-describing rather than '
-            'trusted. The siblings pin the other two verdicts — unsigned '
-            'during the changeover, and chained where the parent is not the '
-            'root — which is what stops anchored being the only reachable '
-            'answer. No atServer is in this loop: the input is a document and '
-            'the output is a verdict over it',
-        clauses: [
-          'carries a chain link that `verifyChain` walks to the '
-              'signing root'
-        ],
+        'when the walk runs, then it continues from that key and reads '
+            'anchored through it',
+        proves: 'the walk itself: from a key whose link another enrollment\'s '
+            'key signed, it reads anchored and states the path it took, so the '
+            'chain is self-describing rather than trusted. The siblings pin '
+            'the other verdicts — unsigned with no link, and chained where the '
+            'signer key has none — which is what stops anchored being the only '
+            'reachable answer. No atServer is in this loop: the input is a '
+            'document and the output is a verdict over it',
+        clauses: ['which `verifyChain` walks to the signing root'],
       );
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',
@@ -92,6 +90,26 @@ void main() {
         clauses: [
           'authenticates PQ and decrypts',
         ],
+      );
+      provenIn(
+        'packages/at_client/test/enrollment_conveyance_guard_test.dart',
+        'an enrollment granted only * is conveyed in the approver\'s namespace',
+        proves: 'where the envelopes go, through the real conveyance: every '
+            'envelope for an enrollment granted only * lands in the approver\'s '
+            'preference namespace. Its siblings show a namespace the grant '
+            'names comes first, an approver that may not write its own '
+            'namespace falls back to one it was granted, and a grant sharing '
+            'no namespace with the approver is refused before the approval',
+        clauses: ['An E2 granted only `*` is approved too'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_conveyance_reach_live_test.dart',
+        'an approval conveys every key its approver holds that the new '
+            'enrollment may read, all of them under *',
+        proves: 'that such an approval completes against an atServer: an '
+            'enrollment granted only * is approved, opens its client, and is '
+            'conveyed the keys its approver holds',
+        clauses: ['An E2 granted only `*` is approved too'],
       );
     });
 
@@ -444,10 +462,59 @@ void main() {
             'error text rather than on throwing, because a connection failing '
             'for an unrelated reason satisfies a bare throwsA. The control '
             'runs first and is accepted; skip the revoke and the same request '
-            'succeeds, which is what attributes the refusal to revocation. '
-            '⚠️ NOT proven: an enrollment revoked while it holds an already '
-            'open, already authenticated connection — this arm reconnects.',
+            'succeeds, which is what attributes the refusal to revocation. An '
+            'enrollment revoked while it holds an open, authenticated '
+            'connection has that connection closed by the atServer, and the '
+            'test waits for the close before the revoked arm sends, so no '
+            'request races it.',
         clauses: ['the same request against a'],
+      );
+    });
+
+    test(
+        'UC-A2.7 · an enrollment that exchanges keys post-quantum '
+        'authenticates post-quantum', () {
+      // GIVEN an app enrolling, or a program building a PqPosture of its own.
+      // WHEN  the request pairs an rsa2048 APKAM key with the pq key exchange;
+      //       or a posture does, or seeds namespace keys without it.
+      // THEN  it is refused where it is built, naming both, and nothing
+      //       reaches the atServer; an rsa2048 request under the legacy key
+      //       exchange is accepted.
+      provenIn(
+        'packages/at_auth/test/enrollment_test.dart',
+        'when it is built with rsa2048, then it is refused naming both',
+        proves: 'the refusal at the one constructor every caller goes '
+            'through, on its message naming both rsa2048 and the pq key '
+            'exchange',
+        clauses: ['it is refused where it is built'],
+      );
+      provenIn(
+        'packages/at_auth/test/enrollment_test.dart',
+        'when a legacy request is built with rsa2048 instead, then it is '
+            'accepted',
+        proves: 'the same constructor builds an rsa2048 request under the '
+            'legacy key exchange',
+        clauses: ['the arm that stays'],
+      );
+      provenIn(
+        'packages/at_client/test/lifecycle/enroll_pq_test.dart',
+        'an rsa2048 enrollment under the pq key exchange is refused before',
+        proves: 'Atsign.enroll refuses before anything is sent: the mocked '
+            'lookup it was handed sees no interaction at all',
+        clauses: ['nothing reaches the atServer'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_posture_test.dart',
+        'a posture pairing rsa2048 authentication with the pq key exchange',
+        proves: 'the posture constructor refuses the same pairing, naming '
+            'both',
+        clauses: ['the constructor throws, naming both'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_posture_test.dart',
+        'a posture that seeds namespace keys without the pq key exchange',
+        proves: 'a seeding posture must convey through key packages, so the '
+            'constructor refuses one on the legacy exchange, naming both',
       );
     });
   });

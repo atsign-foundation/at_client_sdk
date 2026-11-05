@@ -1,11 +1,14 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
 import '../test_utils/no_op_services.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 /// A stopping client fails its own in-flight requests by closing their
 /// connections, and what those requests fail with says nothing about the
@@ -69,13 +72,10 @@ void main() {
         () async {
       final lookUp = MockAtLookupImpl();
       when(() => lookUp.isConnectionAvailable()).thenReturn(false);
-      // the bridge reads the enrollment id off the lookup until the ladder goes
-      // ignore: deprecated_member_use
-      when(() => lookUp.enrollmentId).thenReturn(null);
       late AtClient client;
-      // What the remote does when the stop closes its lookup underneath a
+      // What the remote does when the stop ends its lookup underneath a
       // request in flight: classifies the failure and reports it.
-      when(() => lookUp.close()).thenAnswer((_) async {
+      when(() => lookUp.stop()).thenAnswer((_) async {
         await client.connection.report(offline());
       });
       client = await buildAtClient(
@@ -84,18 +84,26 @@ void main() {
           preference: AtClientPreference()
             ..hiveStoragePath = dir.path
             ..monitorAutoStart = false,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
+          atKeysIo: noKeysFor('@stopquiet'),
           atLookUp: lookUp,
-          syncServiceBuilder: (_) => NoOpSyncService());
+          syncServiceBuilder: (_) => NoOpSyncService(),
+          storage: hiveStoreAt('@stopquiet', dir.path));
       final before = client.connection.current;
+      final emitted = client.connection.changes.toList();
 
       await client.stop();
 
-      verify(() => lookUp.close()).called(greaterThan(0));
+      verify(() => lookUp.stop()).called(greaterThan(0));
       expect(before.cause, isNot(AtConnectionCause.stopped));
-      expect(client.connection.current.cause, AtConnectionCause.stopped,
-          reason: 'the connection state is closed before the services and '
-              'the remote are, so a failure the stop caused is not filed '
-              'as the atServer being unreachable');
+      final changes = await emitted.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('stop() left connection.changes open'));
+      expect(changes.map((s) => s.cause), [AtConnectionCause.stopped],
+          reason: 'the connection state is closed before the remote is, so a '
+              'failure the stop caused is never filed as the atServer being '
+              'unreachable, not even for a moment');
+      expect(client.connection.current.cause, AtConnectionCause.stopped);
     });
   });
 }

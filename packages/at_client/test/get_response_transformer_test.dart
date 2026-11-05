@@ -11,14 +11,11 @@ import 'test_utils/test_crypto_provider.dart';
 void main() {
   group('A group of test for GetResponseTransformer', () {
     late MockAtClient mockAtClient;
-    late MockAtChops mockAtChops;
     late GetResponseTransformer transformer;
     setUp(() {
       mockAtClient = MockAtClient();
-      mockAtChops = MockAtChops();
       transformer = GetResponseTransformer(mockAtClient);
       when(() => mockAtClient.getCurrentAtSign()).thenReturn('@alice');
-      when(() => mockAtClient.atChops).thenReturn(mockAtChops);
       // Data in these tests carries no appMetadata.providerId, so the get path
       // looks up the 'legacy' provider; register a CipherProvider under that id
       // so the runtime resolves it.
@@ -125,7 +122,7 @@ void main() {
     });
 
     test(
-        'A test to verify explicit isEncrypted=false returns the raw value without attempting decryption',
+        'A test to verify explicit isEncrypted=false returns a value without legacy ciphertext\'s shape as stored, without attempting decryption',
         () async {
       final keyName = 'phone';
       final atKey = AtKey()
@@ -138,11 +135,30 @@ void main() {
         ..two =
             '{"data": "abcdecrypted_data", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
 
-      // Even if a provider WOULD strip the value, explicit isEncrypted=false
-      // means the value was deliberately stored unencrypted: return it as-is.
+      // Even if a provider WOULD strip the value, a value flagged false that is
+      // not shaped like legacy ciphertext is returned as stored.
       var result = await transformer.transform(tuple);
 
       expect(result.value, equals('abcdecrypted_data'));
+    });
+
+    test(
+        'A test to verify explicit isEncrypted=false with valid base64 but not a multiple of 16 bytes is not decrypted',
+        () async {
+      final keyName = 'phone';
+      final atKey = AtKey()
+        ..metadata = Metadata()
+        ..key = keyName
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob';
+      final tuple = Tuple<AtKey, String>()
+        ..one = atKey
+        ..two =
+            '{"data": "true", "key": "@bob:$keyName@alice","metaData": {"isEncrypted": false}}';
+
+      var result = await transformer.transform(tuple);
+
+      expect(result.value, equals('true'));
     });
 
     test(

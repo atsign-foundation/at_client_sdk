@@ -1,7 +1,3 @@
-// The substrate and the nskey surface are @experimental; driving them is the
-// point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -58,8 +54,9 @@ void main() {
         namespace: namespace,
         // NOTE: these clients have to ANSWER and COLLECT over the envelope
         // channel, and a posture configuring no post-quantum providers runs
-        // none of that startup. The authentication algorithm stays rsa2048, so
-        // no retrofit fires and the enrollment id is still stable.
+        // none of that startup. The enrollment authenticates mldsa65, which
+        // this posture's rsa2048 floor never retrofits, so the enrollment id
+        // is still stable.
         preference:
             TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         rootDomain: 'vip.ve.atsign.zone',

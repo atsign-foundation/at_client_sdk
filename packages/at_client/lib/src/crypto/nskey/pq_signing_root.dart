@@ -18,11 +18,14 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
+import 'package:at_client/src/enroll/privilege_resolver.dart'
+    show isFullyPrivileged;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
-import 'package:at_client/src/crypto/nskey/mint_lock.dart'
-    show MintLease, MintLock;
+import 'package:at_client/src/client/server_mutex.dart'
+    show ServerMutexLease, checkedServerMutexTtl;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         pqSigningRootKey,
@@ -31,6 +34,13 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
         signingRootMintLockTtl;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
+import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
+    show AtClientSecretSharing;
+import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    show KeyPackageStatus;
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
+import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
@@ -39,13 +49,14 @@ import 'package:at_commons/at_commons.dart'
     show
         AtBytes,
         AtKey,
+        EnrollmentConstants,
+        EnrollmentStatus,
         AtKeyNotFoundException,
         AtValue,
         KeyNotFoundException,
         StoppedException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('PqSigningRoot');
 
@@ -56,7 +67,6 @@ final _logger = AtSignLogger('PqSigningRoot');
 /// One root per atSign: only a fully privileged enrollment mints one, and a
 /// short-ttl lock on `_rootlock@<atSign>` ([MintLock]) serialises them, the
 /// mutable record itself refusing nothing.
-@experimental
 class PqSigningRoot {
   static const String recordName = pqSigningRootRecordName;
 
@@ -117,9 +127,17 @@ class PqSigningRoot {
   /// wires the real one.
   final MintLock mintLock;
 
+  /// The other fully privileged enrollments a published root is pushed to;
+  /// null reads them from the atServer.
+  final Future<List<KeyPackage>> Function()? fullyPrivilegedRoster;
+
   PqSigningRoot(this.atClient,
-      {this.keysIo, MintLock? mintLock, this.lockTtl = signingRootMintLockTtl})
-      : mintLock = mintLock ?? MintLock(atClient);
+      {this.keysIo,
+      MintLock? mintLock,
+      Duration lockTtl = signingRootMintLockTtl,
+      this.fullyPrivilegedRoster})
+      : lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
+        mintLock = mintLock ?? MintLock(atClient);
 
   /// How long this client holds the root's mint lock once it has taken it.
   ///
@@ -207,8 +225,10 @@ class PqSigningRoot {
   /// of the pair first.
   ///
   /// Returns the public half, or null when this client did not mint: it is not
-  /// fully privileged, a root is already published, or another of this atSign's
-  /// enrollments holds the mint lock.
+  /// fully privileged, its key source cannot file a private, a root is already
+  /// published, or another client of this atSign holds the mint lock.
+  /// Without a key source that can file the private, neither is the published
+  /// root read nor the mint lock taken.
   Future<Uint8List?> mintIfAbsent({required bool isFullyPrivileged}) async {
     final atSign = atClient.getCurrentAtSign()?.toAtsign();
     if (atSign == null) return null;
@@ -217,6 +237,12 @@ class PqSigningRoot {
       _logger.info('Not minting the signing root for $atSign: this enrollment '
           'is not fully privileged, so it receives the root rather than '
           'creating it');
+      return null;
+    }
+    if (keysIo is! WrittenAtKeysIo) {
+      _logger.warning('Not minting the signing root for $atSign: this '
+          'client\'s key source cannot file a private, and a root whose '
+          'private nothing holds cannot be replaced');
       return null;
     }
 
@@ -237,13 +263,14 @@ class PqSigningRoot {
     if (outcome == null) {
       _logger.info('Not minting a signing root for $atSign: the mint lock is '
           'already held, by another of this atSign\'s enrollments or by this '
-          'one from a run inside the last couple of minutes');
+          'one from a run inside the last ${lockTtl.inSeconds} seconds');
       return null;
     }
     final publicKey = outcome.publicKey;
     if (publicKey == null) return null;
 
     await _anchorSelf(atSign);
+    await pushToFullyPrivileged(atSign);
     return publicKey;
   }
 
@@ -270,6 +297,7 @@ class PqSigningRoot {
     _logger.info('Published the signing root this client filed for $atSign '
         'and had not published');
     await _anchorSelf(atSign);
+    await pushToFullyPrivileged(atSign);
     return publicKey;
   }
 
@@ -277,7 +305,7 @@ class PqSigningRoot {
   /// lock held. A null `publicKey` means this client published nothing;
   /// without [mintFresh] it only finishes publishing.
   Future<({Uint8List? publicKey})> _mintUnderLock(
-      String atSign, MintLease lease,
+      String atSign, ServerMutexLease lease,
       {bool mintFresh = true}) async {
     // NOTE: this re-read is not redundant — [mintIfAbsent] checked absence
     // before the lock was taken, and with a mutable record, minting on a stale
@@ -346,8 +374,8 @@ class PqSigningRoot {
   ///
   /// The pair under [slot] is retired unless the record cannot be read at all,
   /// and a spent [lease] stops the write before it is attempted.
-  Future<Uint8List?> _publish(
-      String atSign, String slot, Uint8List publicKey, MintLease lease) async {
+  Future<Uint8List?> _publish(String atSign, String slot, Uint8List publicKey,
+      ServerMutexLease lease) async {
     if (lease.isSpent) {
       await _retireSlot(atSign, slot);
       _logger.warning('Abandoned the signing root mint for $atSign: the mint '
@@ -392,9 +420,9 @@ class PqSigningRoot {
         return publicKey;
       }
 
-      // NOTE: the losing pair must be retired, not kept for a later start to
-      // republish — [mintIfAbsent] never runs on a start, so a kept pair is
-      // permanent, and it satisfies [requestPrivateIfAbsent]'s cheapest guard.
+      // NOTE: the losing pair is retired at once, not kept for a later start
+      // to republish: while it stays active it satisfies
+      // [requestPrivateIfAbsent]'s cheapest guard.
       try {
         await _retireSlot(atSign, slot);
       } catch (e2) {
@@ -415,14 +443,92 @@ class PqSigningRoot {
     return publicKey;
   }
 
-  /// Anchors this enrollment to the root it just published.
+  /// Pushes the root private this client just published to every other fully
+  /// privileged enrollment carrying a verified key package, and returns how
+  /// many it reached.
+  ///
+  /// After the publish, so a receiver finds the root its private corresponds
+  /// to. Never fails the mint: a failure is logged, and an enrollment the push
+  /// missed still asks for the root at its next start, as one approved after
+  /// the roster was read is conveyed it at its approval.
+  Future<int> pushToFullyPrivileged(String atSign) async {
+    try {
+      final private = (await signingKey(atSign))?.private;
+      if (private == null) return 0;
+      final putIn = atClient.getPreferences()?.namespace;
+      if (putIn == null || putIn.isEmpty) {
+        _logger.warning('Published the signing root for $atSign and pushed its '
+            'private to no other enrollment: this client names no namespace '
+            'to put the envelopes in, so they ask for it at their next start');
+        return 0;
+      }
+      final roster = await (fullyPrivilegedRoster ?? _fullyPrivilegedRoster)();
+      final sharing = AtClientSecretSharing.forClient(atClient);
+      final secret = Secret(
+          namespace: putIn, name: secretName, value: base64Encode(private));
+      var pushed = 0;
+      for (final to in roster) {
+        try {
+          await sharing.shareSecretWith(to, secret,
+              inReplyTo: EnvelopeAddressing.unsolicited);
+          pushed++;
+        } catch (e) {
+          if (e is StoppedException) rethrow;
+          _logger.warning('Could not push the signing root private for '
+              '$atSign to enrollment ${to.enrollmentId}; it asks for it at '
+              'its next start: $e');
+        }
+      }
+      return pushed;
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.warning('Published the signing root for $atSign but could not '
+          'push its private; the other fully privileged enrollments ask for '
+          'it at their next start: $e');
+      return 0;
+    }
+  }
+
+  /// The key packages of this atSign's other approved, fully privileged
+  /// enrollments, each verified against its `_apsk`; one that fails is named
+  /// and left out, and one with none is left out silently.
+  Future<List<KeyPackage>> _fullyPrivilegedRoster() async {
+    final sharing = AtClientSecretSharing.forClient(atClient);
+    final selfId = sharing.enrollmentId;
+    final privileged = <String>{
+      for (final enrollment
+          in await atClient.enrollmentService!.fetchEnrollmentRequests())
+        if (enrollment.enrollmentStatus == EnrollmentStatus.approved &&
+            isFullyPrivileged(enrollment.namespace) &&
+            enrollment.enrollmentId != null &&
+            enrollment.enrollmentId != selfId)
+          enrollment.enrollmentId!
+    };
+    final roster = <KeyPackage>[];
+    for (final member in await sharing.directory
+        .listForNamespace(EnrollmentConstants.enrollManageNamespace)) {
+      if (!privileged.contains(member.enrollmentId)) continue;
+      if (member.keyPackageStatus == KeyPackageStatus.rejected) {
+        _logger.warning('Not pushing the signing root private to enrollment '
+            '${member.enrollmentId}: its key package did not verify');
+        continue;
+      }
+      final package = member.keyPackage;
+      if (package != null) roster.add(package);
+    }
+    return roster;
+  }
+
+  /// Links this enrollment's keys to the root it just published.
   ///
   /// Swallows its own failure: the root is published and the private filed, so
   /// the next start is free to retry.
   Future<void> _anchorSelf(String atSign) async {
     try {
-      await PqSigningChain(atClient).publishOwnRootLink(
-          isFullyPrivileged: () async => true, keysIo: keysIo);
+      await PqSigningChain(atClient).linkOwnKeys(
+          AtClientSecretSharing.forClient(atClient),
+          isFullyPrivileged: () async => true,
+          keysIo: keysIo);
     } catch (e) {
       if (e is StoppedException) rethrow;
       _logger.warning('Minted the signing root for $atSign but could not '
@@ -538,15 +644,18 @@ class PqSigningRoot {
   /// the record publishes no root: a link signed with an unpublished root
   /// verifies against nothing.
   ///
-  /// A null `kid` means no public half is filed beside the private, and a
-  /// reader takes its absence as "try them all" rather than "reject".
+  /// The `kid` is the public half's filed beside the private, else that of
+  /// the advertised root the private corresponds to; it is null only when
+  /// neither can be found.
   Future<({Uint8List private, String? kid})?> signingKey(String atSign) async {
     final AtKeys? keys = await _readKeys(atSign);
     if (keys == null) return null;
     final material = await _signingPrivate(atSign, keys);
     if (material == null) return null;
+    var roots = const <ApskSigningKey>[];
     try {
-      if ((await publishedRoots(atClient, atSign)).isEmpty) {
+      roots = await publishedRoots(atClient, atSign);
+      if (roots.isEmpty) {
         _logger.info('$atSign holds a signing root private the record does '
             'not publish yet, so nothing is signed with it until it is');
         return null;
@@ -556,13 +665,14 @@ class PqSigningRoot {
       _logger.warning('Could not read whether the signing root $atSign holds '
           'is published, so it signs as though it is: $e');
     }
+    final private = Uint8List.fromList(material.bytes.bytes);
     final public = keys.getAtSignKey(
         material.keyId, CryptographicMaterialRole.publicVerification);
     return (
-      private: Uint8List.fromList(material.bytes.bytes),
-      kid: public == null
-          ? null
-          : publicKeyKid(Uint8List.fromList(public.bytes.bytes)),
+      private: private,
+      kid: public != null
+          ? publicKeyKid(Uint8List.fromList(public.bytes.bytes))
+          : (await _correspondingRoot(private, roots))?.kid,
     );
   }
 
@@ -660,8 +770,8 @@ class PqSigningRoot {
 
     if (await privateHalf(atSign) != null) return 0;
 
-    // NOTE: the atSign's own credential does not ask: its route to a missing
-    // root is to mint one.
+    // NOTE: the primary enrollment does not ask: it advertises no key
+    // package, so no holder could seal the answer to it.
     if (isAtSignCredential(atClient.enrollmentId)) {
       return 0;
     }
@@ -763,8 +873,9 @@ class PqSigningRoot {
   /// Files a conveyed root private waiting in the secret store, if there is one
   /// this client does not already hold, and returns whether it filed.
   ///
-  /// A one-shot check of the store rather than a subscription, so a private
-  /// arriving after this runs is filed at the next start.
+  /// A one-shot check of the store rather than a subscription; a private
+  /// arriving later is filed as it arrives, by the client's
+  /// `fileReceivedSecret` hook.
   Future<bool> filePendingPrivate(
       String atSign, Iterable<Secret> heldSecrets) async {
     final secret = heldSecrets.where((s) => s.name == secretName).firstOrNull;

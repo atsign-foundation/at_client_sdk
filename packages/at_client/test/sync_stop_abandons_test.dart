@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
@@ -125,7 +128,8 @@ void main() {
               atKey: 'k1.wavi@abandon', op: SyncQueueOp.delete, ts: 1, seq: 1));
       when(() => localSecondary.keyStore).thenReturn(_MockKeyStore());
       when(() => remote.executeCommand(any(), auth: any(named: 'auth')))
-          .thenThrow(StoppedException('the lookup for @abandon is closed'));
+          .thenThrow(
+              StoppedException('the lookup for @abandon has been stopped'));
 
       await expectLater(
           sync.syncInternal(-1, SyncRequest()..result = SyncResult(),
@@ -225,7 +229,7 @@ void main() {
       when(() => localSecondary.executeVerb(any(),
               cameFromServer: any(named: 'cameFromServer')))
           .thenThrow(
-              StoppedException('the lookup for @abandon has been closed'));
+              StoppedException('the lookup for @abandon has been stopped'));
 
       await expectLater(
           sync.syncInternal(5, SyncRequest()..result = SyncResult(),
@@ -260,9 +264,9 @@ void main() {
               'UpdateVerbBuilder, so a refused DELETE surfaced as a '
               'TypeError from inside the catch');
       expect(
-          recorded.at('FINER'),
-          contains(
-              contains('Failed to sync k1.__ssenv.wavi@abandon caused by')),
+          recorded.at('WARNING'),
+          contains(contains('Not applying the atServer\'s change to '
+              'k1.__ssenv.wavi@abandon')),
           reason: 'the refusal is logged with the key it was about');
     });
 
@@ -305,7 +309,7 @@ void main() {
     final box =
         await Hive.openBox<String>('snapshot_probe', bytes: Uint8List(0));
     final queue = AtSyncQueue(atSign: '@snapshot');
-    await queue.open(injectedBox: box);
+    await queue.open(store: HiveBoxSyncQueueStore(box));
     final ls = LocalSecondary(atClient, keyStore: null, syncQueue: queue);
     expect(ls.syncQueueSyncSnapshot, 0);
     await queue.close();

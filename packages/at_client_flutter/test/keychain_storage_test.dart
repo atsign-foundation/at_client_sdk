@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -672,6 +673,108 @@ void main() {
         final result = await keyChainStorage.readAtKeysData();
 
         expect(result, isNull);
+      },
+    );
+  });
+
+  group('Given only the legacy keychain entry holds the keys', () {
+    late KeychainStorage storage;
+    late MockBiometricStorage biometricStorage;
+    late MockBiometricStorageFile current;
+    late MockBiometricStorageFile legacy;
+    String? currentEntry;
+    late int currentWrites;
+    late int heldLegacyReads;
+    late int legacyReads;
+    late Completer<void> releaseLegacyReads;
+    late Completer<void> legacyReadsArrived;
+
+    final AtKeys bobKeys = AtKeys.legacy(
+      apkamPrivateKey: 'bobPrivKey12',
+      apkamPublicKey: 'bobPubKey123',
+      selfEncryptionKey: 'bobSelfKey12',
+      encryptionPrivateKey: 'bobEncPrivKey123',
+      encryptionPublicKey: 'bobEncPubKey',
+      apkamSymmetricKey: 'bobApkamSym1',
+      enrollmentId: 'enrollBob',
+    );
+
+    setUp(() {
+      resetMocktailState();
+      biometricStorage = MockBiometricStorage();
+      current = MockBiometricStorageFile();
+      legacy = MockBiometricStorageFile();
+      storage = KeychainStorage()..biometricStorage = biometricStorage;
+      currentEntry = null;
+      currentWrites = 0;
+      legacyReads = 0;
+      releaseLegacyReads = Completer<void>();
+      legacyReadsArrived = Completer<void>();
+
+      when(
+        () => biometricStorage.getStorage(
+          '@atsigns:test',
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => current);
+      when(
+        () => biometricStorage.getStorage(
+          '@atsigns_test',
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => legacy);
+      when(() => current.read()).thenAnswer((_) async => currentEntry);
+      when(() => current.write(any())).thenAnswer((inv) async {
+        currentEntry = inv.positionalArguments[0] as String;
+        currentWrites++;
+      });
+      // NOTE: the first [heldLegacyReads] reads of the legacy entry wait for
+      // [releaseLegacyReads], so a caller can be held part-way through the
+      // migration while another runs.
+      when(() => legacy.read()).thenAnswer((_) async {
+        final held = legacyReads++ < heldLegacyReads;
+        if (legacyReads == heldLegacyReads) legacyReadsArrived.complete();
+        if (held) await releaseLegacyReads.future;
+        return dummyAtKeysData;
+      });
+    });
+
+    test(
+      'when a read and a write of another atSign run at the same moment, then '
+      'the current entry keeps both atSigns',
+      () async {
+        heldLegacyReads = 1;
+        final reading = storage.readAtKeysData();
+        await legacyReadsArrived.future;
+
+        await storage.appendAtKeysToKeychain(keys: bobKeys);
+        releaseLegacyReads.complete();
+        await reading;
+
+        final kept = AtKeysData.fromJson(jsonDecode(currentEntry!));
+        expect(
+          kept.keys.map((k) => k.storedEnrollmentId),
+          containsAll(['enrollId1', 'enrollBob']),
+          reason:
+              'the read must not write the legacy keys back over the '
+              'write that migrated them and added another atSign',
+        );
+      },
+    );
+
+    test(
+      'when two reads run at the same moment, then the keys are copied to the '
+      'current entry once',
+      () async {
+        heldLegacyReads = 2;
+        final first = storage.readAtKeysData();
+        final second = storage.readAtKeysData();
+        await legacyReadsArrived.future;
+
+        releaseLegacyReads.complete();
+        await Future.wait([first, second]);
+
+        expect(currentWrites, 1);
       },
     );
   });

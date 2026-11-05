@@ -25,7 +25,10 @@ import 'package:at_utils/at_progress.dart';
 /// now on: `rsa2048` for a legacy activation, `mldsa65` for a post-quantum
 /// one. [mintLegacyMaterial] cuts the RSA encryption keypair and the
 /// self-encryption key; null means yes, since whether this atSign will ever
-/// talk to a legacy peer is decided by the apps that adopt it.
+/// talk to a legacy peer is decided by the apps that adopt it. Without them
+/// at_client's `AtClient.put` of a public value throws
+/// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+/// encryption private key.
 /// [metadataBuilder] and [advertisedSigningKey] ride the first enrollment's
 /// request; a post-quantum activation supplies both, and they must name the
 /// same signing key.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -187,6 +188,251 @@ void main() {
         throwsA(isA<AtKeysAssuranceException>()),
       );
       expect(blob, before, reason: 'a refused flush must not have written');
+    },
+  );
+
+  /// Holds the next keychain write until [release] completes, answering once
+  /// it is held: its writer has read the keychain and its write has not
+  /// landed.
+  Future<void> parkNextWrite(Future<void> release) {
+    final held = Completer<void>();
+    when(() => file.write(any())).thenAnswer((invocation) async {
+      if (!held.isCompleted) {
+        held.complete();
+        await release;
+      }
+      blob = invocation.positionalArguments[0] as String;
+    });
+    return held.future;
+  }
+
+  bool holdsWavi(AtKeys keys) =>
+      keys.getAtSignKey(
+        'nskey.wavi',
+        CryptographicMaterialRole.symmetricEncryption,
+      ) !=
+      null;
+
+  test(
+    'two concurrent updates, through two instances, each keep what the other '
+    'added',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+      final gate = Completer<void>();
+
+      final first = io.update('@alice'.toAtsign(), (keys) async {
+        await gate.future;
+        keys.addKey(material('nskey.wavi'));
+        return true;
+      });
+      final second =
+          KeychainAtKeysIo(
+            keychainStorage: KeychainStorage()..biometricStorage = storage,
+          ).update('@alice'.toAtsign(), (keys) {
+            keys.addKey(material('nskey.buzz'));
+            return true;
+          });
+      await pumpEventQueue();
+      gate.complete();
+      await Future.wait([first, second]);
+
+      final reread = await io.read('@alice');
+      expect(
+        reread.getAtSignKey(
+          'nskey.buzz',
+          CryptographicMaterialRole.symmetricEncryption,
+        ),
+        isNotNull,
+        reason:
+            'an update that read before the other wrote would write back keys '
+            'missing its addition, which the never-lose check refuses, so one '
+            'of the two would fail',
+      );
+      expect(holdsWavi(reread), isTrue);
+    },
+  );
+
+  /// Runs [other] while an update adding `nskey.wavi` to @alice has read the
+  /// keychain and not yet written it, then lets both finish.
+  Future<void> duringAliceUpdate(Future<void> Function() other) async {
+    final release = Completer<void>();
+    final held = parkNextWrite(release.future);
+    final updating = io.update('@alice'.toAtsign(), (keys) {
+      keys.addKey(material('nskey.wavi'));
+      return true;
+    });
+    await held;
+    final running = other();
+    await pumpEventQueue();
+    release.complete();
+    await Future.wait([updating, running]);
+  }
+
+  test(
+    'a flush for one atSign is not undone by an update of another',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+      await io.write('@bob', keysFor('@bob'));
+      final bob = await io.read('@bob');
+      bob.addKey(material('nskey.wavi'));
+
+      await duringAliceUpdate(() => io.flush('@bob'.toAtsign(), bob));
+
+      expect(holdsWavi(await io.read('@alice')), isTrue);
+      expect(
+        holdsWavi(await io.read('@bob')),
+        isTrue,
+        reason:
+            'the keychain keeps every atSign in one entry, so a write that '
+            'read it before another landed puts back the entry without that '
+            'one, and the never-lose check only compares its own atSign',
+      );
+    },
+  );
+
+  test(
+    'a write for one atSign is not undone by an update of another',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+
+      await duringAliceUpdate(() => io.write('@bob', keysFor('@bob')));
+
+      expect(holdsWavi(await io.read('@alice')), isTrue);
+      expect(
+        entryCount(),
+        2,
+        reason:
+            'an atSign onboarded while another\'s keys are being written '
+            'must not be dropped from the keychain',
+      );
+    },
+  );
+
+  test(
+    'keys appended to the keychain directly are not undone by an update',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+
+      await duringAliceUpdate(
+        () => io.keychainStorage.appendAtKeysToKeychain(
+          keys: keysFor('@bob')..atsign = '@bob'.toAtsign(),
+        ),
+      );
+
+      expect(holdsWavi(await io.read('@alice')), isTrue);
+      expect(
+        entryCount(),
+        2,
+        reason: 'an app may append through the storage itself',
+      );
+    },
+  );
+
+  test(
+    'an atSign removed while another\'s keys are being written stays removed',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+      await io.write('@bob', keysFor('@bob'));
+
+      await duringAliceUpdate(
+        () => io.keychainStorage.removeAtsignFromKeychain('@bob'),
+      );
+
+      expect(holdsWavi(await io.read('@alice')), isTrue);
+      await expectLater(
+        io.read('@bob'),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+        reason:
+            'a write that read the keychain before the removal puts the '
+            'removed atSign back, and removing it is how a device gives up '
+            'its credential',
+      );
+    },
+  );
+
+  test(
+    'deleting every atSign\'s keys while one is being written leaves none',
+    () async {
+      when(() => file.delete()).thenAnswer((_) async => blob = null);
+      await io.write('@alice', keysFor('@alice'));
+
+      await duringAliceUpdate(() => io.keychainStorage.deleteAllAtKeysData());
+
+      expect(
+        blob,
+        isNull,
+        reason: 'a write already under way must not put the keys back',
+      );
+    },
+  );
+
+  test('two writes of one atSign at once leave one entry', () async {
+    final outcomes = await Future.wait([
+      for (var i = 0; i < 2; i++)
+        io
+            .write('@alice', keysFor('@alice'))
+            .then(
+              (_) => 'written',
+              onError: (Object e) =>
+                  e is AtKeysFileOverwriteException ? 'refused' : throw e,
+            ),
+    ]);
+
+    expect(
+      entryCount(),
+      1,
+      reason:
+          'both would find no entry before either appended, and the second '
+          'entry appended is one read never reaches',
+    );
+    expect(outcomes, unorderedEquals(['written', 'refused']));
+  });
+
+  test(
+    'an update refuses to put back a keychain emptied before it writes',
+    () async {
+      await io.write('@alice', keysFor('@alice'));
+
+      await expectLater(
+        io.update('@alice'.toAtsign(), (keys) {
+          blob = null;
+          keys.addKey(material('nskey.wavi'));
+          return true;
+        }),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+      );
+      expect(
+        blob,
+        isNull,
+        reason:
+            'an update is a change to keys that exist, and keys deleted from '
+            'outside this isolate\'s lock stay deleted',
+      );
+    },
+  );
+
+  test(
+    'an update refuses to put back an atSign removed before it writes',
+    () async {
+      await io.write('@bob', keysFor('@bob'));
+      final bobOnly = blob;
+      await io.write('@alice', keysFor('@alice'));
+
+      await expectLater(
+        io.update('@alice'.toAtsign(), (keys) {
+          blob = bobOnly;
+          keys.addKey(material('nskey.wavi'));
+          return true;
+        }),
+        throwsA(isA<AtKeysSourceAbsentException>()),
+      );
+      expect(
+        blob,
+        bobOnly,
+        reason:
+            'an update is a change to keys that exist, and an atSign removed '
+            'from outside this isolate\'s lock stays removed',
+      );
     },
   );
 

@@ -33,22 +33,44 @@ void main() {
     ..enrollmentId = enrollmentId;
 
   late MockAtLookupImpl lookUp;
+  late List<AtAuthenticator?> handed;
+  late List<SecondaryAddressFinder?> finders;
+  final finder = FixedSecondaryAddressFinder('127.0.0.1', 6464);
   setUp(() {
     lookUp = MockAtLookupImpl();
+    handed = [];
+    finders = [];
     when(() => lookUp.close()).thenAnswer((_) async {});
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => true);
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
   });
 
-  /// The enrollment id that reached the PKAM, which is what signs the
-  /// challenge, rather than what the document says.
+  /// Hands back [lookUp], keeping the authenticator each build was given.
+  AtLookupMuxable lookUps(
+      {required String atSign,
+      required AtRootDomain rootDomain,
+      required AtAuthenticator? authenticator,
+      SecondaryAddressFinder? secondaryAddressFinder}) {
+    handed.add(authenticator);
+    finders.add(secondaryAddressFinder);
+    return lookUp;
+  }
+
+  /// The enrollment named by the `pkam:` the connection's authenticator
+  /// sends, which is what signs the challenge, rather than what the
+  /// document says.
+  Future<String?> idOnTheWire() async {
+    final wire = _PkamAtServer();
+    expect(await handed.single!(wire), isTrue);
+    return wire.enrollmentId;
+  }
+
   Future<String?> idReachingPkam(AtKeysIo keys) async {
-    await Atsign(atSign)
-        .authenticatesAs(keys: keys, rootDomain: rootDomain, atLookUp: lookUp);
-    return verify(() => lookUp.pkamAuthenticate(
-            enrollmentId: captureAny(named: 'enrollmentId'))).captured.single
-        as String?;
+    await Atsign(atSign).authenticatesAs(
+        keys: keys,
+        rootDomain: rootDomain,
+        lookUps: lookUps,
+        secondaryAddressFinder: finder);
+    return idOnTheWire();
   }
 
   /// A retrofitted keyfile: the flat fields keep the legacy enrollment's
@@ -93,13 +115,24 @@ void main() {
     final id = await Atsign(atSign).authenticatesAs(
         keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
         rootDomain: rootDomain,
-        atLookUp: lookUp);
+        lookUps: lookUps,
+        secondaryAddressFinder: finder);
 
     expect(id, 'e-7');
-    verify(() => lookUp.pkamAuthenticate(enrollmentId: 'e-7')).called(1);
-    verifyNever(() => lookUp.close());
+    verify(() => lookUp.pkamAuthenticate()).called(1);
+    expect(await idOnTheWire(), 'e-7',
+        reason: 'the PKAM signs as the enrollment it answers with');
+    verify(() => lookUp.close()).called(1);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
         reason: 'a check, not a client');
+  });
+
+  test(
+      'when it authenticates, then its connection finds the atServer through '
+      'the finder given', () async {
+    await idReachingPkam(InMemoryAtKeysIo.holding(atSign, keysAs('e-1')));
+
+    expect(finders.single, same(finder));
   });
 
   test('a legacy keyfile authenticates as its flat stored enrollment',
@@ -129,57 +162,77 @@ void main() {
     final id = await Atsign(atSign).authenticatesAs(
         keys: InMemoryAtKeysIo.holding(atSign, keysAs()),
         rootDomain: rootDomain,
-        atLookUp: lookUp);
+        lookUps: lookUps,
+        secondaryAddressFinder: finder);
 
     expect(id, 'primary');
-    verify(() => lookUp.pkamAuthenticate(enrollmentId: 'primary')).called(1);
+    expect(await idOnTheWire(), isNull,
+        reason: 'the atSign\'s own credential signs a pkam: naming no '
+            'enrollment');
   });
 
   test(
       'a refusal throws the cause open would report, names the enrollment, '
       'and hands nothing back', () async {
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => false);
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => false);
 
     await expectLater(
         () => Atsign(atSign).authenticatesAs(
             keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
             rootDomain: rootDomain,
-            atLookUp: lookUp),
+            lookUps: lookUps,
+            secondaryAddressFinder: finder),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause',
                 AtConnectionCause.unauthenticated)
             .having((e) => e.message, 'message', contains('e-7'))));
-    verifyNever(() => lookUp.close());
+    verify(() => lookUp.close()).called(1);
   });
 
   test('a revoked enrollment is refused as revoked, as open reports it',
       () async {
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+    when(() => lookUp.pkamAuthenticate())
         .thenThrow(AtLookUpException('AT0027', 'enrollment e-7 is revoked'));
 
     await expectLater(
         () => Atsign(atSign).authenticatesAs(
             keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
             rootDomain: rootDomain,
-            atLookUp: lookUp),
+            lookUps: lookUps,
+            secondaryAddressFinder: finder),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)));
   });
 
   test('an atServer that cannot be reached is not a refusal', () async {
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
+    when(() => lookUp.pkamAuthenticate())
         .thenThrow(AtConnectException('no route to the atServer'));
 
     await expectLater(
         () => Atsign(atSign).authenticatesAs(
             keys: InMemoryAtKeysIo.holding(atSign, keysAs('e-7')),
             rootDomain: rootDomain,
-            atLookUp: lookUp),
+            lookUps: lookUps,
+            secondaryAddressFinder: finder),
         throwsA(isA<AtConnectException>()),
         reason: 'the control: only a refusal is retyped');
   });
+}
+
+/// Answers an authenticator's `from:` with a challenge for `@alice🛠` and its
+/// `pkam:` with success, keeping the enrollment that `pkam:` named.
+class _PkamAtServer implements AtCommandExecutor {
+  String? enrollmentId;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    if (command.startsWith('from:')) {
+      return 'data:_70ce5d4e-1b8e-4a7c-9d1e-7e6c2a9b8f10@alice🛠'
+          ':4f3c2b1a-9e8d-4c7b-a6f5-e4d3c2b1a098';
+    }
+    enrollmentId =
+        RegExp(r'^pkam:.*:enrollmentId:([^:]+):').firstMatch(command)?[1];
+    return 'data:success';
+  }
 }

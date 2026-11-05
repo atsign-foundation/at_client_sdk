@@ -8,7 +8,8 @@
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
@@ -18,6 +19,9 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   const storageDir = 'test/hive';
@@ -25,20 +29,31 @@ void main() {
 
   Future<LocalSecondary> setUpLocalSecondary({AtSyncQueue? syncQueue}) async {
     AtClientImpl.atClientInstanceMap.remove(atSign);
-    final atClientManager = AtClientManager(atSign);
     final preference = AtClientPreference()
-      ..isLocalStoreRequired = true
       ..syncRegex = ''
-      ..hiveStoragePath = storageDir
-      ..commitLogPath = '$storageDir/commit';
+      ..hiveStoragePath = storageDir;
     final atClient = await AtClientImpl.create(
       atSign,
       'wavi',
       preference,
-      atClientManager: atClientManager,
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: atDirectoryOf(preference),
+      atKeysIo: noKeysFor(atSign),
+      storage: hiveStoreFor(atSign, preference),
     );
     atClient.syncService = MockSyncService();
-    return LocalSecondary(atClient, syncQueue: syncQueue);
+    // NOTE: with no [syncQueue] the client's own queue, as its storage holds
+    // it; one queue box carries one queue.
+    return LocalSecondary(atClient,
+        keyStore: atClient.getLocalSecondary()!.keyStore,
+        syncQueue: syncQueue ?? (atClient as AtClientImpl).storage!.syncQueue);
+  }
+
+  /// Empties [storageDir], which other test files share and can leave
+  /// holding this atSign's queue, so a test starts from nothing.
+  void clearStorageDir() {
+    final dir = Directory(storageDir);
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
   }
 
   Future<void> tearDownLocalSecondary() async {
@@ -58,15 +73,14 @@ void main() {
       await HiveInstances.closeAll();
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      final dir = Directory(storageDir);
-      if (dir.existsSync()) dir.deleteSync(recursive: true);
+      clearStorageDir();
     } catch (e) {
       print('teardown error: $e');
     }
   }
 
   group('LocalSecondary sync-queue enqueue', () {
-    setUp(() async {});
+    setUp(clearStorageDir);
     tearDown(() async => await tearDownLocalSecondary());
 
     test('public key write enqueues with op=updateAll', () async {
@@ -78,7 +92,7 @@ void main() {
           ..metadata = (Metadata()..isPublic = true))
         ..value = 'alice@example.com';
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       // Both the in-memory queue AND the persisted record must be
       // populated. atKey is the canonical string form.
@@ -101,7 +115,7 @@ void main() {
           ..metadata = Metadata())
         ..value = 'cipher';
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       final atKey = builder.buildKey();
       final pending = await localSecondary.peekSyncQueue();
@@ -120,7 +134,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = '12345',
-        sync: true,
       );
 
       final metaBuilder = UpdateVerbBuilder()
@@ -132,7 +145,7 @@ void main() {
             ..ttl = 60000))
         ..operation = AtConstants.updateMeta;
 
-      await localSecondary.executeVerb(metaBuilder, sync: true);
+      await localSecondary.executeVerb(metaBuilder);
 
       final atKey = metaBuilder.buildKey();
       final entry = await localSecondary.readSyncQueueEntry(atKey);
@@ -153,7 +166,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'will be deleted',
-        sync: true,
       );
 
       final deleteBuilder = DeleteVerbBuilder()
@@ -161,7 +173,7 @@ void main() {
           ..key = 'temp'
           ..sharedBy = atSign
           ..metadata = (Metadata()..isPublic = true));
-      await localSecondary.executeVerb(deleteBuilder, sync: true);
+      await localSecondary.executeVerb(deleteBuilder);
 
       final atKey = deleteBuilder.buildKey();
       final entry = await localSecondary.readSyncQueueEntry(atKey);
@@ -175,7 +187,7 @@ void main() {
         ..atKey = AtKey.local('marker', atSign).build()
         ..value = 'true';
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       // Local keys are excluded by the syncEligibility predicate.
       expect(await localSecondary.syncQueueSize, 0);
@@ -193,7 +205,6 @@ void main() {
 
       await localSecondary.executeVerb(
         builder,
-        sync: true,
         cameFromServer: true,
       );
 
@@ -214,7 +225,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'first',
-        sync: true,
       );
       await localSecondary.executeVerb(
         UpdateVerbBuilder()
@@ -223,7 +233,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'first',
-        sync: true,
       );
       // Re-write phone — should NOT move it to the end of the
       // in-memory queue.
@@ -234,7 +243,6 @@ void main() {
             ..sharedBy = atSign
             ..metadata = (Metadata()..isPublic = true))
           ..value = 'second',
-        sync: true,
       );
 
       final pending = await localSecondary.peekSyncQueue();
@@ -331,7 +339,10 @@ void main() {
   group('LocalSecondary sync-queue failures', () {
     final logs = RecordedLogs();
     setUpAll(() => logs.installOn());
-    setUp(() => logs.records.clear());
+    setUp(() {
+      clearStorageDir();
+      logs.records.clear();
+    });
     tearDown(() async => await tearDownLocalSecondary());
 
     UpdateVerbBuilder publicEmail() => UpdateVerbBuilder()
@@ -349,13 +360,12 @@ void main() {
         'a write that cannot be queued is shouted about, and does not claim '
         'to have asked for a drain', () async {
       // A real queue in a real failure state - constructed and never opened,
-      // so every enqueue throws. Injected, so the lazy open that would
-      // otherwise repair it never runs.
-      final localSecondary = await setUpLocalSecondary(
-          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      // so every enqueue throws.
+      final localSecondary =
+          await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       final atKey = builder.buildKey();
       expect(matching('failed to enqueue $atKey'), hasLength(1),
@@ -371,11 +381,11 @@ void main() {
     });
 
     test('a write that cannot be queued still lands in the keystore', () async {
-      final localSecondary = await setUpLocalSecondary(
-          syncQueue: AtSyncQueue(atSign: atSign, storagePath: storageDir));
+      final localSecondary =
+          await setUpLocalSecondary(syncQueue: AtSyncQueue(atSign: atSign));
       final builder = publicEmail();
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       final value = await localSecondary
           .executeVerb(LLookupVerbBuilder()..atKey = builder.atKey);
@@ -388,7 +398,7 @@ void main() {
       final localSecondary = await setUpLocalSecondary();
       final builder = publicEmail();
 
-      await localSecondary.executeVerb(builder, sync: true);
+      await localSecondary.executeVerb(builder);
 
       expect(await localSecondary.peekSyncQueue(), [builder.buildKey()],
           reason: 'the control has to actually queue, or it proves nothing '

@@ -35,7 +35,9 @@ typedef OnboardingMint = ({
 /// deliberately: the symmetric key exists to wrap the other two for conveyance
 /// to a later enrollment, so minting it alone would produce a key with nothing
 /// to wrap, and minting the pair without it would leave nothing able to convey
-/// them.
+/// them. Without the keypair at_client's `AtClient.put` of a public value
+/// throws `AtPrivateKeyNotFoundException`, since it signs the value with the
+/// RSA encryption private key.
 Future<OnboardingMint> mintOnboardingKeys({
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   bool mintLegacyMaterial = true,

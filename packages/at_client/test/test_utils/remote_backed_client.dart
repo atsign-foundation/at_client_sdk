@@ -1,13 +1,15 @@
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart' show isA;
 
+import 'enroll_link_fake.dart';
 import 'mocks.dart';
 import 'test_keypairs.dart';
 import 'ml_dsa_keyfile.dart';
 
-/// A mock [AtClient] whose puts and gets go through [remoteData], so several
-/// clients of the same atSign share one view of the atServer.
+/// A mock [AtClient] whose puts, gets and key scans go through [remoteData], so
+/// several clients of the same atSign share one view of the atServer.
 ///
 /// That sharing is the point rather than a convenience: the substrate's
 /// verification path has one client publish its `_apsk` and another read it
@@ -27,8 +29,17 @@ import 'ml_dsa_keyfile.dart';
 /// without it a `get` returns an [AtValue] with none, and an assertion about
 /// metadata fails for want of a fixture rather than for want of the feature.
 ///
+/// A remote put merges as an atServer's update does: a field it leaves unset
+/// keeps the stored value, so a put without `appMetadata` does not clear a
+/// record's links.
+///
+/// With [remoteMetadata], `enroll:link` is answered as [enrollLink] says, by
+/// [answerEnrollLink] over the same maps, each target's authentication key
+/// being the APKAM keypair this fixture gives that enrollment; every
+/// `enroll:link` sent is appended to [enrollLinkLog] when it is given.
+///
 /// Callers must `registerFallbackValue(AtKey())` in `setUpAll`; this registers
-/// the [NotificationParams] fallback its own `notify` matcher needs.
+/// the [NotificationParams] and `VerbBuilder` fallbacks its own matchers need.
 MockAtClient buildRemoteBackedMockClient({
   required String atSign,
   required String enrollmentId,
@@ -38,22 +49,16 @@ MockAtClient buildRemoteBackedMockClient({
   Map<String, Metadata>? localMetadata,
   List<String>? keyEstablishmentAlgorithms,
   PqPosture? posture,
+  EnrollLinkSupport enrollLink = EnrollLinkSupport.supported,
+  List<EnrollVerbBuilder>? enrollLinkLog,
 }) {
   registerFallbackValue(NotificationParams.forUpdate(AtKey()));
+  registerFallbackValue(EnrollVerbBuilder());
   final atClient = MockAtClient(
       keyEstablishmentAlgorithms: keyEstablishmentAlgorithms, posture: posture);
   final pair = pkamKeyPairFor(atSign, enrollmentId);
   when(() => atClient.atKeysIo)
       .thenReturn(keysHoldingApkam(atSign, enrollmentId, pair));
-  // NOTE: the same keypair twice. A test that swaps in a key source of its
-  // own, or none, leaves the client no keypair there, and the AtChops door
-  // is what still answers for it.
-  // ignore: deprecated_member_use
-  when(() => atClient.atChops).thenReturn(AtChopsImpl(AtChopsKeys.create(
-      null,
-      // ignore: deprecated_member_use
-      AtPkamKeyPair.create(
-          pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey))));
   when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
   when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
@@ -61,9 +66,22 @@ MockAtClient buildRemoteBackedMockClient({
   final atLookUp = MockAtLookupImpl();
   when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
-  // the bridge reads the enrollment id off the lookup until the ladder goes
-  // ignore: deprecated_member_use
-  when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);
+  if (remoteMetadata != null) {
+    when(() => remoteSecondary.executeVerb(any(
+            that: isA<EnrollVerbBuilder>().having(
+                (b) => b.operation, 'operation', EnrollOperationEnum.link))))
+        .thenAnswer((inv) async {
+      final builder = inv.positionalArguments[0] as EnrollVerbBuilder;
+      enrollLinkLog?.add(builder);
+      return answerEnrollLink(builder,
+          atSign: atSign,
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          authenticationKeyOf: (id) =>
+              pkamKeyPairFor(atSign, id).atPublicKey.publicKey,
+          support: enrollLink);
+    });
+  }
 
   final localValues = localData ?? remoteData;
   final localMeta = localData == null ? remoteMetadata : localMetadata;
@@ -76,13 +94,15 @@ MockAtClient buildRemoteBackedMockClient({
     final remote = options?.useRemoteAtServer ?? false;
     final values = remote ? remoteData : localValues;
     final meta = remote ? remoteMetadata : localMeta;
-    values[atKey.toString()] = inv.positionalArguments[1];
-    meta?[atKey.toString()] = atKey.metadata;
+    final key = atKey.toString();
+    values[key] = inv.positionalArguments[1];
+    meta?[key] = remote
+        ? _mergedAsTheAtServerDoes(atKey.metadata, meta[key])
+        : atKey.metadata;
     return Future.value(true);
   });
 
   when(() => atClient.delete(any(),
-          isDedicated: any(named: 'isDedicated'),
           deleteRequestOptions: any(named: 'deleteRequestOptions')))
       .thenAnswer((inv) {
     final keyString = inv.positionalArguments[0].toString();
@@ -132,6 +152,20 @@ MockAtClient buildRemoteBackedMockClient({
   when(() => atClient.get(any(),
       getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer(getFrom);
   when(() => atClient.get(any())).thenAnswer(getFrom);
+
+  when(() => atClient.getAtKeys(
+      regex: any(named: 'regex'),
+      showHiddenKeys: any(named: 'showHiddenKeys'),
+      useRemoteAtServer: any(named: 'useRemoteAtServer'))).thenAnswer((inv) {
+    final pattern = inv.namedArguments[#regex] as String?;
+    final remote = inv.namedArguments[#useRemoteAtServer] as bool? ?? false;
+    final regex = pattern == null ? null : RegExp(pattern);
+    return Future.value((remote ? remoteData : localValues)
+        .keys
+        .where((k) => regex?.hasMatch(k) ?? true)
+        .map(AtKey.fromString)
+        .toList());
+  });
   return atClient;
 }
 
@@ -151,3 +185,11 @@ void syncToRemote({
     remoteMetadata.addAll(localMetadata);
   }
 }
+
+/// What an atServer stores for an update carrying [update] over a record
+/// holding [stored]: the update's fields, with the ones it leaves unset kept.
+Metadata _mergedAsTheAtServerDoes(Metadata update, Metadata? stored) => update
+  ..ttl ??= stored?.ttl
+  ..ttb ??= stored?.ttb
+  ..ttr ??= stored?.ttr
+  ..appMetadata ??= stored?.appMetadata;

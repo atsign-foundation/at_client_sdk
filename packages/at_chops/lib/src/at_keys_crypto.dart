@@ -23,9 +23,18 @@ abstract class AtKeysCrypto {
   /// provided [hashingAlgoType].
   ///
   /// The [hashingAlgoType] parameter determines the hashing
-  /// algorithm to be used in the cryptographic operations.
-  static AtKeysCrypto fromHashingAlgorithm(HashingAlgoType hashingAlgoType) =>
-      _AtKeysCryptoImpl(hashingAlgoType);
+  /// algorithm to be used in the cryptographic operations. Only
+  /// [HashingAlgoType.argon2id] derives a usable AES key from a passphrase:
+  /// the other types hash bytes and answer a hex digest, which is no AES key,
+  /// so they are refused here with an [ArgumentError] instead of failing in
+  /// [encrypt] or [decrypt].
+  static AtKeysCrypto fromHashingAlgorithm(HashingAlgoType hashingAlgoType) {
+    if (hashingAlgoType != HashingAlgoType.argon2id) {
+      throw ArgumentError.value(hashingAlgoType.name, 'hashingAlgoType',
+          'AtKeysCrypto supports only ${HashingAlgoType.argon2id.name}');
+    }
+    return _AtKeysCryptoImpl(hashingAlgoType);
+  }
 
   /// Encrypts the given [plainAtKeys] using the provided [passPhrase] and
   /// optional [hashParams].

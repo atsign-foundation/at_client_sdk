@@ -29,10 +29,12 @@ abstract final class AtPqc {
 
   /// ML-DSA-65 signing — FFI when available, else pure-Dart.
   ///
-  /// Typed as [AtSignatureAlgorithm]: `message` is positional; key material
-  /// is passed via required named parameters.
+  /// Typed as [AtSeededSignatureAlgorithm]: `message` is positional; key
+  /// material is passed via required named parameters, and
+  /// [AtSeededSignatureAlgorithm.keyPairFromSeed] gives both backends' shared
+  /// seeded keygen.
   /// Do not downcast to the concrete type — it is an implementation detail.
-  static final AtSignatureAlgorithm mlDsa65 =
+  static final AtSeededSignatureAlgorithm mlDsa65 =
       (_lib != null && libCryptoSupportsMlDsa65(_lib!))
           ? MlDsa65FfiAlgo.fromLib(_lib!)
           : MlDsa65PureDartAlgo();

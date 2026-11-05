@@ -7,6 +7,7 @@ class Response {
   String? errorMessage;
   String? errorCode;
   AtException? atException;
+  @Deprecated('atServers no longer support the stream verb; removed in 6.0.0')
   bool isStream = false;
 
   Response();

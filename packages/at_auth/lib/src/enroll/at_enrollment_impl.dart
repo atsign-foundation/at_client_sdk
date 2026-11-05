@@ -57,6 +57,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     bool logProgress = AtEnrollment.defaultLogProgress,
     int maxRetries = AtEnrollment.defaultMaxRetries,
     required AtLookupMuxable atLookup,
+    Future<void>? cancelled,
   }) =>
       _handshake.waitForApproval(
         enrollmentResponse,
@@ -64,5 +65,6 @@ class AtEnrollmentImpl implements AtEnrollment {
         logProgress: logProgress,
         maxRetries: maxRetries,
         atLookup: atLookup,
+        cancelled: cancelled,
       );
 }

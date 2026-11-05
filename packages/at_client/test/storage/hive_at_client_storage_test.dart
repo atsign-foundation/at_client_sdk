@@ -1,6 +1,11 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/hive.dart';
+import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    show AtData;
+import 'package:at_persistence_secondary_server/hive.dart' show HiveInstances;
+import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import 'storage_contract.dart';
@@ -11,5 +16,86 @@ void main() {
   tearDown(() => dir.deleteSync(recursive: true));
 
   runStorageContract('hive',
-      (atSign) => HiveAtClientStorage(atSign: atSign, storagePath: dir.path));
+      (atSign) => HiveAtClientStorage(atSign: atSign, storagePath: dir.path),
+      breakOpen: (atSign) =>
+          unreadable('${dir.path}/${AtUtils.getShaForAtSign(atSign)}.hive'));
+
+  test('a queue that fails to open leaves the keystore closed', () async {
+    const atSign = '@hivequeue';
+    final keystoreBox = AtUtils.getShaForAtSign(atSign);
+    final first = HiveAtClientStorage(atSign: atSign, storagePath: dir.path);
+    await first.attach(FakeClient(atSign, 'e1'));
+    await first.close();
+    final restore = unreadable(
+        '${dir.path}/${HiveBoxSyncQueueStore.boxNameFor(atSign)}.hive');
+    if (restore == null) {
+      markTestSkipped('the queue box cannot be made unreadable here');
+      return;
+    }
+    addTearDown(restore);
+
+    final s = HiveAtClientStorage(atSign: atSign, storagePath: dir.path);
+    await expectLater(
+        s.attach(FakeClient(atSign, 'e1')), throwsA(isA<Exception>()));
+    await pumpEventQueue();
+    expect(HiveInstances.forPath(dir.path).isBoxOpen(keystoreBox), isFalse,
+        reason: 'the keystore had opened before the queue failed; left open, '
+            'the next store of this atSign wraps the same box a second time '
+            'and the first wrapper is never closed');
+
+    restore();
+    final again = HiveAtClientStorage(atSign: atSign, storagePath: dir.path);
+    await again.attach(FakeClient(atSign, 'e1'));
+    await again.keyStore.put('k$atSign', AtData()..data = 'v');
+    expect((await again.keyStore.get('k$atSign'))?.data, 'v');
+    await again.close();
+  });
+
+  group('Given a Hive storage', () {
+    test(
+        'when two clients attach to it at once, then the second is refused '
+        'because the storage is held, and only one open runs', () async {
+      const atSign = '@hiveattachrace';
+      final storage =
+          _CountingHiveStorage(atSign: atSign, storagePath: dir.path);
+      addTearDown(storage.close);
+      final first = FakeClient(atSign, 'e1');
+      final second = FakeClient(atSign, 'e2');
+
+      final firstAttach = storage.attach(first);
+      final secondAttach = storage.attach(second);
+
+      await expectLater(secondAttach, throwsA(isA<StateError>()));
+      await firstAttach;
+      expect(storage.isHeldBy(first), isTrue);
+      expect(storage.opens, 1,
+          reason: 'a second open of the same boxes while the first runs '
+              'waits on a failure it is never told of');
+    });
+  });
+
+  test('location is resolved once, so reading it recreates nothing', () {
+    final s = HiveAtClientStorage(atSign: '@hivegone', storagePath: dir.path);
+    final resolved = s.location;
+    dir.deleteSync(recursive: true);
+    addTearDown(dir.createSync);
+
+    expect(s.location, resolved);
+    expect(dir.existsSync(), isFalse,
+        reason: 'close() reads location to drop its claim; a read that '
+            'created the directory would make closing write');
+  });
+}
+
+/// A Hive storage that counts how often its backend is opened.
+class _CountingHiveStorage extends HiveAtClientStorage {
+  _CountingHiveStorage({required super.atSign, required super.storagePath});
+
+  int opens = 0;
+
+  @override
+  Future<void> openBackend() {
+    opens++;
+    return super.openBackend();
+  }
 }

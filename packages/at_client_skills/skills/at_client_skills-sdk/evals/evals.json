@@ -4,31 +4,31 @@
     {
       "id": 1,
       "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
-      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/examples/todos/).",
+      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/example/todos/).",
       "expectations": [
         "Recommends at_client_flutter as the single dependency and notes it re-exports at_client (does not ask for both packages)",
         "Shows atClient.collection<Todo>() with a fromJson factory and typeTag",
         "Creates the todo via collection.create with a sharedWith set",
-        "Does not recommend the deprecated AtCollectionModel"
+        "Does not recommend the removed AtCollectionModel"
       ]
     },
     {
       "id": 2,
       "prompt": "How do I use AtCollectionModel to store data in my Dart app?",
-      "expected_output": "Warns that AtCollectionModel is deprecated with @Deprecated annotation. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern.",
+      "expected_output": "States that at_client 4.0 removed AtCollectionModel, so code using it no longer compiles. Redirects to the modern AtCollection<T> API via atClient.collection(). Shows the correct pattern, and shows no AtCollectionModel code, not even as a before/after comparison.",
       "expectations": [
-        "Warns that AtCollectionModel is deprecated",
+        "States at_client 4.0 removed AtCollectionModel, so code using it no longer compiles",
         "Redirects to the modern AtCollection<T> API via atClient.collection()",
-        "Shows the correct modern pattern in code"
+        "Shows the correct modern pattern in code, and no AtCollectionModel code even as a before/after"
       ]
     },
     {
       "id": 3,
       "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
-      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, storage: a HiveAtClientStorage, backupKeys: [KeychainAtKeysIo()]) which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth.",
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, backupKeys: [KeychainAtKeysIo()]), passing storage only to override at_client_flutter's default Hive store in the app support directory, which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth.",
       "expectations": [
         "Shows AtKeysFileDialog.show(context) as the entry point, yielding a FileAtKeysIo",
-        "Follows with PkamDialog.show(...) passing keys, preference and storage, treating a null return as cancelled or failed",
+        "Follows with PkamDialog.show(...) passing keys and preference (storage only to override the default store), treating a null return as cancelled or failed",
         "Adopts the returned client with AtClientManager.getInstance().use(client)",
         "Does not use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does not import at_auth"
       ]
@@ -65,10 +65,10 @@
     {
       "id": 7,
       "prompt": "How do I write unit tests for my AtCollection-backed service without spinning up a real atServer?",
-      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Imports them from package:at_client/at_client.dart (NOT the src/collections/collections_test_hooks.dart path — that file is a part-of and cannot be imported directly).",
+      "expected_output": "Explains collections_test_hooks.dart — collectionWithInjectedNotifications(), handleNotificationForTest(), clearFactoriesForTest(). Imports them through the app's platform package (package:at_client_cli/at_client_cli.dart or package:at_client_flutter/at_client_flutter.dart, both re-exporting package:at_client/at_client.dart), NOT the src/collections/collections_test_hooks.dart path — that file is a part-of and cannot be imported directly.",
       "expectations": [
         "Recommends the collections_test_hooks helpers (collectionWithInjectedNotifications, handleNotificationForTest, clearFactoriesForTest)",
-        "Imports the hooks from package:at_client/at_client.dart",
+        "Imports the hooks through the app's platform package (at_client_cli or at_client_flutter), which re-exports at_client",
         "Does not import src/collections/collections_test_hooks.dart directly"
       ]
     },
@@ -117,9 +117,9 @@
     {
       "id": 12,
       "prompt": "How do I send a notification to another atsign from my Dart app?",
-      "expected_output": "Shows atClient.notificationService.send(to:, idAndNamespace:, body:, expiration:) — NOT the deprecated namespace: parameter; body is typically JSON-encoded and send returns the notification id. May note that the value is an id and a namespace joined by a dot. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging.",
+      "expected_output": "Shows atClient.notificationService.send(to:, idAndNamespace:, body:, expiration:); body is typically JSON-encoded and send returns the notification id. Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:). May point to the packages/at_client/example/bin/notifications.dart example. Does NOT use raw atClient.put/get for messaging.",
       "expectations": [
-        "Uses atClient.notificationService.send(to:, idAndNamespace:, body:, ...) for messaging, not the deprecated namespace: parameter",
+        "Uses atClient.notificationService.send(to:, idAndNamespace:, body:, ...) for messaging, not the namespace: parameter at_client 4.0 removed",
         "Mentions the recipient subscribes via notificationService.subscribe(regex:, shouldDecrypt:)",
         "Does not use raw atClient.put/get for messaging"
       ]
@@ -127,11 +127,11 @@
     {
       "id": 13,
       "prompt": "what's the difference between at_client and at_client_flutter",
-      "expected_output": "Explains that at_client is the core Dart SDK (AtCollection, Query, NotificationService, AtClientManager, AtClientPreference). at_client_flutter adds the Flutter layer on top: auth dialogs (AtSignSelectionDialog, PkamDialog, CramDialog, AtKeysFileDialog, ApkamActivationDialog), KeychainStorage / KeychainAtKeysIo, and RegistrarService re-exported from at_auth. at_client_flutter re-exports at_client in full, so a Flutter app adds only the one package.",
+      "expected_output": "Explains that at_client is the platform-neutral core (AtClient, AtCollection, Query, NotificationService, AtClientPreference, AtClientManager, the Atsign verbs), public but meant for building platform packages and for programs that pass every dependency themselves. at_client_flutter is the Flutter platform package: it re-exports at_client's API and adds the auth dialogs, KeychainStorage and KeychainAtKeysIo, with defaults for storage and keys. An app depends on and imports its one platform package — at_client_flutter for Flutter, at_client_cli for a CLI, daemon or server — not at_client beside it.",
       "expectations": [
-        "Describes at_client as the core Dart SDK (AtCollection, Query, NotificationService)",
-        "Describes at_client_flutter as the Flutter layer (auth dialogs, KeychainStorage/KeychainAtKeysIo) and does NOT misattribute AtClientManager or AtClientPreference to it — both are core at_client",
-        "Notes at_client_flutter re-exports at_client"
+        "Describes at_client as the platform-neutral core (AtCollection, Query, NotificationService, AtClientManager, AtClientPreference, the Atsign verbs)",
+        "Describes at_client_flutter as the Flutter platform package (auth dialogs, KeychainStorage/KeychainAtKeysIo) and does NOT attribute AtClientManager or AtClientPreference to it",
+        "Notes at_client_flutter re-exports at_client, so an app imports its one platform package, not at_client beside it"
       ]
     },
     {
@@ -148,13 +148,13 @@
     {
       "id": 15,
       "prompt": "My Flutter app using AtCollection shares data with another atsign, but nothing syncs — SyncService stays inProgress and shared items never arrive. How do I debug this?",
-      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atsign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (not the deprecated sync(onDone:)).",
+      "expected_output": "Treats a stuck-inProgress SyncService as a wedged sync and DIAGNOSES it rather than assuming a single cause. Explains the common cause is unscoped sync: with AtClientPreference.syncRegex unset, sync covers the atsign's ENTIRE keystore, so one unrelated/dangling key from another app or namespace can abort the whole round (e.g. 'key not found : <key> does not exist in keystore'). Recommends scoping syncRegex to the app's namespace. Notes the atServer always syncs a small set regardless of the regex (shared_key reserved keys, the encryption public key, and namespace-less public: keys), and that scoping still works because the sync regex is an unanchored substring match — so your own namespace's cached: copies match anyway; sharing and decryption are unaffected. Also frames that reads are local-only, writes sync in the background, and completion is observed via SyncProgressListener (sync(onDone:) is gone in 4.0).",
       "expectations": [
         "Diagnoses a wedged sync rather than assuming a single cause",
         "Identifies unscoped sync (syncRegex unset covers the entire keystore) as the common cause",
         "Recommends scoping AtClientPreference.syncRegex to the app namespace",
         "Notes the always-synced key set (shared_key reserved keys, encryption public key, namespace-less public: keys)",
-        "Observes completion via SyncProgressListener, not the deprecated sync(onDone:)"
+        "Observes completion via SyncProgressListener, not sync(onDone:), which at_client 4.0 removed"
       ]
     },
     {
@@ -170,25 +170,25 @@
     {
       "id": 17,
       "prompt": "I want a user to edit an item that another atsign shared with them, but calling update() on it throws ArgumentError. How should collaborative editing work?",
-      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass.",
+      "expected_output": "Explains AtCollection is owner-writes-only, naming ALL THREE enforcing methods — update, updateSharedWith, and delete — and that each throws ArgumentError when the item's owner is not the current atsign, so a received item cannot be edited in place. Explains that sharedWith grants a readable copy, not write access. Shows the additive pattern in current API terms: the contributing atsign calls create(obj: ..., sharedWith: {...}) on its OWN collection and the original owner reads that item; reading a received item works but mutating it does not. Must stay on the current AtCollection<T> API — an answer that is conceptually right about ownership but routes the contribution through the removed AtCollectionModel, a .save() call, or raw atClient.put() does NOT pass.",
       "expectations": [
         "Names all three enforcing methods - update, updateSharedWith, AND delete - as throwing ArgumentError for items owned by another atsign",
         "States the check is on the item's owner versus the current atsign",
         "Explains sharedWith grants a readable copy, not write access",
         "Shows the additive pattern in current API terms: the contributing atsign calls create(obj:, sharedWith:) on its own collection",
-        "Does not route the contribution through the deprecated AtCollectionModel, a .save() call, or raw atClient.put()"
+        "Does not route the contribution through the removed AtCollectionModel, a .save() call, or raw atClient.put()"
       ]
     },
     {
       "id": 18,
       "prompt": "My Flutter app fails to authenticate an atsign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
-      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService from at_auth configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. Recommending the discontinued at_onboarding_flutter package does NOT pass.",
+      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService (at_auth's, re-exported by at_client_flutter; the app does not import at_auth) configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. May note that at_client 4.0's open reports this as the cause noAtServer, thrown as AtOpenRefusedException on the first open of those keys on a device. Recommending the discontinued at_onboarding_flutter package does NOT pass.",
       "expectations": [
         "Explains the atDirectory is the atServer address registry and this atsign has no atServer registered in it",
         "Notes the lookup fails before authentication is attempted",
         "Distinguishes two causes with different fixes: never activated, or a mistyped atsign",
         "States activation happens once and must precede the existing-keys, keychain, and APKAM login flows",
-        "For in-app activation uses AtSignSelectionDialog (at_client_flutter) plus RegistrarService (at_auth) with a registrar URL and API key, or defers to an onboarding app / the registrar",
+        "For in-app activation uses AtSignSelectionDialog (at_client_flutter) plus RegistrarService (re-exported by at_client_flutter; the app does not import at_auth) with a registrar URL and API key, or defers to an onboarding app / the registrar",
         "Does not recommend the discontinued at_onboarding_flutter package"
       ]
     },
@@ -228,24 +228,24 @@
     {
       "id": 22,
       "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
-      "expected_output": "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true. States that the LOSING put() THROWS (it does not return false) with no typed exception — detect contention by checking the error text for 'immutable', as AtRpc._tryAcquireSessionMutex does. Mentions TTL auto-release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_cli_commons, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage per process) and stops its client when done.",
+      "expected_output": "Shows the server mutex: atClient.tryAcquireServerMutex(key, ttl: ...) on a self key of the client's own atSign, which returns a lease to the one instance that takes the lock and null when its record already exists (another instance's, or its own within the ttl), and throws any other failure; it needs an atServer from p3.13.0. Mentions that the ttl (at most 15 minutes) is the only release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_client_cli, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage or CliKeys.storageFor per process, or CLIBase's -s; at_client ignores the deprecated hiveStoragePath, and 4.0 removed commitLogPath) and stops its client when done. Naming at_cli_commons as the package to add does NOT pass.",
       "expectations": [
-        "Shows the immutable-mutex race: an AtKey with Metadata()..immutable = true and a ttl, written with PutRequestOptions()..useRemoteAtServer = true",
-        "States the losing put() THROWS rather than returning false, with no typed exception — contention is detected by checking the error text for 'immutable'",
-        "Mentions TTL auto-release and that AtRpc.server(enableRequestMutex: true) packages this for RPC responders",
-        "Attributes ServiceFactoryWithNoOpSyncService to at_cli_commons, not at_client",
-        "States each instance needs its own storage (a HiveAtClientStorage per process)",
+        "Shows atClient.tryAcquireServerMutex(key, ttl:) on a self key, which returns a lease to one instance and null when the lock's record already exists",
+        "States any other failure is thrown, and that the ttl (at most 15 minutes) is the only release",
+        "Mentions that AtRpc.server(enableRequestMutex: true) packages this for RPC responders",
+        "Attributes ServiceFactoryWithNoOpSyncService to at_client_cli, not at_client or at_cli_commons",
+        "States each instance needs its own storage",
         "Notes each instance stops its client when done"
       ]
     },
     {
       "id": 23,
       "prompt": "I'm writing a headless Dart daemon (no Flutter, no UI) that authenticates with a .atKeys file and then uses collections and notifications. What's the simplest way to set up the AtClient?",
-      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client and at_cli_commons. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT hand-roll AtOnboardingService/keyfile parsing or use Flutter dialog classes.",
+      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_client_cli — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client_cli as the single SDK dependency and importing package:at_client_cli/at_client_cli.dart. May mention CliKeys with Atsign(atSign).open(...) for a program that names its own keyfile and store, and that CLIBase throws SecondaryServerConnectivityException only for an outage. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT add at_cli_commons or at_onboarding_cli (deprecated re-exports of at_client_cli), does NOT use AtOnboardingService (gone), does NOT hand-roll keyfile parsing, and does NOT use Flutter dialog classes.",
       "expectations": [
-        "Recommends CLIBase.fromCommandLineArgs(args) from at_cli_commons as the one-line setup",
-        "Adds at_client and at_cli_commons as the dependencies",
-        "Does not hand-roll AtOnboardingService/keyfile parsing and does not use Flutter dialog classes"
+        "Recommends CLIBase.fromCommandLineArgs(args) from at_client_cli as the one-line setup",
+        "Adds at_client_cli as the single SDK dependency",
+        "Does not add at_cli_commons or at_onboarding_cli, does not use AtOnboardingService, and does not hand-roll keyfile parsing or use Flutter dialog classes"
       ]
     },
     {
@@ -274,7 +274,7 @@
     {
       "id": 26,
       "prompt": "How do I know whether my AtClient is online, and what happens if the device has no network when the app starts?",
-      "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login.",
+      "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved, enrollmentDenied) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login.",
       "expectations": [
         "Explains open (and PkamDialog) makes one bounded connect attempt and hands the client back either way",
         "Names client.connection.current as online / offline / refused with a cause, and connection.changes as the stream",
@@ -341,26 +341,26 @@
     {
       "id": 31,
       "prompt": "My app writes an item and shares it, then a later step reads the data back, and sometimes the read doesn't see the write yet. I added a loop that keeps checking syncService.isSyncInProgress and only continues once it's false, but it still fails intermittently. What's the correct way to wait until sync has finished before continuing?",
-      "expected_output": "Explains that polling isSyncInProgress (or isInSync()) is a check-then-act race: both are point-in-time reads, so the answer can change between the check and the next line, and neither tells you when it becomes true. Directs the developer to await syncService.waitUntilCaughtUp(timeout: ...), noting it is an extension on SyncService so it works on any SyncService reference with no cast or opt-in, and that there is no need to call sync() first because it triggers an iteration itself. Stresses that timeout must be passed: it is nullable with no default, a SyncStatus.failure while waiting deliberately does not reject the future, so the timeout is the only bound and without one a stalled sync waits forever. Notes it throws TimeoutException from dart:async, which is not an AtException. Explains the snapshot semantics — it completes when localCommitId reaches the server commit id as it stood at the time of the call, so remote changes arriving afterwards do not extend the wait — and that completion also requires the local push queue to be drained (pendingPushCount), since commit-id equality alone would miss writes queued after the round started. May mention onProgress for progress UI (its exceptions are swallowed and logged), or contrast it with SyncProgressListener as the tool for observing sync over the life of the app. Does NOT recommend polling isSyncInProgress or isInSync, does NOT use the deprecated sync(onDone:) or setOnDone, and does NOT claim the wait covers remote changes made after the call.",
+      "expected_output": "Explains that polling isSyncInProgress (or isInSync()) is a check-then-act race: both are point-in-time reads, so the answer can change between the check and the next line, and neither tells you when it becomes true. Directs the developer to await syncService.waitUntilCaughtUp(timeout: ...), noting it is an extension on SyncService so it works on any SyncService reference with no cast or opt-in, and that there is no need to call sync() first because it triggers an iteration itself. Stresses that timeout must be passed: it is nullable with no default, a SyncStatus.failure while waiting deliberately does not reject the future, so the timeout is the only bound and without one a stalled sync waits forever. Notes it throws TimeoutException from dart:async, which is not an AtException. Explains the snapshot semantics — it completes when localCommitId reaches the server commit id as it stood at the time of the call, so remote changes arriving afterwards do not extend the wait — and that completion also requires the local push queue to be drained (pendingPushCount), since commit-id equality alone would miss writes queued after the round started. May mention onProgress for progress UI (its exceptions are swallowed and logged), or contrast it with SyncProgressListener as the tool for observing sync over the life of the app. Does NOT recommend polling isSyncInProgress or isInSync, does NOT use sync(onDone:) or setOnDone, both removed in at_client 4.0, and does NOT claim the wait covers remote changes made after the call.",
       "expectations": [
         "Explains polling isSyncInProgress or isInSync() is a check-then-act race",
         "Directs to await syncService.waitUntilCaughtUp(timeout: ...)",
         "Stresses timeout must be passed: it has no default and a sync failure does not reject the future",
         "Notes it throws TimeoutException, which is not an AtException",
         "Explains the snapshot semantics — it completes at the server commit id as it stood at the call",
-        "Does not recommend polling isSyncInProgress or the deprecated sync(onDone:)"
+        "Does not recommend polling isSyncInProgress or sync(onDone:), which at_client 4.0 removed"
       ]
     },
     {
       "id": 32,
-      "prompt": "I inherited a Dart service that uses the atsign SDK. It calls atClient.notify(...) to tell the other side about changes, atClient.startMonitor(...) to listen, and atClient.uploadFile(...) to send attachments. It all compiles and my IDE autocompletes everything. Is any of this a problem?",
-      "expected_output": "Says yes — every one of those is annotated @Deprecated on AtClient, and compiling plus autocompleting is not evidence otherwise. Maps notify (and notifyAll / notifyChange) and startMonitor onto NotificationService: send(...) to publish and subscribe(...) to receive, since the whole group predates NotificationService. For uploadFile, explains there is NO drop-in SDK replacement — it and downloadFile / reuploadFiles / shareFiles are annotated as moved to the app layer and are slated for removal — so the app must encrypt the file itself, upload the ciphertext to storage of its choosing, and share the URL plus the decryption key as a normal encrypted item, leaving the platform with no plaintext. May also flag the stream / sendStreamAck pair as carrying the same removal notice, that startCompactionJob / stopCompactionJob are inert because commit-log compaction went with the commit-log-free keystore, that the atChops getter and setter are deprecated in favour of building the client from its keyfile, or that NotificationParams.forText is no longer supported. Does NOT present any of these as merely stylistic or safe to keep, and does NOT invent an SDK-side replacement for the file-transfer methods.",
+      "prompt": "I inherited a Dart service that uses the atsign SDK. It calls atClient.notify(...) to tell the other side about changes, atClient.startMonitor(...) to listen, and atClient.uploadFile(...) to send attachments. It built fine before, but since I upgraded the SDK to the latest version none of those calls compile. What happened, and what do I use instead?",
+      "expected_output": "Says at_client 4.0 removed every one of those from AtClient, so the code cannot compile on 4.0 and has to be rewritten rather than patched. Maps notify (and notifyAll / notifyChange) onto NotificationService — send(...) to publish, or notificationService.notify for the full NotificationParams — and startMonitor onto subscribe(...) to receive. For uploadFile, explains there is NO SDK replacement: it and downloadFile / reuploadFiles / shareFiles were removed because file transfer belongs in the app, so the app must encrypt the file itself, upload the ciphertext to storage of its choosing, and share the URL plus the decryption key as a normal encrypted item, leaving the platform with no plaintext. May also note that the stream / sendStreamAck pair, startCompactionJob / stopCompactionJob and the atChops getter and setter went in 4.0 too. Does NOT suggest pinning at_client to an older version to keep the old calls, and does NOT invent an SDK-side replacement for the file-transfer methods.",
       "expectations": [
-        "Says notify, startMonitor and uploadFile are all @Deprecated despite compiling and autocompleting",
+        "States at_client 4.0 removed notify, startMonitor and uploadFile from AtClient, so the code no longer compiles",
         "Maps notify (and notifyAll/notifyChange) and startMonitor onto NotificationService send() and subscribe()",
-        "States there is no SDK replacement for uploadFile — the file methods moved to the app layer",
+        "States there is no SDK replacement for uploadFile — file transfer belongs in the app",
         "Describes the app-layer approach: encrypt client-side, host the ciphertext, share the URL plus key as an encrypted item",
-        "Does not present these as stylistic, and does not invent an SDK file-transfer replacement"
+        "Does not suggest pinning at_client to an older version, and does not invent an SDK file-transfer replacement"
       ]
     },
     {

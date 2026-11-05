@@ -2,7 +2,9 @@
 
 `at_client` ships test-only helpers that let you unit-test collection-backed
 services without a running atServer or network connection. They are available
-from `package:at_client/at_client.dart` — the normal import.
+from the app's platform package — `package:at_client_cli/at_client_cli.dart`
+or `package:at_client_flutter/at_client_flutter.dart` — the normal import,
+since both re-export `package:at_client/at_client.dart`.
 
 ---
 
@@ -14,10 +16,12 @@ Add `test` and `mocktail` as dev dependencies:
 dart pub add --dev test mocktail
 ```
 
-Import the test hooks library in your test file:
+Import the platform package, which carries the test hooks, in your test file
+(a Flutter app's tests import `package:at_client_flutter/at_client_flutter.dart`
+in its place):
 
 ```dart
-import 'package:at_client/at_client.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 ```
@@ -100,7 +104,7 @@ final subColl = subCollectionWithInjectedNotifications<Parent, Child>(
 ```dart
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client_cli/at_client_cli.dart'; // a Flutter app: at_client_flutter
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -272,7 +276,8 @@ The SDK's own test suite demonstrates every pattern in detail:
 
 - The test hooks (`collectionWithInjectedNotifications`,
   `clearFactoriesForTest`, …) are test-only helpers available from
-  `package:at_client/at_client.dart` — import that, not the `src/...` path.
+  `package:at_client/at_client.dart`, which both platform packages re-export —
+  import the platform package, not the `src/...` path.
   `collections_test_hooks.dart` is a `part of` `collections.dart` (which
   `at_client.dart` exports), so importing the file directly fails with
   "can't have a part-of directive".

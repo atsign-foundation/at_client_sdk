@@ -4,29 +4,35 @@ import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'enroll_link_fake.dart';
 import 'mocks.dart';
 
 /// A [RemoteSecondary] served from [remoteData], logging every wire operation
 /// into [events] in call order:
 ///
-///   `update:<key>[:rootlink|:chainlink]` · `delete:<key>` · `scan:<regex>` ·
-///   `get:<key>` · `cmd:<head>`
+///   `update:<key>` · `delete:<key>` · `scan:<regex>` · `get:<key>` ·
+///   `enroll:link:<enrollmentId>[:rootlink|:chainlink]` · `cmd:<head>`
 ///
-/// The atLookUp carries no enrollment id, so a client built on this is fully
-/// privileged by construction.
+/// An `enroll:link` is answered by [answerEnrollLink] for [atSign], with no key
+/// treated as an authentication key. `enroll:list` answers [enrollments],
+/// keyed as the atServer keys its records, and `enroll:listns:<ns>` answers
+/// what [listns] returns for the namespace, or an empty roster.
+///
+/// The mock lookup carries no enrollment restriction, so a client built on
+/// this is fully privileged by construction.
 ///
 /// Callers must `registerFallbackValue` a [VerbBuilder] fake in `setUpAll`.
 MockRemoteSecondary buildRecordingRemote({
   required List<String> events,
   required Map<String, String> remoteData,
   required Map<String, Metadata> remoteMeta,
+  Map<String, Object?> enrollments = const {},
+  String? atSign,
+  Future<List<Object?>> Function(String namespace)? listns,
 }) {
   final remote = MockRemoteSecondary();
   final lookUp = MockAtLookupImpl();
   when(() => remote.atLookUp).thenReturn(lookUp);
-  // the bridge reads the enrollment id off the lookup until the ladder goes
-  // ignore: deprecated_member_use
-  when(() => lookUp.enrollmentId).thenReturn(null);
   when(() => remote.sync(any(), regex: any(named: 'regex')))
       .thenAnswer((_) async => null);
 
@@ -42,21 +48,31 @@ MockRemoteSecondary buildRecordingRemote({
         })}';
   }
 
-  when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-      .thenAnswer((inv) async {
+  when(() => remote.executeVerb(any())).thenAnswer((inv) async {
     final builder = inv.positionalArguments[0];
     if (builder is UpdateVerbBuilder) {
       final key = builder.atKey.toString();
-      final additional = builder.atKey.metadata.appMetadata?.additional;
-      final tag = additional?.containsKey(PqSigningChain.rootLinkField) == true
-          ? ':rootlink'
-          : additional?.containsKey(PqSigningChain.linkField) == true
-              ? ':chainlink'
-              : '';
-      events.add('update:$key$tag');
+      events.add('update:$key');
       remoteData[key] = builder.value;
       remoteMeta[key] = builder.atKey.metadata;
       return 'data:1';
+    }
+    if (builder is EnrollVerbBuilder &&
+        builder.operation == EnrollOperationEnum.link) {
+      final links = builder.links!.values.map((r) => (r as Map)['link']);
+      final tag = links.every((l) => l is Map && l['payload'] is Map)
+          ? ':rootlink'
+          : ':chainlink';
+      events.add('enroll:link:${builder.enrollmentId}$tag');
+      if (atSign == null) {
+        throw StateError('buildRecordingRemote: an enroll:link arrived and no '
+            'atSign was given to answer it for');
+      }
+      return answerEnrollLink(builder,
+          atSign: atSign,
+          remoteData: remoteData,
+          remoteMetadata: remoteMeta,
+          authenticationKeyOf: (_) => null);
     }
     if (builder is DeleteVerbBuilder) {
       final key = builder.atKey.toString();
@@ -99,8 +115,13 @@ MockRemoteSecondary buildRecordingRemote({
     // `listForNamespace` refused it at severe rather than reading it as an
     // empty roster - correctly, since treating it as empty would withhold key
     // material from every member of the namespace.
-    if (command.startsWith('enroll:listns')) return 'data:[]';
-    if (command.startsWith('enroll:list')) return 'data:{}';
+    if (command.startsWith('enroll:listns')) {
+      final namespace = command.substring('enroll:listns:'.length).trim();
+      return 'data:${jsonEncode(await listns?.call(namespace) ?? const [])}';
+    }
+    if (command.startsWith('enroll:list')) {
+      return 'data:${jsonEncode(enrollments)}';
+    }
     if (command.startsWith('scan')) {
       final regexMatch = RegExp(r'scan (.*)\n?$').firstMatch(command);
       final re = regexMatch == null ? null : RegExp(regexMatch.group(1)!);

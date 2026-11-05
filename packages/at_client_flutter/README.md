@@ -49,10 +49,12 @@ example app. Read these rather than copying snippets from here:
 Smaller copy/paste snippets live under
 [`example/lib/snippets`](example/lib/snippets):
 
-- [`example/lib/snippets/at_invitation.dart`](example/lib/snippets/at_invitation.dart)
-  — replacement for the deprecated `at_invitation_flutter` package. It keeps
-  the SMS/email invite flow as app-owned code instead of a separate Flutter
-  package.
+- [`example/lib/snippets/at_backup_key.dart`](example/lib/snippets/at_backup_key.dart)
+  — replacement for the deprecated `at_backupkey_flutter` package.
+
+Invitations, which replace the deprecated `at_invitation_flutter` package, are
+`AtClientInvitations` in `at_client`; the app at
+[`example/invitations`](example/invitations) shows them end to end.
 
 For a **full Flutter app** using `at_client_flutter` in anger, see
 the two flagship examples — deliberately positioned side-by-side
@@ -60,7 +62,7 @@ to make a fundamental SDK trade-off visible:
 
 ### todos — the idiomatic `AtCollection<T>` Flutter app
 
-[`examples/todos/`](examples/todos/README.md) is the **first
+[`example/todos/`](example/todos/README.md) is the **first
 place to look** when building a real Flutter application on the
 Atsign Protocol that needs a typed shared **dataset**. It drives
 every common collection-shaped pattern through the mobile /
@@ -73,11 +75,11 @@ via `availableAt`. Wire-compatible with the
 so the same data flows live between TUI and Flutter instances.
 
 Full design, source tour, and multi-device demo in
-[`examples/todos/README.md`](examples/todos/README.md).
+[`example/todos/README.md`](example/todos/README.md).
 
 ### dockerstats — live container telemetry
 
-[`examples/dockerstats/`](examples/dockerstats/README.md) is the
+[`example/dockerstats/`](example/dockerstats/README.md) is the
 canonical worked example of an SDK pattern the API doesn't
 impose: **deliver via short-lived notifications, store in a
 relational database**. The publisher (a [Dart CLI](../at_client/example/README.md#dockerstats--notification-based-live-telemetry))
@@ -101,9 +103,17 @@ would be wrong. `AtCollection<T>` is for typed shared *datasets*
 
 Full design, query-time aggregation semantics, and the seed-DB
 workflow for cross-window chart development are in
-[`examples/dockerstats/README.md`](examples/dockerstats/README.md).
+[`example/dockerstats/README.md`](example/dockerstats/README.md).
 
 ## Onboarding, provisioning & timeouts
+
+**The registrar API key.** `RegistrarCramDialog` takes a `RegistrarService`
+built with a registrar URL and an `apiKey`. The service sends the key to the
+registrar (`my.atsign.com`) on the calls that find a free atSign and
+exchange the code emailed to the user for that atSign's CRAM secret. It
+names the app to the registrar and acts for no atSign: the CRAM secret still
+needs the code from the user's email. An app developer can create an API key
+via the registrar at [my.atsign.com](https://my.atsign.com).
 
 Registering a brand-new atSign and having its atServer **provisioned** are two
 separate steps — provisioning can lag registration by anything from seconds to a
@@ -149,18 +159,21 @@ app's to use and, when it is done, to `stop()`. An app whose screens read
 `AtClientManager.getInstance().atClient` makes it current with
 `AtClientManager.getInstance().use(client)`; an app that passes the client around
 needs no `AtClientManager` at all, and `EnrollmentRequestList` takes an
-`atClient` for that case. The details (the chosen storage directory, the
-namespace) are all in [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart)
-in the `_storage(...)` and `_adopt(...)` functions.
+`atClient` for that case. The details (the namespace, making the client
+current) are in [`example/lib/walkthrough.dart`](example/lib/walkthrough.dart),
+in the `_preference()` and `_adopt(...)` functions.
 
 The dialogs take the `AtClientPreference` and, optionally, the `AtClientStorage`
-the client opens on; with no storage a Hive store opens under
-`preference.hiveStoragePath`. They also take `lookUps:`, at_client's
+the client opens on. With none, they open a Hive store in the app's support
+directory (`getApplicationSupportDirectory()`), or under
+`preference.hiveStoragePath` while the app still sets it. An app that kept its
+store anywhere else passes it as `storage:` before at_client 5.0 removes
+`hiveStoragePath`. They also take `lookUps:`, at_client's
 `AtLookUpFactory`, for an app that chooses its transport or reaches its
 atServers through a proxy: every connection the client they hand back opens
 comes from it. With none, TLS on TCP with the defaults. Together with
 `keys:` these are the three platform-supplied things a client is built from;
-[at_client's README](../at_client/README.md#in-code-one-import-four-verbs)
+[at_client's README](../at_client/README.md#in-code-four-verbs)
 shows the factory.
 
 ## Keychain storage
@@ -223,24 +236,30 @@ if (atKeys == null) throw Exception('No keys found for $atSign');
 final atKeysIo = FileAtKeysIo(
   filePath: (_) => '/path/to/${atSign}_key.atKeys',
 );
-atKeysIo.write(atSign, atKeys);
+await atKeysIo.write(atSign, atKeys);
 ```
+
+`write` creates the file: it throws `AtKeysFileOverwriteException` when the
+file already exists, so await it and export to a path that is free.
 
 ## Migrating from 1.x
 
-2.0 removes the two services that orchestrated at_auth for an app and stops
-re-exporting at_auth. The dialogs take the atSign, the keys store and the
+[Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app through the whole move, at_client included; this section covers at_client_flutter's own changes.
+
+2.0 removes the two services that orchestrated at_auth for an app, and an app
+no longer imports at_auth. The dialogs take the atSign, the keys store and the
 `AtClientPreference`, and hand back the `AtClient` they opened; an app with
-its own UI calls the `Atsign` verbs directly. Nothing an app reads after
-login changes.
+its own UI calls the `Atsign` verbs through `AtsignFlows`, which supplies the
+store (`storageOrDefault`), the transport and the atDirectory, as the dialogs
+do. Nothing an app reads after login changes.
 
 | 1.x                                                                                              | 2.0                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AuthService().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramKey)`                  | `CramDialog.show(context, atSign: ..., cramKey: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).activate(cramSecret: ..., keys: KeychainAtKeysIo(), preference: ...)`      |
-| `AuthService().authenticate(AtAuthRequest(atSign, atKeysIo: ...), backupKeys: ...)`              | `PkamDialog.show(context, atSign: ..., keys: ..., preference: ..., backupKeys: ...)` → `AtClient`, or `Atsign(atSign).open(keys: ..., preference: ...)`                           |
-| `AtClientManager.getInstance().setCurrentAtSign(..., atChops: response.atChops, ...)` afterwards | `AtClientManager.getInstance().use(client)`; `setCurrentAtSign` is deprecated                                                                                                      |
+| `AuthService().onboard(AtOnboardingRequest(atSign)..rootDomain = ..., cramKey)`                  | `CramDialog.show(context, atSign: ..., cramKey: ..., preference: ...)` → `AtClient`, or `const AtsignFlows().activate(atSign, cramSecret: ..., keys: KeychainAtKeysIo(), preference: ...)`      |
+| `AuthService().authenticate(AtAuthRequest(atSign, atKeysIo: ...), backupKeys: ...)`              | `PkamDialog.show(context, atSign: ..., keys: ..., preference: ..., backupKeys: ...)` → `AtClient`, or `const AtsignFlows().open(atSign, keys: ..., preference: ...)`                           |
+| `AtClientManager.getInstance().setCurrentAtSign(..., atChops: response.atChops, ...)` afterwards | `AtClientManager.getInstance().use(client)`; `setCurrentAtSign` is removed                                                                                                         |
 | `response.isSuccessful`, `response.atAuthKeys`, `response.atLookUp`                              | a null client means the dialog failed or was cancelled; the keys are in the store the client opened on; the connection is the client's (`client.connection.current`)               |
-| `FlutterEnrollmentService().enroll(AtEnrollmentRequest(...))` then `awaitApproval`, then a `PkamDialog` | `ApkamActivationDialog.show(context, atSign: ..., rootDomain: ..., appName: ..., deviceName: ..., namespaces: ..., preference: ...)` → `AtClient`, or `Atsign(atSign).enroll(...)` then `pending.client(preference)` |
+| `FlutterEnrollmentService().enroll(AtEnrollmentRequest(...))` then `awaitApproval`, then a `PkamDialog` | `ApkamActivationDialog.show(context, atSign: ..., rootDomain: ..., appName: ..., deviceName: ..., namespaces: ..., preference: ...)` → `AtClient`, or `const AtsignFlows().enroll(atSign, ...)` then `pending.client(preference, storage: await storageOrDefault(atSign, preference))` |
 | `FlutterEnrollmentService().approve(...)` / `.deny(...)` / `.revoke(...)`                        | `client.enrollments.approve(id)` / `.deny(id)` / `.revoke(id)`; `EnrollmentRequestList(atClient: client)` renders the roster and decides                                          |
 | `.getEnrollments(...)` / `.list(statuses, atLookUp)`                                             | `client.enrollments.requests` (a stream of new requests) / `.list(statuses: ...)` / `.pending()`                                                                                   |
 | `.generateOtp()` / `.setSpp(spp: ...)`, answering an `Otp`                                       | `client.enrollments.otp()` / `.spp(value, expiry: ...)`, answering a `Passcode`; `KeychainStorage().saveSpp(atSign, passcode)` keeps it                                             |
@@ -261,17 +280,14 @@ failure to reach the atServer as a failed login; a 2.0 app decides.
 ### Before and after
 
 The things a 1.x app commonly did, each as it was and as it is now. The 2.0
-side shares two helpers:
+side shares one preference, and passes no storage: the dialogs open Hive in the
+app's support directory, where a 1.x app that set `hiveStoragePath` to it kept
+its store.
 
 ```dart
-// Where this app keeps the atSign's local store. closedByClient: the client
-// closes it when it stops, so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  final dir = await getApplicationSupportDirectory();
-  return HiveAtClientStorage(atSign: atSign, storagePath: dir.path, closedByClient: true);
-}
-
-final preference = AtClientPreference()..namespace = 'my_app';
+// Step one for an app built on 1.x: pqReady, then pqActive once
+// every client runs pqReady (the at_client README's rollout ladder).
+final preference = AtClientPreference(posture: PqPosture.pqReady)..namespace = 'my_app';
 ```
 
 **Log in from the keychain, then set up the client**
@@ -302,7 +318,6 @@ final client = await PkamDialog.show(context,
   rootDomain: rootDomain,
   keys: KeychainAtKeysIo(),
   preference: preference,
-  storage: await _storage(atSign),
 );
 if (client == null) return;                       // cancelled, or the dialog failed
 AtClientManager.getInstance().use(client);        // if screens read the manager
@@ -330,7 +345,6 @@ final client = await CramDialog.show(context,
   rootDomain: selection.rootDomain,
   cramKey: cramKey!,
   preference: preference,
-  storage: await _storage(selection.atSign),
 );
 if (client == null) return;
 AtClientManager.getInstance().use(client);
@@ -357,7 +371,6 @@ final client = await ApkamActivationDialog.show(context,
   deviceName: 'default', namespaces: {'my_app': 'rw'},
   preference: preference,
   keys: KeychainAtKeysIo(),
-  storage: await _storage(atSign),
 );
 if (client == null) return;
 AtClientManager.getInstance().use(client);
@@ -401,7 +414,7 @@ await AtClientManager.getInstance().setCurrentAtSign(nextAtSign, 'my_app', acp, 
 // so every sign-in stops the previous client first.
 await client.stop();
 final next = await PkamDialog.show(context, atSign: nextAtSign, keys: KeychainAtKeysIo(),
-    preference: preference, storage: await _storage(nextAtSign));
+    preference: preference);
 if (next != null) AtClientManager.getInstance().use(next);
 ```
 

@@ -2,12 +2,17 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show ApkamSigningKeys, EnvelopeType, signEnvelope;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
+import 'test_utils/test_keypairs.dart';
 
 /// Collecting the `apkamSymmetricKey` an approver sealed to a new enrollment.
 ///
@@ -59,11 +64,28 @@ void main() {
 
   const envelopeKey = '@alice:abc.$kpid.__ssenv.myapp@alice';
 
-  /// An lookup that finds one envelope addressed to this kpid, signed by
-  /// [signer], and answers the `_apsk` lookup for that signer with [apsk] —
-  /// or throws the atServer's AT0015 when [apsk] is null, which is what a
-  /// **revoked** signer's key lookup actually returns.
+  /// An envelope for this kpid, signed by [signer] as an approver signs one:
+  /// it parses, so the resolver goes on to look up [signer]'s `_apsk`.
+  String signedBy(String signer) {
+    final pkam = pkamKeyPairFor(atSign, signer);
+    return jsonEncode(signEnvelope(
+      {'toKpid': kpid},
+      keys: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
+            publicKey: pkam.atPublicKey.publicKey,
+            privateKey: pkam.atPrivateKey.privateKey)
+      ],
+      type: EnvelopeType.secretEnvelope,
+      enrollmentId: signer,
+    ).toJson());
+  }
+
+  /// A lookup that finds [signedBy]'s envelope from [signer] and answers the
+  /// `_apsk` lookup for [signer] with [apsk], or throws the atServer's AT0015
+  /// when [apsk] is null, which is what a revoked signer's key lookup returns.
   MockAtLookUp lookupWith({required String signer, String? apsk}) {
+    final envelope = signedBy(signer);
     final lookUp = MockAtLookUp();
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((inv) async {
@@ -80,101 +102,238 @@ void main() {
         }
         return 'data:$apsk';
       }
-      if (command.contains(envelopeKey)) {
-        return 'data:${jsonEncode({
-              'enrollmentId': signer,
-              'signature': 'not-checked-because-the-apsk-lookup-decides-first',
-              'signingAlgo': 'rsa2048',
-              'hashingAlgo': 'sha256',
-              'payload': {'toKpid': kpid},
-            })}';
-      }
+      if (command.contains(envelopeKey)) return 'data:$envelope';
       return null;
     });
     return lookUp;
   }
 
-  String b64u(String text) =>
-      base64Url.encode(utf8.encode(text)).replaceAll('=', '');
+  /// Whether [lookUp] was asked for [signer]'s `_apsk`.
+  void verifyApskLookedUp(MockAtLookUp lookUp, String signer) => verify(() =>
+      lookUp.executeCommand(any(that: contains('_apsk.$signer.a.__e')),
+          auth: any(named: 'auth'))).called(greaterThan(0));
 
-  /// The JWS wrapper form of [lookupWith]'s envelope: the signer claim lives
-  /// in the protected header's `kid`, so the resolver must read it from there
-  /// to know which `_apsk` to look up at all.
-  MockAtLookUp lookupWithJws({required String signer}) {
-    final lookUp = MockAtLookUp();
-    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
-        .thenAnswer((inv) async {
-      final command = inv.positionalArguments[0] as String;
-      if (command.startsWith('scan')) {
-        return 'data:${jsonEncode([envelopeKey])}';
-      }
-      if (command.contains('_apsk.$signer')) {
-        throw AtLookUpException(
-            'AT0015',
-            'key not found : public:_apsk.$signer.a.__e$atSign does not '
-                'exist in keystore');
-      }
-      if (command.contains(envelopeKey)) {
-        return 'data:${jsonEncode({
-              'v': 2,
-              'payload': b64u('{"toKpid":"$kpid"}'),
-              'protected': b64u('{"alg":"RS256","kid":"$signer","v":2}'),
-              'signature': 'unchecked-the-apsk-lookup-decides-first',
-            })}';
-      }
-      return null;
-    });
-    return lookUp;
-  }
+  final logs = RecordedLogs();
 
-  setUpAll(() => registerFallbackValue(''));
+  setUpAll(() {
+    logs.installOn();
+    registerFallbackValue('');
+  });
 
   test('an envelope whose signer has no _apsk is skipped, not fatal', () async {
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
         timeout: const Duration(milliseconds: 200),
         pollInterval: const Duration(milliseconds: 50));
+    final lookUp = lookupWith(signer: 'unpublished-enrollment');
 
     // NOTE: the `_apsk` lookup for a signer with no key answers AT0015, which
     // AtLookupImpl throws rather than returning null — uncaught, it escapes
     // the skip and takes the whole enrollment down.
     await expectLater(
-        resolve(withKeyPackage(), lookupWith(signer: 'revoked-enrollment'))
-            .toList(),
+        resolve(withKeyPackage(), lookUp).toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
             contains('No conveyed apkamSymmetricKey arrived'))),
-        reason: 'a revoked signer is precisely the case this path documents '
-            'as its intended outcome — its key is gone, so the envelope is '
-            'not from an approved enrollment and is skipped. Propagating the '
-            'lookup error instead means one stale envelope from a revoked '
-            'enrollment fails every later enrollment that walks past it');
+        reason: 'an envelope whose signer has no key is not from an approved '
+            'enrollment and is skipped. Propagating the lookup error instead '
+            'means one such envelope fails every later enrollment that walks '
+            'past it');
+    verifyApskLookedUp(lookUp, 'unpublished-enrollment');
   });
 
-  test('a JWS envelope from a revoked signer is skipped the same way',
-      () async {
+  test(
+      'a revoked signer is looked up by the enrollment its signature names, '
+      'and skipped the same way', () async {
     final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
         timeout: const Duration(milliseconds: 200),
         pollInterval: const Duration(milliseconds: 50));
+    final lookUp = lookupWith(signer: 'revoked-enrollment');
 
     await expectLater(
-        resolve(withKeyPackage(), lookupWithJws(signer: 'revoked-enrollment'))
-            .toList(),
+        resolve(withKeyPackage(), lookUp).toList(),
         throwsA(isA<StateError>().having((e) => '$e', 'message',
-            contains('No conveyed apkamSymmetricKey arrived'))));
+            contains('No conveyed apkamSymmetricKey arrived'))),
+        reason: 'the atServer moves a revoked enrollment\'s _apsk out from '
+            'under its approved address, so the lookup answers AT0015');
+    verifyApskLookedUp(lookUp, 'revoked-enrollment');
   });
 
-  test('and a signer whose _apsk does not verify is skipped too', () async {
-    // NOTE: the control arm — without it the tests above also pass on code
-    // that skips EVERY envelope.
-    final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
-        timeout: const Duration(milliseconds: 200),
-        pollInterval: const Duration(milliseconds: 50));
+  const approver = 'approver-enrollment';
+  const conveyed = 'the-apkam-symmetric-key';
 
-    await expectLater(
-        resolve(withKeyPackage(),
-                lookupWith(signer: 'live-enrollment', apsk: 'not-a-real-key'))
-            .toList(),
-        throwsA(isA<StateError>().having((e) => '$e', 'message',
-            contains('No conveyed apkamSymmetricKey arrived'))));
+  /// [withKeyPackage]'s envelope sealed to the key package's real public half
+  /// for `myapp` under a body naming [approver] as its sender, and signed by
+  /// [signer].
+  Future<String> approverEnvelope({String signer = approver}) async {
+    final kem = XWingPureDartAlgo.instance;
+    final recipient = await kem
+        .keyPairFromSeed(Uint8List.fromList(List<int>.generate(32, (i) => i)));
+    final info = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: approver,
+        fromKpid: 'kpid-approver',
+        toKpid: kpid,
+        appNamespace: 'myapp');
+    final sealed = await pqSeal(
+        kem,
+        recipient.publicKey,
+        Uint8List.fromList(utf8.encode(jsonEncode({
+          'kind': PairwiseSecretSharing.secretPayloadKind,
+          'name': enrollmentApkamSymmetricKeySecretName,
+          'value': conveyed,
+        }))),
+        info: info);
+    final pkam = pkamKeyPairFor(atSign, signer);
+    return jsonEncode(signEnvelope(
+      SecretEnvelope(
+        fromKpid: 'kpid-approver',
+        fromEnrollmentId: approver,
+        toKpid: kpid,
+        appNamespace: 'myapp',
+        suite: SecretSharingAlgos.xWingRfc9180,
+        kid: kpid,
+        sealed: base64Encode(sealed),
+      ).toJson(),
+      keys: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
+            publicKey: pkam.atPublicKey.publicKey,
+            privateKey: pkam.atPrivateKey.privateKey)
+      ],
+      type: EnvelopeType.secretEnvelope,
+      enrollmentId: signer,
+    ).toJson());
+  }
+
+  /// A lookup whose scan finds [value] at [key] and whose `_apsk` lookup
+  /// answers with [signer]'s real public key, or with [apsk] when given.
+  MockAtLookUp serving(String key, String value,
+      {String signer = approver, String? apsk}) {
+    final lookUp = MockAtLookUp();
+    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((inv) async {
+      final command = inv.positionalArguments[0] as String;
+      if (command.startsWith('scan')) return 'data:${jsonEncode([key])}';
+      if (command.contains('_apsk.$signer')) {
+        return 'data:${apsk ?? pkamKeyPairFor(atSign, signer).atPublicKey.publicKey}';
+      }
+      if (command.contains(key)) return 'data:$value';
+      return null;
+    });
+    return lookUp;
+  }
+
+  group('a genuinely sealed and signed envelope', () {
+    test(
+        'is skipped before its _apsk is looked up when its signer is not an '
+        'enrollment id', () async {
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      const key = 'msg.0.$kpid.__ssenv.myapp@alice';
+
+      for (final signer in ['approver\n', 'appro.ver', 'appro:ver']) {
+        final lookUp = serving(key, await approverEnvelope(signer: signer),
+            signer: signer);
+        await expectLater(resolve(withKeyPackage(), lookUp).toList(),
+            throwsA(isA<StateError>()),
+            reason: 'a signer of ${signer.length} characters');
+        verifyNever(() => lookUp.executeCommand(any(that: contains('_apsk')),
+            auth: any(named: 'auth')));
+      }
+
+      // NOTE: positive control — the same envelope from an enrollment id is
+      // looked up and collected.
+      final control = serving(key, await approverEnvelope());
+      expect(await resolve(withKeyPackage(), control).first, conveyed);
+      verify(() => control.executeCommand(
+          any(that: contains('_apsk.$approver.')),
+          auth: any(named: 'auth'))).called(greaterThan(0));
+    });
+
+    test('is collected where its approver addressed it', () async {
+      // NOTE: the positive control for every skip in this file, none of which
+      // otherwise shows that anything is ever collected.
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(seconds: 5),
+          pollInterval: const Duration(milliseconds: 50));
+      expect(
+          await resolve(
+                  withKeyPackage(),
+                  serving('msg.0.$kpid.__ssenv.myapp@alice',
+                      await approverEnvelope()))
+              .first,
+          conveyed);
+    });
+
+    test('is skipped when it sits under a namespace its approver did not sign',
+        () async {
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      await expectLater(
+          resolve(
+                  withKeyPackage(),
+                  serving('msg.0.$kpid.__ssenv.otherapp@alice',
+                      await approverEnvelope()))
+              .toList(),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('No conveyed apkamSymmetricKey arrived'))));
+    });
+
+    test(
+        'is skipped when the _apsk of the enrollment it names does not verify '
+        'its signature', () async {
+      // NOTE: the key served is a real one, another enrollment's, so the
+      // signature check is the only one that refuses the envelope.
+      const key = 'msg.0.$kpid.__ssenv.myapp@alice';
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      final lookUp = serving(key, await approverEnvelope(),
+          apsk:
+              pkamKeyPairFor(atSign, 'other-enrollment').atPublicKey.publicKey);
+      logs.records.clear();
+
+      await expectLater(
+          resolve(withKeyPackage(), lookUp).toList(),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('No conveyed apkamSymmetricKey arrived'))),
+          reason: 'only $approver\'s own key verifies what $approver signed');
+      verifyApskLookedUp(lookUp, approver);
+      expect(
+          logs.at('WARNING').where((m) => m.contains(key)),
+          allOf(isNotEmpty,
+              everyElement(contains('failed signature verification'))));
+    });
+  });
+
+  group("Given an envelope C seals and signs whose body names A's enrollment",
+      () {
+    test('when B sweeps, then it is refused, by name', () async {
+      const signerC = 'other-enrollment';
+      const key = 'msg.0.$kpid.__ssenv.myapp@alice';
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      logs.records.clear();
+
+      await expectLater(
+          resolve(
+                  withKeyPackage(),
+                  serving(key, await approverEnvelope(signer: signerC),
+                      signer: signerC))
+              .toList(),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('No conveyed apkamSymmetricKey arrived'))),
+          reason: 'C signed it, and its body names $approver as the sender');
+      expect(
+          logs.at('WARNING').where((m) => m.contains(key)),
+          allOf(
+              isNotEmpty,
+              everyElement(contains('signer enrollment $signerC does not '
+                  'match claimed sender enrollment $approver'))),
+          reason: 'C sealed the body under the binding that names $approver, '
+              'so only the check of signer against sender refuses it');
+    });
   });
 
   test('AtKeys with no key package cannot be resolved at all', () async {

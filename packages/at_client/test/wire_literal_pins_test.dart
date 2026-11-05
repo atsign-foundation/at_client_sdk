@@ -25,11 +25,13 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
-import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart'
     show
         AESKey,
         AesGcm256EncryptionAlgo,
+        HkdfSha256,
         RsaKeyPair,
         InitialisationVector,
         MlDsa65PureDartAlgo,
@@ -82,24 +84,24 @@ void main() {
               'interlock now that the root record itself is mutable');
       expect(key.metadata.ttl, 15000,
           reason: 'deliberately NOT the shared two-minute mintLockTtl that the '
-              'nskey lock above still carries. This path does not pass '
-              'ownLockIsNotContention, so the ttl is also how long a client '
-              'that took the lock and exited before publishing is refused on '
-              'its next start — and two enrollments racing to mint the root is '
-              'not a situation normal operation produces, while a short-lived '
-              'client relaunching is');
+              'nskey lock above still carries. The ttl is also how long a '
+              'client that took the lock and exited before publishing is '
+              'refused on its next start — and two clients racing to mint the '
+              'root is not a situation normal operation produces, while a '
+              'short-lived client relaunching is');
       expect(key.metadata.isPublic, isFalse,
           reason: 'a self key — nobody but the owner writes the owner\'s '
               'records, so there is nothing to share');
     });
 
     test('the current-CK pointer strips the destination owner\'s @', () {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
       // The emitted segment is 'bob', not '@bob' — easy to mis-pin.
       expect(
           const CurrentCkPointer()
               .keyFor(atClient, '@bob', 'app_1.my_apps')
               .toString(),
-          '__ckcur.bob.app_1.my_apps@alice');
+          '__ckcur.bob.app_1.my_apps.enroll-1.a.__e@alice');
     });
 
     test('a self conveyance is <ckKid>.__ck.<ckNs>@<owner>', () {
@@ -167,36 +169,35 @@ void main() {
       expect(PairwiseSecretSharing.perEnrollmentSecretPrefix, '__en.');
       expect(enrollmentApkamSymmetricKeySecretName, '__en.apkamSymmetricKey');
       expect(PqSigningRoot.secretName, '__en.pqSigningRoot');
-      expect(PqSigningChain.linkSecretName, '__en.apskChainLink');
-      expect(PqSigningChain.rootLinkSecretName, '__en.apskRootLink');
       expect(NskeyPrivateFiling.secretNamePrefix, '__nskey.');
     });
 
     test('_apsk appMetadata link field names', () {
-      expect(PqSigningChain.linkField, 'apskChainLink');
-      expect(PqSigningChain.rootLinkField, 'apskRootLink');
-      // Inside the root-link document, naming the advertised root entry that
-      // signed it. A verifier narrows on this, so a rename would silently turn
-      // every labelled link into an unlabelled one — still verifiable, but the
-      // claim would stop being checked and nothing would go red.
+      // Every atServer implementation carries this field over on every write
+      // of an _apsk record but enroll:link, so a rename strands every link.
+      expect(PqSigningChain.linksField, 'apskLinks');
+      // Inside the root-link document, naming the root key that signed it,
+      // which is what makes it a root link at all.
       expect(PqSigningChain.rootLinkKidField, 'kid');
     });
 
-    test('a root link built by the signer emits its exact field set', () {
-      // The DOCUMENT, not the constants — a shape assertion that follows a
-      // renamed constant pins nothing. The signature member is excluded on
-      // purpose: ML-DSA signing is hedged, so it differs run to run.
-      final link = {
-        'v': 1,
-        'alg': PqSigningChain.rootLinkAlgo,
-        PqSigningChain.rootLinkKidField: 'kid-of-the-signer',
-        'payload': PqSigningChain.linkPayload(
-            childEnrollmentId: 'child-1', childApkamPublicKey: 'cHVibGlj'),
-        'signature': 'IGNORED',
-      };
+    test('a root link built by the signer emits its exact field set', () async {
+      // The DOCUMENT the signer builds, not the constants — a shape assertion
+      // that follows a renamed constant pins nothing.
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final link = await PqSigningChain.signRootLink(
+          PqSigningChain.linkPayload(
+              'child-1',
+              ApskSigningKey(
+                  kid: 'k1', alg: SigningAlgoType.rsa2048, pub: 'cHVibGlj')),
+          rootPrivate: pair.secretKey,
+          rootKid: 'kid-of-the-signer');
       expect(link.keys.toList(), ['v', 'alg', 'kid', 'payload', 'signature']);
+      expect(link['v'], 2);
+      expect(link['alg'], 'mldsa65');
+      expect(link['kid'], 'kid-of-the-signer');
       expect((link['payload'] as Map).keys.toList(),
-          ['v', 'childEnrollmentId', 'apkamPublicKey'],
+          ['v', 'enrollmentId', 'kid', 'alg', 'pub'],
           reason: 'the payload is the SIGNED region and is shared verbatim '
               'with the chain link, so a field added here changes what a '
               'chain link signs');
@@ -266,6 +267,18 @@ void main() {
     // ciphertext opens ONLY under the hand-built binding string, and a
     // negative control proves the test can fail.
 
+    /// The pairwise substrate's info for enroll-a, kpid-from, kpid-to and
+    /// myapp: each component is a two-byte big-endian length, then its UTF-8.
+    final pairwiseInfo = Uint8List.fromList([
+      for (final (length, text) in [
+        (0x1b, 'at_client/secret_sharing/v2'),
+        (0x08, 'enroll-a'),
+        (0x09, 'kpid-from'),
+        (0x07, 'kpid-to'),
+        (0x05, 'myapp'),
+      ]) ...[0x00, length, ...utf8.encode(text)],
+    ]);
+
     AtKey selfConveyance() => AtKey()
       ..key = 'ckkid.__ck'
       ..namespace = 'myapp'
@@ -299,12 +312,10 @@ void main() {
       // The CROSS-SUBSTRATE control. The arm above varies the namespace within
       // this substrate; this one crosses to the pairwise substrate's binding,
       // which is the replay the two distinct `info` values exist to prevent.
-      // Written as a raw literal rather than PairwiseSecretSharing.sealInfo so
-      // it cannot follow that constant if someone pointed it here.
+      // Written as a raw literal rather than PairwiseSecretSharing.sealInfoFor
+      // so it cannot follow that function if someone pointed it here.
       await expectLater(
-          pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(
-                  utf8.encode('at_client/secret_sharing/v1'))),
+          pqOpen(kem, pair.secretKey, base64Decode(wire), info: pairwiseInfo),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding — shared code for seal/open is fine, a shared binding '
@@ -345,16 +356,15 @@ void main() {
       // The cross-substrate control on the ML-KEM path, for the same reason as
       // the X-Wing one above.
       await expectLater(
-          pqOpen(kem, pair.secretKey, base64Decode(wire),
-              info: Uint8List.fromList(
-                  utf8.encode('at_client/secret_sharing/v1'))),
+          pqOpen(kem, pair.secretKey, base64Decode(wire), info: pairwiseInfo),
           throwsA(isA<PqOpenException>()),
           reason: 'a conveyance must not open under the pairwise substrate\'s '
               'binding');
     });
 
-    test('a data value binds AAD "<providerId>:<sharedBy>:<sharedWith>:<name>"',
-        () async {
+    test(
+        'a data value binds AAD "<providerId>:<sharedBy>:<sharedWith>:<name>" '
+        'under a key derived from the CK and its salt', () async {
       final cache = ContentKeyCache();
       final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
       // _nskeyOwnerOf is sharedWith ?? sharedBy, so the CK scopes to @bob.
@@ -369,20 +379,39 @@ void main() {
       final wire = await provider.encrypt(
           CryptoContext(atClient: atClient), atKey, 'hello');
 
-      final iv = InitialisationVector(Uint8List.fromList(
-          base64Decode(atKey.metadata.appMetadata!.additional!['iv'])));
+      final additional = atKey.metadata.appMetadata!.additional!;
+      final iv = InitialisationVector(
+          Uint8List.fromList(base64Decode(additional['iv'])));
+      // The value key: HKDF-SHA256-Expand keyed by the CK, over this label
+      // followed by the value's salt — written as raw literals so a change to
+      // either is a pin edit.
+      final valueKey = AESKey(base64Encode(HkdfSha256.expand(ck.bytes,
+          info: Uint8List.fromList([
+            ...utf8.encode('at/symmetric/AES/GCM/value-key/v2'),
+            ...base64Decode(additional['salt']),
+          ]),
+          length: 32)));
       final aad = utf8.encode('at/symmetric/AES/GCM:@alice:@bob:msg.myapp');
-      final plain = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
+      final plain = await AesGcm256EncryptionAlgo(valueKey)
           .decrypt(Uint8List.fromList(base64Decode(wire)), iv: iv, aad: aad);
       expect(utf8.decode(plain), 'hello');
 
       await expectLater(
-          AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+          AesGcm256EncryptionAlgo(valueKey).decrypt(
               Uint8List.fromList(base64Decode(wire)),
               iv: iv,
               aad: utf8.encode('at/symmetric/AES/GCM:@alice:@bob:msg.other')),
           throwsA(anything),
           reason: 'the negative control for the AAD arm');
+
+      await expectLater(
+          AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+              Uint8List.fromList(base64Decode(wire)),
+              iv: iv,
+              aad: aad),
+          throwsA(anything),
+          reason: 'the negative control for the value key: a value is never '
+              'encrypted under the content key itself');
     });
 
     test('fullNameOf joins key and namespace at a dot', () {
@@ -393,14 +422,64 @@ void main() {
       expect(SymmetricAesGcmProvider.fullNameOf(k), 'msg.app_1.my_apps');
     });
 
-    test('the pairwise substrate binds info "at_client/secret_sharing/v1"', () {
-      // Pins the constant's VALUE, and only that: it never touches a
-      // ciphertext, so it stays green if a call site stops passing the
-      // constant. The arms that read real sealed output — and that go red on a
-      // converged binding — are in pairwise_secret_sharing_test.dart, group
+    test(
+        'the pairwise substrate binds info "at_client/secret_sharing/v2", '
+        '<fromEnrollmentId>, <fromKpid>, <toKpid>, <appNamespace>, each '
+        'after its two-byte length', () {
+      // Pins the function's OUTPUT, and only that: it never touches a
+      // ciphertext, so it stays green if a call site stops passing it. The
+      // arms that read real sealed output — and that go red on a converged or
+      // unbound binding — are in pairwise_secret_sharing_test.dart, group
       // 'FROZEN FOREVER: the pairwise seal binding, read from real output'.
-      expect(utf8.decode(PairwiseSecretSharing.sealInfo),
-          'at_client/secret_sharing/v1');
+      expect(
+          PairwiseSecretSharing.sealInfoFor(
+            fromEnrollmentId: 'enroll-a',
+            fromKpid: 'kpid-from',
+            toKpid: 'kpid-to',
+            appNamespace: 'myapp',
+          ),
+          pairwiseInfo);
+    });
+
+    test('fields that join to the same string give different pairwise info',
+        () {
+      final colonInSender = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: 'enroll-a:kpid-from',
+        fromKpid: 'kpid-to',
+        toKpid: 'myapp',
+        appNamespace: 'other',
+      );
+      final colonInNamespace = PairwiseSecretSharing.sealInfoFor(
+        fromEnrollmentId: 'enroll-a',
+        fromKpid: 'kpid-from',
+        toKpid: 'kpid-to',
+        appNamespace: 'myapp:other',
+      );
+      expect(['enroll-a:kpid-from', 'kpid-to', 'myapp', 'other'].join(':'),
+          ['enroll-a', 'kpid-from', 'kpid-to', 'myapp:other'].join(':'),
+          reason: 'the premise: joined with ":", the two sets of fields are '
+              'one string');
+      expect(colonInSender, isNot(colonInNamespace));
+    });
+
+    test('a component longer than 65535 bytes is refused', () {
+      expect(
+          PairwiseSecretSharing.sealInfoFor(
+            fromEnrollmentId: 'enroll-a',
+            fromKpid: 'kpid-from',
+            toKpid: 'kpid-to',
+            appNamespace: 'n' * 0xffff,
+          ).length,
+          2 + 27 + 2 + 8 + 2 + 9 + 2 + 7 + 2 + 0xffff,
+          reason: 'the control: 65535 bytes is the most a length can say');
+      expect(
+          () => PairwiseSecretSharing.sealInfoFor(
+                fromEnrollmentId: 'enroll-a',
+                fromKpid: 'kpid-from',
+                toKpid: 'kpid-to',
+                appNamespace: 'n' * 0x10000,
+              ),
+          throwsArgumentError);
     });
   });
 
@@ -433,6 +512,47 @@ void main() {
       expect(NskeyRecipientKind.nskey, 'nskey');
     });
 
+    test('a conveyance names the enrollment that cut its key', () async {
+      when(() => atClient.enrollmentId).thenReturn('enroll-1');
+      final kem = XWingPureDartAlgo.instance;
+      final pair = await kem.keyPairFromSeed(kem.newSeed());
+      final ring = InMemoryNskeyKeyRing()
+        ..seedKeypair('@alice', 'myapp',
+            publicKey: pair.publicKey,
+            privateKey: pair.secretKey,
+            keyAlgo: 'x-wing');
+      final provider = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
+      final atKey = AtKey()
+        ..key = 'ckkid.__ck'
+        ..namespace = 'myapp'
+        ..sharedBy = '@alice';
+
+      final before = DateTime.now().toUtc();
+      await provider.encrypt(
+          CryptoContext(atClient: atClient), atKey, ck.toBase64());
+      final after = DateTime.now().toUtc();
+
+      // NOTE: frozen — only the enrollment named here collects the key once
+      // nothing cites it, so a conveyance without it is never collected, and
+      // the key's grace counts from the cut it records.
+      final json = atKey.metadata.appMetadata!.toJson();
+      expect(json.keys.toList(), [
+        'providerId',
+        'recipientKind',
+        'ckKid',
+        'nskeyKid',
+        'ns',
+        'cutBy',
+        'cutAt'
+      ]);
+      expect(json['cutBy'], 'enroll-1');
+      final cutAt = DateTime.parse(json['cutAt'] as String);
+      expect(json['cutAt'], endsWith('Z'), reason: 'UTC, ISO-8601');
+      expect(cutAt.isBefore(before), isFalse);
+      expect(cutAt.isAfter(after), isFalse);
+    });
+
     test('a data value\'s appMetadata, field by field', () async {
       final cache = ContentKeyCache();
       final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
@@ -446,7 +566,10 @@ void main() {
       await provider.encrypt(CryptoContext(atClient: atClient), atKey, 'hello');
 
       final json = atKey.metadata.appMetadata!.toJson();
-      expect(json.keys.toList(), ['providerId', 'ckKid', 'iv', 'ns', 'ckNs']);
+      expect(json.keys.toList(),
+          ['providerId', 'ckKid', 'salt', 'iv', 'ns', 'ckNs']);
+      expect(base64Decode(json['salt'] as String), hasLength(32),
+          reason: 'frozen: a reader refuses a salt of any other length');
       expect(json['providerId'], 'at/symmetric/AES/GCM');
       expect(json['ckKid'], ck.ckKid);
       expect(json['ns'], 'myapp');
@@ -549,15 +672,16 @@ void main() {
         fromKpid: 'kpid-from',
         fromEnrollmentId: 'enroll-a',
         toKpid: 'kpid-to',
+        appNamespace: 'myapp',
         suite: 'x-wing-rfc9180-v1',
         kid: 'kpid-to',
         sealed: 'U0VBTEVE',
       );
       expect(
           jsonEncode(env.toJson()),
-          '{"v":1,"from":{"kpid":"kpid-from","enrollmentId":"enroll-a"},'
-          '"to":"kpid-to","suite":"x-wing-rfc9180-v1","kid":"kpid-to",'
-          '"sealed":"U0VBTEVE"}');
+          '{"v":2,"from":{"kpid":"kpid-from","enrollmentId":"enroll-a"},'
+          '"to":"kpid-to","ns":"myapp","suite":"x-wing-rfc9180-v1",'
+          '"kid":"kpid-to","sealed":"U0VBTEVE"}');
     });
 
     test('PackageKey emits its exact JSON shape', () {
@@ -783,16 +907,18 @@ void main() {
       expect(parsed.publicKey, 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A');
     });
 
-    test('a chain-link payload emits its exact JSON shape', () {
+    test('a link payload emits its exact JSON shape', () {
       // Payload, not wrapper: these field names are the same under either
-      // wrapper shape and are compared against live records by verifiers.
-      // The signature covers signableTextOf of exactly this map (its JSON
-      // encoding under the JWS wrapper), so the key ORDER is
-      // cryptographically bound.
+      // wrapper shape, and every atServer implementation compares them with
+      // the key a link is written for. The signature covers signableTextOf of
+      // exactly this map (its JSON encoding under the JWS wrapper), so the key
+      // ORDER is cryptographically bound.
       expect(
           jsonEncode(PqSigningChain.linkPayload(
-              childEnrollmentId: 'c1', childApkamPublicKey: 'PK')),
-          '{"v":1,"childEnrollmentId":"c1","apkamPublicKey":"PK"}');
+              'c1',
+              ApskSigningKey(
+                  kid: 'k1', alg: SigningAlgoType.rsa2048, pub: 'PK'))),
+          '{"v":2,"enrollmentId":"c1","kid":"k1","alg":"rsa2048","pub":"PK"}');
     });
 
     test('the nskey advertisement version', () {
@@ -832,6 +958,8 @@ void main() {
       expect(EnvelopeType.keyPackage.typ, 'at-key-package+jws');
       expect(EnvelopeType.nskeyRing.typ, 'at-nskey-ring+jws');
       expect(EnvelopeType.secretEnvelope.typ, 'at-secret-envelope+jws');
+      expect(EnvelopeType.verifiedAdvertisement.typ,
+          'at-verified-advertisement+jws');
 
       // Every value is distinct — the whole mechanism is that two uses cannot
       // be confused, and two enum entries sharing a spelling would confuse
@@ -849,9 +977,11 @@ void main() {
       expect(
           utf8.decode(PqSigningChain.rootLinkSignableBytes(
               PqSigningChain.linkPayload(
-                  childEnrollmentId: 'c1', childApkamPublicKey: 'PK'))),
+                  'c1',
+                  ApskSigningKey(
+                      kid: 'k1', alg: SigningAlgoType.rsa2048, pub: 'PK')))),
           'at-root-link:'
-          '{"v":1,"childEnrollmentId":"c1","apkamPublicKey":"PK"}');
+          '{"v":2,"enrollmentId":"c1","kid":"k1","alg":"rsa2048","pub":"PK"}');
     });
 
     test('the envelope members, their order, and unpadded base64url', () {

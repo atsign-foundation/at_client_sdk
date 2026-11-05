@@ -1,3 +1,55 @@
+## 5.25.0
+
+- chore: `VerbSyntax.stream` and `Response.isStream` are deprecated:
+  atServers no longer support the stream verb, and both are removed in
+  6.0.0.
+
+## 5.24.0
+
+- feat: `otp:list`, `otp:delete:<otp>` and `otp:delete:spp` in
+  `VerbSyntax.otp`, so a client can list an atServer's active passcodes and
+  withdraw one. `otp:delete` must name what it deletes, and `:ttl:` follows
+  only `get` and `put`. An atServer that accepts them lists
+  `InfoFeature.otpList` (`otp.list`) and `InfoFeature.otpDelete`
+  (`otp.delete`) in its `info` features; one that does not refuses them as a
+  syntax error.
+
+## 5.23.0
+
+- feat: `enroll:link`, for writing links that vouch for an enrollment's
+  client data signing keys: `EnrollOperationEnum.link`, and `links` on
+  `EnrollParams` and `EnrollVerbBuilder`.
+
+## 5.22.0
+
+- feat: `InfoFeature.notifyText` (`notify.text`), the name under which an
+  atServer's `info` lists text notifications; an atServer that refuses them
+  lists it as `Retired`.
+
+## 5.21.0
+
+- feat: an atSign has at most 55 characters after its `@`. `toAtsign` and
+  `Atsign` refuse a longer one with `InvalidAtSignException`
+  (`AtMessage.tooLong`).
+
+## 5.20.0
+
+- feat: `AtConstants.atTelemetrySigningPrivateKey`
+  (`privatekey:at_telemetry_signing_privatekey`) and
+  `AtConstants.atTelemetrySigningPublicKey`
+  (`public:_at_telemetry_signing_publickey.__atserver`) are reserved keys.
+  Both are marked `@experimental` while telemetry signing is in early stages.
+
+## 5.19.0
+
+- feat: a notification can carry its own expiry (`eAtn`) instead of `ttln`,
+  and an update can be marked ephemeral (`eph`), which no atServer persists.
+  Send them only to an atServer whose `info` lists `notify.eAtn` and
+  `notify.eph`.
+- feat: `InfoFeatures` reads the `features` an atServer lists in its `info`
+  reply, with `InfoFeature` and `InfoFeatureStatus` naming them: a feature
+  counts unless it is `Retired`, and one that is not `GA` warns once.
+
 ## 5.18.0
 
 - feat: `StoppedException`, thrown by the work of a stopped `AtClient` and by

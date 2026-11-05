@@ -1,6 +1,3 @@
-// The retrofit surface is @experimental; driving it is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq', 'legacy-server'])
 library;
 
@@ -8,7 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_end2end_test/config/config_util.dart';
@@ -103,7 +100,9 @@ void main() {
     final rootDomain = AtRootDomain(ConfigUtil.getYaml()['root_server']['url'],
         ConfigUtil.getYaml()['root_server']['port'] ?? 64);
     final enrollmentId = await Atsign(atSign)
-        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestPreferences.atDirectory);
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
@@ -144,6 +143,8 @@ void main() {
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
             posture: PqPosture.legacy, device: 'b01-priv-rf-$runId'),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestPreferences.atDirectory,
         storage: TestPreferences.getInstance()
             .storageForCoLocatedClient(atSign, device: 'b01-priv-rf-$runId'),
         appName: 'b01-priv',
@@ -209,6 +210,8 @@ void main() {
         session: session,
         preference: TestPreferences.getInstance().forCoLocatedClient(atSign,
             posture: PqPosture.legacy, device: 'b01-scoped-rf-$runId'),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestPreferences.atDirectory,
         storage: TestPreferences.getInstance()
             .storageForCoLocatedClient(atSign, device: 'b01-scoped-rf-$runId'),
         appName: 'b01-scoped',

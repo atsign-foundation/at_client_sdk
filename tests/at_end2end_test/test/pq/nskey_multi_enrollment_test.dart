@@ -1,7 +1,3 @@
-// The nskey and enrollment surfaces are @experimental; driving them from
-// another package is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -215,11 +211,34 @@ void main() {
         reason: 'and a different one from the client that wrote the first '
             'record');
 
-    // alice2 mints NOTHING for itself: a sender seals to the recipient's
-    // published namespace key, so it needs no generation of its own.
+    // alice2 mints NOTHING for itself: it seals the share to @bob's published
+    // key and its own sibling copy to the generation alice1 minted.
     final aliceSecondRing = PublishedNskeyKeyRing(aliceSecond.client);
     aliceSecond.client.getPreferences()!.crypto =
         CryptoConfig.nskey(keyRing: aliceSecondRing);
+
+    // A client seals to its own atSign's key only when it holds the private,
+    // and UC-A4.3's table gives aE2 that private. Approval conveys it in
+    // production; it is copied from alice1's keyfile here, because the
+    // conveyance is proven live by the functional pack's rollout ladder.
+    final heldByFirst = (await NskeyPrivateFiling(
+                keysIo: aliceClient.atKeysIo!, atSign: alice)
+            .readAll())[sharedNamespace] ??
+        const {};
+    expect(heldByFirst, isNotEmpty,
+        reason: 'alice1 minted the generation its first share sealed the '
+            'sibling copy to, so it holds that private');
+    final secondFiling =
+        NskeyPrivateFiling(keysIo: aliceSecond.client.atKeysIo!, atSign: alice);
+    for (final held in heldByFirst.entries) {
+      expect(
+          await secondFiling.file(Secret(
+            namespace: sharedNamespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}${held.key}',
+            value: base64Encode(held.value.bytes),
+          )),
+          isTrue);
+    }
 
     final secondKeyName = 'multishare2${DateTime.now().microsecondsSinceEpoch}';
     const secondPlaintext = 'written by alice\'s other enrollment';
@@ -261,6 +280,20 @@ void main() {
             'it did not matter which of alice\'s enrollments wrote the '
             'record — the seal is to (owner, namespace) on the RECIPIENT side '
             'and carries no sender identity a reader has to hold');
+
+    // And alice1 reads what alice2 shared. alice2 cut that content key, so
+    // alice1 never held it: it opens it from alice2's sibling copy, sealed to
+    // the namespace key alice1 minted. Read from the atServer: this fixture
+    // syncs only the suite namespace, so nothing in this one reaches alice1's
+    // local storage.
+    expect(
+        (await aliceClient.get(fromAliceSecond(),
+                getRequestOptions: GetRequestOptions()
+                  ..useRemoteAtServer = true))
+            .value,
+        secondPlaintext,
+        reason: 'every authorised reader on the SENDING side reads it too, '
+            'whichever of alice\'s enrollments wrote it');
 
     // ── And what an UNAUTHORISED enrollment of @bob can reach ─────────────
     //

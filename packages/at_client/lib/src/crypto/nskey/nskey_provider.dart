@@ -2,11 +2,20 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/crypto/backends/crypto_backends.dart'
+    show xWingKem;
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show heldOwnAfterStartUpAsk;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show requireRecordAtSign, requireRecordKid, requireRecordNamespace;
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart'
+    show StartUpSeeding;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64, pqSealToBase64;
+import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_commons/at_commons.dart';
 
 /// The provider id that conveys a content key sealed to a [keyAlgo] nskey, or
@@ -49,10 +58,14 @@ class NskeyRecipientKind {
 /// anything, and is as current as this is.
 ///
 /// There is no post-quantum fallback to offer: the only atSign-level key is a
-/// signing root, which cannot receive an encapsulation. The escape hatch is the
-/// legacy path, and it is opt-in
-/// ([AtClientPreference.allowLegacyCryptoFallback]) because a silent downgrade
-/// to RSA is exactly what this design exists to stop.
+/// signing root, which cannot receive an encapsulation. Below
+/// `PqPosture.pqActive`, `AtClientPreference.allowLegacyCryptoFallback` sends
+/// such a write by the legacy path instead; at `pqActive` nothing does, since
+/// a silent downgrade to RSA is what that posture refuses.
+///
+/// When this client's own start-up has yet to publish the key, a write waits
+/// for it first, at most 30 seconds; this then says so, and a later write
+/// succeeds once the key is published.
 class NamespaceKeyUnavailableException extends AtEncryptionException {
   /// The atSign whose namespace key is missing — the recipient for a share, or
   /// the writer for self data.
@@ -60,11 +73,13 @@ class NamespaceKeyUnavailableException extends AtEncryptionException {
 
   final String namespace;
 
-  NamespaceKeyUnavailableException(this.atSign, this.namespace)
-      : super('$atSign has no published nskey for "$namespace" — that '
-            'namespace has not been used or authorised there, so there is no '
-            'post-quantum key to seal a content key to. Reaching it needs the '
-            'legacy path, which must be opted into explicitly.');
+  /// [because], when given, says why in place of the usual explanation.
+  NamespaceKeyUnavailableException(this.atSign, this.namespace,
+      {String? because})
+      : super('$atSign has no published nskey for "$namespace" — '
+            '${because ?? 'that namespace has not been used or authorised '
+                'there, so there is no post-quantum key to seal a content key '
+                'to'}.');
 }
 
 /// Layer 2 of the nskey data path: conveys a symmetric content key.
@@ -93,9 +108,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     required this.cache,
     this.keyAlgo = SecretSharingAlgos.xWing,
     AtKemAlgorithm? kem,
-  }) : _kem = kem ??
-            SecretSharingAlgos.kemFor(keyAlgo) ??
-            XWingPureDartAlgo.instance;
+  }) : _kem = kem ?? SecretSharingAlgos.kemFor(keyAlgo) ?? xWingKem;
 
   /// The nskey data path is scoped to `(owner, namespace)` throughout — the key
   /// ring, the CK cache and the HPKE binding all take a namespace — so a key
@@ -114,14 +127,15 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   String get id => nskeyProviderIdFor(keyAlgo) ?? nskeyCryptoProviderId;
 
   /// The strongest `pqSeal` construction both this provider and the
-  /// destination can handle, or null if there is no overlap.
+  /// destination can handle, given the [suites] the destination opens, or null
+  /// if there is no overlap.
   ///
   /// No overlap is a refusal, not a fallback to this build's preference: the
   /// owner would get a conveyance it cannot unwrap, and the failure would
   /// surface on their side as an AEAD error naming nothing.
-  int? _sealVersionFor(NskeyAdvertisement advertised) {
+  int? _sealVersionFor(List<String> suites) {
     final suite = SecretSharingAlgos.bestSuiteBetween(
-        SecretSharingAlgos.openableSuitesFor(keyAlgo), advertised.suites);
+        SecretSharingAlgos.openableSuitesFor(keyAlgo), suites);
     return suite == null ? null : SecretSharingAlgos.sealVersionFor(suite);
   }
 
@@ -139,34 +153,74 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   static Uint8List _info(String sharedBy, String namespace) =>
       Uint8List.fromList(utf8.encode('$_infoLabel:$sharedBy:$namespace'));
 
+  /// Seals the CK in [plaintext] into [atKey]'s conveyance record.
+  ///
+  /// A **sibling copy** — the sender's own record of a key it shares — arrives
+  /// with `appMetadata` naming the recipient as `destination` and the level of
+  /// the sender's key as `ns`; it is sealed at that level and records the scope
+  /// it is filed under, since the pipeline that writes it cannot. One that also
+  /// names `sealTo` is sealed to that generation of the sender's own key, whose
+  /// private this client holds, instead of the one advertised.
   @override
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
     final nskeyOwner = _nskeyOwnerOf(atKey);
-    final namespace = _namespaceOf(atKey);
-
-    final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
-    if (advertised == null) {
-      throw NamespaceKeyUnavailableException(nskeyOwner, namespace);
-    }
+    final sibling = _siblingCopyOf(atKey);
+    final namespace = sibling?.sealNs ?? _namespaceOf(atKey);
+    final cutBy = context.atClient.enrollmentId;
 
     final ck = ContentKey.fromBase64(plaintext);
 
-    // NOTE: seal to the ENTRY under this provider's own KEM, never to
-    // `NskeyAdvertisement.alg`/`.publicKey`/`.nskeyKid` — those answer for a
-    // single entry, so on an advertisement carrying two they encapsulate to the
-    // wrong key and stamp a kid the owner never looks for.
-    final entry = advertised.usableFor([keyAlgo]);
-    if (entry == null) {
-      throw AtEncryptionException('$nskeyOwner:$namespace advertises '
-          '${advertised.keys.map((k) => k.alg).toSet().join(', ')}, '
-          'and $id can only seal to $keyAlgo');
+    final PackageKey entry;
+    final List<String> suites;
+    final sealTo = sibling?.sealTo;
+    if (sealTo != null) {
+      final held = await keyRing.heldPublic(nskeyOwner, namespace, sealTo);
+      if (held == null) {
+        throw NskeyPrivateNotHeldException(nskeyOwner, namespace, sealTo);
+      }
+      if (held.alg != keyAlgo) {
+        throw AtEncryptionException('$nskeyOwner:$namespace generation '
+            '$sealTo is a ${held.alg} key, and $id can only seal to $keyAlgo');
+      }
+      entry = held;
+      suites = SecretSharingAlgos.openableSuitesFor(held.alg);
+    } else {
+      final advertised = await keyRing.currentPublic(nskeyOwner, namespace);
+      if (advertised == null) {
+        throw NamespaceKeyUnavailableException(nskeyOwner, namespace);
+      }
+      // NOTE: seal to the ENTRY under this provider's own KEM, never to
+      // `NskeyAdvertisement.alg`/`.publicKey`/`.nskeyKid` — those answer for a
+      // single entry, so on an advertisement carrying two they encapsulate to
+      // the wrong key and stamp a kid the owner never looks for.
+      final usable = advertised.usableFor([keyAlgo]);
+      if (usable == null) {
+        throw AtEncryptionException('$nskeyOwner:$namespace advertises '
+            '${advertised.keys.map((k) => k.alg).toSet().join(', ')}, '
+            'and $id can only seal to $keyAlgo');
+      }
+      // NOTE: own-atSign keys only, sealed to the public half the held private
+      // derives. A peer's private is never held, so a share can rest only on
+      // the advertisement's signature.
+      if (nskeyOwner == context.atClient.getCurrentAtSign()) {
+        final held = await heldOwnAfterStartUpAsk(
+            keyRing, nskeyOwner, namespace, usable.kid,
+            until: StartUpSeeding.boundFromNow());
+        if (held == null) {
+          throw NskeyPrivateNotHeldException(nskeyOwner, namespace, usable.kid);
+        }
+        entry = held;
+      } else {
+        entry = usable;
+      }
+      suites = advertised.suites;
     }
-    final int? version = _sealVersionFor(advertised);
+    final int? version = _sealVersionFor(suites);
     if (version == null) {
       throw AtEncryptionException(
           '$nskeyOwner:$namespace advertises a ${entry.alg} nskey opening '
-          '${advertised.suites}, and $id produces '
+          '$suites, and $id produces '
           '${SecretSharingAlgos.openableSuitesFor(keyAlgo)} — no shared '
           'construction, so nothing is sealed rather than sealing something '
           'they cannot open');
@@ -191,6 +245,18 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
         // the wire string — AtKey.fromString cuts at the last dot, so
         // `<ckKid>.__ck.app_1.my_apps` parses back as `my_apps`.
         'ns': namespace,
+        if (sibling != null) ...{
+          'destination': sibling.destination,
+          'ckNs': _namespaceOf(atKey),
+        },
+        // NOTE: only this enrollment collects the key once nothing cites it;
+        // a sibling cannot tell a key about to be cited from an unused one.
+        // `cutAt` keeps the cut on the record, so its grace counts from the
+        // cut wherever it is read, not from when it reached a client's store.
+        if (cutBy != null) ...{
+          'cutBy': cutBy,
+          'cutAt': DateTime.now().toUtc().toIso8601String(),
+        },
       },
     );
 
@@ -198,7 +264,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // transformer, with the write still to come, so promoting a CK whose
     // conveyance never reaches storage leaves `CkManager.ensureCurrent`
     // skipping it forever. The manager promotes it once the write returns.
-    cache.put(nskeyOwner, namespace, ck);
+    cache.put(sibling?.destination ?? nskeyOwner,
+        sibling == null ? namespace : _namespaceOf(atKey), ck);
 
     return envelope;
   }
@@ -211,7 +278,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // NOTE: the record states its own namespace, because a conveyance key
     // re-parsed from the wire mis-splits a multi-segment one — both the private
     // lookup and the HPKE binding would then be wrong.
-    final namespace = additional?['ns'] as String? ?? _namespaceOf(atKey);
+    final namespace = requireRecordNamespace(
+        additional?['ns'] as String? ?? _namespaceOf(atKey), 'namespace');
+    final filedUnder = _filingScopeOf(atKey, additional, nskeyOwner, namespace);
 
     final nskeyKid = additional?['nskeyKid'];
     if (nskeyKid is! String) {
@@ -219,8 +288,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           'an $nskeyCryptoProviderId record must name the nskey generation it '
           'was sealed to in appMetadata.nskeyKid');
     }
+    requireRecordKid(nskeyKid, 'nskeyKid');
 
-    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid);
+    final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid,
+        writtenBy: _recordOwnerOf(atKey));
     if (private == null) {
       // NOTE: the notification service parks on this type and re-drives it when
       // the private is filed, so the retry must not depend on the wording.
@@ -228,8 +299,8 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           nskeyOwner,
           namespace,
           nskeyKid,
-          'this client is not authorised for the namespace, or has not yet '
-          'received that generation');
+          'its private key has not yet been conveyed to this enrollment, or '
+          'this enrollment is not authorised for the namespace');
     }
 
     final Uint8List ckBytes;
@@ -251,8 +322,57 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // NOTE: cached but not made current — sync is unordered, so this conveyance
     // may be older than the CK new writes are already using.
     final ck = ContentKey(ckBytes);
-    cache.put(nskeyOwner, namespace, ck);
+    cache.put(filedUnder.owner, filedUnder.namespace, ck);
     return ck.toBase64();
+  }
+
+  /// The recipient, seal level and any held generation a sibling copy is being
+  /// written with, or null for any other conveyance.
+  static ({String destination, String sealNs, String? sealTo})? _siblingCopyOf(
+      AtKey atKey) {
+    final additional = atKey.metadata.appMetadata?.additional;
+    final destination = additional?['destination'];
+    if (destination == null) return null;
+    if (destination is! String || _hasRecipient(atKey)) {
+      throw AtEncryptionException('only a sender\'s own record can name the '
+          'recipient of a content key it shares; ${atKey.sharedWith} is this '
+          'record\'s recipient');
+    }
+    final sealTo = additional?['sealTo'];
+    return (
+      destination: destination,
+      sealNs: additional?['ns'] as String? ?? _namespaceOf(atKey),
+      sealTo: sealTo is String ? sealTo : null,
+    );
+  }
+
+  /// Whose CK cache scope an opened conveyance belongs to: the recipient a
+  /// sibling copy names, else the nskey owner's own.
+  static ({String owner, String namespace}) _filingScopeOf(AtKey atKey,
+      Map<String, dynamic>? additional, String nskeyOwner, String namespace) {
+    final destination = additional?['destination'];
+    if (destination == null) return (owner: nskeyOwner, namespace: namespace);
+    final ckNs = additional?['ckNs'];
+    if (_hasRecipient(atKey)) {
+      throw AtDecryptionException('only a sender\'s own record can name the '
+          'recipient of a content key it shares, and this one has a recipient, '
+          '${atKey.sharedWith}');
+    }
+    if (destination is! String || ckNs is! String) {
+      throw AtDecryptionException('a sibling copy must name the recipient and '
+          'the namespace its key is filed under, as destination and ckNs');
+    }
+    return (
+      owner: requireRecordAtSign(destination, 'destination'),
+      namespace: requireRecordNamespace(ckNs, 'ckNs'),
+    );
+  }
+
+  static bool _hasRecipient(AtKey atKey) {
+    final sharedWith = atKey.sharedWith;
+    return sharedWith != null &&
+        sharedWith.isNotEmpty &&
+        sharedWith != atKey.sharedBy;
   }
 
   /// Who owns the *record* — what the HPKE `info` binds, so an envelope sealed

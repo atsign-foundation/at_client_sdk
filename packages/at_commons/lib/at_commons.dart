@@ -29,6 +29,7 @@ export 'package:at_commons/src/verb/batch/batch_response.dart';
 export 'package:at_commons/src/verb/operation_enum.dart';
 export 'package:at_commons/src/verb/response.dart';
 export 'package:at_commons/src/verb/syntax.dart';
+export 'package:at_commons/src/verb/info_features.dart';
 export 'package:at_commons/src/verb/update_json.dart';
 export 'package:at_commons/src/verb/verb_util.dart';
 export 'package:at_commons/src/auth/auth_mode.dart';

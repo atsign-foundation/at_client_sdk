@@ -1,7 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -20,7 +19,7 @@ class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   final AtSignLogger logger = AtSignLogger('TestEnvelopeSigner');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings;
 
   TestEnvelopeSigner(this.atClient, {this.publicKeyCacheSettings});
 }
@@ -138,13 +137,60 @@ void main() {
     });
   });
 
+  group('a key the atServer moved', () {
+    /// B's lookups of A's `_apsk`: only [location] holds it, or nothing does.
+    void stubApskAt(String? location) {
+      when(() => atClientB.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments.first.toString();
+        if (location != null &&
+            key == 'public:_apsk.enroll-a.$location$atSign') {
+          return AtValue()..value = pkamPublicKey(keyA);
+        }
+        throw AtKeyNotFoundException('$key not found');
+      });
+    }
+
+    test('to .r.__e is refused as revoked or superseded', () async {
+      stubApskAt('r.__e');
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(isA<WithdrawnSigningKeyException>()
+              .having((e) => e.location, 'location', 'r.__e')
+              .having((e) => e.message, 'message',
+                  contains('revoked or superseded'))));
+    });
+
+    test('to .d.__e is refused as deleted or expired', () async {
+      stubApskAt('d.__e');
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(isA<WithdrawnSigningKeyException>()
+              .having((e) => e.location, 'location', 'd.__e')
+              .having((e) => e.message, 'message',
+                  contains('deleted or expired'))));
+    });
+
+    test('at none of the three fails as not found — the control', () async {
+      stubApskAt(null);
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await expectLater(
+          verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
+          throwsA(allOf(isA<AtKeyNotFoundException>(),
+              isNot(isA<WithdrawnSigningKeyException>()))));
+    });
+  });
+
   group('public key caching', () {
     test('with caching enabled, the _apsk key is fetched only once', () async {
       final cachingVerifier = TestEnvelopeSigner(atClientB,
-          publicKeyCacheSettings: (
-            cacheExpiry: Duration(minutes: 1),
-            resetOnLookup: false
-          ));
+          publicKeyCacheSettings: (cacheExpiry: Duration(minutes: 1)));
       stubApskGet(atClientB, pkamPublicKey(keyA));
 
       final envelope = await signerA.wrapAndSign({'a': 1});
@@ -160,10 +206,7 @@ void main() {
     test('an expired entry is fetched again, with no timer left to purge it',
         () async {
       final cachingVerifier = TestEnvelopeSigner(atClientB,
-          publicKeyCacheSettings: (
-            cacheExpiry: Duration(milliseconds: 50),
-            resetOnLookup: false
-          ));
+          publicKeyCacheSettings: (cacheExpiry: Duration(milliseconds: 50)));
       stubApskGet(atClientB, pkamPublicKey(keyA));
 
       final envelope = await signerA.wrapAndSign({'a': 1});
@@ -191,10 +234,7 @@ void main() {
 
     test('cachePubKey drops expired entries on insert', () async {
       final cachingVerifier = TestEnvelopeSigner(atClientB,
-          publicKeyCacheSettings: (
-            cacheExpiry: Duration(milliseconds: 50),
-            resetOnLookup: false
-          ));
+          publicKeyCacheSettings: (cacheExpiry: Duration(milliseconds: 50)));
 
       cachingVerifier.cachePubKey('@alice', 'enrollA', 'keyA');
       expect(cachingVerifier.pubKeyCache, hasLength(1));
@@ -204,6 +244,106 @@ void main() {
       cachingVerifier.cachePubKey('@bob', 'enrollB', 'keyB');
       expect(cachingVerifier.pubKeyCache, hasLength(1));
       expect(cachingVerifier.pubKeyCache.keys.single, '@bob#enrollB');
+    });
+
+    test('an entry expires a fixed time after its fetch, however often used',
+        () async {
+      final cachingVerifier = AtClientEnvelopeSigner(atClientB,
+          publicKeyCacheSettings: (cacheExpiry: Duration(milliseconds: 200)));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await cachingVerifier.verifyEnvelopeSignature(envelope,
+          signerAtSign: atSign);
+      for (var i = 0; i < 4; i++) {
+        await Future.delayed(const Duration(milliseconds: 70));
+        await cachingVerifier.verifyEnvelopeSignature(envelope,
+            signerAtSign: atSign);
+      }
+
+      expect(
+          verify(() => atClientB.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions'))).callCount,
+          2,
+          reason: 'fetched at the start and again once 200ms had passed; a '
+              'hit that reset the expiry would keep a stale entry alive for '
+              'as long as it kept being used');
+    });
+
+    test('a failed verification evicts the entry and fetches once more',
+        () async {
+      final cachingVerifier = AtClientEnvelopeSigner(atClientB);
+      // A stale entry: the key A published before it rotated to the one it
+      // signs with now.
+      cachingVerifier.cachePubKey(atSign, 'enroll-a', pkamPublicKey(keyB));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await cachingVerifier.verifyEnvelopeSignature(envelope,
+          signerAtSign: atSign);
+
+      verify(() => atClientB.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).called(1);
+    });
+
+    test('and fails if the fresh key does not verify either — the control',
+        () async {
+      final cachingVerifier = AtClientEnvelopeSigner(atClientB);
+      cachingVerifier.cachePubKey(atSign, 'enroll-a', pkamPublicKey(keyB));
+      stubApskGet(atClientB, pkamPublicKey(keyB));
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await expectLater(
+          cachingVerifier.verifyEnvelopeSignature(envelope,
+              signerAtSign: atSign),
+          throwsA(isA<AtSigningVerificationException>()));
+      verify(() => atClientB.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).called(1);
+    });
+
+    test('signers built on one AtClient share one cache', () async {
+      stubApskGet(atClientB, pkamPublicKey(keyA));
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await AtClientEnvelopeSigner(atClientB)
+          .verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+      await AtClientEnvelopeSigner(atClientB)
+          .verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+
+      verify(() => atClientB.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).called(1);
+    });
+
+    test(
+        'an enrollment id that cannot name an _apsk record is refused before '
+        'anything is fetched', () async {
+      stubApskGet(atClientB, pkamPublicKey(keyA));
+
+      for (final id in ['enroll-a\n', 'enroll.a', 'enroll:a', '']) {
+        await expectLater(verifierB.getApkamPublicKey(atSign, id),
+            throwsA(isA<AtSigningVerificationException>()),
+            reason: 'an id of ${id.length} characters');
+      }
+      verifyNever(() => atClientB.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions')));
+
+      expect(await verifierB.getApkamPublicKey(atSign, 'enroll-a'),
+          pkamPublicKey(keyA),
+          reason: 'the premise: an enrollment id has its _apsk fetched');
+    });
+
+    test('signers on different AtClients do not — the control', () async {
+      stubApskGet(atClientA, pkamPublicKey(keyA));
+      stubApskGet(atClientB, pkamPublicKey(keyA));
+      final envelope = await signerA.wrapAndSign({'a': 1});
+
+      await AtClientEnvelopeSigner(atClientA)
+          .verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+      await AtClientEnvelopeSigner(atClientB)
+          .verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+
+      verify(() => atClientB.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).called(1);
     });
   });
 }

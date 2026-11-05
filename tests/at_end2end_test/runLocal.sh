@@ -11,12 +11,22 @@ set -euo pipefail
 #   ./runLocal.sh 26000 test/pq        # post-quantum only
 #   ./runLocal.sh 26000 test -x pq     # everything except post-quantum
 #
+# The base port is the first argument when that is a number, else
+# VIRTUALENV_BASE_PORT, else 26000. A base given either way also names the
+# compose project after it, so a run in another checkout never takes this one's
+# container down. A second run of this pack in this checkout waits for the
+# first to finish.
+#
 # The default EXCLUDES the `legacy-server` tag: that row (UC-B0.1) wants a
 # PINNED PRE-PQ atServer, and against the newest local build it does not fail
 # usefully — it stops testing anything. Run it deliberately, with the pin:
 #
 #   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 \
 #     ./runLocal.sh 26000 test/pq -t legacy-server
+#
+# A pinned image's certificates expire. When they have, the runner mounts
+# renewed ones from atsigncompany/virtualenv:dev_env over them
+# (test/fetch_certs.sh, test/certs-overlay.yaml).
 #
 # The default path `test` recurses into test/pq/, so a bare run covers both
 # sets. CI does not: `dart_test.yaml` allowlists what a bare `dart test` may
@@ -27,8 +37,21 @@ set -euo pipefail
 # Generates atKeys + config/config.yaml (test/local_setup.dart) from at_demo_data
 # for the PKAM demo atSigns, then runs the tests. Both are gitignored.
 
-BASE_PORT="${1:-26000}"
-shift || true
+cd "$(dirname "$0")"
+source ../lib/rig_lock.sh
+
+if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+  VIRTUALENV_BASE_PORT="$1"
+  shift
+fi
+if [[ -n "${VIRTUALENV_BASE_PORT:-}" ]]; then
+  if [[ ! "$VIRTUALENV_BASE_PORT" =~ ^[0-9]+$ ]]; then
+    echo "*** Not a base port: ${VIRTUALENV_BASE_PORT}" >&2
+    exit 2
+  fi
+  export COMPOSE_PROJECT_NAME="at_end2end_test-${VIRTUALENV_BASE_PORT}"
+fi
+BASE_PORT="${VIRTUALENV_BASE_PORT:-26000}"
 # `A && B` as a bare statement under `set -e` exits the script whenever A is
 # false, so the default goes in an if.
 if [[ $# -eq 0 ]]; then
@@ -52,9 +75,15 @@ export VE_TOP_PORT=$((BASE_PORT + 99))
 # range 0..47: 48` out of pkamAuthenticate.
 export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
-cd "$(dirname "$0")"
+lock_pack
 
-echo "*** Getting dependencies" && dart pub get
+echo "*** Getting dependencies" && pub_get_locked
+
+# The one virtualenv service, addressed through compose so the container's
+# name, which depends on the project name, never has to be spelled out.
+ve() {
+  docker compose -f test/docker-compose.yaml exec -T virtualenv "$@"
+}
 
 cd test
 echo "*** docker compose down" && docker compose down
@@ -65,8 +94,17 @@ if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
 else
   echo "*** docker compose pull SKIPPED (local image ${VIRTUALENV_IMAGE})"
 fi
+# A release-pinned image keeps the certificates it was built with, and they
+# expire. When they have, mount renewed ones over them.
+COMPOSE_FILES=(-f docker-compose.yaml)
+if ! docker run --rm --network none --entrypoint openssl "$VIRTUALENV_IMAGE" \
+    x509 -checkend 0 -noout -in /atsign/root/certs/fullchain.pem >/dev/null; then
+  echo "*** ${VIRTUALENV_IMAGE}'s certificates have expired; mounting renewed ones"
+  ./fetch_certs.sh
+  COMPOSE_FILES+=(-f certs-overlay.yaml)
+fi
 echo "*** docker compose up (base port ${BASE_PORT}, range ${BASE_PORT}-${VE_TOP_PORT})"
-docker compose up -d
+docker compose "${COMPOSE_FILES[@]}" up -d
 cd ..
 
 # `supervisorctl status` exits non-zero whenever ANY program is not RUNNING,
@@ -80,7 +118,7 @@ echo "*** Waiting for supervisor"
 # exit-code check.
 ready=
 for i in $(seq 1 30); do
-  status=$(docker exec e2e_virtualenv supervisorctl status 2>/dev/null || true)
+  status=$(ve supervisorctl status 2>/dev/null || true)
   if printf '%s\n' "$status" | grep -qE '_root +RUNNING'; then
     ready=1
     break
@@ -88,14 +126,14 @@ for i in $(seq 1 30); do
   sleep 2
 done
 if [[ -z "$ready" ]]; then
-  docker exec e2e_virtualenv supervisorctl status || true
+  ve supervisorctl status || true
   echo "*** atDirectory did not reach RUNNING within 60s - aborting"
   exit 1
 fi
 
 echo "*** Starting pkamLoad"
 for i in $(seq 1 30); do
-  if docker exec e2e_virtualenv supervisorctl start pkamLoad >/dev/null 2>&1; then
+  if ve supervisorctl start pkamLoad >/dev/null 2>&1; then
     echo "    pkamLoad started"
     break
   fi

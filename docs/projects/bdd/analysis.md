@@ -122,7 +122,7 @@ CI emits the stream from five jobs across two workflows
 (`grep -n 'file-reporter json' .github/workflows/*.yaml`): `unit_at_client`,
 `functional_tests`, `pqe2e_tests` and `legacy_server_tests` in `at_client_sdk.yaml`
 and the `build_and_test` matrix in `at_libraries.yaml`. The CLI pack's job
-(`functional_tests_at_onboarding_cli`, `at_libraries.yaml:303`) runs with no
+(`functional_tests_at_client_cli` in `at_libraries.yaml`) runs with no
 reporter and no upload, although it is a declared live pack with 3 citations, so a
 CI-rendered ledger can never show those rows exercised. Rendering is a local step
 (`tools/acceptance_ledger.sh`), by decision.
@@ -172,7 +172,7 @@ deliberately*. The current design provides:
 8. Unnumbered cross-cutting invariants that count as rows, cite tests, and cannot
    pin clauses.
 9. One catalogue row split into two scenarios by an `(a)`/`(b)` suffix the id
-   grammar ignores (98 use cases, 108 scenarios).
+   grammar ignores, so the use-case and scenario counts differ.
 10. A document that is design prose as well as acceptance rows, where only the Then
     structure is parsed.
 11. A status table and a headline sentence generated from the tree and guarded
@@ -217,12 +217,14 @@ factory, and a two-process driver.
 
 Two of the three take a base port, and the design is deliberate rather than
 incidental. `tests/at_functional_test/runLocal.sh` accepts one as its first argument
-(`./runLocal.sh 27000` puts the root at 27000, secondaries at 27001-27080 and Redis
+(`./runLocal.sh 27000` puts the root at 27000, secondaries at 27001-27098 and Redis
 at 27099), and its `docker-compose.yaml` header states the purpose: the shift exists
 "so it can run alongside another virtualenv (e.g. the e2e suite) on a different base
 port". `tests/at_end2end_test/runLocal.sh` takes the same argument, defaulting to
-26000, and its compose carries a top-level `name: at_end2end_test` and
-`container_name: e2e_virtualenv` so the two projects cannot collide. Both composes
+26000, and its compose carries a top-level `name: at_end2end_test` so the two
+projects cannot collide; a base passed or exported to either runner also names the
+compose project after it, so a run from another checkout on another base cannot take
+its container down. Both composes
 override the entrypoint to `/atsign/entrypoint.sh`, because the published image's own
 CMD runs supervisord directly and would ignore the variable. CI already relies on it:
 `pqe2e_tests` and `legacy_server_tests` run at 26000. On the Dart side
@@ -274,7 +276,7 @@ one-shot CRAM constraint that otherwise forces the retirement rule in
 
 The repo already contains two Gherkin files, and nothing has ever read them:
 `tests/at_functional_test/test_scenarios/atclient_apkam.feature` (4 scenarios) and
-`tests/at_onboarding_cli_functional_tests/test_scenarios/apkam/onboarding_cli.feature`
+`tests/at_client_cli_functional_tests/test_scenarios/apkam/onboarding_cli.feature`
 (6 scenarios), both added by Murali in March 2024; the first was hand-edited in June
 2025 to track an atServer error-code change, so it is maintained prose with no
 runner. `git grep -n -P '\.feature|test_scenarios' -- ':!*.feature'` returns nothing,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
@@ -33,13 +34,16 @@ class EnrollmentHandshake {
   /// Waits over [atLookup] for the enrollment in [enrollmentResponse] to be
   /// approved, then collects what the approval released into its keys.
   ///
-  /// [atLookup] is left open for the caller to close.
+  /// [atLookup] is left open for the caller to close. Once [cancelled]
+  /// completes, with a value or an error, no further poll starts and the wait
+  /// throws [StoppedException].
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     required Duration retryInterval,
     required bool logProgress,
     required int maxRetries,
     required AtLookupMuxable atLookup,
+    Future<void>? cancelled,
   }) async {
     if (enrollmentResponse.atSign == null ||
         enrollmentResponse.atSign!.isEmpty) {
@@ -58,7 +62,8 @@ class EnrollmentHandshake {
     await _handshake(enrollmentResponse, atLookup,
         retryInterval: retryInterval,
         logProgress: logProgress,
-        maxRetries: maxRetries);
+        maxRetries: maxRetries,
+        cancelled: cancelled);
   }
 
   Future<void> _handshake(
@@ -67,6 +72,7 @@ class EnrollmentHandshake {
     required Duration retryInterval,
     required bool logProgress,
     required int maxRetries,
+    Future<void>? cancelled,
   }) async {
 
     // PKAM here proves possession of this enrollment's APKAM keypair, which is
@@ -78,6 +84,8 @@ class EnrollmentHandshake {
     final AtKeys handshakeKeys = enrollmentResponse.atAuthKeys!;
     final String handshakeEnrollmentId = enrollmentResponse.enrollmentId;
 
+    // NOTE: a key source for the handshake alone, never a keyfile.
+    // ignore: invalid_use_of_visible_for_testing_member
     final memory = InMemoryAtKeysIo();
     await memory.write(enrollmentResponse.atSign!, handshakeKeys);
     atLookup.authenticator = authenticatorFor(
@@ -92,6 +100,7 @@ class EnrollmentHandshake {
       retryInterval,
       logProgress: logProgress,
       maxRetries: maxRetries,
+      cancelled: cancelled,
     );
 
     // fetch the following keys from the atServer
@@ -244,7 +253,23 @@ class EnrollmentHandshake {
     Duration retryInterval, {
     required bool logProgress,
     required int maxRetries,
+    Future<void>? cancelled,
   }) async {
+    var isCancelled = false;
+    Completer<void>? sleeping;
+    void cancel() {
+      isCancelled = true;
+      final pause = sleeping;
+      if (pause != null && !pause.isCompleted) pause.complete();
+    }
+
+    unawaited(
+        cancelled?.then((_) => cancel(), onError: (Object _) => cancel()));
+    StoppedException cancelledWait() => StoppedException(
+        'the wait for enrollment $enrollmentIdFromServer was cancelled');
+    // NOTE: one microtask, so a cancel that has already completed is seen
+    // before the first poll.
+    await Future<void>.value();
     // [maxRetries] is a budget for failures to REACH the atServer, and only
     // those. An enrollment nobody has decided yet is not a failure — the
     // decision is a person's, taken on their own schedule — so a pending
@@ -257,6 +282,7 @@ class EnrollmentHandshake {
     // atServer and understanding what it said are separate questions.
     int consecutiveUnresolvableRefusals = 0;
     while (true) {
+      if (isCancelled) throw cancelledWait();
       _logger.info('Attempting pkam auth');
       if (logProgress) {
         _progress.add('PKAM', 'attempting PKAM auth', ProgressEventType.info);
@@ -266,8 +292,9 @@ class EnrollmentHandshake {
       try {
         // _attemptPkamAuth returns boolean value true when authentication is successful.
         // Returns UnAuthenticatedException when authentication fails.
-        pkamAuthSucceeded = await atLookUp.pkamAuthenticate(
-            enrollmentId: enrollmentIdFromServer);
+        pkamAuthSucceeded = await atLookUp.pkamAuthenticate();
+      } on StoppedException {
+        rethrow;
       } on UnAuthenticatedException catch (e) {
         // A refusal is an ANSWER: the atServer was reached and reported on the
         // enrollment, so this costs nothing against the budget.
@@ -282,6 +309,16 @@ class EnrollmentHandshake {
         else if (e.message.contains('error:AT0025')) {
           throw AtEnrollmentException(
               'The enrollment: $enrollmentIdFromServer is denied');
+        }
+        // NOTE AT0028 also names a throttled request, but the atServer
+        // throttles enrollment requests, never PKAM, so here it means the
+        // enrollment expired or never existed.
+        else if (e.message.contains('error:AT0028')) {
+          final refusal = 'Enrollment $enrollmentIdFromServer has expired or '
+              'does not exist: ${e.message}';
+          _logger.severe(refusal);
+          _progress.add('PKAM', refusal, ProgressEventType.error);
+          throw AtEnrollmentException(refusal);
         } else {
           // Neither "not yet decided" nor "denied", so waiting cannot turn it
           // into an approval — an enrollment revoked mid-wait answers here,
@@ -320,6 +357,9 @@ class EnrollmentHandshake {
       if (reachedAtServer) {
         consecutiveUnreachable = 0;
       }
+      // NOTE: an approval that answers a poll made before the cancel ends
+      // with the cancel.
+      if (isCancelled) throw cancelledWait();
       if (pkamAuthSucceeded) {
         if (logProgress) {
           _progress.add(
@@ -339,7 +379,13 @@ class EnrollmentHandshake {
               ProgressEventType.info);
         }
         _logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
-        await Future.delayed(retryInterval); // Delay and retry
+        final pause = sleeping = Completer<void>();
+        final timer = Timer(retryInterval, () {
+          if (!pause.isCompleted) pause.complete();
+        });
+        await pause.future;
+        timer.cancel();
+        sleeping = null;
       }
     }
   }

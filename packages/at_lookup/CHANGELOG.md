@@ -1,196 +1,187 @@
-## 3.7.0-rc2
+## 4.0.0
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: `AtLookupImpl`'s constructor is internal to at_lookup; build a
+  lookup with `AtLookUp.withSecureSocket` or `withTransport`.
+- feat: `package:at_lookup/at_lookup_web.dart` reaches an atServer from a
+  browser: `webSocketLookUps()` finds it through the atDirectory over HTTPS
+  and connects over `wss://`; `fixedAddressWebSocketLookUps(host:, port:)`
+  connects every atSign to one atServer, for development.
+- feat: `AtLookUp.withTransport` builds a lookup over any transport.
+- fix: a closed connection is replaced on the next command rather than
+  written to. Over TLS, a close the atServer makes while notifications are
+  paused is seen once they resume.
+- fix: every command an authenticator sends goes on the connection its
+  authentication began on.
+- fix: stopping notifications while they are starting no longer closes a
+  connection the lookup has since logged in on, so the next command needs no
+  second login.
+- fix: nothing else goes out on a connection until its `onConnect` has
+  finished, and a connection whose `onConnect` fails is closed, so the next
+  call opens one and runs `onConnect` again.
+- fix: in a browser, a connect to an atServer gives up after the network
+  timeout, and closing a lookup stops a connect or atDirectory lookup still in
+  progress.
+- fix: an atDirectory answer longer than 512 bytes, or that is not a host
+  name and a port, is refused, over TLS as in a browser, and over TLS the
+  answer is read whole however it arrives. In a browser the atDirectory is
+  asked for the atSign in its canonical form; over TLS an atSign holding a
+  line feed is refused before any connection is made.
+- fix: in a browser, an atServer address the WebSocket constructor refuses
+  fails with `SecondaryConnectException`, as any other failure to connect does.
+- fix: a command holding a line feed before its end is refused, and none of
+  it is sent. `executeCommand` throws `IllegalArgumentException`, and
+  `executeVerb` an `AtLookUpException` with code AT0022, before the lookup
+  finds, connects to or logs in to the atServer; `AtCommandExecutor.sendSync`
+  and `AtConnection.write` throw `IllegalArgumentException`.
+- fix: a connection lost while authenticating is retried once on a fresh
+  connection; a second loss fails with `ConnectionInvalidException`.
+- fix: a lost connection fails a verb with `AT0004`, as other socket failures
+  do.
+- fix: setting `authenticator` takes effect on the next command that needs
+  authentication, which logs in again with it rather than running on the
+  previous authenticator's login.
+- breaking: `AtLookUp.connection` is an `AtConnection?`.
+- breaking: `CacheableSecondaryAddressFinder`, `SecureSocketUtil`,
+  `SecondaryUrlFinder`, `SecondaryAddressCacheEntry` and
+  `AtLookupSecureSocketFactory` now come from `at_lookup_io.dart`, not
+  `at_lookup.dart`.
+- feat: `FixedSecondaryAddressFinder` resolves every atSign to one fixed
+  address.
+- breaking: `AtLookupImpl` requires `secondaryAddressFinder` and
+  `transportFactory`, and no longer takes `secureSocketConfig` — that now
+  belongs to the transport factory. `AtLookUp.withSecureSocket` requires
+  `secondaryAddressFinder` too. Native callers can use
+  `secureSocketLookUps()` from `at_lookup_io.dart` instead.
+- breaking: `AtLookupImpl.findSecondary` is removed. Use a
+  `SecondaryAddressFinder`.
+- breaking: `AtLookUp.withSecureSocket`, `withTransport`, `AtLookupImpl`,
+  `secureSocketLookUps`, `webSocketLookUps` and `AtLookUpFactory` take no
+  `clientConfig`; give it to at_auth's `authenticatorFor`, which sends it in
+  `from:`.
+- breaking: `MonitorClient` is removed. It has no replacement.
+- breaking: `AtLookupTransport` takes a `transportFactory` (an
+  `AtTransportFactory`) in place of `socketFactory` and `secureSocketConfig`;
+  `secureSocketTransport(...)` callers are unaffected.
+- breaking: `AtConnection` no longer exposes a socket. `getSocket()` is gone —
+  read arriving bytes from `inbound`, write raw bytes with `add(List<int>)`,
+  and `write(String)` returns a `Future`. A connection is built over an
+  `AtTransport`, which an `AtTransportFactory` opens.
+- breaking: `AtLookupImpl`'s `secureSocketFactory` is now `transportFactory`
+  and takes an `AtTransportFactory`; `AtLookupSecureSocketListenerFactory` is
+  now `AtLookupMessageListenerFactory`. Anything constructing an
+  `OutboundConnectionImpl` itself changes with it, including code reaching
+  `src/connection/` through `implementation_imports`.
+- breaking: `AtLookUp`'s credential-ladder members (`atChops`, `enrollmentId`,
+  `signingAlgoType`, `hashingAlgoType`, `authenticate_cram`, and
+  `executeVerb`'s `sync` param) are removed. A connection's authenticated
+  enrollment is `connection?.getMetaData()?.authenticatedAsEnrollmentId`.
+- breaking: `AtLookUp`'s `update`, `lookup`, `plookup`, `llookup`, `delete`
+  and `scan` are removed, with `AtLookupMuxable.readResponse`. Run a verb
+  builder through `executeVerb` instead.
+- breaking: `cramAuthenticate`, `authenticate(privateKey)` and the
+  `privateKey` and `cramSecret` fields are removed. For CRAM, set
+  `authenticator` to at_auth's `authenticatorForCramSecret(...)` and call
+  `pkamAuthenticate()`.
+- breaking: `atLookupOverSecureSocket` is removed. Use
+  `AtLookUp.withSecureSocket` or `secureSocketLookUps()` with an
+  authenticator.
+- breaking: the `secondaryAddressFinder` setter is removed; pass the finder
+  when the lookup is built.
+- breaking: `pkamAuthenticate` takes no `enrollmentId`; the authenticator
+  decides. `authenticatedAsEnrollmentId` names the enrollment the atServer
+  accepted, after a reconnect too.
+- breaking: a failed write throws `AtIOException` on every transport; catch
+  it where you caught `SocketException`. `executeVerb` still reports it as
+  `AT0004`.
+- feat: `authenticator` and `stop()` are on `AtLookUp` itself, not only on
+  `AtLookupMuxable`.
+- fix: a `startNotifications` called while another is still starting joins
+  it, so one `monitor:` goes out however many callers ask; a start after
+  `stopNotifications` begins afresh.
+- fix: the commands a lookup logs carry `***` in place of the passcode in
+  `otp:put` and the `otp` an `enroll:` request carries.
+- build: no longer depends on `at_chops`.
 
-- fix: the listener reads the connection a line at a time, and each line is
-  one message from the atServer: the prompt that may precede it comes off,
-  and what it begins with says where it goes - `data:` and `error:` to the
-  reader waiting for a reply, `notification:` to whoever asked for
-  notifications. It used to look for a reply's terminating prompt instead, so
-  anything the atServer said first and did not terminate - an error line, a
-  banner, half a reply - sat in front of every notification after it and none
-  were recognised: the connection stayed up and the client went deaf with
-  nothing to see. A notification and a reply that arrive in one chunk now
-  both survive, where one of them used to be lost.
-- `AtLookupImpl.notificationReconnectDelays` is settable, so a test of what
-  happens across several outages does not spend a second on each.
-- chore: bump at_commons dependency to ^5.18.0.
-- fix: a TLS connect is bounded from the TCP connect to the end of the
-  handshake. `SecureSocket.connect(timeout:)` bounds only the TCP part, so a
-  peer that accepted the connection and never answered the handshake left
-  the connect waiting for ever, and its socket held the process open.
-- feat: `AtLookUp.close()` ends the lookup. Work in flight fails with
-  `StoppedException` at once, without waiting for it, every socket still
-  being opened for the lookup is closed (the atDirectory lookup's included,
-  mid-handshake or not), notifications stop with their reconnect loop and
-  heartbeat, and every later call throws `StoppedException` without touching
-  the network.
-  `AtLookupMuxable.dropConnection()` closes only the current connection and
-  leaves the lookup usable, which is what `close()` did before; a caller that
-  closed a lookup and went on using it calls that instead.
-- fix: a stop that lands while `startNotifications` is opening its connection
-  leaves notifications stopped and that connection closed. It used to send
-  `monitor:` anyway and start a heartbeat that nothing cancelled. A heartbeat
-  or reconnect attempt that a stop cuts short now ends quietly, rather than
-  logging a failure and closing the connection.
-- feat: `checkAtSignServer(lookUp, atSign)` reports whether an atSign is in
-  the atDirectory, whether its atServer answers and whether it is activated,
-  as an `AtSignServerState` with the cause of any failure. It asks over the
-  lookup it is given - that lookup's finder, that lookup's transport - so it
-  needs no `dart:io` of its own and the answer is about the route the caller's
-  connections take.
-- feat: `AtLookUpFactory`, the function type an application hands at_client's
-  entry points so that every connection a client opens travels the way the
-  application chose, and `secureSocketLookUps` in `at_lookup_io.dart`, the
-  default over TLS on TCP. `AtLookUp.withSecureSocket` takes `onConnect`, run
-  on each connection before anything else is sent on it, for a proxy that
-  needs `from:` first.
-- fix: a request in flight when this client closes the connection fails with
-  `ConnectionInvalidException('The connection was closed by this client
-  before a response arrived')`, where a connection the far end dropped still
-  reads `The connection went away before a response arrived`. Either is
-  logged once, at `info`, by the listener that failed the read; at_lookup no
-  longer logs it twice more at `severe` as an error in sending to the server.
-- fix: `createConnection` is single-flight. Two callers racing through it —
-  a `pkamAuthenticate` beside a verb's own authentication — each opened a
-  socket, the second replacing the first while the handshake ran on the
-  first, so the authenticated flag landed on a socket the atServer had seen
-  no PKAM on and every verb on it was refused as unauthenticated.
-- fix: opening and closing a connection, and sending the monitor command, are
-  logged at `finer` rather than `info`
+## 3.7.0
 
-## 3.7.0-rc1
-
-- feat: `AtLookupMuxable.notificationConnectionUp` — `true` when `monitor:` is
-  accepted on a live connection, `false` when it is lost or stopped
-
-- feat: `AtLookupMuxable`, an `AtLookUp` that also carries the atServer's
-  asynchronous notification stream, so one class knows both of the atServer's
-  framings instead of the framing code existing twice. `AtLookupImpl`
-  implements it: `notifications` is a **single-subscription** stream whose
-  pause reaches the socket, `startNotifications` sends `monitor:` under the
-  request-response mutex, and `stopNotifications` closes both. A broadcast
-  stream was rejected — it does not buffer, ignores pause and drops anything
-  arriving before a listener attaches, and each of those is a lost
-  notification, which is indistinguishable from one the atServer never sent.
-  **NB** This _enables_ callers (at_client) to re-use the same connection for
-  different purposes rather than creating (and authenticating) multiple 
-  connections. The hooks to make it easy for SDK users to choose that will 
-  be in a 4.x minor release after the pqc project has completed.
-
-- feat: `AtLookUp.withSecureSocket(...)` — the entry point, returning an
-  `AtLookupMuxable`. Static, so it adds nothing to the `implements` contract
-  and breaks none of the classes that mock `AtLookUp`. It takes an
-  `AtRootDomain` rather than a `String, int` pair, and requires both
-  `authenticator` (nullable, because "this connection never authenticates" is
-  a real mode that ought to be stated) and `transport`. No socket settings
-  appear in its signature: they belong to the transport.
-
-- feat: `OutboundMessageListener` keeps the subscription `listen()` used to
-  discard, and exposes `pauseDelivery`/`resumeDelivery`. That is what makes
-  back-pressure real: pausing stops reading the socket, so TCP closes the
-  window on the atServer rather than this process buffering without bound.
-  Note that `StreamSubscription` **counts** pauses — two need two resumes.
-
-- feat: the six credential members are `@Deprecated` — `atChops`,
-  `signingAlgoType`, `hashingAlgoType` and `enrollmentId` on both `AtLookUp`
-  and `AtLookupImpl`, plus `privateKey` and `cramSecret` on the impl.
-  Authentication runs through an injected `AtAuthenticator`, which at_auth
-  builds from whichever credential shape a caller holds, so at_lookup no
-  longer needs key material of its own. The fallback ladder still reads these
-  fields and nothing breaks; the fields and the ladder are removed together in
-  the next major. `signingAlgoType` and `hashingAlgoType` are one setting —
-  they are read on the same lines when the PKAM signature is built — so
-  deprecating either without the other would say the survivor lives on into
-  the major, which is not true.
-
-- feat: `AtLookupImpl` accepts an injected authenticator. Two new types,
-  `AtAuthenticator` and `AtCommandExecutor`, let a caller hand over the whole
-  of authentication as one closure instead of handing at_lookup a credential
-  to store. at_lookup cannot name `AtKeys` or `AtKeysIo` - they live in
-  at_auth, which depends on at_lookup - so the keystore, the enrollment and
-  the signing algorithm stay on the caller's side. When set, the
-  authenticator is preferred over the existing atChops/privateKey/cramSecret
-  ladder; when absent, nothing changes. Both routes work, and the ladder goes
-  once every caller supplies one.
-
-- feat: `OutboundMessageListener` can route asynchronous notifications, via a
-  new `onNotification` callback. The atServer frames the two kinds of message
-  differently - a verb response ends with a newline and the ready prompt
-  `@<atSign>@`, while a notification is a reply to nothing, so no prompt
-  follows it, and it ends at a bare newline. One listener now knows both. While
-  `onNotification` is null the second framing is not applied at all and parsing
-  is byte-for-byte what it was, because routing notifications to a callback
-  nobody installed would drop them.
-
-- feat: `OutboundMessageListener.read` waits on an event instead of polling.
-  It slept 10ms at a time and re-checked a queue, so every response carried up
-  to a polling interval of latency for no reason. It now sleeps until a
-  response is queued or until the nearer of its two deadlines, whichever comes
-  first.
-
-- feat: a connection records the identity it authenticated as.
-  `AtConnectionMetaData` gains `authenticatedAsEnrollmentId` and
-  `authenticatedAt` beside `isAuthenticated`, set by every path in
-  `AtLookupImpl` that authenticates. `AtLookUp.enrollmentId` is what the *next*
-  PKAM will send, so it cannot answer which enrollment is held by a socket
-  that is already up; this can.
-
-- feat: `AtLookupMuxable` gains the members callers were reaching for through
-  a cast to the concrete class: `authenticator`, `isConnectionAvailable` and
-  `readResponse`, plus `scan(auth:)`, `scan(showHiddenKeys:)` and
-  `lookup(metadata:)`. Those last three are a defect this surfaced -
-  `AtLookupImpl` accepted **more** than `AtLookUp` declared, so a caller
-  moving to the interface silently lost parameters. Dart permits an
-  implementer to add optional named parameters, so nothing goes red when the
-  restatement is incomplete: `showHiddenKeys` was missed on the first pass and
-  this entry named only two parameters until it was found. They
-  are restated on the muxable rather than added to `AtLookUp`, which is frozen:
-  adding a parameter there forces every `implements AtLookUp` to redeclare it.
-
-- fix: a request in flight when its connection closes now fails immediately
-  instead of waiting on response timeout duration
-
-- feat: `AtLookupTransport` bundles the three connection factories
-  `AtLookupImpl` has always accepted into one value, so a caller holding only
-  the `AtLookupMuxable` interface can still say how connections are made. It
-  bundles rather than abstracts on purpose: the web-port plan records that
-  these factories are already injectable and that the blocker is their
-  **return type**, so a second abstraction here would be one more thing for
-  that work to reconcile. It also carries the `SecureSocketConfig`, because how
-  a transport reaches an atServer is a property of the transport — TLS
-  certificates and a keylog path mean nothing to one that is not TLS over TCP.
-  It is not yet sufficient for a non-socket transport, and does not claim to
-  be — `AtConnection.getSocket()` still returns a `Socket`.
-
-- feat: the socket transport is `secureSocketTransport(...)` in a new
-  `package:at_lookup/at_lookup_io.dart`, and `transport` has no default.
-  A default naming an implementation pulls that implementation's imports in
-  whatever the caller injects, which is how a transport swap fails silently
-  instead of failing to compile; naming the transport is therefore also what
-  selects the library carrying it. Callers import the `_io` barrel, which
-  re-exports everything in `at_lookup.dart`. This does not make a web build
-  possible on its own — `AtConnection.getSocket()` still has to go, which is a
-  major — but it means that change will not also have to remove a default.
-
-- feat: `AtLookupImpl`'s constructor is `@Deprecated` in favour of the factory.
-  The class itself is **not** deprecated and does not move: it is exported from
-  the barrel, so renaming it or making it private would remove a public class,
-  which this release is not. The warnings at each construction site are the
-  deliverable — 45 of them, `info`, so nothing breaks while they are worked
-  through.
-
-- feat: `OutboundMessageListener.onDisconnect`. The listener knows the socket
-  died before anything else does and used to keep it to itself, so a
-  subscriber just stopped hearing anything, with no event separating "the
-  atServer is quiet" from "the socket is gone".
-
-- deprecated: `AtLookUp.executeVerb`'s `sync` parameter, removal in 4.0. It
-  has never been read: the verb always executes on the remote atServer, and
-  there is no sync behaviour for the parameter to control
-
-- build(deps): raised the `at_chops` constraint to `^3.6.0`
-
-- build(deps): raised the `at_commons` constraint to `^5.16.0`
-
+- feat: `AtLookUp.withSecureSocket(...)` creates a lookup from an
+  `AtRootDomain`, an `authenticator` and an `AtLookupTransport`, and returns
+  an `AtLookupMuxable`. `onConnect` runs on each new connection before
+  anything else can use it, for a proxy, and a connection whose `onConnect`
+  fails is closed.
+- feat: `AtLookupMuxable` also carries the atServer's notifications, through
+  `notifications`, `startNotifications` and `stopNotifications`;
+  `notificationConnectionUp` says whether that connection is up, and
+  `dropConnection` closes it and leaves the lookup usable.
+- feat: `AtLookupMuxable.stop()` ends a lookup for good: work in flight fails
+  with `StoppedException`, and so does every later call. `close()` still
+  closes the connection, and the next call reconnects. (3.7.0-rc2 to rc4 had
+  `close()` end the lookup for good; that is `stop()` now.)
+- feat: an application can choose how a client's connections travel, through
+  `AtLookUpFactory`; the TLS default, `secureSocketLookUps`, is in the new
+  `package:at_lookup/at_lookup_io.dart`, which re-exports `at_lookup.dart`.
+- feat: `AtAuthenticator` and `AtCommandExecutor` let a caller supply its own
+  authentication.
+- feat: `checkAtSignServer(lookUp, atSign)` reports whether an atSign is
+  registered, whether its atServer answers and whether it is activated, with
+  the cause of any failure.
+- feat: a connection's metadata records when it authenticated, and the
+  enrollment id the lookup was asked to authenticate as.
+- feat: `BaseConnection.inbound` and `BaseConnection.add` read and write a
+  connection's raw bytes.
+- feat: `validatedFromChallenge` is public, so an authenticator built outside
+  at_lookup refuses the same `from:` challenges.
+- feat: while notifications are on, each heartbeat the atServer answers logs
+  `Heartbeat OK: lastReceipt <time of the last notification>` at info.
+- fix: a request in flight when its connection closes fails at once, instead
+  of waiting for the response timeout: `executeCommand` throws a
+  `ConnectionInvalidException` that says so, and `executeVerb` an
+  `AtLookUpException` carrying it.
+- fix: a TLS connect is bounded through the end of the handshake, so a peer
+  that never finishes it no longer hangs the connect or keeps the process
+  alive.
+- fix: two authentications racing on one lookup no longer leave its verbs
+  refused as unauthenticated, and a command after `close()` authenticates its
+  new connection even when an authentication begun before finishes late.
+- fix: a refused CRAM authentication's exception carries the atServer's
+  response, and a response line starting `stream:` is refused as unexpected
+  (AT0014).
+- fix: `lookup(..., verifyData: true)` returns the value only when its
+  signature verifies against the sharer's public key.
+- fix: a command holding a line feed before its end is refused, and none of
+  it is sent. `executeCommand` throws `IllegalArgumentException`, and
+  `executeVerb` an `AtLookUpException` with code AT0022, before connecting or
+  authenticating; `sendSync` and a connection's `write` throw
+  `IllegalArgumentException`.
+- perf: a response is read as soon as it arrives, rather than up to 10ms
+  later.
+- chore: opening and closing a connection log at finer rather than info.
+- chore: a reply ends at its newline, as the atServer writes it, and a line
+  that is no reply to anything closes the connection, so the next command
+  opens a fresh one.
+- chore: a read gives up after `AtNetworkTimeouts.defaultTimeout` (30 s unless
+  set) with nothing arriving, rather than 10 s; a whole reply still has 90 s.
+- chore: `SecureSocketUtil.createSecureSocket` returns at_lookup's own
+  `SecureSocket`: `close()` flushes and then closes both directions, and
+  `renegotiate()` throws `UnsupportedError`.
+- deprecated, for removal in 4.0: `AtLookupImpl`'s constructor, in favour of
+  `AtLookUp.withSecureSocket`; the credential members `atChops`,
+  `signingAlgoType`, `hashingAlgoType` and `enrollmentId`, and
+  `AtLookupImpl`'s `privateKey` and `cramSecret`, in favour of an
+  `AtAuthenticator`; `executeVerb`'s `sync` parameter, which was never read;
+  and `AtLookupMuxable.readResponse`, whose only use was the stream verb.
+- deprecated, for removal in 4.0: `update`, `lookup`, `plookup`, `llookup`,
+  `delete` and `scan`, in favour of `executeVerb` with the matching verb
+  builder; `cramAuthenticate`, in favour of an `AtAuthenticator`;
+  `MonitorClient`, in favour of `AtLookupMuxable`'s notifications; and
+  `AtConnection.getSocket()`, in favour of `BaseConnection.inbound` and
+  `add`.
+- deprecated, for removal in 4.0: `AtLookupImpl.authenticate`,
+  `pkamAuthenticate`'s `enrollmentId`, `AtLookupImpl.socketFactory` and
+  setting `secondaryAddressFinder` on a built lookup, in favour of what the
+  lookup is built with; and `AtLookupSecureSocketListenerFactory`, renamed
+  `AtLookupMessageListenerFactory` in 4.0.0.
+- build: requires `at_chops` ^3.6.0 and `at_commons` ^5.18.0.
 
 ## 3.6.1
 

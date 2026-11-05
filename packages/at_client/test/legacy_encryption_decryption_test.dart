@@ -1,12 +1,7 @@
-// The bridge that builds a client's AtChops from a keyfile insists on a
-// credential, so this fixture hands the client a placeholder signer; nothing
-// here signs, and the key source carries the material that is read.
-// ignore_for_file: deprecated_member_use
-
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/crypto/legacy/legacy_decryption.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_commons/at_builders.dart';
@@ -14,6 +9,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   String currentAtSign = '@alice';
@@ -26,20 +23,19 @@ void main() {
 
   setUp(() async {
     AtClientPreference atClientPreference = AtClientPreference()
-      ..hiveStoragePath = 'test/unit_test_storage/hive'
-      ..commitLogPath = 'test/unit_test_storage/commit';
+      ..hiveStoragePath = 'test/unit_test_storage/hive';
 
     encryptionKeyPair = RsaKeyPair.generate();
 
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(atClientPreference),
         remoteSecondary: mockRemoteSecondary,
-        // NOTE: a signer object the client insists on holding; nothing here
-        // signs, and the key source carries the material that is read.
-        atChops: AtChopsImpl(AtChopsKeys.create(null, null)),
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,
-            selfEncryptionKey: AESKey.generate(32).key));
+            selfEncryptionKey: AESKey.generate(32).key),
+        storage: hiveStoreFor(currentAtSign, atClientPreference));
     atClient.syncService = MockSyncService();
 
     // During decryption, fetches the encryption public key from local keystore.
@@ -49,7 +45,11 @@ void main() {
         encryptionKeyPair.atPublicKey.publicKey);
   });
 
-  tearDownAll(() {
+  // NOTE: each test's client is built from keys of its own, so it gets a
+  // store of its own too; one test's shared-key copies are unreadable to the
+  // next.
+  tearDown(() async {
+    await atClient.stop();
     Directory('test/unit_test_storage').deleteSync(recursive: true);
   });
 

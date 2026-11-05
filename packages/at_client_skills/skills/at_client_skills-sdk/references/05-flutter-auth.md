@@ -11,9 +11,8 @@ Nothing in these flows imports `at_auth`.
 Add the packages with `dart pub add` (pins the latest compatible versions):
 
 ```sh
-dart pub add at_client_flutter path_provider
-# at_client_flutter re-exports at_client; path_provider is for
-# getApplicationSupportDirectory()
+dart pub add at_client_flutter
+# the app's one SDK dependency: it re-exports at_client's API
 ```
 
 ---
@@ -25,11 +24,11 @@ its atServer must be registered in the **atDirectory** (the atServer address
 registry). Activation happens once, via Flow 1 (CRAM) below or an onboarding
 app / the registrar.
 
-Opening an atsign that isn't activated (or a typo) comes back **refused** with
+Opening an atsign that isn't activated (or a typo) comes back **offline** with
 cause `noAtServer`: the atDirectory has no atServer for it. On the first open
-of those keys on a device that is a thrown `AtOpenRefusedException`, since
-there is nothing local to serve. Activate it first (Flow 1), then Flows 2–4
-(existing keys / keychain / APKAM) will resolve it.
+of those keys on a device, `open` throws `AtOpenRefusedException` instead,
+since there is nothing local to serve. Activate it first (Flow 1), then
+Flows 2–4 (existing keys / keychain / APKAM) will resolve it.
 
 ---
 
@@ -38,30 +37,25 @@ there is nothing local to serve. Activate it first (Flow 1), then Flows 2–4
 ```dart
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';   // FileAtKeysIo.getAtsign()
-import 'package:path_provider/path_provider.dart';
 
-const namespace = 'my_namespace';
+const namespace = 'my_app';
 
-AtClientPreference _preference() => AtClientPreference()
+AtClientPreference _preference() => AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = namespace
   ..syncRegex = namespace;   // scope sync to this app (see 11-sync.md)
-
-/// Where this app keeps the atSign's local store. closedByClient: the client
-/// closes it when it stops, so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  final dir = await getApplicationSupportDirectory();
-  return HiveAtClientStorage(
-      atSign: atSign, storagePath: dir.path, closedByClient: true);
-}
 
 /// Screens that read AtClientManager.getInstance().atClient need this; an app
 /// that passes the client around does not.
 void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
 ```
 
-`AtClientPreference.hiveStoragePath` and `commitLogPath` are deprecated: the
-storage object above is where the store lives, and it is what the dialogs and
-the `Atsign` verbs take as `storage`.
+Pass no `storage` and the dialogs open Hive in the app's support directory
+(`getApplicationSupportDirectory()`), or under `preference.hiveStoragePath`
+while the app still sets it. That field is deprecated (at_client itself
+ignores it, and it goes in 5.0), and at_client 4.0 removed `commitLogPath`: an
+app that keeps its store anywhere else, or wants another backend, passes an
+`AtClientStorage` as `storage`, such as `HiveAtClientStorage`, which comes
+through `package:at_client_flutter`.
 
 **`rootDomain` is an `AtRootDomain`, not a `String`.** Every dialog below takes
 the typed value, so passing `'root.atsign.org'` is a compile error. The flows
@@ -82,12 +76,21 @@ Reach for `atsignDomain` unless your app talks to a non-standard root — then
 
 Use when a developer wants to activate a brand-new atsign for a user.
 Requires a `RegistrarService` (re-exported by `at_client_flutter`) configured
-with a registrar URL and API key.
+with a registrar URL and API key. The service sends the key to the registrar
+on the calls that find a free atSign and exchange the code emailed to the
+user for that atSign's CRAM secret; it names the app to the registrar and
+acts for no atSign. An app developer can create an API key via the
+registrar at my.atsign.com. Keep it out of the source: a Flutter app takes
+it at build time with `--dart-define`; at_client_cli's commands send
+`AT_REGISTRAR_API_KEY` when it is set, and otherwise a built-in key.
 
 ```dart
+// flutter run --dart-define=REGISTRAR_API_KEY=<your key>
+const registrarApiKey = String.fromEnvironment('REGISTRAR_API_KEY');
+
 final registrar = RegistrarService(
   registrarUrl: 'my.atsign.com',
-  apiKey: 'your-api-key',        // from the atsign.com developer portal
+  apiKey: registrarApiKey,
 );
 
 Future<void> activateNewAtSign(BuildContext context) async {
@@ -110,7 +113,6 @@ Future<void> activateNewAtSign(BuildContext context) async {
     rootDomain: selection.rootDomain,
     cramKey: cramKey,
     preference: _preference(),
-    storage: await _storage(selection.atSign),
   );
   if (client == null) return;
   _adopt(client);
@@ -141,7 +143,6 @@ Future<void> loginWithFile(BuildContext context) async {
     atSign: atSign,
     keys: atKeysIo,
     preference: _preference(),
-    storage: await _storage(atSign),
     backupKeys: [KeychainAtKeysIo()],
   );
   if (client == null) return;
@@ -204,7 +205,6 @@ Future<void> loginWithKeychain(BuildContext context) async {
     rootDomain: selection.rootDomain,
     keys: KeychainAtKeysIo(),
     preference: _preference(),
-    storage: await _storage(selection.atSign),
   );
   if (client == null) return;
   _adopt(client);
@@ -238,7 +238,6 @@ Future<void> loginWithApkam(BuildContext context) async {
     namespaces: {namespace: 'rw'},   // the permissions this device needs
     preference: _preference(),
     keys: KeychainAtKeysIo(),
-    storage: await _storage(selection.atSign),
   );
   if (client == null) return;
   _adopt(client);
@@ -250,10 +249,19 @@ There is no second `PkamDialog`: the enrolled client is the one handed back.
 **The approve side**, on the manager device:
 
 ```dart
-final pending = await client.enrollments.pending();
-await client.enrollments.approve(pending.first.enrollmentId!);   // or deny(id)
-client.enrollments.requests.listen((r) => ...);                  // new requests as they arrive
-final passcode = await client.enrollments.otp();                 // what the new device types
+// Show the person each request: the app, the device and the namespaces it
+// asks for. Anyone holding a passcode can ask for anything, so approve only
+// what they recognise.
+for (final request in await client.enrollments.pending()) {
+  if (!context.mounted) return;
+  if (await confirmWithUser(context, request)) {   // your dialog
+    await client.enrollments.approve(request.enrollmentId!);
+  } else {
+    await client.enrollments.deny(request.enrollmentId!);
+  }
+}
+client.enrollments.requests.listen((r) => ...);    // new requests as they arrive
+final passcode = await client.enrollments.otp();   // what the new device types
 ```
 
 or drop in `EnrollmentRequestList(atClient: client)`, which renders the roster
@@ -274,9 +282,13 @@ client.connection.changes.listen((s) => setState(() => _state = s));
 
 - **offline** — the client serves its local store and syncs when the atServer
   is reached. A 1.x app treated this as a failed login; a 2.0 app decides, and
-  usually shows an indicator rather than blocking.
+  usually shows an indicator rather than blocking. Under `pqActive`, a
+  device's first write in a namespace, and a share whose recipient's key the
+  client holds no current copy of, need the atServer; once a device has
+  written in a namespace, it goes on writing there offline, across restarts.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
-  `enrollmentNotApproved`) — the atServer rejected the keys. Ask the user.
+  `enrollmentNotApproved`, `enrollmentDenied`) — the atServer rejected the
+  keys. Ask the user.
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
 
@@ -302,9 +314,9 @@ hook, not a logout.
 ## Canonical Examples
 
 <!-- pyml disable-num-lines 3 md013-->
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_storage` and `_adopt` helpers
+- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_adopt` helper
 - [packages/at_client_flutter/example/lib/apkam_example.dart](../../../../at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
-- [packages/at_client_flutter/examples/todos/lib/onboarding.dart](../../../../at_client_flutter/examples/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
+- [packages/at_client_flutter/example/todos/lib/onboarding.dart](../../../../at_client_flutter/example/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
 
 ---
 

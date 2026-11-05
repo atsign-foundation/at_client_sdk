@@ -1,7 +1,12 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:test/test.dart';
+
+Future<void> _holdUntilKilled(String protected) =>
+    AtKeysFileLock(protected).synchronized(() => Completer<void>().future);
 
 /// The keyfile's inter-process advisory lock.
 ///
@@ -83,6 +88,45 @@ void main() {
     expect(ran, isTrue,
         reason: 'a process that crashed holding the lock must not deadlock '
             'every future run of every app sharing the keyfile');
+  });
+
+  test('a lock whose holder was killed mid-write is broken within the timeout',
+      () async {
+    final holder = await Isolate.spawn(_holdUntilKilled, protected);
+    while (!File('$protected.lock').existsSync()) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    holder.kill(priority: Isolate.immediate);
+
+    var ran = false;
+    await AtKeysFileLock(protected).synchronized(() async => ran = true);
+
+    expect(ran, isTrue,
+        reason: 'an isolate or process that dies holding the lock leaves the '
+            'lock file behind; with no heartbeat left to refresh it, the next '
+            'writer must break it inside its own timeout rather than fail');
+  });
+
+  test('a live holder that outlasts staleAfter is not broken', () async {
+    AtKeysFileLock lock() => AtKeysFileLock(protected,
+        timeout: const Duration(seconds: 3),
+        staleAfter: const Duration(milliseconds: 300),
+        heartbeat: const Duration(milliseconds: 50));
+    final events = <String>[];
+
+    await Future.wait([
+      lock().synchronized(() async {
+        events.add('holder-enter');
+        await Future<void>.delayed(const Duration(seconds: 1));
+        events.add('holder-exit');
+      }),
+      Future<void>.delayed(const Duration(milliseconds: 100)).then((_) =>
+          lock().synchronized(() async => events.add('waiter-enter'))),
+    ]);
+
+    expect(events, ['holder-enter', 'holder-exit', 'waiter-enter'],
+        reason: 'the heartbeat keeps a live lock fresh, so a waiter must not '
+            'take a holder that is still running for a dead one');
   });
 
   test("release leaves a lock that is no longer the holder's own", () async {

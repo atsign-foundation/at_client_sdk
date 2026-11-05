@@ -1,18 +1,15 @@
-// The substrate, the nskey surface and the rotation levers are @experimental;
-// driving them is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show ckConveyanceKey;
+    show ckConveyanceKey, ckSiblingCopyKey;
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:test/test.dart';
@@ -30,14 +27,21 @@ void main() {
   TestUtils.isolateStorage('nskey_rotation_live_test');
   late AtClient approver;
   late String atSign;
-  const namespace = 'buzz';
+  // NOTE: unique per run — the atServer refuses a second enrollment carrying
+  // an (appName, deviceName) pair that already has one approved, so fixed
+  // names collide on the second run against the same virtualenv.
+  final runId = DateTime.now().microsecondsSinceEpoch;
+  // NOTE: a namespace of its own, because a client start asks every
+  // enrollment holding its namespace for the keys it lacks, one request each,
+  // so a namespace other files share costs a request per enrollment they
+  // leave behind.
+  final namespace = 'rotation$runId';
 
   setUpAll(() async {
-    // NOTE: the SECOND atSign, not the first. These tests create enrollments
-    // and REVOKE one, and both are shared state the rest of the suite reads:
-    // every enroll:listns walks the whole roster, and a revoked enrollment's
-    // _apsk is deleted for good.
-    atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    // NOTE: an atSign no other file uses, so the roster each rotation conveys
+    // to, and the mint lock sized to it, hold only this file's enrollments,
+    // and no other file reads the enrollments it revokes.
+    atSign = ConfigUtil.getYaml()['atSign']['rotationAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager = await TestUtils.initAtClient(atSign, namespace,
@@ -45,11 +49,6 @@ void main() {
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
-
-  // NOTE: unique per run — the atServer refuses a second enrollment carrying
-  // an (appName, deviceName) pair that already has one approved, so fixed
-  // names collide on the second run against the same virtualenv.
-  final runId = DateTime.now().microsecondsSinceEpoch;
 
   Future<EnrolledClient> enrol(String device,
           {AtKeysIo? atKeysIo, Map<String, String>? namespaces}) =>
@@ -70,7 +69,7 @@ void main() {
   /// What revocation needs, which is not what rotation needs: revoking is gated
   /// on `__manage`, and a client without it cannot even enumerate the atSign's
   /// enrollments to find the one it means.
-  const operatorGrants = {'*': 'rw', '__manage': 'rw', namespace: 'rw'};
+  final operatorGrants = {'*': 'rw', '__manage': 'rw', namespace: 'rw'};
 
   /// An enrollment with its own keyfile, sharing substrate, filing and ring —
   /// everything a client needs to hold and answer for a namespace key.
@@ -94,7 +93,9 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: liveMintLockTtl),
+          privateFiling: filing,
+          lockTtl: liveMintLockTtl,
+          lockBudgetPerMember: liveMintLockBudgetPerMember),
     );
   }
 
@@ -137,7 +138,7 @@ void main() {
   test(
       'UC-A5.1(b) · a rotation publishes a successor, pushes it to the '
       'survivor, and leaves the excluded enrollment on the old generation',
-      () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     final rotator = await holder('rot-rotator');
     final survivor = await holder('rot-survivor');
     final excluded = await holder('rot-excluded');
@@ -173,7 +174,7 @@ void main() {
       sharing: rotator.sharing,
     );
 
-    await waitOutMintLock();
+    await waitOutMintLock(rotator.enrolled.client, namespace);
 
     final outcome = await rotation.rotateNamespaceKey(namespace,
         excludeEnrollmentIds: {excluded.enrolled.enrollmentId});
@@ -253,7 +254,8 @@ void main() {
             'revocation would have bought nothing');
   });
 
-  test('a rotation inside the mint lock\'s cooldown is refused', () async {
+  test('a rotation inside the mint lock\'s cooldown is refused',
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // NOTE: this cannot be a unit test — the interlock IS the atServer
     // refusing a second create of an immutable record, and a mocked
     // executeVerb accepts the second take happily.
@@ -280,7 +282,7 @@ void main() {
 
     // The control: the same call is accepted once the cooldown has lapsed, so
     // the refusal above is the lock and not an enrollment that cannot rotate.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
     final rotated = (await owner.ring.rotate(ns)).rotated;
     expect(rotated.nskeyKid, isNot(minted.nskeyKid));
   });
@@ -360,8 +362,7 @@ void main() {
           TestUtils.lookUpAs(atSign, enrolled.keys,
         enrollmentId: enrolled.enrollmentId);
       try {
-        final accepted =
-            await lookup.pkamAuthenticate(enrollmentId: enrolled.enrollmentId);
+        final accepted = await lookup.pkamAuthenticate();
         return accepted ? 'accepted' : 'refused without a reason';
       } catch (e) {
         return '$e';
@@ -503,11 +504,12 @@ void main() {
 
   test(
       'UC-A5.3 · revokeEnrollmentAndRotate revokes first, then supersedes the '
-      'generation the revoked enrollment held', () async {
+      'generation the revoked enrollment held',
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // NOTE: its OWN namespace, because this needs a genuine cold start — the
     // owner retains the private for the superseded generation only if it
     // minted it, and on a warm namespace `mintAndPublish` ADOPTS the live
-    // generation and files nothing. A sub-namespace of `buzz`, so the same
+    // generation and files nothing. A sub-namespace of [namespace], so the same
     // grant satisfies the atServer's write gate; the target is granted it
     // explicitly, because revokeEnrollmentAndRotate rotates what the TARGET's
     // enrollment names.
@@ -520,7 +522,7 @@ void main() {
     // NOTE: revokeEnrollmentAndRotate revokes FIRST, so a rotation refused by
     // the cooldown would leave the enrollment cut off but still holding the
     // live generation.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
 
     final outcomes = await NskeyRotation(
       atClient: owner.enrolled.client,
@@ -542,6 +544,10 @@ void main() {
     // the pull gets its chance and still comes up empty.
     await Future<void>.delayed(const Duration(seconds: 1));
     await owner.sharing.sweepOnce(fromRemote: true);
+    expect(await owner.filing.read(ns, rotated.advertisement.nskeyKid),
+        isNotNull,
+        reason: 'the control: a remaining enrollment finds the successor by '
+            'the same read');
     await NskeyPrivateFiling(keysIo: target.io, atSign: atSign)
         .filePending(target.sharing.secretStore.listSecrets());
     expect(await target.filing.read(ns, rotated.advertisement.nskeyKid), isNull,
@@ -554,8 +560,122 @@ void main() {
   });
 
   test(
+      'UC-A5.7 · a revoked enrollment cannot open what a remaining one shares '
+      'next',
+      // Three enrollments, a second atSign's namespace key, a rotation and the
+      // remaining writer noticing it through its own client.
+      timeout: const Timeout(Duration(minutes: 4)), () async {
+    final ns = 'snd$runId.$namespace';
+    final peer = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
+    final operator = await holder('snd-operator', namespaces: operatorGrants);
+    // NOTE: the parent namespace too, which is the grant the atServer's write
+    // gate reads for a key under [ns].
+    final writer =
+        await holder('snd-writer', namespaces: {namespace: 'rw', ns: 'rw'});
+    final doomed = await holder('snd-doomed', namespaces: {ns: 'rw'});
+
+    // NOTE: the peer needs a namespace key at [ns] for a share to seal to. An
+    // owned client, because switching the manager to another atSign stops the
+    // approver every other test here enrols through.
+    final peerKeys = InMemoryAtKeysIo.holding(peer,
+        AtEncryptionKeysLoader.getInstance().createAtKeysFromDemoKeys(peer));
+    final peerClient = await Atsign(peer).open(
+        keys: peerKeys,
+        preference:
+            TestUtils.getPreference(peer, posture: legacyPlusPqProviders),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
+        namespace: ns,
+        storage: TestUtils.storageForPrincipal(peer, 'snd-peer'));
+    addTearDown(peerClient.stop);
+    await PublishedNskeyKeyRing(peerClient,
+            privateFiling: NskeyPrivateFiling(keysIo: peerKeys, atSign: peer),
+            lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero)
+        .mintAndPublish(ns);
+
+    final g1 = await writer.ring.mintAndPublish(ns);
+
+    /// Shares a fresh value with [peer] from the writer's own client, and
+    /// answers which content key it went under and which of this atSign's
+    /// generations that key's sibling copy was sealed to, read off the copy's
+    /// own record.
+    Future<({String ckKid, String? sealedTo})> share(String name) async {
+      final key = AtKey()
+        ..key = name
+        ..namespace = ns
+        ..sharedBy = atSign
+        ..sharedWith = peer;
+      expect(
+          await writer.enrolled.client.put(key, 'shared with $peer',
+              putRequestOptions: PutRequestOptions()
+                ..cryptoProviderId = symmetricAesGcmCryptoProviderId),
+          isTrue);
+      final written = await writer.enrolled.client.getMeta(key);
+      final ckKid = written?.appMetadata?.additional?['ckKid'] as String?;
+      expect(ckKid, isNotNull,
+          reason: '$name must be on the nskey data path, or it has no '
+              'content key and no sibling copy to read');
+      final copy = await writer.enrolled.client
+          .getMeta(ckSiblingCopyKey(sender: atSign, ckKid: ckKid!, ckNs: ns));
+      return (
+        ckKid: ckKid,
+        sealedTo: copy?.appMetadata?.additional?['nskeyKid'] as String?,
+      );
+    }
+
+    final before = await share('before$runId');
+    expect(before.sealedTo, g1.nskeyKid,
+        reason: 'the control: before the rotation the writer\'s key rests on '
+            'the generation every enrollment with access holds');
+
+    await waitOutMintLock(writer.enrolled.client, ns);
+    final outcomes = await NskeyRotation(
+      atClient: operator.enrolled.client,
+      ring: operator.ring,
+      privateFiling: operator.filing,
+      sharing: operator.sharing,
+    ).revokeEnrollmentAndRotate(doomed.enrolled.enrollmentId);
+    final rotated = outcomes.firstWhere((o) => o.namespace == ns);
+    expect(rotated.excluded, contains(doomed.enrolled.enrollmentId),
+        reason: 'the revoked enrollment is in the rotation\'s excluded set');
+    final g2 = rotated.advertisement;
+    expect(g2.nskeyKid, isNot(g1.nskeyKid));
+
+    // NOTE: polled, because the writer learns of the rotation through its own
+    // client — the conveyed private and the synced advertisement — and the
+    // write that follows is what moves its key.
+    var after = await share('after$runId-0');
+    for (var i = 1; i < 90 && after.sealedTo != g2.nskeyKid; i++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      after = await share('after$runId-$i');
+    }
+    expect(after.sealedTo, g2.nskeyKid,
+        reason: 'the writer\'s next share must rest on the generation the '
+            'revoked enrollment was excluded from');
+    expect(after.ckKid, isNot(before.ckKid),
+        reason: '$peer did not rotate, so only the sending side moved the '
+            'key');
+
+    // NOTE: positive control — the same read finds G2 for an enrollment the
+    // rotation conveyed it to, so the null below is about the exclusion.
+    await writer.sharing.sweepOnce(fromRemote: true);
+    await NskeyPrivateFiling(keysIo: writer.io, atSign: atSign)
+        .filePending(writer.sharing.secretStore.listSecrets());
+    expect(await writer.filing.read(ns, g2.nskeyKid), isNotNull,
+        reason: 'the control: a remaining enrollment finds G2 by the same '
+            'read');
+
+    await NskeyPrivateFiling(keysIo: doomed.io, atSign: atSign)
+        .filePending(doomed.sharing.secretStore.listSecrets());
+    expect(await doomed.filing.read(ns, g2.nskeyKid), isNull,
+        reason: 'the revoked enrollment never receives G2, which is now all '
+            'that opens the copy of the key the writer shares under');
+  });
+
+  test(
       'UC-G2.5 · a revocation whose rotation did not happen is rotated at the '
-      'next start', () async {
+      'next start',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
     // The backstop for the composed lever: `revokeEnrollmentAndRotate` revokes
     // and then rotates, and when the second half does not happen nothing else
     // notices — the revoked enrollment is off every roster and still holds the
@@ -567,7 +687,7 @@ void main() {
     final target = await holder('bck-target', namespaces: {ns: 'rw'});
 
     final before = await owner.ring.mintAndPublish(ns);
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
 
     // Revoked and NOT rotated: the half-finished state, produced by driving the
     // revoke alone rather than through the lever that composes the two.
@@ -593,7 +713,7 @@ void main() {
 
     // The control: the rotation took a fresh server stamp, so the same
     // revocation is no longer later than it and the next start rotates nothing.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
     expect(await seeding.rotateIfRevoked(atSign, ns), isFalse);
     expect((await owner.ring.publishedAdvertisement(atSign, ns))?.nskeyKid,
         after?.nskeyKid);

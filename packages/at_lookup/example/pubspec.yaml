@@ -12,13 +12,11 @@ dependency_overrides:
     path: ../../at_commons
   at_lookup:
     path: ../../at_lookup
-  at_chops:
-    path: ../../at_chops
 
 dependencies:
-  at_utils: ^3.0.2
+  at_utils: ^4.0.0
   at_commons: ^5.5.0
-  at_lookup: ^3.0.5
+  at_lookup: ^4.0.0
 
 dev_dependencies:
   lints: ^1.0.0

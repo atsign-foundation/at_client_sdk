@@ -10,7 +10,7 @@ final Expando<SigningAlgoType> _resolvedSigningAlgo =
 /// Records [algo] as [atClient]'s key-material-resolved signing algorithm.
 ///
 /// A null [algo] clears the record — the enrollment has no typed key material
-/// — so [signingAlgoOf] falls back to the preference.
+/// — so [signingAlgoOf] falls back to rsa2048.
 void recordResolvedSigningAlgo(AtClient atClient, SigningAlgoType? algo) {
   _resolvedSigningAlgo[atClient] = algo;
 }
@@ -23,10 +23,7 @@ SigningAlgoType? resolvedSigningAlgoFor(AtClient atClient) =>
     _resolvedSigningAlgo[atClient];
 
 /// The PKAM signing algorithm [atClient]'s connections authenticate with:
-/// the key-material resolution when one was recorded, else the preference —
-/// the documented legacy fallback for untyped key material.
+/// the key-material resolution when one was recorded, else rsa2048, the
+/// algorithm of a flat keyfile's untyped key material.
 SigningAlgoType signingAlgoOf(AtClient atClient) =>
-    _resolvedSigningAlgo[atClient] ??
-    // ignore: deprecated_member_use_from_same_package
-    atClient.getPreferences()?.signingAlgoType ??
-    SigningAlgoType.rsa2048;
+    _resolvedSigningAlgo[atClient] ?? SigningAlgoType.rsa2048;

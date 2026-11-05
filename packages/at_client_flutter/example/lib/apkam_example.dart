@@ -1,5 +1,4 @@
 import 'package:at_client_flutter/at_client_flutter.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:flutter/material.dart';
 
 /// {@template apkam_example_page}
@@ -139,10 +138,17 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
         app: appName,
         device: deviceName,
         namespaces: {'public': 'rw'},
+        // NOTE: a demo device's keys, which no client is opened on.
+        // ignore: invalid_use_of_visible_for_testing_member
         keys: InMemoryAtKeysIo(),
         preference: AtClientPreference()
           ..rootDomain = preferences.rootDomain
           ..rootPort = preferences.rootPort,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          preferences.rootDomain,
+          preferences.rootPort,
+        ),
       );
       _logger.info('Submitted request ID: ${pending.enrollmentId}');
 

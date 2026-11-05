@@ -49,6 +49,56 @@ void main() {
     });
   });
 
+  group("Given an atSign's length", () {
+    const String tooLong =
+        'invalid @sign: must have at most 55 characters after the @';
+
+    test(
+        'when an atSign has 55 characters after its "@", then toAtsign accepts it',
+        () {
+      final String atSign = '@${'a' * 55}';
+      expect(atSign.toAtsign(), atSign);
+    });
+
+    test(
+        'when an atSign has 56 characters after its "@", then toAtsign throws'
+        ' InvalidAtSignException saying it must have at most 55 characters'
+        ' after the @', () {
+      expect(
+          () => '@${'a' * 56}'.toAtsign(),
+          throwsA(isA<InvalidAtSignException>()
+              .having((e) => e.message, 'message', tooLong)));
+    });
+
+    test(
+        "when an atSign's dots take it past 55 characters, then toAtsign"
+        ' counts it without them', () {
+      final String dotted = '@${List.filled(55, 'a').join('.')}';
+      expect(dotted.length, greaterThan(56),
+          reason: 'the dots alone carry it past the limit');
+      expect(dotted.toAtsign(), '@${'a' * 55}');
+    });
+
+    test(
+        'when an atSign has 55 emoji after its "@", then toAtsign accepts it,'
+        ' counting each emoji once', () {
+      final String atSign = '@${'\u{1F6E0}' * 55}';
+      expect(atSign.length, 111,
+          reason: 'each emoji is two UTF-16 code units, so a count of code'
+              ' units would refuse it');
+      expect(atSign.toAtsign(), atSign);
+    });
+
+    test(
+        'when Atsign is constructed with 56 characters after its "@", then it'
+        ' throws as toAtsign does', () {
+      expect(
+          () => Atsign('@${'a' * 56}'),
+          throwsA(isA<InvalidAtSignException>()
+              .having((e) => e.message, 'message', tooLong)));
+    });
+  });
+
   group("downstream usage from noports_core/at_server:", () {
     test("noports_core & at_server", () {
       //legacy used to be:

@@ -93,7 +93,8 @@ Check existence against the remote atServer (`true`) or the local keystore
 ## Client-wide: `AtClientPreference.remoteLocalPref`
 
 ```dart
-final prefs = AtClientPreference()
+final prefs = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app'
   ..remoteLocalPref = RemoteLocalPref.remoteOnly  // default: localOnly
   /* ...the rest of your preference setup... */;
 ```
@@ -187,14 +188,15 @@ collection operations follow whatever the _client_ is configured to do:
 - `remoteLocalPref = remoteOnly`: every collection op (like everything else on
   that client) runs against the remote atServer.
 
-What you cannot do is flip a _single_ collection call to remote. Two kinds of key
-justify dropping below `AtCollection` to raw `put`/`get`:
+What you cannot do is flip a *single* collection call to remote. Two kinds of
+key justify dropping below `AtCollection` to raw `put`/`get`:
 
 1. **Infrastructure keys** needing per-operation control — cross-process
-   coordination, mutex/lock keys, read-your-write probes. Give them a distinct
-   key-name prefix within your app's namespace (e.g. `lock.` or
-   `session_mutexes.`, as `AtRpc` does within its `__rpcs` namespace) so they
-   never collide with collection keys.
+   coordination keys, read-your-write probes. Use raw `put`/`get` with request
+   options, and take a lock with `tryAcquireServerMutex`, which goes straight
+   to the atServer by itself. Give them a distinct key-name prefix within your
+   app's namespace (e.g. `lock.` or `session_mutexes.`, as `AtRpc` does within
+   its `__rpcs` namespace) so they never collide with collection keys.
 2. **Public keys** — collections cannot carry public metadata at all, since no
    collection method accepts `Metadata`. See the section above.
 

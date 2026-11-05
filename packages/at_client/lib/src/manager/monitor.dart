@@ -366,7 +366,7 @@ class Monitor {
     if (_closed) return;
     _closed = true;
     stop();
-    await lookUp.close();
+    await lookUp.stop();
     await _lifecycle;
     closeWithoutWaiting(currentStateStreamController);
   }

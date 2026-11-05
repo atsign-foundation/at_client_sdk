@@ -1,7 +1,3 @@
-// The nskey substrate and the enrollment key-package surface are
-// @experimental; driving them is the point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -68,10 +64,13 @@ void main() {
   /// miss — and the holder is already listening, which makes this file's own
   /// `startListening` a no-op. `askOnReadMiss` stays on: state 1's own read
   /// must still broadcast the ask that state 2 waits for.
+  ///
+  /// The start-time root step is off as [TestUtils.packStartupGates] has it.
   const handDrivenConveyance = PqStartupGates(
     hydrateHeldSecrets: false,
     startEnvelopeListener: false,
     requestMissingPrivates: false,
+    anchorOwnKeys: false,
   );
 
   setUpAll(() async {
@@ -127,6 +126,32 @@ void main() {
     final old = await enrol('ladder-old',
         mints: const [SecretSharingAlgos.xWing],
         sealsTo: const [SecretSharingAlgos.xWing]);
+    expect(old.client.getPreferences()?.keyEstablishmentAlgorithms,
+        const [SecretSharingAlgos.xWing],
+        reason: 'the older install must really be the older build, or the add '
+            'below has nothing to add and this row passes for that');
+    await AtClientSecretSharing.forClient(old.client).register();
+
+    final oldRing = PublishedNskeyKeyRing(old.client,
+        lockTtl: liveMintLockTtl,
+        lockBudgetPerMember: liveMintLockBudgetPerMember);
+    final oldSeeding = NskeySeeding(
+        atClient: old.client,
+        ring: oldRing,
+        sharing: AtClientSecretSharing.forClient(old.client),
+        privateFiling: oldRing.privateFiling);
+    await oldSeeding.seedNamespace(atSign, namespace);
+    final before = await oldRing.publishedAdvertisement(atSign, namespace);
+    expect(before, isNotNull,
+        reason: 'without a generation there is nothing '
+            'for the rollout-1 install to add to');
+    expect(before!.keys.map((k) => k.alg).toSet(), {SecretSharingAlgos.xWing},
+        reason: 'the older build can fill exactly one slot, which is what '
+            'leaves the generation short of what the newer one mints');
+    final sharedKid = before.keys.single.kid;
+
+    // NOTE: enrolled after the mint, so it is not on the roster the mint
+    // conveyed to and holds nothing of the shared generation until it asks.
     // Rollout 1 is exactly this pairing: the receive capability moves, the send
     // posture does not.
     final rolled = await enrol('ladder-new',
@@ -139,14 +164,9 @@ void main() {
     // single build twice.
     expect(rolled.enrollmentId, isNot(old.enrollmentId));
     expect(identical(rolled.client, old.client), isFalse);
-    expect(old.client.getPreferences()?.keyEstablishmentAlgorithms,
-        const [SecretSharingAlgos.xWing],
-        reason: 'the older install must really be the older build, or the add '
-            'below has nothing to add and this row passes for that');
     expect(rolled.client.getPreferences()?.keyEstablishmentAlgorithms,
         const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 
-    await AtClientSecretSharing.forClient(old.client).register();
     await AtClientSecretSharing.forClient(rolled.client).register();
 
     // NOTE: by hand, because [handDrivenConveyance] turns off the startup step
@@ -167,29 +187,16 @@ void main() {
       AtClientSecretSharing.forClient(rolled.client).stopListening();
     });
 
-    final oldRing =
-        PublishedNskeyKeyRing(old.client, lockTtl: liveMintLockTtl);
-    final oldSeeding = NskeySeeding(
-        atClient: old.client,
-        ring: oldRing,
-        privateFiling: oldRing.privateFiling);
-    await oldSeeding.seedNamespace(atSign, namespace);
-    final before = await oldRing.publishedAdvertisement(atSign, namespace);
-    expect(before, isNotNull,
-        reason: 'without a generation there is nothing '
-            'for the rollout-1 install to add to');
-    expect(before!.keys.map((k) => k.alg).toSet(), {SecretSharingAlgos.xWing},
-        reason: 'the older build can fill exactly one slot, which is what '
-            'leaves the generation short of what the newer one mints');
-    final sharedKid = before.keys.single.kid;
-
     // NOTE: nothing releases a mint lock but expiry, so the add below is
     // refused inside the window.
-    await waitOutMintLock();
+    await waitOutMintLock(old.client, namespace);
 
     await NskeySeeding(
             atClient: rolled.client,
-            ring: PublishedNskeyKeyRing(rolled.client, lockTtl: liveMintLockTtl))
+            ring: PublishedNskeyKeyRing(rolled.client,
+                lockTtl: liveMintLockTtl,
+                lockBudgetPerMember: liveMintLockBudgetPerMember),
+            sharing: AtClientSecretSharing.forClient(rolled.client))
         .seedNamespace(atSign, namespace);
 
     final after = await PublishedNskeyKeyRing(approver)
@@ -215,22 +222,19 @@ void main() {
     final remoteWrite = PutRequestOptions()..useRemoteAtServer = true;
     final remoteRead = GetRequestOptions()..useRemoteAtServer = true;
 
-    // ── c1: the direction that needs no conveyance ──
-    // `old` minted the shared generation, so it already holds the private.
-    // Asserted first so a failure here reads as the seal being wrong rather
-    // than the delivery.
+    // ── before any conveyance: the rollout-1 install cannot write ──
+    // It holds no private for the shared generation, and a client seals to its
+    // own atSign's key only when it holds the private.
     final fromRolled = AtKey()
       ..key = 'ladder_new_$runId'
       ..namespace = namespace
       ..sharedBy = atSign;
-    await rolled.client.put(fromRolled, 'written by the rollout-1 install',
-        putRequestOptions: remoteWrite);
-    expect(
-        (await old.client.get(fromRolled, getRequestOptions: remoteRead)).value,
-        'written by the rollout-1 install',
-        reason: 'c1: the rollout-1 install added an algorithm without changing '
-            'what it seals to, so the older install opens it with the private '
-            'it minted itself — no conveyance in this direction');
+    await expectLater(
+        rolled.client.put(fromRolled, 'written by the rollout-1 install',
+            putRequestOptions: remoteWrite),
+        throwsA(isA<NskeyPrivateNotHeldException>()),
+        reason: 'an install that has not been conveyed the private must not '
+            'seal to the advertisement it was served');
 
     // NOTE: a holder answers a request from its secret store, which the mint
     // does not fill — the bootstrap would prime it from the filing at every
@@ -328,5 +332,15 @@ void main() {
             'opens immediately — no ask, no wait. c2 of UC-G2.11: the older '
             'build seals to the entry it always used and the rollout-1 build '
             'holds it');
+
+    // ── c1: the rollout-1 install writes, now that it holds the private ──
+    await rolled.client.put(fromRolled, 'written by the rollout-1 install',
+        putRequestOptions: remoteWrite);
+    expect(
+        (await old.client.get(fromRolled, getRequestOptions: remoteRead)).value,
+        'written by the rollout-1 install',
+        reason: 'c1: the rollout-1 install added an algorithm without changing '
+            'what it seals to, so the older install opens it with the private '
+            'it minted itself');
   }, timeout: Timeout(Duration(minutes: 5)));
 }

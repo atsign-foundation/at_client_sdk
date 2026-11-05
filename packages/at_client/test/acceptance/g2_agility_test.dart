@@ -250,6 +250,43 @@ void main() {
         clauses: ['without coordinating with another'],
       );
       provenIn(
+        'packages/at_client/test/nskey_seeding_test.dart',
+        'when E3, granted `app`, starts after the revocation, then it rotates '
+            '`chat.app` as well as `app` where neither has moved since',
+        proves: 'the start-time comparison reaches a namespace nested under a '
+            'granted one that this client holds a key for and may write',
+        clauses: ['without coordinating with another'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'when it differs from lastRevokedAt, then the key-holder moment',
+        proves: 'an answer carrying both moments returns the key-holder one. '
+            'Mutation-proven: reading only lastRevokedAt reddens it, with the '
+            'null and malformed rows beside it',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'when it is null, then none is returned, whatever lastRevokedAt',
+        proves: 'a present null is read as no revocation even beside a '
+            'lastRevokedAt. Mutation-proven: falling back on a null reddens it',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'when it is not a timestamp, then the answer is refused',
+        proves: 'a malformed key-holder moment is refused by name rather than '
+            'read from lastRevokedAt',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'Given an atServer that answers only lastRevokedAt',
+        proves: 'an answer without the key, the shape every released '
+            'atServer gives, is read from lastRevokedAt',
+        clauses: ['that is the revocation moment the client compares'],
+      );
+      provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'the published advertisement emits its exact wire shape — raw literals',
         proves:
@@ -429,6 +466,23 @@ void main() {
     test(
         'UC-G2.7 · a retired entry stops being offered and still opens history',
         () {
+      provenIn('packages/at_client/test/envelope_signing_test.dart',
+          'to .r.__e is refused as revoked or superseded',
+          proves: 'a signature whose signer\'s _apsk the atServer moved to '
+              '.r.__e is refused with that reason, typed so a caller can tell '
+              'it from a key that was never published — the control, a key at '
+              'none of the three locations, still fails as not found. The '
+              'chain arm, "a link whose signer was revoked reads revoked", '
+              'reports the same standing as a verdict. The move itself is the '
+              'atServer\'s');
+      provenIn('tests/at_functional_test/test/apsk_server_side_test.dart',
+          'a revoked enrollment\'s signature is refused as revoked',
+          proves: 'the server half, live: an enrollment signs, a peer atSign '
+              'and a sibling enrollment both verify it, the approver revokes '
+              'it, and both are then refused with a '
+              'WithdrawnSigningKeyException at .r.__e — so the atServer moved '
+              'the record on the revoke and serves the moved record to a '
+              'reader of either kind');
       provenIn('packages/at_client/test/signing_key_minting_test.dart',
           'a re-minted algorithm is advertised beside the key it replaced',
           proves: 'the clause as written, on the shape that discriminates: a '

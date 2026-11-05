@@ -1,17 +1,15 @@
-// The enrollment fixture is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/at_builders.dart';
+import 'package:at_functional_test/src/at_keys_initializer.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -25,7 +23,12 @@ void main() {
   TestUtils.isolateStorage('apsk_server_side_test');
   late AtClient approver;
   late String atSign;
-  const namespace = 'buzz';
+  final runId = DateTime.now().microsecondsSinceEpoch;
+  // NOTE: a namespace of its own, because a client start asks every
+  // enrollment holding its namespace for the keys it lacks, one request each,
+  // so a namespace other files share costs a request per enrollment they
+  // leave behind.
+  final namespace = 'apsk$runId';
   const rootDomain = 'vip.ve.atsign.zone';
 
   setUpAll(() async {
@@ -37,8 +40,6 @@ void main() {
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
-
-  final runId = DateTime.now().microsecondsSinceEpoch;
 
   Future<EnrolledClient> enrol(String device) => enrolAndAuthenticate(
         approver: approver,
@@ -126,8 +127,7 @@ void main() {
 
     try {
       expect(
-          await attackerLookup.pkamAuthenticate(
-              enrollmentId: attacker.enrollmentId),
+          await attackerLookup.pkamAuthenticate(),
           true,
           reason: 'the attacker enrollment is approved and must authenticate, '
               'or nothing below tests write restriction');
@@ -250,17 +250,14 @@ void main() {
   });
 
   test(
-      'an rsa2048 enrollment that heals an ML-DSA signing key signs its key '
+      'an mldsa65 enrollment that heals an ML-DSA signing key signs its key '
       'package again', () async {
-    // The rollout path: an existing rsa2048 enrollment whose preference comes
-    // to name an ML-DSA signing key. Its package was signed by the rsa2048
-    // authentication key, which leaves `_apsk` the moment the enrollment holds
-    // a signing key of its own.
     final keysIo = InMemoryAtKeysIo();
     final enrolled = await enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
       namespace: namespace,
+      signingAlgo: SigningAlgoType.mldsa65,
       preference: TestUtils.getPreference(atSign,
           dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
           posture: PqPosture.legacy),
@@ -274,7 +271,7 @@ void main() {
     final reconciled =
         await SigningKeyMinting(enrolled.client).reconcileSigningKeys();
     expect(reconciled.minted, [SigningAlgoType.mldsa65],
-        reason: 'precondition: a signing key was minted, so the rsa2048 '
+        reason: 'precondition: a signing key was minted, so the mldsa65 '
             'authentication key has left `_apsk`');
 
     await expectTheHealedPackageIsSignedAgain(enrolled);
@@ -297,5 +294,56 @@ void main() {
     expect(members.map((m) => m.enrollmentId), contains(member.enrollmentId),
         reason: 'including this one, which is authorised for the namespace it '
             'is asking about');
+  });
+
+  test(
+      'a revoked enrollment\'s signature is refused as revoked, by a peer '
+      'atSign and by a sibling enrollment', () async {
+    final peerAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'] as String;
+    final signer = await enrol('revoked-signer');
+    final envelope =
+        await AtClientEnvelopeSigner(signer.client).wrapAndSign({'run': runId});
+
+    // NOTE: opened directly rather than through TestUtils.initAtClient, which
+    // stops the current client first and would stop the approver.
+    final peerKeys = InMemoryAtKeysIo.holding(
+        peerAtSign,
+        AtEncryptionKeysLoader.getInstance()
+            .createAtKeysFromDemoKeys(peerAtSign));
+    await TestUtils.seedIfCredentialless(peerAtSign, peerKeys);
+    await TestUtils.stopClientRunningAs(peerAtSign, peerKeys);
+    final peer = await Atsign(peerAtSign).open(
+        keys: peerKeys,
+        preference:
+            TestUtils.getPreference(peerAtSign, posture: PqPosture.legacy)
+              ..namespace = namespace,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
+        namespace: namespace,
+        storage: TestUtils.storageFor(peerAtSign));
+    addTearDown(peer.stop);
+
+    Future<void> verifyAs(AtClient verifier) =>
+        AtClientEnvelopeSigner(verifier, publicKeyCacheSettings: null)
+            .verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+
+    await verifyAs(peer);
+    await verifyAs(approver);
+
+    final revoked = await approver.enrollmentService!
+        .revoke(EnrollmentRequestDecision.revoked(signer.enrollmentId, atSign));
+    expect(revoked.enrollmentStatus, EnrollmentStatus.revoked,
+        reason: 'the control arms verified before this; the refusals below '
+            'are the revoke');
+
+    final refusedAsRevoked = throwsA(isA<WithdrawnSigningKeyException>().having(
+        (e) => e.location,
+        'location',
+        EnrollmentConstants.perEnrollmentRevoked));
+    await expectLater(verifyAs(peer), refusedAsRevoked,
+        reason: 'the peer\'s atServer served the record the revoke moved to '
+            '.r.__e, so the refusal says why rather than that the key is gone');
+    await expectLater(verifyAs(approver), refusedAsRevoked,
+        reason: 'and the owner\'s atServer serves it to a sibling enrollment');
   });
 }

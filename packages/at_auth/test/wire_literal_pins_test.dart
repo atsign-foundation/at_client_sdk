@@ -98,7 +98,7 @@ void main() {
       final iv = InitialisationVector.random(16);
       final ivB64 = base64Encode(iv.ivBytes);
       final aes = StringAESEncryptor(AESKey(apkamSymmetricKey));
-      when(() => mock.pkamAuthenticate(enrollmentId: '123'))
+      when(() => mock.pkamAuthenticate())
           .thenAnswer((_) async => true);
       // The fetches ride the just-authenticated connection: executeCommand
       // is called with NO auth argument (unlike every enroll: verb).

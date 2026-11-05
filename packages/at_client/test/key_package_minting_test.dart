@@ -76,8 +76,8 @@ void main() {
   Future<List<CryptographicMaterial>> encMaterials(
       {String part = CryptographicMaterialRole.publicEncapsulation}) async {
     final keys = await keysIo.read(atSign);
-    // NOTE: not scoped by enrollment id — an enrollment's first package is
-    // filed untagged and anything minted later is tagged.
+    // NOTE: not scoped by enrollment id: [fileHeldKey] files a pair untagged
+    // unless asked, and anything minted later is tagged.
     return keys.keys.where((m) => m.role == part).toList();
   }
 
@@ -101,10 +101,9 @@ void main() {
   /// Files an already-held encapsulation keypair, as an enrollment created
   /// under [algorithm] would carry.
   ///
-  /// [tagged] defaults to false because a first key package is filed before
-  /// the atServer has assigned an enrollment id, so an untagged pair is the
-  /// ordinary state of a freshly created enrollment; a tagged one appears
-  /// only once something re-files it under the id.
+  /// [tagged] false files the pair without an enrollment id, the shape only
+  /// an older keyfile holds: every submit path files a first key package
+  /// under the enrollment id the atServer assigns.
   Future<String> fileHeldKey(String algorithm,
       {bool tagged = false,
       CryptographicMaterialStatus status =

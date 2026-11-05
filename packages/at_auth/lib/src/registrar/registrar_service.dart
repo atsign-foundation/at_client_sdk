@@ -37,7 +37,7 @@ class RegistrarService implements Registrar {
   @override
   Future<http.Response> registrarApiRequest(
     RegistrarApiEndpoint endpoint,
-    Map<String, String?> data, {
+    Map<String, dynamic> data, {
     bool requiresAuth = true,
   }) async {
     Uri url = Uri.https(registrarUrl, "$apiBase${endpoint.path}");
@@ -47,23 +47,13 @@ class RegistrarService implements Registrar {
       headers['Authorization'] = apiKey;
     }
 
-    // Handle GET vs POST requests
-    if (endpoint.method == HttpMethod.get) {
-      if (data.isNotEmpty) {
-        url = url.replace(queryParameters: data);
-      }
-      final response = await _http.get(url, headers: headers);
-      _throwIfAuthFailure(response, endpoint, requiresAuth);
-      return response;
-    } else {
-      final response = await _http.post(
-        url,
-        body: jsonEncode(data),
-        headers: headers,
-      );
-      _throwIfAuthFailure(response, endpoint, requiresAuth);
-      return response;
-    }
+    final response = await _http.post(
+      url,
+      body: jsonEncode(data),
+      headers: headers,
+    );
+    _throwIfAuthFailure(response, endpoint, requiresAuth);
+    return response;
   }
 
   void _throwIfAuthFailure(
@@ -124,154 +114,45 @@ class RegistrarService implements Registrar {
     return cramKey;
   }
 
-  // Free AtSign Generation Methods
+  // AtSign Registration/Activation Methods (v4, hybrid/custom atSigns)
   @override
-  Future<String> getFreeAtSign() async {
-    var res = await registrarApiRequest(
-      RegistrarApiEndpoint.getFreeAtsign,
-      {},
-    );
-    if (res.statusCode != 200) {
-      throw Exception(
-          'Failed to get free Atsign: ${res.reasonPhrase} - ${res.body}');
-    }
-    var payload = jsonDecode(res.body);
-    if (payload["data"] == null) {
-      throw Exception('Failed to get free Atsign: payload data is null');
-    }
-    if (payload["success"] == true) {
-      return payload["data"]["atsign"];
-    }
-    throw Exception(
-        'Failed to get free Atsign: ${payload["message"] ?? "Unknown error"}');
-  }
-
-  @override
-  Future<String> getFreeAtSignByCategory(List<String> categories) async {
-    Uri url = Uri.https(registrarUrl,
-        "$apiBase${RegistrarApiEndpoint.getFreeAtsignByCategory.path}");
-
-    var res = await _http.post(
-      url,
-      body: jsonEncode({'category': categories}),
-      headers: {
-        'Authorization': apiKey,
-        'Content-Type': 'application/json',
-      },
-    );
-    _throwIfAuthFailure(
-        res, RegistrarApiEndpoint.getFreeAtsignByCategory, true);
-
-    if (res.statusCode != 200) {
-      _logger.shout('Failed to getFreeAtsignByCategory - ${res.body}');
-      throw Exception(
-          'Failed to get free Atsign by category: ${res.reasonPhrase}');
-    }
-    var payload = jsonDecode(res.body);
-    if (payload["data"] == null) {
-      throw Exception(
-          'Failed to get free Atsign by category: payload data is null');
-    }
-    if (payload["Status"] == "success") {
-      return payload["data"]["atsign"];
-    }
-    throw Exception(
-        'Failed to get free Atsign by category: ${payload["message"] ?? "Unknown error"}');
-  }
-
-  // Person Registration Methods (Email-based with OTP)
-  @override
-  Future<void> registerPerson({
-    required String atSign,
-    required String email,
-    String? oldEmail,
+  Future<RegisterAtSignResult> registerAtSign({
+    String? atSign,
+    required RegisterOperation operation,
+    bool? startAtServer,
   }) async {
-    Map<String, String?> data = {
-      'atsign': atSign,
-      'email': email,
-    };
-    if (oldEmail != null) {
-      data['oldEmail'] = oldEmail;
+    Map<String, dynamic> data = {'operation': operation.wireValue};
+    if (atSign != null) data['atSign'] = atSign;
+    if (startAtServer != null) {
+      data['startatServer'] = startAtServer.toString();
     }
 
     var res = await registrarApiRequest(
-      RegistrarApiEndpoint.registerPerson,
+      RegistrarApiEndpoint.registerAtsign,
       data,
     );
     if (res.statusCode != 200) {
       throw Exception(
-          'Failed to register person: ${res.reasonPhrase} - ${res.body}');
+          'Failed to register atSign: ${res.reasonPhrase} - ${res.body}');
     }
     var payload = jsonDecode(res.body);
-    if (payload["message"] != "Sent Successfully") {
+    if (payload["status"] != "success") {
       throw Exception(
-          'Failed to register person: ${payload["message"] ?? "Unknown error"}');
+          'Failed to register atSign: ${payload["message"] ?? "Unknown error"}');
     }
-  }
 
-  /// validates A Person through atSign, an attached email and otp from the authentication request.
-  ///
-  /// For a new user, returns cramkey
-  /// returns: {
-  ///		'success':
-  ///   'cramkey':
-  /// }
-  /// For an existing user, returns existing atsigns, and the new one
-  /// returns: {
-  ///		'atsigns':
-  ///   'newAtsign':
-  /// }
-  @override
-  Future<Map<String, dynamic>> validatePerson({
-    required String atSign,
-    required String email,
-    required String otp,
-    bool confirmation = false,
-  }) async {
-    var res = await registrarApiRequest(
-      RegistrarApiEndpoint.validatePerson,
-      {
-        'atsign': atSign,
-        'email': email,
-        'otp': otp,
-        'confirmation': confirmation.toString(),
-      },
+    String? cramKey = payload["cramkey"]?.split(':').last;
+    if (operation == RegisterOperation.register &&
+        startAtServer != false &&
+        cramKey == null) {
+      throw Exception(
+          'Failed to register atSign: cramKey missing from payload');
+    }
+
+    return RegisterAtSignResult(
+      cramKey: cramKey,
+      atSign: payload["atSign"],
+      message: payload["message"],
     );
-    if (res.statusCode != 200) {
-      if (!confirmation) {
-        _logger.shout(
-            'Failed to validate person, try setting confirmation in validatePerson to true');
-      }
-      throw Exception(
-          'Failed to validate person: ${res.reasonPhrase} - ${res.body}');
-    }
-    var payload = jsonDecode(res.body);
-
-    // Check if validation was successful and return appropriate data
-    if (payload["success"] != null && payload["success"] == true) {
-      // New user - return cramkey
-      return {
-        'success': true,
-        'cramkey': payload["cramkey"]?.split(':').last ?? '',
-      };
-    } else if (payload["data"] != null) {
-      // Existing user - return list of atSigns
-      //describes a successful free atsign path
-      if (payload["data"]["newAtsign"] != null) {
-        return {
-          'atsigns': payload["data"]["atsigns"],
-          'newAtsign': payload["data"]["newAtsign"],
-        };
-      } else {
-        // if user has reached maximum free atsigns
-        _logger.shout(payload["message"]);
-        return {
-          'atsigns': payload["data"]["atsigns"],
-        };
-      }
-    }
-
-    throw Exception(
-        'Validation failed: ${payload["message"] ?? "Unknown error"}');
   }
 }

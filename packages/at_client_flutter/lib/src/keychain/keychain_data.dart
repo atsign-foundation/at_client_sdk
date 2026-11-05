@@ -16,14 +16,38 @@ class AtKeysData extends KeychainData {
   String? defaultAtsign;
   AtKeysData({this.keys = const [], this.defaultAtsign});
 
+  /// Reads a keychain document, including one at_client_mobile wrote, whose
+  /// entries name their keys differently from an atKeys file.
   factory AtKeysData.fromJson(Map<String, dynamic> json) => AtKeysData(
     keys:
         (json['keys'] as List<dynamic>?)
-            ?.map((e) => AtKeys.fromJson(e as Map<String, dynamic>))
+            ?.map(
+              (e) => AtKeys.fromJson(
+                _withAtKeysFieldNames(e as Map<String, dynamic>),
+              ),
+            )
             .toList() ??
         [],
     defaultAtsign: json['defaultAtsign'],
   );
+
+  /// at_client_mobile's `AtsignKey` field names, and the atKeys file names
+  /// [AtKeys.fromJson] reads the same keys under.
+  static const _atClientMobileFieldNames = {
+    'pkamPublicKey': 'aesPkamPublicKey',
+    'pkamPrivateKey': 'aesPkamPrivateKey',
+    'encryptionPublicKey': 'aesEncryptPublicKey',
+    'encryptionPrivateKey': 'aesEncryptPrivateKey',
+  };
+
+  /// [entry] with at_client_mobile's field names replaced by the atKeys file
+  /// names.
+  static Map<String, dynamic> _withAtKeysFieldNames(
+    Map<String, dynamic> entry,
+  ) => {
+    for (final MapEntry(:key, :value) in entry.entries)
+      _atClientMobileFieldNames[key] ?? key: value,
+  };
 
   @override
   Map<String, dynamic> toJson() => {

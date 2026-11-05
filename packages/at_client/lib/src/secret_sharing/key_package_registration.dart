@@ -10,7 +10,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
-import 'package:meta/meta.dart' show experimental, protected;
+import 'package:meta/meta.dart' show protected;
 
 /// One of this APKAM keypair's enc keypairs, as it is persisted.
 ///
@@ -28,7 +28,6 @@ import 'package:meta/meta.dart' show experimental, protected;
 /// [status] is what makes holding more than one useful: nothing new is sealed
 /// to a retired key, but it is still expanded and still opens envelopes
 /// already addressed to it.
-@experimental
 class PersistedEncKey {
   final String encSeed;
 
@@ -62,7 +61,6 @@ class PersistedEncKey {
 /// `envelopeTtl` of traffic is still addressed to the old key at the moment a
 /// client starts advertising a new one, so the superseded key is retained as
 /// [KeyEntryStatus.retired] and expanded alongside the active one.
-@experimental
 class PersistedApkamKeys {
   /// Exactly one entry should be [KeyEntryStatus.active] per algorithm — that
   /// is the key this APKAM keypair advertises and is addressed at. The rest are
@@ -125,7 +123,6 @@ class _HeldEncKey {
 /// By default the enc keypair is generated fresh and held in memory; apps that
 /// want it stable across restarts supply [loadApkamKeys] / [saveApkamKeys]
 /// (which persist it to the keyfile/keychain alongside the APKAM keypair).
-@experimental
 mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// Supply to give this APKAM keypair a stable enc keypair across restarts.
   /// Called once, before generating a fresh one; return null to generate fresh.
@@ -204,6 +201,34 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// the package before a rotation addresses the superseded key, and an
   /// envelope this client never scans for is one it never opens.
   Set<String> get heldKpids => {for (final held in _encKeys) held.kid};
+
+  /// The status of every key [heldKpids] names, by kid.
+  Map<String, KeyEntryStatus> get heldStatuses =>
+      {for (final held in _encKeys) held.kid: held.status};
+
+  /// The KEM enc keys this APKAM keypair holds, in the shape [saveApkamKeys]
+  /// receives; empty until [register].
+  PersistedApkamKeys get heldApkamKeys => PersistedApkamKeys(encKeys: [
+        for (final held in _encKeys)
+          PersistedEncKey(
+              encSeed: base64Encode(held.seed),
+              keyAlgo: held.keyAlgo,
+              status: held.status),
+      ]);
+
+  /// Holds what [loadApkamKeys] now answers in place of the keys held so far,
+  /// so a key package filed or changed since [register] is the one held. Does
+  /// nothing without [loadApkamKeys], or when it answers none.
+  Future<void> reloadApkamKeys() async {
+    final loaded = await loadApkamKeys?.call();
+    if (loaded == null || loaded.encKeys.isEmpty) return;
+    final reloaded = [
+      for (final entry in loaded.encKeys) await _expandEncKey(entry)
+    ];
+    _encKeys
+      ..clear()
+      ..addAll(reloaded);
+  }
 
   /// Which KEM [encPublicKey] belongs to — an id from
   /// [SecretSharingAlgos.keyAlgos]. Throws [StateError] until [register]

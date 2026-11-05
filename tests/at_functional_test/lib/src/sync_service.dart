@@ -4,7 +4,6 @@ import 'package:at_client/at_client.dart';
 
 // ignore: implementation_imports
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_utils/at_logger.dart';
 
 final _logger = AtSignLogger('FunctionalTestSyncService');
 
@@ -29,14 +28,19 @@ class FunctionalTestSyncService {
     String logLabel = label == null ? '' : '($label)';
     await Future.delayed(Duration(milliseconds: 100));
 
-    final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign();
+    // NOTE: a caller passing its own service may hold a client the manager
+    // never saw, so the manager is asked only when none is passed.
+    final atSign = syncSvc == null
+        ? AtClientManager.getInstance().atClient.getCurrentAtSign()
+        : null;
     syncSvc ??= AtClientManager.getInstance().atClient.syncService;
     SyncServiceImpl syncImpl = syncSvc as SyncServiceImpl;
 
     isSyncInProgress = true;
     late TestSyncProgressListener testSyncProgressListener;
     try {
-      _logger.info('syncData starting for $atSign ($logLabel)');
+      _logger.info('syncData starting${atSign == null ? '' : ' for $atSign'} '
+          '($logLabel)');
 
       SyncServiceImpl.queueSize = 1;
 
@@ -100,7 +104,8 @@ class FunctionalTestSyncService {
         unawaited(syncImpl.processSyncRequests());
       }
 
-      _logger.info('syncData complete for $atSign $logLabel');
+      _logger.info('syncData complete${atSign == null ? '' : ' for $atSign'} '
+          '$logLabel');
     } finally {
       syncSvc.removeProgressListener(testSyncProgressListener);
       isSyncInProgress = false;

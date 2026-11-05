@@ -1,7 +1,7 @@
 name: at_contact
 description: A Dart library for managing contact data that developers can use
   for their applications.
-version: 3.1.0
+version: 4.0.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_contact
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -12,8 +12,8 @@ resolution: workspace
 
 dependencies:
   intl: ^0.20.2
-  at_client: ^3.7.0
-  at_utils: ^3.0.19
+  at_client: ^4.0.0
+  at_utils: ^4.0.0
   uuid: ^4.0.0
 
 dev_dependencies:

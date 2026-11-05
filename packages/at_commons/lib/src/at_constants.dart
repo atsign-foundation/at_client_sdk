@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 class AtConstants {
   static const String atSign = 'atSign';
   static const String forAtSign = 'forAtSign';
@@ -22,11 +24,24 @@ class AtConstants {
       'private:blocklist'; // contains @atsign postfix
   static const String atSigningKeypairGenerated =
       'privatekey:signing_keypair_generated';
+  @experimental
+  static const String atTelemetrySigningPrivateKey =
+      'privatekey:at_telemetry_signing_privatekey';
+  @experimental
+  static const String atTelemetrySigningPublicKey =
+      'public:_at_telemetry_signing_publickey.__atserver'; // contains @atsign postfix
   static const String statId = 'statId';
   static const String ttl = 'ttl';
   static const String ttb = 'ttb';
   static const String ttr = 'ttr';
   static const String ttlNotification = 'ttln';
+
+  /// The notification's own expiry, set by its sender: `eAtn` on the wire, in
+  /// `eAt`'s format. On notify, `eAt` is the cached record's expiry.
+  static const String notificationExpiresAt = 'notificationExpiresAt';
+
+  /// A notification no atServer persists: `eph` on the wire.
+  static const String ephemeral = 'ephemeral';
   static const String fromCommitSequence = 'from_commit_seq';
   static const String syncLimit = 'limit';
   static const String skipDeletesUntil = 'skipDeletesUntil';

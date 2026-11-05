@@ -1,0 +1,17 @@
+# Layered on docker-compose.yaml to mount the certificates fetch_certs.sh wrote
+# over the image's own, for a release-pinned image whose certificates expire.
+services:
+  virtualenv:
+    volumes:
+      - type: bind
+        source: ./ve-certs/root
+        target: /atsign/root/certs
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./ve-certs/secondary
+        target: /atsign/secondary/base/certs
+        read_only: true
+        bind:
+          create_host_path: false

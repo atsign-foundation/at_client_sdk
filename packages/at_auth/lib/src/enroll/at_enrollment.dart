@@ -69,7 +69,8 @@ abstract class AtEnrollment {
   ///                     appName: 'wavi',
   ///                     deviceName: 'my-device',
   ///                     namespaces: {'wavi': 'rw'},
-  ///                     otp: '123');
+  ///                     otp: '123',
+  ///                     signingAlgo: SigningAlgoType.mldsa65); // the APKAM keypair's algorithm
   ///
   ///     AtEnrollmentResponse atEnrollmentResponse =
   ///         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
@@ -138,7 +139,9 @@ abstract class AtEnrollment {
   ///
   /// **The wait for a decision is unbounded.** Somebody has to decide this
   /// request, on their own schedule, so polling continues until the atServer
-  /// reports approval or denial — for as long as that takes. No parameter
+  /// reports approval or denial — for as long as that takes. An enrollment
+  /// that has expired, or that the atServer has no record of, ends the wait
+  /// at once with an `AtEnrollmentException` carrying its answer. No parameter
   /// here shortens it; a caller that needs to give up must race this against
   /// its own timer.
   ///
@@ -175,11 +178,16 @@ abstract class AtEnrollment {
   /// [atLookup] is the connection the approval handshake runs on — the PKAM
   /// retries and the post-approval key fetches — and it is left open for the
   /// caller to close.
+  ///
+  /// Once [cancelled] completes, with a value or an error, no further poll
+  /// starts and the wait throws [StoppedException]; a connection that is
+  /// stopped ends it the same way.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = defaultLogProgress,
     int maxRetries = defaultMaxRetries,
     Duration retryInterval = defaultRetryInterval,
     required AtLookupMuxable atLookup,
+    Future<void>? cancelled,
   });
 }

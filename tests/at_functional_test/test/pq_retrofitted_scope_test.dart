@@ -1,16 +1,12 @@
-// The enrollment key-package and posture surfaces this file drives are
-// @experimental.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookupMuxable;
 import 'package:at_functional_test/src/enrolled_client.dart'
     show EnrolledClient, enrolAndAuthenticate;
 import 'package:test/test.dart';
@@ -28,11 +24,11 @@ import 'test_utils.dart';
 /// Each arm drives a real operation rather than stopping at "it
 /// authenticated": at_auth authenticates on its own connection before the
 /// client exists, so a client can report success and still be unable to run a
-/// verb. Each arm also asserts `runningAs != enrolledAs` first, because
-/// `enrolAndAuthenticate` submits an OTP enrollment and that path mints
-/// RSA-2048 unconditionally — a run in which the client did not move would
-/// satisfy every operational assertion below while measuring an ordinary
-/// enrollment.
+/// verb. Each arm also asserts `runningAs != enrolledAs` first: the
+/// enrollment is submitted under the legacy key exchange, which mints RSA-2048
+/// and carries no key package, the shape a production retrofit starts from,
+/// and a run in which the client did not move would satisfy every operational
+/// assertion below while measuring an ordinary enrollment.
 void main() {
   TestUtils.isolateStorage('pq_retrofitted_scope_test');
   late String atSign;
@@ -61,15 +57,17 @@ void main() {
   ///
   /// No `*` and no `__manage`: a fully privileged retrofit also mints the
   /// signing root, which belongs to UC-B1.1 rather than here.
-  Future<EnrolledClient> retrofittedScopedClient(String label) async {
+  Future<EnrolledClient> retrofittedScopedClient(String label,
+      {AtLookUp? atLookUp}) async {
     final enrolled = await enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
       namespace: namespace,
-      // pqReady asks for mldsa65 authentication that the OTP path's RSA-2048
-      // enrollment does not have, so the client retrofits. This preference is
-      // the independent variable of the file.
+      // pqReady asks for mldsa65 authentication that the legacy exchange's
+      // RSA-2048 enrollment does not have, so the client retrofits. This
+      // preference is the independent variable of the file.
       preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       // NOTE: (appName, deviceName) is one-shot server state — an
@@ -79,6 +77,7 @@ void main() {
       deviceName: 'rs-$label-${uuid.v4().hashCode}',
       namespaces: {namespace: 'rw'},
       storage: TestUtils.storage,
+      atLookUp: atLookUp,
     );
 
     expect(enrolled.client.enrollmentId, isNot(enrolled.enrollmentId),
@@ -92,6 +91,33 @@ void main() {
             'enrollment it was enrolled as under a different id');
     return enrolled;
   }
+
+  /// Catalogue: features/at_lookup/close_and_stop.feature
+  test("A superseded enrollment's lookup cannot reconnect after a retrofit",
+      () async {
+    final superseded = secureSocketLookUps()(
+      atSign: atSign,
+      rootDomain: AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
+      authenticator: null,
+    );
+    final enrolled =
+        await retrofittedScopedClient('superseded', atLookUp: superseded);
+    expect(
+        identical(enrolled.client.getRemoteSecondary()!.atLookUp, superseded),
+        isFalse,
+        reason: 'the premise: the client moved off the connection it was '
+            'opened on');
+    expect(superseded.connection?.getMetaData()?.authenticatedAsEnrollmentId,
+        enrolled.enrollmentId,
+        reason: 'the premise: the connection authenticated as the enrollment '
+            'the retrofit superseded');
+
+    await expectLater(superseded.executeCommand('scan\n', auth: true),
+        throwsA(isA<StoppedException>()),
+        reason: 'a connection left able to reconnect would authenticate as '
+            'the superseded enrollment, which the atServer honours until the '
+            'replacement first authenticates');
+  }, timeout: Timeout(Duration(minutes: 3)));
 
   test('UC-B1.4 · a retrofitted scoped enrollment runs an authenticated verb',
       () async {
@@ -249,6 +275,7 @@ void main() {
       // Legacy: this client must NOT retrofit, so that step 2 is the first and
       // only retrofit and the keyfile it reads is genuinely pre-PQ.
       preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+      keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
       rootDomain: 'vip.ve.atsign.zone',
       rootPort: TestUtils.rootServerPort,
       deviceName: 'rs-cold-${uuid.v4().hashCode}',
@@ -266,9 +293,8 @@ void main() {
 
     // Drop everything the process holds for this atSign, so the client below
     // is built the way a later run builds one: from the keyfile.
-    // NOTE: dropped rather than closed. A closed lookup is ended for good,
-    // and this client stays live until teardown, so its sync would go on
-    // reaching for a connection that can never be used again.
+    // NOTE: dropped, never stopped: this client stays live until teardown,
+    // and its sync still needs the connection.
     await (enrolled.client.getRemoteSecondary()?.atLookUp as AtLookupMuxable?)
         ?.dropConnection();
     for (final dropped in List.of(AtClientImpl.atClientInstanceMap.values)) {
@@ -279,6 +305,8 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: FileAtKeysIo(filePath: (_) => keysFilePath),
         preference: TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         namespace: namespace,
         storage: TestUtils.storageForPrincipal(atSign, enrolled.enrollmentId));
 

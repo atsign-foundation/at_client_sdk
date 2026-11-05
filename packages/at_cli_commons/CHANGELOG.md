@@ -1,24 +1,39 @@
-## 3.1.2
+## 4.0.0
 
-- feat: `CLIBase.fromCommandLineArgs(lookUps: ...)` and the constructor's
-  `lookUps` hand at_client's `AtLookUpFactory` to `open`; with none, the
-  preference's, which is the proxy factory when the root domain names a
-  proxy and TLS on TCP otherwise.
-- feat: `CLIBase` opens its client through at_client's `Atsign.open` and
-  waits for the connection to come online with a budget of
-  `maxConnectAttempts` tries, three seconds apart, instead of
-  re-authenticating in a loop. A refusal by the atServer is thrown as
-  `AtOpenRefusedException` at once; a connection still offline when the
-  budget is spent is `SecondaryServerConnectivityException`, as before.
-- build: require `at_onboarding_cli` ^2.0.0-rc1 and `at_auth` ^4.0.0-rc2.
-- chore: set `AtOnboardingPreference.storagePath` rather than the now-deprecated
-  `AtClientPreference.hiveStoragePath`. The store lands in the same place; the
-  bundle is built by at_onboarding_cli and closed by the client, so `CLIBase`
-  still has nothing to tear down.
-- chore: stop setting `AtClientPreference.commitLogPath`, which at_client reads
-  nowhere, so the value had no effect. No behaviour changes.
-- build: require `at_onboarding_cli` ^1.17.0-rc1, the first version carrying
-  `AtOnboardingPreference.storagePath`.
+- docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: at_cli_commons is a deprecated re-export of at_client_cli, which
+  now carries `CLIBase` and the rest of this package. Depend on at_client_cli.
+- breaking: `MySyncProgressListener` is gone, and `CLIBase`'s `preference` is
+  an `AtClientPreference`.
+- breaking: `CLIBase.createArgsParser` and `fromCommandLineArgs` take no
+  `addLegacyRootDomainArg`, and the arguments they parse no
+  `-d`/`--legacy-root-domain`; use `-r`/`--root-server`.
+- breaking: `CLIBase` throws `AtCredentialRefusedException` for every
+  refusal and `SecondaryNotFoundException` for an atSign the atDirectory does
+  not know; `SecondaryServerConnectivityException` now means only an outage.
+- fix: on Windows, `standardAtClientStorageDir` returns its directory under
+  `TEMP` rather than overflowing the stack.
+
+## 3.1.2-rc3
+
+- build: requires `at_onboarding_cli` ^2.0.0-rc4, `at_client` ^3.15.0-rc4 and
+  `at_auth` ^4.0.0-rc4, for their fixes to upgrading from at_client 3.14.0.
+
+## 3.1.2-rc2
+
+- build: requires `at_client` ^3.15.0-rc2 and `at_auth` ^4.0.0-rc3, for their
+  post-quantum sharing and keyfile lock fixes.
+
+## 3.1.2-rc1
+
+- feat: `CLIBase` waits up to `maxConnectAttempts` tries, 3 seconds apart, for
+  its client to come online, rather than re-authenticating in a loop. A device
+  that has never held the atSign online gets `AtOpenRefusedException`; any
+  other failure to connect still throws `SecondaryServerConnectivityException`.
+- feat: `lookUps` on `CLIBase` and `fromCommandLineArgs` chooses the
+  transport: by default the proxy when the root domain names one, else TLS.
+- build: requires `at_onboarding_cli` ^2.0.0-rc1, `at_client` ^3.15.0-rc1 and
+  `at_auth` ^4.0.0-rc2.
 
 ## 3.1.1
 

@@ -16,7 +16,6 @@ import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, EnvelopeType, signEnvelope;
-import 'package:meta/meta.dart' show experimental;
 
 /// Builds the signed key package that rides an `enroll:request`, and records
 /// its private half in the [AtKeys] the enrollment will persist.
@@ -35,7 +34,6 @@ import 'package:meta/meta.dart' show experimental;
 /// `AtClientPreference.keyEstablishmentAlgorithms`, since an enrollment is
 /// created holding one key and the rest of that list is minted at the client's
 /// first startup.
-@experimental
 Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   String atSign, {
   DateTime? createdAt,

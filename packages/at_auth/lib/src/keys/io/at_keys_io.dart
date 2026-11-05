@@ -17,6 +17,11 @@ sealed class AtKeysIo {
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
+///
+/// ⚠️ **The store a client runs on MUST be durable**: what is written to it
+/// survives the process. A client files key material there that exists nowhere
+/// else, the atSign's signing root among it, so a store that forgets strands
+/// it. [InMemoryAtKeysIo] is the exception, for tests.
 abstract class WrittenAtKeysIo extends AtKeysIo {
   /// Create-only initial persist (fresh onboard); implementations throw if
   /// the target already exists. Use [flush] to persist later mutations.
@@ -61,7 +66,10 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   /// Implementations backed by a lockable store take the lock across all three
   /// steps. The default here does not — it is read/mutate/flush — which is no
   /// worse than the hand-rolled form it replaces, and gives every store one
-  /// call to serialise later.
+  /// call to serialise later. A store that holds a pending enrollment must
+  /// override it to run as one operation: an approval and a cancel each
+  /// decide inside [mutate], and with the default a cancel can write back a
+  /// copy read before the approval was, removing the approved keys.
   ///
   /// [mutate] receives the freshly-read [AtKeys] and mutates it in place. It
   /// returns whether anything changed: **false** abandons the write, which is

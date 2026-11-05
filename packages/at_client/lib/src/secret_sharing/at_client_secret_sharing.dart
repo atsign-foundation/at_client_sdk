@@ -5,7 +5,6 @@ import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 /// Ready-made composition of the same-atSign secret-sharing mixins, for
 /// apps that don't want to mix them into their own classes.
@@ -21,19 +20,19 @@ import 'package:meta/meta.dart' show experimental;
 /// secret-sharing instance is this APKAM keypair's recipient identity (its
 /// KEM enc keypair, registered key package, and envelope listener) plus its
 /// [SecretStore]. Reusing one instance per [AtClient] lets every consumer (the
-/// app and SDK-internal ones, e.g. a future CryptoProvider that distributes
-/// its keys as secrets) share a single store and a single registration rather
-/// than minting duplicate enc keypairs. (Correctness does not depend on it —
-/// kpid-addressed envelopes converge idempotently via [SecretStore.putIfNewer]
-/// — but a single instance avoids redundant registration and double delivery.)
+/// app and SDK-internal ones, e.g. the namespace-key provider, which conveys
+/// its privates as secrets) share a single store and a single registration
+/// rather than minting duplicate enc keypairs. (Correctness does not depend on
+/// it — kpid-addressed envelopes converge idempotently via
+/// [SecretStore.putIfNewer] — but a single instance avoids redundant
+/// registration and double delivery.)
 ///
-/// > **⚠ Experimental.** A recipient key package is APKAM-signed by the
-/// > enrollment that generated it and verified against that enrollment's
-/// > `_apsk` before anything is sealed to it, but the atServer serves the
-/// > `_apsk` too — so the **operator** of the atSign's own atServer is still
-/// > inside the confidentiality boundary. Durable storage of received secrets
-/// > is an app-supplied hook.
-@experimental
+/// > A recipient key package is APKAM-signed by the enrollment that generated
+/// > it and verified against that enrollment's `_apsk` before anything is
+/// > sealed to it, but the atServer serves the `_apsk` too — so the
+/// > **operator** of the atSign's own atServer is still inside the
+/// > confidentiality boundary. Durable storage of received secrets is an
+/// > app-supplied hook.
 class AtClientSecretSharing
     with
         ApkamSigning,
@@ -52,12 +51,8 @@ class AtClientSecretSharing
     AtClient atClient, {
     SecretStorePersistence? persistence,
     ({
-      Duration cacheExpiry,
-      bool resetOnLookup
-    })? publicKeyCacheSettings = const (
-      cacheExpiry: Duration(minutes: 5),
-      resetOnLookup: true,
-    ),
+      Duration cacheExpiry
+    })? publicKeyCacheSettings = const (cacheExpiry: Duration(minutes: 5)),
   }) {
     var instance = _instances[atClient];
     if (instance == null) {
@@ -76,7 +71,7 @@ class AtClientSecretSharing
   final AtSignLogger logger = AtSignLogger('AtClientSecretSharing');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings;
 
   /// Direct construction creates an independent instance with its own
   /// enc keypair. Use [forClient] unless that is what you want (tests,
@@ -85,9 +80,6 @@ class AtClientSecretSharing
   /// closed — until a composition installs a resolver.
   AtClientSecretSharing(
     this.atClient, {
-    this.publicKeyCacheSettings = const (
-      cacheExpiry: Duration(minutes: 5),
-      resetOnLookup: true,
-    ),
+    this.publicKeyCacheSettings = const (cacheExpiry: Duration(minutes: 5)),
   });
 }

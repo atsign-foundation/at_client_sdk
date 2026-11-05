@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -27,8 +26,7 @@ class TestSharer
   final AtSignLogger logger = AtSignLogger('TestSharer');
 
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
-      null;
+  final ({Duration cacheExpiry})? publicKeyCacheSettings = null;
 
   TestSharer(this.atClient);
 }

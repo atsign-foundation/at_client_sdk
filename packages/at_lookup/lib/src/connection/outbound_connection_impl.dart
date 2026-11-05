@@ -3,7 +3,7 @@ import 'outbound_connection.dart';
 class OutboundConnectionImpl extends OutboundConnection {
   int? outboundIdleTime = 600000; //default timeout 10 minutes
 
-  OutboundConnectionImpl(super.socket) {
+  OutboundConnectionImpl(super.transport) {
     metaData = OutboundConnectionMetadata()..created = DateTime.now().toUtc();
   }
 
@@ -20,7 +20,10 @@ class OutboundConnectionImpl extends OutboundConnection {
 
   @override
   bool isInValid() {
-    return _isIdle() || getMetaData()!.isClosed || getMetaData()!.isStale;
+    return _isIdle() ||
+        getMetaData()!.isClosed ||
+        getMetaData()!.isStale ||
+        !isTransportOpen;
   }
 
   @override

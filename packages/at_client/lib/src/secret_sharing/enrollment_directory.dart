@@ -8,7 +8,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException, AtValueException, StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('VerbEnrollmentDirectory');
 
@@ -16,7 +15,6 @@ final _logger = AtSignLogger('VerbEnrollmentDirectory');
 ///
 /// A null `keyPackage` on its own cannot be acted on: these outcomes call for
 /// opposite responses, and only one of them is a problem anybody can fix.
-@experimental
 enum KeyPackageStatus {
   /// Present and verified — safe to seal to.
   present,
@@ -49,7 +47,6 @@ enum KeyPackageStatus {
 /// keypair and therefore exactly one key package — so each member has exactly
 /// one [keyPackage] (null unless [keyPackageStatus] is
 /// [KeyPackageStatus.present]).
-@experimental
 class NamespaceMember {
   final String enrollmentId;
 
@@ -87,7 +84,6 @@ class NamespaceMember {
 /// enrollment record by riding `enroll:request` as opaque
 /// `EnrollParams.metadata` at enrollment time (there is no post-enrollment
 /// metadata write, and no `enroll:metadata` verb).
-@experimental
 abstract class EnrollmentDirectory {
   /// The enrollments authorised for [namespace] (the caller's own enrollment
   /// must hold at least read access — the atServer gates the verb), each with
@@ -98,8 +94,14 @@ abstract class EnrollmentDirectory {
     Set<String> excludeEnrollmentIds = const {},
   });
 
-  /// The latest moment a revocation touched an enrollment granted [namespace],
-  /// null when none ever has.
+  /// The latest moment a revocation touched an enrollment granted [namespace]
+  /// that could hold its namespace key, null when none ever has.
+  ///
+  /// Read from the atServer's `lastKeyHolderRevokedAt` where it answers one,
+  /// which counts only enrollments whose record has ever carried a key
+  /// package, since only those are conveyed a namespace key's private; null
+  /// there means none. An atServer that does not answer it is read from
+  /// `lastRevokedAt`, which counts every revocation.
   ///
   /// Stamped by the atServer, so it is comparable with the atServer's stamp on
   /// a record and with nothing a client computed. It can move **backwards** —
@@ -135,7 +137,6 @@ abstract class EnrollmentDirectory {
 ///                   "payload":{"v":1,"createdAt":..,"keys":[..]},
 ///                   "signature":..,"signingAlgo":..,"hashingAlgo":..,
 ///                   "enrollmentId":..}}}]
-@experimental
 class VerbEnrollmentDirectory implements EnrollmentDirectory {
   final AtClient atClient;
 
@@ -200,14 +201,24 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
       throw AtValueException('enroll:infons for $namespace returned a '
           '${decoded.runtimeType} where a map of namespace facts was expected');
     }
-    final lastRevokedAt = decoded['lastRevokedAt'];
-    if (lastRevokedAt == null) return null;
-    if (lastRevokedAt is! String) {
-      throw AtValueException('enroll:infons for $namespace answered with a '
-          '${lastRevokedAt.runtimeType} lastRevokedAt where an ISO-8601 '
-          'timestamp was expected');
+    if (!decoded.containsKey('lastKeyHolderRevokedAt') &&
+        !decoded.containsKey('lastRevokedAt')) {
+      throw AtValueException('enroll:infons for $namespace answered with '
+          'neither lastKeyHolderRevokedAt nor lastRevokedAt');
     }
-    return DateTime.parse(lastRevokedAt).toUtc();
+    // NOTE: a present key with a null value is an answer, so only an absent
+    // key falls back.
+    final field = decoded.containsKey('lastKeyHolderRevokedAt')
+        ? 'lastKeyHolderRevokedAt'
+        : 'lastRevokedAt';
+    final moment = decoded[field];
+    if (moment == null) return null;
+    if (moment is! String) {
+      throw AtValueException('enroll:infons for $namespace answered with a '
+          '${moment.runtimeType} $field where an ISO-8601 timestamp was '
+          'expected');
+    }
+    return DateTime.parse(moment).toUtc();
   }
 
   /// The key package inside [advertised], if its APKAM signature checks out as
@@ -233,7 +244,6 @@ class VerbEnrollmentDirectory implements EnrollmentDirectory {
 /// advertisement only**, so a caller listing a roster can drop one member and
 /// keep the rest rather than let a single bad record deny every other
 /// enrollment its secrets.
-@experimental
 Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   Object? advertised, {
   required AtClientEnvelopeSigner signer,
@@ -290,7 +300,6 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
 ///
 /// Anything the package receives this way is only as trustworthy as the
 /// atServer that served it; [verifyAdvertisedKeyPackage] is the checked read.
-@experimental
 (KeyPackage?, KeyPackageStatus) readAdvertisedKeyPackage(Object? advertised,
     {required String enrollmentId}) {
   if (advertised == null) return (null, KeyPackageStatus.absent);

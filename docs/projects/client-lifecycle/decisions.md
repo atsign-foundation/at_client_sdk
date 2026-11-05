@@ -116,14 +116,19 @@ open, forward-ranked `String` on 2026-08-14 so that adding a token would stop
 being a breaking at-rest change; an older build treats an unknown token as
 not active and refuses transitions on it, which is the right reading of a
 pending keypair. The protection a pending private key gets is the store's own
-(passphrase envelope, OS keychain, or the chmod-600 plaintext the CLI
-checkpoint uses today). Alternatives: a `PendingEnrollment` record beside the
+(passphrase envelope, OS keychain, or a keyfile that `FileAtKeysIo` writes
+readable and writable by its owner alone; this said "the chmod-600
+plaintext the CLI checkpoint uses today" while that checkpoint existed).
+Alternatives: a `PendingEnrollment` record beside the
 store, persisted per platform (the present situation, tidied); in-memory only
 (gives up a recovery both packages built on purpose).
 
-## 6. at_onboarding_cli keeps a three-member `AtOnboardingService`
+## 6. ~~at_onboarding_cli keeps a three-member `AtOnboardingService`~~
 
-`LIVE`. `AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
+`SUPERSEDED` on 2026-10-28 by the at_client_cli ledger's
+[ruling 5](../client-cli/decisions.md#5-atonboardingservice-ends): the
+adapter ends, and a program opens with `CLIBase` or `Atsign.open`. As ruled:
+`AtOnboardingServiceImpl(atSign, preference)`, `authenticate()` and
 `atClient` stay with their present meaning (gkc, 2026-09-13: the deprecated
 `getAtClient()` goes with the rest, its nine external callers moving to
 `atClient` at the dependency bump), implemented over
@@ -176,9 +181,11 @@ atSign, the root domain, the authenticator, an optional address finder and the
 client config and returning an `AtLookupMuxable`, and `secureSocketLookUps`,
 the default that builds through `withSecureSocket` on the TLS transport. The
 verbs (`open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`),
-`buildAtClient` and `AtServiceFactory.atClient` take `lookUps:`; the client
-holds it, and the client's own connection, sync's, the monitor's, the
-file-stream path and the re-derive after a retrofit all ask it. The Flutter
+and `buildAtClient` take `lookUps:`, as `AtServiceFactory.atClient` did until
+at_client 4.0 removed it; the client
+holds it, and the client's own connection, sync's, the monitor's and the
+re-derive after a retrofit all ask it (the file-stream path did too, until
+the stream verb was retired). The Flutter
 dialogs and `AtsignFlows`, `CLIBase` and the `at_activate` commands pass it
 through. at_auth keeps taking instances. The existing `atLookUp:` instance
 parameters stay for now. `AtClientPreference.decryptPackets`,

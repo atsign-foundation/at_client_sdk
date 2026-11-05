@@ -4,6 +4,11 @@ import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:uuid/uuid.dart';
 
+/// A notification [NotificationService.droppedEvents] reports as given up on:
+/// its key, empty when the frame could not be parsed into one, and the reason
+/// logged for it.
+typedef DroppedNotification = ({String key, String reason});
+
 abstract class NotificationService {
   /// Our atSign
   Atsign get atSign;
@@ -14,6 +19,13 @@ abstract class NotificationService {
   /// - When [shouldDecrypt] is true, then [AtNotification.value] is decrypted
   /// (if it was encrypted). [shouldDecrypt] defaults to false in order to
   /// preserve backwards compatibility.
+  /// - Calls with the same [regex] and [shouldDecrypt] return streams that
+  /// compare equal.
+  /// - Each listener is a subscription of its own, with its own copy of each
+  /// notification; subscriptions asking for the same decryption share one
+  /// decryption of it.
+  /// - A listener's subscription is held until it cancels. Any notification it
+  /// was still waiting to decrypt is then reported on [droppedEvents].
   /// - when [AtClientPreference.monitorAutoStart] is true, the notifications listener
   /// will be started either the first time that [subscribe] is called by the
   /// application code, or 30 seconds after creation if there have been no
@@ -22,6 +34,13 @@ abstract class NotificationService {
   /// will not be started until explicitly requested to do so by the
   /// application, via [startListening]
   Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt});
+
+  /// Every notification this service gives up on without delivering it, such
+  /// as one this client cannot decrypt, with the reason it logs at `warning`.
+  ///
+  /// A dropped notification is otherwise indistinguishable to a subscriber
+  /// from one that was never sent. Broadcast, and it does not replay.
+  Stream<DroppedNotification> get droppedEvents;
 
   /// Stops all subscriptions on the current instance. By default
   /// will also stop listening for notifications from the atServer. If you
@@ -87,23 +106,24 @@ abstract class NotificationService {
   ///
   /// [body] is most usually some json encoded as a String.
   ///
-  /// Exactly one of [idAndNamespace] and the deprecated [namespace] must be
-  /// given; supplying both, or neither, throws [ArgumentError].
+  /// An [ephemeral] notification is persisted by no atServer that supports it,
+  /// and lives at most two minutes whatever [expiration] says; it cannot be
+  /// combined with [cacheAtRecipient], which persists a copy at the recipient.
+  ///
+  /// [sealToNamespace] is the namespace of [to]'s namespace key the body is
+  /// sealed to, as `PutRequestOptions.sealToNamespace` has it; it needs a body
+  /// to encrypt.
   Future<String> send({
     required Atsign to,
-    String? idAndNamespace,
-    @Deprecated('Renamed to idAndNamespace, which says what the value is. The '
-        'value never was a namespace on its own: it is an id and a namespace '
-        'joined by a dot, and reading it as a bare namespace is what left a '
-        'dot-free value with no namespace to encrypt under. Same value, same '
-        'wire format — pass it as idAndNamespace instead.')
-    String? namespace,
+    required String idAndNamespace,
     String body = '',
     bool shouldEncrypt = true,
     String? cryptoProviderId,
+    String? sealToNamespace,
     Duration expiration = NotificationService.defaultExpiration,
     bool cacheAtRecipient = false,
     DateTime? recipientCacheExpiration,
+    bool ephemeral = false,
   });
 
   /// calls [subscribe] with regex constructed from the [namespace]
@@ -168,7 +188,7 @@ abstract class NotificationService {
   ///    ..key = 'phone'
   ///    ..sharedWith = '@bob';
   ///
-  ///  var notificationService = AtClientManager.getInstance().notificationService;
+  ///  var notificationService = client.notificationService;
   ///  await notificationService.notify(NotificationParams.forUpdate(key));
   ///```
   ///2. To notify and cache a key to @bob
@@ -181,7 +201,7 @@ abstract class NotificationService {
   ///
   ///  var value = '+1 998 999 4940'
   ///
-  ///  var notificationService = AtClientManager.getInstance().notificationService;
+  ///  var notificationService = client.notificationService;
   ///  await notificationService.notify(NotificationParams.forUpdate(key, value: value));
   ///```
   ///3. To notify deletion of a key to @bob.
@@ -190,16 +210,8 @@ abstract class NotificationService {
   ///     ..key = 'phone'
   ///     ..sharedWith = '@bob';
   ///
-  ///   var notificationService = AtClientManager.getInstance().notificationService;
+  ///   var notificationService = client.notificationService;
   ///   await notificationService.notify(NotificationParams.forDelete(key));
-  ///```
-  ///4. To notify a text message to @bob
-  ///   forText notifications are case sensitive
-  ///   `await notificationService.notify(NotificationParams.forText(<Text to Notify>,<Whom to Notify>));`
-  ///
-  ///```dart
-  ///   var notificationService = AtClientManager.getInstance().notificationService;
-  ///   await notificationService.notify(NotificationParams.forText('Hello','@bob'));
   ///```
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {bool waitForFinalDeliveryStatus = true,
@@ -215,8 +227,8 @@ abstract class NotificationService {
   ///
   /// To get the status of a notification
   ///```dart
-  /// var notificationService = AtClientManager.getInstance().notificationService;
-  /// var notificationResult = await notificationService.status('abc-123');
+  /// var notificationService = client.notificationService;
+  /// var notificationResult = await notificationService.getStatus('abc-123');
   ///```
   ///
   /// * Returns [NotificationResult] for the given notification-id.
@@ -234,7 +246,7 @@ abstract class NotificationService {
   ///
   ///  To fetch a notification with id: abc-123
   /// ```dart
-  /// var notificationService = AtClientManager.getInstance().notificationService;
+  /// var notificationService = client.notificationService;
   /// var atNotification = await notificationService.fetch('abc-123');
   /// ```
   /// Returns [NotificationStatus.delivered] when notification exist in the key-store
@@ -260,13 +272,14 @@ class NotificationParams {
   late AtKey _atKey;
   String? _value;
   late OperationEnum _operation;
-  late MessageTypeEnum _messageType;
   PriorityEnum _priority = PriorityEnum.low;
   StrategyEnum _strategy = StrategyEnum.all;
   int _latestN = 1;
   String _notifier = AtConstants.system;
   Duration _notificationExpiry = Duration(hours: 24);
   String? _cryptoProviderId;
+  String? _sealToNamespace;
+  bool _ephemeral = false;
 
   String get id => _id;
 
@@ -275,9 +288,6 @@ class NotificationParams {
   String? get value => _value;
 
   OperationEnum get operation => _operation;
-
-  @Deprecated('Use MessageType.key')
-  MessageTypeEnum get messageType => _messageType;
 
   PriorityEnum get priority => _priority;
 
@@ -290,6 +300,13 @@ class NotificationParams {
   Duration get notificationExpiry => _notificationExpiry;
 
   String? get cryptoProviderId => _cryptoProviderId;
+
+  /// For a notification to another atSign, the namespace of the recipient's
+  /// namespace key its value is sealed to, as `PutRequestOptions` has it.
+  String? get sealToNamespace => _sealToNamespace;
+
+  /// Whether no atServer that supports it persists the notification.
+  bool get ephemeral => _ephemeral;
 
   /// Returns [NotificationParams] to send an update notification.
   ///
@@ -305,6 +322,10 @@ class NotificationParams {
   ///
   /// * notificationExpiry: Refers to the amount of time the notification is
   /// available in the KeyStore. Beyond which the notification is removed from the KeyStore.
+  ///
+  /// * ephemeral: no atServer that supports it persists the notification, and
+  /// it lives at most two minutes whatever [notificationExpiry] says. It cannot
+  /// be combined with a ttr or ccd on [atKey].
   static NotificationParams forUpdate(AtKey atKey,
       {String? value,
       PriorityEnum priority = PriorityEnum.low,
@@ -312,13 +333,16 @@ class NotificationParams {
       int latestN = 1,
       String notifier = AtConstants.system,
       Duration? notificationExpiry,
-      String? cryptoProviderId}) {
+      String? cryptoProviderId,
+      String? sealToNamespace,
+      bool ephemeral = false}) {
     return NotificationParams()
       .._id = Uuid().v4()
       .._atKey = atKey
       .._value = value
       .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.key
+      .._sealToNamespace = sealToNamespace
+      .._ephemeral = ephemeral
       .._priority = priority
       .._strategy = strategy
       .._latestN = latestN
@@ -333,25 +357,6 @@ class NotificationParams {
       .._id = Uuid().v4()
       .._atKey = atKey
       .._operation = OperationEnum.delete
-      .._messageType = MessageTypeEnum.key
-      .._cryptoProviderId = cryptoProviderId;
-  }
-
-  /// Returns [NotificationParams] to send a text message to another atSign.
-  /// forText notifications are case-sensitive
-  /// platform level lower case enforcement will not apply to forText notifications
-  @Deprecated('No longer supported')
-  static NotificationParams forText(String text, String whomToNotify,
-      {bool shouldEncrypt = false, String? cryptoProviderId}) {
-    var atKey = AtKey()
-      ..key = text
-      ..sharedWith = whomToNotify
-      ..metadata = (Metadata()..isEncrypted = shouldEncrypt);
-    return NotificationParams()
-      .._id = Uuid().v4()
-      .._atKey = atKey
-      .._operation = OperationEnum.update
-      .._messageType = MessageTypeEnum.text
       .._cryptoProviderId = cryptoProviderId;
   }
 }

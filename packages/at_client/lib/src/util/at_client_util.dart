@@ -4,21 +4,11 @@ import 'dart:typed_data';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:crypton/crypton.dart';
 
 class AtClientUtil {
-  @Deprecated('use RemoteSecondary.findSecondaryUrl')
-  static Future<String> findSecondary(
-      String toAtSign, String rootDomain, int rootPort) async {
-    final secondaryAddress =
-        await CacheableSecondaryAddressFinder(rootDomain, rootPort)
-            .findSecondary(toAtSign);
-    return secondaryAddress.toString();
-  }
-
   static List<String> getSecondaryInfo(String? url) {
     var result = <String>[];
     if (url != null && url.contains(':')) {
@@ -121,20 +111,19 @@ class AtClientUtil {
     if (!(atKey.metadata.namespaceAware)) {
       return atKey.key;
     }
-    // Do not append the namespace if the key already ends in it. The check
-    // wants the dot: a key NAMED like the namespace has not got it yet.
-    final namespace = atClientPreference.namespace;
-    if (namespace != null && atKey.key.endsWith('.$namespace')) {
-      return atKey.key;
-    }
-    // If key does not have any namespace, append the namespace to the key.
-    if (atKey.namespace.isNotNull) {
+    // NOTE: a namespace set on the key is appended as `AtKey.toString` appends
+    // it, so a read addresses the record the write made.
+    if (atKey.namespace.isNotNull && atKey.namespace!.isNotEmpty) {
       return '${atKey.key}.${atKey.namespace!}';
     }
-    if (atClientPreference.namespace.isNotNull) {
-      return '${atKey.key}.${atClientPreference.namespace}';
+    // Do not append the preference's namespace if the key already ends in it.
+    // The check wants the dot: a key NAMED like the namespace has not got it
+    // yet.
+    final namespace = atClientPreference.namespace;
+    if (namespace == null || atKey.key.endsWith('.$namespace')) {
+      return atKey.key;
     }
-    return atKey.key;
+    return '${atKey.key}.$namespace';
   }
 
   // TODO Remove this once AtUtils.fixAtSign accepts and returns String?

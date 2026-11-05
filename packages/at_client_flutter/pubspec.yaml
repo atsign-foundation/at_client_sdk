@@ -1,6 +1,6 @@
 name: at_client_flutter
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 2.0.0-rc1
+version: 2.0.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -16,26 +16,32 @@ dependencies:
   biometric_storage: ^5.0.1
   collection: ^1.18.0
   at_commons: ^5.8.0
-  at_utils: ^3.4.0
+  at_utils: ^4.0.0
   at_chops: ^3.0.0
-  at_lookup: ^3.7.0-rc2
-  # Floor set by WrittenAtKeysIo.update, which the keychain store's flush makes
-  # reachable here. Resolution in this workspace is by path, so only a consumer
-  # resolving from pub.dev feels a floor set too low.
-  at_auth: ^4.0.0-rc2
-  # Floor set by PqPosture and EnrollmentConveyanceException. It has to be
-  # written as a prerelease: a caret on a stable lower bound never accepts one,
-  # so ^3.14.1 would not resolve 3.15.0-rc1 however it is published.
-  at_client: ^3.15.0-rc1
+  at_lookup: ^4.0.0
+  # WrittenAtKeysIo.update, which the keychain store's flush makes reachable
+  # here, needs 4.0.0-rc1; 4.0.0-rc3 also releases a keyfile lock a stopped
+  # process left behind, and 4.0.0-rc4 ends ApkamActivationDialog's wait at
+  # once for an enrollment that has expired. Resolution in this workspace is by
+  # path, so only a consumer resolving from pub.dev feels a floor set too low.
+  at_auth: ^4.0.0
+  at_client: ^4.0.0
   encrypt: ^5.0.3
   intl: ^0.20.2
-  file_picker: ^11.0.02
+  file_picker: ^11.0.2
   path: ^1.9.1
+  path_provider: ^2.1.5
   pinput: ^5.0.1
+  synchronized: ^3.1.0
 
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.0
   mocktail: ^1.0.4
+  at_persistence_secondary_server: ^5.4.0
+  path_provider_platform_interface: ^2.1.2
+  # path_provider allows platform 3.0.x, which no longer compiles.
+  platform: ^3.1.0
+  plugin_platform_interface: ^2.1.8
   flutter_test:
     sdk: flutter

@@ -12,14 +12,14 @@
 //       -a @alice --other-at-signs @bob -P 2s --simulate
 //
 // Mirrors the receive-side wiring of the Flutter dashboard at
-// `packages/at_client_flutter/examples/dockerstats/`.
+// `packages/at_client_flutter/example/dockerstats/`.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:at_cli_commons/at_cli_commons.dart';
+import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_examples/dockerstats/models.dart';
 
 const String applicationNamespace = 'dockerstats.demos';
@@ -266,6 +266,5 @@ ArgParser _buildParser() {
       abbr: 'P',
       hide: true,
     )
-    ..addOption('legacy-root-domain', hide: true)
     ..addFlag('verbose', abbr: 'v', negatable: false);
 }

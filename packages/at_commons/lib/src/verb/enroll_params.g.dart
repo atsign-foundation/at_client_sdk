@@ -34,7 +34,8 @@ EnrollParams _$EnrollParamsFromJson(Map<String, dynamic> json) => EnrollParams()
       .toList()
   ..apkamKeysExpiryDuration = json['apkamKeysExpiryInMillis'] == null
       ? null
-      : Duration(milliseconds: json['apkamKeysExpiryInMillis']);
+      : Duration(milliseconds: json['apkamKeysExpiryInMillis'])
+  ..links = json['links'] as Map<String, dynamic>?;
 
 Map<String, dynamic> _$EnrollParamsToJson(EnrollParams instance) =>
     <String, dynamic>{
@@ -61,6 +62,7 @@ Map<String, dynamic> _$EnrollParamsToJson(EnrollParams instance) =>
           .toList(),
       'apkamKeysExpiryInMillis':
           instance.apkamKeysExpiryDuration?.inMilliseconds,
+      'links': instance.links,
     };
 
 const _$EnrollmentStatusEnumMap = {

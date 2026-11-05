@@ -33,7 +33,7 @@ runs:
       uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 #v2.12.0
       with:
         channel: ${{ inputs.flutter-channel }}
-        cache: ${{ steps.flutter-ref.outputs.sha }}
+        cache: true
         cache-key: ${{ steps.flutter-ref.outputs.sha }}
 
     - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1

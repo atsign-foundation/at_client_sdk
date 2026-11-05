@@ -3,7 +3,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
@@ -18,6 +20,7 @@ import 'package:uuid/uuid.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/test_crypto_provider.dart';
+import 'test_utils/transport.dart';
 
 String? lastNotificationJson;
 
@@ -115,17 +118,18 @@ class RecordingProvider extends CryptoProvider {
       value.substring(4);
 }
 
+// NOTE: send() asks the atServer's info before it notifies; the notify
+// command is what these tests are about.
+bool _isNotify(dynamic command) => '$command'.startsWith('notify:');
+
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
-  final mockAtChops = MockAtChops();
   AtClientManager mockAtClientManager = MockAtClientManager();
   FakeMonitor fakeMonitor = FakeMonitor();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   AtLookupImpl mockAtLookupImpl = MockAtLookupImpl();
-  setUpAll(() {
-    when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
-  });
+  setUpAll(() {});
   group('A group of test to validate notification request transformer', () {
     var value = '+91908909933';
     setUp(() {
@@ -385,55 +389,6 @@ void main() {
     });
 
     test(
-        'A test to validate notification request with text return verb builder',
-        () async {
-      var notificationParams =
-          NotificationParams.forText('Hi How are you', '@bob');
-      var notifyVerbBuilder =
-          await NotificationRequestTransformer(mockAtClientImpl)
-              .transform(notificationParams);
-      //upper case should be preserved in forText notifications
-      expect(notifyVerbBuilder.atKey.key, 'Hi How are you');
-      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
-      // ignore: deprecated_member_use
-      expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
-      expect(notifyVerbBuilder.priority, PriorityEnum.low);
-      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
-    });
-
-    test(
-        'A test to validate notification request with text with shouldEncrypt set to true return verb builder',
-        () async {
-      var notificationParams = NotificationParams.forText(
-          'Hi How are you', '@bob',
-          shouldEncrypt: true);
-      var notifyVerbBuilder =
-          await NotificationRequestTransformer(mockAtClientImpl)
-              .transform(notificationParams);
-      expect(notifyVerbBuilder.atKey.key, 'abcHi How are you');
-      expect(notifyVerbBuilder.atKey.sharedWith, '@bob');
-      // ignore: deprecated_member_use
-      expect(notifyVerbBuilder.messageType, MessageTypeEnum.text);
-      expect(notifyVerbBuilder.priority, PriorityEnum.low);
-      expect(notifyVerbBuilder.strategy, StrategyEnum.all);
-    });
-
-    test(
-        'A test to verify notification is not sent when encryption service throws exception',
-        () async {
-      registerFallbackValue(FakeAtKey());
-      var notificationParams = NotificationParams.forText(
-          'Hi How are you', '@bob',
-          shouldEncrypt: true);
-
-      var notificationRequestTransformer =
-          NotificationRequestTransformer(mockAtClientImpl);
-      var transformed =
-          await notificationRequestTransformer.transform(notificationParams);
-      expect(transformed.atKey.sharedWith, '@bob');
-    });
-
-    test(
         'A test to validate encrypted value and shared encryption key is set in verb builder when isEncrypted is set to true in metadata',
         () async {
       var notificationParams = NotificationParams.forUpdate(
@@ -444,12 +399,9 @@ void main() {
         notifier: 'test-notifier',
         latestN: 2,
         notificationExpiry: Duration(minutes: 1),
+        cryptoProviderId: 'test_provider',
       );
       notificationParams.atKey.metadata.isEncrypted = true;
-      notificationParams.atKey.metadata.appMetadata =
-          AppMetadata(providerId: 'test_provider');
-      // The key pins providerId 'test_provider'; register a CipherProvider
-      // under that id so the runtime routes encryption to it.
       when(() => mockAtClientImpl.getPreferences()).thenReturn(
         AtClientPreference()
           ..namespace = 'wavi'
@@ -518,6 +470,77 @@ void main() {
       expect(notifyVerbBuilder.value, 'abc$value');
       expect(notifyVerbBuilder.atKey.metadata.appMetadata?.providerId,
           'override-provider');
+    });
+
+    group('a send the SDK encrypts takes nothing an earlier send left', () {
+      void configureTwoProviders() =>
+          when(() => mockAtClientImpl.getPreferences()).thenReturn(
+            AtClientPreference()
+              ..namespace = 'wavi'
+              ..crypto = CryptoConfig(
+                defaultProviderId: 'default-provider',
+                providers: [
+                  CipherProvider('default-provider'),
+                  CipherProvider('override-provider'),
+                ],
+              ),
+          );
+
+      AtKey toBob() =>
+          (AtKey.shared('phone', namespace: 'wavi')..sharedWith('@bob'))
+              .build();
+
+      Future<String?> providerOfSend(
+          AtKey atKey, String? cryptoProviderId) async {
+        final params = NotificationParams.forUpdate(atKey,
+            value: value, cryptoProviderId: cryptoProviderId);
+        params.atKey.metadata.isEncrypted = true;
+        final builder = await NotificationRequestTransformer(mockAtClientImpl)
+            .transform(params);
+        return builder.atKey.metadata.appMetadata?.providerId;
+      }
+
+      test('a provider id written on the key does not choose the provider',
+          () async {
+        configureTwoProviders();
+        final atKey = toBob()
+          ..metadata.appMetadata = AppMetadata(providerId: 'override-provider');
+
+        expect(await providerOfSend(atKey, null), 'default-provider',
+            reason: 'only cryptoProviderId, or else the default, chooses the '
+                'provider of a send the SDK encrypts');
+      });
+
+      test('a reused key follows each send\'s own cryptoProviderId', () async {
+        configureTwoProviders();
+        final atKey = toBob();
+
+        expect(await providerOfSend(atKey, 'override-provider'),
+            'override-provider');
+        expect(
+            await providerOfSend(atKey, 'default-provider'), 'default-provider',
+            reason: 'the provider the first send stamped on the key must not '
+                'outrank the second send\'s explicit request');
+        expect(await providerOfSend(atKey, null), 'default-provider',
+            reason: 'nor stand in for the default');
+      });
+
+      test('keys sharing one Metadata do not inherit each other\'s provider',
+          () async {
+        configureTwoProviders();
+        final shared = Metadata();
+        final first = toBob()..metadata = shared;
+        final second = (AtKey.shared('phone', namespace: 'wavi')
+              ..sharedWith('@carol'))
+            .build()
+          ..metadata = shared;
+
+        expect(await providerOfSend(first, 'override-provider'),
+            'override-provider');
+        expect(await providerOfSend(second, null), 'default-provider',
+            reason: 'one Metadata object reused across keys is how AtRpc '
+                'sent; the first send\'s stamp must not route the second');
+      });
     });
     test(
         'A test to validate unencrypted value is set in verb builder when isEncrypted is set to false in metadata',
@@ -593,6 +616,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
       // The send routed encryption to the override provider, so the wire
       // appMetadata carries that providerId (not the preference default).
@@ -641,6 +665,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
       // With no override, the send routed encryption to the preference default
       // provider, so the wire appMetadata carries that providerId.
@@ -650,6 +675,56 @@ void main() {
           ':${AtConstants.appMetadata}:'
           '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'default-provider'))}',
         ),
+      );
+    });
+
+    test('send answers a notification in the scheme it arrived in', () async {
+      final remoteSecondary = MockRemoteSecondary();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'wavi'
+          ..crypto = CryptoConfig(
+            defaultProviderId: 'default-provider',
+            providers: [
+              CipherProvider('default-provider'),
+              CipherProvider('request-provider'),
+            ],
+          ),
+      );
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenReturn(remoteSecondary);
+      when(() => remoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async => 'data:ok');
+      final notificationServiceImpl = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        monitor: fakeMonitor,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+      ) as NotificationServiceImpl;
+      final request = AtNotification.empty()
+        ..from = '@bob'
+        ..metadata = (Metadata()
+          ..appMetadata = AppMetadata(providerId: 'request-provider'));
+
+      await notificationServiceImpl.send(
+        to: request.from.toAtsign(),
+        idAndNamespace: 'reply.wavi',
+        body: 'answer',
+        cryptoProviderId: request.receivedUnder,
+      );
+
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .where(_isNotify)
+              .single as String;
+      expect(
+        command,
+        contains(
+          ':${AtConstants.appMetadata}:'
+          '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'request-provider'))}',
+        ),
+        reason: 'the reply goes out under the provider the request arrived '
+            'under, not this client\'s default',
       );
     });
   });
@@ -695,6 +770,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
       // NOTE: the wire name is frozen — the recipient derives the ciphertext's
       // binding from this string, so moving it computes different bytes.
@@ -708,6 +784,7 @@ void main() {
       final command =
           verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
               .captured
+              .where(_isNotify)
               .single as String;
 
       // NOTE: a frozen wire shape, with only the generated id substituted out
@@ -717,16 +794,6 @@ void main() {
           'notify:id:<id>:notifier:SYSTEM:ttln:900000:isEncrypted:true'
           ':appMetadata:eyJwcm92aWRlcklkIjoicmVjb3JkaW5nLXByb3ZpZGVyIn0='
           ':@bob:a.b.c@alice:enc:hello\n');
-    });
-
-    test('the deprecated parameter is the same value, split the same way',
-        () async {
-      await (await service())
-          .send(to: '@bob'.toAtsign(), namespace: 'a.b.c', body: 'hello');
-
-      expect(recorder.seen!.namespace, 'b.c',
-          reason: 'the rename is a rename — a caller that has not migrated '
-              'must not get different crypto');
     });
 
     test('a name with no dot is refused at the call site', () async {
@@ -755,24 +822,6 @@ void main() {
             reason: '"$bad" has a dot but leaves one half empty, and an empty '
                 'namespace declines exactly as a missing one does');
       }
-    });
-
-    test('both spellings at once is refused, and so is neither', () async {
-      final s = await service();
-
-      await expectLater(
-          () => s.send(
-              to: '@bob'.toAtsign(),
-              idAndNamespace: 'a.b',
-              namespace: 'c.d',
-              body: 'hi'),
-          throwsA(isA<ArgumentError>()),
-          reason: 'silently preferring one would make the migration '
-              'unreviewable — a half-migrated call site would keep working '
-              'while sending under the wrong name');
-
-      await expectLater(() => s.send(to: '@bob'.toAtsign(), body: 'hi'),
-          throwsA(isA<ArgumentError>()));
     });
   });
 
@@ -981,9 +1030,6 @@ void main() {
 
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
-      when(() => mockAtClientImpl.atChops).thenReturn(mockAtChops);
       when(() => mockAtClientManager.atClient)
           .thenAnswer((_) => mockAtClientImpl);
 
@@ -1008,12 +1054,11 @@ void main() {
                 ..cache(1000, true))
               .build();
       var value = '91807876564';
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyVerbBuilder());
@@ -1037,8 +1082,10 @@ void main() {
     test('A test to verify buffer over flow exception for messageType key',
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => AtClientPreference()..maxDataSize = 1);
@@ -1062,40 +1109,47 @@ void main() {
           throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
     });
 
-    test('A test to verify buffer over flow exception for messageType text',
-        () async {
-      when(() => mockAtClientImpl.getPreferences())
-          .thenAnswer((_) => AtClientPreference()..maxDataSize = 1);
-
+    test(
+        'A notification value of exactly maxDataSize is sent, and one longer '
+        'is refused with BufferOverFlowException', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
-
-      NotificationParams notificationParams =
-          NotificationParams.forText('Hello bob', '@bob');
-      NotifyVerbBuilder notifyVerbBuilder = NotifyVerbBuilder()
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()..maxDataSize = 10);
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
+            ..sharedWith('@alice'))
+          .build();
+      NotifyVerbBuilder builderCarrying(String value) => NotifyVerbBuilder()
         ..useAtKeyToString = true
-        ..atKey.key = '@bob:Hello bob';
+        ..atKey = atKey
+        ..value = value;
 
+      notificationServiceImpl.notificationValueValidation(
+          NotificationParams.forUpdate(atKey, value: '0123456789'),
+          builderCarrying('0123456789'));
       expect(
           () => notificationServiceImpl.notificationValueValidation(
-              notificationParams, notifyVerbBuilder),
-          throwsA(predicate((dynamic e) => e is BufferOverFlowException)));
+              NotificationParams.forUpdate(atKey, value: '0123456789a'),
+              builderCarrying('0123456789a')),
+          throwsA(isA<BufferOverFlowException>()));
     });
 
     test(
         'A test to verify unauthorized exception is thrown when sharedBy atSign is different from currentAtSign',
         () async {
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockSecondaryAddressFinder.findSecondary('@colin'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
       when(() => mockAtClientImpl.notifyStatus(any()))
           .thenAnswer((_) => Future.value('data:delivered'));
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       var notificationParams = NotificationParams.forUpdate(
           (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@bob')
@@ -1112,9 +1166,6 @@ void main() {
 
   group('Verify basic monitor interactions', () {
     setUp(() {
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
-
       when(() => mockAtClientImpl.getPreferences())
           .thenAnswer((_) => AtClientPreference()
             ..namespace = 'wavi'
@@ -1130,8 +1181,9 @@ void main() {
     test('Verify lastReceipt', () async {
       DateTime testStartTime = DateTime.now().toUtc();
 
-      var ns = await NotificationServiceImpl.create(mockAtClientImpl)
-          as NotificationServiceImpl;
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          secondaryAddressFinder: defaultAtDirectory,
+          lookUps: mockAtClientImpl.lookUps) as NotificationServiceImpl;
 
       var atNotification = AtNotification(
           '124',
@@ -1158,8 +1210,9 @@ void main() {
     });
 
     test('Verify monitor delivers notification', () async {
-      var ns = await NotificationServiceImpl.create(mockAtClientImpl)
-          as NotificationServiceImpl;
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          secondaryAddressFinder: defaultAtDirectory,
+          lookUps: mockAtClientImpl.lookUps) as NotificationServiceImpl;
 
       var atNotification = AtNotification(
           '124',
@@ -1200,6 +1253,7 @@ void main() {
       var notificationService = await NotificationServiceImpl.create(
         mockAtClientImpl,
         monitor: fakeMonitor,
+        secondaryAddressFinder: defaultAtDirectory,
       ) as NotificationServiceImpl;
 
       notificationService.subscribe(regex: 'statsNotification');
@@ -1221,6 +1275,7 @@ void main() {
       var notificationService = await NotificationServiceImpl.create(
         mockAtClientImpl,
         monitor: fakeMonitor,
+        secondaryAddressFinder: defaultAtDirectory,
       ) as NotificationServiceImpl;
 
       // inject a custom duration of 10 milliseconds
@@ -1253,8 +1308,10 @@ void main() {
     test('NotificationService subscribe returns a new stream for a new regex',
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
           regex: '.wavi', shouldDecrypt: false);
@@ -1272,14 +1329,16 @@ void main() {
     });
 
     test(
-        'NotificationService subscribe returns an existing stream for a same regex',
-        () async {
+        'NotificationService subscribe gives each listener a subscription of '
+        'its own, for the same regex and shouldDecrypt', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
-          regex: '.wavi', shouldDecrypt: false);
+          regex: '.wavi', shouldDecrypt: true);
       notificationStream.listen((event) async {
         print(event);
       });
@@ -1289,7 +1348,30 @@ void main() {
       notificationStream1.listen((event) {
         print(event);
       });
-      expect(notificationServiceImpl.getStreamListenersCount(), 1);
+      expect(notificationServiceImpl.getStreamListenersCount(), 2,
+          reason: 'each listener is a subscription of its own, released when '
+              'it cancels');
+      notificationServiceImpl.stopAllSubscriptions();
+    });
+
+    test(
+        'NotificationService subscribe returns a new stream for the same regex '
+        'with the other shouldDecrypt', () async {
+      var notificationServiceImpl = await NotificationServiceImpl.create(
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+
+      notificationServiceImpl
+          .subscribe(regex: '.wavi', shouldDecrypt: false)
+          .listen((_) {});
+      notificationServiceImpl
+          .subscribe(regex: '.wavi', shouldDecrypt: true)
+          .listen((_) {});
+      expect(notificationServiceImpl.getStreamListenersCount(), 2,
+          reason: 'a subscription asking for decrypted values must not share '
+              'one asking for values as they arrived');
       notificationServiceImpl.stopAllSubscriptions();
     });
   });
@@ -1298,15 +1380,16 @@ void main() {
     test('A test to verify notification fetch for non-existing notification',
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -1324,15 +1407,16 @@ void main() {
     test('A test to verify notification fetch for an existing notification',
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -1363,15 +1447,16 @@ void main() {
 
     test('A test to verify remote secondary timeouts to respond', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -1386,15 +1471,16 @@ void main() {
 
     test('A test to verify remote secondary is not reachable', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
+      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
+          lookUps: secureSocketLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenAnswer((_) => mockSecondaryAddressFinder);
       when(() => mockAtClientImpl.getRemoteSecondary())
           .thenAnswer((_) => remoteSecondary);
       registerFallbackValue(FakeNotifyFetchVerbBuilder());
@@ -1432,8 +1518,10 @@ void main() {
 
       final beforeCreate = DateTime.now().millisecondsSinceEpoch;
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
       final afterCreate = DateTime.now().millisecondsSinceEpoch;
       notificationServiceImpl.stopAllSubscriptions();
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -1481,7 +1569,9 @@ void main() {
             .thenAnswer((_) async => true);
 
         service = await NotificationServiceImpl.create(mockAtClientImpl,
-            monitor: fakeMonitor) as NotificationServiceImpl;
+                monitor: fakeMonitor,
+                secondaryAddressFinder: defaultAtDirectory)
+            as NotificationServiceImpl;
         createdAtMillis = (await service.getLastNotificationTime())!;
       });
 
@@ -1528,8 +1618,10 @@ void main() {
 
       final beforeCreate = DateTime.now().millisecondsSinceEpoch;
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
       final afterCreate = DateTime.now().millisecondsSinceEpoch;
       // Long enough that "when it was created" and "when it was asked" are
       // different numbers.
@@ -1590,8 +1682,10 @@ void main() {
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
@@ -1630,8 +1724,10 @@ void main() {
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
               .get(notificationServiceImpl.lastReceivedNotificationAtKey))
@@ -1670,8 +1766,10 @@ void main() {
           Uuid().v4(), '', '@bob', '@alice', epochMillis, 'update', true);
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              mockAtClientImpl,
+              monitor: fakeMonitor,
+              secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       // Default: any key NOT explicitly stubbed below is absent.
       // The #1942 migration also probes the intermediate
@@ -1722,7 +1820,8 @@ void main() {
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
           .thenAnswer((_) async => false);
       service = await NotificationServiceImpl.create(mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
       service.stopAllSubscriptions();
     });
 
@@ -1739,7 +1838,8 @@ void main() {
           '"value":null,"operation":"update","epochMillis":1,'
           '"messageType":"MessageType.key","isEncrypted":false}';
       final live = await NotificationServiceImpl.create(mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
 
       final receipt = live.handleNotificationReceipt(
           'notification: ${notification('n1')}notification: ${notification('n2')}');
@@ -1770,7 +1870,8 @@ void main() {
         return true;
       });
       final live = await NotificationServiceImpl.create(mockAtClientImpl,
-          monitor: fakeMonitor) as NotificationServiceImpl;
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
       live.subscribe(regex: '.*').listen((n) => events.add('delivered'));
 
       await live.handleNotificationReceipt('notification: '
@@ -1867,9 +1968,10 @@ void main() {
       var lastReceivedNotification =
           AtKey.fromString('local:lastReceivedNotification.wavi@alice');
 
-      NotificationServiceImpl service =
-          await NotificationServiceImpl.create(mockAtClientImpl)
-              as NotificationServiceImpl;
+      NotificationServiceImpl service = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          secondaryAddressFinder: defaultAtDirectory,
+          lookUps: mockAtClientImpl.lookUps) as NotificationServiceImpl;
 
       expect(lastReceivedNotification.toString(),
           service.lastReceivedNotificationAtKey.toString());
@@ -1954,6 +2056,7 @@ void main() {
       return await NotificationServiceImpl.create(
         mockAtClientImpl,
         monitor: fakeMonitor,
+        secondaryAddressFinder: defaultAtDirectory,
       ) as NotificationServiceImpl;
     }
 
@@ -2095,11 +2198,10 @@ void main() {
 
   group('validate stop() behaviour', () {
     test('stop() sets isStopped to true', () async {
-      when(() => mockAtClientManager.secondaryAddressFinder)
-          .thenReturn(MockSecondaryAddressFinder());
-      final notificationService =
-          await NotificationServiceImpl.create(mockAtClientImpl)
-              as NotificationServiceImpl;
+      final notificationService = await NotificationServiceImpl.create(
+          mockAtClientImpl,
+          secondaryAddressFinder: defaultAtDirectory,
+          lookUps: mockAtClientImpl.lookUps) as NotificationServiceImpl;
 
       await notificationService.stop();
       expect(notificationService.isStopped, true);
@@ -2138,8 +2240,8 @@ void main() {
         ..monitorHeartbeatResponseTimeout = Duration(milliseconds: 7);
 
       final ns = await NotificationServiceImpl.create(mockAtClientImpl,
-              secondaryAddressFinder: mockSecondaryAddressFinder)
-          as NotificationServiceImpl;
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          lookUps: mockAtClientImpl.lookUps) as NotificationServiceImpl;
 
       expect(ns.monitor.lookUp.heartbeatInterval, Duration(milliseconds: 20),
           reason: 'an application that tunes monitorHeartbeatInterval must '
@@ -2158,8 +2260,8 @@ void main() {
         'an untouched preference gives the documented 59s, not the 30s '
         'underneath', () async {
       final ns = await NotificationServiceImpl.create(mockAtClientImpl,
-              secondaryAddressFinder: mockSecondaryAddressFinder)
-          as NotificationServiceImpl;
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          lookUps: mockAtClientImpl.lookUps) as NotificationServiceImpl;
 
       // A raw-literal pin on the default, not a second wiring test: every
       // mutation that reddens this one reddens the test above too.

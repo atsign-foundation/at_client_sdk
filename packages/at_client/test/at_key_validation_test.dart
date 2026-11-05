@@ -1,6 +1,9 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/hive.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:test/test.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 void main() {
   group('A group of test related to validation of atKey', () {
@@ -32,9 +35,20 @@ void main() {
     var atSign = '';
     final namespace = 'test';
     final preference = AtClientPreference();
-    expect(
-        () async => await AtClientManager.getInstance()
-            .setCurrentAtSign(atSign, namespace, preference),
+    // NOTE: keys and store built for a valid atSign, outside the closure, so
+    // the refusal is buildAtClient's own and not theirs.
+    final keys = noKeysFor('@alice');
+    final storage =
+        HiveAtClientStorage(atSign: '@alice', storagePath: 'test/hive');
+    await expectLater(
+        () => buildAtClient(
+            atSign: atSign,
+            namespace: namespace,
+            preference: preference,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: atDirectoryOf(preference),
+            atKeysIo: keys,
+            storage: storage),
         throwsA(predicate((dynamic e) => e is InvalidAtSignException)));
   });
 

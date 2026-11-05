@@ -1,7 +1,3 @@
-// The substrate is @experimental; exercising it from another package is the
-// point of this file.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -11,7 +7,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -29,7 +25,8 @@ import 'test_utils.dart';
 /// ML-DSA-65 keypair, submits a no-OTP `enroll:request`, is auto-approved by
 /// the atServer, and immediately PKAM-authenticates under the new enrollment
 /// with the ML-DSA key — record-authoritative, so the pass proves the whole
-/// client chain (keyfile → AtChops → pkam dispatch) signed genuine ML-DSA.
+/// client chain (keyfile → authenticator → pkam dispatch) signed genuine
+/// ML-DSA.
 ///
 /// The pre-PQ starting point is built with an ordinary OTP enrollment on
 /// firstAtSign, approved by the demo-keys owner client, rather than a CRAM
@@ -101,7 +98,9 @@ void main() {
       [String Function(String)? pathFor]) async {
     final keysIo = FileAtKeysIo(filePath: pathFor ?? keysFilePath);
     final enrollmentId = await Atsign(atSign)
-        .authenticatesAs(keys: keysIo, rootDomain: rootDomain);
+        .authenticatesAs(keys: keysIo, rootDomain: rootDomain,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory);
     return AtAuthSession(
         atSign: atSign,
         rootDomain: rootDomain,
@@ -115,7 +114,8 @@ void main() {
   /// authentication revokes it.
   Future<AtLookUp> legacyLookUp(AtAuthSession session) =>
       authenticatedLookUp(atSign, session.atKeysIo, rootDomain,
-          enrollmentId: session.enrollmentId, lookUps: secureSocketLookUps());
+          enrollmentId: session.enrollmentId, lookUps: secureSocketLookUps(),
+              secondaryAddressFinder: TestUtils.atDirectory);
 
   test(
       'the rollout-window retrofit: an rsa2048 self-enrollment auto-approves '
@@ -150,7 +150,9 @@ void main() {
 
     expect(
         await Atsign(atSign).authenticatesAs(
-            keys: FileAtKeysIo(filePath: t1Path), rootDomain: rootDomain),
+            keys: FileAtKeysIo(filePath: t1Path), rootDomain: rootDomain,
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: TestUtils.atDirectory),
         newId,
         reason: 'the retrofit that carries the rollout window must be usable '
             'immediately, exactly as the PQ one is, and the keyfile alone '
@@ -217,7 +219,8 @@ void main() {
     expect(
         await Atsign(atSign).authenticatesAs(
             keys: FileAtKeysIo(filePath: keysFilePath),
-            rootDomain: rootDomain),
+            rootDomain: rootDomain, lookUps: secureSocketLookUps(),
+                secondaryAddressFinder: TestUtils.atDirectory),
         newId,
         reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
             'keyfile → signer → pkam dispatch, all genuinely ML-DSA, and the '
@@ -237,6 +240,8 @@ void main() {
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         appName: 'rf2b-app',
         deviceName: deviceRF2C,
         namespaces: {namespace: 'rw'},
@@ -348,6 +353,8 @@ void main() {
         session: session,
         preference:
             TestUtils.getPreference(atSign, posture: PqPosture.pqActive),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         appName: 'rf2b-app',
         deviceName: deviceRF2D,
         namespaces: {namespace: 'rw'},
@@ -403,6 +410,8 @@ void main() {
     final client = await selfRetrofit(
         session: session,
         preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: TestUtils.atDirectory,
         appName: 'rf2b-app',
         deviceName: deviceRF2E,
         namespaces: {namespace: 'rw'},

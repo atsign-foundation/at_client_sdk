@@ -14,10 +14,12 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/memory_sync_queue.dart';
 
 class _MockAtClient extends Mock implements AtClient {}
 
@@ -42,10 +44,6 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSignStr);
     when(() => atClient.atSign).thenReturn(atSignStr.toAtsign());
     when(() => atClient.enrollmentId).thenReturn(null);
-    // A LocalSecondary built without an explicit keyStore resolves it
-    // from the client's persistence bundle — the 'keystore-cache reuse'
-    // test relies on a fresh LocalSecondary sharing this keystore.
-    when(() => atClient.persistenceBundle).thenReturn(bundle);
     // NOTE: LocalSecondary asks the sync service to drain after every
     // eligible write, so an unstubbed one answers null into a non-nullable
     // SyncService and the write reports that instead of triggering.
@@ -55,6 +53,7 @@ void main() {
     events = <DataEvent>[];
     local = LocalSecondary(
       atClient,
+      syncQueue: memorySyncQueue(),
       keyStore: bundle.keyValueStore,
       onEvent: events.add,
     );
@@ -232,7 +231,10 @@ void main() {
       // walk.
       await local.executeVerb(put('p1', 'v', ttbMs: 3600 * 1000));
 
-      final fresh = LocalSecondary(atClient, onEvent: events.add);
+      final fresh = LocalSecondary(atClient,
+          syncQueue: memorySyncQueue(),
+          keyStore: local.keyStore,
+          onEvent: events.add);
       expect(await fresh.nextAvailableAt(), isNotNull);
       expect(
         approximate((await fresh.nextAvailableAt())!,

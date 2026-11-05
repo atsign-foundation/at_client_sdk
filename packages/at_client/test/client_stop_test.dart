@@ -15,6 +15,9 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/hive_store.dart';
+import 'test_utils/no_keys.dart';
+import 'test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -24,8 +27,11 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
   final Completer<void> startGate = Completer<void>();
   final List<String> calls = [];
 
+  /// What ended the start, once something has.
+  Object? startEndedBy;
+
   _GatedMuxable() {
-    // NOTE: a muxable never started has nobody awaiting the gate its close
+    // NOTE: a muxable never started has nobody awaiting the gate its stop
     // fails.
     startGate.future.ignore();
   }
@@ -43,7 +49,12 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
     bool selfNotificationsEnabled = true,
   }) async {
     calls.add('start');
-    await startGate.future;
+    try {
+      await startGate.future;
+    } catch (e) {
+      startEndedBy = e;
+      rethrow;
+    }
   }
 
   /// Takes real time, as closing a socket does, so a close that did not wait
@@ -55,10 +66,10 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
   }
 
   @override
-  Future<void> close() async {
-    calls.add('close');
+  Future<void> stop() async {
+    calls.add('stop');
     if (!startGate.isCompleted) {
-      startGate.completeError(StoppedException('the lookup is closed'));
+      startGate.completeError(StoppedException('the lookup is stopped'));
     }
   }
 }
@@ -182,8 +193,8 @@ void main() {
       await monitor.close().timeout(const Duration(seconds: 5),
           onTimeout: () => fail('close waited on the start it should end'));
 
-      expect(lookUp.calls, ['start', 'close', 'stopNotifications'],
-          reason: 'the lookup is closed first, so the start fails at once, '
+      expect(lookUp.calls, ['start', 'stop', 'stopNotifications'],
+          reason: 'the lookup is stopped first, so the start fails at once, '
               'and the teardown has run by the time close returns');
       expect(() => monitor.start(), throwsA(isA<StoppedException>()));
     });
@@ -214,7 +225,6 @@ void main() {
       when(() => atClient.getCurrentAtSign()).thenReturn('@alice');
       when(() => atClient.atSign).thenReturn(Atsign('@alice'));
       when(() => atClient.enrollmentId).thenReturn(null);
-      when(() => atClient.atChops).thenReturn(MockAtChops());
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference()
         ..namespace = 'wavi'
         ..monitorAutoStart = false);
@@ -235,15 +245,21 @@ void main() {
           secondaryAddressFinder: finder) as NotificationServiceImpl;
     }
 
-    test('stop returns once the monitor\'s connection is closed', () async {
+    /// Catalogue: features/at_lookup/close_and_stop.feature
+    test('A stopped monitor ends its lookup at once', () async {
       final lookUp = _GatedMuxable();
       final notifications = await service(lookUp);
       notifications.startListening();
       await Future.delayed(const Duration(milliseconds: 20));
+      expect(lookUp.calls, ['start'], reason: 'the start must be in flight');
 
-      await notifications.stop();
+      await notifications.stop().timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the stop waited for the start to finish'));
 
-      expect(lookUp.calls, containsAllInOrder(['close', 'stopNotifications']));
+      expect(lookUp.startEndedBy, isA<StoppedException>(),
+          reason: 'the stop ended the lookup under the start, rather than '
+              'waiting for an atServer that may never answer');
+      expect(lookUp.calls, containsAllInOrder(['stop', 'stopNotifications']));
     });
 
     test('refuses a subscription or a start after stop', () async {
@@ -387,15 +403,11 @@ void main() {
       required AtRootDomain rootDomain,
       required AtAuthenticator? authenticator,
       SecondaryAddressFinder? secondaryAddressFinder,
-      Map<String, dynamic> clientConfig = const {},
     }) {
       final lookUp = MockAtLookupImpl();
       when(() => lookUp.isConnectionAvailable()).thenReturn(false);
       when(() => lookUp.close()).thenAnswer((_) async {});
       when(() => lookUp.stopNotifications()).thenAnswer((_) async {});
-      // the bridge reads the enrollment id off the lookup until the ladder goes
-      // ignore: deprecated_member_use
-      when(() => lookUp.enrollmentId).thenReturn(null);
       when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
           .thenAnswer((_) async => 'data:null');
       built.add(lookUp);
@@ -409,7 +421,10 @@ void main() {
           ..hiveStoragePath = dir.path
           ..namespace = 'wavi'
           ..monitorAutoStart = false,
-        lookUps: recording) as AtClientImpl;
+        secondaryAddressFinder: defaultAtDirectory,
+        atKeysIo: noKeysFor(atSign),
+        lookUps: recording,
+        storage: hiveStoreAt(atSign, dir.path)) as AtClientImpl;
 
     test('a second stop waits for the teardown the first one started',
         () async {
@@ -417,7 +432,7 @@ void main() {
       // The first connection to be closed parks, so the teardown is provably
       // still running when the second caller arrives.
       final closing = Completer<void>();
-      when(() => built.first.close()).thenAnswer((_) => closing.future);
+      when(() => built.first.stop()).thenAnswer((_) => closing.future);
 
       final first = stopping.stop();
       await Future.delayed(const Duration(milliseconds: 20));
@@ -435,54 +450,8 @@ void main() {
       await Future.wait([first, second]);
       expect(secondReturned, isTrue);
       for (final lookUp in built) {
-        verify(() => lookUp.close()).called(1);
+        verify(() => lookUp.stop()).called(1);
       }
-    });
-
-    test('a hand-over that joins a stop already running hands nothing over',
-        () async {
-      final stopping = await client('@handover');
-      final closing = Completer<void>();
-      when(() => built.first.close()).thenAnswer((_) => closing.future);
-
-      final first = stopping.stop();
-      await Future.delayed(const Duration(milliseconds: 20));
-      final handedOver = stopping.stopHandingOverStorage();
-      closing.complete();
-      await first;
-
-      expect(await handedOver, isNull,
-          reason: 'the teardown already running is an ordinary stop, which '
-              'releases the storage; handing the same store to a successor '
-              'as well would give two clients one store');
-    });
-
-    test('a client restarted after a stop tears down again on the next stop',
-        () async {
-      // A client with no local store is the one that can restart: releasing
-      // storage is what makes a stop final, and this one holds none.
-      final restartable = await buildAtClient(
-          atSign: '@restartable',
-          namespace: 'wavi',
-          preference: AtClientPreference()
-            ..isLocalStoreRequired = false
-            ..namespace = 'wavi'
-            ..monitorAutoStart = false,
-          lookUps: recording) as AtClientImpl;
-      int teardowns() => recorded
-          .at('INFO')
-          .where((m) => m.contains('stopping at_client for @restartable'))
-          .length;
-      await restartable.stop();
-      expect(teardowns(), 1);
-
-      await restartable.start();
-      await restartable.stop();
-
-      expect(teardowns(), 2,
-          reason: 'the second stop ran a teardown of its own. Holding the '
-              'first one\'s future past a restart would answer this caller '
-              'from it and tear down nothing');
     });
 
     test('closes every connection it opened: its own, sync\'s, the monitor\'s',
@@ -493,7 +462,7 @@ void main() {
       await stopping.stop();
 
       for (final lookUp in built) {
-        verify(() => lookUp.close()).called(1);
+        verify(() => lookUp.stop()).called(1);
       }
     });
 
@@ -510,7 +479,7 @@ void main() {
       await running.stop();
 
       for (final lookUp in built) {
-        verify(() => lookUp.close()).called(1);
+        verify(() => lookUp.stop()).called(1);
       }
     });
 

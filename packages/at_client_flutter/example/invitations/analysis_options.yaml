@@ -1,0 +1,12 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - macos/**
+    - issuer/**
+  errors:
+    # This sample demonstrates at_client's invitations, which are experimental.
+    experimental_member_use: ignore

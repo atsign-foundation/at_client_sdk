@@ -1,6 +1,3 @@
-// The enrollment fixture is @experimental; driving it is the point here.
-// ignore_for_file: experimental_member_use
-
 @Tags(['pq'])
 library;
 
@@ -28,7 +25,12 @@ void main() {
   TestUtils.isolateStorage('enroll_update_live_test');
   late AtClient approver;
   late String atSign;
-  const namespace = 'buzz';
+  final runId = DateTime.now().microsecondsSinceEpoch;
+  // NOTE: a namespace of its own, because a client start asks every
+  // enrollment holding its namespace for the keys it lacks, one request each,
+  // so a namespace other files share costs a request per enrollment they
+  // leave behind.
+  final namespace = 'enrupdate$runId';
   const rootDomain = 'vip.ve.atsign.zone';
 
   setUpAll(() async {
@@ -40,14 +42,17 @@ void main() {
     approver = manager.atClient;
   });
 
-  final runId = DateTime.now().microsecondsSinceEpoch;
-
   /// The enrolled client's own authenticated connection, which carries the
   /// enrollment id the atServer judges self-only against.
   AtLookUp lookupOf(EnrolledClient c) =>
       c.client.getRemoteSecondary()!.atLookUp;
 
-  Future<EnrolledClient> enrol(String device) => enrolAndAuthenticate(
+  /// [keyExchangeMode] legacy gives an rsa2048 enrollment, which at_auth
+  /// refuses to pair with the pq exchange.
+  Future<EnrolledClient> enrol(String device,
+          {EnrollmentKeyExchangeMode keyExchangeMode =
+              EnrollmentKeyExchangeMode.pq}) =>
+      enrolAndAuthenticate(
         approver: approver,
         atSign: atSign,
         namespace: namespace,
@@ -55,6 +60,7 @@ void main() {
         rootDomain: rootDomain,
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
+        keyExchangeMode: keyExchangeMode,
         storage: TestUtils.storage,
       );
 
@@ -140,10 +146,15 @@ void main() {
   }
 
   test('UC-G1.10 · rekey keeps the enrollment id', () async {
-    final client = await enrol('g110-rekey');
+    // NOTE: rsa2048, because authenticatesWith signs RSA by hand.
+    final client = await enrol('g110-rekey',
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
     final before = await fetch(client);
     final oldPrivateKey =
         client.keys.authenticationKeyPairFor(client.enrollmentId)!.privateKey;
+    expect(await authenticatesWith(client, oldPrivateKey), isTrue,
+        reason: 'the control: the old key authenticates before the rekey, so '
+            'its failing after it is the rekey\'s doing');
     final apskBefore = await readApsk(client);
     final fresh = freshApkamPair();
 
@@ -189,7 +200,9 @@ void main() {
   });
 
   test('UC-G1.11 · proof of possession is required', () async {
-    final client = await enrol('g111-pop');
+    // NOTE: rsa2048, because the proofs below are signed RSA by hand.
+    final client = await enrol('g111-pop',
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy);
     final fresh = freshApkamPair();
 
     Future<String?> sendWith(String? signature) {

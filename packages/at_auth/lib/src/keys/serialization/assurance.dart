@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_commons/at_commons.dart';
 
 class AtKeysAssuranceException extends AtKeysValidationException {
@@ -86,12 +88,8 @@ class AtKeysAssurance {
 
   AtBytes expectBytes(Object? value, String fieldName) {
     final token = expectNonEmptyString(value, fieldName);
-    try {
-      base64Decode(token);
-    } on FormatException catch (e) {
-      throw AtKeysValidationException('Malformed base64 at $fieldName: $e');
-    }
-    return AtBytes.fromString(token);
+    return AtBytes(
+        decodeBase64Field(token, fieldName, AtKeysValidationException.new));
   }
 
   T expectEnum<T extends Enum>(
@@ -151,11 +149,11 @@ class AtKeysAssurance {
   /// one live enrollment per install is the model, so a second active
   /// authentication key is a corrupt keyfile whatever algorithm it names.
   ///
-  /// ⚠️ It no longer answers "which enrollment does this keyfile authenticate
-  /// as" — that is the caller's to state, with
-  /// `AtKeys.resolveAuthenticatingEnrollment()` there for a cold start that
-  /// has nothing to state it from. This rule is a write-side invariant now,
-  /// and a reader meeting a document with two live enrollments gets a refusal
+  /// ⚠️ It does not answer "which enrollment does this keyfile authenticate
+  /// as": that is the caller's to state, with
+  /// `AtKeys.resolveAuthenticatingEnrollment()` for a cold start that has
+  /// nothing to state it from. This rule is a write-side invariant, and a
+  /// reader meeting a document with two live enrollments gets a refusal
   /// from here rather than a silently chosen one.
   void validateKeyMaterials(List<CryptographicMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
@@ -189,11 +187,10 @@ class AtKeysAssurance {
   ///
   /// ⚠️ **The duplicate check is per owner, not per keyId.** Identity is
   /// `(enrollment, keyId)`: two enrollments may each hold `auth:mldsa65:1`,
-  /// and they land in separate containers. What used to be a second rule
-  /// here — that every material sharing a keyId must agree on its
-  /// enrollmentId — is what that change removes, not something it relaxes:
-  /// the container states the owner once, so there is no longer a
-  /// document-wide keyId group for them to disagree about.
+  /// and they land in separate containers. Nothing requires materials sharing
+  /// a keyId to agree on their enrollmentId: the container states the owner
+  /// once, so there is no document-wide keyId group for them to disagree
+  /// about.
   ///
   /// Throws [ArgumentError] rather than an [AtKeysValidationException]:
   /// addKey misuse is a caller programming error, not a malformed file.
@@ -267,9 +264,22 @@ class AtKeysAssurance {
     }
   }
 
+  /// Refuses [candidate] as the next state of a store holding [existing]
+  /// when it drops anything [existing] holds.
+  ///
+  /// [atsign] is the atSign [candidate] is written for. A flat [candidate]
+  /// is refused over:
+  /// - a typed [existing] of the version this build writes holding no typed
+  ///   material, when it holds a credential or [atsign] is given, unless it
+  ///   names [atsign];
+  /// - an [existing], typed or flat, holding no credential, when [atsign] is
+  ///   given and [existing] names another atSign.
+  ///
+  /// Any other typed [existing] holding a credential keeps its typed header.
   void validateMapUpdate({
     required Map<String, dynamic> existing,
     required Map<String, dynamic> candidate,
+    Atsign? atsign,
   }) {
     final existingMaterials = _decode(existing);
     final candidateMaterials = _decode(candidate);
@@ -283,12 +293,26 @@ class AtKeysAssurance {
       // NOTE: a typed document holding no credential — every material
       // pending, none of the flat secrets — is a request awaiting approval,
       // and a candidate that drops the typed header is that request
-      // discarded, leaving a store that reads as holding nothing.
+      // discarded, leaving a store that reads as holding nothing. A write
+      // the caller names another atSign for may not discard it.
       final emptied = !candidate.containsKey('version') &&
           !_holdsCredential(existingMaterials, existingLegacy);
-      if (!emptied) {
+      // NOTE: a typed document of the version this build writes, holding no
+      // typed material, is written in the flat shape, without the typed
+      // header. The atSign it names must be the one the candidate is written
+      // for, whenever the caller names that atSign.
+      final flattened = !candidate.containsKey('version') &&
+          existing['version'] == AtKeys.supportedVersion &&
+          !_holdsTypedContent(existing);
+      if (flattened && (atsign != null || !emptied)) {
+        _assertSame(_asAtsign(existing['atsign']),
+            _asAtsign(atsign?.toString()), 'map.atsign');
+      } else if (!emptied) {
         _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
         _assertSame(existing['version'], candidate['version'], 'map.version');
+      } else if (atsign != null && existing['atsign'] != null) {
+        _assertSame(_asAtsign(existing['atsign']), _asAtsign(atsign.toString()),
+            'map.atsign');
       }
     } else if (candidate.containsKey('version') &&
         existingLegacy.containsKey('atsign')) {
@@ -302,13 +326,21 @@ class AtKeysAssurance {
       // `AtKeys.fromJson` has already normalized the reserved side.
       _assertSame(_asAtsign(existingLegacy.remove('atsign')),
           _asAtsign(candidate['atsign']), 'map.atsign');
+    } else if (!candidate.containsKey('version') &&
+        atsign != null &&
+        existingLegacy['atsign'] != null &&
+        !_holdsCredential(existingMaterials, existingLegacy)) {
+      _assertSame(_asAtsign(existingLegacy['atsign']),
+          _asAtsign(atsign.toString()), 'map.atsign');
     }
     // NOTE: the legacy fields are protected because they are the credential
     // every published reader authenticates and decrypts with. A document that
     // holds none — no active typed material and none of the flat secrets —
     // is not a credential yet: an enrollment's keys filed at submission and
     // not accepted, or the stub a denied one leaves behind. Its legacy fields
-    // are the pending request's, and the next request may replace them.
+    // are the pending request's, and the next request for the atSign it
+    // names may replace them; one the caller names another atSign for may
+    // not.
     if (_holdsCredential(existingMaterials, existingLegacy)) {
       _assertLegacyPreserved(
         existingLegacy,
@@ -326,6 +358,12 @@ class AtKeysAssurance {
     'aesEncryptPrivateKey',
     'selfEncryptionKey',
   };
+
+  /// Whether [json] carries a typed container as anything but an empty list.
+  bool _holdsTypedContent(Map<String, dynamic> json) =>
+      const ['enrollments', 'atsignKeys', 'keys'].any((field) =>
+          json.containsKey(field) &&
+          !(json[field] is List && (json[field] as List).isEmpty));
 
   bool _holdsCredential(
           List<CryptographicMaterial> materials, Map<String, dynamic> legacy) =>

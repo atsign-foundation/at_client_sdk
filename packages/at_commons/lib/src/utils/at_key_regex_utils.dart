@@ -14,6 +14,7 @@ abstract class Regexes {
       '|privatekey|self_encryption_key'
       '|at_secret|at_secret_deleted'
       '|signing_keypair_generated|commitLogCompactionStats'
+      '|at_telemetry_signing_privatekey'
       '|accessLogCompactionStats'
       '|notificationCompactionStats)\$)|^(configkey)\$|(?:^_($charsInEntity)+)\$)';
   // the last part of the above regex is to match internal keys such as
@@ -26,6 +27,7 @@ abstract class Regexes {
       '(?<=private:)'
       'blocklist'
       '|(?<=public:)signing_publickey'
+      r'|(?<=public:)_at_telemetry_signing_publickey\.__atserver'
       '|(?<=$ownershipFragmentWithoutNamedGroup:)signing_privatekey'
       '|(?<=^@($sharedWithFragment))shared_key'
       '|(?<=public:)publickey'

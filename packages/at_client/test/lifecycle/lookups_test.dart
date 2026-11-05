@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_commons/at_builders.dart';
@@ -13,6 +13,9 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 
 import '../test_utils/ml_dsa_keyfile.dart';
 import '../test_utils/mocks.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/no_keys.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -52,17 +55,11 @@ void main() {
     required AtRootDomain rootDomain,
     required AtAuthenticator? authenticator,
     SecondaryAddressFinder? secondaryAddressFinder,
-    Map<String, dynamic> clientConfig = const {},
   }) {
     final lookUp = MockAtLookupImpl();
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
     when(() => lookUp.close()).thenAnswer((_) async {});
-    // the bridge reads the enrollment id off the lookup until the ladder goes
-    // ignore: deprecated_member_use
-    when(() => lookUp.enrollmentId).thenReturn(null);
-    when(() =>
-            lookUp.pkamAuthenticate(enrollmentId: any(named: 'enrollmentId')))
-        .thenAnswer((_) async => true);
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
@@ -99,7 +96,10 @@ void main() {
         atSign: '@lookups',
         namespace: 'wavi',
         preference: preference(),
-        lookUps: recording) as AtClientImpl;
+        secondaryAddressFinder: atDirectoryOf(preference()),
+        atKeysIo: noKeysFor('@lookups'),
+        lookUps: recording,
+        storage: hiveStoreFor('@lookups', preference())) as AtClientImpl;
 
     expect(client.getRemoteSecondary()!.atLookUp, same(built.first),
         reason: 'the client\'s own connection');
@@ -120,7 +120,11 @@ void main() {
     final client = await buildAtClient(
         atSign: '@nofactory',
         namespace: 'wavi',
-        preference: preference()) as AtClientImpl;
+        preference: preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preference()),
+        atKeysIo: noKeysFor('@nofactory'),
+        storage: hiveStoreFor('@nofactory', preference())) as AtClientImpl;
 
     expect(client.getRemoteSecondary()!.atLookUp, isA<AtLookupImpl>());
     expect(
@@ -138,7 +142,9 @@ void main() {
     final client = await Atsign('@opened').open(
         keys: await typedKeyfile('@opened', enrollmentId: 'primary'),
         preference: preference(),
-        lookUps: recording);
+        secondaryAddressFinder: atDirectoryOf(preference()),
+        lookUps: recording,
+        storage: hiveStoreFor(Atsign('@opened'), preference()));
 
     expect(client.connection.current.isOnline, isTrue,
         reason: 'the factory\'s mock said yes to the PKAM');
@@ -154,6 +160,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: InMemoryAtKeysIo(),
         preference: preference(),
+        secondaryAddressFinder: atDirectoryOf(preference()),
         lookUps: recording);
 
     expect(pending.enrollmentId, 'e1');

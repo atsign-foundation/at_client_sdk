@@ -1,24 +1,22 @@
-// A client with no key source signs from its AtChops, and several tests here are
-// about that shape, so this file names the AtChops on purpose.
-// ignore_for_file: deprecated_member_use
-
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
-import 'package:at_client/src/crypto/nskey/mint_lock.dart'
-    show MintLease, MintLock;
+import 'package:at_client/at_client_mixins.dart'
+    show AtClientEnvelopeSigner, Secret;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_keypairs.dart';
+import 'test_utils/ml_dsa_keyfile.dart' show keysHoldingApkam;
 
 /// A bare mock, shadowing the shared one in `test_utils/mocks.dart` whose
 /// concrete `getPreferences()` override cannot be stubbed.
@@ -31,9 +29,24 @@ class _SpentLeaseLock extends MintLock {
 
   @override
   Future<T?> withLock<T>(
-          AtKey lockKey, Future<T> Function(MintLease lease) mint,
-          {bool ownLockIsNotContention = false}) =>
-      mint(MintLease(DateTime.now().subtract(const Duration(seconds: 1))));
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint) =>
+      mint(ServerMutexLease(
+          lockKey, DateTime.now().subtract(const Duration(seconds: 1))));
+}
+
+/// A lock that is taken successfully and hands out a lease of [length].
+class _ShortLeaseLock extends MintLock {
+  _ShortLeaseLock(super.atClient, this.length);
+
+  final Duration length;
+
+  /// The lease most recently handed out.
+  ServerMutexLease? lease;
+
+  @override
+  Future<T?> withLock<T>(
+          AtKey lockKey, Future<T> Function(ServerMutexLease lease) mint) =>
+      mint(lease = ServerMutexLease(lockKey, DateTime.now().add(length)));
 }
 
 /// Minting a namespace key: the interlock between an atSign's own
@@ -51,7 +64,7 @@ void main() {
   /// A client whose remote verbs succeed, recording what was sent, and serving
   /// back whatever has been published to the one record these tests turn on.
   /// [lockAlreadyHeld] makes the lock's immutable create fail, which is how the
-  /// atServer reports that another enrollment already holds it.
+  /// atServer reports that another client already holds it.
   ({
     MockAtClient client,
     List<AtKey> verbs,
@@ -64,6 +77,9 @@ void main() {
     /// namespace. Absent unless a test sets one.
     Map<String, DateTime> advertisedStamps,
     List<GetRequestOptions?> advertisementReads,
+
+    /// Every write handed to local storage.
+    List<({UpdateVerbBuilder builder, bool cameFromServer})> filedLocally,
 
     /// [takeDelay] makes the lock's own take slow, which is the only way to
     /// tell a lease stamped BEFORE the request from one stamped after it.
@@ -82,17 +98,29 @@ void main() {
     final advertised = <String, String>{};
     final advertisedStamps = <String, DateTime>{};
     final advertisementReads = <GetRequestOptions?>[];
+    final filedLocally = <({UpdateVerbBuilder builder, bool cameFromServer})>[];
+    final local = MockLocalSecondary();
+    when(() => atClient.getLocalSecondary()).thenReturn(local);
+    when(() => local.executeVerb(any(),
+        cameFromServer: any(named: 'cameFromServer'))).thenAnswer((inv) async {
+      filedLocally.add((
+        builder: inv.positionalArguments[0] as UpdateVerbBuilder,
+        cameFromServer: inv.namedArguments[#cameFromServer] as bool,
+      ));
+      return 'data:1';
+    });
     final pair = pkamKeyPairFor(atSign, 'enroll-a');
-    final chops = AtChopsImpl(AtChopsKeys.create(
-        null,
-        AtPkamKeyPair.create(
-            pair.atPublicKey.publicKey, pair.atPrivateKey.privateKey)));
+    when(() => local.getPkamPublicKey())
+        .thenAnswer((_) async => pair.atPublicKey.publicKey);
+    when(() => local.getPkamPrivateKey())
+        .thenAnswer((_) async => pair.atPrivateKey.privateKey);
 
-    when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
     when(() => atClient.enrollmentId).thenReturn('enroll-a');
+    when(() => atClient.atKeysIo).thenAnswer(
+        (_) => keysHoldingApkam(atSign, atClient.enrollmentId, pair));
     // NOTE: an EMPTY roster, and said rather than left unstubbed. A read miss
     // broadcasts a pull to the namespace's other enrollments, and here there
     // are none - which is the situation these tests are in. Matched on the
@@ -102,6 +130,13 @@ void main() {
     // member of the namespace.
     when(() => secondary.executeCommand(any(that: startsWith('enroll:listns')),
         auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
+    // NOTE: no conveyance record is waiting, and said rather than left
+    // unstubbed: a miss on a private fetches them before it asks.
+    when(() => atClient.getAtKeys(
+            regex: any(named: 'regex'),
+            showHiddenKeys: any(named: 'showHiddenKeys'),
+            useRemoteAtServer: any(named: 'useRemoteAtServer')))
+        .thenAnswer((_) async => []);
     when(() => atClient.put(any(), any(),
             putRequestOptions: any(named: 'putRequestOptions')))
         .thenAnswer((_) async => true);
@@ -114,8 +149,7 @@ void main() {
       // advertisement signed by the fixture verifies whichever enrollment it
       // claims.
       if (key.key != '__nskey') {
-        return AtValue()
-          ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+        return AtValue()..value = pair.atPublicKey.publicKey;
       }
       advertisementReads
           .add(inv.namedArguments[#getRequestOptions] as GetRequestOptions?);
@@ -127,8 +161,7 @@ void main() {
         ..metadata = stamp == null ? null : (Metadata()..updatedAt = stamp);
     });
 
-    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
+    when(() => secondary.executeVerb(any())).thenAnswer((inv) async {
       final builder = inv.positionalArguments[0] as Object;
       builders.add(builder);
       if (builder is UpdateVerbBuilder) {
@@ -140,8 +173,7 @@ void main() {
         }
         if (builder.atKey.key == '_nskeylock' && lockAlreadyHeld) {
           // What the atServer says to the loser of the race.
-          throw AtLookUpException(
-              'AT0023', 'Immutable records may not be updated');
+          throw IllegalStateException('Immutable records may not be updated');
         }
         if (builder.atKey.key == '__nskey') {
           advertised[builder.atKey.namespace!] = builder.value as String;
@@ -158,6 +190,7 @@ void main() {
       advertised: advertised,
       advertisedStamps: advertisedStamps,
       advertisementReads: advertisementReads,
+      filedLocally: filedLocally,
     );
   }
 
@@ -167,7 +200,7 @@ void main() {
     return NskeyPrivateFiling(keysIo: io, atSign: atSign);
   }
 
-  test('the advertisement is written to the atServer and nowhere else',
+  test('the advertisement is published to the atServer, never by a local put',
       () async {
     final c = client();
     final filer = await filing();
@@ -186,6 +219,27 @@ void main() {
         .put(any(), any(), putRequestOptions: any(named: 'putRequestOptions')));
   });
 
+  test('a mint files what it published locally, without queueing a push',
+      () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await ring.mintAndPublish(namespace);
+
+    final advertisements =
+        c.filedLocally.where((f) => f.builder.atKey.key == '__nskey').toList();
+    expect(advertisements, hasLength(1),
+        reason: 'a local-first re-read would otherwise find whatever '
+            'generation local storage held before, until sync pulled this '
+            'one down');
+    expect(advertisements.single.builder.buildCommand().split(' ').first,
+        'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice');
+    expect(advertisements.single.builder.value, c.advertised[namespace]);
+    expect(advertisements.single.cameFromServer, isTrue,
+        reason: 'a queued local write carries only the key\'s name, and a '
+            'drain sends whatever local storage holds by then');
+  });
+
   test('the private is durable before the public half is published', () async {
     final c = client();
     final filer = await filing();
@@ -201,45 +255,176 @@ void main() {
     expect(published, hasLength(1));
   });
 
-  test('a generation filed but never published is published, not minted again',
-      () async {
-    final c = client();
-    final filer = await filing();
-    final secondary = c.client.getRemoteSecondary()!;
-    var refuse = true;
-    when(() => secondary.executeVerb(
-        any(
-            that: isA<UpdateVerbBuilder>()
-                .having((b) => b.atKey.key, 'key', '__nskey')),
-        sync: any(named: 'sync'))).thenAnswer((inv) async {
-      if (refuse) throw StoppedException('the client stopped');
-      final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
-      c.advertised[builder.atKey.namespace!] = builder.value as String;
-      return 'data:1';
+  group('UC-A3.7 · Given nothing published for the namespace', () {
+    test(
+        'when this client filed a generation it then failed to publish, then '
+        'its next mint publishes a fresh one and retires the filed one',
+        () async {
+      final c = client();
+      final filer = await filing();
+      final secondary = c.client.getRemoteSecondary()!;
+      var refuse = true;
+      when(() => secondary.executeVerb(any(
+          that: isA<UpdateVerbBuilder>().having(
+              (b) => b.atKey.key, 'key', '__nskey')))).thenAnswer((inv) async {
+        if (refuse) throw StoppedException('the client stopped');
+        final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
+        c.advertised[builder.atKey.namespace!] = builder.value as String;
+        return 'data:1';
+      });
+      await expectLater(
+          PublishedNskeyKeyRing(c.client, privateFiling: filer)
+              .mintAndPublish(namespace),
+          throwsA(isA<StoppedException>()));
+      final filed = await filer.filedFor(namespace);
+      expect(filed, hasLength(1), reason: 'the stop landed after the filing');
+
+      refuse = false;
+      final conveyed = <List<String>>[];
+      final advertisement =
+          await PublishedNskeyKeyRing(c.client, privateFiling: filer)
+              .mintAndPublish(namespace,
+                  conveyFirst: (kids) async => conveyed.add(kids));
+
+      expect(advertisement.nskeyKid, isNot(filed.single.nskeyKid),
+          reason: 'a cold-start mint publishes only what it minted itself');
+      expect(conveyed, [
+        [advertisement.nskeyKid]
+      ]);
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+          [advertisement.nskeyKid],
+          reason: 'the filed generation is retired before the mint');
+      expect(await filer.readSeed(namespace, filed.single.nskeyKid), isNotNull,
+          reason: 'retired, not removed: anything sealed to it still opens');
     });
-    await expectLater(
-        PublishedNskeyKeyRing(c.client, privateFiling: filer)
-            .mintAndPublish(namespace),
-        throwsA(isA<StoppedException>()));
-    final filed = await filer.filedFor(namespace);
-    expect(filed, hasLength(1), reason: 'the stop landed after the filing');
 
-    refuse = false;
-    final advertisement =
-        await PublishedNskeyKeyRing(c.client, privateFiling: filer)
-            .mintAndPublish(namespace);
+    test(
+        'when another enrollment conveyed this client a generation and never '
+        'published it, then this client\'s mint publishes a fresh one and '
+        'retires the conveyed one', () async {
+      final c = client();
+      final filer = await filing();
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final seed = kem.newSeed();
+      final conveyedKid =
+          nskeyKidOf((await kem.keyPairFromSeed(seed)).publicKey);
+      expect(
+          await filer.file(Secret(
+              namespace: namespace,
+              name: '${NskeyPrivateFiling.secretNamePrefix}$conveyedKid',
+              value: base64Encode(seed))),
+          isTrue);
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+          [conveyedKid],
+          reason: 'the control: the conveyed private is filed active, under '
+              'the kid its seed derives, before the mint runs');
 
-    expect(advertisement.nskeyKid, filed.single.nskeyKid,
-        reason: 'minting again would publish a generation beside a filed '
-            'private that nothing will ever advertise');
-    expect(await filer.filedFor(namespace), hasLength(1));
+      final advertisement =
+          await PublishedNskeyKeyRing(c.client, privateFiling: filer)
+              .mintAndPublish(namespace);
+
+      expect(advertisement.keys.map((k) => k.kid), isNot(contains(conveyedKid)),
+          reason: 'a cold-start mint publishes only what it minted itself, '
+              'whoever minted what is filed');
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+          [advertisement.nskeyKid]);
+      expect(await filer.readSeed(namespace, conveyedKid), isNotNull);
+    });
+
+    test(
+        'when a second process of this enrollment mints while the first is '
+        'conveying, then it mints and retires nothing, and a fresh process '
+        'seals to what the first published', () async {
+      final c = client();
+      // NOTE: the lock as the atServer keeps it: the first create wins, every
+      // later one is refused until the ttl, which outlasts this test, and a
+      // read serves the value the winner wrote, as llookup:all does.
+      final secondary = c.client.getRemoteSecondary()!;
+      String? lockValue;
+      when(() => secondary.executeVerb(any(
+              that: isA<UpdateVerbBuilder>()
+                  .having((b) => b.atKey.key, 'key', '_nskeylock'))))
+          .thenAnswer((inv) async {
+        if (lockValue != null) {
+          throw IllegalStateException('Immutable records may not be updated');
+        }
+        lockValue =
+            (inv.positionalArguments[0] as UpdateVerbBuilder).value as String;
+        return 'data:1';
+      });
+      when(() => secondary.executeVerb(any(
+              that: isA<LLookupVerbBuilder>()
+                  .having((b) => b.atKey.key, 'key', '_nskeylock'))))
+          .thenAnswer((inv) async => 'data:${jsonEncode({
+                    'key':
+                        '${(inv.positionalArguments[0] as LLookupVerbBuilder).atKey}',
+                    'data': lockValue,
+                    'metaData': {
+                      'expiresAt': DateTime.now()
+                          .toUtc()
+                          .add(const Duration(minutes: 2))
+                          .toIso8601String()
+                    },
+                  })}');
+      // NOTE: one keyfile, as two processes of one enrollment share it.
+      final filer = await filing();
+      PublishedNskeyKeyRing process() => PublishedNskeyKeyRing(c.client,
+          privateFiling: filer,
+          requestConveyance: (ns, name) async {},
+          fetchConveyance: () async {});
+      final conveying = Completer<List<String>>();
+      final release = Completer<void>();
+      final firstMint =
+          process().mintAndPublish(namespace, conveyFirst: (kids) async {
+        conveying.complete(kids);
+        await release.future;
+      });
+      final first = (await conveying.future).single;
+
+      await expectLater(
+          process().mintAndPublish(namespace),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('has published no advertisement yet'))),
+          reason: 'the first process holds the mint lock, and every refusal '
+              'is contention, whichever client took the lock');
+      expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid), [first],
+          reason: 'the first process\'s generation, filed and not yet '
+              'published, is still active in the shared keyfile');
+
+      release.complete();
+      expect((await firstMint).nskeyKid, first);
+      expect(c.advertised[namespace], isNotNull);
+
+      final fresh = process();
+      expect(await fresh.heldPublic(atSign, namespace, first), isNotNull,
+          reason: 'a fresh process holds the published generation as one it '
+              'can seal to');
+      final ck =
+          ContentKey(Uint8List.fromList(base64Decode(AESKey.generate(32).key)));
+      final conveyance = AtKey()
+        ..key = '${ck.ckKid}.__ck'
+        ..namespace = namespace
+        ..sharedBy = atSign
+        ..metadata = Metadata();
+      await NskeyProvider(keyRing: fresh, cache: ContentKeyCache()).encrypt(
+          CryptoContext(atClient: c.client), conveyance, ck.toBase64());
+      expect(conveyance.metadata.appMetadata?.additional?['nskeyKid'], first,
+          reason: 'its write seals to the generation the first process '
+              'published');
+    });
   });
 
   test('a ring built from the client alone files into the client\'s keyfile',
       () async {
     final c = client();
     final io = InMemoryAtKeysIo();
-    await io.write(atSign, AtKeys());
+    final pair = pkamKeyPairFor(atSign, 'enroll-a');
+    await io.write(
+        atSign,
+        AtKeys()
+          ..fileLegacyMaterial(
+              apkamPublicKey: pair.atPublicKey.publicKey,
+              apkamPrivateKey: pair.atPrivateKey.privateKey));
     when(() => c.client.atKeysIo).thenReturn(io);
 
     final ring = PublishedNskeyKeyRing(c.client);
@@ -257,20 +442,6 @@ void main() {
         await NskeyPrivateFiling(keysIo: io, atSign: atSign)
             .read(namespace, advertisement.nskeyKid),
         isNotNull);
-  });
-
-  test('and a client with no key source mints into memory only', () async {
-    // NOTE: `atKeysIo` is left unstubbed, so mocktail answers null and there is
-    // nothing to derive a filing from.
-    final c = client();
-
-    final ring = PublishedNskeyKeyRing(c.client);
-    expect(ring.privateFiling, isNull);
-
-    final advertisement = await ring.mintAndPublish(namespace);
-    expect(advertisement.nskeyKid, isNotEmpty);
-    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true),
-        hasLength(1));
   });
 
   test('the published advertisement emits its exact wire shape — raw literals',
@@ -306,6 +477,45 @@ void main() {
     expect(keys.single['use'], 'enc');
     expect(keys.single['alg'], 'x-wing');
     expect(keys.single['kid'], advertisement.nskeyKid);
+  });
+
+  test('what a mint, a rotation and an add send carries — raw literals',
+      () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+    await ring.mintAndPublish(namespace);
+    await ring.rotate(namespace);
+    c.advertisedStamps[namespace] = DateTime.utc(2026, 3, 4);
+    when(() => c.client.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]));
+    await ring.add(namespace);
+
+    List<String> sent(String record) => c.builders
+        .whereType<UpdateVerbBuilder>()
+        .where((b) => b.atKey.key == record)
+        .map((b) => b.buildCommand().split(' ').first)
+        .toList();
+    expect(
+        sent('__nskey'),
+        [
+          'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice',
+          'update:isEncrypted:false:public:__nskey.app_1.my_apps@alice',
+          'update:uAt:2026-03-04T00:00:00.000000Z:isEncrypted:false:'
+              'public:__nskey.app_1.my_apps@alice',
+        ],
+        reason: 'no ttr, or a reader\'s atServer may serve its copy after a '
+            'rotation; no ttl, or the key every sender seals to expires');
+    expect(
+        sent('_nskeylock'),
+        List.filled(
+            3,
+            'update:nc:ttl:120000:isEncrypted:false:immutable:true:'
+            '_nskeylock.app_1.my_apps@alice'),
+        reason: 'the ttl is what releases the lock, and the atServer\'s '
+            'refusal of a second immutable create is the interlock');
   });
 
   group('the record stamp says when the generation was minted', () {
@@ -379,6 +589,162 @@ void main() {
         reason: 'the advertisement is the promise that a private exists; '
             'making it when one does not is the failure this ordering exists '
             'to prevent');
+  });
+
+  test(
+      'a mint, a rotation and an add convey their new privates before the '
+      'advertisement naming them is published', () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+    final conveyed = <({List<String> kids, String? advertisedThen})>[];
+    Future<void> record(List<String> kids) async =>
+        conveyed.add((kids: kids, advertisedThen: c.advertised[namespace]));
+
+    final minted = await ring.mintAndPublish(namespace, conveyFirst: record);
+    final afterMint = c.advertised[namespace];
+    final rotated = await ring.rotate(namespace, conveyFirst: record);
+    final afterRotate = c.advertised[namespace];
+    c.advertisedStamps[namespace] = DateTime.utc(2026, 3, 4);
+    when(() => c.client.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]));
+    final added = await ring.add(namespace, conveyFirst: record);
+
+    expect(conveyed.map((c) => c.kids), [
+      [minted.nskeyKid],
+      [rotated.rotated.nskeyKid],
+      [
+        for (final key in added!.keys)
+          if (key.alg == SecretSharingAlgos.mlKem1024) key.kid
+      ],
+    ]);
+    expect(
+        conveyed.map((c) => c.advertisedThen), [null, afterMint, afterRotate],
+        reason: 'publishing is the commit point: each conveyance ran while '
+            'the atServer still served the previous advertisement, so every '
+            'listed enrollment holds a private before any sender can seal to '
+            'it');
+    expect(c.advertised[namespace], isNot(afterRotate));
+  });
+
+  test('a conveyance that throws publishes nothing', () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await expectLater(
+        ring.mintAndPublish(namespace,
+            conveyFirst: (_) async =>
+                throw StateError('a revocation touched the namespace')),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('a revocation touched the namespace'))));
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty);
+  });
+
+  test('a conveyance that outlasts the lease publishes nothing', () async {
+    final c = client();
+    final lock = _ShortLeaseLock(c.client, const Duration(seconds: 2));
+    final ring = PublishedNskeyKeyRing(c.client,
+        mintLock: lock, privateFiling: await filing());
+    var leaseLiveWhenConveying = false;
+
+    await expectLater(
+        ring.mintAndPublish(namespace, conveyFirst: (_) async {
+          leaseLiveWhenConveying = !lock.lease!.isSpent;
+          while (!lock.lease!.isSpent) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+        }),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('expired while this client was minting'))));
+    expect(leaseLiveWhenConveying, isTrue,
+        reason: 'the precondition: the lease ran out during the conveyance, '
+            'not before it');
+    expect(c.verbs.where((k) => k.key == '__nskey'), isEmpty,
+        reason: 'the lease is checked after the conveyance, so a mint whose '
+            'conveyance ran past it does not publish over the enrollment that '
+            'has since won the next election');
+  });
+
+  group('Given a mint whose afterPublish rotates', () {
+    test(
+        'when the mint publishes, then the rotation publishes under the same '
+        'lock, conveyed through what it is handed', () async {
+      final c = client();
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+      final conveyed = <({List<String> kids, String? advertisedThen})>[];
+      NskeyAdvertisement? handed;
+      String? firstPayload;
+
+      final result = await ring.mintAndPublish(namespace,
+          afterPublish: (published, rotate) async {
+        handed = published;
+        firstPayload = c.advertised[namespace];
+        return rotate(
+            conveyFirst: (kids) async => conveyed
+                .add((kids: kids, advertisedThen: c.advertised[namespace])));
+      });
+
+      expect(c.verbs.where((k) => k.key == '_nskeylock'), hasLength(1),
+          reason: 'the rotation runs under the lock the mint took, never a '
+              'second take');
+      expect(c.verbs.where((k) => k.key == '__nskey'), hasLength(2));
+      expect(result.nskeyKid, isNot(handed!.nskeyKid));
+      expect(conveyed.single.kids, [result.nskeyKid]);
+      expect(conveyed.single.advertisedThen, firstPayload,
+          reason: 'conveyed after the mint published and before the rotation '
+              'did');
+      expect(c.advertised[namespace], isNot(firstPayload));
+    });
+
+    test(
+        'when the lease runs out before the rotation publishes, then the '
+        'rotation publishes nothing', () async {
+      final c = client();
+      final ring = PublishedNskeyKeyRing(c.client,
+          mintLock:
+              _ShortLeaseLock(c.client, const Duration(milliseconds: 300)),
+          privateFiling: await filing());
+
+      await expectLater(
+          ring.mintAndPublish(namespace,
+              afterPublish: (published, rotate) async {
+            await Future<void>.delayed(const Duration(milliseconds: 400));
+            return rotate();
+          }),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('expired while this client was minting'))));
+      expect(c.verbs.where((k) => k.key == '__nskey'), hasLength(1),
+          reason: 'the mint published inside its lease; the rotation, past '
+              'it, did not');
+    });
+  });
+
+  test('a mint, a rotation and an add take the lock with the ttl handed them',
+      () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await ring.mintAndPublish(namespace,
+        lockTtl: const Duration(minutes: 3, seconds: 7));
+    await ring.rotate(namespace, lockTtl: const Duration(minutes: 4));
+    c.advertisedStamps[namespace] = DateTime.utc(2026, 3, 4);
+    when(() => c.client.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]));
+    expect(await ring.add(namespace, lockTtl: const Duration(minutes: 5)),
+        isNotNull,
+        reason: 'the add had work to do, so it took the lock');
+
+    expect(
+        c.verbs.where((k) => k.key == '_nskeylock').map((k) => k.metadata.ttl),
+        [187000, 240000, 300000],
+        reason: 'the ceiling sized from the roster is the lock\'s ttl, so a '
+            'minter that has spent it does not publish');
   });
 
   test('the lock is taken remotely, before anything is published', () async {
@@ -550,16 +916,24 @@ void main() {
   test('UC-G2.6 c6 · the added document is re-signed by the ADDING enrollment',
       () async {
     final c = client();
-    // Same chops as the fixture, which serves one `_apsk` for every enrollment,
-    // so this signature verifies while claiming a different kid.
+    // Same keypair as the fixture, which serves one `_apsk` for every
+    // enrollment, so this signature verifies while claiming a different kid.
     final other = MockAtClient();
     final otherSecondary = MockRemoteSecondary();
     final otherLookUp = MockAtLookUp();
-    when(() => other.atChops).thenReturn(c.client.atChops);
+    final otherLocal = MockLocalSecondary();
+    final pair = pkamKeyPairFor(atSign, 'enroll-a');
+    when(() => other.getLocalSecondary()).thenReturn(otherLocal);
+    when(() => otherLocal.getPkamPublicKey())
+        .thenAnswer((_) async => pair.atPublicKey.publicKey);
+    when(() => otherLocal.getPkamPrivateKey())
+        .thenAnswer((_) async => pair.atPrivateKey.privateKey);
     when(() => other.getCurrentAtSign()).thenReturn(atSign);
     when(() => other.getRemoteSecondary()).thenReturn(otherSecondary);
     when(() => otherSecondary.atLookUp).thenReturn(otherLookUp);
     when(() => other.enrollmentId).thenReturn('enroll-minter');
+    when(() => other.atKeysIo)
+        .thenAnswer((_) => keysHoldingApkam(atSign, other.enrollmentId, pair));
 
     final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
     final minted = await xWing.keyPairFromSeed(xWing.newSeed());

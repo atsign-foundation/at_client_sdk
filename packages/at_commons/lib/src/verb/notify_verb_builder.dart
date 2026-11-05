@@ -16,6 +16,12 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
   /// time in milliseconds after which a notification expires.
   int? ttln;
 
+  /// When the notification expires, written as `eAtn`; set this or [ttln].
+  DateTime? notificationExpiresAt;
+
+  /// Whether no atServer persists the notification, written as a bare `eph`.
+  bool ephemeral = false;
+
   OperationEnum? operation;
 
   /// priority of the notification
@@ -56,9 +62,13 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
       sb.write(':latestN:$latestN');
     }
     sb.write(':notifier:$notifier');
-    if (ttln != null) {
-      sb.write(':ttln:$ttln');
-    }
+    sb.write(VerbUtil.notificationLifetime(
+        ttln: ttln,
+        expiresAt: notificationExpiresAt,
+        ephemeral: ephemeral,
+        ttr: atKey.metadata.ttr,
+        ccd: atKey.metadata.ccd,
+        isDelete: operation == OperationEnum.delete));
 
     // Add in all of the metadata parameters in atProtocol command format
     sb.write(atKey.metadata.toAtProtocolFragment());

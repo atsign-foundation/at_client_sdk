@@ -1,18 +1,27 @@
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_client_flutter/extensions.dart';
-import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:example/main.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart'
-    show getApplicationSupportDirectory;
 
 final namespace = 'at_client_flutter_example';
 final AtSignLogger _logger = AtSignLogger(namespace);
-final RegistrarService registrar = RegistrarService(
-  registrarUrl: "my.atsign.com",
-  apiKey: "477b-876u-bcez-c42z-6a3d",
-);
+
+/// The registrar API key this example is built with:
+/// `flutter run --dart-define=REGISTRAR_API_KEY=<your key>`.
+const String registrarApiKey = String.fromEnvironment('REGISTRAR_API_KEY');
+
+/// What the example says when it was built with no registrar API key.
+const String missingRegistrarApiKey =
+    'This build has no registrar API key. An app developer can create one '
+    'via the registrar at my.atsign.com; pass it with '
+    '--dart-define=REGISTRAR_API_KEY=<your key>.';
+
+/// The registrar new atSigns are activated through, or null when the example
+/// was built with no API key.
+final RegistrarService? registrar = registrarApiKey.isEmpty
+    ? null
+    : RegistrarService(registrarUrl: 'my.atsign.com', apiKey: registrarApiKey);
 
 final KeychainStorage keychainStorage = KeychainStorage();
 
@@ -35,6 +44,14 @@ Future<T?> _safeExecute<T>(
 
 /// This method is an example of how an application creates their own customized onboarding flow
 Future<void> onboard(BuildContext context) async {
+  final service = registrar;
+  if (service == null) {
+    _logger.warning(missingRegistrarApiKey);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text(missingRegistrarApiKey)));
+    return;
+  }
   await _safeExecute('onboard', () async {
     _logger.info('Step 1: Showing AtSignSelectionDialog');
     final selection = await AtSignSelectionDialog.show(context);
@@ -49,7 +66,7 @@ Future<void> onboard(BuildContext context) async {
     var cramKey = await RegistrarCramDialog.show(
       context,
       selection.atSign,
-      registrar: registrar,
+      registrar: service,
     );
     if (!context.mounted || cramKey == null) {
       _logger.warning(
@@ -57,8 +74,6 @@ Future<void> onboard(BuildContext context) async {
       );
       return;
     }
-
-    final storage = await _storage(selection.atSign);
     if (!context.mounted) return;
 
     _logger.info('Step 3: Showing CramDialog to complete onboarding');
@@ -70,7 +85,6 @@ Future<void> onboard(BuildContext context) async {
       rootDomain: selection.rootDomain,
       cramKey: cramKey,
       preference: _preference(),
-      storage: storage,
     );
     if (client == null) {
       _logger.warning('CramDialog failed or user cancelled');
@@ -114,8 +128,6 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
       _logger.warning('User cancelled AtSignSelectionDialog');
       return;
     }
-
-    final storage = await _storage(selection.atSign);
     if (!context.mounted) return;
 
     _logger.info('Step 3: Showing PkamDialog, opening on the keychain');
@@ -125,7 +137,6 @@ Future<void> authenticateWithKeychain(BuildContext context) async {
       rootDomain: selection.rootDomain,
       keys: KeychainAtKeysIo(),
       preference: _preference(),
-      storage: storage,
     );
     if (client == null) {
       _logger.warning('PkamDialog failed or user cancelled');
@@ -152,8 +163,6 @@ Future<void> authenticateWithFile(BuildContext context) async {
     _logger.info('Step 2: Processing selected file');
     final atSign = atKeysIo.getAtsign();
     _logger.info('Extracted atSign from filename: $atSign');
-
-    final storage = await _storage(atSign);
     if (!context.mounted) return;
 
     _logger.info('Step 3: Showing PkamDialog, opening on the file');
@@ -164,7 +173,6 @@ Future<void> authenticateWithFile(BuildContext context) async {
       atSign: atSign,
       keys: atKeysIo,
       preference: _preference(),
-      storage: storage,
       backupKeys: [KeychainAtKeysIo()],
     );
     if (client == null) {
@@ -186,8 +194,6 @@ Future<void> authenticateWithApkam(BuildContext context) async {
       _logger.warning('User cancelled AtSignSelectionDialog');
       return;
     }
-
-    final storage = await _storage(selection.atSign);
     if (!context.mounted) return;
 
     _logger.info(
@@ -206,7 +212,6 @@ Future<void> authenticateWithApkam(BuildContext context) async {
       namespaces: {namespace: 'rw'},
       preference: _preference(),
       keys: KeychainAtKeysIo(),
-      storage: storage,
     );
     if (client == null) {
       _logger.warning('ApkamActivationDialog failed or user cancelled');
@@ -249,7 +254,7 @@ Future<void> exportKeys(BuildContext context) async {
     }
 
     _logger.info('Writing keys to file');
-    atKeysIo.write(atsign, atKeys);
+    await atKeysIo.write(atsign, atKeys);
     _logger.info('Keys exported successfully');
 
     if (context.mounted) {
@@ -297,19 +302,6 @@ Future<String?> _openFileSaveDialog({
 }
 
 AtClientPreference _preference() => AtClientPreference()..namespace = namespace;
-
-/// Where this app keeps [atSign]'s local store. closedByClient: this app
-/// picks the location and the client still closes the store when it stops,
-/// so there is nothing to tear down.
-Future<HiveAtClientStorage> _storage(String atSign) async {
-  var dir = await getApplicationSupportDirectory();
-  _logger.info('Application support directory: ${dir.path}');
-  return HiveAtClientStorage(
-    atSign: atSign,
-    storagePath: dir.path,
-    closedByClient: true,
-  );
-}
 
 /// Every dialog hands back a client the app owns. This app keeps one current
 /// client in [AtClientManager], since its pages read it from there, whether or

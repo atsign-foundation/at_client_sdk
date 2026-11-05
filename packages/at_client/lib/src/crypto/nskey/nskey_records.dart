@@ -8,14 +8,15 @@
 /// intended change (there should be none) edits the pin in the same commit,
 /// and that edit is the review.
 ///
-/// | record             | shape                                          |
-/// |--------------------|------------------------------------------------|
-/// | advertisement      | `public:__nskey.<ns>@<owner>`                  |
-/// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                      |
-/// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`  |
-/// | current-CK pointer | `__ckcur.<destination>.<ckNs>@<atSign>`        |
-/// | signing root       | `public:pq_signing_root@<atSign>`              |
-/// | root mint lock     | `_rootlock@<atSign>`                           |
+/// | record             | shape                                                        |
+/// |--------------------|--------------------------------------------------------------|
+/// | advertisement      | `public:__nskey.<ns>@<owner>`                                |
+/// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                                    |
+/// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`                |
+/// | CK sibling copy    | `<ckKid>.__ck.<ckNs>@<sender>`, naming its recipient         |
+/// | current-CK pointer | `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>` |
+/// | signing root       | `public:pq_signing_root@<atSign>`                            |
+/// | root mint lock     | `_rootlock@<atSign>`                                         |
 ///
 /// At-rest ids freeze the same way — existing keyfiles hold them and scans
 /// match on them: the `nskey.<ns>.<kid>` AtKeys id and the `__nskey.<kid>`
@@ -29,7 +30,12 @@
 /// shared constant would move them in lockstep.
 library;
 
-import 'package:at_commons/at_commons.dart' show AtKey, Metadata;
+import 'dart:convert' show jsonEncode;
+
+import 'package:at_client/src/util/at_key_grammar.dart'
+    show isAtKeyAtSign, isAtKeyNamespace, isIdShaped;
+import 'package:at_commons/at_commons.dart'
+    show AtDecryptionException, AtKey, EnrollmentConstants, Metadata;
 
 /// The record name an nskey advertisement is published under, in the
 /// namespace the key serves: `public:__nskey.<ns>@<owner>`.
@@ -77,54 +83,78 @@ AtKey nskeyMintLockKey(String owner, String namespace,
 /// what stops a holder that dies mid-mint blocking its own atSign forever.
 ///
 /// It is also the winner's own budget: a holder carries the matching
-/// [MintLease] and refuses to publish once this has elapsed, so an overrunning
-/// mint abandons rather than writing over the enrollment that won the next
-/// election.
+/// `ServerMutexLease` and refuses to publish once this has elapsed, so an
+/// overrunning mint abandons rather than writing over the enrollment that won
+/// the next election.
 ///
-/// ⚠️ Sizing a lock purely against "how long a mint can legitimately take"
-/// ignores the other thing the ttl decides: how long a client that took the
-/// lock and exited before publishing is refused on its next start. This value
-/// governs the **nskey** lock, where that cost is bounded — `mintAndPublish`
-/// passes `ownLockIsNotContention`, so a client meeting its own token proceeds
-/// rather than waiting the ttl out. [signingRootMintLockTtl] is sized against
-/// the other risk.
+/// ⚠️ It is also how long this enrollment is refused a mint whenever its own
+/// lock is still held and no valid advertisement is published, since its own
+/// lock refuses it as another client's would: a client that died between
+/// taking the lock and publishing, on its next start, and a process that
+/// finds its advertisement missing or failing verification within the ttl of
+/// its own mint or rotation. A mint that conveys before publishing holds the
+/// lock for longer, this plus a budget for each enrollment listed, never past
+/// the atServer's 15-minute limit, and the refusal lasts as long.
+/// [signingRootMintLockTtl] is sized against that cost instead.
 const Duration mintLockTtl = Duration(minutes: 2);
 
 /// How long the **signing root's** mint lock is held.
 ///
-/// Much shorter than [mintLockTtl], and sized against a different risk. The
-/// root mint does not pass `ownLockIsNotContention`, so a client that takes
-/// this lock and exits before publishing loses to its own token for the whole
-/// ttl — and a client whose lifetime is shorter than the ttl never mints a
-/// root at all. Two of an atSign's enrollments racing to mint the root, which
+/// Much shorter than [mintLockTtl], and sized against a different risk. A
+/// client that takes this lock and exits before publishing is refused for the
+/// whole ttl, and a client whose lifetime is shorter than the ttl never mints
+/// a root at all. Two of an atSign's clients racing to mint the root, which
 /// is what the cooldown guards, is not a situation normal operation produces;
 /// a short-lived client relaunching is.
 ///
 /// **The floor is how long a mint may legitimately take**, because the winner
-/// carries the matching `MintLease` and abandons rather than publishing once
-/// it is spent — keygen, filing and the publish call, with room for several
+/// carries the matching `ServerMutexLease` and abandons rather than publishing
+/// once it is spent — keygen, filing and the publish call, with room for several
 /// round trips on a slow link and a far slower CPU. An overrun costs a retry
 /// at the next start, not damage.
 const Duration signingRootMintLockTtl = Duration(seconds: 15);
 
 /// The leading segment of the current-CK pointer record:
-/// `__ckcur.<destination>.<ckNs>@<atSign>`.
+/// `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@<atSign>`.
 const String currentCkPointerRecordName = '__ckcur';
 
-/// The at-key remembering which CK [sharedBy] is currently writing under for
-/// [destination], namespaced by the namespace the nskey resolved to — matching
-/// the CK's own scope.
+/// The at-key remembering which CK [enrollmentId] of [sharedBy] is currently
+/// writing under for [destination] in [ckNs], the namespace the destination's
+/// nskey resolved to.
 ///
-/// The destination's `@` is stripped — the emitted segment is `bob`, not
-/// `@bob` — and the double underscore hides the record from an ordinary scan.
+/// It lives in the enrollment's own reserved namespace, which the atServer
+/// lets that enrollment alone read and write, and moves aside when the
+/// enrollment is revoked. The destination's `@` is stripped — the emitted
+/// segment is `bob`, not `@bob` — and the double underscore hides the record
+/// from an ordinary scan.
 AtKey currentCkPointerKey(
         {required String? sharedBy,
+        required String enrollmentId,
         required String destination,
         required String ckNs}) =>
     AtKey()
       ..key = '$currentCkPointerRecordName.${destination.replaceAll('@', '')}'
-      ..namespace = ckNs
+          '.$ckNs'
+      ..namespace = '$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
       ..sharedBy = sharedBy
+      ..metadata = Metadata();
+
+/// The leading segment of a client's record that it verified its own
+/// namespace-key advertisement:
+/// `local:__nskeyverified.<namespace>.<enrollmentId>.a.__e@<atSign>`.
+const String verifiedAdvertisementRecordName = '__nskeyverified';
+
+/// The local at-key holding [enrollmentId]'s record that it verified
+/// [sharedBy]'s advertisement for [namespace]. Local, so it never syncs.
+AtKey verifiedAdvertisementKey(
+        {required String sharedBy,
+        required String enrollmentId,
+        required String namespace}) =>
+    AtKey()
+      ..key = '$verifiedAdvertisementRecordName.$namespace'
+      ..namespace = '$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
+      ..sharedBy = sharedBy
+      ..isLocal = true
       ..metadata = Metadata();
 
 /// The record name of the atSign's signing root:
@@ -150,9 +180,10 @@ const String pqSigningRootMintLockRecordName = '_rootlock';
 ///
 /// A self key with **no namespace**, matching the record it guards: the root
 /// is atSign-level, which is exactly what distinguishes it from an nskey. The
-/// single underscore hides it from every scan and keeps it out of the commit
-/// log, which is right for a record whose only reader is the atServer's own
-/// refusal — it is taken remotely, expires remotely, and must never ride sync.
+/// single underscore hides it from every scan, and as a server mutex it is
+/// taken with no commit, which is right for a record whose only reader is the
+/// atServer's own refusal — it is taken remotely, expires remotely, and must
+/// never ride sync.
 ///
 /// The metadata is contract, not tuning, for the same reason
 /// [nskeyMintLockKey]'s is: the refusal of a second **immutable** create is
@@ -182,6 +213,9 @@ const String ckConveyanceMarker = '.$ckConveyanceRecordName.';
 /// `@<recipient>:<ckKid>.__ck.<ckNs>@<sender>` for a share. Deriving it from
 /// the value rather than from the nskey owner alone is what keeps the inbound
 /// case addressable, since there sender and recipient are different atSigns.
+/// A share's conveyance carries `ttr -1` and `ccd: true`, so its recipient's
+/// atServer caches it from the notification and drops the copy when the
+/// original goes.
 ///
 /// [ckNs] is the namespace the nskey resolved to, **not** the value's own. One
 /// conveyance therefore serves every namespace beneath it — which is what
@@ -192,7 +226,34 @@ AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
   ..namespace = ckNs
   ..sharedBy = value.sharedBy
   ..sharedWith = value.sharedWith
-  ..metadata = Metadata();
+  ..metadata = _isShare(value)
+      ? (Metadata()
+        ..ttr = -1
+        ..ccd = true)
+      : Metadata();
+
+/// The at-key of a shared CK's **sibling copy**: `<ckKid>.__ck.<ckNs>@<sender>`,
+/// the sender's own record of a key it conveyed to a recipient.
+///
+/// Addressed like a self conveyance in the recipient's CK scope, so a reader
+/// finds it from the shared value alone; the record's `appMetadata` names the
+/// recipient, and the level of the sender's key that sealed it.
+AtKey ckSiblingCopyKey(
+        {required String sender,
+        required String ckKid,
+        required String ckNs}) =>
+    AtKey()
+      ..key = '$ckKid.$ckConveyanceRecordName'
+      ..namespace = ckNs
+      ..sharedBy = sender
+      ..metadata = Metadata();
+
+bool _isShare(AtKey value) {
+  final sharedWith = value.sharedWith;
+  return sharedWith != null &&
+      sharedWith.isNotEmpty &&
+      sharedWith != value.sharedBy;
+}
 
 /// Splits a conveyance key string into the CK it carries, the namespace that
 /// CK lives in, and the nskey owner whose cache scope it belongs to — or
@@ -246,6 +307,28 @@ const String nskeyKeyfileIdPrefix = 'nskey.';
 /// multi-segment namespace.
 String nskeyKeyfileIdFor(String namespace, String nskeyKid) =>
     '$nskeyKeyfileIdPrefix$namespace.$nskeyKid';
+
+/// [value], the namespace a record names as its [field], when an atKey can
+/// carry it; throws [AtDecryptionException] otherwise.
+String requireRecordNamespace(String value, String field) =>
+    _requireRecordField(isAtKeyNamespace, value, field, 'a namespace');
+
+/// [value], the key id a record names as its [field], when it has a key id's
+/// shape; throws [AtDecryptionException] otherwise.
+String requireRecordKid(String value, String field) =>
+    _requireRecordField(isIdShaped, value, field, 'a key id');
+
+/// [value], the atSign a record names as its [field], when it is one; throws
+/// [AtDecryptionException] otherwise.
+String requireRecordAtSign(String value, String field) =>
+    _requireRecordField(isAtKeyAtSign, value, field, 'an atSign');
+
+String _requireRecordField(
+    bool Function(String) shaped, String value, String field, String what) {
+  if (shaped(value)) return value;
+  throw AtDecryptionException('a record names ${jsonEncode(value)} as its '
+      '$field, which is not $what an atKey can carry');
+}
 
 // ---------------------------------------------------------------------------
 // Provider ids — the `appMetadata.providerId` every record is stamped with,

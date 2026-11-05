@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_utils/at_logger.dart';
 
 /// Sync helpers shared across the e2e test suite.
 ///

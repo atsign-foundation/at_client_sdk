@@ -1,6 +1,10 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyAdvertisementRecordName;
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show apskRecordName;
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -9,6 +13,10 @@ import 'package:at_commons/at_builders.dart';
 /// Class responsible for returning the appropriate [VerbBuilder] for given [AtKey]
 class LookUpBuilderManager {
   ///Returns a [VerbBuilder] for the given AtKey instance
+  ///
+  /// A lookup of an nskey advertisement or an `_apsk` record always bypasses
+  /// the cache, whatever [getRequestOptions] asks, so a cached copy that some
+  /// writer gave a `ttr` is never served in place of the owner's record.
   static VerbBuilder get(
       AtKey atKey, String currentAtSign, AtClientPreference atClientPreference,
       {GetRequestOptions? getRequestOptions}) {
@@ -20,7 +28,7 @@ class LookUpBuilderManager {
           ..key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
           ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy))
         ..operation = 'all';
-      if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
+      if (_bypassesCache(plookUpVerbBuilder.atKey.key, getRequestOptions)) {
         plookUpVerbBuilder.bypassCache = true;
       }
       return plookUpVerbBuilder;
@@ -34,7 +42,7 @@ class LookUpBuilderManager {
           ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy))
         ..auth = true
         ..operation = 'all';
-      if (getRequestOptions != null && getRequestOptions.bypassCache == true) {
+      if (_bypassesCache(lookupVerbBuilder.atKey.key, getRequestOptions)) {
         lookupVerbBuilder.bypassCache = true;
       }
       return lookupVerbBuilder;
@@ -51,6 +59,11 @@ class LookUpBuilderManager {
       ..operation = 'all';
   }
 }
+
+bool _bypassesCache(String name, GetRequestOptions? options) =>
+    options?.bypassCache == true ||
+    name.startsWith('$nskeyAdvertisementRecordName.') ||
+    name.startsWith('$apskRecordName.');
 
 class SecondaryManager {
   /// - If [useRemoteAtServer] is true, return RemoteLocalPref.remoteOnly

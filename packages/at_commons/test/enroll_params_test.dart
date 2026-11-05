@@ -305,4 +305,73 @@ void main() {
       expect(parsed.toJson()['apkamPublicKeySignature'], isNull);
     });
   });
+
+  group('A group of tests to verify enroll:link', () {
+    test('the operation token is "link"', () {
+      expect(getEnrollOperation(EnrollOperationEnum.link), 'link');
+    });
+
+    test('the enroll grammar matches an enroll:link command', () {
+      const params = '{"enrollmentId":"abc-123","links":'
+          '{"0123456789abcdef":{"link":{"v":2},"expect":null}}}';
+
+      final match = RegExp(VerbSyntax.enroll).firstMatch('enroll:link:$params');
+      expect(match, isNotNull);
+      expect(match!.namedGroup('operation'), 'link');
+      expect(match.namedGroup('enrollParams'), params);
+    });
+
+    test('adding "link" leaves the existing operations matching as before', () {
+      for (final op in [
+        'request',
+        'approve',
+        'deny',
+        'revoke',
+        'listns',
+        'infons',
+        'list',
+        'fetch',
+        'unrevoke',
+        'delete',
+        'update',
+      ]) {
+        final match = RegExp(VerbSyntax.enroll).firstMatch('enroll:$op:{}');
+        expect(match?.namedGroup('operation'), op,
+            reason: 'operation "$op" must still capture as itself');
+      }
+    });
+
+    test('the enroll grammar refuses a truncated operation token', () {
+      expect(RegExp(VerbSyntax.enroll).firstMatch('enroll:li:{}'), isNull);
+    });
+
+    test('links survive a wire round trip under that name, a null expect kept',
+        () {
+      final links = <String, dynamic>{
+        '0123456789abcdef': {
+          'link': {'v': 2, 'kid': '0123456789abcdef'},
+          'expect': null,
+        },
+      };
+
+      final json = (EnrollParams()..links = links).toJson();
+      expect(json['links'], links);
+
+      final parsed = EnrollParams.fromJson(
+          jsonDecode(jsonEncode(json)) as Map<String, dynamic>);
+      expect(parsed.links, links);
+      expect((parsed.links!['0123456789abcdef'] as Map).containsKey('expect'),
+          isTrue,
+          reason: 'a null expect says the caller found no link, so it has to '
+              'arrive as a key rather than be dropped');
+    });
+
+    test('an absent links stays null', () {
+      final parsed = EnrollParams.fromJson(<String, dynamic>{
+        'enrollmentId': 'abc-123',
+      });
+      expect(parsed.links, isNull);
+      expect(parsed.toJson()['links'], isNull);
+    });
+  });
 }

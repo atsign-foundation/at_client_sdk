@@ -7,7 +7,8 @@ import 'package:path/path.dart' as p;
 
 /// Keystore and sync queue in one SQLite database at [dbPath].
 ///
-/// [dbPath] may be `:memory:`, which is what [InMemoryAtClientStorage] passes.
+/// [dbPath] may be `:memory:`, which is what `InMemoryAtClientStorage`, from
+/// `package:at_client/memory.dart`, passes.
 class SqliteAtClientStorage extends AtClientStorageBase {
   SqliteAtClientStorage(
       {required this.atSign, required this.dbPath, super.closedByClient});
@@ -74,11 +75,4 @@ class SqliteAtClientStorage extends AtClientStorageBase {
     await _keyStore?.close();
     _db?.close();
   }
-}
-
-/// Keystore and sync queue in memory: a SQLite database that is never written
-/// to disk.
-class InMemoryAtClientStorage extends SqliteAtClientStorage {
-  InMemoryAtClientStorage({required super.atSign, super.closedByClient})
-      : super(dbPath: SqliteAtClientStorage.inMemoryPath);
 }

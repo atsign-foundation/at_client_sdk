@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 /// A client is obtainable with no atServer reachable, and serves everything
 /// its local storage holds. The client lifecycle's ruling that `open` works
@@ -51,7 +54,10 @@ void main() {
         atSign: atSign,
         namespace: 'offline',
         preference: preference,
-        atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'));
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preference),
+        atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
+        storage: hiveStoreFor(atSign, preference));
     built.stop();
     // Generous on purpose: this pins that the build awaits no network round
     // trip, and a build that did would wait out the 30 s connect budget or
@@ -99,7 +105,10 @@ void main() {
               ..rootPort = await refusedPort()
               ..hiveStoragePath = dir.path
               ..namespace = 'offline',
-            atKeysIo: keys);
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atKeysIo: keys,
+            storage: hiveStoreAt(atSign, dir.path));
 
     test('a granted namespace is written and read', () async {
       const atSign = '@enrolledoffline';
@@ -140,6 +149,41 @@ void main() {
               contains('Failed to fetch the enrollment record'))),
           reason: 'a keyfile that recorded no grants gives the client nothing '
               'to authorise from');
+    });
+
+    /// The record at_onboarding_cli 1.x stored once an enrollment it
+    /// requested was approved, holding the grants it asked for.
+    Future<void> recordAsTheCliDid(
+            AtClient client, String atSign, Map<String, String> grants) =>
+        client.getLocalSecondary()!.putValue(
+            'local:$enrollmentId$atSign', jsonEncode({'namespace': grants}));
+
+    test('with no snapshot, the record an older client left decides', () async {
+      const atSign = '@enrolledolder';
+      final client = await offlineClient(atSign, await enrolledKeys(atSign));
+      await recordAsTheCliDid(client, atSign, {'offline': 'rw'});
+      final key =
+          AtKey.self('phone', namespace: 'offline', sharedBy: atSign).build();
+
+      expect(await client.put(key, 'offline value'), isTrue,
+          reason: 'a store enrolled by at_onboarding_cli 1.x holds its grants '
+              'only there until an authenticated start records a snapshot, '
+              'and at_client 3.14 authorised from it offline');
+      expect((await client.get(key)).value, 'offline value');
+    });
+
+    test('and a namespace that record does not grant is refused', () async {
+      const atSign = '@enrolledolderother';
+      final client = await offlineClient(atSign, await enrolledKeys(atSign));
+      await recordAsTheCliDid(client, atSign, {'offline': 'rw'});
+      final key =
+          AtKey.self('phone', namespace: 'elsewhere', sharedBy: atSign).build();
+
+      await expectLater(
+          () => client.put(key, 'x'),
+          throwsA(isA<AtException>().having(
+              (e) => e.message, 'message', contains('insufficient privilege'))),
+          reason: 'the control: the record was consulted, not waved through');
     });
   });
 }

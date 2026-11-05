@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart' show internal;
+
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
 abstract class RequestOptions {}
@@ -7,6 +9,9 @@ abstract class RequestOptions {}
 class GetRequestOptions extends RequestOptions {
   /// Whether the `get` request should bypass this atSign's cache of data owned
   /// by another atSign
+  ///
+  /// A get of another atSign's nskey advertisement or `_apsk` record bypasses
+  /// it whatever this says.
   bool bypassCache = false;
 
   /// Whether to send this get request directly to the remote atServer.
@@ -21,11 +26,6 @@ class GetRequestOptions extends RequestOptions {
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.put`
 class PutRequestOptions extends RequestOptions {
-  /// Whether to set the `sharedKeyEnc` and `pubKeyCS` properties on the
-  /// Metadata for this put request
-  @Deprecated('Ignored. Always true.')
-  bool storeSharedKeyEncryptedMetadata = true;
-
   /// Whether to send this update request directly to the remote atServer.
   ///
   /// The default writes to local storage and the record reaches the atServer
@@ -37,22 +37,56 @@ class PutRequestOptions extends RequestOptions {
   /// Except public keys, shared keys and self keys are encrypted by default.
   /// If client prefers not to encrypt a shared key or self key, set this flag
   /// to false.
+  ///
+  /// With this false the value is stored as given, and a value encrypted
+  /// outside the SDK is not supported: the put drops the encryption fields on
+  /// the key's metadata, such as `isEncrypted` and `ivNonce`, so the value is
+  /// stored flagged unencrypted. A get returns it as stored, unless it has
+  /// legacy ciphertext's shape (base64 of a positive multiple of 16 bytes)
+  /// and decrypts under this client's legacy keys.
   bool shouldEncrypt = true;
+
+  /// Whether the value was encrypted before this put, under the metadata its
+  /// key carries; read by every put the SDK does not encrypt itself — one
+  /// with [shouldEncrypt] false, or of a public or `local:` key.
+  ///
+  /// The put then sends the key's metadata as it is. Without it, such a put
+  /// clears `isEncrypted` and `encoding`, and one with [shouldEncrypt] false
+  /// that is not public has its metadata rebuilt as well, so what a read or an
+  /// earlier put left on a reused key cannot mark a plain value encrypted.
+  @internal
+  bool alreadyEncrypted = false;
 
   /// Overrides the configured crypto provider for this put request.
   ///
-  /// Leave null to use [AtClientPreference.crypto]'s default provider.
+  /// Leave null to use [AtClientPreference.crypto]'s default provider, or,
+  /// with [sealToNamespace] set, the namespace-key provider.
   String? cryptoProviderId;
+
+  /// For a put shared with another atSign, the namespace of the recipient's
+  /// namespace key it is sealed to: the recipient's key at exactly this
+  /// namespace, with no other tried. The key's name must end with it after a
+  /// dot. Where the recipient advertises none there, the put is refused, or
+  /// falls back to legacy as [AtClientPreference.allowLegacyCryptoFallback]
+  /// allows. With no [cryptoProviderId], the put uses the namespace-key
+  /// provider, `symmetricAesGcmCryptoProviderId`, and is refused where this
+  /// client's config does not register it, as at `PqPosture.legacy`.
+  ///
+  /// Null seals to the most specific namespace key the recipient advertises
+  /// for the key's name. A put that is not encrypted, or is to this client's
+  /// own atSign, is refused with it set.
+  String? sealToNamespace;
 
   /// Whether the atServer should carry out this operation **without recording
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.
   ///
-  /// ⚠️ Without [useRemoteAtServer] this does nothing, because the default
-  /// routing writes locally and sync later pushes with no flag; an atServer
-  /// that does not honour the flag ignores it silently, so treat it as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// ⚠️ An operation that is not routed to the atServer — by
+  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
+  /// `IllegalArgumentException`, because a local write sends no command and
+  /// sync would later push it with no flag. An atServer that does not honour
+  /// the flag ignores it silently, so treat it as an optimisation that may not
+  /// happen, never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }
 
@@ -70,10 +104,11 @@ class DeleteRequestOptions extends RequestOptions {
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.
   ///
-  /// ⚠️ Without [useRemoteAtServer] this does nothing, because the default
-  /// routing writes locally and sync later pushes with no flag; an atServer
-  /// that does not honour the flag ignores it silently, so treat it as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// ⚠️ An operation that is not routed to the atServer — by
+  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
+  /// `IllegalArgumentException`, because a local write sends no command and
+  /// sync would later push it with no flag. An atServer that does not honour
+  /// the flag ignores it silently, so treat it as an optimisation that may not
+  /// happen, never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }

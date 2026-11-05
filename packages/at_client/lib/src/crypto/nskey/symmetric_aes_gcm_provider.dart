@@ -1,13 +1,20 @@
 import 'dart:convert';
+import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/crypto/backends/crypto_backends.dart'
+    show aesGcm256Decrypt, aesGcm256Encrypt;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show ckConveyanceKey;
+    show
+        ckConveyanceKey,
+        ckSiblingCopyKey,
+        requireRecordKid,
+        requireRecordNamespace;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -17,9 +24,10 @@ final _logger = AtSignLogger('SymmetricAesGcmProvider');
 
 /// The value cites a CK this client cannot resolve *yet*.
 ///
-/// Retry the read once the conveyance record syncs, where a plain
-/// [AtDecryptionException] means give up; a CK deleted for forward secrecy
-/// surfaces here too and never resolves.
+/// Retry the read once the conveyance record — for a shared value, the
+/// recipient's cached copy of it — syncs, where a plain [AtDecryptionException]
+/// means give up; a CK deleted for forward secrecy surfaces here too and never
+/// resolves.
 class ContentKeyUnavailableException extends AtDecryptionException {
   /// The kid the value cited, as it appears in `appMetadata`.
   final String ckKid;
@@ -33,7 +41,7 @@ class ContentKeyUnavailableException extends AtDecryptionException {
 /// A value carries its ciphertext and *cites* a CK by `ckKid` rather than
 /// carrying a sealed key inline; the CK is resolved from the [ContentKeyCache],
 /// which the `at/nskey` provider populates when the matching conveyance record
-/// syncs.
+/// — for a shared value, the recipient's cached copy of it — syncs.
 class SymmetricAesGcmProvider
     implements
         CryptoProvider,
@@ -64,11 +72,24 @@ class SymmetricAesGcmProvider
 
   /// Runs before the write pipeline starts, which is the only place a CK can be
   /// conveyed — see [PreparesWrites].
+  ///
+  /// [encrypt] seals [atKey] at the level and under the content key this
+  /// chooses.
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-          {bool? useRemoteAtServer}) async =>
-      await ckManager?.ensureCurrent(context, atKey,
-          useRemoteAtServer: useRemoteAtServer);
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
+    if (sealToNamespace != null && ckManager == null) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'needs a content-key manager to seal with, and this provider has none');
+    }
+    final chosen = await ckManager?.ensureCurrent(context, atKey,
+        useRemoteAtServer: useRemoteAtServer, sealToNamespace: sealToNamespace);
+    if (chosen != null) _chosen[atKey] = chosen;
+  }
+
+  /// What each write's [prepareForWrite] chose, held on the key object the
+  /// write pipeline carries from there to [encrypt].
+  final Expando<({String namespace, String ckNs})> _chosen = Expando();
 
   /// Answers the question a write would otherwise answer by failing: has
   /// [atSign] published an nskey for [namespace]?
@@ -83,14 +104,24 @@ class SymmetricAesGcmProvider
   Future<bool> isReadyFor(
           CryptoContext context, String atSign, String namespace) async =>
       ckManager == null ||
-      await ckManager!.resolver.resolve(atSign, namespace) != null;
+      await ckManager!.resolver.resolve(
+              atSign, NskeyResolver.startLevelOfNamespace(namespace)) !=
+          null;
 
   @override
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
     final owner = _nskeyOwnerOf(atKey);
-    final namespace = _namespaceOf(atKey);
-    final ckNs = await _ckNamespaceOf(owner, namespace);
+    // NOTE: the pre-pass's choice, not a second one: what this client holds
+    // can grow in between, and only the pre-pass checked the key it chose.
+    // It serves this one write.
+    final chosen = _chosen[atKey];
+    _chosen[atKey] = null;
+    final namespace = chosen?.namespace ??
+        await ckManager?.resolver
+            .startLevelOf(context.atClient.getCurrentAtSign(), atKey) ??
+        _namespaceOf(atKey);
+    final ckNs = chosen?.ckNs ?? await _ckNamespaceOf(owner, namespace);
 
     final ck = cache.current(owner, ckNs);
     if (ck == null) {
@@ -99,15 +130,17 @@ class SymmetricAesGcmProvider
           'an $nskeyCryptoProviderId record before writing data');
     }
 
-    // NOTE: a fresh nonce per value — never reuse a (key, nonce) pair.
+    final salt = _freshSalt();
     final iv = InitialisationVector.random(AesGcm256EncryptionAlgo.nonceLength);
-    final ciphertext = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64()))
-        .encrypt(_toBytes(atKey, plaintext), iv: iv, aad: _aad(atKey));
+    final ciphertext = await aesGcm256Encrypt(
+        valueKeyOf(ck, salt), _toBytes(atKey, plaintext),
+        iv: iv, aad: _aad(atKey));
 
     atKey.metadata.appMetadata = AppMetadata(
       providerId: id,
       additional: {
         'ckKid': ck.ckKid,
+        'salt': base64Encode(salt),
         'iv': base64Encode(iv.ivBytes),
         // NOTE: AtKey.fromString splits at the last dot, so a multi-segment
         // namespace cannot be recovered from the wire string.
@@ -151,6 +184,8 @@ class SymmetricAesGcmProvider
           'an $symmetricAesGcmCryptoProviderId value must carry ckKid and iv '
           'in appMetadata');
     }
+    final saltB64 = additional['salt'];
+    final List<int>? salt = saltB64 == null ? null : _saltOf(saltB64);
 
     final ck = cache.get(owner, namespace, ckKid) ??
         await _resolveFromConveyance(context, atKey, owner, namespace, ckKid);
@@ -161,13 +196,67 @@ class SymmetricAesGcmProvider
           'conveyance record has not synced, or the key was rotated away');
     }
 
-    final plain = await AesGcm256EncryptionAlgo(AESKey(ck.toBase64())).decrypt(
+    // NOTE: a value with no salt is encrypted under the content key itself.
+    final AESKey key =
+        salt == null ? AESKey(ck.toBase64()) : valueKeyOf(ck, salt);
+    final plain = await aesGcm256Decrypt(
+      key,
       Uint8List.fromList(base64Decode(ciphertext)),
       iv: InitialisationVector(Uint8List.fromList(base64Decode(ivB64))),
       aad: _aad(atKey),
     );
     return _fromBytes(atKey, plain);
   }
+
+  /// How many bytes of fresh randomness each value's key is derived with.
+  static const int saltLength = 32;
+
+  /// Decodes the salt a value's `appMetadata` carries as [saltB64], throwing
+  /// [AtDecryptionException] naming what makes it unusable.
+  static List<int> _saltOf(Object saltB64) {
+    if (saltB64 is! String) {
+      throw AtDecryptionException(
+          'an $symmetricAesGcmCryptoProviderId value carries a salt that is not '
+          'a string');
+    }
+    final List<int> salt;
+    try {
+      salt = base64Decode(saltB64);
+    } on FormatException catch (e) {
+      throw AtDecryptionException(
+          'an $symmetricAesGcmCryptoProviderId value carries a salt that is '
+          'not base64: ${e.message}');
+    }
+    if (salt.length != saltLength) {
+      throw AtDecryptionException(
+          'an $symmetricAesGcmCryptoProviderId value carries a '
+          '${salt.length}-byte salt, and the salt is $saltLength bytes');
+    }
+    return salt;
+  }
+
+  static final Random _random = Random.secure();
+
+  static Uint8List _freshSalt() => Uint8List.fromList(
+      List<int>.generate(saltLength, (_) => _random.nextInt(256)));
+
+  /// The label a value key's HKDF `info` starts with; the value's salt follows.
+  static final Uint8List _valueKeyLabel =
+      Uint8List.fromList(utf8.encode('at/symmetric/AES/GCM/value-key/v2'));
+
+  /// The AES key one value is encrypted under: HKDF-SHA256-Expand keyed by
+  /// [ck], over the label followed by that value's own [salt].
+  ///
+  /// A fresh key per value means no `(key, nonce)` pair repeats however many
+  /// values share a content key and however long it stays current, so the
+  /// random-nonce limit on AES-GCM does not bound a content key's use. The CK
+  /// is already a uniform 256-bit key, so it keys the expand step directly
+  /// (RFC 5869 section 3.3) and each value key rests on HMAC-SHA256's PRF
+  /// security under the CK.
+  @visibleForTesting
+  static AESKey valueKeyOf(ContentKey ck, List<int> salt) =>
+      AESKey(base64Encode(HkdfSha256.expand(ck.bytes,
+          info: Uint8List.fromList([..._valueKeyLabel, ...salt]), length: 32)));
 
   /// Binds a value's ciphertext to the record it was written under.
   ///
@@ -206,7 +295,16 @@ class SymmetricAesGcmProvider
   /// `at/nskey` provider decapsulates and caches it as a side effect, then
   /// look the CK up again rather than taking it from the read.
   ///
-  /// **Local storage first, then the atServer.** The remote leg is not an
+  /// **For a value this atSign shared, its sibling copy**, the only record of
+  /// that key sealed to this atSign; the recipient's conveyance is never read.
+  ///
+  /// **For a shared value, the recipient's cached copy first**, which its
+  /// atServer made from the conveyance's notification: a restarted recipient
+  /// opens what was shared with it while the sender's atServer is unreachable.
+  /// The conveyance itself is read after it, since one written before shares
+  /// carried a `ttr` has no cached copy.
+  ///
+  /// **Each from local storage first, then the atServer.** The remote leg is not an
   /// optimisation: a value delivered remote-only — which every notification is
   /// — cites a conveyance its sender wrote remote-first, so the record is on
   /// the atServer before the value arrives and may not reach local storage
@@ -226,11 +324,12 @@ class SymmetricAesGcmProvider
     String namespace,
     String ckKid,
   ) async {
-    final conveyance = conveyanceKeyFor(value, ckKid, namespace);
+    final conveyance = openableConveyanceKeyFor(
+        value, ckKid, namespace, context.atClient.getCurrentAtSign());
 
     /// Returns true when the record was read and opened. A read that finds
     /// nothing returns false; a record that will not open still throws.
-    Future<bool> read({required bool remote}) async {
+    Future<bool> read(AtKey conveyance, {required bool remote}) async {
       try {
         await context.atClient.get(conveyance,
             getRequestOptions: remote
@@ -246,6 +345,10 @@ class SymmetricAesGcmProvider
         // NOTE: the record is there and will not open — reporting it as absent
         // would send the caller to wait for a sync that has already happened.
         rethrow;
+      } on AtKeyNotFoundException {
+        return false;
+      } on KeyNotFoundException {
+        return false;
       } catch (e) {
         if (e is StoppedException) rethrow;
         // NOTE: an unexpected failure lands here as well and is reported to
@@ -259,11 +362,28 @@ class SymmetricAesGcmProvider
       }
     }
 
-    if (await read(remote: false)) {
+    final sharedWith = conveyance.sharedWith;
+    if (sharedWith != null &&
+        conveyance.sharedBy != context.atClient.getCurrentAtSign()) {
+      final cachedCopy = AtKey()
+        ..key = conveyance.key
+        ..namespace = conveyance.namespace
+        ..sharedBy = conveyance.sharedBy
+        ..sharedWith = sharedWith
+        ..metadata = (Metadata()..isCached = true);
+      for (final remote in const [false, true]) {
+        if (await read(cachedCopy, remote: remote)) {
+          final hit = cache.get(owner, namespace, ckKid);
+          if (hit != null) return hit;
+        }
+      }
+    }
+
+    if (await read(conveyance, remote: false)) {
       final local = cache.get(owner, namespace, ckKid);
       if (local != null) return local;
     }
-    if (await read(remote: true)) {
+    if (await read(conveyance, remote: true)) {
       return cache.get(owner, namespace, ckKid);
     }
     return null;
@@ -273,6 +393,26 @@ class SymmetricAesGcmProvider
   /// which owns the format.
   static AtKey conveyanceKeyFor(AtKey value, String ckKid, String ckNs) =>
       ckConveyanceKey(value, ckKid, ckNs);
+
+  /// The record [me] opens the CK for [value] from: the sibling copy when [me]
+  /// shared the value, else the record the CK was conveyed under.
+  ///
+  /// Throws [AtDecryptionException] when [ckKid] or [ckNs], as [value] names
+  /// them, cannot form an atKey.
+  static AtKey openableConveyanceKeyFor(
+      AtKey value, String ckKid, String ckNs, String? me) {
+    requireRecordKid(ckKid, 'ckKid');
+    requireRecordNamespace(ckNs, 'ckNs');
+    final sharedWith = value.sharedWith;
+    final sharedOut = me != null &&
+        value.sharedBy == me &&
+        sharedWith != null &&
+        sharedWith.isNotEmpty &&
+        sharedWith != me;
+    return sharedOut
+        ? ckSiblingCopyKey(sender: me, ckKid: ckKid, ckNs: ckNs)
+        : conveyanceKeyFor(value, ckKid, ckNs);
+  }
 
   /// The CK cache's scope: whose nskey the CK was conveyed under. On an inbound
   /// value this is the recipient, matching how the conveyance was cached.

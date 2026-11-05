@@ -2,6 +2,10 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
+    show ChainResult, ChainVerdict, PqSigningChain;
+import 'package:at_client/src/mixins/at_client_envelope_signer.dart'
+    show AtClientEnvelopeSigner;
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
@@ -71,15 +75,14 @@ class Enrollments {
       .map(Enrollment.fromNotification);
 
   /// Approves [enrollmentId], conveying this atSign's secrets to the device
-  /// it names. Throws [AtEnrollmentException] when no such request is
-  /// awaiting approval.
-  Future<void> approve(String enrollmentId) async {
-    final request = (await list(statuses: const [
-      EnrollmentStatus.pending,
-      EnrollmentStatus.approved,
-    ]))
-        .where((e) => e.enrollmentId == enrollmentId)
-        .firstOrNull;
+  /// it names, and returns its record as the atServer holds it afterwards,
+  /// with the term the atServer recorded and when the enrollment expires.
+  /// That record is revoked if another approver revoked it in the meantime.
+  /// Throws [AtEnrollmentException] when no such request is awaiting
+  /// approval, or when the atServer no longer holds it once approved.
+  Future<Enrollment> approve(String enrollmentId) async {
+    final request = await _byId(enrollmentId,
+        const [EnrollmentStatus.pending, EnrollmentStatus.approved]);
     if (request == null) {
       throw AtEnrollmentException(
           '$_atSign has no enrollment $enrollmentId awaiting approval');
@@ -91,7 +94,21 @@ class Enrollments {
         apkamSymmetricKey:
             AtBytes.fromString(request.encryptedAPKAMSymmetricKey ?? ''),
         atSign: _atSign));
+    // NOTE: read after the approval, which sets the term and the expiry.
+    final approved = await _byId(enrollmentId,
+        const [EnrollmentStatus.approved, EnrollmentStatus.revoked]);
+    if (approved == null) {
+      throw AtEnrollmentException('$_atSign approved enrollment $enrollmentId, '
+          'but its atServer no longer holds it');
+    }
+    return approved;
   }
+
+  Future<Enrollment?> _byId(
+          String enrollmentId, List<EnrollmentStatus> statuses) async =>
+      (await list(statuses: statuses))
+          .where((e) => e.enrollmentId == enrollmentId)
+          .firstOrNull;
 
   /// Denies [enrollmentId]; the device it names never authenticates.
   Future<void> deny(String enrollmentId) =>
@@ -111,6 +128,14 @@ class Enrollments {
   /// revoked enrollment may be deleted; the atServer refuses the rest.
   Future<void> delete(String enrollmentId) =>
       _decide(EnrollOperationEnum.delete, enrollmentId);
+
+  /// Whether [enrollmentId]'s keys are anchored to this atSign's signing
+  /// root: [ChainVerdict.anchored] when every key it signs with walks to the
+  /// root, [ChainVerdict.unsigned] when none of its active keys has a link,
+  /// and otherwise the verdict for a key that fails, which
+  /// [ChainResult.kid] names.
+  Future<ChainResult> anchoring(String enrollmentId) => PqSigningChain(_client)
+      .verifyChain(AtClientEnvelopeSigner(_client), enrollmentId);
 
   /// The atServer's record of [enrollmentId], or null when it holds none.
   Future<Enrollment?> fetch(String enrollmentId) async {

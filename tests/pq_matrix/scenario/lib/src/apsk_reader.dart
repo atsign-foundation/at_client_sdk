@@ -1,4 +1,4 @@
-// `EnvelopeSigning` carries at_client's `@experimental` marker in both builds.
+// `EnvelopeSigning` carries at_client 3.14.0's `@experimental` marker.
 // UC-G1.14's claim is about what a DEPLOYED reader makes of a rollout-1
 // `_apsk`, and only that reader's own code path can settle it.
 // ignore_for_file: experimental_member_use
@@ -38,9 +38,9 @@ Future<Map<String, Object?>> readPeerApskAsReleasedReader(
 
 /// The smallest thing that can hold [EnvelopeSigning].
 ///
-/// Its three members are declared identically in at_client 3.14.0 and in this
-/// tree; a mixin member present in only one of them would make this file
-/// uncompilable on the released arm.
+/// Its three members exist in at_client 3.14.0 and in this tree; a mixin
+/// member present in only one of them would make this file uncompilable on
+/// one arm.
 class _ReleasedApskReader with ApkamSigning, EnvelopeSigning {
   _ReleasedApskReader(this.atClient);
 
@@ -52,7 +52,10 @@ class _ReleasedApskReader with ApkamSigning, EnvelopeSigning {
 
   /// Null so that each read fetches the record as it stands rather than
   /// returning an earlier read's answer.
+  ///
+  /// NOTE: typed `Null` because the two at_clients declare this member with
+  /// different record shapes, and `Null` overrides both.
+  // ignore: prefer_void_to_null
   @override
-  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
-      null;
+  Null get publicKeyCacheSettings => null;
 }

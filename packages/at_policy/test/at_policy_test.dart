@@ -1,6 +1,5 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_policy/at_policy.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

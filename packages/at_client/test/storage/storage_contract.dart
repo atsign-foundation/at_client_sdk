@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -14,12 +16,26 @@ class FakeClient extends Mock implements AtClient {
   String? get enrollmentId => _enrollmentId;
 }
 
-/// The claim and clear rules every [AtClientStorage] must satisfy.
+/// Makes the file at [path] unreadable, and returns what makes it readable
+/// again, or null when the process reads it whatever its mode says.
+void Function()? unreadable(String path) {
+  if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+    return null;
+  }
+  expect(Process.runSync('chmod', ['000', path]).exitCode, 0);
+  return () => Process.runSync('chmod', ['600', path]);
+}
+
+/// The open, claim and clear rules every [AtClientStorage] must satisfy.
 ///
 /// [make] builds a fresh, unopened storage for [atSign]; the contract closes
-/// what it opens.
+/// what it opens. [breakOpen] leaves the storage [make] builds for an atSign
+/// unable to open, and returns what puts it right, or null when it cannot
+/// break it here; pass null for a backend with nothing that can stop it
+/// opening.
 void runStorageContract(
-    String backend, AtClientStorage Function(String atSign) make) {
+    String backend, AtClientStorage Function(String atSign) make,
+    {required void Function()? Function(String atSign)? breakOpen}) {
   final opened = <AtClientStorage>[];
   AtClientStorage storageFor(String atSign) {
     final s = make(atSign);
@@ -33,6 +49,38 @@ void runStorageContract(
     }
     opened.clear();
   });
+
+  final breaker = breakOpen;
+  if (breaker != null) {
+    group('$backend: open', () {
+      test('a failed open reaches the caller once, and a later open works',
+          () async {
+        final atSign = '@${backend}c10';
+        final first = storageFor(atSign);
+        await first.attach(FakeClient(atSign, 'e1'));
+        await first.close();
+        final restore = breaker(atSign);
+        if (restore == null) {
+          markTestSkipped('$backend cannot be made to fail to open here');
+          return;
+        }
+        addTearDown(restore);
+
+        final s = storageFor(atSign);
+        await expectLater(
+            s.attach(FakeClient(atSign, 'e1')), throwsA(isA<Exception>()));
+        // NOTE: an unhandled second report would arrive after the caller's,
+        // and fails this test only if it lands before the test ends.
+        await pumpEventQueue();
+
+        restore();
+        await s.attach(FakeClient(atSign, 'e1'));
+        await s.keyStore.put('k$atSign', AtData()..data = 'v');
+        expect((await s.keyStore.get('k$atSign'))?.data, 'v',
+            reason: 'the failure left nothing behind that stops a later open');
+      });
+    });
+  }
 
   group('$backend: attach', () {
     test('the same client attaching twice is a no-op', () async {
@@ -143,6 +191,34 @@ void runStorageContract(
       await s.close();
       await s.close();
       expect(s.isAttached, isFalse);
+    });
+
+    test(
+        'when a keystore held past close is read or written, then each '
+        'operation throws', () async {
+      final atSign = '@${backend}c10';
+      final s = storageFor(atSign);
+      await s.attach(FakeClient(atSign, 'e1'));
+      final keyStore = s.keyStore;
+      final key = 'public:note$atSign';
+      await keyStore.put(key, AtData()..data = 'before');
+      expect((await keyStore.get(key))?.data, 'before',
+          reason: 'the control: the keystore answers while open');
+      await s.close();
+
+      final operations = <String, Future<Object?> Function()>{
+        'get': () => keyStore.get(key),
+        'exists': () => keyStore.exists(key),
+        'getKeys': () => keyStore.getKeys(),
+        'put': () => keyStore.put(key, AtData()..data = 'after'),
+        'create': () =>
+            keyStore.create('public:other$atSign', AtData()..data = 'after'),
+        'remove': () => keyStore.remove(key),
+      };
+      for (final MapEntry(key: name, value: operation) in operations.entries) {
+        await expectLater(operation(), throwsA(anything),
+            reason: '$name on a closed keystore');
+      }
     });
   });
 }

@@ -1,0 +1,21 @@
+name: keyfile_capture
+publish_to: none
+description: >-
+  Writes a keyfile through whichever published at_auth the consuming arm
+  resolves, and records what that at_auth reads back from it.
+version: 1.0.0
+
+# Deliberately NOT a workspace member: packages/at_auth is in the root
+# `workspace:` list, so anything inside the workspace resolves at_auth by path,
+# and the arms that consume this have to run what pub.dev ships.
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  # Every release an arm pins; the arm's pubspec.lock is what fixes the build.
+  at_auth: ">=3.2.0 <4.0.0"
+  crypto: ^3.0.0
+
+dev_dependencies:
+  lints: ^6.0.0

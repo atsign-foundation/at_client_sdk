@@ -1,0 +1,22 @@
+name: keyfile_capture_3_3_0
+publish_to: none
+description: >-
+  Writes the keyfile fixtures with at_auth 3.3.0, the previous release of the package that owns the keyfile format, as pub.dev ships it.
+version: 1.0.0
+
+# Deliberately NOT a workspace member, and deliberately WITHOUT
+# dependency_overrides: anything inside the workspace resolves at_auth by path,
+# and this arm has to run what pub.dev ships. pubspec.lock is committed, so a
+# re-capture runs the same transitive set.
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  # Exact, not a caret range: this arm stays on the version it names.
+  at_auth: 3.3.0
+  keyfile_capture:
+    path: ../../capture
+
+dev_dependencies:
+  lints: ^6.0.0

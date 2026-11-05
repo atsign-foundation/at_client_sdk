@@ -1,9 +1,11 @@
 import 'dart:io';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
+import '../test_utils/hive_store.dart';
+import '../test_utils/transport.dart';
 
 class _RecordingListener implements AtSignChangeListener {
   final events = <SwitchAtSignEvent>[];
@@ -40,7 +42,10 @@ void main() {
         ..rootPort = 1
         ..hiveStoragePath = '${dir.path}/$atSign'
         ..namespace = 'lifecycle',
-      atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'));
+      lookUps: secureSocketLookUps(),
+      secondaryAddressFinder: await refusingAtDirectory(),
+      atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
+      storage: hiveStoreAt(atSign, '${dir.path}/$atSign'));
 
   test(
       'use makes the client current, notifies the listeners, and stops '
@@ -61,8 +66,8 @@ void main() {
     expect(listener.events.last.previousAtClient, same(first));
     expect(listener.events.last.newAtClient, same(second));
     expect(first.isStopped, isFalse,
-        reason: 'the caller owns the previous client; the manager only '
-            'stopped clients it had built itself');
+        reason: 'the caller owns the previous client, so the manager leaves '
+            'it running');
   });
 
   test('using the current client again is not a switch', () async {

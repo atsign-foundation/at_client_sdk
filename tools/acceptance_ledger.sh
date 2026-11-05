@@ -75,7 +75,7 @@ REPORTS+=("$ROOT/packages/at_auth/acceptance-report.json")
 
 if [[ $WITH_LIVE -eq 1 ]]; then
   echo "*** Live packs (each recycles its own virtualenv; this takes a while)"
-  for pack in at_functional_test at_end2end_test at_onboarding_cli_functional_tests; do
+  for pack in at_functional_test at_end2end_test at_client_cli_functional_tests; do
     run_suite "$pack" \
       bash -c 'cd "$0/tests/$1" && ACCEPTANCE_REPORT=acceptance-report.json ./runLocal.sh' \
       "$ROOT" "$pack"

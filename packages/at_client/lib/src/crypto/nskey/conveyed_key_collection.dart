@@ -12,7 +12,6 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart'
     show bindKeyPackageToAtKeys;
-import 'package:meta/meta.dart' show experimental;
 
 /// Collects the secrets this enrollment has been sent and files the key
 /// material among them into [keysIo]. Returns how many nskey privates were
@@ -27,7 +26,6 @@ import 'package:meta/meta.dart' show experimental;
 /// `receivedSecrets` after the client is built sees no arrival event for
 /// anything that was already waiting; the secret itself is in the store, where
 /// `waitForSecret` looks first.
-@experimental
 Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
     {NskeyKeyRing? ring}) async {
   final atSign = atClient.getCurrentAtSign();
@@ -48,22 +46,8 @@ Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
   final ringFiling = ring is PublishedNskeyKeyRing ? ring.privateFiling : null;
   if (ringFiling != null) return ringFiling.filePending(held);
 
-  return NskeyPrivateFiling(
-    keysIo: keysIo,
-    atSign: atSign,
-    publishedGeneration: (namespace, nskeyKid) async {
-      final advertised =
-          await (ring ?? PublishedNskeyKeyRing(atClient)).currentPublic(
-        atSign,
-        namespace,
-      );
-      // NOTE: matched against every entry, not the advertisement's default kid,
-      // which would answer "not published" for the other entry of a two-entry
-      // advertisement.
-      if (advertised == null || advertised.entryWithKid(nskeyKid) == null) {
-        return null;
-      }
-      return advertised;
-    },
-  ).filePending(held);
+  final lookup = ring ?? PublishedNskeyKeyRing(atClient);
+  return NskeyPrivateFiling.checkedAgainst(() => lookup,
+          keysIo: keysIo, atSign: atSign)
+      .filePending(held);
 }

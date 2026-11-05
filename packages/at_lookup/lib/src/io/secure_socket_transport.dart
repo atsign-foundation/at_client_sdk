@@ -1,0 +1,106 @@
+import 'dart:io';
+
+import 'package:at_commons/at_commons.dart';
+
+import '../transport/at_transport.dart';
+import 'secure_socket_util.dart';
+
+/// TLS over TCP: the [AtTransport] a native program connects with.
+///
+/// The constructor takes [Socket] rather than [SecureSocket] because every
+/// member below is plain socket delegation; the TLS lives entirely in
+/// [SecureSocketTransportFactory], which is the only thing that constructs one.
+///
+/// A far-end close shows only as [inbound] ending. [isOpen] turns false on a
+/// local close or [destroy] alone, and [add] and [flush] can succeed after the
+/// peer has gone, so a consumer watches [inbound] to learn that it has.
+class SecureSocketTransport implements AtTransport {
+  final Socket _socket;
+
+  @override
+  final String description;
+
+  bool _open = true;
+
+  SecureSocketTransport(Socket socket)
+      : _socket = socket,
+        description = '${socket.remoteAddress.address}:${socket.remotePort}' {
+    socket.done.then((_) => _open = false, onError: (_) => _open = false);
+  }
+
+  @override
+  bool get isOpen => _open;
+
+  /// The socket itself, never a re-broadcast of it.
+  ///
+  /// `Socket implements Stream<Uint8List>`, so pausing this subscription
+  /// pauses the TCP receive window. A `StreamController` in between would
+  /// answer the pause out of a local buffer and the far end would keep sending.
+  @override
+  Stream<List<int>> get inbound => _socket;
+
+  /// Throws [AtIOException] when the socket refuses [bytes]: a failed socket
+  /// refuses with an [IOException], a `dart:io` socket that has closed with a
+  /// [StateError].
+  @override
+  void add(List<int> bytes) {
+    try {
+      _socket.add(bytes);
+    } on IOException catch (e) {
+      throw _failed(e);
+    } on StateError catch (e) {
+      throw _failed(e);
+    }
+  }
+
+  /// Throws [AtIOException] when the socket fails before the bytes leave.
+  @override
+  Future<void> flush() async {
+    try {
+      await _socket.flush();
+    } on IOException catch (e) {
+      throw _failed(e);
+    }
+  }
+
+  AtIOException _failed(Object cause) =>
+      AtIOException('connection to $description failed: $cause');
+
+  @override
+  void destroy() {
+    _open = false;
+    _socket.destroy();
+  }
+}
+
+/// Opens [SecureSocketTransport]s, carrying the TLS settings they are opened
+/// with.
+///
+/// The config lives here rather than on the transport because it is an input to
+/// connecting and means nothing to an open channel.
+class SecureSocketTransportFactory implements AtTransportFactory {
+  final SecureSocketConfig secureSocketConfig;
+
+  const SecureSocketTransportFactory({required this.secureSocketConfig});
+
+  /// Both a refused connection ([SocketException]) and a failed or rejected
+  /// handshake ([TlsException]) surface as [SecondaryConnectException]; the
+  /// cause is kept in the message. The caller supplies whose atServer this was.
+  @override
+  Future<AtTransport> connect(String host, String port,
+      {Duration? timeout}) async {
+    try {
+      return SecureSocketTransport(await SecureSocketUtil.createSecureSocket(
+          host, port, secureSocketConfig,
+          timeout: timeout));
+    } on SocketException catch (e) {
+      throw _unreachable(host, port, e);
+    } on TlsException catch (e) {
+      throw _unreachable(host, port, e);
+    }
+  }
+
+  SecondaryConnectException _unreachable(String host, String port, Object e) =>
+      SecondaryConnectException('unable to connect to atServer on $host:$port'
+          ' - $e');
+}

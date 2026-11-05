@@ -69,8 +69,9 @@ class EnrollParams {
   /// verification reads the enrollment record, so the server has no use for
   /// this key and no business knowing how a signing key is spelled.
   ///
-  /// Capped by the atServer at 20KB **encoded**; a longer value is refused
-  /// rather than truncated.
+  /// The atServer limits the whole enrollment record, this value included, to
+  /// 500 KB, and refuses a record that would exceed it rather than truncating
+  /// it.
   Map<String, dynamic>? apsk;
 
   /// The **bare** `_apsk` value — an RSA public key string, exactly as the
@@ -117,6 +118,18 @@ class EnrollParams {
 
   List<EnrollmentStatus>? enrollmentStatusFilter;
   Duration? apkamKeysExpiryDuration;
+
+  /// The links an `enroll:link` carries, keyed by the `kid` of the key each
+  /// vouches for:
+  ///
+  /// ```json
+  /// {"<kid>": {"link": {...}, "expect": {...} or null}}
+  /// ```
+  ///
+  /// `expect` is a copy of the link the caller found on that key when it read
+  /// the record, or null when it found none, and is sent as null rather than
+  /// left out.
+  Map<String, dynamic>? links;
 
   EnrollParams();
 

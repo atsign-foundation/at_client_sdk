@@ -7,7 +7,9 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart';
@@ -89,6 +91,8 @@ void main() {
           preference: AtClientPreference(posture: PqPosture.legacy)
             ..rootDomain = 'vip.ve.atsign.zone'
             ..rootPort = TestUtils.rootServerPort,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           namespace: namespace,
           app: 'wavi',
           device: 'pixel1',
@@ -147,18 +151,6 @@ void main() {
     test(
         'A test to verify SPP is set and enrollment request is submitted successfully',
         () async {
-      var fromResponse = await atClientManager.atClient
-          .getRemoteSecondary()!
-          .executeCommand('from:$atSign\n');
-      expect(fromResponse!.isNotEmpty, true);
-      fromResponse = fromResponse.replaceAll('data:', '');
-      // 1. Cram auth
-      var cramDigest = TestUtils.generateCramDigest(atSign, fromResponse);
-      var cramResult = await atClientManager.atClient
-          .getRemoteSecondary()!
-          .executeCommand('cram:$cramDigest\n');
-      expect(cramResult, 'data:success');
-      // 2. Send enroll request which will be auto approved (Because connection is CRAM Authenticated).
       var encryptedDefaultEncPrivateKey = EncryptionUtil.encryptValue(
           aliceDefaultEncryptionPrivateKey, aliceApkamSymmetricKey);
       var encryptedSelfEncKey = EncryptionUtil.encryptValue(
@@ -166,34 +158,41 @@ void main() {
       final cramEnrolmentKey = freshApkamPair();
       var enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${cramEnrolmentKey.publicKey}"}\n';
-      var enrollResponseFromServer = await atClientManager.atClient
-          .getRemoteSecondary()!
-          .executeCommand(enrollRequest);
-      expect(enrollResponseFromServer, isNotEmpty);
-      enrollResponseFromServer =
-          enrollResponseFromServer?.replaceFirst('data:', '');
-      var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
-      expect(enrollResponseJson['enrollmentId'], isNotEmpty);
-      expect(enrollResponseJson['status'], 'approved');
 
-      // NOTE: a CRAM auto-approve that copies the enrolling key over
-      // privatekey:at_pkam_publickey has just replaced the owner credential.
-      expect(
-          await atClientManager.atClient
-              .getRemoteSecondary()!
-              .executeCommand('update:privatekey:at_pkam_publickey '
-                  '${pkamPublicKeyMap[atSign]}\n'),
-          'data:-1',
-          reason: 'the owner credential must be the demo keypair again before '
-              'anything else authenticates as this atSign');
+      // 1. Cram auth, on a connection of the test's own.
+      // NOTE: a cram may not follow a pkam on one connection, and the
+      // client's own has authenticated with pkam.
+      final cramLookup = TestUtils.unauthenticatedLookUp(atSign);
+      try {
+        var fromResponse =
+            await cramLookup.executeCommand('from:$atSign\n', auth: false);
+        expect(fromResponse!.isNotEmpty, true);
+        fromResponse = fromResponse.replaceAll('data:', '');
+        var cramDigest = TestUtils.generateCramDigest(atSign, fromResponse);
+        var cramResult =
+            await cramLookup.executeCommand('cram:$cramDigest\n', auth: false);
+        expect(cramResult, 'data:success');
+
+        // 2. Send an enroll request, auto-approved because the connection is
+        // CRAM-authenticated.
+        var enrollResponseFromServer =
+            await cramLookup.executeCommand(enrollRequest, auth: false);
+        expect(enrollResponseFromServer, isNotEmpty);
+        enrollResponseFromServer =
+            enrollResponseFromServer?.replaceFirst('data:', '');
+        var enrollResponseJson = jsonDecode(enrollResponseFromServer!);
+        expect(enrollResponseJson['enrollmentId'], isNotEmpty);
+        expect(enrollResponseJson['status'], 'approved');
+      } finally {
+        await cramLookup.close();
+      }
 
       // 3. Assert that SPP is set successfully.
       var otp = (await atClientManager.atClient.getOTP()).response;
 
       // 4. Send the enrollment request on a connection of the test's own.
-      // NOTE: the client's connection is CRAM-authenticated, and an
-      // enroll:request arriving on it is auto-approved, as step 2's was; this
-      // one has to come back pending.
+      // NOTE: an enroll:request on an unauthenticated connection is the one
+      // that waits for approval; this one has to come back pending.
       enrollRequest =
           'enroll:request:{"appName":"wavi","deviceName":"pixel-${Uuid().v4().hashCode}","namespaces":{"wavi":"rw"},"otp":"$otp","encryptedDefaultEncryptedPrivateKey":"$encryptedDefaultEncPrivateKey","encryptedDefaultSelfEncryptionKey":"$encryptedSelfEncKey","apkamPublicKey":"${freshApkamPair().publicKey}", "encryptedAPKAMSymmetricKey":"$encryptedAPKAMSymmetricKey"}\n';
       final requestLookup = TestUtils.unauthenticatedLookUp(atSign);
@@ -215,11 +214,11 @@ void main() {
 
       expect(atResponse.response.isNotEmpty, true);
       var otp = atResponse.response;
-      expect(otp.length, 6);
-      expect(
-          otp.contains('0') || otp.contains('o') || otp.contains('O'), false);
-      // check whether otp contains at least one number and one alphabet
-      expect(RegExp(r'^(?=.*[a-zA-Z])(?=.*\d).+$').hasMatch(otp), true);
+      expect(otp, matches(RegExp(r'^[A-NP-Z1-9]{6}$')),
+          reason: 'six upper-case letters and digits, never 0 or O');
+      expect(otp, matches(RegExp(r'\d')),
+          reason: 'the atServer guarantees a digit; a letter is not '
+              'guaranteed, so an all-digit OTP is valid');
     });
 
     test('A test to verify invalid OTP results in error response from server',
@@ -283,7 +282,8 @@ void main() {
     expect(otp, isNotNull);
     // create first enrollment request
     RemoteSecondary? secondRemoteSecondary =
-        RemoteSecondary(atSign, getClient2Preferences());
+        RemoteSecondary(atSign, getClient2Preferences(),
+            lookUps: secureSocketLookUps());
     // Fresh per request, and the two below must differ: the atServer refuses a
     // request whose key any stored enrollment already holds, so two requests
     // sharing one key make the second fail.
@@ -361,6 +361,8 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: InMemoryAtKeysIo(),
           preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           signingAlgo: SigningAlgoType.rsa2048);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -497,7 +499,9 @@ void main() {
           () => Atsign(atSign).authenticatesAs(
               keys: InMemoryAtKeysIo.holding(atSign, enrolledKeys),
               rootDomain:
-                  AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort)),
+                  AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort),
+                      lookUps: secureSocketLookUps(),
+                      secondaryAddressFinder: TestUtils.atDirectory),
           throwsA(predicate((e) =>
               '$e'.contains('AT0025') &&
               '$e'.contains('${atEnrollmentResponse.enrollmentId} is denied'))));
@@ -517,6 +521,8 @@ void main() {
           namespaces: {'wavi': 'r'},
           keys: InMemoryAtKeysIo(),
           preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           signingAlgo: SigningAlgoType.rsa2048);
 
       // Use enroll fetch to get the encryptedAPKAMSymmetricKey
@@ -715,6 +721,8 @@ void main() {
           keys: ownerKeysIo,
           preference:
               TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           namespace: namespace,
           app: 'wavi',
           device: 'pixel-onboard',
@@ -754,6 +762,8 @@ void main() {
           keys: InMemoryAtKeysIo(),
           preference:
               TestUtils.getPreference(cramAtSign, posture: PqPosture.legacy),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: TestUtils.atDirectory,
           signingAlgo: SigningAlgoType.rsa2048);
       expect(pending.enrollmentId, isNotEmpty);
 

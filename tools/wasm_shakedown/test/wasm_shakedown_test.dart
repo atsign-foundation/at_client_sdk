@@ -124,13 +124,17 @@ void main() {
 
     test('a platform library in the graph is reported', () {
       // The positive control: this assay detects forbidden imports, so the
-      // specimen known to test positive is the one that has them. at_utils.dart
-      // exports app_config.dart and pseudo_server_socket.dart, both dart:io, so
-      // a walk that reports nothing here is broken regardless of what it says
-      // elsewhere. `controls:` in the gate config are the same idea per gate.
-      final result = shakedown('package:at_utils/at_utils.dart');
+      // specimen known to test positive is the one that has them.
+      // at_utils_io.dart is the quarantine barrel — app_config.dart,
+      // io_handlers.dart and pseudo_server_socket.dart, all dart:io — so it
+      // tests positive by construction and stays that way.
+      //
+      // Its neutral twin at_utils.dart does not: the 4.0.0 split cleaned it,
+      // which is the one thing a control must never depend on. `controls:` in
+      // the gate config are the same idea per gate.
+      final result = shakedown('package:at_utils/at_utils_io.dart');
       expect(result.offendersIn('at_utils'), isNotEmpty,
-          reason: 'the walk found no dart:io under at_utils.dart, which is '
+          reason: 'the walk found no dart:io under at_utils_io.dart, which is '
               'known to reach it — the traversal or the forbidden set is wrong');
     });
 

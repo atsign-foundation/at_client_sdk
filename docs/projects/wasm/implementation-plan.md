@@ -169,7 +169,7 @@ Preparation. Changes no public interface, breaks nothing, and shrinks every late
 > at_auth's `max_blocked_packages` from 4 to 3 in the same PR — which is exactly the "T0
 > shrinks" the phase promises, and the first evidence that the one-way baseline is
 > tightened when convenient rather than ignored. Putting the import back fails the at_auth
-> ratchet at 4 blocked packages over the 3 it is baselined at.
+> ratchet by one blocked package over its ceiling.
 
 - **S1 — Plumb the at_lookup socket factories.** ⛔ **Superseded by
   [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13)**;
@@ -216,7 +216,7 @@ application hands `lookUps:` to at_client's doors and every connection the clien
 comes from it, at_client names the TLS transport in one file, and `at_client_web` can
 implement `AtLookupMuxable` whole behind its factory without waiting for anything below.
 What remains is at_lookup's own major — T3, T4, T5 and T8 — which is what lets a web
-transport *reuse* `AtLookupImpl` rather than replace it, plus T6's raw sockets and T7's
+transport *reuse* `AtLookupImpl` rather than replace it, plus T6's raw socket and T7's
 web address finder. Two things are additive when wanted and not owed now: an
 address-finder parameter at the doors (`buildAtClient` already takes one), and a
 platform-default registration so the core stops building the Hive and TLS defaults
@@ -253,16 +253,17 @@ break; it stays as ruled.
 - **T5 — `at_lookup_io.dart`.** Native transport wrapping `SecureSocket`; absorb
   `src/util/secure_socket_util.dart` whole (certs, `SecurityContext`, TLS keylog) as
   native-only.
-- **T6 — Follow the raw sockets.** `monitor_client.dart` (exported from at_lookup's
-  barrel, no consumer in this repository) and
-  `at_client/lib/src/stream/stream_notification_handler.dart` both call
-  `SecureSocket.connect` directly, bypassing `SecureSocketUtil`. They must route through
-  the transport or move to `_io`.
+- **T6 — Follow the raw socket.** `monitor_client.dart` (exported from at_lookup's
+  barrel, no consumer in this repository) calls `SecureSocket.connect` directly,
+  bypassing `SecureSocketUtil`. It must route through the transport or move to
+  `_io`. **Done 2026-10-23:** `MonitorClient` is removed in at_lookup 4.0.0.
 - **T7 — Web `SecondaryAddressFinder`.** `cacheable_secondary_address_finder.dart`
   opens a raw TLS socket to `root.atsign.org:64` through `AtLookupSecureSocketFactory`,
   not through `AtLookUpFactory`. Ship a web implementation using one of
   the two existing escape hatches — the abstract interface, or the `proxy:<host>`
-  convention. The production answer is OQ-7.
+  convention. The production answer is OQ-7. **Done 2026-10-23:**
+  `HttpsSecondaryAddressFinder` in `at_lookup_web.dart`, behind `webSocketLookUps()`;
+  OQ-7 resolved, pending atDirectory CORS.
 - **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2
 - **T9 — Let the APP inject the transport, and thread it to every construction site**
   (gkc, 2026-09-06). ✅ **DONE 2026-09-13**, on the client-lifecycle branch, as the
@@ -273,8 +274,8 @@ break; it stays as ruled.
   the authenticator, an optional address finder and the client config in, an
   `AtLookupMuxable` out — and `secureSocketLookUps` in `at_lookup_io.dart`, the one
   file naming the TLS transport, is the default. `Atsign.open`, `activate`, `enroll`,
-  `resumeEnrollment`, `authenticatesAs`, `buildAtClient` and
-  `AtServiceFactory.atClient` take `lookUps:` beside `keys:` and
+  `resumeEnrollment`, `authenticatesAs` and `buildAtClient` (and
+  `AtServiceFactory.atClient`, until at_client 4.0 removed it) take `lookUps:` beside `keys:` and
   [`storage:`](#5a-client-storage-bundle-x); `AtClientImpl.lookUps` holds it, and
   `buildRemoteSecondary`, `SyncServiceImpl.remoteSecondaryFor` and the monitor (through
   `NotificationServiceImpl.create(lookUps:)`) all build through it, so every connection
@@ -434,8 +435,7 @@ D-12. Independent of the P series, which is `at_server`-side.
     client. The guard firing is the evidence that the sharing was real and unnoticed.
   - **A child isolate is a separate heap**, so `sync_multiple_client_test`'s two clients
     cannot be handed a bundle at all — that isolate builds its own from the path string it
-    is sent. The third client in that file sets `isLocalStoreRequired` false and opens no
-    local store.
+    is sent. The third client in that file opens on `InMemoryAtClientStorage`.
   - **`setCurrentAtSign` treated any storage argument as a change** and took the
     destructive stop/recreate path, which would have altered the client lifecycle at every
     site the pack touches. Re-offering the bundle a client already holds is now not a
@@ -590,10 +590,10 @@ D-12. Independent of the P series, which is `at_server`-side.
     add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
     `dart analyze` and `flutter analyze --no-fatal-infos`.
   **Raised while building X6, tracked nowhere else:**
-  - **The monitor connection advertises nothing.** `RemoteSecondary` passes
-    `clientConfig: _getClientConfig()` — version, clientId, appName, appVersion, platform —
-    and `NotificationServiceImpl` passes none, so that parameter takes its `const {}`
-    default. `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
+  - **The monitor connection advertises nothing.** `RemoteSecondary`'s authenticator
+    sends `_getClientConfig()` — version, clientId, appName, appVersion, platform — in its
+    `from:`, and the one `NotificationServiceImpl` builds for the monitor carries none.
+    `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
     connection only. Whether that is deliberate is unknown: the socket-owning Monitor built
     its own connection, so there was nothing to inherit. Worth settling if the atServer logs
     or branches on client version per connection.
@@ -1031,9 +1031,9 @@ count is sound for at_client's own sync service, and the extension seam is fine 
   every consumer. `PseudoServerSocket` is used by `at_server` for ALPN multiplexing —
   **split, do not delete.**
 - **I2 — Split `at_utils/lib/src/logging/handlers.dart`.** `ConsoleLoggingHandler`
-  (`print`) stays neutral; `FileLoggingHandler` (`:34-48`), `StdErrLoggingHandler`
-  (`:53-59`) and `CLILoggingHandler` (`:71-97`) move to `at_utils_io.dart`. The
-  `dart:io` import at `:1` is what currently poisons the whole logger.
+  (`print`) stays neutral; `FileLoggingHandler`, `StdErrLoggingHandler` and
+  `CLILoggingHandler` move to `at_utils_io.dart`. The `dart:io` import at `:1` is
+  what currently poisons the whole logger.
 - **I3 — `app_config.dart` into `at_utils_io.dart`,** or inject the config.
 - **I4 — Publish `at_utils` 4.0.0.**
 - **I5 — Connectivity.** Replace `internet_connection_checker` behind an injectable
@@ -1044,21 +1044,26 @@ count is sound for at_client's own sync service, and the extension seam is fine 
   `List<File>` in `uploadFile` / `downloadFile` / `reuploadFiles`, and
   `at_client.dart:4` exports the spec. Resolve OQ-4, then pull
   `at_client_impl.dart:1214,1389-1394,1456-1482`,
-  `encryption_service.dart:310-350`, `file_transfer_service.dart` and
-  `stream_notification_handler.dart` along with it.
+  `encryptFileInChunks` / `decryptFileInChunks` in `encryption_service.dart`, and
+  `file_transfer_service.dart` along with it.
 - **I7 — Inject an `http.Client` into `file_transfer_service.dart`** (`:14,31,40,50`,
   top-level `http.post`/`get` with no seam). Worth doing independently of I6 — it is
   also the only way to test that service.
-- **I8 — Storage backend selectable from `AtClientPreference`.**
-  `storage_manager.dart:16` hardcodes `HiveAtPersistenceFactory()` and requires
-  `hiveStoragePath`. Introduce the backend choice (`AtPersistenceBackendId` already has
-  `hive` and `sqlite`) and an opaque storage location. Remove the unused
-  `keyStoreSecret` parameter while in the file. Resolve OQ-3 here.
-- **I9 — Backend-neutral `AtSyncQueue`.** Replace the direct `Hive.openBox` at
-  `at_sync_queue.dart:121` with a small spec interface plus Hive and SQLite
-  implementations, building on S3's plumbing.
-- **I10 — Drop the direct `hive: ^2.2.3` dependency** from `at_client`'s pubspec once
-  I8 and I9 land. OQ-9 determines whether this is required or merely tidy.
+- **I8 — The app chooses its storage.** ✅ Done, #2327 (D-25). Each backend comes from
+  its own barrel and is passed as `storage:`; outside the backends only
+  `default_storage.dart` names Hive, the default until 4.0, and `StorageManager` is folded
+  into `HiveAtClientStorage`. (First written as a backend chosen on `AtClientPreference`
+  with an opaque storage location, which D-12 rejected.)
+  `AtClientPreference.keyStoreSecret`, which nothing reads, is deprecated for 4.0.
+- **I9 — Backend-neutral `AtSyncQueue`.** ✅ Done, #2327 (D-25). `AtSyncQueue` takes a
+  `SyncQueueStore` from the storage backend and opens nothing itself; the Hive box store
+  lives in the Hive backend and the SQLite one beside it. (First written as building on
+  S3's plumbing, which D-12 superseded.)
+- **I10 — The direct `hive` dependency stays** while `hive.dart` lives in at_client
+  (D-25); every at_client app resolves `hive` through at_persistence_secondary_server
+  anyway. Until 4.0 removes the default seam, core compiles Hive in every build, so OQ-9
+  still decides whether the browser lane can carry it. (First written as dropping the
+  dependency once I8 and I9 landed.)
 - **I11 — Publish `at_client` 4.0.0.** → T0 green, T1, T2.4
 
 ### C — crypto verification
@@ -1202,11 +1207,11 @@ Dependency order, one major per package:
 
 | # | Package            | Version   | Phase    | Break                                                                                                             |
 | - | ------------------ | --------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1 | `at_chops`         | minor     | C, S6    | none — dependency move only. **3.6.1 published; S6 ships in 3.7.0 (#2162)**                                       |
-| 2 | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http`. **✅ 4.0.0-rc1 on trunk (#2179)** |
+| 1 | `at_chops`         | minor     | C, S6    | none — dependency move only. **S6 (#2162) published in 3.7.0**                                                   |
+| 2 | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http`. **4.0.0-rc3 newest on pub.dev, 2026-10-03** |
 | 3 | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`                                                                |
-| 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **3.7.0-rc1 published; 3.7.0-rc2 on trunk**                      |
-| 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **1.1.2-rc1 published; S5 ships in 1.1.2-rc2 (#2162)**                            |
+| 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **3.7.0-rc3 newest on pub.dev, 2026-10-03**                       |
+| 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **S5 (#2162) published in 1.1.2-rc2**                                            |
 | 5a | `at_persistence_secondary_server` | minor | P | none — additive web open path ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)). **V2** |
 | 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected                                            |
 | 7 | `at_client_web`    | 1.0.0     | W        | new                                                                                                               |

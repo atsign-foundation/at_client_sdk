@@ -4,6 +4,7 @@
 # ports: atDirectory 64, atServers 25000-25999, Redis 6379. runLocal.sh can set
 # a base port to shift the virtualenv into a [BASE, BASE+99] range so it can run
 # alongside another virtualenv (e.g. the e2e suite) on a different base port.
+# Every host port it binds is inside that range.
 services:
   virtualenv:
     # Overridable so a local run can drive a PQ-capable build; the default is a
@@ -17,8 +18,6 @@ services:
     ports:
       - "127.0.0.1:${VE_REDIS_PORT:-6379}:${VE_REDIS_PORT:-6379}"
       - "${VE_ROOT_PORT:-64}:${VE_ROOT_PORT:-64}"
-      - "443:443"
-      - "127.0.0.1:9001:9001"
       - "${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}:${VE_SECONDARY_LOW:-25000}-${VE_SECONDARY_HIGH:-25999}"
     extra_hosts:
       - "vip.ve.atsign.zone:127.0.0.1"

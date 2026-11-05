@@ -618,7 +618,372 @@ void main() {
       });
     });
   });
+
+  group('Given a typed keyfile with no typed key material', () {
+    const assurance = AtKeysAssurance();
+    const alice = '@alice🛠';
+
+    Map<String, dynamic> typedWithoutMaterial(
+            {String atsign = alice, Map<String, dynamic>? legacy}) =>
+        {
+          ...(legacy ?? _fixtureLegacyJson()),
+          'version': AtKeys.supportedVersion,
+          'atsign': atsign,
+          'keys': <Object?>[],
+        };
+
+    Map<String, dynamic> pendingEnrollment() => {
+          'enrollments': [
+            {
+              'enrollmentId': 'e-1',
+              'keys':
+                  encodeAtKeysDocument([_pendingAuthenticationMaterial('e-1')])
+            }
+          ]
+        };
+
+    /// A typed keyfile holding no credential: the fixture's public keys,
+    /// and [content].
+    Map<String, dynamic> noCredential(
+            {String atsign = alice, Map<String, dynamic> content = const {}}) =>
+        {
+          ...typedWithoutMaterial(
+              atsign: atsign, legacy: _publicOnlyLegacyJson()),
+          ...content
+        };
+
+    /// Typed containers holding only pending content, by shape.
+    List<(String, Map<String, dynamic>)> pendingContent() => [
+          (
+            'an enrollment snapshot with no keys',
+            {
+              'enrollments': [
+                {'enrollmentId': 'e-1', 'keys': <Object?>[]}
+              ]
+            }
+          ),
+          ('an enrollment holding pending material', pendingEnrollment()),
+          (
+            'atsignKeys holding pending material',
+            {
+              'atsignKeys': encodeAtKeysDocument([
+                _symmetricMaterial()
+                    .withStatus(CryptographicMaterialStatus.pending)
+              ])
+            }
+          ),
+        ];
+
+    test(
+        'when it is rewritten flat for the atSign it names, then the rewrite '
+        'is accepted', () {
+      assurance.validateMapUpdate(
+          existing: typedWithoutMaterial(),
+          candidate: _fixtureLegacyJson(),
+          atsign: alice.toAtsign());
+    });
+
+    for (final (shape, container) in <(String, Map<String, dynamic>)>[
+      ('an empty enrollments list', {'enrollments': <Object?>[]}),
+      ('an empty atsignKeys list', {'atsignKeys': <Object?>[]}),
+    ]) {
+      test(
+          'when it carries $shape and is rewritten flat for the atSign it '
+          'names, then the rewrite is accepted', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: {...typedWithoutMaterial(), ...container},
+                candidate: _fixtureLegacyJson(),
+                atsign: alice.toAtsign()),
+            returnsNormally,
+            reason: 'an empty typed container holds nothing');
+      });
+    }
+
+    test(
+        'when it holds a credential and is rewritten flat for the atSign it '
+        'names with other legacy fields, then the rewrite is refused', () {
+      final existing = typedWithoutMaterial();
+      for (final key in auth_constants.keySchemaList) {
+        for (final (change, candidate) in <(String, Map<String, dynamic>)>[
+          (
+            'changed',
+            {..._fixtureLegacyJson(), key: 'changed-${existing[key]}'}
+          ),
+          ('removed', _fixtureLegacyJson()..remove(key)),
+        ]) {
+          expect(
+              () => assurance.validateMapUpdate(
+                  existing: existing,
+                  candidate: candidate,
+                  atsign: alice.toAtsign()),
+              throwsA(isA<AtKeysAssuranceException>()
+                  .having((e) => e.message, 'message', contains('map.legacy'))),
+              reason: '$key $change: the credential it holds is not replaced '
+                  'by the flat rewrite for the atSign it names');
+        }
+      }
+    });
+
+    test(
+        'when it is rewritten flat for another atSign, then the rewrite is '
+        'refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: typedWithoutMaterial(atsign: '@bob🛠'),
+              candidate: _fixtureLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for');
+    });
+
+    test(
+        'when it holds no credential and is rewritten flat for another '
+        'atSign, then the rewrite is refused', () {
+      final publicOnly = _publicOnlyLegacyJson();
+      expect(
+          () => assurance.validateMapUpdate(
+              existing:
+                  typedWithoutMaterial(atsign: '@bob🛠', legacy: publicOnly),
+              candidate: publicOnly,
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for, whether or not it holds a credential');
+    });
+
+    test(
+        'when its version is not the one this build writes, then a flat '
+        'rewrite is refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: {...typedWithoutMaterial(), 'version': 2},
+              candidate: _fixtureLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()),
+          reason: 'a version this build does not write is not dropped');
+    });
+
+    for (final (shape, keys) in <(String, Object)>[
+      ('a map', {'unexpected': true}),
+      (
+        'a populated list',
+        [
+          {'keyId': 'auth:rsa2048:1'}
+        ]
+      ),
+    ]) {
+      test(
+          'when its keys field is $shape, then a flat rewrite is refused '
+          'for the atSign it names', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: {...typedWithoutMaterial(), 'keys': keys},
+                candidate: _fixtureLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'a keys field holding anything is not dropped');
+      });
+    }
+
+    // NOTE: typedWithoutMaterial() carries the fixture's flat secrets, so
+    // each keyfile these cases build holds a credential.
+    for (final (shape, container) in pendingContent()) {
+      test(
+          'when it holds $shape, then a flat rewrite is refused for the '
+          'atSign it names', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: {...typedWithoutMaterial(), ...container},
+                candidate: _fixtureLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'a typed container holding anything is not dropped');
+      });
+    }
+
+    for (final (shape, container) in pendingContent()) {
+      test(
+          'when it holds $shape and no credential, then a flat rewrite for '
+          'another atSign is refused', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: noCredential(atsign: '@bob🛠', content: container),
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'the atSign the keyfile names is the one it is rewritten '
+                'for, whatever pending content it holds');
+      });
+
+      test(
+          'when it holds $shape and no credential, then a flat rewrite for '
+          'the atSign it names is accepted', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: noCredential(content: container),
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            returnsNormally,
+            reason: 'a write for the atSign the keyfile names may discard its '
+                'pending content');
+      });
+    }
+
+    test(
+        'when it holds pending content and no credential, and names its '
+        'atSign in another spelling, then a flat rewrite for that atSign is '
+        'accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: noCredential(
+                  atsign: '@Alice🛠', content: pendingEnrollment()),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'atSigns are compared folded');
+    });
+
+    for (final (shape, existing) in <(String, Map<String, dynamic>)>[
+      (
+        'absent',
+        {...noCredential(content: pendingEnrollment())}..remove('atsign')
+      ),
+      ('null', {...noCredential(content: pendingEnrollment()), 'atsign': null}),
+    ]) {
+      test(
+          'when it holds pending content and no credential, and its atsign '
+          'field is $shape, then a flat rewrite for an atSign is accepted', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: existing,
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            returnsNormally,
+            reason: 'the keyfile names no owner to compare with');
+      });
+    }
+
+    test(
+        'when its version is not the one this build writes and it holds no '
+        'credential, then a flat rewrite for another atSign is refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: {...noCredential(atsign: '@bob🛠'), 'version': 2},
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for, whatever version it carries');
+    });
+  });
+
+  group('Given a flat keyfile holding no credential', () {
+    const assurance = AtKeysAssurance();
+    const alice = '@alice🛠';
+
+    /// A flat keyfile holding no credential whose `atsign` field is [atsign].
+    Map<String, dynamic> flatNaming(Object? atsign) =>
+        {..._publicOnlyLegacyJson(), 'atsign': atsign};
+
+    test(
+        'when it names another atSign and is rewritten flat for this one, '
+        'then the rewrite is refused', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming('@bob🛠'),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          throwsA(isA<AtKeysAssuranceException>()
+              .having((e) => e.message, 'message', contains('map.atsign'))),
+          reason: 'the atSign the keyfile names is the one it is rewritten '
+              'for, whether or not it is typed');
+    });
+
+    test(
+        'when it is rewritten flat for the atSign it names, then the rewrite '
+        'is accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming(alice),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'a write for the atSign the keyfile names may replace its '
+              'fields');
+    });
+
+    test(
+        'when it names its atSign in another spelling, then a flat rewrite '
+        'for that atSign is accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming('@Alice🛠'),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'atSigns are compared folded');
+    });
+
+    test(
+        'when it names no atSign, then a flat rewrite for an atSign is '
+        'accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: _publicOnlyLegacyJson(),
+              candidate: _publicOnlyLegacyJson(),
+              atsign: alice.toAtsign()),
+          returnsNormally,
+          reason: 'a keyfile that names no atSign is not compared with the '
+              'atSign the write names');
+    });
+
+    for (final (shape, value) in <(String, Object)>[
+      ('an empty string', ''),
+      ('not an atSign', 42),
+    ]) {
+      test(
+          'when its atsign field is $shape, then a flat rewrite for an atSign '
+          'is refused', () {
+        expect(
+            () => assurance.validateMapUpdate(
+                existing: flatNaming(value),
+                candidate: _publicOnlyLegacyJson(),
+                atsign: alice.toAtsign()),
+            throwsA(isA<AtKeysAssuranceException>()
+                .having((e) => e.message, 'message', contains('map.atsign'))),
+            reason: 'the keyfile names no atSign the write can match');
+      });
+    }
+
+    test(
+        'when it is rewritten flat with no atSign named, then the rewrite is '
+        'accepted', () {
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: flatNaming('@bob🛠'),
+              candidate: _publicOnlyLegacyJson()),
+          returnsNormally,
+          reason: 'a write that names no atSign is not compared with the '
+              'atSign the keyfile names');
+    });
+  });
 }
+
+/// The fixture's public keys alone: flat fields that hold no credential.
+Map<String, dynamic> _publicOnlyLegacyJson() => {
+      for (final entry in _fixtureLegacyJson().entries)
+        if (entry.key == 'aesPkamPublicKey' ||
+            entry.key == 'aesEncryptPublicKey')
+          entry.key: entry.value,
+    };
 
 final _createdAt = DateTime.utc(2024, 1, 1);
 

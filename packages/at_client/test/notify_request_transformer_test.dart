@@ -49,8 +49,13 @@ void main() {
         .thenAnswer((inv) async {
       final key = inv.positionalArguments[0] as AtKey;
       final value = inv.positionalArguments[1] as String;
+      final options =
+          inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
       written.add(key);
-      await nskey.encrypt(CryptoContext(atClient: atClient), key, value);
+      // A sibling copy arrives sealed, and the pipeline sends it as it is.
+      if (options?.shouldEncrypt ?? true) {
+        await nskey.encrypt(CryptoContext(atClient: atClient), key, value);
+      }
       return true;
     });
 
@@ -91,13 +96,14 @@ void main() {
 
       await NotificationRequestTransformer(c.atClient).transform(params);
 
-      // The current-CK pointer is an ordinary self key, not a conveyance.
-      c.written.removeWhere((k) => k.key.startsWith('__ckcur') == true);
-      expect(c.written, hasLength(1),
+      expect(c.written, hasLength(2),
           reason: 'a namespace-less key makes CkManager.ensureCurrent bail, so '
-              'no conveyance is written and nothing can decrypt the value');
-      expect(c.written.single.key, endsWith('.__ck'));
-      expect(c.written.single.namespace, namespace);
+              'no conveyance is written and nothing can decrypt the value; a '
+              'share writes bob\'s and alice\'s sibling copy');
+      for (final conveyance in c.written) {
+        expect(conveyance.key, endsWith('.__ck'));
+        expect(conveyance.namespace, namespace);
+      }
     });
 
     test('a key that already carries its own namespace is unaffected',
@@ -116,6 +122,47 @@ void main() {
 
       expect(params.atKey.metadata.appMetadata?.providerId,
           symmetricAesGcmCryptoProviderId);
+    });
+  });
+
+  group('Given a notification marked encrypted that carries no value', () {
+    test(
+        'when it is a delete, then it goes through no crypto provider and '
+        'cuts no content key', () async {
+      final c = nskeyClient();
+      // NOTE: notify marks every notification encrypted by default before it
+      // calls transform, a delete included.
+      final params = NotificationParams.forDelete(AtKey()
+        ..key = 'phone'
+        ..namespace = namespace
+        ..sharedWith = '@bob'
+        ..sharedBy = owner
+        ..metadata = (Metadata()..isEncrypted = true));
+
+      final builder =
+          await NotificationRequestTransformer(c.atClient).transform(params);
+
+      expect(builder.value, isNull);
+      expect(params.atKey.metadata.appMetadata, isNull,
+          reason: 'nothing is sealed, so no provider is named');
+      expect(c.written, isEmpty, reason: 'no content key is cut or conveyed');
+    });
+
+    test(
+        'when it is an update with no value, then it goes through no crypto '
+        'provider either', () async {
+      final c = nskeyClient();
+      final params = NotificationParams.forUpdate(AtKey()
+        ..key = 'phone'
+        ..namespace = namespace
+        ..sharedWith = '@bob'
+        ..sharedBy = owner
+        ..metadata = (Metadata()..isEncrypted = true));
+
+      await NotificationRequestTransformer(c.atClient).transform(params);
+
+      expect(params.atKey.metadata.appMetadata, isNull);
+      expect(c.written, isEmpty);
     });
   });
 }

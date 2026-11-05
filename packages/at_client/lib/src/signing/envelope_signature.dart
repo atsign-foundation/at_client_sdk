@@ -16,19 +16,32 @@ import 'package:at_auth/at_auth.dart'
 import 'package:collection/collection.dart' show ListEquality;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, RsaSignatureAlgo, SigningAlgoType;
+import 'package:at_client/src/util/at_key_grammar.dart' show isIdShaped;
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException, EnrollmentConstants;
 
+/// The record name an enrollment's APKAM public signing key is published
+/// under: see [apskUri].
+const String apskRecordName = '_apsk';
+
 /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
-/// APKAM public signing key lives, and the one record its own connection may
-/// write.
+/// APKAM public signing key lives, in the reserved namespace only that
+/// enrollment may write.
 ///
 /// The atServer mints the record at approval, so the spelling is a
 /// cross-implementation contract; it is pinned in
 /// `test/wire_literal_pins_test.dart`.
 String apskUri(String atSign, String enrollmentId) =>
-    'public:_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
-    '$atSign';
+    'public:$apskRecordName.$enrollmentId.'
+    '${EnrollmentConstants.perEnrollmentApproved}$atSign';
+
+/// [enrollmentId] when it can name an `_apsk` record; throws
+/// [AtSigningVerificationException], quoting it on one line, otherwise.
+String requireApskEnrollmentId(String enrollmentId) {
+  if (isIdShaped(enrollmentId)) return enrollmentId;
+  throw AtSigningVerificationException('${jsonEncode(enrollmentId)} is not '
+      'an enrollment id, so it names no $apskRecordName record');
+}
 
 /// The envelope's payload version, carried inside each protected header where
 /// the signature covers it.
@@ -53,8 +66,8 @@ enum EnvelopeType {
   /// handed looks like.
   app('at-app+jws'),
 
-  /// A parent enrollment vouching for a child's APKAM key —
-  /// `PqSigningChain.signLinkFor`.
+  /// One enrollment's key vouching for a key another enrollment, or the same
+  /// one, lists: `PqSigningChain.signChainLink`.
   chainLink('at-chain-link+jws'),
 
   /// An enrollment's public encapsulation key package, signed either at
@@ -66,7 +79,11 @@ enum EnvelopeType {
   nskeyRing('at-nskey-ring+jws'),
 
   /// A sealed secret addressed to one enrollment's key package.
-  secretEnvelope('at-secret-envelope+jws');
+  secretEnvelope('at-secret-envelope+jws'),
+
+  /// A client's record, in its own local storage, that it verified its own
+  /// namespace-key advertisement. Never sent.
+  verifiedAdvertisement('at-verified-advertisement+jws');
 
   const EnvelopeType(this.typ);
 
@@ -333,6 +350,11 @@ class ApkamSigningKeys {
 /// A keyfile can hold a signing key for an algorithm this build has no
 /// envelope support for; a signer skips it rather than throwing.
 bool canSignEnvelopeWith(SigningAlgoType algo) => _joseAlgFor(algo) != null;
+
+/// Whether a key under [algo] is one an envelope signature naming the JOSE
+/// algorithm [joseAlg] was made with.
+bool signsUnder(SigningAlgoType algo, String? joseAlg) =>
+    joseAlg != null && _joseAlgFor(algo) == joseAlg;
 
 /// The exact text that is signed and verified: a String payload as-is,
 /// anything else as its JSON encoding.

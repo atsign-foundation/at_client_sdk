@@ -1,6 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart' show AtPrivateKey, RsaEncryptionAlgo;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_commons/at_builders.dart';
@@ -121,15 +126,13 @@ void main() {
       () {
     setUp(() async {
       when(() => mockRemoteSecondary.executeVerb(
-          any(that: isA<DeleteVerbBuilder>()),
-          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+          any(that: isA<DeleteVerbBuilder>()))).thenAnswer((invocation) async {
         var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
         print('DeleteVerbBuilder: ${builder.buildCommand()}');
         return 'data:10';
       });
       when(() => mockLocalSecondary.executeVerb(
-          any(that: isA<DeleteVerbBuilder>()),
-          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+          any(that: isA<DeleteVerbBuilder>()))).thenAnswer((invocation) async {
         var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
         print('DeleteVerbBuilder: ${builder.buildCommand()}');
         return 'data:10';
@@ -185,8 +188,7 @@ void main() {
         return 'data:null';
       });
       when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: false)).thenAnswer((_) async {
+          any(that: UpdateEncryptedSharedKeyMatcher()))).thenAnswer((_) async {
         print("Matched the UpdateVerbBuilder");
         return 'data:1';
       });
@@ -254,15 +256,13 @@ void main() {
           .thenAnswer((_) => Future.value(encryptionPrivateKey));
 
       when(() => mockRemoteSecondary.executeVerb(
-          any(that: isA<DeleteVerbBuilder>()),
-          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+          any(that: isA<DeleteVerbBuilder>()))).thenAnswer((invocation) async {
         var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
         print('DeleteVerbBuilder: ${builder.buildCommand()}');
         return 'data:10';
       });
       when(() => mockLocalSecondary.executeVerb(
-          any(that: isA<DeleteVerbBuilder>()),
-          sync: any(named: 'sync'))).thenAnswer((invocation) async {
+          any(that: isA<DeleteVerbBuilder>()))).thenAnswer((invocation) async {
         var builder = invocation.positionalArguments[0] as DeleteVerbBuilder;
         print('DeleteVerbBuilder: ${builder.buildCommand()}');
         return 'data:10';
@@ -294,8 +294,7 @@ void main() {
       expect(atKey.metadata.ivNonce, isNotNull);
 
       var decryptedSharedKey =
-          // ignore: deprecated_member_use_from_same_package
-          EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
+          _rsaDecrypt(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptedSharedKey,
@@ -319,8 +318,7 @@ void main() {
           .thenAnswer((_) => Future.value(encryptionPublicKey));
       var encryptedValue = await sharedKeyEncryption.encrypt(atKey, value);
       var decryptedSharedKey =
-          // ignore: deprecated_member_use_from_same_package
-          EncryptionUtil.decryptKey(encryptedSharedKey, encryptionPrivateKey);
+          _rsaDecrypt(encryptedSharedKey, encryptionPrivateKey);
       expect(decryptedSharedKey, sharedKey);
       var decryptedValue = EncryptionUtil.decryptValue(
           encryptedValue, decryptedSharedKey,
@@ -328,6 +326,37 @@ void main() {
       expect(decryptedValue, value);
       expect(atKey.metadata.sharedKeyEnc.isNotNull, true);
       expect(atKey.metadata.pubKeyCS.isNotNull, true);
+    });
+
+    test('each encryption with a reused key takes a new IV', () async {
+      sharedKeyEncryption = SharedKeyEncryption(mockAtClient);
+      var atKey = (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+            ..sharedWith('@bob'))
+          .build();
+      final preset = EncryptionUtil.generateIV();
+      atKey.metadata.ivNonce = preset;
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: LLookupEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value(encryptedSharedKey));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: EncryptionPublicKeyMatcher())))
+          .thenAnswer((_) => Future.value(encryptionPublicKey));
+
+      final firstValue = await sharedKeyEncryption.encrypt(atKey, 'first');
+      final firstIv = atKey.metadata.ivNonce;
+      final secondValue = await sharedKeyEncryption.encrypt(atKey, 'second');
+      final secondIv = atKey.metadata.ivNonce;
+
+      expect(firstIv, isNot(preset),
+          reason: 'an IV already on the key is replaced, never reused');
+      expect(secondIv, isNot(firstIv),
+          reason: 'this AES is CTR, so two values under one shared key and '
+              'one IV would share a keystream');
+      final key = _rsaDecrypt(encryptedSharedKey, encryptionPrivateKey);
+      expect(EncryptionUtil.decryptValue(firstValue, key, ivBase64: firstIv),
+          'first');
+      expect(EncryptionUtil.decryptValue(secondValue, key, ivBase64: secondIv),
+          'second');
     });
 
     test('test to verify legacy encryption when a new shared key is generated',
@@ -343,15 +372,15 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: true)).thenAnswer((_) => Future.value('data:1'));
-      when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: false)).thenAnswer((_) => Future.value('data:1'));
-      when(() => mockRemoteSecondary.executeVerb(
-          any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: false)).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: UpdateEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:1'));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: UpdateEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:1'));
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: UpdateEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
 
@@ -385,12 +414,12 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: false)).thenAnswer((_) => Future.value('data:1'));
-      when(() => mockRemoteSecondary.executeVerb(
-          any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: false)).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: UpdateEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:1'));
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: UpdateEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:1'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
 
@@ -425,13 +454,12 @@ void main() {
       when(() => mockLocalSecondary
               .executeVerb(any(that: EncryptionPublicKeyMatcher())))
           .thenAnswer((_) => Future.value(encryptionPublicKey));
-      when(() => mockLocalSecondary.executeVerb(
-          any(that: UpdateEncryptedSharedKeyMatcher()),
-          sync: false)).thenAnswer((_) => Future.value('data:1'));
+      when(() => mockLocalSecondary
+              .executeVerb(any(that: UpdateEncryptedSharedKeyMatcher())))
+          .thenAnswer((_) => Future.value('data:1'));
 
-      when(() => mockRemoteSecondary.executeVerb(
-              any(that: UpdateEncryptedSharedKeyMatcher()),
-              sync: false))
+      when(() => mockRemoteSecondary
+              .executeVerb(any(that: UpdateEncryptedSharedKeyMatcher())))
           .thenAnswer((_) => throw SecondaryConnectException(
               'unable to connect to remote secondary'));
       when(() => mockLocalSecondary.getEncryptionPublicKey('@alice'))
@@ -499,3 +527,8 @@ class UpdateEncryptedSharedKeyMatcher extends Matcher {
     return false;
   }
 }
+
+/// [cipher], RSA-encrypted and base64-encoded, decrypted with [privateKey].
+String _rsaDecrypt(String cipher, String privateKey) => utf8.decode(
+    (RsaEncryptionAlgo()..atPrivateKey = AtPrivateKey.fromString(privateKey))
+        .decrypt(base64Decode(cipher)));

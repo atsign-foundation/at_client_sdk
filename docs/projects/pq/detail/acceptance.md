@@ -35,7 +35,7 @@ it.
 The row read "**180** live test declarations across 65 files … a looser
 `grep -o 'test('` gives 225 and an indentation-anchored one 224". All three
 figures were scoped to `tests/at_functional_test` and `tests/at_end2end_test`
-alone. `tests/at_onboarding_cli_functional_tests` and its `_proxy` sibling are
+alone. `tests/at_client_cli_functional_tests` and its `_proxy` sibling are
 live packs too, and the CLI one builds clients from a `PqPosture` in two arms —
 the best live evidence for UC-C1.6.
 
@@ -91,8 +91,7 @@ observations, so the monitor was never authenticating RSA for want of anything
 setting its algorithm — and 14.34's `signingAlgo:rsa2048` monitor was the
 **legacy** client's of the two live at the time, correctly RSA.
 
-A second candidate died too: `signingAlgoOf` falls back to
-`preference.signingAlgoType` (default `rsa2048`) whenever
+A second candidate died too: `signingAlgoOf` falls back to `rsa2048` whenever
 `_resolveSigningAlgoFromKeyMaterial` records null, and that path throws nothing
 and logs nothing. The probe showed the fallback firing on the **control** arm
 only, where it is correct by design — a legacy enrollment holds no typed
@@ -1411,7 +1410,7 @@ reading the test.
 | **UC-A1.1** | c5 | `nskey_data_path_live_test.dart` — a write to a namespace with no nskey fails, saying which |
 | **UC-A1.1** | c6 | `pq_legacy_interop_live_test.dart` — UC-B4.2 opt-out · an atSign that refused legacy material is no |
 | **UC-A1.1** | c2 | `pq_signing_root_mint_lock_test.dart` — a second signing-root mint lock create is refused |
-| **UC-A2.1** | c3 | `pq_signing_chain_test.dart` — climbs a chain link to an anchored parent *(in-process)* |
+| **UC-A2.1** | c3 | `pq_signing_chain_test.dart` — when the walk runs, then it continues from that key and reads anchored through it *(in-process)* |
 | **UC-A2.1** | c2 | `enrollment_chain_link_live_test.dart` — the root private reaches a privileged enrollment and no other |
 | **UC-A2.1** | c5 | `nskey_rotation_live_test.dart` — UC-A5.2/A5.3 · a revoked enrollment cannot authenticate |
 | **UC-A2.4** | c3 | `key_package_amendment_live_test.dart` — UC-A2.5 · a sender picks by its own order and stamps the match |

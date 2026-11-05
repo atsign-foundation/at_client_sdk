@@ -1,19 +1,18 @@
-import 'dart:convert' show base64Encode;
-
 import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/pre_publish_conveyance.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
-import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
+import 'package:at_client/src/secret_sharing/secret_store.dart'
+    show SecretStore;
 import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('NskeyRotation');
 
@@ -21,7 +20,6 @@ final _logger = AtSignLogger('NskeyRotation');
 ///
 /// [conveyedTo] may legitimately be zero: a single-enrollment atSign has nobody
 /// to push to, and an offline holder picks the generation up by pull instead.
-@experimental
 typedef NskeyRotationOutcome = ({
   String namespace,
 
@@ -47,7 +45,6 @@ typedef NskeyRotationOutcome = ({
 /// content-key lever's O(1) job — and it is never automatic, never recovers a
 /// lost generation, and needs the `rw` on the namespace that the atServer
 /// already enforces on the advertisement write.
-@experimental
 class NskeyRotation {
   final AtClient atClient;
   final PublishedNskeyKeyRing ring;
@@ -86,11 +83,14 @@ class NskeyRotation {
           'process — leaving every peer sealing to a generation this atSign '
           'can no longer open');
     }
-    final filing =
-        privateFiling ?? NskeyPrivateFiling(keysIo: keysIo!, atSign: atSign);
+    late final PublishedNskeyKeyRing ring;
+    final filing = privateFiling ??
+        NskeyPrivateFiling.checkedAgainst(() => ring,
+            keysIo: keysIo!, atSign: atSign);
+    ring = PublishedNskeyKeyRing(atClient, privateFiling: filing);
     return NskeyRotation(
       atClient: atClient,
-      ring: PublishedNskeyKeyRing(atClient, privateFiling: filing),
+      ring: ring,
       privateFiling: filing,
       sharing: sharing ?? AtClientSecretSharing.forClient(atClient),
     );
@@ -114,55 +114,31 @@ class NskeyRotation {
     if (owner == null) {
       throw StateError('cannot rotate $namespace: no current atSign');
     }
-    final outcome = await ring.rotate(namespace);
+    final conveyance = await PrePublishConveyance.prepare(
+        sharing, privateFiling, namespace,
+        excludeEnrollmentIds: excludeEnrollmentIds);
+    if (conveyance == null) {
+      throw StateError('cannot rotate $owner:$namespace: this enrollment '
+          'carries no key package, so it mints no namespace key');
+    }
+    // NOTE: the successor's privates are pushed to every listed enrollment
+    // but the excluded ones before the successor is published, under a lock
+    // sized to that roster.
+    final outcome = await ring.rotate(namespace,
+        conveyFirst: conveyance.convey,
+        afterPublish: conveyance.afterPublish,
+        lockTtl: conveyance.lockTtlFor(
+            margin: ring.lockTtl,
+            perMember: ring.lockBudgetPerMember,
+            kids: ring.wantedKeyAlgorithms().length,
+            conveyances: 2));
     final advertisement = outcome.rotated;
-
-    // NOTE: convey the durable SEED read back from filing, one secret per key
-    // the generation carries. A private that failed to persist must never be
-    // conveyed; only the seed lets a receiver re-derive the published public
-    // half; and a key left unconveyed is advertised with its private held by
-    // this client alone.
-    final secrets = <Secret>[];
-    for (final key in advertisement.keys) {
-      final private = await privateFiling.readSeed(namespace, key.kid);
-      if (private == null) {
-        throw StateError(
-            'rotated $owner:$namespace to a generation carrying ${key.alg} '
-            '${key.kid} but cannot read that private back, so NOTHING is '
-            'conveyed — the other enrollments keep the superseded generation '
-            'whole rather than a part of the successor, and a later rotation '
-            'supersedes this one');
-      }
-      secrets.add(Secret(
-        namespace: namespace,
-        name: '${NskeyPrivateFiling.secretNamePrefix}${key.kid}',
-        value: base64Encode(private.bytes),
-      ));
-    }
-
-    // NOTE: into this client's own store before the fan-out. The request-answer
-    // path serves from the secret store, which is filled from the keyfile only
-    // at bootstrap, so without this the enrollment that rotated cannot serve
-    // the successor until it restarts — and it fails silently, writing no
-    // envelope and logging nothing.
-    for (final secret in secrets) {
-      await sharing.secretStore.putIfNewer(secret);
-    }
-
-    // NOTE: outside the mint lock — holding it across a per-enrollment fan-out
-    // would scale the lock-held window with the enrollment count, and the lock
-    // has already refused any concurrent rotation by the time this runs.
-    var conveyedTo = 0;
-    for (final secret in secrets) {
-      conveyedTo = await sharing.pushSecretToNamespaceMembers(
-        secret,
-        excludeEnrollmentIds: excludeEnrollmentIds,
-      );
-    }
+    final conveyedTo = conveyance.pushedTo;
 
     _logger.info('Rotated $owner:$namespace to a generation carrying '
         '${advertisement.keys.map((k) => '${k.alg}/${k.kid}').join(', ')} and '
-        'conveyed ${secrets.length} private(s) to $conveyedTo key package(s)'
+        'conveyed ${conveyance.conveyedKids.length} private(s) to '
+        '$conveyedTo key package(s)'
         '${excludeEnrollmentIds.isEmpty ? '' : ', excluding '
             '${excludeEnrollmentIds.join(', ')}'}');
 
@@ -177,6 +153,11 @@ class NskeyRotation {
 
   /// Revokes [enrollmentId], then rotates every namespace it could read,
   /// excluding it, and returns one outcome per namespace rotated.
+  ///
+  /// Given no [namespaces], those are the namespaces its grants name and every
+  /// namespace they cover that this client holds a key for, such as `chat.app`
+  /// under a grant on `app`. A covered namespace whose key this client does
+  /// not hold is not rotated here.
   ///
   /// Revoking first is the enforcement — it drops the enrollment out of
   /// `enroll:listns` before any rotation runs, which is why the namespaces are
@@ -229,12 +210,15 @@ class NskeyRotation {
             'no enrollment $enrollmentId on $owner to revoke — nothing was '
             'revoked and nothing was rotated');
       }
-      final granted = target.namespace?.keys.toSet() ?? const <String>{};
-      rotatable = granted.where(isRotatable).toSet();
-      if (granted.contains('*')) {
-        _logger.warning('Enrollment $enrollmentId holds "*", so the '
-            'namespaces it could read are not a list this can enumerate; '
-            'rotating only ${rotatable.isEmpty ? 'nothing' : rotatable.join(', ')}. '
+      final grants = target.namespace ?? const <String, dynamic>{};
+      rotatable = {...grants.keys, ...await _heldCoveredBy(grants, owner)}
+          .where(isRotatable)
+          .toSet();
+      if (grants.containsKey('*')) {
+        _logger.warning('Enrollment $enrollmentId holds "*", so it could read '
+            'namespaces this client holds no key for, and those are not '
+            'rotated; rotating '
+            '${rotatable.isEmpty ? 'nothing' : rotatable.join(', ')}. '
             'Name the namespaces explicitly to rotate the rest');
       }
     }
@@ -259,6 +243,27 @@ class NskeyRotation {
       }
     }
     return outcomes;
+  }
+
+  /// The namespaces [grants] cover, as [SecretStore.namespaceAuthorizes] reads
+  /// a grant, that this client holds a key for.
+  ///
+  /// Empty, logged at `severe`, when the keyfile cannot be read: the revoke
+  /// goes ahead and rotates the namespaces the grants name.
+  Future<Set<String>> _heldCoveredBy(
+      Map<String, dynamic> grants, String owner) async {
+    try {
+      return (await privateFiling.readAllWhere((namespace) =>
+              SecretStore.namespaceAuthorizes(grants, namespace)))
+          .keys
+          .toSet();
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      _logger.severe('Could not read which namespace keys this client holds '
+          'for $owner, so a namespace the revoked enrollment\'s grants cover '
+          'without naming it is not rotated. Rotate those explicitly: $e');
+      return const {};
+    }
   }
 
   /// Whether [namespace] names something with an nskey to rotate.
