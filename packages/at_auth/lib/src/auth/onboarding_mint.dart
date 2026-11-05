@@ -192,7 +192,7 @@ Future<({String publicKey, String privateKey})> checkApkamKeyPair(
     rethrow;
   } catch (e) {
     throw AtSigningException(
-      'the supplied ${signingAlgo.name} APKAM keypair cannot sign: $e',
+      'the supplied ${signingAlgo.name} APKAM keypair cannot sign (${e.runtimeType})',
     );
   }
   if (!verified) {
