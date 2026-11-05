@@ -67,6 +67,27 @@ class NotificationServiceImpl extends NotificationService {
   /// The epoch millis of the latest notification this service received.
   int? _lastReceivedMillis;
 
+  /// How many notification ids [_isDuplicate] remembers.
+  @visibleForTesting
+  static const seenIdCapacity = 1024;
+
+  /// Ids already delivered, oldest first (a `Set` literal keeps insertion
+  /// order, so `.first` is the oldest).
+  final _seenIds = <String>{};
+
+  /// Whether [id] was already delivered, recording it when it was not. An
+  /// inclusive since filter, a reconnect and a tab handoff all replay the
+  /// notification a service already delivered, and subscribers must see it once.
+  bool _isDuplicate(String id) {
+    // Every stats notification carries this id; none is a replay of another.
+    if (id == '-1') return false;
+    if (!_seenIds.add(id)) return true;
+    // FIFO: replays arrive close behind the original, so recency of use adds
+    // nothing over recency of first sight.
+    if (_seenIds.length > seenIdCapacity) _seenIds.remove(_seenIds.first);
+    return false;
+  }
+
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
@@ -666,6 +687,10 @@ class NotificationServiceImpl extends NotificationService {
           .getAtNotifications(notificationParser.parse(notificationJSON));
       _lastReceipt = DateTime.now().toUtc();
       for (var n in notifs) {
+        if (_isDuplicate(n.id)) {
+          logger.finer('Ignoring ${n.key}: id ${n.id} was already delivered');
+          continue;
+        }
         if (n.key == myStatsNotifKey) {
           logger.finer('Received ${n.key} (serverCommitId) ${n.value}');
         } else {

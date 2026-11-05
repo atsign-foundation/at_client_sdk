@@ -1601,6 +1601,48 @@ void main() {
 
         expect(await service.getLastNotificationTime(), createdAtMillis);
       });
+
+      group('delivery by notification id', () {
+        late List<String> delivered;
+
+        setUp(() {
+          delivered = [];
+          service
+              .subscribe(regex: '.*')
+              .listen((n) => delivered.add(n.id));
+        });
+
+        test('the same id received twice reaches a subscriber once', () async {
+          await receive('1', createdAtMillis + 1000);
+          await receive('1', createdAtMillis + 1000);
+          await pumpEventQueue();
+
+          expect(delivered, ['1']);
+        });
+
+        test('stats notifications all carry id -1 and are never deduped',
+            () async {
+          await receive('-1', createdAtMillis + 1000);
+          await receive('-1', createdAtMillis + 2000);
+          await pumpEventQueue();
+
+          expect(delivered, ['-1', '-1']);
+        });
+
+        test('the seen-set is bounded: the oldest id is forgotten', () async {
+          for (var i = 0; i <= NotificationServiceImpl.seenIdCapacity; i++) {
+            await receive('id$i', createdAtMillis + 1000);
+          }
+          await receive('id0', createdAtMillis + 1000);
+          await receive('id2', createdAtMillis + 1000);
+          await pumpEventQueue();
+
+          expect(delivered.where((id) => id == 'id0'), hasLength(2),
+              reason: 'id0 was evicted, so its replay is delivered again');
+          expect(delivered.where((id) => id == 'id2'), hasLength(1),
+              reason: 'id2 is still remembered (re-adding id0 evicted id1)');
+        });
+      });
     });
 
     test(
