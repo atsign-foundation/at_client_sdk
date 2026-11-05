@@ -152,6 +152,8 @@ default.
 
 **The largest item.** Everything that reaches an atServer terminates in one function.
 
+> **Historical (2026-11-05).** This inventory predates at_lookup 4.0.0. On trunk `AtConnection` names no socket — it is transport-based (`write`, `add`, `inbound`) — so the `getSocket()` sites below no longer exist.
+
 | Site                                                                        | What it does                                                                                                                                                                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection built by the default `secureSocketLookUps` factory ends here**; an application-supplied `AtLookUpFactory` ends wherever it chooses. |

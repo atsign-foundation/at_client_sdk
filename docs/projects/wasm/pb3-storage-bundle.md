@@ -1,6 +1,6 @@
 # PB-3 — the storage bundle, remote-only client and io split
 
-**Status:** six stages, partly landed. Re-checked with `gh` 2026-11-02: #2257, #2262 and #2263 are closed (stages 4 and 5 are on trunk as the `hive.dart` barrel, `at_client` 4.0.0 and the wasm gate); #2258–#2261, #2273–#2276 and #2336 are open. The remote-only classes are not on trunk. Merge order and the publish ladder live in the landing plan, not here.
+**Status:** six stages, partly landed. Re-checked with `gh` 2026-11-02: #2257, #2262 and #2263 are closed (stages 4 and 5 are on trunk as the `hive.dart` barrel, `at_client` 4.0.0 and the wasm gate); #2258–#2261, #2273–#2276 and #2336 are open. The remote-only classes are not on trunk: they and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (CI [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431), tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). Merge order and the publish ladder live in the landing plan, not here.
 **Purpose:** the delivered record of PB-3 — what each stage changed in `at_client`, why, and what its tests prove. It merges the former `pb3-stage1.md` … `pb3-stage6.md`; per-PR status was dropped, so this table is the only place state is recorded.
 **Rulings it implements:** [`decisions.md`](decisions.md) D-12 (storage bundle), D-17 (V1 ships remote-only), D-18 (remote-only is an `AtClientStorage` implementation), D-13/D-14 (location per atSign). Gates: [`acceptance.md`](acceptance.md) §9a.2, X-R1/X-R2.
 **Not here:** the web crypto and web lookups (PB-4), `at_client_wasm` sessions and the JS entry (PB-5) — see [`implementation-plan.md`](implementation-plan.md).
@@ -219,7 +219,8 @@ A `const` class in `lib/src/sync/sync_queue_store.dart`, beside `HiveBoxSyncQueu
 - The fragment comes from `metadata.toCommonsMetadata().toAtProtocolFragment()`, not a hand mapping.
 - Every write returns `null`: there is no commit log to return an id from.
 - `nextExpiresAt` / `nextAvailableAt` return `null`; `changes` is an empty stream; hooks are empty; `supportsSnapshots` / `supportsPathQueries` are `false`; `commitLog` is `null` and its setter is a no-op.
-- The other 14 members (`create`, `scanKeys`, `queryByPath`, `snapshot`, `compact`, `restore`, `peekNewlyAvailable`, `getExpiredKeys`, `deleteExpiredKeys`, `peekExpired`, `exists`, `getMany`, `removeMany`, `transaction`, `stats`) throw `UnsupportedError('RemoteWriteThroughKeyStore does not support <member>')`.
+- `exists` is `get`-or-`KeyNotFoundException` (added in #2430, `at_client_sdk-336`; the watermark migration calls it).
+- The other 13 members (`create`, `scanKeys`, `queryByPath`, `snapshot`, `compact`, `restore`, `peekNewlyAvailable`, `getExpiredKeys`, `deleteExpiredKeys`, `peekExpired`, `getMany`, `removeMany`, `transaction`, `stats`) throw `UnsupportedError('RemoteWriteThroughKeyStore does not support <member>')`.
 
 #### Retry
 
@@ -289,7 +290,7 @@ sequenceDiagram
 | `get / getMeta` | 4 | `operation == 'all'` and decode; metadata half; `privatekey:at_pkam_privatekey` and `public:publickey@alice` round-trip to their exact wire strings |
 | `getKeys` | 1 | `ScanVerbBuilder` with `regex` and `auth: true`; list decode |
 | `retry` | 3 | Succeeds on the 3rd call; stops at exactly 3 and rethrows; `KeyNotFoundException` after 1 call |
-| `unsupported members` | 1 | 14 members throw `UnsupportedError` |
+| `unsupported members` | 1 | 13 members throw `UnsupportedError` (14 before #2430 implemented `exists`) |
 | safe defaults | 5 | Expiry probes `null`, `changes` empty, hooks empty, capability flags `false`, `commitLog` `null` |
 | `local:` keys | 7 | Round-trip, metadata, `putMeta`, absent-key miss, `remove`, case-insensitive prefix, `getKeys` merge; `tearDown` asserts `executeCommand` was never called |
 
@@ -800,7 +801,7 @@ PB-3 is the `at_client` part of browser support. The goal is a client that runs 
 - D-3 "Breaking majors are accepted" already names this break: "`dart:io File` leaves the `AtClient` public surface".
 - Every removed member was already `@Deprecated`. Their messages said the file methods were "moved to app layer" and the stream methods were "Obsolete, will be removed in v4".
 - So deleting was cheaper than porting. OQ-4 "File transfer: change the API, or extract the component?" offered both; this PR takes neither and removes the API.
-- The PR also removes the last `at_client` caller of `getSocket()` (`RemoteSecondary.addStreamData`). That unblocks at_lookup T3 (#2399).
+- The PR also removes the last `at_client` caller of `getSocket()` (`RemoteSecondary.addStreamData`). That unblocked at_lookup T3 (#2399, which reached trunk via #2415).
 
 ---
 
@@ -962,7 +963,7 @@ at_client:
 | Before stage5 | 1283 | 7 | 8 |
 | After stage5 | 1145 | 0 | 3 |
 
-The 3 blocked packages:
+The 3 blocked packages at stage 5 — all since cleared by the 4.0.0 package set (#2415, which superseded #2214 and carried #2399); every gated barrel in `.github/wasm_gates.yaml` is now at `max_blocked: 0`:
 
 | Package | Path into the graph | Owner |
 |---|---|---|

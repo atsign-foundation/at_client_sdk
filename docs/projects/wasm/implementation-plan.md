@@ -266,8 +266,8 @@ break; it stays as ruled.
   the two existing escape hatches — the abstract interface, or the `proxy:<host>`
   convention. The production answer is OQ-7. **Done 2026-10-23:**
   `HttpsSecondaryAddressFinder` in `at_lookup_web.dart`, behind `webSocketLookUps()`;
-  OQ-7 resolved, pending atDirectory CORS.
-- **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2
+  OQ-7 resolved, pending atDirectory CORS ([at_server#2921](https://github.com/atsign-foundation/at_server/issues/2921)).
+- **T8 — Publish `at_lookup` 4.0.0.** → T0 green for at_lookup, T2.2. **Done:** 4.0.0 is on pub.dev (checked 2026-11-05).
 - **T9 — Let the APP inject the transport, and thread it to every construction site**
   (gkc, 2026-09-06). ✅ **DONE 2026-09-13**, on the client-lifecycle branch, as the
   third leg of the platform bundle. This was the structural gap the rest of phase T
@@ -1034,7 +1034,7 @@ The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above
 | Stack | Delivers | Nearest task ids | PRs | State |
 | --- | --- | --- | --- | --- |
 | PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263, closed) are on trunk as the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open (`gh`, 2026-11-02). [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
-| PB-4 A | `WebSocketTransport` + `at_lookup_web.dart`, `at_lookup` 4.0.0 | T1–T7 | #2399 | **landed on trunk** (at_lookup 4.0.0, not yet on pub.dev; T8 publish open) |
+| PB-4 A | `WebSocketTransport` + `at_lookup_web.dart`, `at_lookup` 4.0.0 | T1–T7 | #2399 | **landed on trunk** via #2415; at_lookup 4.0.0 on pub.dev (T8 done) |
 | PB-4 B | `at_client` web `defaultLookUps` branch | W1 (transport leg) | #2266 | open, draft |
 | PB-4 C | `at_chops_web.dart`: WebCrypto AES-CTR, envelope-selectable Argon2id/PBKDF2 | C1–C4 | #2265 | open, draft |
 | PB-4/5 D | WebAuthn PRF spike (OQ-P1) → K-7 | — | #2269 | open, draft |

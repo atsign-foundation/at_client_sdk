@@ -1333,7 +1333,7 @@ already builds. Must be decided before the browser lane ships notifications.
 defaults to *window(1h)*, which bounds the replay with no checkpoint store at all. The
 IndexedDB record stands, but only for a browser client that opts into *resume*.
 
-> **Corrected 2026-11-02.** The premise above is wrong. The method is `notification_service_impl.dart:428`, and under `RemoteWriteThroughKeyStore` (in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430)) `exists` **throws** `UnsupportedError`; it does not silently succeed. `Monitor.currentWatermark` catches the throw and returns null. A null watermark sends `monitor:` with no epoch, which means "since now". So every reconnect **loses the gap**, which fails X-R4e; the failure is not an unbounded replay. The browser default is now *connect*, which keeps an in-memory cursor across reconnects (D-24, amended 2026-11-02).
+> **Corrected 2026-11-02.** The premise above is wrong. The method is `notification_service_impl.dart:428`, and the read never silently succeeds. As first built, `RemoteWriteThroughKeyStore.exists` **threw** `UnsupportedError`, the watermark read failed, and the monitor reconnected with no epoch, so a reconnect **lost the gap** (seen live: [`at-talk-demo.md`](at-talk-demo.md), `at_client_sdk-336`). In [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) `exists` is `get`-or-`KeyNotFoundException`, and the watermark is a `local:` key held in memory, so reconnects within a session resume from it and a page reload starts from the new session's creation time. The failure is a lost gap, not an unbounded replay. The browser default is now *connect* with a reconnect supervisor (D-24, amended 2026-11-02).
 
 ### OQ-14 — Do the registrar asks land?
 
