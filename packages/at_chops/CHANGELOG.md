@@ -8,6 +8,11 @@
   `keyPairFromSeed` and `newSeed`. Both ML-DSA-65 classes implement it, and
   `AtPqc.mlDsa65` is now typed as it, so a caller going through `AtPqc` can
   reach the seeded path.
+- fix: the X25519, ML-DSA-65 and ML-KEM-768 FFI backends clear each native
+  buffer that held a private key, seed or shared secret before freeing it.
+  Copies the caller holds as `Uint8List` are not affected.
+- fix: `RsaSignatureAlgo`'s message for an unreadable private key names the
+  parse error's type rather than quoting its text.
 
 ## 3.7.1
 
