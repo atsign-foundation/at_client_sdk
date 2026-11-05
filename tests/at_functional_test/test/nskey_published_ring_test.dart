@@ -3,6 +3,9 @@ library;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyMintLockKey;
+import 'package:at_commons/at_builders.dart' show LLookupVerbBuilder;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 
@@ -105,12 +108,13 @@ void main() {
     final ns = uniqueNs();
     const slowFiling = Duration(seconds: 8);
     final ring = PublishedNskeyKeyRing(atClient,
-        lockTtl: liveMintLockTtl,
-        lockBudgetPerMember: liveMintLockBudgetPerMember);
-    // NOTE: the hold runs inside the mint lock, after the lock is taken and
-    // before the advertisement is published.
-    ring.privateFiling!.holdBeforeStore =
-        () => Future<void>.delayed(slowFiling);
+        lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero);
+    String? lockDuringHold;
+    ring.privateFiling!.holdBeforeStore = () async {
+      lockDuringHold = await atClient.getRemoteSecondary()!.executeVerb(
+          LLookupVerbBuilder()..atKey = nskeyMintLockKey(atSign, ns));
+      await Future<void>.delayed(slowFiling);
+    };
 
     final minting = Stopwatch()..start();
     final minted = await ring.mintAndPublish(ns);
@@ -119,6 +123,9 @@ void main() {
     expect(minting.elapsed, greaterThanOrEqualTo(slowFiling),
         reason: 'the control: the filing was held inside the mint, so the '
             'publish below happened after the hold and not before it');
+    expect(lockDuringHold, allOf(startsWith('data:'), isNot('data:null')),
+        reason: 'the hold ran while the atServer held this mint\'s lock, so '
+            'the 8 s counted against the lease');
     expect(
         (await PublishedNskeyKeyRing(atClient)
                 .publishedAdvertisement(atSign, ns))
