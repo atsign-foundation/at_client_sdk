@@ -1607,9 +1607,7 @@ void main() {
 
         setUp(() {
           delivered = [];
-          service
-              .subscribe(regex: '.*')
-              .listen((n) => delivered.add(n.id));
+          service.subscribe(regex: '.*').listen((n) => delivered.add(n.id));
         });
 
         test('the same id received twice reaches a subscriber once', () async {
