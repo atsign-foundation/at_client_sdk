@@ -17,6 +17,8 @@ const Map<String, int> atSigns = {
   '@bob🛠': 25003,
   '@eve🛠': 25010,
   '@kevin🛠': 25012,
+  '@murali🛠': 25013,
+  '@sameeraja🛠': 25016,
   '@sitaram🛠': 25017,
   '@denise': 25035,
 };
