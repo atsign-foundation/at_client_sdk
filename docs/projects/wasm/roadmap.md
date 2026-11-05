@@ -61,7 +61,7 @@ canonical home rather than duplicating it.
 | [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
 | [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
 | [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T6, with the measured evidence for each and an explicit statement of what each tier does *not* prove. Plus §9a: confidentiality, remote-only, deployment and surface-stability gates.                                                                                                  |
-| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-26, plus K-1..K-17 for browser at-keys custody), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-26, plus K-1..K-18 for browser at-keys custody), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                        |
 | [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, npm packaging, and **the deployment contract** (§8a).                                                                              |
 | [`enterprise-identity.md`](enterprise-identity.md) | atSigns behind a customer's identity provider (Entra/Okta) — the SCIM lifecycle mapping, the atSign-level disable gap, the registrar asks, and the constraints the browser lane must not violate. An *adoption* blocker, not a program blocker.                                                            |
 | [`browser-onboarding.md`](browser-onboarding.md)   | How the browser holds the atSign's @keys: requirements R1–R7, one public pointer per passkey (K-10) + one private document per enrollment (K-11), enroll / return / recover flows, lifecycle, security properties and what does not hold. |
@@ -69,7 +69,7 @@ canonical home rather than duplicating it.
 | [`atkeys-derivation.md`](atkeys-derivation.md)     | The derivation behind K-1..K-5 and the K-10/K-11 layout: constant PRF salt, one PRF call then HKDF, pointer and document format and AAD, test vector, cost of changing each choice later. |
 | [`pb3-storage-bundle.md`](pb3-storage-bundle.md)   | What PB-3 delivered in `at_client`, stage by stage (storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop), with PR state. |
 | [`vfs-lab-results.md`](vfs-lab-results.md) · [`spike-indexeddb-storage.md`](superseded/spike-indexeddb-storage.md) | The measurements behind D-26 (SimpleOPFS) and the earlier raw-IndexedDB spike it superseded. |
-| [`at-talk-demo.md`](at-talk-demo.md)               | The first real browser↔atServer session: a Chrome tab (dart2js and dart2wasm) chatting end-to-end encrypted with the C `at_talk` CLI, 2026-10-27 — local virtualenv, dev keys, via `at_secondary_proxy`, not yet the direct path. |
+| [`at-talk-demo.md`](at-talk-demo.md)               | The first real browser↔atServer sessions: a Chrome tab chatting end-to-end encrypted with an `at_talk` CLI — through `at_secondary_proxy` on a local virtualenv (2026-10-27), then direct on production atSigns in both directions (2026-11-03). |
 
 ---
 
@@ -82,8 +82,9 @@ predecessor — **no platform conditionals either**. A core package must not kno
 platforms differ. Platform-specific behaviour is supplied from outside, by a platform
 implementer package, through an injected interface.
 
-**One exception is now shipped, deliberately.** `at_auth` 4.0.0-rc1 resolves its
-reachability probe through a conditional export, because the two implementations are not
+**One exception shipped, then went.** `at_auth` 4.0.0-rc1 resolved its
+reachability probe through a conditional export; 4.0.0-rc2 removed the probe and that
+export, so the published 4.0.0 (2026-11-04) has neither. rc1 used it because the two implementations are not
 interchangeable — a browser negotiates the ALPN protocol that makes an HTTPS probe
 meaningful and `dart:io`'s HTTP client does not. It is PQ-owned code and the ruling is
 recorded against D-1 in [`decisions.md`](decisions.md), which also explains why the
@@ -300,9 +301,9 @@ ruling that a removed default is preferable to a conditional default.
 | **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | **Landed** ([#2399], via #2415) — at_lookup 4.0.0 on trunk and on pub.dev; web transport `at_lookup_web.dart` |
 | **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-26).         | T2 for storage   | **V1 partly landed** — the `hive.dart`/`memory.dart`/`sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate are on trunk; `RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore` and `remote_only` are not (open: #2258–#2261, #2273–#2276, #2336; consolidated with `at_client_wasm` in #2430) — PB-3 ([`pb3-storage-bundle.md`](pb3-storage-bundle.md)). V2 decided, not built |
 | **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | **Landed** — `at_utils` and `at_client` 4.0.0 |
-| **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-17 (K-6, K-8 superseded; K-10 pointer + K-11 document); first live session partial — see [`implementation-plan.md`](implementation-plan.md) §5b |
+| **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-18 (K-6, K-8 superseded; K-10 pointer + K-11 document); first live sessions ran (proxy 2026-10-27, direct on production 2026-11-03, [`at-talk-demo.md`](at-talk-demo.md)) — see [`implementation-plan.md`](implementation-plan.md) §5b |
 | **6 — JS/TS facade**    | The `@JSExport` facade and its TypeScript entry point; the npm package. See [`js-api.md`](js-api.md).                              | T6               | Dev harness only; the `@atsign/at-client-web` facade is a draft plan, gated on OQ-16      |
-| **7 — Deferred**        | File transfer on web, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. Browser onboarding is **no longer deferred** (K-1..K-17). | —                | —                                                                                        |
+| **7 — Deferred**        | File transfer on web, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. Browser onboarding is **no longer deferred** (K-1..K-18). | —                | —                                                                                        |
 
 [#2149]: https://github.com/atsign-foundation/at_client_sdk/pull/2149
 [#2158]: https://github.com/atsign-foundation/at_client_sdk/issues/2158
@@ -318,19 +319,18 @@ ruling that a removed default is preferable to a conditional default.
 Phases 2 and 3 are independent and can run in parallel. Phase 0 gates everything,
 because without it each phase's gains decay behind the next one.
 
-**What Phase 0 did *not* turn on.** T0 is green for the two packages named above and for
-nothing else: `at_utils`, `at_lookup` and `at_client` own 3, 6 and 7 offenders and are
-absent from `.github/wasm_gates.yaml` on purpose, so a gate holds a line rather than
-recording a backlog. They join as their phases land. The runtime tier (T2) is not in CI
-at all — see [`acceptance.md`](acceptance.md) §4.
+**What Phase 0 did *not* turn on.** The structural gate now covers eight packages
+(`at_chops`, `at_auth`, `at_utils`, `at_lookup`, `at_client`, `at_contact`, `at_policy`,
+`at_telemetry`), each barrel at 0 blocked packages in `.github/wasm_gates.yaml`. The
+runtime tier (T2) is not in CI at all — see [`acceptance.md`](acceptance.md) §4.
 
 ## Beyond the neutral client
 
-Three adjacent systems depend on this work. Browser at-keys custody is ruled in this doc set (K-1..K-17 in [`decisions.md`](decisions.md)); the other two are **not** part of its rulings. Their state, as of 2026-10-27:
+Three adjacent systems depend on this work. Browser at-keys custody is ruled in this doc set (K-1..K-18 in [`decisions.md`](decisions.md)); the other two are **not** part of its rulings. Their state, as of 2026-10-27:
 
 | System | What | State | Where |
 | --- | --- | --- | --- |
-| Browser at-keys custody | PRF-named public pointer per passkey (K-10) + private sealed document per enrollment (K-11) | **Decided** (K-1..K-17; K-6, K-8 superseded 2026-10-27; K-12 fallbacks ruled by K-13 2026-10-28); code reworks to it next | [`decisions.md`](decisions.md), [`browser-onboarding.md`](browser-onboarding.md) |
+| Browser at-keys custody | PRF-named public pointer per passkey (K-10) + private sealed document per enrollment (K-11) | **Decided** (K-1..K-18; K-6, K-8 superseded 2026-10-27; K-12 fallbacks ruled by K-13 2026-10-28); code reworks to it next | [`decisions.md`](decisions.md), [`browser-onboarding.md`](browser-onboarding.md) |
 | Trusted devices | A signed server challenge replaces the OTP on a second device | Proposal; needs atServer work | PR [#2268](https://github.com/atsign-foundation/at_client_sdk/pull/2268) |
 | Hardware-bound APKAM custody | The APKAM credential held in OS hardware, with a server-held document; competes with or supplements browser custody | Proposal; hardware claims unprobed | PR [#2295](https://github.com/atsign-foundation/at_client_sdk/pull/2295) |
 

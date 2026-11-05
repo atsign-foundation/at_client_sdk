@@ -1,6 +1,6 @@
 # PB-3 — the storage bundle, remote-only client and io split
 
-**Status:** six stages, partly landed. Re-checked with `gh` 2026-11-02: #2257, #2262 and #2263 are closed (stages 4 and 5 are on trunk as the `hive.dart` barrel, `at_client` 4.0.0 and the wasm gate); #2258–#2261, #2273–#2276 and #2336 are open. The remote-only classes are not on trunk: they and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (CI [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431), tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). Merge order and the publish ladder live in the landing plan, not here.
+**Status:** six stages, partly landed. Re-checked with `gh` 2026-11-02: #2257, #2262 and #2263 are closed. Stages 4 and 5 did not merge as written: [#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415) superseded them and shipped `at_client` 4.0.0 (on pub.dev 2026-11-04). The [4.0.0 CHANGELOG](../../../packages/at_client/CHANGELOG.md) is the record of what shipped; the stage 4/5 sections below are the closed PRs' design. #2258–#2261, #2273–#2276 and #2336 are open. The remote-only classes are not on trunk: they and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (CI [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431), tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). Merge order and the publish ladder live in the landing plan, not here.
 **Purpose:** the delivered record of PB-3 — what each stage changed in `at_client`, why, and what its tests prove. It merges the former `pb3-stage1.md` … `pb3-stage6.md`; per-PR status was dropped, so this table is the only place state is recorded.
 **Rulings it implements:** [`decisions.md`](decisions.md) D-12 (storage bundle), D-17 (V1 ships remote-only), D-18 (remote-only is an `AtClientStorage` implementation), D-13/D-14 (location per atSign). Gates: [`acceptance.md`](acceptance.md) §9a.2, X-R1/X-R2.
 **Not here:** the web crypto and web lookups (PB-4), `at_client_wasm` sessions and the JS entry (PB-5) — see [`implementation-plan.md`](implementation-plan.md).
@@ -28,12 +28,22 @@ graph LR
 | [1](#stage-1) | [#2257](https://github.com/atsign-foundation/at_client_sdk/pull/2257) | closed | A non-Hive bundle with `isLocalStoreRequired: false` constructs; chops setup no longer gated on local store | no |
 | [2](#stage-2) | [#2258](https://github.com/atsign-foundation/at_client_sdk/pull/2258), [#2259](https://github.com/atsign-foundation/at_client_sdk/pull/2259), [#2260](https://github.com/atsign-foundation/at_client_sdk/pull/2260) | open, ready | `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `RemoteOnlyAtClientStorage` (`package:at_client/remote_only.dart`) | no |
 | [3](#stage-3) | [#2261](https://github.com/atsign-foundation/at_client_sdk/pull/2261) | open, ready | `AtClientStorage.holdsKeyMaterial`; remote-only client without keys fails at construction | no |
-| [4](#stage-4) | [#2262](https://github.com/atsign-foundation/at_client_sdk/pull/2262) | closed; on trunk | `HiveAtClientStorage` moves to `package:at_client/hive.dart`; conditional default storage | **yes** (`at_client` 4.0.0) |
-| [5](#stage-5) | [#2263](https://github.com/atsign-foundation/at_client_sdk/pull/2263) | closed; on trunk | No `dart:io` in `at_client.dart`; deprecated file/stream API deleted; wasm gate stanza | **yes** (`at_client` 4.0.0) |
+| [4](#stage-4) | [#2262](https://github.com/atsign-foundation/at_client_sdk/pull/2262) | closed; superseded by #2415 (4.0.0) | `HiveAtClientStorage` moves to `package:at_client/hive.dart`; conditional default storage | **yes** (`at_client` 4.0.0) |
+| [5](#stage-5) | [#2263](https://github.com/atsign-foundation/at_client_sdk/pull/2263) | closed; superseded by #2415 (4.0.0) | No `dart:io` in `at_client.dart`; deprecated file/stream API deleted; wasm gate stanza | **yes** (`at_client` 4.0.0) |
 | [6](#stage-6) | [#2273](https://github.com/atsign-foundation/at_client_sdk/pull/2273)–[#2276](https://github.com/atsign-foundation/at_client_sdk/pull/2276) | open, 6a–6d ready | `remote_only.dart` wasm gate; write-through `get` key fix; `replicatesServer` + `WriteThroughSyncService`; X-R2 interop test | no |
 | follow-up | [#2336](https://github.com/atsign-foundation/at_client_sdk/pull/2336) | open, base stage 6d | `at_client` timer-gate and rederive fixes found by the PB-5 sessions work | no |
 
-Stages 1–3 are additive; the breaking changes are in 4 and 5 and ride `at_client` 4.0.0. Each of those stages has a migration section for consumers.
+Stages 1–3 are additive; the breaking changes are in 4 and 5. What reached trunk through #2415 differs from the stage 4/5 PRs:
+
+| Stage 4/5 design (closed PRs) | Trunk (`at_client` 4.0.0) |
+|---|---|
+| `remote_only.dart` barrel | none; the remote-only classes are in #2430 |
+| conditional default storage (`default_storage.dart`) | none; every factory takes a required `storage`, and `hive.dart` exports `HiveAtClientStorage` |
+| `AtClientStorage.persistenceBundle` getter | not present; `AtClient.persistenceBundle` is removed too |
+| `transport_error.dart` conditional export (`_io` / `_web`) and the gate control on `transport_error_io.dart` | none; `lifecycle/at_connection.dart` recognises a wrapped transport failure by its message text (`SocketException`, `HandshakeException`, …), and the gate's control walks `crypto/backends/crypto_backends_native.dart` to `dart:ffi` |
+| `at_client_io.dart` exports only the io helpers | re-exports `at_client.dart` plus `FileAtKeysIo`, `CacheableSecondaryAddressFinder`, `secureSocketLookUps` |
+
+Read the migration sections below against the 4.0.0 CHANGELOG, which wins where they differ.
 
 **Glossary trap.** "R3" means three different things across the doc set: PB-3 item e/R3 (key material is a precondition of a remote-only client; stage 1 hoist + stage 3 guard), `implementation-plan.md` R3 (the no-throwing-stub gate), and `acceptance.md` X-R3 (a write is not acknowledged until the atServer accepts it).
 
@@ -220,7 +230,8 @@ A `const` class in `lib/src/sync/sync_queue_store.dart`, beside `HiveBoxSyncQueu
 - Every write returns `null`: there is no commit log to return an id from.
 - `nextExpiresAt` / `nextAvailableAt` return `null`; `changes` is an empty stream; hooks are empty; `supportsSnapshots` / `supportsPathQueries` are `false`; `commitLog` is `null` and its setter is a no-op.
 - `exists` is `get`-or-`KeyNotFoundException` (added in #2430, `at_client_sdk-336`; the watermark migration calls it).
-- The other 13 members (`create`, `scanKeys`, `queryByPath`, `snapshot`, `compact`, `restore`, `peekNewlyAvailable`, `getExpiredKeys`, `deleteExpiredKeys`, `peekExpired`, `getMany`, `removeMany`, `transaction`, `stats`) throw `UnsupportedError('RemoteWriteThroughKeyStore does not support <member>')`.
+- `peekNewlyAvailable` returns an empty stream.
+- The other 13 members (`create`, `scanKeys`, `queryByPath`, `snapshot`, `compact`, `restore`, `getExpiredKeys`, `deleteExpiredKeys`, `peekExpired`, `getMany`, `removeMany`, `transaction`, `stats`) throw `UnsupportedError('RemoteWriteThroughKeyStore does not support <member>')`.
 
 #### Retry
 
@@ -531,7 +542,6 @@ sequenceDiagram
 | Commits | `70f1b25ab` feat (lib + precondition tests + the stage2c test change), `11a1ece4e` test (enroll) |
 | Diff | 6 files changed, +187 / −4 |
 | `CHANGELOG.md` | No entry in this PR |
-| AI attribution trailers | None on either commit |
 
 ---
 
@@ -547,6 +557,8 @@ sequenceDiagram
 <a id="stage-4"></a>
 
 ## Stage 4 — Hive leaves the default barrel
+
+> **Closed PR's design.** #2262 did not merge; #2415 shipped `at_client` 4.0.0 instead. The [4.0.0 CHANGELOG](../../../packages/at_client/CHANGELOG.md) is what shipped. See [the trunk comparison](#the-stack).
 
 **Bottom line:**
 - `package:at_client/at_client.dart` no longer exports `HiveAtClientStorage`. It now comes from `package:at_client/hive.dart`.
@@ -783,6 +795,8 @@ As reported in the PR description:
 
 ## Stage 5 — no `dart:io` in `at_client.dart`, file/stream API removed, CI gate
 
+> **Closed PR's design.** #2263 did not merge; #2415 shipped `at_client` 4.0.0 instead. The [4.0.0 CHANGELOG](../../../packages/at_client/CHANGELOG.md) is what shipped. See [the trunk comparison](#the-stack).
+
 **Bottom line:**
 - **BREAKING:** the deprecated file-transfer and stream API is **deleted, not moved**. The SDK has no replacement for it.
 - No source file in `at_client` imports `dart:io` any more when reached from `package:at_client/at_client.dart`. `FileAtKeysIo` and `secureSocketLookUps` move to a new barrel, `package:at_client/at_client_io.dart`.
@@ -990,9 +1004,9 @@ The in-repo consumer sweep added the `at_client_io.dart` import to:
 - `tests/at_end2end_test`, `tests/at_functional_test`, `tests/at_onboarding_cli_functional_tests`
 - `at_client` tests, the `at_client_skills` snippets, and the `at_client` README
 
-#### CHANGELOG (`at_client` 4.0.0-rc1)
+#### CHANGELOG (`at_client` 4.0.0-rc1, as drafted in #2263)
 
-The 4.0.0-rc1 entry is new in this PR. It covers stage4 and stage5 together:
+The 4.0.0-rc1 entry was new in #2263. It covered stage4 and stage5 together; the published 4.0.0 entry replaces it:
 
 - BREAKING: `HiveAtClientStorage` is imported from `package:at_client/hive.dart`, and `FileAtKeysIo`/`secureSocketLookUps` from `package:at_client/at_client_io.dart`. `at_client_flutter` re-exports both.
 - BREAKING: `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`, `stream`, `sendStreamAck`, `ConnectivityListener` and `RemoteSecondary.isAvailable` are removed.
@@ -1039,9 +1053,9 @@ Commits:
 | Item | Owner | Blocks |
 |---|---|---|
 | ~~The 3 inherited blocked packages (`at_lookup`, `at_utils`, `chalkdart`)~~ | Done: landed with the 4.0.0 package set ([#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415), which superseded #2214 and carried #2399) | Every gated barrel is at 0 blocked packages (`.github/wasm_gates.yaml`) |
-| `tools/wasm_shakedown/README.md` still says `at_client` owns 7 offenders and lists only `at_chops` and `at_auth` as gated | Whoever next touches the tool | Nothing. The yaml is correct; only the README is stale |
+| ~~`tools/wasm_shakedown/README.md` still says `at_client` owns 7 offenders and lists only `at_chops` and `at_auth` as gated~~ | Done on trunk | — |
 | The CHANGELOG omits `RemoteSecondary.addStreamData` and `EncryptionService.encryptFileInChunks` / `decryptFileInChunks` | This PR, if wanted | Nothing. `RemoteSecondary` is exported from `at_client.dart`, so `addStreamData` was public |
-| `at_client_io.dart` exports only the io helpers. D-5 "Native implementations live in `_io` barrels, not new packages" describes each `_io` barrel as "exporting the neutral barrel plus the native implementations" | Your call: amend D-5 or re-export `at_client.dart` | Nothing. Consumers import both barrels today |
+| ~~`at_client_io.dart` exports only the io helpers, against D-5~~ | Done: trunk's `at_client_io.dart` re-exports `at_client.dart`, as D-5 says | — |
 | `remote_only.dart` has no gate of its own | Done in stage6a (#2273) | — |
 
 ---
@@ -1302,8 +1316,7 @@ sequenceDiagram
 | 6d | 2161 / 2161 | clean | ✓ |
 
 - Across 6a–6d: 13 files changed, +479 / −8.
-- None of the commits carries an AI attribution trailer.
-- `CHANGELOG.md` (4.0.0-rc1) has three new entries: the `get` fix, the **BREAKING** `replicatesServer` member, and the sync-warning fix.
+- The 6a–6d branches' `CHANGELOG.md` (4.0.0-rc1) had three new entries: the `get` fix, the **BREAKING** `replicatesServer` member, and the sync-warning fix. None is in the published 4.0.0 entry; `replicatesServer` is not on trunk.
 
 ---
 
@@ -1312,6 +1325,5 @@ sequenceDiagram
 | Item | Owner | Blocks |
 |---|---|---|
 | ~~The 3 inherited blocked packages (`at_lookup`, `at_utils`, `chalkdart`)~~ | Done: landed with the 4.0.0 package set ([#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415), which superseded #2214 and carried #2399) | Every gated barrel is at 0 blocked packages (`.github/wasm_gates.yaml`) |
-| Whether to cherry-pick the 6b `get` fix onto stage2b (#2259) | Your call. #2259 is untouched for now | Nothing. The fix reaches trunk through the stack either way |
 | `update:meta:` in `StatefulFakeServer` | Whoever next needs it in a test | Nothing today. The fake throws `UnimplementedError` for it |
 | X-R2 against a **real** atServer | Later, in the functional/e2e lane | Nothing for PB-3. The fake covers the client-side contract |

@@ -400,7 +400,7 @@ D-12. Independent of the P series, which is `at_server`-side.
   first and separately as *a stopped sync service abandons its round* (#2206); (c) **the e2e pack
   depended on cached-client resurrection for key material** — `getAtClient()` called
   `setCurrentAtSign` with no `atKeysIo`/`atChops`, and its own comment said so
-  (`getAtClient()` is gone in at_onboarding_cli 2.0.0-rc1; the service builds through
+  (`getAtClient()` is gone in at_onboarding_cli 2.0.0; the service builds through
   `Atsign.open` and `AtClientManager.use`); a fresh
   client on switch-back rebuilt `AtChops` from its keystore and 14 tests died with
   `PKAM Keypair required for signing`. Why the reopened keystore lacked the keys is NOT
@@ -714,7 +714,7 @@ with it — lands in all 49 import closures. That is the entanglement `import_to
 exists to prevent, and that test is spike-only, which is why X6 shipped the static without
 anything going red. Dart cannot put a static outside its class, so the spelling and the
 invariant could not both survive; the spelling gave way, at no external cost, because 3.15.0-rc1
-is unpublished. The factory now lives in `lib/src/client/at_client_factory.dart`, and moving it
+was never published (`at_client` went to 4.0.0). The factory now lives in `lib/src/client/at_client_factory.dart`, and moving it
 also freed the interface of four impl imports it no longer needs. ⚠️ `js-api.md` still specifies
 a JavaScript facade constructed as `AtClient.create(...)`; that is a different language surface
 and was deliberately left alone, but the two now differ and the JS design should say why.
@@ -1029,20 +1029,20 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 
 ## 5b. The browser-lane build, PB-3…PB-7 (2026-10-18)
 
-The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column is PR state read with `gh` on 2026-10-18; **since then PB-4 A has landed on trunk** (`at_lookup` 4.0.0 with `at_lookup_web.dart`) and PB-3 has **partly** landed (the `hive.dart`, `memory.dart` and `sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate; `at_utils` 4.0.0 too). The remote-only pieces (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) are **not** on trunk, and `packages/at_client_wasm` and `at_chops_web.dart` are not either; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
+The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column was re-read with `gh` on 2026-11-05. **PB-4 A has landed on trunk** (`at_lookup` 4.0.0 with `at_lookup_web.dart`) and PB-3 has **partly** landed (the `hive.dart`, `memory.dart` and `sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate; `at_utils` 4.0.0 too). The 4.0.0 package set (`at_client`, `at_lookup`, `at_auth`, `at_utils`; `at_onboarding_cli` and `at_policy` 2.0.0) is on pub.dev since 2026-11-04. The remote-only pieces (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) are **not** on trunk, and `packages/at_client_wasm` and `at_chops_web.dart` are not either; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
 
 | Stack | Delivers | Nearest task ids | PRs | State |
 | --- | --- | --- | --- | --- |
-| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263, closed) are on trunk as the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open (`gh`, 2026-11-02). [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
+| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263) closed, superseded by #2415, which shipped the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open; the remote-only classes are in #2430. [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
 | PB-4 A | `WebSocketTransport` + `at_lookup_web.dart`, `at_lookup` 4.0.0 | T1–T7 | #2399 | **landed on trunk** via #2415; at_lookup 4.0.0 on pub.dev (T8 done) |
-| PB-4 B | `at_client` web `defaultLookUps` branch | W1 (transport leg) | #2266 | open, draft |
+| PB-4 B | `at_client` web `defaultLookUps` branch | W1 (transport leg) | #2266 | closed 2026-11-02, not merged |
 | PB-4 C | `at_chops_web.dart`: WebCrypto AES-CTR, envelope-selectable Argon2id/PBKDF2 | C1–C4 | #2265 | open, draft |
 | PB-4/5 D | WebAuthn PRF spike (OQ-P1) → K-7 | — | #2269 | open, draft |
-| PB-5 E, F | `packages/at_client_wasm`: key envelope, `WebAtKeysIo` | W1 (keys leg) | #2267 | open, draft |
-| PB-5 G, K | IndexedDB store, `PasskeyKek` over a port; dev portal-cutter | W1 (keys leg) | #2271, #2272 | open, draft |
+| PB-5 E, F | `packages/at_client_wasm`: key envelope, `WebAtKeysIo` | W1 (keys leg) | #2267 | open, ready |
+| PB-5 G, K | IndexedDB store, `PasskeyKek` over a port; dev portal-cutter | W1 (keys leg) | #2271, #2272 | #2271 open, ready; #2272 closed 2026-10-31, not merged |
 | PB-5 H | Portal and ephemeral sessions; `HealOutcome` | W1 | #2338 | open |
 | PB-5 J | `@JSExport` dev harness + `build.sh` (js and wasm compiles required) | J1 (dev only) | #2341 | open |
-| PB-5 N | K-10 pointer + K-11 document replacing the shared `unlocks[]` copy | — | not started | build is bd `5vf.1`–`5vf.7`; rulings K-1..K-17 (K-6, K-8 superseded 2026-10-27; K-12 fallbacks ruled by K-13) |
+| PB-5 N | K-10 pointer + K-11 document replacing the shared `unlocks[]` copy | — | not started | build is bd `5vf.1`–`5vf.7`; rulings K-1..K-18 (K-6, K-8 superseded 2026-10-27; K-12 fallbacks ruled by K-13) |
 | PB-5 M | Notifications in the browser: leader tab, D-24 *connect* + reconnect supervisor (ruled 2026-11-02) | — | not started | [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439) |
 | PB-6 | `@atsign/at-client-web` TypeScript facade | J1–J8 | not started | draft plan; gated on OQ-16 |
 | PB-7 / L | First live browser session on a real hostname; the five live paths | W3 → T4.1, T4.2 | not started | step 0a (paths 1–3) passed on Chrome headless + local atServer; step 0a′ reruns after N |
@@ -1052,7 +1052,7 @@ The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above
 
 - **W1's package name.** Ruled 2026-10-18: the Dart package is `at_client_wasm` (the package is in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430), CI in #2431, tracked by #2437). `at_client_web` in D-4/D-8 and older text means this package. The JS facade stays `@atsign/at-client-web`, a separate npm name.
 - **W4 is done** (D-26): SimpleOPFS, one directory per (atSign, enrollmentId); D4 not triggered. A SQLite bundle is V2.
-- **D2 (browser onboarding) is no longer deferred.** It is K-1..K-17 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
+- **D2 (browser onboarding) is no longer deferred.** It is K-1..K-18 plus [`browser-onboarding.md`](browser-onboarding.md), and PB-5 N is its build.
 - **Order of what is left:** review and land the stack → PB-5 N (so no code ships against the superseded `unlocks[]` design) → PB-7 live paths → PB-5 M → PB-6.
 
 ---
@@ -1225,7 +1225,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 ## 9. Phase 7 — deferred (D)
 
 - **D1 — File-transfer web implementation** via `package:web` File/Blob.
-- **D2 — Browser onboarding and key-import UX.** *Un-deferred 2026-10: see §5b and K-1..K-17.* The `.atKeys` *file* does not exist in
+- **D2 — Browser onboarding and key-import UX.** *Un-deferred 2026-10: see §5b and K-1..K-18.* The `.atKeys` *file* does not exist in
   a browser; the flow needs paste, upload or QR feeding bytes into the existing decode
   path.
 - **D3 — Argon2id performance work,** driven by C4.
@@ -1245,15 +1245,15 @@ Dependency order, one major per package:
 
 | # | Package            | Version   | Phase    | Break                                                                                                             |
 | - | ------------------ | --------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1 | `at_chops`         | minor     | C, S6    | none — dependency move only. **S6 (#2162) published in 3.7.0**                                                   |
-| 2 | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http`. **4.0.0-rc3 newest on pub.dev, 2026-10-03** |
-| 3 | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`                                                                |
-| 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **3.7.0-rc3 newest on pub.dev, 2026-10-03**                       |
+| 1 | `at_chops`         | minor     | C, S6    | none — dependency move only. **S6 (#2162) published in 3.7.0; 3.7.1 newest, 2026-11-04** |
+| 2 | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http`. **4.0.0 published 2026-11-04** |
+| 3 | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`. **4.0.0 published 2026-11-04** |
+| 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **4.0.0 published 2026-11-04** |
 | 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **S5 (#2162) published in 1.1.2-rc2**                                            |
 | 5a | `at_persistence_secondary_server` | minor | P | none — additive web open path ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)). **V2** |
-| 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected                                            |
+| 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected. **4.0.0 published 2026-11-04** (#2415) |
 | 7 | `at_client_wasm` | 1.0.0 | W | new — name ruled, see §5b |
-| 8 | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages                                    |
+| 8 | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages. **`at_onboarding_cli` 2.0.0 published 2026-11-04** |
 
 **Coordinate step 8 with the PQ program's S-6**, which bumps the same consumers for
 `at_auth ^4.0.0`. Doing them separately means two breaking sweeps through the same

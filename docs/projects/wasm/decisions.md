@@ -2,7 +2,7 @@
 
 **Status:** decision record (binding).
 **Scope:** the rulings D-1..D-26 that govern the implementation-neutral `AtClient`
-work, the K-1..K-17 rulings on browser at-keys custody (K-6 and K-8 superseded; K-5 re-ruled and K-12 ruled 2026-10-27; K-13 ruled 2026-10-28; K-14..K-16 ruled 2026-10-30; K-17 amended K-10 2026-10-31), the measurements that drove them, the superseded positions from the predecessor
+work, the K-1..K-18 rulings on browser at-keys custody (K-6 and K-8 superseded; K-5 re-ruled and K-12 ruled 2026-10-27; K-13 ruled 2026-10-28; K-14..K-16 ruled 2026-10-30; K-17 amended K-10 2026-10-31; K-18 ruled 2026-11-05), the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
 [`design.md`](design.md); sequencing in [`implementation-plan.md`](implementation-plan.md);
@@ -11,7 +11,7 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
-- [1. The rulings](#1-the-rulings) — D-1..D-26, then [K-1..K-17 browser at-keys custody](#browser-at-keys-custody--k-1k-17)
+- [1. The rulings](#1-the-rulings) — D-1..D-26, then [K-1..K-18 browser at-keys custody](#browser-at-keys-custody--k-1k-18)
 - [2. Measured findings](#2-measured-findings)
 - [3. Superseded positions](#3-superseded-positions)
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
@@ -733,7 +733,9 @@ nothing while there is no VFS.
 dart2wasm the default AES path resolves to pure Dart regardless of thread. See
 [`design.md`](design.md) §C1.
 
-> **Amended 2026-11-02 (browser notifications).** The V1 monitor runs on the main thread of one **leader tab**. The leader is elected by a Web Lock named `at-monitor:<atSign>:<enrollmentId>`, and it forwards the raw `notification:` lines (still ciphertext) to the other tabs over a `BroadcastChannel`. Each tab decrypts on its own. Moving the monitor into a worker or SharedWorker is a **path to explore** in V2, not a commitment, because the whole AtClient and its keys would have to move into the worker too. Tracked in [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439).
+> **Amended 2026-11-02 (browser notifications).** The V1 monitor runs on the main thread of one **leader tab**. The leader is elected by a Web Lock named `at-monitor:<atSign>:<enrollmentId>`, and it forwards the raw `notification:` lines (still ciphertext) to the other tabs over a `BroadcastChannel` of the same name. Each tab decrypts on its own. Moving the monitor into a worker or SharedWorker is a **path to explore** in V2, not a commitment, because the whole AtClient and its keys would have to move into the worker too. Tracked in [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439); rulings recorded [there](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840).
+>
+> **Handover (ruled 2026-11-05).** Every tab tracks the newest notification id and epoch it has seen. A tab that becomes leader starts its monitor from that point and dedupes by notification id (D-24), so a leader change neither loses nor repeats a notification.
 
 ---
 
@@ -864,9 +866,9 @@ into **resume**.
 is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
 the bool's deprecation are a follow-up at_client change.
 
-> **Amended 2026-11-02 (browser notifications, [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439)).**
+> **Amended 2026-11-02 (browser notifications, [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439); [rulings](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840)).**
 >
-> - **The browser default is now *connect*, not *window(1h)*.** The browser preset sets `fetchOfflineNotifications = false`, so it needs no at_client change. Without a checkpoint, *window(1h)* replays the same hour on every reload.
+> - **The browser default is now *connect*, not *window(1h)*.** A browser preset is to set `fetchOfflineNotifications = false`, so it needs no at_client change. Ruled, not built: no preset sets it yet, on trunk or in #2430. Without a checkpoint, *window(1h)* replays the same hour on every reload.
 > - **A reconnect supervisor goes with it.** While the tab is open, the monitor never gives up. It retries once the cause of the disconnect is fixed:
 >
 >   | Cause | Retry when |
@@ -889,6 +891,8 @@ opens for a client given no storage until 4.0. `test/storage/import_boundary_tes
 holds that line for Hive and for SQLite. at_client_flutter's default is Hive under the
 app's support directory, where at_client_mobile's examples put `hiveStoragePath`, and
 at_onboarding_cli already chooses its own.
+
+> **Amended 2026-11-05 (`at_client` 4.0.0, published 2026-11-04).** The Hive default is gone: every factory takes a required `storage`, and `default_storage.dart` is not on trunk. at_client opens no store under `hiveStoragePath`; a caller keeping that store passes `HiveAtClientStorage(storagePath: …)`. The platform-package default above is unchanged.
 
 Everything at_client creates lives on that storage. `AtSyncQueue` takes a `SyncQueueStore`
 from the backend and opens nothing itself, and the Hive queue box moves into the Hive
@@ -944,9 +948,9 @@ Settles P1 on [at_server#2754](https://github.com/atsign-foundation/at_server/is
 **Scope limits (do not lean on this ruling beyond them).** Durability is characterised for renderer death only, not power loss or browser-process kill. Browser coverage is desktop Chromium, Firefox 157, WebKit and Safari 27.0.1; E2 is Chromium-only; mobile is out of scope. A bfcache-parked tab can keep the lock (seen on Firefox), so the app must release on `pagehide` and reacquire on `pageshow` (unbuilt). `sqlite3.wasm` compile time and memory are excluded.
 
 
-### Browser at-keys custody — K-1..K-17
+### Browser at-keys custody — K-1..K-18
 
-The browser lane holds the atSign's @keys behind a passkey, derived from a single WebAuthn PRF call: a **public pointer** (K-10) names the enrollment, and a **private per-enrollment document** (K-11) holds the sealed @keys. Derivation detail, rationale and the test vector live in [`atkeys-derivation.md`](atkeys-derivation.md); the flows and requirements R1–R7 in [`browser-onboarding.md`](browser-onboarding.md). This table is the binding ledger; those two docs must not restate a ruling differently. Server evidence below is at_server trunk `acd5a4ba` and is not verifiable from this repo (every at_server file and line citation in K-1..K-17 is sourced from at_server); `EVH` = `enroll_verb_handler.dart`, `EM` = `enrollment_manager.dart`, `AVH` = `abstract_verb_handler.dart`.
+The browser lane holds the atSign's @keys behind a passkey, derived from a single WebAuthn PRF call: a **public pointer** (K-10) names the enrollment, and a **private per-enrollment document** (K-11) holds the sealed @keys. Derivation detail, rationale and the test vector live in [`atkeys-derivation.md`](atkeys-derivation.md); the flows and requirements R1–R7 in [`browser-onboarding.md`](browser-onboarding.md). This table is the binding ledger; those two docs must not restate a ruling differently. Server evidence below is at_server trunk `acd5a4ba` and is not verifiable from this repo (every at_server file and line citation in K-1..K-18 is sourced from at_server); `EVH` = `enroll_verb_handler.dart`, `EM` = `enrollment_manager.dart`, `AVH` = `abstract_verb_handler.dart`.
 
 | ID | Ruling | Decided |
 | --- | --- | --- |
@@ -967,8 +971,9 @@ The browser lane holds the atSign's @keys behind a passkey, derived from a singl
 | K-15 | **The portal-cut passphrase envelope (R-5/R-6) is not a browser bootstrap.** APKAM enrollment (OTP → `enroll:request`, approver approves, bd `5vf.7`) is the only way a browser gets an enrollment; `tool/cut_keys.dart` (not on trunk; its PR #2272 is closed) stays a dev-only tool. Closes the remainder of browser-onboarding Q-3 | 2026-10-30 |
 | K-16 | **K-13 a is deferred; the first release is PRF-only.** The no-PRF passphrase record waits on browser-onboarding Q-10 (entropy floor, Argon2id parameters, lookup key) and bd `2fk` (Argon2id under dart2wasm). A browser with **no WebAuthn** takes the same path as an authenticator without PRF (K-13 a with no credential) and is deferred with it. Until then, an authenticator without PRF, or a browser without WebAuthn, cannot enroll in the browser lane | 2026-10-30 |
 | K-17 | **The pointer lives in a per-passkey namespace; `atkeysv` is retired.** Amends K-10. `ns = HKDF-SHA256(P, salt = ∅, info = "atkeys-ns\|<atSign>")`, 64 lowercase hex, from the same `P` as the lookup key and kek. The pointer is `public:_<lookupHex>.<ns>@<atSign>`, and the enrollment's `enroll:request` asks for `<ns>:rw` beside the app's namespaces (no `atkeysv:rw`). Only that passkey's enrollment holds `<ns>:rw`, so no other enrollment can overwrite or delete the pointer (closes bead `m0j`; CRAM still can). The namespace cannot be the `enrollmentId`: recovery reads the pointer to learn it. **Cost:** the approver sees an opaque hex namespace in the request. A revoked enrollment's pointer stays in place, as under K-10 (Revocation, Pointer row). Probed P8, 2026-10-16, at_server `310aa150`: `enroll:request` with `{<ns>: rw}` is approved and can update and delete; a `wavi:rw` enrollment cannot delete (`AT0009`); anonymous `lookup:` and a foreign `plookup:` read it | 2026-10-31 |
+| K-18 | **The WebAuthn `user.id` is `SHA-256(atSign)`** (32 bytes) for every atSign; `user.name` carries the atSign. A fixed-size, opaque handle fits WebAuthn's 64-byte cap for any atSign and keeps the atSign out of the authenticator's handle. The `userHandle` from a discoverable `get()` maps back to the atSign through the IndexedDB hint (K-13 c1, K-14) or, with no hint, by asking the user | 2026-11-05 |
 
-**Open flow (K-10, K-11, K-12).** Passkey tap → `P`, `userHandle` = atSign → unauthenticated `lookup:` of the pointer → unseal `enrollmentId` → PKAM → `llookup:` of the document → open with the kek → restored public keys match the published ones, else hard fail (K-5) → only then use the @keys. The PKAM key is the passkey-derived ML-DSA-65 key (K-12), derived from the same `P`.
+**Open flow (K-10, K-11, K-12, K-18).** Passkey tap → `P`, `userHandle` = `SHA-256(atSign)`, resolved to the atSign by the hint or the user → unauthenticated `lookup:` of the pointer → unseal `enrollmentId` → PKAM → `llookup:` of the document → open with the kek → restored public keys match the published ones, else hard fail (K-5) → only then use the @keys. The PKAM key is the passkey-derived ML-DSA-65 key (K-12), derived from the same `P`.
 
 **Proposed, not ruled.**
 
@@ -1114,7 +1119,7 @@ confirmed correct and is the only one recorded below.
 `final` event subclasses, pre-allocated enum slack); there is no `@experimental`. Against
 that: the API is roughly four months old (born `df1272374`, 2026-04-27), took a breaking
 change 2 days after introduction (`fb4c96587`, mandatory `typeTag`), reworked
-`EventSource` semantics since, ships 7 correctness fixes in the current 3.15.0-rc1, and has
+`EventSource` semantics since, shipped 7 correctness fixes in 3.15.0-rc1, and has
 **zero functional/e2e coverage** — all 209 tests in `packages/at_client/test/` are
 mocktail unit tests against `MockAtClient`; nothing in `tests/at_functional_test/` or
 `tests/at_end2end_test/` references it. `js-api.md` §10 marks the JS-side collections
@@ -1272,12 +1277,12 @@ directory endpoint. Whose work is that, and does it belong in this project?
 (`package:web` `fetch`) for the lookup, `wss://` straight to the atServer for the
 session. This is also the browser replacement for `root.atsign.org:64`.
 
-**Open dependencies — the direct path is not usable in production until both land:**
+**Production state (checked 2026-11-05).** The direct path works in production: a browser → CLI chat ran on two production atSigns on 2026-11-03 ([`at-talk-demo.md`](at-talk-demo.md)).
 
-| Dependency | State |
+| Item | State |
 | --- | --- |
-| CORS on the atDirectory's HTTPS face | The server code sends `Access-Control-Allow-Origin: *` on every HTTP answer since at_root_server 2.3.0 (sourced from at_server, not verifiable from this repo; [at_server#2894](https://github.com/atsign-foundation/at_server/pull/2894), merged 2026-10-23). Open: 2.3.0 deployed to `root.atsign.org`, which the repos cannot show, and an allowlist of origins in place of `*`, [at_server#2921](https://github.com/atsign-foundation/at_server/issues/2921). Only the finder's `fetch` needs it; WebSocket opens are not subject to CORS |
-| Prod HTTPS lookup | The prod atDirectory's `:443` listener is not live; `:64` answers only in the raw protocol |
+| CORS on the atDirectory's HTTPS face | `https://root.atsign.org:64/@<atSign>` answers `200` with `Access-Control-Allow-Origin: *` (at_root_server 2.3.0, [at_server#2894](https://github.com/atsign-foundation/at_server/pull/2894)). Still open: an allowlist of origins in place of `*`, [at_server#2921](https://github.com/atsign-foundation/at_server/issues/2921). Only the finder's `fetch` needs CORS; WebSocket opens are not subject to it |
+| Port | `:443` does not answer; the HTTPS face is on `:64`. `webSocketLookUps()` defaults `directoryPort` to 443 (`at_lookup_web.dart:49`), so a caller passes 64 |
 
 **OQ-8 — How far does the `AtConnection` break reach outside this repo?** In-repo
 callers are enumerated in [`design.md`](design.md) §2.1. External `implements
@@ -1333,7 +1338,7 @@ already builds. Must be decided before the browser lane ships notifications.
 defaults to *window(1h)*, which bounds the replay with no checkpoint store at all. The
 IndexedDB record stands, but only for a browser client that opts into *resume*.
 
-> **Corrected 2026-11-02, revised 2026-11-05** (the 11-02 text said `exists` still throws; #2430 implements it). The premise above is wrong. The method is `notification_service_impl.dart:428`, and the read never silently succeeds. As first built, `RemoteWriteThroughKeyStore.exists` **threw** `UnsupportedError`, the watermark read failed, and the monitor reconnected with no epoch, so a reconnect **lost the gap** (seen live: [`at-talk-demo.md`](at-talk-demo.md), `at_client_sdk-336`). In [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) `exists` is `get`-or-`KeyNotFoundException`, and the watermark is a `local:` key held in memory, so reconnects within a session resume from it and a page reload starts from the new session's creation time. The failure is a lost gap, not an unbounded replay. The browser default is now *connect* with a reconnect supervisor (D-24, amended 2026-11-02).
+> **Corrected 2026-11-02, revised 2026-11-05** (the 11-02 text said `exists` still throws; #2430 implements it; [rulings](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840)). The premise above is wrong. The method is `notification_service_impl.dart:428`, and the read never silently succeeds. As first built, `RemoteWriteThroughKeyStore.exists` **threw** `UnsupportedError`, the watermark read failed, and the monitor reconnected with no epoch, so a reconnect **lost the gap** (seen live: [`at-talk-demo.md`](at-talk-demo.md), `at_client_sdk-336`). In [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) `exists` is `get`-or-`KeyNotFoundException`, and the watermark is a `local:` key held in memory, so reconnects within a session resume from it and a page reload starts from the new session's creation time. The failure is a lost gap, not an unbounded replay. The browser default is now *connect* with a reconnect supervisor (D-24, amended 2026-11-02).
 
 ### OQ-14 — Do the registrar asks land?
 
@@ -1408,5 +1413,5 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-10-28 | **PB-0 reservation dropped.** No D-numbers are held for PB-0's unfiled rulings (the portal-requirements routing, R-5); they take the next free numbers when filed. The old reservation of D-26..D-28 also collided with D-26 (SimpleOPFS). |
 | 2026-10-30 | **K-14..K-16 ruled.** K-14: no document replica; IndexedDB holds the hint only (closes the open replica question). K-15: the portal-cut envelope (R-5/R-6) is not a browser bootstrap; APKAM enrollment (`5vf.7`) is the only one, `cut_keys` stays dev-only (closes the Q-3 remainder). K-16: K-13 a deferred behind Q-10 and `2fk`, first release PRF-only; no-WebAuthn takes the no-PRF path and is deferred with it. |
 | 2026-10-31 | **K-17 ruled; K-10 amended.** The pointer moves from `atkeysv` to a per-passkey namespace `ns = HKDF(P, "atkeys-ns\|<atSign>")`; enrollments request `<ns>:rw` instead of `atkeysv:rw`. Closes bead `m0j` (cross-enrollment overwrite) except for CRAM. Cost: the approver sees an opaque namespace. |
-| 2026-11-02 | **Browser notifications ruled; D-19 and D-24 amended; OQ-13 corrected** ([#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439)). V1 is Tier 1 only. The monitor runs in a leader tab elected by a Web Lock, and a `BroadcastChannel` carries the ciphertext lines to the other tabs. A worker monitor is a path to explore. The browser default replay is *connect*, with a reconnect supervisor. The atServer's since filter becomes inclusive ([at_server#2922](https://github.com/atsign-foundation/at_server/issues/2922)), and dedupe by notification id becomes mandatory. Directory CORS is [at_server#2921](https://github.com/atsign-foundation/at_server/issues/2921). Deferred to V2: Tier 2 tickle push, the worker monitor and Chrome Android OS notifications. OS notifications are opt-in. |
-| 2026-11-05 | Doc set brought current: #2214 closed, superseded by [#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415) (4.0.0 package set; #2399's transport reached trunk through it). The remote-only classes and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430), with CI in [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431) and tracking in [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437). Every wasm-gated barrel now has 0 blocked packages. OQ-13's correction revised: `exists` is implemented in #2430, and the watermark is an in-memory `local:` key, so a reload, not a reconnect, loses the gap. |
+| 2026-11-02 | **Browser notifications ruled; D-19 and D-24 amended; OQ-13 corrected** ([#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439), [rulings](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840)). V1 is Tier 1 only. The monitor runs in a leader tab elected by a Web Lock, and a `BroadcastChannel` carries the ciphertext lines to the other tabs. A worker monitor is a path to explore. The browser default replay is *connect*, with a reconnect supervisor. The atServer's since filter becomes inclusive ([at_server#2922](https://github.com/atsign-foundation/at_server/issues/2922)), and dedupe by notification id becomes mandatory. Directory CORS is [at_server#2921](https://github.com/atsign-foundation/at_server/issues/2921). Deferred to V2: Tier 2 tickle push, the worker monitor and Chrome Android OS notifications. OS notifications are opt-in. |
+| 2026-11-05 | Doc set brought current: #2214 closed, superseded by [#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415) (4.0.0 package set; #2399's transport reached trunk through it). The remote-only classes and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430), with CI in [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431) and tracking in [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437). Every wasm-gated barrel now has 0 blocked packages. OQ-13's correction revised: `exists` is implemented in #2430, and the watermark is an in-memory `local:` key, so a reload, not a reconnect, loses the gap. From the #2428 review: **K-18** (`user.id = SHA-256(atSign)`); D-19's `BroadcastChannel` keyed like its lock, with last-seen handover; D-24's browser preset marked not built; D-25 amended for 4.0.0's required `storage`; OQ-7's production state (CORS `*` on `:64`, direct path ran 2026-11-03); the 2026-11-02 rulings recorded on [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840). |

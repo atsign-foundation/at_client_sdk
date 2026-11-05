@@ -1,6 +1,6 @@
 # Browser onboarding — problem definition and solution flow
 
-**Status:** model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; K-5 re-ruled and K-12 (passkey-derived PKAM key) ruled 2026-10-27, its fallbacks ruled 2026-10-28 as K-13 · derivation in [atkeys-derivation.md](atkeys-derivation.md) · build not started (bd `5vf.1`–`5vf.7`); open: Q-3 (portal envelope), Q-4, Q-5, Q-10 (passphrase fallback hardening)
+**Status:** model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; K-5 re-ruled and K-12 (passkey-derived PKAM key) ruled 2026-10-27, its fallbacks ruled 2026-10-28 as K-13 · derivation in [atkeys-derivation.md](atkeys-derivation.md) · build not started (bd `5vf.1`–`5vf.7`); `user.id` ruled 2026-11-05 as K-18 · open: Q-4, Q-5, Q-10 (passphrase fallback hardening)
 **Supersedes:** the shared `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array (PB-5 H/J, live-tested in L step 0a)
 **Resolves:** OQ-19 (prf unlocks accumulate on the server copy)
 
@@ -43,7 +43,7 @@ An app client running in a browser must:
 | Codec | `{ v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv, ct }`, AAD = canonical JSON of the record without `ct` — **no atSign, no credential ID**. `typ` is `"eid"` (pointer) or `"atkeys"` (document) |
 | Pointer (K-10, K-17) | `public:_<lookupHex>.<ns>@<atSign>`, where `<ns>` is the passkey's own namespace (`atkeys-ns`, K-17); plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by the enrollment holding `<ns>:rw`, the only one that can (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.<ns>@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
 | Document (K-11) | `atkeys.<enrollmentId>.a.__e@<atSign>`, private, plaintext = the @keys JSON **without the APKAM private key**. Read and written over PKAM (`llookup:` / `update:`) by that enrollment only; opening it needs the kek, no private key. CRAM can read it but not write it. Not `_`-prefixed, so own-enrollment and CRAM scans list it. Probed P9, 2026-10-20 |
-| Passkey `user.id` | the atSign (UTF-8, ≤ 64 bytes) — returned as `userHandle` on every assertion |
+| Passkey `user.id` | `SHA-256(atSign)`, 32 bytes, for every atSign; `user.name` = atSign (K-18). Returned as `userHandle` on every assertion and mapped back to the atSign by the IndexedDB hint (K-14) or, with no hint, by asking the user |
 | IndexedDB | hint only (K-13 c1): `credentialId`, `enrollmentId` — nothing secret. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
 | APKAM key for PKAM | not stored anywhere (K-11, K-12). **Derived from the passkey**: `authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1\|<atSign>")` seeds an ML-DSA-65 key — the primary path (K-12). With no PRF (K-13): the PKAM key is sealed under a passphrase-derived key in a server-held, public-readable record, no TTL (§3.5) |
 
@@ -69,7 +69,7 @@ sequenceDiagram
     participant A as Authenticator / password manager
     participant S as atServer
     U->>B: atSign
-    B->>A: create(user.id = atSign, residentKey + UV required, prf)
+    B->>A: create(user.id = SHA-256(atSign), user.name = atSign, residentKey + UV required, prf)
     A-->>B: credential ID (+ prf result, if the platform returns it at create)
     opt create returned no prf result
         B->>A: get(allowCredentials = [id], prf.eval.first = salt)
@@ -94,7 +94,7 @@ sequenceDiagram
     participant A as Authenticator
     participant S as atServer
     B->>A: get(allowCredentials = [hint], prf.eval.first = salt)
-    A-->>B: P, userHandle = atSign
+    A-->>B: P, userHandle = SHA-256(atSign) → atSign via hint or user
     B->>S: lookup pointer (unauthenticated) → unseal enrollmentId
     B->>S: PKAM auth as enrollmentId (APKAM key derived from P, K-12)
     B->>S: llookup atkeys.eid.a.__e → open with kek
@@ -111,7 +111,7 @@ sequenceDiagram
     participant A as Authenticator
     participant S as atServer
     B->>A: get(no allowCredentials, prf.eval.first = salt)
-    A-->>B: P, userHandle = atSign, credential ID
+    A-->>B: P, userHandle = SHA-256(atSign), credential ID
     B->>S: lookup(HKDF(P,"atkeys-record-id|atSign")) on atSign's atServer — unauthenticated, no from:
     S-->>B: pointer → unseal enrollmentId with kek
     B->>S: PKAM auth as enrollmentId (APKAM key derived from P, K-12)
@@ -138,13 +138,13 @@ Return and recovery differ only in the credential hint: the server holds everyth
 
 ## 4. Decisions
 
-> **Numbering.** These `BO-n` are local to this doc, prefixed so they cannot be read as the `decisions.md` D-n of the same number. The binding ledger is `decisions.md` K-1..K-13: local BO-1 → K-2 (and K-3), BO-2 → K-1, BO-4 → K-8 (superseded by K-11), BO-5 → K-8 (survives), BO-6 → K-6 (superseded by K-10), BO-7 → K-10 and K-11, BO-9 → K-4 and K-5. BO-3 and BO-8 are design choices without a K ruling. K-12 (passkey-derived PKAM key) has no local BO; see §2. K-13 → BO-10.
+> **Numbering.** These `BO-n` are local to this doc, prefixed so they cannot be read as the `decisions.md` D-n of the same number. The binding ledger is `decisions.md` K-1..K-18: local BO-1 → K-2 (and K-3), BO-2 → K-1, BO-4 → K-8 (superseded by K-11), BO-5 → K-8 (survives), BO-6 → K-6 (superseded by K-10), BO-7 → K-10 and K-11, BO-9 → K-4 and K-5. BO-3 and BO-8 are design choices without a K ruling. K-12 (passkey-derived PKAM key) has no local BO; see §2. K-13 → BO-10. K-18 supersedes BO-3.
 
 | # | Decision | Why |
 |---|---|---|
 | BO-1 | **One PRF evaluation, two HKDF derivations** (lookup, kek); **no stored salt** | a stored random salt is server-controlled: as a PRF input it lets the server make the blob key equal the lookup key it already knows (key substitution), and costs a second prompt; as an HKDF salt it adds nothing to a 256-bit PRF output. Labels carry the atSign |
-| BO-2 | **PRF salt is constant, not derived from the atSign** (changes Gary's model) | `get()` runs locally before any network call; the atSign it returns in `userHandle` then drives root lookup, `lookup:` and `from:`. The salt must be in the request, so it can't depend on the atSign; PRF output is already unique per credential |
-| BO-3 | **atSign in `user.id`** | the only per-passkey storage that survives a cleared browser and needs no extra ceremony; makes R3 typing-free |
+| BO-2 | **PRF salt is constant, not derived from the atSign** (changes Gary's model) | `get()` runs locally before any network call; the atSign its `userHandle` resolves to (K-18) then drives root lookup, `lookup:` and `from:`. The salt must be in the request, so it can't depend on the atSign; PRF output is already unique per credential |
+| BO-3 | ~~**atSign in `user.id`**~~ **superseded 2026-11-05 by K-18** (`user.id = SHA-256(atSign)`). Was: the only per-passkey storage that survives a cleared browser and needs no extra ceremony | with the hint gone, R3 asks the user for the atSign once; the passkey alone still recovers the keys |
 | BO-4 | ~~APKAM private key inside the blob~~ **superseded 2026-10-27 by K-11** (the document holds no APKAM private key). Was: for the session, imported non-extractable into WebCrypto when WebCrypto supports its algorithm, otherwise held in Dart memory | a non-extractable key persisted by the browser lives in IndexedDB and dies with it — R3 would require re-enrollment |
 | BO-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded with the enrollment (`signingAlgo`) | crypto agility already exists in at_chops. The browser makes the choice at enrollment, among algorithms whose keygen finishes within a UI time budget. On the primary path K-12 fixes the APKAM key to ML-DSA-65, derived from the passkey; this choice applies to the fallbacks; the fallback algorithm stays open (U-2, not ruled by K-13). The APKAM key is a software key, so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer (Q-4) |
 | BO-6 | ~~`ttl` refreshed on open prunes dead passkeys~~ **superseded 2026-10-27 by K-10**: the pointer has no TTL | — |

@@ -1,7 +1,7 @@
 # VFS / W4 live lab — results
 
 **Date:** 2026-10-13 · **Browser:** Chromium 156.0.8078.4 (Playwright headless) unless stated ·
-**Harness:** `packages/at_client_wasm/tool/vfs_lab/` (+ `tool/payload/measure.sh`) ·
+**Harness:** `packages/at_client_wasm/tool/vfs_lab/` (+ `tool/payload/measure.sh`), not on trunk: kept at commit [`aaa0758c8`](https://github.com/atsign-foundation/at_client_sdk/tree/aaa0758c8) on branch `st/wasm/atkeys-derivation` (closed PR [#2378](https://github.com/atsign-foundation/at_client_sdk/pull/2378)) ·
 **Plan:** `plans/2026-10-12-vfs-live-test.md` (local) · **Settles:** W4, P1 ([at_server#2754](https://github.com/atsign-foundation/at_server/issues/2754)), and amends [D-21](decisions.md) via [D-26](decisions.md).
 
 ## Verdict
@@ -93,6 +93,8 @@ This is the sharpest result. Atomicity under a crash (E2) does not protect Index
 - The lab drives SQLite directly; worker/main-thread wiring for the real `AtKeyStore` is separate work.
 
 ## Reproduce
+
+The harness needs `packages/at_client_wasm`, which is not on trunk yet ([#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430)). Check out `aaa0758c8`, then:
 
 ```bash
 cd packages/at_client_wasm
