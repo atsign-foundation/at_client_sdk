@@ -27,22 +27,39 @@ side and gate (c).
 ## Derivation
 
 ```text
-ikm      = PRF(device secret, userHandle salt)          // one call, one prompt
-recordId = HKDF(ikm, info = "atkeys-record-id|<atSign>")
-kek      = HKDF(ikm, info = "atkeys-kek|<atSign>")
+ikm      = PRF(device secret, "atkeys-prf-v1")     // one call, one prompt
+recordId = HKDF(ikm, salt = userHandle, info = "atkeys-record-id|<atSign>")
+kek      = HKDF(ikm, salt = userHandle, info = "atkeys-kek|<atSign>")
 ```
 
 * **Domain separation.** The two outputs differ only by label, so neither can
   be made equal to the other. The raw `ikm` never leaves the device.
-* **No server-chosen input.** The PRF salt is the passkey's `userHandle`
+* **A constant PRF input.** WebAuthn fixes the PRF input in the `get()`
+  request, and the `userHandle` arrives only in the response, so a
+  `userHandle` input would need a second `get()` — and a second prompt —
+  before anything could be derived. The input is a fixed constant instead,
+  and the `userHandle` returned by the same `get()` is the HKDF salt.
+* **No server-chosen input.** The HKDF salt is the passkey's `userHandle`
   ([`apkam-custody.md` section 4](apkam-custody.md#4-custody-tiers-and-the-ranking-rule)),
   held by the authenticator, not stored beside the blob.
 * **atSign-bound.** One device with two atSigns gets two unrelated recordIds.
 * **Fresh key per write** comes from the envelope's random data key, not from a
   PRF salt. Rewrapping is 32 bytes.
 
-The record is `public:_<recordId>@<atSign>`, with a **single** underscore:
+The record is `public:_<recordId>@<atSign>`, with a **single** underscore, and
+its body is the enrollment id in the clear beside the envelope:
 
+```json
+{"enrollmentId": "<id>", "envelope": {"v": 2, ...}}
+```
+
+* The id can't be derived: the atServer assigns it at `enroll:request`, after
+  the passkey and its `userHandle` already exist. After an eviction, or on a
+  second synced device, nothing on the device holds it, yet gate (c)'s PKAM,
+  the private record's name and the envelope's AAD all need it. So it travels
+  in the record, unencrypted. It reaches only someone who already knows the
+  256-bit name, and it is only an enrollment id: the envelope's data key
+  stays wrapped under the `kek`.
 * at_server gives `public:_` keys no commit-log row, so they never sync to
   other clients (`HiveAtCommitLog` and `SqliteAtCommitLog` skip `public:_`;
   `public:__` keys *do* sync).
@@ -58,7 +75,7 @@ The record is `public:_<recordId>@<atSign>`, with a **single** underscore:
 | Item | Created | Kept where |
 | --- | --- | --- |
 | **Device secret** | Once per device, at first setup | Authenticator / enclave / TPM; survives app-storage wipes |
-| **userHandle salt** | With the device secret | In the passkey (returned by a discoverable `get()`) or the keychain item |
+| **userHandle (HKDF salt)** | With the device secret | In the passkey (returned by a discoverable `get()`) or the keychain item |
 | **Data key + IV** | Every write | Data key wrapped by `kek` in the envelope; IV in clear |
 | **recordId**, **kek** | Re-derived at setup and restore | Memory only |
 
@@ -72,25 +89,25 @@ sequenceDiagram
     participant AS as atServer
 
     Note over S,AS: Setup: device has its atKeys and is authenticated
-    A->>S: create device secret + userHandle salt (first setup only)
+    A->>S: create device secret + userHandle (first setup only)
     Note over S: secret never leaves
-    A->>S: PRF(userHandle salt)
-    S-->>A: ikm
-    A->>A: recordId, kek = HKDF(ikm, two labels, atSign)
+    A->>S: PRF("atkeys-prf-v1")
+    S-->>A: ikm, userHandle (same get() returns both)
+    A->>A: recordId, kek = HKDF(ikm, salt = userHandle, two labels, atSign)
     A->>A: fresh data key, envelope v2 (AES-GCM, AAD = atSign, enrollmentId, v)
     A->>A: wrap data key with kek
-    A->>AS: update public:_<recordId> = envelope
+    A->>AS: update public:_<recordId> = enrollmentId + envelope
 
     Note over S,AS: Restore: app restarts with nothing stored locally
-    A->>S: PRF(userHandle salt)
-    S-->>A: ikm (same as setup)
-    A->>A: recordId, kek = HKDF(ikm, two labels, atSign)
+    A->>S: PRF("atkeys-prf-v1")
+    S-->>A: ikm, userHandle (same as setup)
+    A->>A: recordId, kek = HKDF(ikm, salt = userHandle, two labels, atSign)
     A->>AS: lookup public:_<recordId>
-    AS-->>A: envelope
+    AS-->>A: enrollmentId + envelope
     A->>A: unwrap data key with kek, decrypt (AAD checked)
     A->>A: check keys match the published public keys
     Note over A: browser: APKAM key re-derived from the passkey (gate c)
-    A->>AS: authenticate (PKAM)
+    A->>AS: authenticate (PKAM, enrollmentId)
 ```
 
 ## Payload
@@ -109,6 +126,15 @@ sequenceDiagram
   ([`apkam-custody.md` section 9](apkam-custody.md#9-the-browser-as-the-only-device)).
   The alternative, carrying the browser's APKAM private key in the blob, is not
   taken: it puts the key the atServer authenticates on the atServer.
+* **Gate (c) alone can't bootstrap a wiped device either.** Its PKAM carries
+  `enrollmentId:<id>`, the private record is `atkeys.<enrollmentId>.a.__e`, and
+  the id is part of the envelope's AAD, so the id has to be in hand before the
+  first PKAM — and after a wipe, or on a second synced device, nothing on the
+  device holds it, because the atServer assigns it at `enroll:request`. That is
+  why the record carries the id beside the envelope, and why gate (a) is kept
+  in the browser rather than replaced by gate (c): the public record is the
+  bootstrap that hands the id to gate (c), which then authenticates and reads
+  the private record.
 
 ## Where the device secret comes from
 
@@ -148,12 +174,17 @@ one.
 ## Decisions
 
 1. Replace local `.atKeys` files with an envelope v2 on the atServer.
-2. One PRF call; recordId and kek are domain-separated HKDF outputs bound to the atSign.
+2. One PRF call, with a constant input (the `userHandle` arrives only in the
+   response, so it is the HKDF salt); recordId and kek are domain-separated
+   HKDF outputs bound to the atSign.
 3. Per-write freshness comes from the envelope's data key; no server-stored PRF salt.
 4. The recordId hides the record; confidentiality rests on the kek.
 5. The record is `public:_`, so it is not synced or in the commit log.
 6. APKAM private keys never enter the blob.
 7. Build the web version first.
+8. The record carries the enrollment id in the clear beside the envelope, so
+   an evicted device or a new synced device can bootstrap gate (c), whose PKAM
+   and AAD both need it.
 
 ## Threats
 
@@ -164,12 +195,12 @@ From an adversarial review of the first draft of this doc (33 findings).
 | Finding | Fix |
 | --- | --- |
 | A writer chooses the stored salt so `wrapKey = recordId`, then substitutes keys | No server-supplied PRF input; separate labels |
-| No AEAD, so blobs can be tampered with, spliced or rolled back | Envelope v2: AES-GCM, AAD = atSign, enrollmentId, version |
+| No AEAD, so blobs can be tampered with, spliced or rolled back | Envelope v2: AES-GCM, AAD = atSign, enrollmentId, version. This fixes tampering and splicing; whole-record rollback is *not* fixed and is in Open below |
 | Raw PRF output used as the name lets the server compute the key | Raw `ikm` never leaves the device |
 | recordId links atSigns; nothing binds the atSign | atSign in both labels and the AAD |
 | recordId reaches other apps through sync | `public:_` has no commit-log row |
 | recordId exposed on the wire | TLS, moving to PQ-TLS (the atServer and its logs still see it; see Open) |
-| Two prompts per cold start | One PRF call |
+| Two prompts per cold start | One PRF call, with a constant input: the userHandle arrives only in the `get()` response, so using it as the PRF input would need a second `get()`; it is the HKDF salt instead |
 | Key substitution on restore goes unnoticed | Check against published public keys before PKAM |
 | Whole keyfile, including APKAM keys, on the server | APKAM keys excluded |
 
@@ -184,8 +215,9 @@ From an adversarial review of the first draft of this doc (33 findings).
 
 | Finding | Direction |
 | --- | --- |
-| Gate (a) read is unauthenticated: anyone with the name can fetch | Gate (c) replaces it with PKAM then a private record |
-| Revocation doesn't reach a gate (a) record | Gate (c) moves the record with the enrollment |
+| Gate (a) read is unauthenticated: anyone with the name can fetch | Not closed by gate (c): the record stays as the bootstrap that hands gate (c) the enrollment id, so the read stays unauthenticated. Only the id is in the clear and it is reachable only by name; the envelope stays under the kek. A fetch-gate on the record would close it |
+| Revocation doesn't reach a gate (a) record | Not closed by gate (c): revoking the enrollment must also delete or move the bootstrap record; until an atServer does that, a revoked record's id and ciphertext stay fetchable by name |
+| Whole-record rollback: the atServer, or a writer, answers the restore lookup with an older complete envelope for the same atSign and enrollment | AEAD doesn't catch it — the AAD values are the same for every write and each envelope carries its own data key, so an older envelope still unwraps and authenticates. The published-public-keys check catches only a rollback across a key the client checks. A monotonic write counter needs a client that has seen a newer write; a wiped client has nothing to compare against. Recovery floor: re-enrollment (OTP) |
 | Per-atSign rate limit would let anyone lock out restores | Limit misses per source, not per atSign |
 | Device secret never rotates | Rotation = new secret, new recordId, delete old record |
 | Wipe premise varies (uninstall, migration, TPM clear, biometric re-enroll) | Define "wipe" per platform; test it |
