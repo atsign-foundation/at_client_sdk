@@ -13,20 +13,13 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:pqcrypto/pqcrypto.dart';
 import 'package:test/test.dart';
 
-Uint8List _hex(String s) {
-  final out = Uint8List(s.length ~/ 2);
-  for (var i = 0; i < out.length; i++) {
-    out[i] = int.parse(s.substring(i * 2, i * 2 + 2), radix: 16);
-  }
-  return out;
-}
+import 'ml_dsa_65_acvp_vectors.dart';
 
 String _toHex(Uint8List b) =>
     b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
@@ -36,17 +29,10 @@ String _toHex(Uint8List b) =>
 String _expectHex(Object? nistHex) => (nistHex as String).toLowerCase();
 
 void main() {
-  final vectors =
-      jsonDecode(File('test/vectors/ml_dsa_65_acvp.json').readAsStringSync())
-          as Map;
-
-  List<Map<String, dynamic>> vectorsFor(String name) =>
-      (vectors[name] as List).cast<Map<String, dynamic>>();
-
   const params = DilithiumParams.mlDsa65;
 
   group('ML-DSA-65 ACVP keyGen', () {
-    final cases = vectorsFor('keyGen');
+    final cases = mlDsa65AcvpGroup('keyGen');
 
     test('the fixture carries every published ML-DSA-65 keyGen vector', () {
       expect(cases, hasLength(25));
@@ -55,15 +41,26 @@ void main() {
     for (final c in cases) {
       test('tcId ${c['tcId']}: the seed derives the published keypair', () {
         final (pk, sk) =
-            MlDsa.generateKeyPairSeeded(params, _hex(c['seed'] as String));
+            MlDsa.generateKeyPairSeeded(params, acvpHex(c['seed'] as String));
         expect(_toHex(pk), _expectHex(c['pk']));
         expect(_toHex(sk), _expectHex(c['sk']));
       });
     }
   });
 
+  group('ML-DSA-65 ACVP keyGen through MlDsa65PureDartAlgo.keyPairFromSeed',
+      () {
+    for (final v in mlDsa65KeyGenVectors()) {
+      test('tcId ${v.tcId}: the seed derives the published keypair', () async {
+        final kp = await MlDsa65PureDartAlgo().keyPairFromSeed(v.seed);
+        expect(kp.publicKey, v.pk);
+        expect(kp.secretKey, v.sk);
+      });
+    }
+  });
+
   group('ML-DSA-65 ACVP sigGen (deterministic)', () {
-    final cases = vectorsFor('sigGenDeterministic');
+    final cases = mlDsa65AcvpGroup('sigGenDeterministic');
 
     test('the fixture carries every published deterministic vector', () {
       expect(cases, hasLength(15));
@@ -75,10 +72,10 @@ void main() {
       // NIST's bytes exactly rather than merely producing something verifiable.
       test('tcId ${c['tcId']}: signing reproduces the published signature', () {
         final sig = MlDsa.signDeterministic(
-          _hex(c['sk'] as String),
-          _hex(c['message'] as String),
+          acvpHex(c['sk'] as String),
+          acvpHex(c['message'] as String),
           params,
-          ctx: _hex(c['context'] as String),
+          ctx: acvpHex(c['context'] as String),
         );
         expect(_toHex(sig), _expectHex(c['signature']));
       });
@@ -86,7 +83,7 @@ void main() {
   });
 
   group('ML-DSA-65 ACVP sigGen (hedged)', () {
-    final cases = vectorsFor('sigGenHedged');
+    final cases = mlDsa65AcvpGroup('sigGenHedged');
 
     // Hedged signing mixes in fresh randomness, and `MlDsa.sign` draws it
     // internally, so these signatures cannot be reproduced. Verifying them is
@@ -95,11 +92,11 @@ void main() {
       test('tcId ${c['tcId']}: the published signature verifies', () {
         expect(
           MlDsa.verify(
-            _hex(c['pk'] as String),
-            _hex(c['message'] as String),
-            _hex(c['signature'] as String),
+            acvpHex(c['pk'] as String),
+            acvpHex(c['message'] as String),
+            acvpHex(c['signature'] as String),
             params,
-            ctx: _hex(c['context'] as String),
+            ctx: acvpHex(c['context'] as String),
           ),
           isTrue,
         );
@@ -108,7 +105,7 @@ void main() {
   });
 
   group('ML-DSA-65 ACVP sigVer', () {
-    final cases = vectorsFor('sigVer');
+    final cases = mlDsa65AcvpGroup('sigVer');
 
     test('the fixture carries both arms', () {
       // NIST publishes negative cases with a `reason` naming what was
@@ -124,11 +121,11 @@ void main() {
       test('tcId ${c['tcId']} ($reason): verify returns $expected', () {
         expect(
           MlDsa.verify(
-            _hex(c['pk'] as String),
-            _hex(c['message'] as String),
-            _hex(c['signature'] as String),
+            acvpHex(c['pk'] as String),
+            acvpHex(c['message'] as String),
+            acvpHex(c['signature'] as String),
             params,
-            ctx: _hex(c['context'] as String),
+            ctx: acvpHex(c['context'] as String),
           ),
           expected,
         );
@@ -173,13 +170,13 @@ void main() {
       // signature is valid, run through the public API rather than the
       // primitive. It comes from sigGen rather than sigVer because sigVer's
       // only empty-context row is a negative case.
-      final c = vectorsFor('sigGenDeterministic')
+      final c = mlDsa65AcvpGroup('sigGenDeterministic')
           .firstWhere((c) => c['context'] == '');
       expect(
         MlDsa65PureDartAlgo.verifyBytesSync(
-          _hex(c['message'] as String),
-          signature: _hex(c['signature'] as String),
-          publicKey: _hex(c['pk'] as String),
+          acvpHex(c['message'] as String),
+          signature: acvpHex(c['signature'] as String),
+          publicKey: acvpHex(c['pk'] as String),
         ),
         isTrue,
       );
