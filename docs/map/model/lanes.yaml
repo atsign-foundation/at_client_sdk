@@ -1,0 +1,14 @@
+# Participants are roles held by @alice and @bob, never real atSigns:
+# <atSign>.<role>[.<instance>]. A client lane is split into the components a
+# step names as its sublane.
+lanes:
+  - id: alice.client
+    title: "@alice's client"
+    sublanes: [AtClient, Crypto, LocalSecondary, SyncService]
+  - id: alice.server
+    title: "@alice's atServer"
+  - id: bob.server
+    title: "@bob's atServer"
+  - id: bob.client
+    title: "@bob's client"
+    sublanes: [Monitor, NotificationService]

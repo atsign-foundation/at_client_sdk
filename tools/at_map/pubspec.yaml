@@ -1,0 +1,22 @@
+name: at_map
+description: >-
+  Dev-only generator and gate for the SDK map in docs/map: reads the curated
+  model, checks it against this checkout and a pinned at_server, and writes
+  the generated data the page loads.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dependencies:
+  analyzer: ^13.3.0
+  args: ^2.6.0
+  crypto: ^3.0.5
+  path: ^1.9.0
+  yaml: ^3.1.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

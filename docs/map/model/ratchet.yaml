@@ -1,0 +1,20 @@
+# The test-evidence figure: for each flow, the exits on its server path whose
+# message a test's string literal holds (a text match, not proof the test
+# trips the exit). The map job reports a fall and never fails on one.
+share-record:
+  named: 14
+  exits:
+    - "alice-server-update: AbstractUpdateVerbHandler._checkMaxLength key.length > maxLength throw"
+    - "alice-server-update: AbstractUpdateVerbHandler.preProcess keyType case KeyType.privateKey || KeyType.cachedPublicKey || KeyType.cachedSharedKey || KeyType.localKey || KeyType.invalidKey throw"
+    - "alice-server-update: AbstractUpdateVerbHandler.preProcess reserved != null throw"
+    - "alice-server-update: AbstractVerbHandler._applyEnrollmentValidations atKeyObj.namespace != namespace throw"
+    - "alice-server-update: AbstractVerbHandler._applyEnrollmentValidations operation.isNotEmpty && enrollDataStoreValue.namespaces.containsKey(EnrollmentConstants.enrollManageNamespace) == false throw"
+    - "alice-server-update: validateTTR ttrMs <= -2 throw"
+    - "alice-server-update: validateTTR ttrMs <= -2 throw #2"
+    - "alice-server-update: validateTTR ttrMs <= -2 throw #3"
+    - "bob-server-accept: NotifyVerbHandler._refuseForeignAtSigns sharedBy != fromAtSign throw"
+    - "bob-server-accept: NotifyVerbHandler._refuseOverlongId (verbParams[AtConstants.id]?.length ?? 0) > maxIdLength throw"
+    - "bob-server-accept: NotifyVerbHandler.processVerb !atConnectionMetadata.isAuthenticated && !atConnectionMetadata.isPolAuthenticated throw"
+    - "bob-server-accept: refuseOverlongNotificationKey length > maxNotificationKeyLength throw"
+    - "bob-server-from: FromVerbHandler.processVerb !result throw"
+    - "bob-server-from: FromVerbHandler.processVerb inBlockList throw"

@@ -1,0 +1,252 @@
+id: share-record
+title: "@alice shares a record with @bob, and @bob's client hears of it"
+summary: >-
+  @alice's client puts @bob:note.ns@alice. The write lands in local storage
+  and the sync queue, and sync pushes it to @alice's atServer in a batch:
+  command. @alice's atServer stores it and, with autoNotify on, queues a
+  notification for @bob. It proves itself to @bob's atServer with from: and
+  pol, then sends notify:. @bob's atServer accepts the notification and pushes
+  it to @bob's monitor connection, and @bob's client hands it to its
+  subscribers.
+lenses: [notifications, sync, e2e]
+lanes: [alice.client, alice.server, bob.server, bob.client]
+retired: []
+frames:
+  - kind: loop
+    label: sync sends queued writes in batches until the queue is empty
+    from: alice-push
+    to: alice-server-update
+  - kind: opt
+    label: the atServer's autoNotify setting is on
+    from: alice-server-queue
+    to: bob-deliver
+steps:
+  - id: alice-put
+    lane: alice.client
+    sublane: AtClient
+    intent: Validate @bob:note.ns@alice, set its sharedBy to @alice, let the crypto provider prepare the write, then build the update command.
+    anchor:
+      code: sdk:packages/at_client/lib/src/client/at_client_impl.dart
+      symbol: AtClientImpl._putInternal
+      contains: "await CryptoRuntime(this).prepareWrite("
+    reached: entry
+    claims:
+      - refuses: a key that fails AtKeyValidators, for example one @alice does not own
+        backing:
+          exit: {symbol: AtClientImpl._putInternal, guard: "!validationResult.isValid"}
+    reviewed: 6f111480fad6379d
+
+  - id: alice-encrypt
+    lane: alice.client
+    sublane: Crypto
+    intent: With the legacy crypto provider, encrypt the value under the symmetric key @alice shares with @bob, with a fresh IV.
+    anchor:
+      code: sdk:packages/at_client/lib/src/crypto/legacy/legacy_encryption.dart
+      symbol: SharedKeyEncryption.encrypt
+      contains: "AESEncryptionAlgo(AESKey(sharedKey))"
+    reached:
+      from: alice-put
+      via: untraced
+      note: the put transformer reaches it through the crypto provider the key's write selected
+    reviewed: a6853990e3db8960
+
+  - id: alice-route
+    lane: alice.client
+    sublane: AtClient
+    intent: Send the update to local storage, the default, or straight to @alice's atServer when the write asks for remote.
+    anchor:
+      code: sdk:packages/at_client/lib/src/client/at_client_impl.dart
+      symbol: AtClientImpl.executeUpdateOrDelete
+      contains: "return await localSecondary!.executeVerb(builder);"
+    reached:
+      from: alice-put
+    reviewed: 06f7912c16904574
+
+  - id: alice-enqueue
+    lane: alice.client
+    sublane: LocalSecondary
+    intent: Once the local write succeeds, queue the record's name for sync and ask the sync service to drain the queue.
+    anchor:
+      code: sdk:packages/at_client/lib/src/client/local_secondary.dart
+      symbol: LocalSecondary._enqueueForSync
+      contains: "await q.enqueue(atKey, op);"
+    reached:
+      via: [LocalSecondary.executeVerb, LocalSecondary._update]
+    touches: [sync-queue]
+    reviewed: 6b761184a3641116
+
+  - id: alice-push
+    lane: alice.client
+    sublane: SyncService
+    intent: Read queued names a batch at a time, build each record's update from local storage, and send the batch to @alice's atServer.
+    anchor:
+      code: sdk:packages/at_client/lib/src/service/sync_service_impl.dart
+      symbol: SyncServiceImpl._pushFromSyncQueue
+      contains: "batchResponse = await sendBatch(batchRequests);"
+    reached:
+      hop:
+        declared:
+          code: sdk:packages/at_client/lib/src/sync/at_sync_queue.dart
+          symbol: AtSyncQueue
+      note: the queue is durable, so the push may run in a later session than the write
+    touches: [sync-queue]
+    reviewed: 45f6fb828b67912e
+
+  - id: alice-server-batch
+    lane: alice.server
+    intent: Parse the batch and hand each entry's command to the handler dispatch chooses, answering each entry on its own.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/verb/handler/batch_verb_handler.dart
+      symbol: BatchVerbHandler.processVerb
+      contains: "verbHandlerManager.getVerbHandler(command)"
+    reached:
+      wire: batch
+      sample: 'batch:[{"id":1,"command":"update:@bob:note.ns@alice bm90IGEgcmVhbCBjaXBoZXJ0ZXh0"}]'
+    reviewed: 080ed912f887cb2c
+
+  - id: alice-server-update
+    lane: alice.server
+    intent: Check the connection may write the key, store the record with its commit, then queue the auto-notification.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/verb/handler/update_verb_handler.dart
+      symbol: UpdateVerbHandler.processVerb
+      contains: "await super.notifyAfterStore("
+    reached:
+      wire: update
+      nested: true
+      sample: "update:@bob:note.ns@alice bm90IGEgcmVhbCBjaXBoZXJ0ZXh0"
+    claims:
+      - refuses: a write the connection's enrollment is not authorized to make
+        backing:
+          exit: {symbol: AbstractUpdateVerbHandler.preProcess, guard: "!isAuthorized"}
+      - refuses: a write into a reserved namespace
+        backing:
+          exit: {symbol: AbstractUpdateVerbHandler.preProcess, guard: "reserved != null"}
+    touches: [keystore, commit-log]
+    reviewed: 85f2b16946cd8860
+
+  - id: alice-server-queue
+    lane: alice.server
+    intent: Build a notification for @bob from the stored record, persist it, and add it to the sender for @bob.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/notification/notification_manager_impl.dart
+      symbol: NotificationManager.enqueue
+      contains: "case NotificationType.sent:"
+    reached:
+      via: [AbstractUpdateVerbHandler.notifyAfterStore, AbstractUpdateVerbHandler.notify, NotificationManager.notify]
+    touches: [notification-store]
+    reviewed: 9fb5caac3bdeb250
+
+  - id: alice-server-send
+    lane: alice.server
+    intent: Take notifications for @bob one at a time and send each over an outbound connection, retrying until it is delivered or expires.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/notification/notification_manager_impl.dart
+      symbol: PerAtSignNotifSender.send
+      contains: "await outBoundClient.notify(notifyCommandBody)"
+    reached:
+      hop:
+        stream:
+          code: server:packages/at_secondary_server/lib/src/notification/notification_manager_impl.dart
+          symbol: PerAtSignNotifSender.notifs
+      via: [PerAtSignNotifSender.onNotif]
+    reviewed: a593cc0ada4e95e7
+
+  - id: bob-server-from
+    lane: bob.server
+    intent: Answer from:@alice with a challenge bound to @bob's atServer, stored for one minute, unless @alice is on @bob's blocklist.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/verb/handler/from_verb_handler.dart
+      symbol: FromVerbHandler.processVerb
+      contains: "SecondaryUtil.buildBoundPolChallenge(currentAtSign)"
+    reached:
+      wire: from
+      sample: "from:@alice"
+    claims:
+      - refuses: "a from: naming an atSign on this atSign's blocklist"
+        backing:
+          exit: {symbol: FromVerbHandler.processVerb, guard: inBlockList}
+    reviewed: 84d7c4500f1ab546
+
+  - id: bob-server-pol
+    lane: bob.server
+    intent: Fetch @alice's signed challenge and signing_publickey@alice, spend the stored challenge, and mark the connection pol-authenticated only if the signature verifies.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/verb/handler/pol_verb_handler.dart
+      symbol: PolVerbHandler.processVerb
+      contains: "message = await consumeChallenge(storedSecretId);"
+    reached:
+      wire: pol
+      sample: pol
+    claims:
+      - refuses: "pol on a connection with no earlier from:"
+        backing:
+          exit: {symbol: PolVerbHandler.processVerb, guard: "atConnectionMetadata.from != true"}
+      - refuses: a signature over the challenge that does not verify against signing_publickey@alice
+        backing:
+          exit: {symbol: PolVerbHandler.processVerb, guard: "!isValidChallenge"}
+    reviewed: 13bd576ff341e88f
+
+  - id: bob-server-accept
+    lane: bob.server
+    intent: Accept @alice's notification only if it is for @bob and its sharedBy is the atSign pol proved.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/verb/handler/notify_verb_handler.dart
+      symbol: NotifyVerbHandler._handlePolAuthenticatedConnection
+      contains: "_refuseForeignAtSigns(verbParams,"
+    reached:
+      wire: notify
+      sample: "notify:id:0a1b2c3d-1111-2222-3333-444455556666:update:messageType:key:@bob:note.ns@alice:bm90IGEgcmVhbCBjaXBoZXJ0ZXh0"
+      via: [NotifyVerbHandler.processVerb]
+    claims:
+      - refuses: a notification whose sharedBy is not the atSign pol proved
+        backing:
+          exit: {symbol: NotifyVerbHandler._refuseForeignAtSigns, guard: "sharedBy != fromAtSign"}
+      - refuses: a notification for an atSign other than @bob
+        backing:
+          exit: {symbol: NotifyVerbHandler._refuseForeignAtSigns, guard: "sharedWith != currentAtSign"}
+    post:
+      - text: a notification into a reserved namespace is dropped and answered data:success
+        backing:
+          gherkin:
+            feature: server:features/notify/peer_reserved_namespace.feature
+            scenario: Another atServer's notification into a reserved namespace is dropped
+            clause: Then it gets data:success
+      - text: a notification whose id this atServer already holds is not stored again, and is answered data:success
+        backing:
+          exit: {symbol: NotifyVerbHandler._handlePolAuthenticatedConnection, guard: "await notifMgr.isKeyExists(n.id!)"}
+    reviewed: 4c59ba21162ee7be
+
+  - id: bob-server-push
+    lane: bob.server
+    intent: Hand the stored notification to the feed of every monitor connection @bob's clients hold, each exactly once.
+    anchor:
+      code: server:packages/at_secondary_server/lib/src/notification/notification_manager_impl.dart
+      symbol: NotificationManager._pushToMonitors
+      contains: "sink.push(n, report: report);"
+    reached:
+      via: [NotificationManager.notify, NotificationManager.enqueue]
+    touches: [notification-store]
+    reviewed: 6e8a48292ec822e7
+
+  - id: bob-receive
+    lane: bob.client
+    sublane: Monitor
+    intent: Pause the monitor stream while a notification is handled, so notifications are handled one at a time and in order.
+    anchor:
+      code: sdk:packages/at_client/lib/src/manager/monitor.dart
+      symbol: Monitor._onNotification
+      contains: "await handleNotification(notification);"
+    reached:
+      push: the atServer writes the notification to the monitor connection, which at_lookup delivers as a stream
+    reviewed: c19f50b1766931e5
+
+  - id: bob-deliver
+    lane: bob.client
+    sublane: NotificationService
+    intent: Parse the notification, deliver it to each matching subscriber in order, then save its time as the watermark a reconnect replays from.
+    anchor:
+      code: sdk:packages/at_client/lib/src/service/notification_service_impl.dart
+      symbol: NotificationServiceImpl.handleNotificationReceipt
+      contains: "_lastReceivedMillis = n.epochMillis;"
+    reviewed: fe2417dbf132ca3b

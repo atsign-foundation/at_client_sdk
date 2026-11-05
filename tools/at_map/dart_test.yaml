@@ -1,0 +1,7 @@
+# Several times the slowest test on a CI runner, where a cold resolve and
+# three checks take over 30 s.
+timeout: 3m
+
+tags:
+  chrome:
+    description: Opens the page in headless Chrome.
