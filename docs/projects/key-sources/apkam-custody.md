@@ -93,8 +93,9 @@ built:
 - **hw-kem.** The Secure Enclave holds an ML-KEM-1024 key. Its public half is
   advertised with the existing `ml-kem-1024-rfc9180-v1` suite, and
   `privateDecapsulation` is a reference, never bytes.
-- **hw-prf-seed.** `seed = HKDF-SHA256(PRF(salt), info)`, where the salt is a
-  random 32 bytes per enrollment. The seed goes to the existing
+- **hw-prf-seed.** `seed = HKDF-SHA256(PRF(input), salt, info)`, where the PRF
+  input is a fixed constant and the salt is a random 32 bytes per enrollment.
+  The seed goes to the existing
   `keyPairFromSeed` (X-Wing, or ML-DSA-65 once that has a seed keygen), so no
   new suite is needed. The seed exists only in memory for the session.
 - **software.** Today's behaviour, and the default.
@@ -102,7 +103,12 @@ built:
 The salt can't be the enrollment id, because the public keys go into
 `enroll:request` before the id exists. Natively it sits in the same keychain
 item as the hardware key reference. In the browser it is the passkey's
-`userHandle`, which a discoverable `get()` returns.
+`userHandle`, which a discoverable `get()` returns; WebAuthn fixes the PRF
+input in the `get()` request and the `userHandle` arrives only in the
+response, so a `userHandle` PRF input would cost a second `get()` and a
+second prompt. The input is a constant and the `userHandle` is the HKDF
+salt, so one ceremony still covers it
+([`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)).
 
 Tiers rank differently by role, because the threats differ:
 
@@ -196,9 +202,12 @@ final class SecurityPlatformKeySource implements AtKeysKeySource {
   public key, which needs no prompt, and unwraps through
   `session.decapsulate`.
 - **PRF-backed sources** (WebAuthn PRF, TPM HMAC, Keystore HMAC, Secure Enclave
-  ECDH) wrap with AES-256-GCM under `HKDF(prf, "atkeys-kek")`, the label
-  `design.md` section 8 already uses. For the HMAC-based PRFs the key is
-  symmetric, so it is already post-quantum. Secure Enclave ECDH against a fixed
+  ECDH) wrap with AES-256-GCM under `HKDF(prf, salt, "atkeys-kek|<atSign>")`,
+  the atSign-bound label [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)
+  and `design.md` section 8 use. The atSign in the label is what keeps two
+  atSigns on one device from sharing a recordId or a kek. For the HMAC-based
+  PRFs the key is symmetric, so it is already post-quantum. Secure Enclave ECDH
+  against a fixed
   point is not: its output is only as secret as a P-256 private key, so anyone
   holding the public half (which stays in the keychain, which narrows the
   exposure) and a quantum computer can recompute the KEK. For a document that
@@ -246,7 +255,11 @@ one a device addressed to itself.
 
 The document is written on activate, when an enrollment completes, and on
 every key rotation. The device's keychain keeps only public halves, hardware
-key references, the salt and the key-package id.
+key references, the salt, the key-package id and the enrollment id, which the
+PKAM verb and the record name both need. In the browser there is no keychain
+that survives eviction, so the enrollment id travels in the gate (a) record
+([section 9](#9-the-browser-as-the-only-device)); everything else the browser
+keeps in IndexedDB is a rebuildable cache.
 
 ## 8. Opening a session
 
@@ -320,21 +333,37 @@ the PRF, or an enrollment whose credential is the passkey. There is a third:
 
 - **No server change.** Trunk already verifies ML-DSA-65 PKAM, and no atServer
   implementation has to verify WebAuthn assertions.
-- **No public record,** so there is no name to leak through `lookup:` or logs.
-- **Revocation** is enrollment revocation, as with any device. This closes
-  the unauthenticated-read and revocation threats that gate (a) leaves open
+- **The gate (a) record stays, as the bootstrap.** Gate (c) needs the
+  enrollment id, and nothing can derive it: the atServer assigns it at
+  `enroll:request`, after the passkey and its `userHandle` already exist. After
+  eviction, or on a second synced device, no device state holds it —
+  IndexedDB is cleared, and a new device never had it — yet the PKAM verb
+  (`pkam:...:enrollmentId:<id>:...`), the record name
+  (`atkeys.<enrollmentId>.a.__e`) and the envelope's AAD all need it. So the
+  browser keeps the `public:_<recordId>` record from gate (a) and stores the
+  enrollment id in it beside the envelope, in the clear
+  ([`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)); the
+  restore reads the id from it, unwraps the envelope, re-derives the PKAM key
+  and only then does an ordinary PKAM. The record's name is still the secret;
+  the id in the clear reaches only whoever already knows the name.
+- **Revocation** is enrollment revocation, as with any device, and it must
+  also delete the gate (a) bootstrap record; until an atServer does that, the
+  unauthenticated-read threat gate (a) leaves open stays open
   ([`prf-server-keys-blob.md`](prf-server-keys-blob.md#open)).
 - **One enrollment across synced devices.** A synced passkey derives the same
   APKAM key on every device it reaches, so they all authenticate as one
   enrollment, the atServer can't tell them apart, and revoking it signs them
   all out.
 - **Eviction loses nothing.** IndexedDB becomes a cache: after it is cleared,
-  the passkey re-derives the PKAM key and the atServer supplies the document.
+  the passkey re-derives the recordId and the PKAM key, the bootstrap record
+  supplies the enrollment id and the envelope, and the atServer supplies the
+  rest.
 - **The cost:** the PKAM key sits in page memory for the session, the same
   exposure `design.md` section 9 already accepts for the data key.
 
-A separate label, `HKDF(prf, "atkeys-kek")`, derives the key that wraps the
-document, so the PKAM key and the document key stay independent. Where PRF is
+A separate label, `HKDF(prf, salt, "atkeys-kek|<atSign>")`, derives the key
+that wraps the document, so the PKAM key and the document key stay
+independent and bound to the atSign. Where PRF is
 unavailable, the fallbacks are largeBlob, then a non-extractable WebCrypto key
 (recorded as software custody), then refusal under `custody: required`.
 

@@ -16,8 +16,15 @@ touch "$D/new" 2>/dev/null; echo "create_beside rc=$?"
 SVC
 sudo systemd-run --wait --pipe --quiet --unit=$U -p LoadCredentialEncrypted=atkeys:$W/atkeys.cred /bin/bash $W/svc.sh 2>&1; echo "service rc=$?"
 echo "after_stop: $(sudo ls /run/credentials/ 2>/dev/null | grep -c $U) entries for $U"
-echo "--- arm2: tampered blob"
-sudo cp $W/atkeys.cred $W/bad.cred; sudo python3 -c "p='$W/bad.cred';b=bytearray(open(p,'rb').read());b[len(b)//2]^=0xff;open(p,'wb').write(b)"
+echo "--- arm2: tampered blob (decode, flip a ciphertext byte, re-encode)"
+sudo python3 -c "import base64,sys
+src,dst=sys.argv[1],sys.argv[2]
+orig=bytearray(base64.b64decode(open(src,'rb').read()))
+i=len(orig)//2; tampered=bytearray(orig); tampered[i]^=0xff
+open(dst,'wb').write(base64.encodebytes(bytes(tampered)))
+back=base64.b64decode(open(dst,'rb').read())
+n=sum(1 for x,y in zip(orig,back) if x!=y)
+print('decoded blob %d bytes; flipped ciphertext byte %d (0x%02x -> 0x%02x); re-encoded file decodes and differs in %d byte(s)'%(len(orig),i,orig[i],back[i],n))" $W/atkeys.cred $W/bad.cred
 sudo systemd-run --wait --pipe --quiet --unit=$U-bad -p LoadCredentialEncrypted=atkeys:$W/bad.cred /bin/bash -c 'echo SERVICE_BODY_RAN' 2>&1 | tail -2; echo "service rc=${PIPESTATUS[0]}"
 sudo journalctl -u $U-bad --no-pager -o cat | grep -iE "credential|decrypt|fail" | head -3
 sudo systemctl reset-failed $U-bad 2>/dev/null
