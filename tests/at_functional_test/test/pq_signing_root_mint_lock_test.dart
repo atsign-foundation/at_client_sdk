@@ -142,8 +142,7 @@ void main() {
   });
 
   test('the published nskey is mutable, because rotation depends on it',
-      // It waits out a whole liveMintLockTtl.
-      timeout: const Timeout(Duration(minutes: 1)), () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // Both key records are mutable and both are minted behind an immutable
     // lock. If "immutable" ever landed on either record, rotation would stop
     // working on that one and nothing else would say so.

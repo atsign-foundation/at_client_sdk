@@ -77,15 +77,17 @@ final legacyPlusPqProviders = PqPosture(
 const liveMintLockTtl = Duration(seconds: 15);
 
 /// What each enrollment listed for a namespace adds to a live test's mint
-/// lock when the mint conveys before it publishes.
+/// lock, for each key a conveyance carries and each conveyance the lock
+/// reserves, when the mint conveys before it publishes.
 ///
-/// A rotation reserves two conveyances of one key each, so the conveyance that
-/// runs may take up to a second per listed enrollment before the holder's
-/// lease is spent and it abandons the publish.
+/// A mint or a rotation reserves two conveyances and an add one, so a
+/// rotation of one key may spend up to a second per listed enrollment on the
+/// conveyance that runs before the holder's lease is spent.
 const liveMintLockBudgetPerMember = Duration(milliseconds: 500);
 
 /// Waits until the atServer no longer holds the mint lock on [namespace] of
-/// [client]'s atSign, whatever ttl it was taken with, reading it as [client].
+/// [client]'s atSign, for up to [timeout] whatever ttl it was taken with,
+/// reading it as [client].
 ///
 /// Throws a [TimeoutException] if the lock is still held after [timeout], and
 /// rethrows any failure to read it other than the record being absent.
@@ -96,8 +98,9 @@ Future<void> waitOutMintLock(AtClient client, String namespace,
   final waited = Stopwatch()..start();
   while (true) {
     try {
-      // NOTE: an expired record the atServer has not yet swept answers
-      // `data:null`; a create is accepted from that moment.
+      // NOTE: an expired record answers `data:null`, so this needs an
+      // atServer from c3.16.2 or p3.16.5 on, where an expired lock stops
+      // refusing a create at once.
       final answer =
           await remote.executeVerb(LLookupVerbBuilder()..atKey = lock);
       if (answer == 'data:null') return;

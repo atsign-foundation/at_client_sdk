@@ -40,8 +40,8 @@ void main() {
   final namespace = 'reach$runId';
 
   setUpAll(() async {
-    // NOTE: the SECOND atSign, as in nskey_rotation_live_test: these tests add
-    // enrollments, and every enroll:listns walks the whole roster.
+    // NOTE: the SECOND atSign: these tests add enrollments, and every
+    // enroll:listns walks the whole roster.
     atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());

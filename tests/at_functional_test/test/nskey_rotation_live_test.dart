@@ -38,11 +38,9 @@ void main() {
   final namespace = 'rotation$runId';
 
   setUpAll(() async {
-    // NOTE: an atSign no other file uses. Every rotation conveys to each
-    // enrollment the atSign lists for the namespace, under a mint lock sized to
-    // that roster, so enrollments other files leave behind would size both by
-    // file order; and these tests revoke enrollments, whose _apsk is deleted
-    // for good.
+    // NOTE: an atSign no other file uses, so the roster each rotation conveys
+    // to, and the mint lock sized to it, hold only this file's enrollments,
+    // and no other file reads the enrollments it revokes.
     atSign = ConfigUtil.getYaml()['atSign']['rotationAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
@@ -140,8 +138,7 @@ void main() {
   test(
       'UC-A5.1(b) · a rotation publishes a successor, pushes it to the '
       'survivor, and leaves the excluded enrollment on the old generation',
-      // It waits out a whole liveMintLockTtl.
-      timeout: const Timeout(Duration(minutes: 1)), () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     final rotator = await holder('rot-rotator');
     final survivor = await holder('rot-survivor');
     final excluded = await holder('rot-excluded');
@@ -258,8 +255,7 @@ void main() {
   });
 
   test('a rotation inside the mint lock\'s cooldown is refused',
-      // It waits out a whole liveMintLockTtl.
-      timeout: const Timeout(Duration(minutes: 1)), () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // NOTE: this cannot be a unit test — the interlock IS the atServer
     // refusing a second create of an immutable record, and a mocked
     // executeVerb accepts the second take happily.
@@ -509,8 +505,7 @@ void main() {
   test(
       'UC-A5.3 · revokeEnrollmentAndRotate revokes first, then supersedes the '
       'generation the revoked enrollment held',
-      // It waits out a whole liveMintLockTtl.
-      timeout: const Timeout(Duration(minutes: 1)), () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // NOTE: its OWN namespace, because this needs a genuine cold start — the
     // owner retains the private for the superseded generation only if it
     // minted it, and on a warm namespace `mintAndPublish` ADOPTS the live
@@ -680,8 +675,6 @@ void main() {
   test(
       'UC-G2.5 · a revocation whose rotation did not happen is rotated at the '
       'next start',
-      // The control waits out the rotation's mint lock, which grows by a
-      // budget for every enrollment listed for the namespace.
       timeout: const Timeout(Duration(minutes: 2)), () async {
     // The backstop for the composed lever: `revokeEnrollmentAndRotate` revokes
     // and then rotates, and when the second half does not happen nothing else

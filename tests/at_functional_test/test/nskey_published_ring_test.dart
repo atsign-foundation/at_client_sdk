@@ -69,8 +69,7 @@ void main() {
   });
 
   test('a rotation publishes a new generation and keeps the old private',
-      // It waits out a whole liveMintLockTtl.
-      timeout: const Timeout(Duration(minutes: 1)), () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     final ns = uniqueNs();
     // NOTE: the cold-start mint below holds the lock, and the rotation that
     // follows is refused until it lapses.
