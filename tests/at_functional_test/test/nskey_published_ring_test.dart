@@ -3,6 +3,9 @@ library;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyMintLockKey;
+import 'package:at_commons/at_builders.dart' show LLookupVerbBuilder;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 
@@ -69,7 +72,7 @@ void main() {
   });
 
   test('a rotation publishes a new generation and keeps the old private',
-      () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     final ns = uniqueNs();
     // NOTE: the cold-start mint below holds the lock, and the rotation that
     // follows is refused until it lapses.
@@ -78,7 +81,7 @@ void main() {
     // mint — a mint that loses the lock adopts the winner and reports success,
     // so it cannot fail the way rotation fails.
     final first = await ring.mintAndPublish(ns);
-    await waitOutMintLock();
+    await waitOutMintLock(atClient, ns);
     final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),
@@ -96,6 +99,39 @@ void main() {
     expect(await ring.privateHalf(atSign, ns, first.nskeyKid), isNotNull,
         reason: 'rotation must not retire data written under the old key');
     expect(await ring.privateHalf(atSign, ns, second.nskeyKid), isNotNull);
+  });
+
+  test(
+      'a cold-start mint whose filing takes 8 s still publishes inside the '
+      'live mint lock',
+      timeout: const Timeout(Duration(minutes: 1)), () async {
+    final ns = uniqueNs();
+    const slowFiling = Duration(seconds: 8);
+    final ring = PublishedNskeyKeyRing(atClient,
+        lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero);
+    String? lockDuringHold;
+    ring.privateFiling!.holdBeforeStore = () async {
+      lockDuringHold = await atClient.getRemoteSecondary()!.executeVerb(
+          LLookupVerbBuilder()..atKey = nskeyMintLockKey(atSign, ns));
+      await Future<void>.delayed(slowFiling);
+    };
+
+    final minting = Stopwatch()..start();
+    final minted = await ring.mintAndPublish(ns);
+    minting.stop();
+
+    expect(minting.elapsed, greaterThanOrEqualTo(slowFiling),
+        reason: 'the control: the filing was held inside the mint, so the '
+            'publish below happened after the hold and not before it');
+    expect(lockDuringHold, allOf(startsWith('data:'), isNot('data:null')),
+        reason: 'the hold ran while the atServer held this mint\'s lock, so '
+            'the 8 s counted against the lease');
+    expect(
+        (await PublishedNskeyKeyRing(atClient)
+                .publishedAdvertisement(atSign, ns))
+            ?.nskeyKid,
+        minted.nskeyKid,
+        reason: 'the generation minted is the one the atServer publishes');
   });
 
   test('a namespace nobody minted for resolves to nothing', () async {

@@ -142,7 +142,7 @@ void main() {
   });
 
   test('the published nskey is mutable, because rotation depends on it',
-      () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // Both key records are mutable and both are minted behind an immutable
     // lock. If "immutable" ever landed on either record, rotation would stop
     // working on that one and nothing else would say so.
@@ -155,7 +155,7 @@ void main() {
     // rather than a second mint, so what proves the record mutable is the
     // operation that actually depends on it being mutable.
     final first = await ring.mintAndPublish(ns);
-    await waitOutMintLock();
+    await waitOutMintLock(atClient, ns);
     final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),
