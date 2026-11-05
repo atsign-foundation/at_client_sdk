@@ -277,8 +277,8 @@ break; it stays as ruled.
   the authenticator, an optional address finder and the client config in, an
   `AtLookupMuxable` out — and `secureSocketLookUps` in `at_lookup_io.dart`, the one
   file naming the TLS transport, is the default. `Atsign.open`, `activate`, `enroll`,
-  `resumeEnrollment`, `authenticatesAs`, `buildAtClient` and
-  `AtServiceFactory.atClient` take `lookUps:` beside `keys:` and
+  `resumeEnrollment`, `authenticatesAs` and `buildAtClient` (and
+  `AtServiceFactory.atClient`, until at_client 4.0 removed it) take `lookUps:` beside `keys:` and
   [`storage:`](#5a-client-storage-bundle-x); `AtClientImpl.lookUps` holds it, and
   `buildRemoteSecondary`, `SyncServiceImpl.remoteSecondaryFor` and the monitor (through
   `NotificationServiceImpl.create(lookUps:)`) all build through it, so every connection

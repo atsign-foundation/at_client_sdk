@@ -339,7 +339,7 @@ void main() {
   });
 
   group('AtKeys authenticationKeyPairFor', () {
-    // The fixture's flat fields are this enrollment's own credentials.
+    // The fixture's flat fields hold this enrollment's keys.
     final flatEnrollmentId = encryptedAtKeysMap['enrollmentId'] as String;
     final flatApkamPublicKey =
         encryptedAtKeysMap[auth_constants.apkamPublicKey] as String;
@@ -1731,6 +1731,70 @@ void main() {
       expect(typed.storedEnrollmentId, isNull);
       expect(typed.enrollmentToAuthenticateAs(), 'E1',
           reason: 'control: the typed enrollment is what authenticates');
+    });
+
+    test(
+        'unfileLegacyEnrollment drops the flat id and symmetric key of the '
+        'enrollment it names, once the document holds nothing else', () {
+      final keys = AtKeys.legacy(
+          apkamSymmetricKey: b64('apkam-symmetric'), enrollmentId: 'E1');
+
+      keys.unfileLegacyEnrollment('E1');
+
+      expect(keys.storedEnrollmentId, isNull);
+      expect(keys.enrollmentSymmetricKey, isNull);
+    });
+
+    test(
+        'unfileLegacyEnrollment leaves the flat id and symmetric key of '
+        'another enrollment', () {
+      final keys = AtKeys.legacy(
+          apkamSymmetricKey: b64('apkam-symmetric'), enrollmentId: 'E1');
+
+      keys.unfileLegacyEnrollment('E2');
+
+      expect(keys.storedEnrollmentId, 'E1',
+          reason: 'only the named enrollment\'s fields are touched');
+      expect(keys.enrollmentSymmetricKey!.key, b64('apkam-symmetric'));
+    });
+
+    test(
+        'unfileLegacyEnrollment keeps the symmetric key while the document '
+        'still holds an enrollment', () {
+      final keys = AtKeys.legacy(
+          apkamSymmetricKey: b64('apkam-symmetric'), enrollmentId: 'E1')
+        ..addKey(CryptographicMaterial(
+            keyId: 'enc:rsa2048:1',
+            enrollmentId: 'E2',
+            role: CryptographicMaterialRole.publicEncryption,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString(b64('enc-public')),
+            createdAt: DateTime.now().toUtc(),
+            status: CryptographicMaterialStatus.pending));
+      expect(keys.holdsAuthenticationMaterial, isFalse,
+          reason: 'the premise: only the enrollment keeps the key');
+
+      keys.unfileLegacyEnrollment('E1');
+
+      expect(keys.storedEnrollmentId, isNull);
+      expect(keys.enrollmentSymmetricKey!.key, b64('apkam-symmetric'));
+    });
+
+    test(
+        'unfileLegacyEnrollment keeps the symmetric key while the document '
+        'holds authentication material', () {
+      final keys = AtKeys.legacy(
+          apkamPublicKey: b64('apkam-public'),
+          apkamPrivateKey: b64('apkam-private'),
+          apkamSymmetricKey: b64('apkam-symmetric'),
+          enrollmentId: 'E1');
+      expect(keys.enrollmentIds, isEmpty,
+          reason: 'the premise: only the authentication material keeps it');
+
+      keys.unfileLegacyEnrollment('E1');
+
+      expect(keys.storedEnrollmentId, isNull);
+      expect(keys.enrollmentSymmetricKey!.key, b64('apkam-symmetric'));
     });
   });
 }

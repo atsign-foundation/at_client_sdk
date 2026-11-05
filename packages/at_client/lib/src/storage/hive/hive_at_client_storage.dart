@@ -90,8 +90,17 @@ class HiveAtClientStorage extends AtClientStorageBase {
     // public names the directory its global instance points at.
     // ignore: invalid_use_of_visible_for_testing_member
     final globalHome = (Hive as HiveImpl).homePath;
-    final bundle = await openReportingOnce(() => _factory.initialize(atSign,
-        HivePersistenceConfig.clientDefaults(storagePath: storagePath)));
+    final AtPersistenceBundle bundle;
+    try {
+      bundle = await openReportingOnce(() => _factory.initialize(atSign,
+          HivePersistenceConfig.clientDefaults(storagePath: storagePath)));
+    } on DataStoreException catch (e) {
+      // NOTE: hive reports a box another process holds only as this text.
+      if ('$e'.contains('lock failed')) {
+        throw AtStorageInUseException(storagePath, e);
+      }
+      rethrow;
+    }
     final AtSyncQueue queue;
     try {
       queue = await openHiveSyncQueue(atSign, storagePath: storagePath);

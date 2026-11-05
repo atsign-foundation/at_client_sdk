@@ -547,6 +547,9 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
       logger.shout('*************');
       OnboardingUtil.allowBadCertificates = true;
     }
+    if (settings.preference.cramSecret == null) {
+      OnboardingUtil.usableRegistrarApiKey(settings.registrarApiKey);
+    }
     // if  -y flag is not used and --cramkey is not provided, show back up key warning message
     // --cramkey implies --yes for backwards compatibility with automation scripts
     if (!argResults[AuthCliArgs.argNameYes] &&
@@ -577,8 +580,8 @@ Future<void> activate(String atSign, EnrollerSettings settings,
   final preference = settings.preference;
   final atKeysFilePath = settings.atKeysFilePath;
   AtFileUtil.ensureWritable(File(atKeysFilePath));
-  preference.cramSecret ??=
-      await _cramSecretFromRegistrar(atSign, settings.registrarUrl);
+  preference.cramSecret ??= await _cramSecretFromRegistrar(
+      atSign, settings.registrarUrl, settings.registrarApiKey);
   if (await _isActivated(atSign, settings, atLookUp)) {
     throw AtClientException.message('atsign $atSign is already activated');
   }
@@ -623,10 +626,11 @@ Future<void> awaitStartupTail(AtClient client) async {
 }
 
 /// The CRAM secret for [atSign] from the registrar: it emails a verification
-/// code to the atSign's owner, who types it in here.
+/// code to the atSign's owner, who types it in here. The registrar is asked
+/// with [registrarApiKey], or with the built-in key when that is not set.
 Future<String> _cramSecretFromRegistrar(
-    String atSign, String registrarUrl) async {
-  final util = OnboardingUtil();
+    String atSign, String registrarUrl, String? registrarApiKey) async {
+  final util = OnboardingUtil(registrarApiKey);
   await util.requestAuthenticationOtp(atSign, authority: registrarUrl);
   final otp = util.getVerificationCodeFromUser();
   return util.getCramKey(atSign, otp, authority: registrarUrl);
@@ -1082,12 +1086,23 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     stderr.writeln('No matching enrollment(s) found');
     return approved;
   }
+  final warnsOfLegacyExchange = toApprove.any(_atLegacyKeyExchange) &&
+      await _publishesNamespaceKey(atClient);
   // Iterate through the requests, approve each one
   for (final er in toApprove) {
     final eId = er.enrollmentId!;
     stdout.writeln('Approving enrollmentId $eId'
         ' with appName "${er.appName}"'
         ' and deviceName "${er.deviceName}"');
+    if (warnsOfLegacyExchange && _atLegacyKeyExchange(er)) {
+      stderr.writeln('Warning: $eId asks at the legacy key exchange, so '
+          'approving it conveys none of ${atClient.getCurrentAtSign()}\'s '
+          'namespace keys. Run legacy, it reads none of the atSign\'s '
+          'post-quantum data; run at pqReady or above, it re-enrolls at its '
+          'first start and asks for them. To convey them, revoke it with '
+          '`at_activate revoke -a ${atClient.getCurrentAtSign()} -i $eId` '
+          'and request again with --posture pqReady. Approving as asked.');
+    }
     // NOTE: approving is also when this atSign's secrets are sealed to the new
     // device's key package, which is why it goes through the client.
     final record = await atClient.enrollments.approve(eId);
@@ -1105,6 +1120,28 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     }
   }
   return approved;
+}
+
+/// Whether [request] was made at the legacy key exchange: it carries a
+/// wrapped symmetric key and no key package.
+bool _atLegacyKeyExchange(Enrollment request) =>
+    request.metadata?['keyPackage'] == null &&
+    (request.encryptedAPKAMSymmetricKey?.isNotEmpty ?? false);
+
+/// Whether [atClient]'s atSign publishes a namespace key of its own, as its
+/// atServer answers; false when that cannot be read.
+Future<bool> _publishesNamespaceKey(AtClient atClient) async {
+  final atSign = atClient.getCurrentAtSign()?.toAtsign();
+  if (atSign == null) return false;
+  try {
+    final keys = await atClient.getKeys(
+        regex: r'__nskey\.', showHiddenKeys: true, useRemoteAtServer: true);
+    return keys.any((key) =>
+        key.startsWith('public:__nskey.') &&
+        AtKey.fromString(key).sharedBy?.toAtsign() == atSign);
+  } on Exception {
+    return false;
+  }
 }
 
 Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
@@ -1356,24 +1393,28 @@ EnrollerSettings enrollerSettingsFrom(ArgResults ar) {
       atKeysFilePath: ar[AuthCliArgs.argNameAtKeys] ??
           getDefaultAtKeysFilePath(getHomeDirectory(throwIfNull: true)!, atSign),
       passPhrase: ar[AuthCliArgs.argNamePassPhrase],
-      registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn]);
+      registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn],
+      registrarApiKey: Platform.environment[registrarApiKeyVariable]);
 }
 
 /// What `onboard` and `enroll` are told: the preference the client runs
-/// under, the keyfile and its passphrase, the registrar to ask, and where the
-/// client's store is when not where at_activate keeps it.
+/// under, the keyfile and its passphrase, the registrar to ask and the API
+/// key to ask it with, and where the client's store is when not where
+/// at_activate keeps it.
 @visibleForTesting
 class EnrollerSettings {
   final AtClientPreference preference;
   final String atKeysFilePath;
   final String? passPhrase;
   final String registrarUrl;
+  final String? registrarApiKey;
   final String? storagePath;
 
   EnrollerSettings(this.preference,
       {required this.atKeysFilePath,
       this.passPhrase,
       this.registrarUrl = RegistrarApiConstants.apiHostProd,
+      this.registrarApiKey,
       this.storagePath});
 
   /// The keyfile store at [atKeysFilePath].

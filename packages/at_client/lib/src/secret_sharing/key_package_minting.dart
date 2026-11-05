@@ -123,8 +123,8 @@ class KeyPackageMinting with ApkamSigning {
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
     final enrolment = atClient.enrollmentId;
     if (enrolment == null || isAtSignCredential(enrolment)) {
-      logger.info('Not reconciling the key package for $atSign: the atSign\'s '
-          'own credential is not reconciled as an enrollment');
+      logger.info('Not reconciling the key package for $atSign: it runs as '
+          'the primary enrollment, which is treated as the atSign itself');
       return nothing;
     }
 

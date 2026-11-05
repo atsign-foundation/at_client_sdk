@@ -364,21 +364,20 @@ void main() {
     await client.stop();
   });
 
-  test('storage passed is used whatever the preference says', () async {
+  test('storage passed is used', () async {
     final storage =
         HiveAtClientStorage(atSign: '@factorynolocal', storagePath: dir.path);
     final client = await buildAtClient(
         atSign: '@factorynolocal',
         namespace: 'wavi',
-        preference: pref()..isLocalStoreRequired = false,
+        preference: pref(),
         lookUps: secureSocketLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factorynolocal'),
         storage: storage);
 
     expect(storage.isHeldBy(client), isTrue,
-        reason: 'a caller that named its own backend gets it, not a client '
-            'that opens no local store at all');
+        reason: 'a caller that named its own backend gets it');
 
     await client.stop();
     await storage.close();

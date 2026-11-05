@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

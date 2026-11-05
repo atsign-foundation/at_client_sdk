@@ -112,10 +112,10 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// deletes it would put it back, and nothing said so.
   ///
   /// The keyfile is read again here, even inside [update], so the candidate
-  /// is validated against, and `.bak` holds, what is on disk now: a keyfile
-  /// replaced while the mutation ran is refused or kept, never overwritten
-  /// unseen. The copies and the keyfile written take the owner that read
-  /// reports.
+  /// is validated against, and `.bak` keeps, what is on disk now, less any
+  /// pending enrollment the write removes: a keyfile replaced while the
+  /// mutation ran is refused or kept, never overwritten unseen. The copies
+  /// and the keyfile written take the owner that read reports.
   Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys,
       {bool requireExisting = false}) async {
     final document = await _encodeAtRest(atKeys, atsign);
@@ -141,9 +141,28 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     await _preserveLegacyShape(file, existing, document, previous);
     // Keep the previous state recoverable as .bak. A copy, not a rename, so
     // the live keyfile exists at every instant of the flush.
-    await _replaceOwnerOnly(File('${file.path}.bak'), previous.bytes,
+    await _replaceOwnerOnly(File('${file.path}.bak'),
+        await _backupOf(previous, existing, atKeys, atsign),
         owner: previous.owner);
     await _writeAtRestDocument(file, document, owner: previous.owner);
+  }
+
+  /// What `.bak` keeps of [previous]: its bytes, less every pending
+  /// enrollment [atKeys] no longer holds.
+  Future<List<int>> _backupOf(KeyfileRead previous,
+      Map<String, dynamic> existing, AtKeys atKeys, String atsign) async {
+    final kept = AtKeys.fromJson(await _selfDecryptLegacyFields(existing));
+    final removed = kept.pendingEnrollmentIds
+        .where((id) => !atKeys.enrollmentIds.contains(id))
+        .toList();
+    if (removed.isEmpty) return previous.bytes;
+    for (final id in removed) {
+      kept
+        ..discardEnrollment(id)
+        ..unfileLegacyEnrollment(id);
+    }
+    return utf8.encode(
+        await _encodePassphraseEnvelope(await _encodeAtRest(kept, atsign)));
   }
 
   /// The keyfile as a write reads it under the lock: its bytes, and when

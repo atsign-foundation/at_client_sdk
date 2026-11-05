@@ -267,7 +267,7 @@ class _PreparingProvider extends _RecordingProvider implements PreparesWrites {
 
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-      {bool? useRemoteAtServer}) async {
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
     prepareCalls++;
     lastUseRemoteAtServer = useRemoteAtServer;
   }

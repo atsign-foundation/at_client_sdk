@@ -75,7 +75,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | PARTLY SUPERSEDED by [139] |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
 | [18]  | `pq_signing_root` is the user-owned signing root                                            | 2026-08-03 | AMENDED 2026-10-13        |
-| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-09-30        |
+| [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | AMENDED 2026-11-01        |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
 | [22]  | SS-4: when a namespace key is minted, and what must be true first                           | 2026-08-03 | PARTLY SUPERSEDED by [157] |
@@ -85,7 +85,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [26]  | UC-A4.4: a conveyance that loses the race to its own announcement                           | 2026-08-04 | AMENDED 2026-08-18        |
 | [27]  | The era default: read the new scheme everywhere, write it once                              | 2026-08-04 | LIVE                      |
 | [28]  | The PQ performance budget, measured                                                         | 2026-08-04 | LIVE                      |
-| [29]  | UC-A3.2 describes a mint trigger that was never built                                       | 2026-08-04 | LIVE                      |
+| [29]  | UC-A3.2 describes a mint trigger that was never built                                       | 2026-08-04 | AMENDED 2026-11-01        |
 | [30]  | UC-B5.1's pull backstop has no initiator                                                    | 2026-08-04 | LIVE                      |
 | [31]  | The root-pull initiator, and what it did not settle                                         | 2026-08-04 | AMENDED 2026-10-09        |
 | [32]  | The two-enrollment fixture: what works and what does not                                    | 2026-08-04 | LIVE                      |
@@ -199,7 +199,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [139] | A provider id names the role, and the algorithm only where the value cannot                 | 2026-09-09 | LIVE               |
 | [140] | #2161's deferral note stays as written: the fix went into at_auth                            | 2026-09-01 | LIVE               |
 | [141] | A typed keyfile carries an empty top-level `keys` array                                      | 2026-09-14 | LIVE               |
-| [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | AMENDED 2026-10-04 |
+| [142] | Content keys: recipients cache shared conveyances, siblings open every key, unused keys go   | 2026-09-30 | AMENDED 2026-11-02 |
 | [143] | Namespace-key advertisements: no ttr, a not-found is final, own ones refresh                 | 2026-09-30 | AMENDED 2026-09-30 |
 | [144] | The _apsk record: a fixed verifier cache, and refusals that say why                         | 2026-09-30 | PARTLY SUPERSEDED by [157] |
 | [145] | A reader's atServer caches no public record without a ttr                                    | 2026-09-30 | AMENDED 2026-10-10 |
@@ -216,6 +216,9 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [156] | The e2e pack's enrollments expire on their own, and nothing tears them down                  | 2026-10-13 | LIVE               |
 | [157] | A link vouches for one key, and the atServer writes it                                       | 2026-10-16 | AMENDED 2026-10-18 |
 | [158] | A key package reconcile advertises the package the client holds                              | 2026-10-29 | LIVE               |
+| [159] | A write starts its walk at the namespace its key names in full                               | 2026-11-01 | AMENDED 2026-11-02 |
+| [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | AMENDED 2026-11-02 |
+| [161] | A share is sealed to the most specific key its recipient advertises                          | 2026-11-02 | AMENDED 2026-11-02 |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -376,3 +379,6 @@ first, `enroll:updateMetadata`, and they still resolve.
 [156]: detail/decisions.md#156-the-e2e-packs-enrollments-expire-on-their-own-and-nothing-tears-them-down-2026-10-13
 [157]: detail/decisions.md#157-a-link-vouches-for-one-key-and-the-atserver-writes-it-2026-10-16
 [158]: detail/decisions.md#158-a-key-package-reconcile-advertises-the-package-the-client-holds-2026-10-29
+[159]: detail/decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01
+[160]: detail/decisions.md#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01
+[161]: detail/decisions.md#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02

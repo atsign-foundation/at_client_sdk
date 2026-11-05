@@ -13,6 +13,10 @@ import 'package:path_provider/path_provider.dart';
 /// the app's support directory, the one at_client_mobile's examples gave
 /// `hiveStoragePath`, so an app that followed them finds its store.
 ///
+/// The default store is the same whichever enrollment of [atSign] opens it,
+/// so an app that holds more than one enrollment over time passes each its
+/// own [storage].
+///
 /// A verb that takes `storage:` and is not on [AtsignFlows], such as
 /// `PendingEnrollment.client`, takes it from here.
 Future<AtClientStorage> storageOrDefault(
@@ -121,12 +125,13 @@ class AtsignFlows {
     connectBudget: connectBudget,
   );
 
-  /// `Atsign.resumeEnrollment`: the request for [app] and [device] already
-  /// filed in [keys] and awaiting approval, or null when there is none.
+  /// `Atsign.resumeEnrollment`: the request already filed in [keys] and
+  /// awaiting approval, or null when there is none. Each of [app] and
+  /// [device] given narrows the search; with neither, [keys] must hold one.
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
-    required String app,
-    required String device,
+    String? app,
+    String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookUpFactory? lookUps,

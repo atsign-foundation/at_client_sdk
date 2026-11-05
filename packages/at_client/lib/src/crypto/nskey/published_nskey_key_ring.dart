@@ -1,5 +1,5 @@
-import 'dart:async' show StreamSubscription, unawaited;
-import 'dart:convert' show jsonDecode;
+import 'dart:async' show Completer, StreamSubscription, unawaited;
+import 'dart:convert' show jsonDecode, jsonEncode;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
@@ -22,6 +22,9 @@ import 'package:at_client/src/client/server_mutex.dart'
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/verified_advertisement_record.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show classifyConnectionFailure;
 import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
@@ -246,7 +249,12 @@ typedef NskeyAfterPublish = Future<NskeyAdvertisement?> Function(
 /// Own privates are held in memory here; conveying them per-APKAM over the
 /// secret-sharing substrate is what supplies them to an enrollment that did
 /// not run [mintAndPublish] itself.
-class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
+class PublishedNskeyKeyRing
+    implements
+        NskeyKeyRing,
+        LooksUpLevelsTogether,
+        SignalsPrivateFiling,
+        AwaitsStartUpAsk {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
 
@@ -321,7 +329,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   }
 
   /// Broadcasts a pull request for a missing own-atSign private, when
-  /// [privateHalf] comes up empty for a generation this atSign has published.
+  /// [privateHalf] comes up empty for a generation this atSign has published,
+  /// or one named by a record this atSign wrote.
   ///
   /// The request is store-and-forward: any current holder answers when it next
   /// runs, and whoever supplies this owns waiting for the answer and filing it
@@ -362,6 +371,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   /// The asks whose answer is still awaited, by whichever route they went out.
   final Map<_OwnGeneration, Future<void>> _outstanding = {};
+
+  /// Those of [_outstanding] the client's start-up made, keyed with the
+  /// namespace folded.
+  final Map<_OwnGeneration, Future<void>> _startUpAsks = {};
 
   /// How many namespaces this ring asked about within the last [askCooldown].
   @visibleForTesting
@@ -412,6 +425,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   NskeyPrivateFiling? get privateFiling => _privateFiling;
   late final NskeyPrivateFiling? _privateFiling;
 
+  late final VerifiedAdvertisementRecord _verifiedRecord =
+      VerifiedAdvertisementRecord(_atClient, filing: _privateFiling);
+
   @override
   Stream<FiledNskeyPrivate> get privatesFiled =>
       privateFiling?.privatesFiled ?? const Stream<FiledNskeyPrivate>.empty();
@@ -452,6 +468,38 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// known, the verified bytes they came from.
   final Map<String, _CachedAdvertisement> _remote = {};
 
+  /// The bytes of each of this atSign's own advertisements this ring verified
+  /// against the atServer, or published, in this session, by folded scope.
+  final Map<String, String> _verifiedOnline = {};
+
+  StreamSubscription<FiledNskeyPrivate>? _filingsSubscription;
+
+  static String _foldedScope(String owner, String namespace) =>
+      _scope(owner, namespace.toLowerCase());
+
+  /// Records that [payload], this atSign's advertisement for [namespace], was
+  /// verified online in this session, and records it again whenever a
+  /// namespace key is filed for [namespace] later in the session.
+  Future<void> _rememberVerified(
+      String owner, String namespace, String payload) async {
+    _verifiedOnline[_foldedScope(owner, namespace)] = payload;
+    _filingsSubscription ??=
+        privateFiling?.privatesFiled.listen(_rememberAfterFiling);
+    await _verifiedRecord.remember(namespace, payload);
+  }
+
+  /// Records again the advertisement verified online in this session for the
+  /// namespace [filed] names, so the record names the key just filed.
+  Future<void> _rememberAfterFiling(FiledNskeyPrivate filed) async {
+    final payload = _verifiedOnline[_foldedScope(filed.owner, filed.namespace)];
+    if (payload == null) return;
+    try {
+      await _verifiedRecord.remember(filed.namespace, payload);
+    } on StoppedException {
+      return;
+    }
+  }
+
   StreamSubscription<DataEvent>? _ownChangesSubscription;
 
   /// Starts expiring this client's own cached advertisements whenever local
@@ -465,12 +513,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Marks the cached advertisement [event] names as due for a re-read,
   /// keeping its bytes so an unchanged copy is not verified again.
   void _expireOwnOnChange(DataEvent event) {
-    final own = _atClient.getCurrentAtSign();
     final changed = event.key.toString().toLowerCase();
     for (final scope in _remote.keys.toList()) {
       final bar = scope.indexOf('|');
       final owner = scope.substring(0, bar);
-      if (owner != own) continue;
+      if (!_isOwn(owner)) continue;
       final name = nskeyAdvertisementKey(owner, scope.substring(bar + 1))
           .toString()
           .toLowerCase();
@@ -484,7 +531,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     }
   }
 
-  static String _scope(String owner, String namespace) => '$owner|$namespace';
+  static String _scope(String owner, String namespace) =>
+      '${owner.toAtsign()}|$namespace';
+
+  /// Whether [atSign] is this client's own, compared in canonical form.
+  bool _isOwn(String? atSign) {
+    final own = _atClient.getCurrentAtSign();
+    return own != null && atSign != null && atSign.toAtsign() == own.toAtsign();
+  }
 
   static String _generation(String owner, String namespace, String kid) =>
       '${_scope(owner, namespace)}|$kid';
@@ -539,7 +593,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// exception for it.
   Future<void> _warnIfPrivateMissing(String owner, String namespace,
       NskeyAdvertisement published, String how) async {
-    if (owner != _atClient.getCurrentAtSign()) return;
+    if (!_isOwn(owner)) return;
     if (await privateHalf(owner, namespace, published.nskeyKid) != null) return;
     _logger.warning(
         'Adopted nskey generation ${published.nskeyKid} for $owner:$namespace '
@@ -888,6 +942,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       fetchedAt: DateTime.now(),
       payload: payload,
     );
+    await _rememberVerified(owner, namespace, payload);
     for (final key in prepared.minted) {
       final generation =
           _generation(owner, namespace, nskeyKidOf(key.publicKey));
@@ -913,7 +968,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<NskeyAdvertisement?> currentPublic(
       String owner, String namespace) async {
-    final isOwn = owner == _atClient.getCurrentAtSign();
+    final isOwn = _isOwn(owner);
     if (isOwn) _listenForOwnChanges();
 
     final scope = _scope(owner, namespace);
@@ -929,8 +984,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           await _getLocalThenRemote(nskeyAdvertisementKey(owner, namespace));
     } on StoppedException {
       rethrow;
-    } catch (_) {
-      final stale = _withinGrace(cached);
+    } catch (e) {
+      final stale =
+          _withinGrace(cached, owner: owner, namespace: namespace, failure: e);
       if (stale != null) return stale;
       rethrow;
     }
@@ -939,12 +995,16 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       return null;
     }
 
-    // NOTE: verifying fetches the signer's _apsk from the atServer, so
-    // re-verifying unchanged bytes would stop a client writing its own data
-    // once it had been offline longer than the TTL.
+    // NOTE: verifying fetches the signer's _apsk from the atServer. Unchanged
+    // bytes are not verified again, and an own advertisement this client
+    // recorded verifying stands when the atServer is out of reach; without
+    // both, a client offline past the TTL, or started offline, cannot write
+    // its own data.
     final advertisement = isOwn && cached?.payload == payload
         ? cached!.advertisement
-        : await verifier.verify(owner, payload);
+        : isOwn
+            ? await _verifyOwn(owner, namespace, payload)
+            : await verifier.verify(owner, payload);
     _remote[scope] = (
       advertisement: advertisement,
       fetchedAt: DateTime.now(),
@@ -952,6 +1012,214 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     );
     return advertisement;
   }
+
+  /// Asks the atServer about every one of [namespaces] it holds no fresh copy
+  /// for, more specific than one it does, in one batch of lookups, and
+  /// verifies only the advertisement it answers with.
+  ///
+  /// A found advertisement is cached as [currentPublic] caches it, and one the
+  /// atServer no longer has is dropped. Only a not-found is a miss: any other
+  /// failure at a level, or the batch's own, stops the walk there, which then
+  /// seals to that level's cached advertisement within its stale grace, or
+  /// throws the failure. This atSign's own namespaces are each asked as
+  /// [currentPublic] asks them.
+  @override
+  Future<({String namespace, NskeyAdvertisement advertisement})?>
+      mostSpecificPublic(String owner, List<String> namespaces,
+          {void Function(String namespace)? missed}) async {
+    if (_isOwn(owner)) return _oneByOne(owner, namespaces, missed);
+    final ask = <String>[];
+    ({String namespace, NskeyAdvertisement advertisement})? cached;
+    for (final namespace in namespaces) {
+      final fresh = _fresh(owner, namespace);
+      if (fresh != null) {
+        cached = (namespace: namespace, advertisement: fresh);
+        break;
+      }
+      ask.add(namespace);
+    }
+    if (ask.isEmpty) return cached;
+    final published = await _publishedAt(owner, ask);
+
+    for (final namespace in ask) {
+      final scope = _scope(owner, namespace);
+      final answer = published[namespace]!;
+      final failure = answer.failure;
+      if (failure != null) {
+        final stale = _withinGrace(_remote[scope],
+            owner: owner, namespace: namespace, failure: failure);
+        if (stale == null) {
+          Error.throwWithStackTrace(
+              failure, answer.stack ?? StackTrace.current);
+        }
+        return (namespace: namespace, advertisement: stale);
+      }
+      final payload = answer.payload;
+      if (payload == null) {
+        _remote.remove(scope);
+        missed?.call(namespace);
+        continue;
+      }
+      final cached = _remote[scope];
+      final advertisement = cached?.payload == payload
+          ? cached!.advertisement
+          : await verifier.verify(owner, payload);
+      _remote[scope] = (
+        advertisement: advertisement,
+        fetchedAt: DateTime.now(),
+        payload: payload,
+      );
+      return (namespace: namespace, advertisement: advertisement);
+    }
+    return cached;
+  }
+
+  /// [mostSpecificPublic], asked one namespace at a time through
+  /// [currentPublic].
+  Future<({String namespace, NskeyAdvertisement advertisement})?> _oneByOne(
+      String owner,
+      List<String> namespaces,
+      void Function(String namespace)? missed) async {
+    for (final namespace in namespaces) {
+      final advertisement = await currentPublic(owner, namespace);
+      if (advertisement != null) {
+        return (namespace: namespace, advertisement: advertisement);
+      }
+      missed?.call(namespace);
+    }
+    return null;
+  }
+
+  /// The advertisement cached for `(owner, namespace)` within
+  /// [advertisementTtl], or null.
+  NskeyAdvertisement? _fresh(String owner, String namespace) {
+    final cached = _remote[_scope(owner, namespace)];
+    if (cached == null ||
+        DateTime.now().difference(cached.fetchedAt) >= advertisementTtl) {
+      return null;
+    }
+    return cached.advertisement;
+  }
+
+  /// What [owner] publishes at each of [namespaces], read from the atServer
+  /// in one batch: each one's advertisement bytes, a null payload where the
+  /// atServer has none, or the failure that kept it from saying which, with
+  /// the stack it was raised with when it was caught here.
+  Future<Map<String, ({String? payload, Object? failure, StackTrace? stack})>>
+      _publishedAt(String owner, List<String> namespaces) async {
+    Map<String, ({String? payload, Object? failure, StackTrace? stack})>
+        failingAll(Object failure, [StackTrace? stack]) => {
+              for (final namespace in namespaces)
+                namespace: (payload: null, failure: failure, stack: stack)
+            };
+    final remote = _atClient.getRemoteSecondary();
+    if (remote == null) {
+      return failingAll(
+          SecondaryConnectException('this client has no atServer connection'));
+    }
+    final requests = [
+      for (var i = 0; i < namespaces.length; i++)
+        BatchRequest(
+            i,
+            (PLookupVerbBuilder()
+                  ..atKey = (AtKey()
+                    ..key = '$nskeyAdvertisementRecordName.${namespaces[i]}'
+                    ..sharedBy = owner)
+                  ..operation = 'all'
+                  ..bypassCache = true)
+                .buildCommand()
+                .trim())
+    ];
+    final Object? entries;
+    try {
+      final answer = await remote
+          .executeCommand('batch:${jsonEncode(requests)}\n', auth: true);
+      entries = jsonDecode((answer ?? '').replaceFirst(RegExp('^data:'), ''));
+    } on StoppedException {
+      rethrow;
+    } on Exception catch (e, stack) {
+      return failingAll(e, stack);
+    }
+    if (entries is! List) {
+      return failingAll(AtException('the batch of lookups of $owner\'s '
+          'namespace keys was answered with something other than a list'));
+    }
+    final published =
+        <String, ({String? payload, Object? failure, StackTrace? stack})>{};
+    for (final entry in entries) {
+      final id = entry is Map ? entry['id'] : null;
+      final response = entry is Map ? entry['response'] : null;
+      if (id is! int || id < 0 || id >= namespaces.length || response is! Map) {
+        continue;
+      }
+      final data = response['data'];
+      final code = response['error_code'];
+      Object? record;
+      try {
+        record = data is String ? jsonDecode(data) : null;
+      } on FormatException {
+        record = null;
+      }
+      final value = record is Map ? record['data'] : null;
+      published[namespaces[id]] = value is String
+          ? (payload: value, failure: null, stack: null)
+          : code == 'AT0015'
+              ? (payload: null, failure: null, stack: null)
+              : (
+                  payload: null,
+                  failure: code is String
+                      ? AtExceptionUtils.get(
+                          code, '${response['error_message'] ?? code}')
+                      : AtException('the lookup of $owner\'s namespace key '
+                          'at ${namespaces[id]} was answered with no data'),
+                  stack: null
+                );
+    }
+    for (final namespace in namespaces) {
+      published.putIfAbsent(
+          namespace,
+          () => (
+                payload: null,
+                failure: AtException('the batch gave no answer for the '
+                    'lookup of $owner\'s namespace key at $namespace'),
+                stack: null
+              ));
+    }
+    return published;
+  }
+
+  /// Verifies [payload], this atSign's own advertisement for [namespace], and
+  /// records that it did; with the atServer out of reach, accepts it only on
+  /// such a record.
+  ///
+  /// An atServer that answers decides: only a failure to reach it falls back,
+  /// and one with no record behind it is rethrown, naming the advertisement.
+  Future<NskeyAdvertisement> _verifyOwn(
+      String owner, String namespace, String payload) async {
+    final NskeyAdvertisement advertisement;
+    try {
+      advertisement = await verifier.verify(owner, payload);
+    } on AtException catch (e) {
+      if (classifyConnectionFailure(e)?.isOffline != true) rethrow;
+      if (await _verifiedRecord.vouchesFor(namespace, payload)) {
+        _verifiedOnline.remove(_foldedScope(owner, namespace));
+        return _advertisementIn(payload);
+      }
+      e.message = 'could not verify ${nskeyAdvertisementKey(owner, namespace)}'
+          ', this client\'s namespace key for $namespace, which it has no '
+          'record of verifying, because its atServer could not be reached: '
+          '${e.message}';
+      rethrow;
+    }
+    await _rememberVerified(owner, namespace, payload);
+    return advertisement;
+  }
+
+  /// The advertisement [payload] carries, read without checking its
+  /// signature: only for bytes this client's own record says it verified.
+  static NskeyAdvertisement _advertisementIn(String payload) =>
+      NskeyAdvertisement.fromPayload(
+          SignedEnvelope.fromJson(jsonDecode(payload) as Map).payload);
 
   /// Files an advertisement this ring just published into local storage, so a
   /// local-first re-read finds it rather than the generation local storage
@@ -990,7 +1258,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// atSign's public record is never held locally, so it is read from the
   /// atServer alone, and an offline write to a peer waits for the network.
   Future<String?> _getLocalThenRemote(AtKey atKey) async {
-    if (atKey.sharedBy == _atClient.getCurrentAtSign()) {
+    if (_isOwn(atKey.sharedBy)) {
       try {
         final local = await _atClient.get(atKey);
         if (local.value != null) return local.value as String;
@@ -1031,7 +1299,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// logged and swallowed, since the read already has its answer.
   Future<void> _fileFetched(
       AtKey atKey, String value, Metadata? fetchedMetadata) async {
-    if (atKey.sharedBy != _atClient.getCurrentAtSign()) return;
+    if (!_isOwn(atKey.sharedBy)) return;
     final filed = AtKey()
       ..key = atKey.key
       ..namespace = atKey.namespace
@@ -1054,10 +1322,16 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// while [advertisementTtl] plus [advertisementStaleGrace] has not passed
   /// since it was fetched; past that, null, so the failure reaches the caller
   /// rather than sealing to a generation that may have been rotated away from.
-  NskeyAdvertisement? _withinGrace(_CachedAdvertisement? cached) {
+  NskeyAdvertisement? _withinGrace(_CachedAdvertisement? cached,
+      {required String owner,
+      required String namespace,
+      required Object failure}) {
     if (cached == null) return null;
     final age = DateTime.now().difference(cached.fetchedAt);
     if (age <= advertisementTtl + advertisementStaleGrace) {
+      _logger.warning('Sealing to the advertised nskey for $owner:$namespace '
+          'fetched ${age.inMinutes}m ago, because it could not be refreshed: '
+          '$failure');
       return cached.advertisement;
     }
     _logger.warning(
@@ -1104,8 +1378,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     try {
       advertisement = await verifier.verify(owner, value.value as String);
     } on Object catch (e) {
-      if (owner != _atClient.getCurrentAtSign() ||
-          !_replaceableOwnAdvertisement(e)) {
+      if (!_isOwn(owner) || !_replaceableOwnAdvertisement(e)) {
         rethrow;
       }
       _logger.warning(
@@ -1119,18 +1392,28 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       fetchedAt: DateTime.now(),
       payload: value.value as String,
     );
+    if (_isOwn(owner)) {
+      await _rememberVerified(owner, namespace, value.value as String);
+    }
     return (advertisement: advertisement, updatedAt: value.metadata?.updatedAt);
   }
 
+  /// A miss on an own generation fetches this enrollment's conveyance records
+  /// and then asks the other enrollments, when an own advertisement names the
+  /// generation, or when this atSign wrote the record ([writtenBy]) in a
+  /// namespace [_knowsOwn] accepts.
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-      String owner, String namespace, String nskeyKid) async {
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy}) async {
     final held = await heldPrivateHalf(owner, namespace, nskeyKid);
-    if (held != null || owner != _atClient.getCurrentAtSign()) return held;
+    if (held != null || !_isOwn(owner)) return held;
     if (!_askOnReadMiss) return null;
 
-    // NOTE: no fetch and no ask for a generation no own advertisement names.
-    if (!await _advertisedOwn(namespace, nskeyKid)) return null;
+    // NOTE: no fetch and no ask for a generation no own advertisement names,
+    // unless this atSign wrote the record that names it.
+    final ownRecord = _isOwn(writtenBy) && await _knowsOwn(namespace);
+    if (!ownRecord && !await _advertisedOwn(namespace, nskeyKid)) return null;
 
     await _fetchOnMiss(namespace, nskeyKid).timeout(fetchOnMissTimeout,
         onTimeout: () => _logger.info('The fetch of the conveyance records '
@@ -1199,7 +1482,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   @override
   Future<PackageKey?> heldPublic(
       String owner, String namespace, String nskeyKid) async {
-    if (owner != _atClient.getCurrentAtSign()) return null;
+    if (!_isOwn(owner)) return null;
     final minted = _mintedPublics[_generation(owner, namespace, nskeyKid)];
     if (minted != null) return minted;
     final filed = (await privateFiling?.filedFor(namespace))
@@ -1218,6 +1501,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return derived.kid == nskeyKid ? derived : null;
   }
 
+  /// What its [privateFiling] lists, which every private this ring mints or
+  /// reads is filed through; only the current atSign's.
+  @override
+  Future<Set<String>> heldNamespaces(String owner) async {
+    if (!_isOwn(owner)) return const {};
+    return await privateFiling?.filedNamespaces() ?? const {};
+  }
+
   /// What [privateHalf] answers, without asking the atSign's other enrollments
   /// for a private this client does not hold.
   Future<NskeyDecapsulationKey?> heldPrivateHalf(
@@ -1225,7 +1516,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final held = _ownPrivates[_generation(owner, namespace, nskeyKid)];
     if (held != null) return held;
 
-    if (owner != _atClient.getCurrentAtSign()) return null;
+    if (!_isOwn(owner)) return null;
     final filed = await privateFiling?.read(namespace, nskeyKid);
     if (filed != null) {
       _ownPrivates[_generation(owner, namespace, nskeyKid)] = filed;
@@ -1290,7 +1581,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     if (_remote.containsKey(_scope(owner, namespace))) return true;
     final filing = privateFiling;
     if (filing == null) return false;
-    if ((await filing.readAllWhere((ns) => ns == namespace)).isNotEmpty) {
+    final folded = namespace.toLowerCase();
+    if ((await filing.readAllWhere((ns) => ns.toLowerCase() == folded))
+        .isNotEmpty) {
       return true;
     }
     return _grantedOwn(filing.keysIo, owner, namespace);
@@ -1300,8 +1593,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// [namespace] in its grants: as the enrollment request named them, and
   /// as each start reconciles them with the atServer's record.
   ///
-  /// `*` and the atSign's own credential name no namespace here, since
-  /// neither bounds the namespaces a record could name.
+  /// `*` and the primary enrollment name no namespace here, since neither
+  /// bounds the namespaces a record could name.
   Future<bool> _grantedOwn(
       AtKeysIo keysIo, String owner, String namespace) async {
     final enrollmentId = _atClient.enrollmentId;
@@ -1417,16 +1710,43 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   /// Records an ask for `(namespace, nskeyKid)` whose answer is awaited until
   /// [outstanding] completes, so a read miss meanwhile asks nothing more.
+  /// [atStartUp] marks the client's start-up as the asker, the one ask a
+  /// write that misses waits for.
   @internal
   void noteOutstandingAsk(
-      String namespace, String nskeyKid, Future<void> outstanding) {
+      String namespace, String nskeyKid, Future<void> outstanding,
+      {bool atStartUp = false}) {
     final generation = (namespace: namespace, nskeyKid: nskeyKid);
+    final folded = (namespace: namespace.toLowerCase(), nskeyKid: nskeyKid);
     _askedAt[generation] = DateTime.now();
     _outstanding[generation] = outstanding;
+    if (atStartUp) _startUpAsks[folded] = outstanding;
     unawaited(outstanding.then((_) {}, onError: (Object _) {}).whenComplete(() {
       if (identical(_outstanding[generation], outstanding)) {
         _outstanding.remove(generation);
       }
+      if (identical(_startUpAsks[folded], outstanding)) {
+        _startUpAsks.remove(folded);
+      }
     }));
   }
+
+  @override
+  Future<void>? startUpAskFor(String namespace, String nskeyKid) =>
+      _startUpAsks[(namespace: namespace.toLowerCase(), nskeyKid: nskeyKid)];
+
+  Completer<void>? _startUpAsking;
+
+  /// This client's start-up is to ask for the own privates it lacks, until
+  /// [startUpAsked].
+  void startUpWillAsk() => _startUpAsking ??= Completer<void>();
+
+  /// This client's start-up has made its asks, or will make none.
+  void startUpAsked() {
+    final asking = _startUpAsking;
+    if (asking != null && !asking.isCompleted) asking.complete();
+  }
+
+  @override
+  Future<void>? get startUpAsksPending => _startUpAsking?.future;
 }

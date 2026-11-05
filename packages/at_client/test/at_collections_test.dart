@@ -499,8 +499,214 @@ void main() {
       final c = buildCollection<String>();
       await expectLater(
         c.create(obj: 'x', id: 'fail-me'),
-        throwsA(isA<CollectionOpException>()),
+        throwsA(isA<CollectionOpException<String>>()),
       );
+    });
+
+    /// Puts that refuse the self copy and accept every recipient's.
+    Exception refuseSelfCopy() {
+      final refused = Exception('no private held for the current generation');
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        if ((i.positionalArguments[0] as AtKey).sharedWith == null) {
+          throw refused;
+        }
+        return true;
+      });
+      return refused;
+    }
+
+    /// The exception [op] throws, caught the way the class doc says an app
+    /// catches it: typed by the collection's item type.
+    Future<CollectionOpException<String>> thrownBy(Future<Object?> op) async {
+      try {
+        await op;
+      } on CollectionOpException<String> catch (e) {
+        return e;
+      }
+      fail('the write returned instead of throwing CollectionOpException');
+    }
+
+    test('A create whose self copy fails writes no share', () async {
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      final refused = refuseSelfCopy();
+      final c = buildCollection<String>();
+
+      final thrown =
+          await thrownBy(c.create(obj: 'x', id: 'h4', sharedWith: {bob}));
+
+      expect(thrown.failures.single.atKey.sharedWith, isNull,
+          reason: 'the one failure the exception names is the self copy');
+      expect(thrown.failures.single.reason, same(refused));
+      expect(
+          thrown.results
+              .whereType<OpNotAttempted>()
+              .map((r) => r.atKey.sharedWith),
+          [bobStr],
+          reason: "@bob's copy is reported as not attempted");
+      expect(thrown.item, isNull,
+          reason: 'nothing was written, so there is no item to retry');
+      verify(() => atClient.put(any(), any())).called(1);
+      verifyNever(() => atClient.delete(any()));
+    });
+
+    test(
+        'A share that fails after the self copy hands back the item to retry '
+        'with', () async {
+      final written = <String, String>{};
+      var bobPublished = false;
+      when(() => atClient.get(any())).thenAnswer((i) async {
+        final json = written['${i.positionalArguments[0]}'];
+        if (json == null) throw Exception('no such key');
+        return AtValue()
+          ..value = json
+          ..metadata = (Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        final key = i.positionalArguments[0] as AtKey;
+        if (key.sharedWith == bobStr && !bobPublished) {
+          throw Exception('$bobStr has no published nskey for $namespace');
+        }
+        written['$key'] = i.positionalArguments[1] as String;
+        return true;
+      });
+      when(() => atClient.getAtKeys(regex: any(named: 'regex'))).thenAnswer(
+          (_) async => [for (final k in written.keys) AtKey.fromString(k)]);
+      final c = buildCollection<String>();
+
+      CollectionOpException<String>? thrown;
+      try {
+        await c.create(obj: 't', id: 'c12', sharedWith: {bob});
+      } on CollectionOpException<String> catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown?.item?.id, 'c12',
+          reason: 'the exception hands back the item written');
+      expect((await c.getItems()).map((item) => item.id), ['c12'],
+          reason: 'getItems lists it once');
+
+      bobPublished = true;
+      await c.updateSharedWith(thrown!.item!, {bob});
+      expect(
+          written.keys.where((k) => k.startsWith('$bobStr:c12.')), hasLength(1),
+          reason: "the retry writes @bob's copy of that same item");
+    });
+
+    /// An atServer holding what it is written, whose put of @bob's copy fails
+    /// while [refusesBob] says so.
+    Map<String, String> storeRefusingBob(bool Function() refusesBob) {
+      final written = <String, String>{};
+      when(() => atClient.get(any())).thenAnswer((i) async {
+        final json = written['${i.positionalArguments[0]}'];
+        if (json == null) throw Exception('no such key');
+        return AtValue()
+          ..value = json
+          ..metadata = (Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+      });
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        final key = i.positionalArguments[0] as AtKey;
+        if (key.sharedWith == bobStr && refusesBob()) {
+          throw Exception('$bobStr has no published nskey for $namespace');
+        }
+        written['$key'] = i.positionalArguments[1] as String;
+        return true;
+      });
+      when(() => atClient.delete(any())).thenAnswer((i) async {
+        written.remove('${i.positionalArguments[0]}');
+        return true;
+      });
+      when(() => atClient.getAtKeys(regex: any(named: 'regex'))).thenAnswer(
+          (_) async => [for (final k in written.keys) AtKey.fromString(k)]);
+      return written;
+    }
+
+    test('A create whose share fails changes no recipient set the app holds',
+        () async {
+      var refusesBob = false;
+      final written = storeRefusingBob(() => refusesBob);
+      int bobCopiesOf(String id) =>
+          written.keys.where((k) => k.startsWith('$bobStr:$id.')).length;
+      final c = buildCollection<String>();
+      final set = {bob};
+      final earlier = await c.create(obj: 'a', id: 'a1', sharedWith: set);
+
+      refusesBob = true;
+      CollectionOpException<String>? thrown;
+      try {
+        await c.create(obj: 'b', id: 'b1', sharedWith: set);
+      } on CollectionOpException<String> catch (e) {
+        thrown = e;
+      }
+      expect(thrown?.item?.sharedWith, isEmpty,
+          reason: 'the item handed back names no recipient it was not '
+              'shared with');
+      expect(set, {bob}, reason: "the app's set still names @bob");
+      expect(earlier.sharedWith, {bob}, reason: 'and so does the earlier item');
+
+      refusesBob = false;
+      await c.update(earlier);
+      expect(bobCopiesOf('a1'), 1,
+          reason: "an update of the earlier item keeps @bob's copy");
+      await c.updateSharedWith(thrown!.item!, set);
+      expect(bobCopiesOf('b1'), 1,
+          reason: "updateSharedWith(e.item!, set) writes @bob's copy of the "
+              'new item');
+    });
+
+    test(
+        'A create whose share fails for one recipient hands back the item '
+        'naming the recipients written', () async {
+      final written = storeRefusingBob(() => true);
+      final carol = '@carol'.toAtsign();
+      final c = buildCollection<String>();
+
+      final thrown = await thrownBy(
+          c.create(obj: 'm', id: 'm1', sharedWith: {bob, carol}));
+
+      expect(thrown.item?.sharedWith, {carol},
+          reason: "@carol's copy was written and @bob's was not");
+      expect(
+          written.keys.where((k) => k.startsWith('@carol:m1.')), hasLength(1));
+
+      await c.update(thrown.item!);
+      expect(
+          written.keys.where((k) => k.startsWith('@carol:m1.')), hasLength(1),
+          reason: "an update of the item handed back keeps @carol's copy");
+    });
+
+    test(
+        "updateSharedWith given the item's own recipient set keeps its "
+        'recipients', () async {
+      final written = storeRefusingBob(() => false);
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 's', id: 's1', sharedWith: {bob});
+
+      await c.updateSharedWith(item, item.sharedWith);
+
+      expect(item.sharedWith, {bob});
+      expect(
+          written.keys.where((k) => k.startsWith('$bobStr:s1.')), hasLength(1));
+    });
+
+    test('an update whose self copy fails writes and removes no share',
+        () async {
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async =>
+          [AtKey.fromString('@dave:h4u.$namespace$selfAtSignStr')]);
+      refuseSelfCopy();
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'h4u', sharedWith: {bob});
+
+      final thrown = await thrownBy(c.update(item));
+
+      expect(thrown.failures.single.atKey.sharedWith, isNull);
+      verify(() => atClient.put(any(), any())).called(1);
+      verifyNever(() => atClient.delete(any()));
     });
 
     test(
@@ -672,6 +878,18 @@ void main() {
     });
 
     test(
+        'a failed recipient write throws a CollectionOpException typed by '
+        "the collection's item type", () async {
+      when(() => atClient.put(any(), any())).thenThrow(Exception('boom'));
+      final c = buildCollection<String>();
+      final item = c.draft(obj: 'x', id: 'sw-fail', sharedWith: {});
+      await expectLater(
+        c.updateSharedWith(item, {bob}),
+        throwsA(isA<CollectionOpException<String>>()),
+      );
+    });
+
+    test(
         'pure recipient changes do not emit a local CItemUpdated on '
         'this collection', () async {
       // Subscribe BEFORE the call so any synchronous emit lands.
@@ -772,7 +990,7 @@ void main() {
       final c = buildCollection<String>();
       await expectLater(
         c.create(obj: 'x', id: 'abc'),
-        throwsA(isA<CollectionOpException>()),
+        throwsA(isA<CollectionOpException<String>>()),
       );
     });
   });
@@ -884,7 +1102,7 @@ void main() {
       final c = buildCollection<String>();
       await expectLater(
         c.upsert(id: 'u4', obj: 'x'),
-        throwsA(isA<CollectionOpException>()),
+        throwsA(isA<CollectionOpException<String>>()),
       );
     });
   });
@@ -1002,6 +1220,47 @@ void main() {
 
       // `getItems()` is `.toList()` which adopts first-error-wins.
       await expectLater(c.getItems(), throwsA(anything));
+    });
+
+    test(
+        'a record this device cannot read fails getItems with a '
+        'CItemReadException naming it and what its read failed with', () async {
+      final goodKey = AtKey.fromString('ok.$namespace$selfAtSignStr');
+      final sealedKey = AtKey.fromString('sealed.$namespace$selfAtSignStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => [goodKey, sealedKey]);
+      final refusal = CryptoProviderNotRegistered(
+          'Crypto provider "at/symmetric/AES/GCM" is not registered');
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        final k = invocation.positionalArguments.first as AtKey;
+        if (k.toString().startsWith('sealed.')) throw refusal;
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'hello'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      final c = buildCollection<String>();
+
+      await expectLater(
+          c.getItems(),
+          throwsA(isA<CItemReadException>()
+              .having((e) => '${e.key}', 'key', '$sealedKey')
+              .having((e) => e.cause, 'cause', same(refusal))));
+
+      final listed = <CItem<String>>[];
+      StackTrace? stack;
+      final done = Completer<void>();
+      c.getItemsAsStream().listen(listed.add,
+          onError: (Object _, StackTrace s) => stack = s,
+          onDone: done.complete);
+      await done.future;
+      expect(listed.map((item) => item.id), ['ok'],
+          reason: 'with an onError handler, the rest are listed');
+      expect('$stack', contains('at_collections_test.dart'),
+          reason: 'the error carries the stack its read failed on');
     });
 
     test('stream consumers can restore silent-skip with .handleError',
@@ -1376,7 +1635,8 @@ void main() {
 
       final c = buildCollection<String>();
       final item = c.draft(obj: 'x', id: 'delme');
-      await expectLater(c.delete(item), throwsA(isA<CollectionOpException>()));
+      await expectLater(
+          c.delete(item), throwsA(isA<CollectionOpException<String>>()));
     });
 
     test(
@@ -1657,12 +1917,14 @@ void main() {
       // The cache-priming `readBy` scans the entire __rr sub-collection
       // (no owner filter); wasMarkedReadByMe then checks self membership.
       // Regex shape mirrors `_getKeysInternal`: `^(?!local:)` rejects
-      // at_client's bookkeeping keys (#1942), `(?:[^:]*:){0,2}` allows up
+      // at_client's bookkeeping keys (#1942), `(?!(?:cached:)?public:)`
+      // rejects public records, `(?:[^:]*:){0,2}` allows up
       // to two wrapper segments (`@bob:` for an outgoing share,
       // `cached:@self:` for a received copy — #2032), and every `.` in the
       // composed namespace is escaped.
       final escapedComposed = '__rr.idr.$namespace'.replaceAll('.', '\\.');
-      final rrRegex = '^(?!local:)(?:[^:]*:){0,2}[^.]+\\.$escapedComposed@';
+      final rrRegex =
+          '^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}[^.]+\\.$escapedComposed@';
       // Parent scan returns bob's item; the __rr sub-collection scan
       // returns nothing (no receipts sent yet).
       when(
@@ -1786,6 +2048,39 @@ void main() {
         receiptWrites.single,
         isNot(matches(RegExp(r'^[^:]+\.__rr\.'))),
         reason: 'no self-copy of __rr receipt should be written',
+      );
+    });
+
+    test(
+        "a failed receipt write throws a CollectionOpException typed by the "
+        "item's type", () async {
+      final bobKey = AtKey.fromString('idf.$namespace$bobStr');
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((invocation) async {
+        final regex = invocation.namedArguments[#regex] as String;
+        if (regex.contains('__rr')) return <AtKey>[];
+        return [bobKey];
+      });
+      when(() => atClient.get(any())).thenAnswer((invocation) async {
+        final k = invocation.positionalArguments.first as AtKey;
+        if (k.toString().contains('__rr')) {
+          throw Exception('no such key');
+        }
+        final v = AtValue();
+        v.value = jsonEncode({'type': 'n/a', 'obj': 'v'});
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 1));
+        return v;
+      });
+      when(() => atClient.put(any(), any())).thenThrow(Exception('boom'));
+
+      final c = buildCollection<String>();
+      final fromBob = (await c.getItems()).single;
+      await expectLater(
+        fromBob.markReadByMe(),
+        throwsA(isA<CollectionOpException<String>>()),
       );
     });
 

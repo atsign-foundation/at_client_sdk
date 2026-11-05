@@ -72,11 +72,24 @@ class SymmetricAesGcmProvider
 
   /// Runs before the write pipeline starts, which is the only place a CK can be
   /// conveyed — see [PreparesWrites].
+  ///
+  /// [encrypt] seals [atKey] at the level and under the content key this
+  /// chooses.
   @override
   Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
-          {bool? useRemoteAtServer}) async =>
-      await ckManager?.ensureCurrent(context, atKey,
-          useRemoteAtServer: useRemoteAtServer);
+      {bool? useRemoteAtServer, String? sealToNamespace}) async {
+    if (sealToNamespace != null && ckManager == null) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'needs a content-key manager to seal with, and this provider has none');
+    }
+    final chosen = await ckManager?.ensureCurrent(context, atKey,
+        useRemoteAtServer: useRemoteAtServer, sealToNamespace: sealToNamespace);
+    if (chosen != null) _chosen[atKey] = chosen;
+  }
+
+  /// What each write's [prepareForWrite] chose, held on the key object the
+  /// write pipeline carries from there to [encrypt].
+  final Expando<({String namespace, String ckNs})> _chosen = Expando();
 
   /// Answers the question a write would otherwise answer by failing: has
   /// [atSign] published an nskey for [namespace]?
@@ -91,14 +104,24 @@ class SymmetricAesGcmProvider
   Future<bool> isReadyFor(
           CryptoContext context, String atSign, String namespace) async =>
       ckManager == null ||
-      await ckManager!.resolver.resolve(atSign, namespace) != null;
+      await ckManager!.resolver.resolve(
+              atSign, NskeyResolver.startLevelOfNamespace(namespace)) !=
+          null;
 
   @override
   Future<String> encrypt(
       CryptoContext context, AtKey atKey, String plaintext) async {
     final owner = _nskeyOwnerOf(atKey);
-    final namespace = _namespaceOf(atKey);
-    final ckNs = await _ckNamespaceOf(owner, namespace);
+    // NOTE: the pre-pass's choice, not a second one: what this client holds
+    // can grow in between, and only the pre-pass checked the key it chose.
+    // It serves this one write.
+    final chosen = _chosen[atKey];
+    _chosen[atKey] = null;
+    final namespace = chosen?.namespace ??
+        await ckManager?.resolver
+            .startLevelOf(context.atClient.getCurrentAtSign(), atKey) ??
+        _namespaceOf(atKey);
+    final ckNs = chosen?.ckNs ?? await _ckNamespaceOf(owner, namespace);
 
     final ck = cache.current(owner, ckNs);
     if (ck == null) {

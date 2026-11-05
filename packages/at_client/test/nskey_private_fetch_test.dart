@@ -685,6 +685,134 @@ void main() {
     });
   });
 
+  group(
+      'Given an enrollment granted the namespace, holding only the generation '
+      'that superseded g1', () {
+    late ({String kid, Uint8List seed, PackageKey key}) g1;
+    late ({String kid, Uint8List seed, PackageKey key}) g2;
+    late ({
+      MockAtClient client,
+      List<String> reads,
+      AdvertisedKeyVerifier verifier
+    }) served;
+    late NskeyPrivateFiling privates;
+    late int fetched;
+    late List<String> asked;
+
+    setUp(() async {
+      g1 = await generation();
+      g2 = await generation();
+      served = serving({
+        namespace: naming([g2.key])
+      });
+      when(() => served.client.enrollmentId).thenReturn('e-1');
+      final io = InMemoryAtKeysIo();
+      await io.write(
+          alice,
+          AtKeys()
+            ..recordEnrollmentSnapshot('e-1',
+                namespaces: {namespace: 'rw'},
+                appName: 'app',
+                deviceName: 'device'));
+      privates = NskeyPrivateFiling(keysIo: io, atSign: alice);
+      await privates.file(conveyed(g2));
+      fetched = 0;
+      asked = [];
+    });
+
+    /// A ring whose ask is answered by a holder of g1, which files it.
+    PublishedNskeyKeyRing answeredByAHolder() =>
+        PublishedNskeyKeyRing(served.client,
+            verifier: served.verifier,
+            privateFiling: privates,
+            fetchConveyance: () async => fetched++,
+            requestConveyance: (ns, name) async {
+              asked.add(name);
+              if (name == secretOf(g1.kid)) await privates.file(conveyed(g1));
+            });
+
+    test(
+        'A device that re-enrolled itself reads what its atSign wrote before a '
+        'rotation', () async {
+      final ring = answeredByAHolder()..askCooldown = Duration.zero;
+
+      expect(await ring.privateHalf(alice, namespace, g1.kid, writtenBy: alice),
+          isNull,
+          reason: 'the miss asks, and the answer arrives after it');
+      await pumpEventQueue();
+      expect(fetched, 1);
+      expect(asked, [secretOf(g1.kid)],
+          reason: 'the record was written by @alice, so the miss asks for '
+              'g1 though no own advertisement names it');
+      expect(await ring.privateHalf(alice, namespace, g1.kid, writtenBy: alice),
+          isNotNull,
+          reason: 'the holder\'s answer is filed, and the read succeeds');
+
+      final unadvertised = await generation();
+      expect(
+          await ring.privateHalf(alice, namespace, unadvertised.kid,
+              writtenBy: '@bob'),
+          isNull);
+      await pumpEventQueue();
+      expect(asked, [secretOf(g1.kid)],
+          reason: 'a record a peer sealed naming a generation @alice does not '
+              'advertise is refused without an ask');
+      expect(fetched, 1);
+    });
+
+    test(
+        'when the record was written by another atSign, then the miss fetches '
+        'and asks nothing', () async {
+      final ring = answeredByAHolder();
+
+      expect(
+          await ring.privateHalf(alice, namespace, g1.kid, writtenBy: '@bob'),
+          isNull);
+      await pumpEventQueue();
+      expect(served.reads, [namespace],
+          reason: 'the control: it still reads the advertisement, which names '
+              'only g2');
+      expect(fetched, 0);
+      expect(asked, isEmpty);
+    });
+
+    test(
+        'when the record is in a namespace it neither holds nor is granted, '
+        'then nothing is read, fetched or asked', () async {
+      final ring = answeredByAHolder();
+
+      expect(
+          await ring.privateHalf(alice, 'other.app', g1.kid, writtenBy: alice),
+          isNull);
+      await pumpEventQueue();
+      expect(served.reads, isEmpty);
+      expect(fetched, 0);
+      expect(asked, isEmpty);
+    });
+
+    test(
+        'when misses on it repeat within the cooldown, then it asks once, '
+        'without reading the advertisement', () async {
+      final ring = PublishedNskeyKeyRing(served.client,
+          verifier: served.verifier,
+          privateFiling: privates,
+          fetchConveyance: () async => fetched++,
+          requestConveyance: (ns, name) async => asked.add(name));
+
+      for (var i = 0; i < 20; i++) {
+        expect(
+            await ring.privateHalf(alice, namespace, g1.kid, writtenBy: alice),
+            isNull);
+      }
+      await pumpEventQueue();
+      expect(asked, [secretOf(g1.kid)]);
+      expect(fetched, 1);
+      expect(served.reads, isEmpty,
+          reason: 'the record names the generation, so the advertisement has '
+              'nothing to add');
+    });
+  });
+
   group('Given a fetch that is still filing when the miss stops waiting', () {
     test(
         'when a write seals to its own key, then it is refused once '

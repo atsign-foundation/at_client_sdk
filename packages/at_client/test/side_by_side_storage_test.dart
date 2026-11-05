@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
@@ -47,7 +48,6 @@ void main() {
       atSign,
       'wavi',
       AtClientPreference()
-        ..isLocalStoreRequired = true
         ..syncRegex = ''
         ..hiveStoragePath = path,
       lookUps: secureSocketLookUps(),

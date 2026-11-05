@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:at_chops/at_chops.dart' show AtPrivateKey, RsaEncryptionAlgo;
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
@@ -477,9 +478,9 @@ Future<void> _notificationCallback(
       await atClient.getLocalSecondary()!.getEncryptionPrivateKey();
   var selfEncryptionKey =
       await atClient.getLocalSecondary()!.getEncryptionSelfKey();
-  // ignore: deprecated_member_use
-  final apkamSymmetricKey = EncryptionUtil.decryptKey(
-      encryptedApkamSymmetricKey, encryptionPrivateKey!);
+  final apkamSymmetricKey = utf8.decode((RsaEncryptionAlgo()
+        ..atPrivateKey = AtPrivateKey.fromString(encryptionPrivateKey!))
+      .decrypt(base64Decode(encryptedApkamSymmetricKey)));
   var encryptedDefaultPrivateEncKey =
       EncryptionUtil.encryptValue(encryptionPrivateKey, apkamSymmetricKey);
   var encryptedDefaultSelfEncKey =

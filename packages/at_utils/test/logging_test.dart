@@ -5,6 +5,7 @@ import 'package:test/test.dart';
 
 void main() {
   setUp(() {
+    AtSignLogger.root_level = 'info';
     AtSignLogger.defaultLoggingHandler = AtSignLogger.consoleLoggingHandler;
   });
 

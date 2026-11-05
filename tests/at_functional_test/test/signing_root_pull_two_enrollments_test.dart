@@ -22,7 +22,7 @@ import 'test_utils.dart';
 ///
 /// It needs two genuine enrollments and nothing less: a seeker that lacks the
 /// root and a holder that has it, each with its own authenticated client. The
-/// atSign's own credential cannot be the seeker, since it does not ask for a
+/// primary enrollment cannot be the seeker, since it does not ask for a
 /// root (it advertises no key package for a holder to seal the answer to),
 /// which is why
 /// `enrolAndAuthenticate` exists. The pull authenticates on **both** sides,

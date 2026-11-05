@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';

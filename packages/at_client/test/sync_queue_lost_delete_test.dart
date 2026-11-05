@@ -14,6 +14,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -90,9 +91,7 @@ void main() {
         .thenAnswer((_) async => AtValue()..value = '7');
 
     service = await SyncServiceImpl.create(atClient,
-        atClientManager: MockAtClientManager(),
-        remoteSecondary: remote,
-        warmStartSync: false) as SyncServiceImpl;
+        remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
 
     // The stats fetch _isInSync opens every round with.
     when(() => remote.executeVerb(any()))
