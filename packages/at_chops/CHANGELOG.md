@@ -1,3 +1,10 @@
+## 3.8.0
+
+- feat: `PassphraseKdf` (`Argon2idKdf`, `Pbkdf2Sha256Kdf`, `kdfFor`) with
+  JSON-serialisable `KdfParams`.
+- feat: `package:at_chops/at_chops_web.dart` adds `WebCryptoAesCtr`, which
+  matches the VM's AES-CTR output byte for byte, and `WebCryptoPbkdf2Sha256Kdf`.
+
 ## 3.7.1
 
 - chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.
