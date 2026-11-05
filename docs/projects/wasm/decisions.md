@@ -720,6 +720,12 @@ nothing while there is no VFS.
 dart2wasm the default AES path resolves to pure Dart regardless of thread. See
 [`design.md`](design.md) §C1.
 
+**Amendment (2026-11-02) — a worker-hosted monitor is a path to explore.** V1 is unchanged:
+Dart stays on the main thread. Hidden-tab timer throttling (heartbeat, reconnect delay,
+silence watchdog) makes a worker or SharedWorker monitor worth exploring, but it would
+move the whole AtClient and its keys into the worker, so it is **not committed** and needs
+its own ruling before any work.
+
 ---
 
 ### D-20 — The JS/TS surface is **`Promise`-returning for every protocol operation**; no synchronous escape hatch (2026-08-30)
@@ -835,7 +841,7 @@ holds. That turns OQ-13's silent unbounded replay into a stated, bounded one.
 - **full is bounded by server retention.** The atServer's monitor handler drops expired
   notifications before replaying, so *full* is everything retained — not a durability
   promise.
-- **The since filter is exclusive.** The handler drops notifications at or before the time
+- **The since filter is exclusive** *(superseded by the 2026-11-03 amendment below)*. The handler drops notifications at or before the time
   it is given, so resuming from a checkpoint does not re-deliver the checkpoint's own
   notification. This is not an off-by-one to correct.
 
@@ -846,6 +852,16 @@ into **resume**.
 **Not yet implemented.** at_client exposes only the `fetchOfflineNotifications` bool, which
 is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
 the bool's deprecation are a follow-up at_client change.
+
+**Amendment (2026-11-03) — the since filter becomes inclusive.** The bullet "The since
+filter is exclusive" no longer holds once atServer change S1 ships
+(`monitor_verb_handler.dart`: `<= sinceMillis` → `< sinceMillis`). The handler then
+re-delivers the notification at the given time, so resuming from a checkpoint replays the
+checkpoint's own notification on every reconnect, and a tab handoff replays its
+predecessor's last one. Dedupe by notification id is therefore mandatory in at_client
+(`NotificationServiceImpl._isDuplicate`: bounded FIFO seen-set, stats id `-1` exempt).
+**Order:** the dedupe must be released before S1, or older clients see one duplicate per
+reconnect.
 
 ### D-25 — Client storage is the app's choice; at_client keeps a Hive default until 4.0 (2026-10-07)
 
