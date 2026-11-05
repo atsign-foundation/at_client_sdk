@@ -216,13 +216,27 @@ passwordless `sudo`, and remove what they create.
 | Mount options                           | `ro,nosuid,nodev,noexec`                  | `ro,nosuid,nodev,noexec,nosymfollow`                                                                |
 | Append, replace or create beside it     | refused, "Read-only file system", as root | refused, "Read-only file system", as root                                                           |
 | After the service stops                 | removed                                   | removed                                                                                             |
-| One byte of the blob flipped            | not applicable                            | the service doesn't start: "Failed to set up credentials: Protocol error", status `243/CREDENTIALS` |
+| One byte of the blob flipped            | not applicable                            | the service doesn't start: "Failed to set up credentials: Protocol error", status `243/CREDENTIALS`; see the re-measure note below |
 | `--with-key=tpm2` on a host with no TPM | not applicable                            | refused, "Failed to create TPM2 context"                                                            |
 
 A systemd credential is a read-only, per-service copy that disappears at stop.
 That suits a key, but it can't carry the atKeys document itself, because the
 client writes to its keys while running: `flush` and `update` file namespace
 keys, signing keys and retrofit results.
+
+**Re-measure note on the flipped-byte row.** The recorded result came from a
+run of [`probes/systemd_load_credential_encrypted.sh`](probes/systemd_load_credential_encrypted.sh)
+whose tamper arm flipped a byte of the base64 *text* of the encrypted
+credential, not of the decoded blob. Every base64 alphabet byte and newline is
+below `0x80`, so the flipped byte became a non-base64 character, and systemd's
+read fails in `READ_FULL_FILE_UNBASE64` — before any decryption, before any
+tag check, and with no "Decryption failed" line in the journal. That is the
+same refusal a credential format with no authentication at all would give, so
+it cannot support the integrity property the row is cited for. The arm now
+decodes the blob, flips a byte of the decoded ciphertext and re-encodes it
+(`base64 -d`, flip, `base64`), and the row must be re-measured on a systemd 255
+host; the expected outcome is the same `243/CREDENTIALS` with a decryption
+failure in the journal.
 
 A container running systemd under Docker Desktop on macOS couldn't deliver any
 credential to a service, not even an inline `SetCredential=` value, and
@@ -361,8 +375,11 @@ and only the derived value reaches the page, during unlock.
 
 The plan builds on that. The browser's atKeys document is kept on the atServer
 as a version 2 envelope, and the passkey's PRF output, run through HKDF, is its
-key source. Clearing the browser then loses nothing, and any device holding the
-passkey can recover it. The key is symmetric, which also matters here: a blob
+key source. Clearing the browser then loses nothing — the enrollment id that
+the PKAM verb and the private record name need is carried in the PRF-named
+record, because the atServer assigns it at `enroll:request` and nothing derives
+it — and any device holding the passkey can recover it. The key is symmetric,
+which also matters here: a blob
 held long-term on a server under an RSA or elliptic-curve wrap is what "harvest
 now, decrypt later" targets, and an HMAC-derived key is already post-quantum.
 
@@ -375,8 +392,11 @@ The browser has to fetch the document before it holds a PKAM key, so the fetch
 needs a gate of its own. There are two, and they can be combined.
 
 The first is a record whose name is derived from the passkey, for example
-`public:_<HKDF(prf, "atkeys-record-id")>`, domain-separated from the
-`HKDF(prf, "atkeys-kek")` that encrypts it. On at_server trunk (`47a6a978`,
+`public:_<HKDF(prf, salt, "atkeys-record-id|<atSign>")>`, domain-separated from
+the `HKDF(prf, salt, "atkeys-kek|<atSign>")` that encrypts it. The atSign in
+both labels keeps two atSigns on one device from sharing a record name or a
+kek; the full derivation is in
+[`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation). On at_server trunk (`47a6a978`,
 `scan_verb_handler.dart`), a scan hides every `public:_` key from other atSigns
 and from the owner, and `showhidden:true` re-admits only `public:__` and `_`
 keys. So the record can't be listed, and it can only be fetched by someone who
@@ -407,8 +427,10 @@ atServer implementation has to verify WebAuthn assertions: `clientDataJSON`,
 per-connection challenge from `from:` already covers replay.
 
 A third gate, deriving the APKAM key itself from the passkey so an ordinary
-PKAM precedes the fetch, is in
-[`apkam-custody.md`](apkam-custody.md#9-the-browser-as-the-only-device).
+PKAM precedes the fetch of the private record, is in
+[`apkam-custody.md`](apkam-custody.md#9-the-browser-as-the-only-device). It
+still needs the first gate as its bootstrap, because its PKAM carries the
+enrollment id, which the atServer assigns and nothing derives.
 
 The first gate alone gets the document but no PKAM key: after a wipe the browser
 holds nothing to authenticate with, so it has to be paired with the third, or
