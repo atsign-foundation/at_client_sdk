@@ -31,5 +31,9 @@ atSign:
   # by an enrollment that file creates, which then holds the root's private
   # key, and a root is created once per atSign per virtualenv.
   perKeyLinksAtSign: '@sameeraja🛠'
+  # Spent by nskey_rotation_live_test.dart alone: each rotation conveys to
+  # every enrollment listed for its namespace, so the roster must hold only
+  # the enrollments that file creates.
+  rotationAtSign: '@murali🛠'
 
 

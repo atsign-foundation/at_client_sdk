@@ -1,3 +1,13 @@
+## 4.0.1
+
+- fix: each listener on a notification subscription is released when it
+  cancels.
+- fix: a change one subscriber makes to a notification, its metadata
+  included, is no longer seen by another subscriber.
+- fix: notifications waiting for their key are no longer dropped sooner
+  because several listeners want them, and one given up because its
+  listener cancelled is reported on `droppedEvents`.
+
 ## 4.0.0
 
 - feat: the first release with post-quantum cryptography, chosen by

@@ -1329,8 +1329,8 @@ void main() {
     });
 
     test(
-        'NotificationService subscribe returns an existing stream for the same '
-        'regex and shouldDecrypt', () async {
+        'NotificationService subscribe gives each listener a subscription of '
+        'its own, for the same regex and shouldDecrypt', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
               mockAtClientImpl,
               monitor: fakeMonitor,
@@ -1348,7 +1348,9 @@ void main() {
       notificationStream1.listen((event) {
         print(event);
       });
-      expect(notificationServiceImpl.getStreamListenersCount(), 1);
+      expect(notificationServiceImpl.getStreamListenersCount(), 2,
+          reason: 'each listener is a subscription of its own, released when '
+              'it cancels');
       notificationServiceImpl.stopAllSubscriptions();
     });
 
