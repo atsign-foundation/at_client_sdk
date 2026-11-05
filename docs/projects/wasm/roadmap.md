@@ -82,9 +82,12 @@ predecessor — **no platform conditionals either**. A core package must not kno
 platforms differ. Platform-specific behaviour is supplied from outside, by a platform
 implementer package, through an injected interface.
 
-**One exception shipped, then went.** `at_auth` 4.0.0-rc1 resolved its
+**Exceptions shipped; one went.** `at_auth` 4.0.0-rc1 resolved its
 reachability probe through a conditional export; 4.0.0-rc2 removed the probe and that
-export, so the published 4.0.0 (2026-11-04) has neither. rc1 used it because the two implementations are not
+export, so the published at_auth 4.0.0 (2026-11-04) has neither. The published at_client
+4.0.0 still picks branches by conditional import: `crypto_backends.dart` (OpenSSL backends
+under `dart.library.ffi`, recorded against D-1 on 2026-10-13, with a wasm-gate control) and
+`at_rpc.dart` (an io logging handler under `dart.library.io`, not yet recorded). at_auth rc1 used its conditional because the two implementations are not
 interchangeable — a browser negotiates the ALPN protocol that makes an HTTPS probe
 meaningful and `dart:io`'s HTTP client does not. It is PQ-owned code and the ruling is
 recorded against D-1 in [`decisions.md`](decisions.md), which also explains why the

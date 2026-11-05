@@ -34,7 +34,7 @@ flowchart LR
 
 ## Running it
 
-The direct-mode steps land with `talk.html` (see Status). The proxy setup below is dev-only.
+Both modes need `talk.html`, so neither can be followed until it lands (see Status). The proxy environment below is kept for reference and is dev-only.
 
 **Proxy (local virtualenv, dev-only)**
 
@@ -44,7 +44,7 @@ The direct-mode steps land with `talk.html` (see Status). The proxy setup below 
 | pkam keys | `supervisorctl start pkamLoad` inside the container (it is `autostart=false`) before any PKAM auth. |
 | hosts | `/etc/hosts`: `127.0.0.1 vip.ve.atsign.zone` |
 | proxy | `at_secondary_proxy` from `at_services`: `dart run bin/main.dart --proxy-url vip.ve.atsign.zone:8443 --root-url vip.ve.atsign.zone:64 --bind-port 8443 --cert-dir certs`, certs copied out of the container (`/atsign/secondary/base/certs`). |
-| page | `talk.html`, built with `tool/build.sh` and served from `localhost` with `Cache-Control: no-store`, without `?direct=1` |
+| page | `talk.html` (not yet pushed), built with `tool/build.sh` and served from `localhost` with `Cache-Control: no-store`, without `?direct=1` |
 | CLI | C `at_talk` with at_c#728 and `ROOT_HOST=vip.ve.atsign.zone`; keys in `$HOME/.atsign/keys/` |
 
 The VE root needs a trunk rebuild (at_server#2894) before `?direct=1&root=` can target it, so the virtualenv still runs through the proxy.

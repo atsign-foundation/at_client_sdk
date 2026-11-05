@@ -714,7 +714,7 @@ with it — lands in all 49 import closures. That is the entanglement `import_to
 exists to prevent, and that test is spike-only, which is why X6 shipped the static without
 anything going red. Dart cannot put a static outside its class, so the spelling and the
 invariant could not both survive; the spelling gave way, at no external cost, because 3.15.0-rc1
-was never published (`at_client` went to 4.0.0). The factory now lives in `lib/src/client/at_client_factory.dart`, and moving it
+(published 2026-09-29, followed by rc2–rc8) already had `buildAtClient`, and `at_client` went on to 4.0.0. The factory now lives in `lib/src/client/at_client_factory.dart`, and moving it
 also freed the interface of four impl imports it no longer needs. ⚠️ `js-api.md` still specifies
 a JavaScript facade constructed as `AtClient.create(...)`; that is a different language surface
 and was deliberately left alone, but the two now differ and the JS design should say why.
