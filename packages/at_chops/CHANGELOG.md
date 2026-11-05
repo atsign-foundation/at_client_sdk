@@ -5,9 +5,9 @@
   (`MlDsa65Sizes.seedBytes`). The seed is the private key; see the README's
   "Persisting an ML-DSA-65 key".
 - feat: `AtSeededSignatureAlgorithm`, an `AtSignatureAlgorithm` that also has
-  `keyPairFromSeed`. Both ML-DSA-65 classes implement it, and `AtPqc.mlDsa65`
-  is now typed as it, so a caller going through `AtPqc` can reach the seeded
-  path.
+  `keyPairFromSeed` and `newSeed`. Both ML-DSA-65 classes implement it, and
+  `AtPqc.mlDsa65` is now typed as it, so a caller going through `AtPqc` can
+  reach the seeded path.
 
 ## 3.7.1
 

@@ -15,8 +15,9 @@ Feature: at_chops derives an ML-DSA-65 key pair from a 32-byte seed
   belongs to. It must be 32 secret, uniformly random bytes, never a constant;
   a seed taken from other key material, such as a passkey PRF output, first
   goes through a KDF with a label of its own so the same bytes never seed
-  another key. The FFI backend hands the seed to OpenSSL by reference, so the
-  only copy is the buffer at_chops zeroes and frees.
+  another key. The FFI backend hands the seed to OpenSSL by reference, so
+  at_chops zeroes and frees the buffer it passed; the EVP_PKEY OpenSSL builds
+  keeps its own copy, which EVP_PKEY_free clears.
 
   Scenario: Every ACVP keyGen vector derives its key pair
     Given the 25 ACVP ML-DSA-65 keyGen vectors
@@ -28,6 +29,12 @@ Feature: at_chops derives an ML-DSA-65 key pair from a 32-byte seed
     When MlDsa65PureDartAlgo and MlDsa65FfiAlgo each run keyPairFromSeed on it
     Then both return the same public key and secret key
     And a signature from one verifies with the other
+
+  Scenario: newSeed returns a seed the backend accepts
+    Given any ML-DSA-65 backend, or AtPqc.mlDsa65
+    When newSeed runs twice
+    Then each result is 32 bytes and keyPairFromSeed accepts it
+    And the two results differ
 
   Scenario: A seed of the wrong length is refused
     Given a seed of 0, 31, 33 or 64 bytes

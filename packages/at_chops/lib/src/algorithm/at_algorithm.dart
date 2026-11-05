@@ -95,6 +95,11 @@ abstract interface class AtSignatureAlgorithm {
 /// another key.
 abstract interface class AtSeededSignatureAlgorithm
     implements AtSignatureAlgorithm {
+  /// A fresh seed of this algorithm's length, drawn from the platform's
+  /// secure random source. The length is deliberately not on this interface:
+  /// [newSeed] makes a valid one and [keyPairFromSeed] rejects an invalid one.
+  Uint8List newSeed();
+
   /// Deterministically derive the key pair for [seed]. Every backend of one
   /// algorithm returns the same bytes for the same seed.
   ///

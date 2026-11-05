@@ -187,9 +187,7 @@ and OpenSSL backends.
 
 ```dart
 final AtSeededSignatureAlgorithm dsa = AtPqc.mlDsa65;
-final Random random = Random.secure();
-final seed = Uint8List.fromList(
-    List<int>.generate(MlDsa65Sizes.seedBytes, (_) => random.nextInt(256)));
+final seed = dsa.newSeed(); // 32 secure-random bytes: store this, not the secret key
 final kp = await dsa.keyPairFromSeed(seed); // same pair on every backend
 ```
 
@@ -210,7 +208,7 @@ otherwise, so callers don't need to pick a backend by hand. Import
 ```dart
 import 'package:at_chops/at_chops_ffi.dart';
 
-// Signing — AtPqc.mlDsa65 is typed as AtSignatureAlgorithm
+// Signing — AtPqc.mlDsa65 is typed as AtSeededSignatureAlgorithm
 final kp = await MlDsa65KeyPair.generate();
 final signature =
     await AtPqc.mlDsa65.signBytes(message, secretKey: kp.privateKeyBytes);

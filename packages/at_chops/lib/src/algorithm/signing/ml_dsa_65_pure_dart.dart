@@ -38,6 +38,11 @@ final class MlDsa65PureDartAlgo
           _checkedKeyPair(MlDsa.generateKeyPair(DilithiumParams.mlDsa65),
               operation: 'ML-DSA-65 generateKeyPair');
 
+  /// A fresh [MlDsa65Sizes.seedBytes]-long seed from the platform's secure
+  /// random source, ready for [keyPairFromSeed].
+  @override
+  Uint8List newSeed() => MlDsa65Sizes.newSeed();
+
   /// Deterministically derive the ML-DSA-65 key pair for [seed], the 32-byte
   /// FIPS 204 `ξ` (`ML-DSA.KeyGen_internal`).
   ///

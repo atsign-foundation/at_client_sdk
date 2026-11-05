@@ -150,6 +150,11 @@ final class MlDsa65FfiAlgo
     }
   }
 
+  /// A fresh [MlDsa65Sizes.seedBytes]-long seed from the platform's secure
+  /// random source, ready for [keyPairFromSeed].
+  @override
+  Uint8List newSeed() => MlDsa65Sizes.newSeed();
+
   /// Deterministically derive the ML-DSA-65 key pair for [seed], the 32-byte
   /// FIPS 204 `ξ`, via `EVP_PKEY_fromdata` with OpenSSL's `seed` parameter.
   ///
@@ -183,7 +188,8 @@ final class MlDsa65FfiAlgo
       if (bld == nullptr) throw StateError('OSSL_PARAM_BLD_new failed');
       // By reference, not push_octet_string: to_param would copy the seed
       // into params, and OSSL_PARAM_free frees that copy without clearing it.
-      // seedBuf is then the only copy, and it outlives fromdata (finally).
+      // seedBuf is cleared in finally; the copy EVP_PKEY keeps is cleared by
+      // EVP_PKEY_free.
       if (_bldPushOctetPtr(bld, paramName, seedBuf, seed.length) <= 0) {
         _bldFree(bld);
         throw StateError('OSSL_PARAM_BLD_push_octet_ptr failed');
