@@ -14,7 +14,7 @@ An app client running in a browser must:
 |---|---|
 | R1 | Hold the atSign's @keys without them ever being stored in plaintext in the browser |
 | R2 | Reopen on the same browser with one biometric/PIN prompt and no passphrase |
-| R3 | Recover after browser storage is cleared, with the passkey alone — no passphrase, no typing. Met on the primary path because the PKAM key is derived from the passkey (K-12); the no-PRF fallback is ruled by K-13 (passphrase-sealed server record); a lost passkey is not recoverable, by ruling |
+| R3 | Recover after browser storage is cleared, with the passkey alone — no passphrase. With the hint cleared, the user types the atSign once to map the `userHandle` back (K-18). Met on the primary path because the PKAM key is derived from the passkey (K-12); the no-PRF fallback is ruled by K-13 (passphrase-sealed server record); a lost passkey is not recoverable, by ruling |
 | R4 | Not let a compromised atServer decrypt the stored keys |
 | R5 | Not let an outside reader learn how many devices an atSign has, or link a record to a passkey |
 | R6 | Not accumulate records for passkeys that no longer exist (under K-10, bounded: at most one orphan pointer per passkey, §5) |
