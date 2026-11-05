@@ -51,14 +51,14 @@ Future<OnboardingMint> mintOnboardingKeys({
   if (mintLegacyMaterial) {
     final encryptionKeyPair = RsaKeyPair.generate();
     keys
-      ..defaultEncryptionPublicKey =
-          AtBytes.fromString(encryptionKeyPair.atPublicKey.publicKey.toString())
+      ..defaultEncryptionPublicKey = AtBytes.fromString(
+        encryptionKeyPair.atPublicKey.publicKey.toString(),
+      )
       ..defaultEncryptionPrivateKey = AtBytes.fromString(
-          encryptionKeyPair.atPrivateKey.privateKey.toString())
-      ..defaultSelfEncryptionKey = AtBytes.fromString(
-          AESKey.generate(32).key)
-      ..apkamSymmetricKey = AtBytes.fromString(
-          AESKey.generate(32).key);
+        encryptionKeyPair.atPrivateKey.privateKey.toString(),
+      )
+      ..defaultSelfEncryptionKey = AtBytes.fromString(AESKey.generate(32).key)
+      ..apkamSymmetricKey = AtBytes.fromString(AESKey.generate(32).key);
   }
 
   final apkam = await mintApkamKeyPair(signingAlgo);
@@ -91,7 +91,8 @@ Future<OnboardingMint> mintOnboardingKeys({
 /// material under an enrollment id — which for an app enrolment is not known
 /// until the atServer answers.
 Future<({String publicKey, String privateKey})> mintApkamKeyPair(
-    SigningAlgoType signingAlgo) async {
+  SigningAlgoType signingAlgo,
+) async {
   switch (signingAlgo) {
     case SigningAlgoType.mldsa65:
       final apkam = await MlDsa65KeyPair.generate();
@@ -111,8 +112,10 @@ Future<({String publicKey, String privateKey})> mintApkamKeyPair(
 }
 
 /// The shape of [mintApkamKeyPair].
-typedef ApkamKeyPairMinter = Future<({String publicKey, String privateKey})>
-    Function(SigningAlgoType signingAlgo);
+typedef ApkamKeyPairMinter =
+    Future<({String publicKey, String privateKey})> Function(
+      SigningAlgoType signingAlgo,
+    );
 
 /// Refuses an APKAM keypair a caller supplied in place of [mintApkamKeyPair]
 /// unless it is a working pair under [signingAlgo], and returns it with both
@@ -132,24 +135,32 @@ typedef ApkamKeyPairMinter = Future<({String publicKey, String privateKey})>
 /// Throws [AtSigningException] for a pair that is malformed or mismatched and
 /// [ArgumentError] for an algorithm with no mint path.
 Future<({String publicKey, String privateKey})> checkApkamKeyPair(
-    SigningAlgoType signingAlgo,
-    ({String publicKey, String privateKey}) apkam) async {
+  SigningAlgoType signingAlgo,
+  ({String publicKey, String privateKey}) apkam,
+) async {
   if (signingAlgo != SigningAlgoType.mldsa65 &&
       signingAlgo != SigningAlgoType.rsa2048) {
     throw _noMintPath(signingAlgo);
   }
-  final Uint8List publicBytes;
-  final ({String publicKey, String privateKey}) canonical;
-  try {
-    publicBytes = base64Decode(apkam.publicKey);
-    canonical = (
-      publicKey: base64Encode(publicBytes),
-      privateKey: base64Encode(base64Decode(apkam.privateKey)),
-    );
-  } on FormatException catch (e) {
-    throw AtSigningException(
-        'the supplied ${signingAlgo.name} APKAM keypair is not base64: $e');
+  Uint8List decodeHalf(String half, String name) {
+    try {
+      return base64Decode(half);
+    } on FormatException catch (e) {
+      // Name the half and the position only: a FormatException's own text
+      // quotes the characters around the bad one, which for the private half
+      // is key material.
+      throw AtSigningException(
+        'the supplied ${signingAlgo.name} APKAM $name key is not base64'
+        '${e.offset == null ? '' : ' (at character ${e.offset})'}',
+      );
+    }
   }
+
+  final publicBytes = decodeHalf(apkam.publicKey, 'public');
+  final canonical = (
+    publicKey: base64Encode(publicBytes),
+    privateKey: base64Encode(decodeHalf(apkam.privateKey, 'private')),
+  );
 
   if (signingAlgo == SigningAlgoType.mldsa65) {
     MlDsa65KeyPair.create(canonical.publicKey, canonical.privateKey);
@@ -159,34 +170,45 @@ Future<({String publicKey, String privateKey})> checkApkamKeyPair(
   final message = Uint8List.fromList(utf8.encode(challenge));
   final bool verified;
   try {
-    final signature = base64Decode(signPkamChallenge((
-      algorithm: signingAlgo,
-      publicKey: canonical.publicKey,
-      privateKey: canonical.privateKey
-    ), challenge));
+    final signature = base64Decode(
+      signPkamChallenge((
+        algorithm: signingAlgo,
+        publicKey: canonical.publicKey,
+        privateKey: canonical.privateKey,
+      ), challenge),
+    );
     verified = signingAlgo == SigningAlgoType.mldsa65
-        ? MlDsa65PureDartAlgo.verifyBytesSync(message,
-            signature: signature, publicKey: publicBytes)
-        : await RsaSignatureAlgo.rsa2048()
-            .verifyBytes(message, signature: signature, publicKey: publicBytes);
+        ? MlDsa65PureDartAlgo.verifyBytesSync(
+            message,
+            signature: signature,
+            publicKey: publicBytes,
+          )
+        : await RsaSignatureAlgo.rsa2048().verifyBytes(
+            message,
+            signature: signature,
+            publicKey: publicBytes,
+          );
   } on AtSigningException {
     rethrow;
   } catch (e) {
     throw AtSigningException(
-        'the supplied ${signingAlgo.name} APKAM keypair cannot sign: $e');
+      'the supplied ${signingAlgo.name} APKAM keypair cannot sign: $e',
+    );
   }
   if (!verified) {
     throw AtSigningException(
-        'the supplied ${signingAlgo.name} APKAM private key does not match '
-        'its public key');
+      'the supplied ${signingAlgo.name} APKAM private key does not match '
+      'its public key',
+    );
   }
   return canonical;
 }
 
 ArgumentError _noMintPath(SigningAlgoType signingAlgo) => ArgumentError.value(
-    signingAlgo,
-    'signingAlgo',
-    'an APKAM authentication keypair can be minted as rsa2048 or '
-        'mldsa65; ${signingAlgo.name} has no mint path, and defaulting '
-        'to one of the others would enrol under an algorithm the caller '
-        'did not ask for');
+  signingAlgo,
+  'signingAlgo',
+  'an APKAM authentication keypair can be minted as rsa2048 or '
+      'mldsa65; ${signingAlgo.name} has no mint path, and defaulting '
+      'to one of the others would enrol under an algorithm the caller '
+      'did not ask for',
+);

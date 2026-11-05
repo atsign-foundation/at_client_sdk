@@ -36,19 +36,21 @@ void main() {
 
     MockAtLookUp approvingLookUp() {
       final mock = MockAtLookUp();
-      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
-              auth: any(named: 'auth')))
-          .thenAnswer((_) async =>
-              'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
+      when(
+        () => mock.executeCommand(
+          any(that: startsWith('enroll:')),
+          auth: any(named: 'auth'),
+        ),
+      ).thenAnswer(
+        (_) async => 'data:{"enrollmentId":"$enrollmentId","status":"pending"}',
+      );
       // The atSign's encryption public key, which this path RSA-encrypts to.
       when(() => mock.executeVerb(any()))
           .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
       return mock;
     }
 
-    test(
-        'a key package the builder mints is the ENROLLMENT\'s, not the atSign\'s',
-        () async {
+    test('a key package the builder mints is the ENROLLMENT\'s, not the atSign\'s', () async {
       // The builder runs before the request, so it files what it mints with no
       // enrollment id — the atServer has not named one yet. The two sibling
       // paths adopt that material under the id once it arrives; this one did
@@ -56,43 +58,56 @@ void main() {
       // never returned by keysForEnrollment, and not reaped when the
       // enrollment is retired.
       final response = await AtEnrollmentImpl().submit(
-          AtEnrollmentRequest(
-              session: AtAuthSession(
-                  atSign: atSign,
-                  rootDomain: AtRootDomain.atsignDomain,
-                  atKeysIo: InMemoryAtKeysIo()),
-              appName: 'wavi',
-              deviceName: 'iphone',
-              otp: 'ABC123',
-              namespaces: {'wavi': 'rw'},
-              signingAlgo: SigningAlgoType.rsa2048,
-              metadataBuilder: (keysIo) async {
-                final handed = await keysIo.read(atSign);
-                handed.addKey(CryptographicMaterial(
-                    keyId: 'kpid-1',
-                    role: CryptographicMaterialRole.privateDecapsulation,
-                    algorithm: CryptographicMaterialAlgorithm.xWing,
-                    bytes: AtBytes.fromString('c2VlZA=='),
-                    createdAt: DateTime.now().toUtc()));
-                return {'keyPackage': 'signed-envelope'};
-              }),
-          approvingLookUp());
+        AtEnrollmentRequest(
+          session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            atKeysIo: InMemoryAtKeysIo(),
+          ),
+          appName: 'wavi',
+          deviceName: 'iphone',
+          otp: 'ABC123',
+          namespaces: {'wavi': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048,
+          metadataBuilder: (keysIo) async {
+            final handed = await keysIo.read(atSign);
+            handed.addKey(
+              CryptographicMaterial(
+                keyId: 'kpid-1',
+                role: CryptographicMaterialRole.privateDecapsulation,
+                algorithm: CryptographicMaterialAlgorithm.xWing,
+                bytes: AtBytes.fromString('c2VlZA=='),
+                createdAt: DateTime.now().toUtc(),
+              ),
+            );
+            return {'keyPackage': 'signed-envelope'};
+          },
+        ),
+        approvingLookUp(),
+      );
 
       final keys = response.atAuthKeys!;
-      expect(keys.keysForEnrollment(enrollmentId).map((m) => m.keyId),
-          contains('kpid-1'),
-          reason: 'the material the builder minted for THIS enrollment must be '
-              'reachable as this enrollment\'s, or it is never reaped with it');
+      expect(
+        keys.keysForEnrollment(enrollmentId).map((m) => m.keyId),
+        contains('kpid-1'),
+        reason:
+            'the material the builder minted for THIS enrollment must be '
+            'reachable as this enrollment\'s, or it is never reaped with it',
+      );
 
       // The other half of the same claim, and what makes this discriminate
       // from a copy: it must not ALSO be sitting in the atSign's container,
       // which is where it landed before the adoption existed.
       expect(
-          keys.getAtSignKey(
-              'kpid-1', CryptographicMaterialRole.privateDecapsulation),
-          isNull,
-          reason: 'a key package belongs to the enrollment that advertised it, '
-              'not to the atSign');
+        keys.getAtSignKey(
+          'kpid-1',
+          CryptographicMaterialRole.privateDecapsulation,
+        ),
+        isNull,
+        reason:
+            'a key package belongs to the enrollment that advertised it, '
+            'not to the atSign',
+      );
     });
   });
 
@@ -107,34 +122,39 @@ void main() {
 
     MockAtLookUp approvingLookUp() {
       final mock = MockAtLookUp();
-      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
-              auth: any(named: 'auth')))
-          .thenAnswer((_) async =>
-              'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
+      when(
+        () => mock.executeCommand(
+          any(that: startsWith('enroll:')),
+          auth: any(named: 'auth'),
+        ),
+      ).thenAnswer(
+        (_) async => 'data:{"enrollmentId":"$enrollmentId","status":"pending"}',
+      );
       when(() => mock.executeVerb(any()))
           .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
       return mock;
     }
 
     Future<AtKeys> submit(
-        ({
-          SigningAlgoType algorithm,
-          String publicKey,
-          String privateKey
-        })? advertised) async {
+      ({SigningAlgoType algorithm, String publicKey, String privateKey})?
+      advertised,
+    ) async {
       final response = await AtEnrollmentImpl().submit(
-          AtEnrollmentRequest(
-              session: AtAuthSession(
-                  atSign: atSign,
-                  rootDomain: AtRootDomain.atsignDomain,
-                  atKeysIo: InMemoryAtKeysIo()),
-              appName: 'wavi',
-              deviceName: 'iphone',
-              otp: 'ABC123',
-              namespaces: {'wavi': 'rw'},
-              signingAlgo: SigningAlgoType.rsa2048,
-              advertisedSigningKey: advertised),
-          approvingLookUp());
+        AtEnrollmentRequest(
+          session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            atKeysIo: InMemoryAtKeysIo(),
+          ),
+          appName: 'wavi',
+          deviceName: 'iphone',
+          otp: 'ABC123',
+          namespaces: {'wavi': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048,
+          advertisedSigningKey: advertised,
+        ),
+        approvingLookUp(),
+      );
       return response.atAuthKeys!;
     }
 
@@ -142,31 +162,37 @@ void main() {
       final keys = await submit((
         algorithm: SigningAlgoType.rsa2048,
         publicKey: signingPub,
-        privateKey: signingPriv
+        privateKey: signingPriv,
       ));
 
       final held = keys.signingKeysFor(enrollmentId);
       expect(held, hasLength(1));
       expect(held.single.algorithm, SigningAlgoType.rsa2048);
       expect(held.single.publicKey, signingPub);
-      expect(held.single.privateKey, signingPriv,
-          reason: 'advertise-without-file leaves the next start finding the '
-              'in-use algorithm missing, minting a SECOND key and '
-              'republishing — orphaning the key this record already named');
+      expect(
+        held.single.privateKey,
+        signingPriv,
+        reason:
+            'advertise-without-file leaves the next start finding the '
+            'in-use algorithm missing, minting a SECOND key and '
+            'republishing — orphaning the key this record already named',
+      );
     });
 
     test('and it is the ENROLLMENT\'s, not the atSign\'s', () async {
       final keys = await submit((
         algorithm: SigningAlgoType.rsa2048,
         publicKey: signingPub,
-        privateKey: signingPriv
+        privateKey: signingPriv,
       ));
 
       // The other half of the same claim: material in the atSign's container
       // is not returned by keysForEnrollment and is not reaped when the
       // enrollment is retired.
-      expect(keys.keysForEnrollment(enrollmentId).map((m) => m.keyId),
-          contains('sign:rsa2048:1'));
+      expect(
+        keys.keysForEnrollment(enrollmentId).map((m) => m.keyId),
+        contains('sign:rsa2048:1'),
+      );
     });
 
     test('without one, nothing is filed', () async {
@@ -175,9 +201,13 @@ void main() {
       // byte-for-byte what it was.
       final keys = await submit(null);
 
-      expect(keys.signingKeysFor(enrollmentId), isEmpty,
-          reason: 'an enrollment that advertised no signing key holds none; '
-              'filing one anyway would publish a key nothing asked for');
+      expect(
+        keys.signingKeysFor(enrollmentId),
+        isEmpty,
+        reason:
+            'an enrollment that advertised no signing key holds none; '
+            'filing one anyway would publish a key nothing asked for',
+      );
     });
   });
 
@@ -188,23 +218,28 @@ void main() {
     late ({String publicKey, String privateKey}) supplied;
 
     AtAuthSession session() => AtAuthSession(
-        atSign: atSign,
-        rootDomain: AtRootDomain.atsignDomain,
-        atKeysIo: InMemoryAtKeysIo());
+      atSign: atSign,
+      rootDomain: AtRootDomain.atsignDomain,
+      atKeysIo: InMemoryAtKeysIo(),
+    );
 
     setUpAll(() async {
       final kp = await MlDsa65KeyPair.generate();
       supplied = (
         publicKey: kp.atPublicKey.publicKey,
-        privateKey: kp.atPrivateKey.privateKey
+        privateKey: kp.atPrivateKey.privateKey,
       );
     });
 
     (AtLookUp, List<String>) recordingLookUp() {
       final mock = MockAtLookUp();
       final sent = <String>[];
-      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
-          auth: any(named: 'auth'))).thenAnswer((inv) async {
+      when(
+        () => mock.executeCommand(
+          any(that: startsWith('enroll:')),
+          auth: any(named: 'auth'),
+        ),
+      ).thenAnswer((inv) async {
         sent.add(inv.positionalArguments[0] as String);
         return 'data:{"enrollmentId":"$enrollmentId","status":"pending"}';
       });
@@ -217,37 +252,43 @@ void main() {
         jsonDecode(command.substring(command.indexOf('{')))
             as Map<String, dynamic>;
 
-    AtEnrollmentRequest legacyRequest(
-            {({String publicKey, String privateKey})? apkamKeyPair,
-            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)?
-                metadataBuilder}) =>
-        AtEnrollmentRequest(
-            session: session(),
-            appName: 'wavi',
-            deviceName: 'browser',
-            otp: 'ABC123',
-            namespaces: {'wavi': 'rw'},
-            signingAlgo: SigningAlgoType.mldsa65,
-            apkamKeyPair: apkamKeyPair,
-            metadataBuilder: metadataBuilder);
+    AtEnrollmentRequest legacyRequest({
+      ({String publicKey, String privateKey})? apkamKeyPair,
+      FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? metadataBuilder,
+    }) => AtEnrollmentRequest(
+      session: session(),
+      appName: 'wavi',
+      deviceName: 'browser',
+      otp: 'ABC123',
+      namespaces: {'wavi': 'rw'},
+      signingAlgo: SigningAlgoType.mldsa65,
+      apkamKeyPair: apkamKeyPair,
+      metadataBuilder: metadataBuilder,
+    );
 
-    test('its public key is the one sent, in the request and in _apsk',
-        () async {
+    test('given a supplied pair, when it is submitted, then its public key is '
+        'the one sent, in the request and in _apsk', () async {
       final (lookUp, sent) = recordingLookUp();
-      await AtEnrollmentImpl()
-          .submit(legacyRequest(apkamKeyPair: supplied), lookUp);
+      await AtEnrollmentImpl().submit(
+        legacyRequest(apkamKeyPair: supplied),
+        lookUp,
+      );
 
       final params = paramsOf(sent.single);
       expect(params['apkamPublicKey'], supplied.publicKey);
       expect(
-          (params['apsk']['keys'] as List).single['pub'], supplied.publicKey);
+        (params['apsk']['keys'] as List).single['pub'],
+        supplied.publicKey,
+      );
     });
 
-    test('its private key is the one kept', () async {
+    test('given a supplied pair, when it is submitted, then its private key is '
+        'the one kept', () async {
       final (lookUp, _) = recordingLookUp();
-      final keys = (await AtEnrollmentImpl()
-              .submit(legacyRequest(apkamKeyPair: supplied), lookUp))
-          .atAuthKeys!;
+      final keys = (await AtEnrollmentImpl().submit(
+        legacyRequest(apkamKeyPair: supplied),
+        lookUp,
+      )).atAuthKeys!;
 
       expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
       expect(keys.apkamPublicKey.toString(), supplied.publicKey);
@@ -257,166 +298,233 @@ void main() {
           .singleWhere((m) => m.role == role)
           .bytes
           .toString();
-      expect(filed(CryptographicMaterialRole.privateAuthentication),
-          supplied.privateKey);
-      expect(filed(CryptographicMaterialRole.publicAuthentication),
-          supplied.publicKey);
+      expect(
+        filed(CryptographicMaterialRole.privateAuthentication),
+        supplied.privateKey,
+      );
+      expect(
+        filed(CryptographicMaterialRole.publicAuthentication),
+        supplied.publicKey,
+      );
     });
 
-    test('the metadataBuilder is handed the supplied keypair', () async {
+    test('given a supplied pair and a metadataBuilder, when it is submitted, '
+        'then the builder is handed the supplied keypair', () async {
       final (lookUp, _) = recordingLookUp();
       AtKeys? seen;
       await AtEnrollmentImpl().submit(
-          legacyRequest(
-              apkamKeyPair: supplied,
-              metadataBuilder: (keysIo) async {
-                seen = await keysIo.read(atSign);
-                return null;
-              }),
-          lookUp);
+        legacyRequest(
+          apkamKeyPair: supplied,
+          metadataBuilder: (keysIo) async {
+            seen = await keysIo.read(atSign);
+            return null;
+          },
+        ),
+        lookUp,
+      );
 
       expect(seen!.apkamPrivateKey.toString(), supplied.privateKey);
       expect(seen!.apkamPublicKey.toString(), supplied.publicKey);
     });
 
-    test('a pq request carries it too', () async {
+    test('given a supplied pair on a pq request, when it is submitted, then '
+        'the request and the keyfile carry it', () async {
       final (lookUp, sent) = recordingLookUp();
       final keys = (await AtEnrollmentImpl().submit(
-              AtEnrollmentRequest.pq(
-                session: session(),
-                appName: 'wavi',
-                deviceName: 'browser',
-                otp: 'ABC123',
-                namespaces: {'wavi': 'rw'},
-                signingAlgo: SigningAlgoType.mldsa65,
-                apkamKeyPair: supplied,
-                metadataBuilder: (_) async => {
-                  'keyPackage': {'v': 1, 'keys': []}
-                },
-                apkamSymmetricKeyResolver: _unusedResolver,
-              ),
-              lookUp))
-          .atAuthKeys!;
+        AtEnrollmentRequest.pq(
+          session: session(),
+          appName: 'wavi',
+          deviceName: 'browser',
+          otp: 'ABC123',
+          namespaces: {'wavi': 'rw'},
+          signingAlgo: SigningAlgoType.mldsa65,
+          apkamKeyPair: supplied,
+          metadataBuilder: (_) async => {
+            'keyPackage': {'v': 1, 'keys': []},
+          },
+          apkamSymmetricKeyResolver: _unusedResolver,
+        ),
+        lookUp,
+      )).atAuthKeys!;
 
       expect(paramsOf(sent.single)['apkamPublicKey'], supplied.publicKey);
       expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
     });
 
-    test('a pair that is not mldsa65 key material is refused before sending',
-        () async {
+    test('given a pair of the wrong length for mldsa65, when it is submitted, '
+        'then it is refused before sending', () async {
       final (lookUp, sent) = recordingLookUp();
       await expectLater(
-          AtEnrollmentImpl().submit(
-              legacyRequest(apkamKeyPair: (
-                publicKey: base64Encode(List<int>.filled(32, 1)),
-                privateKey: base64Encode(List<int>.filled(32, 2))
-              )),
-              lookUp),
-          throwsA(isA<AtSigningException>()));
+        AtEnrollmentImpl().submit(
+          legacyRequest(
+            apkamKeyPair: (
+              publicKey: base64Encode(List<int>.filled(32, 1)),
+              privateKey: base64Encode(List<int>.filled(32, 2)),
+            ),
+          ),
+          lookUp,
+        ),
+        throwsA(isA<AtSigningException>()),
+      );
       expect(sent, isEmpty);
     });
 
     AtEnrollmentRequest rsaRequest(
-            ({String publicKey, String privateKey}) apkamKeyPair) =>
-        AtEnrollmentRequest(
-            session: session(),
-            appName: 'wavi',
-            deviceName: 'browser',
-            otp: 'ABC123',
-            namespaces: {'wavi': 'rw'},
-            signingAlgo: SigningAlgoType.rsa2048,
-            apkamKeyPair: apkamKeyPair);
+      ({String publicKey, String privateKey}) apkamKeyPair,
+    ) => AtEnrollmentRequest(
+      session: session(),
+      appName: 'wavi',
+      deviceName: 'browser',
+      otp: 'ABC123',
+      namespaces: {'wavi': 'rw'},
+      signingAlgo: SigningAlgoType.rsa2048,
+      apkamKeyPair: apkamKeyPair,
+    );
 
     ({String publicKey, String privateKey}) rsaPair() {
       final kp = RsaKeyPair.generate();
       return (
         publicKey: kp.atPublicKey.publicKey.toString(),
-        privateKey: kp.atPrivateKey.privateKey.toString()
+        privateKey: kp.atPrivateKey.privateKey.toString(),
       );
     }
 
     test(
-        'given an rsa2048 pair, when it is submitted, then its public key is '
-        'sent, the flat fields keep it and no typed material is filed',
-        () async {
-      final rsa = rsaPair();
-      final (lookUp, sent) = recordingLookUp();
-      final keys = (await AtEnrollmentImpl().submit(rsaRequest(rsa), lookUp))
-          .atAuthKeys!;
+      'given an rsa2048 pair, when it is submitted, then its public key is '
+      'sent, the flat fields keep it and no typed material is filed',
+      () async {
+        final rsa = rsaPair();
+        final (lookUp, sent) = recordingLookUp();
+        final keys = (await AtEnrollmentImpl().submit(
+          rsaRequest(rsa),
+          lookUp,
+        )).atAuthKeys!;
 
-      expect(paramsOf(sent.single)['apkamPublicKey'], rsa.publicKey);
-      expect(keys.apkamPublicKey.toString(), rsa.publicKey);
-      expect(keys.apkamPrivateKey.toString(), rsa.privateKey);
-      expect(keys.signingKeysFor(enrollmentId), isEmpty);
-      expect(
-          keys.keysForEnrollment(enrollmentId).where((m) =>
-              m.role == CryptographicMaterialRole.privateAuthentication ||
-              m.role == CryptographicMaterialRole.publicAuthentication),
-          isEmpty);
-    });
+        expect(paramsOf(sent.single)['apkamPublicKey'], rsa.publicKey);
+        expect(keys.apkamPublicKey.toString(), rsa.publicKey);
+        expect(keys.apkamPrivateKey.toString(), rsa.privateKey);
+        expect(keys.signingKeysFor(enrollmentId), isEmpty);
+        expect(
+          keys
+              .keysForEnrollment(enrollmentId)
+              .where(
+                (m) =>
+                    m.role == CryptographicMaterialRole.privateAuthentication ||
+                    m.role == CryptographicMaterialRole.publicAuthentication,
+              ),
+          isEmpty,
+        );
+      },
+    );
 
     group('given a supplied pair that does not work,', () {
       Future<void> expectRefused(AtEnrollmentRequest Function() request) async {
         final (lookUp, sent) = recordingLookUp();
-        await expectLater(AtEnrollmentImpl().submit(request(), lookUp),
-            throwsA(isA<AtSigningException>()));
+        await expectLater(
+          AtEnrollmentImpl().submit(request(), lookUp),
+          throwsA(isA<AtSigningException>()),
+        );
         expect(sent, isEmpty);
       }
 
-      test(
-          'when its mldsa65 halves come from two keypairs, then it is refused '
+      test('when its mldsa65 halves come from two keypairs, then it is refused '
           'before sending', () async {
         final other = await MlDsa65KeyPair.generate();
-        await expectRefused(() => legacyRequest(apkamKeyPair: (
+        await expectRefused(
+          () => legacyRequest(
+            apkamKeyPair: (
               publicKey: supplied.publicKey,
-              privateKey: other.atPrivateKey.privateKey
-            )));
+              privateKey: other.atPrivateKey.privateKey,
+            ),
+          ),
+        );
       });
 
-      test(
-          'when its rsa2048 halves come from two keypairs, then it is refused '
+      test('when its rsa2048 halves come from two keypairs, then it is refused '
           'before sending', () async {
         final a = rsaPair();
         final b = rsaPair();
-        await expectRefused(() =>
-            rsaRequest((publicKey: a.publicKey, privateKey: b.privateKey)));
+        await expectRefused(
+          () => rsaRequest((publicKey: a.publicKey, privateKey: b.privateKey)),
+        );
+      });
+
+      test('when a half is not base64, then the error names the half and the '
+          'position and holds none of the key', () async {
+        final (lookUp, sent) = recordingLookUp();
+        final secret = supplied.privateKey;
+        for (final bad in [
+          '$secret\n',
+          '${secret.substring(0, 40)}!${secret.substring(41)}',
+        ]) {
+          Object? error;
+          try {
+            await AtEnrollmentImpl().submit(
+              legacyRequest(
+                apkamKeyPair: (publicKey: supplied.publicKey, privateKey: bad),
+              ),
+              lookUp,
+            );
+          } catch (e) {
+            error = e;
+          }
+          expect(error, isA<AtSigningException>());
+          final message = error.toString();
+          expect(message, contains('private'));
+          expect(message, matches(RegExp(r'at character \d+')));
+          expect(
+            message,
+            isNot(contains(secret.substring(secret.length - 20))),
+          );
+          expect(message, isNot(contains(secret.substring(20, 40))));
+        }
+        expect(sent, isEmpty);
       });
 
       test(
-          'when it is mldsa65 all-zero bytes, then it is refused before sending',
-          () async {
-        await expectRefused(() => legacyRequest(apkamKeyPair: (
-              publicKey: base64Encode(List<int>.filled(1952, 0)),
-              privateKey: base64Encode(List<int>.filled(4032, 0))
-            )));
-      });
+        'when it is mldsa65 all-zero bytes, then it is refused before sending',
+        () async {
+          await expectRefused(
+            () => legacyRequest(
+              apkamKeyPair: (
+                publicKey: base64Encode(List<int>.filled(1952, 0)),
+                privateKey: base64Encode(List<int>.filled(4032, 0)),
+              ),
+            ),
+          );
+        },
+      );
 
-      test(
-          'when it is two empty rsa2048 strings, then it is refused before '
+      test('when it is two empty rsa2048 strings, then it is refused before '
           'sending', () async {
         await expectRefused(() => rsaRequest((publicKey: '', privateKey: '')));
       });
     });
 
-    test(
-        'given a base64url pair, when it is submitted, then the request and '
+    test('given a base64url pair, when it is submitted, then the request and '
         'the keyfile carry the standard-base64 spelling', () async {
       final url = (
         publicKey: base64Url.encode(base64Decode(supplied.publicKey)),
-        privateKey: base64Url.encode(base64Decode(supplied.privateKey))
+        privateKey: base64Url.encode(base64Decode(supplied.privateKey)),
       );
-      expect(url.publicKey, isNot(supplied.publicKey),
-          reason: 'the fixture must actually differ in spelling');
+      expect(
+        url.publicKey,
+        isNot(supplied.publicKey),
+        reason: 'the fixture must actually differ in spelling',
+      );
 
       final (lookUp, sent) = recordingLookUp();
-      final keys = (await AtEnrollmentImpl()
-              .submit(legacyRequest(apkamKeyPair: url), lookUp))
-          .atAuthKeys!;
+      final keys = (await AtEnrollmentImpl().submit(
+        legacyRequest(apkamKeyPair: url),
+        lookUp,
+      )).atAuthKeys!;
 
       final params = paramsOf(sent.single);
       expect(params['apkamPublicKey'], supplied.publicKey);
       expect(
-          (params['apsk']['keys'] as List).single['pub'], supplied.publicKey);
+        (params['apsk']['keys'] as List).single['pub'],
+        supplied.publicKey,
+      );
       expect(keys.apkamPublicKey.toString(), supplied.publicKey);
       expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
     });
@@ -424,20 +532,24 @@ void main() {
     (EnrollmentSubmitter, List<SigningAlgoType>) countingSubmitter() {
       final mints = <SigningAlgoType>[];
       return (
-        EnrollmentSubmitter(EnrollmentProgress(), EnrollmentApprover(),
-            mintApkamKeyPair: (signingAlgo) async {
-          mints.add(signingAlgo);
-          final kp = await MlDsa65KeyPair.generate();
-          return (
-            publicKey: kp.atPublicKey.publicKey,
-            privateKey: kp.atPrivateKey.privateKey
-          );
-        }),
-        mints
+        EnrollmentSubmitter(
+          EnrollmentProgress(),
+          EnrollmentApprover(),
+          mintApkamKeyPair: (signingAlgo) async {
+            mints.add(signingAlgo);
+            final kp = await MlDsa65KeyPair.generate();
+            return (
+              publicKey: kp.atPublicKey.publicKey,
+              privateKey: kp.atPrivateKey.privateKey,
+            );
+          },
+        ),
+        mints,
       );
     }
 
-    test('the keypair minter is never invoked', () async {
+    test('given a supplied pair, when it is submitted, then the keypair minter '
+        'is never invoked', () async {
       final (lookUp, _) = recordingLookUp();
       final (submitter, mints) = countingSubmitter();
       await submitter.submit(legacyRequest(apkamKeyPair: supplied), lookUp);
@@ -445,8 +557,8 @@ void main() {
       expect(mints, isEmpty);
     });
 
-    test('without one, the keypair minter is invoked once, under signingAlgo',
-        () async {
+    test('given no pair, when it is submitted, then the keypair minter is '
+        'invoked once, under signingAlgo', () async {
       final (lookUp, _) = recordingLookUp();
       final (submitter, mints) = countingSubmitter();
       await submitter.submit(legacyRequest(), lookUp);
@@ -454,42 +566,51 @@ void main() {
       expect(mints, [SigningAlgoType.mldsa65]);
     });
 
-    test('under an algorithm with no mint path, it is refused before sending',
-        () async {
+    test('given a pair under an algorithm with no mint path, when it is '
+        'submitted, then it is refused before sending', () async {
       final (lookUp, sent) = recordingLookUp();
       await expectLater(
-          AtEnrollmentImpl().submit(
-              AtEnrollmentRequest(
-                  session: session(),
-                  appName: 'wavi',
-                  deviceName: 'browser',
-                  otp: 'ABC123',
-                  namespaces: {'wavi': 'rw'},
-                  signingAlgo: SigningAlgoType.ed25519,
-                  apkamKeyPair: supplied),
-              lookUp),
-          throwsA(isA<ArgumentError>()));
+        AtEnrollmentImpl().submit(
+          AtEnrollmentRequest(
+            session: session(),
+            appName: 'wavi',
+            deviceName: 'browser',
+            otp: 'ABC123',
+            namespaces: {'wavi': 'rw'},
+            signingAlgo: SigningAlgoType.ed25519,
+            apkamKeyPair: supplied,
+          ),
+          lookUp,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
       expect(sent, isEmpty);
     });
 
-    test('without one, a fresh keypair is minted', () async {
-      final (lookUp, sent) = recordingLookUp();
-      final keys = (await AtEnrollmentImpl().submit(legacyRequest(), lookUp))
-          .atAuthKeys!;
+    test(
+      'given no pair, when it is submitted, then a fresh keypair is minted',
+      () async {
+        final (lookUp, sent) = recordingLookUp();
+        final keys = (await AtEnrollmentImpl().submit(
+          legacyRequest(),
+          lookUp,
+        )).atAuthKeys!;
 
-      final sentPublicKey = paramsOf(sent.single)['apkamPublicKey'];
-      expect(sentPublicKey, isNot(supplied.publicKey));
-      expect(keys.apkamPublicKey.toString(), sentPublicKey);
-      expect(
+        final sentPublicKey = paramsOf(sent.single)['apkamPublicKey'];
+        expect(sentPublicKey, isNot(supplied.publicKey));
+        expect(keys.apkamPublicKey.toString(), sentPublicKey);
+        expect(
           MlDsa65KeyPair.create(
-              sentPublicKey as String, keys.apkamPrivateKey.toString()),
-          isNotNull);
-    });
+            sentPublicKey as String,
+            keys.apkamPrivateKey.toString(),
+          ),
+          isNotNull,
+        );
+      },
+    );
   });
 
-  test(
-      'A test to verify submitting enrollment to server and verify enrollment status is pending',
-      () async {
+  test('A test to verify submitting enrollment to server and verify enrollment status is pending', () async {
     String atSign = '@alice🛠';
     AtEnrollmentImpl atEnrollmentServiceImpl = AtEnrollmentImpl();
     AtLookUp mockAtLookUp = MockAtLookUp();
@@ -507,26 +628,41 @@ void main() {
         .thenAnswer((_) async => 'data:$encryptionPublicKey');
 
     when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:'))))
-        .thenAnswer((_) => Future.value('data:${jsonEncode({
-                  'enrollmentId': '123',
-                  'status': 'pending'
-                })}'));
+        .thenAnswer(
+          (_) => Future.value(
+            'data:${jsonEncode({'enrollmentId': '123', 'status': 'pending'})}',
+          ),
+        );
 
-    when(() => mockAtLookUp.executeCommand(
+    when(
+      () => mockAtLookUp.executeCommand(
         any(
-            that: startsWith(
-                'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}')),
-        auth:
-            true)).thenAnswer((_) async => Future.value(
-        jsonEncode({'value': sealer.encrypt(encryptionPrivateKey, iv: iv)})));
+          that: startsWith(
+            'keys:get:keyName:123.${AtConstants.defaultEncryptionPrivateKey}',
+          ),
+        ),
+        auth: true,
+      ),
+    ).thenAnswer(
+      (_) async => Future.value(
+        jsonEncode({'value': sealer.encrypt(encryptionPrivateKey, iv: iv)}),
+      ),
+    );
 
-    when(() => mockAtLookUp.executeCommand(
+    when(
+      () => mockAtLookUp.executeCommand(
         any(
-            that: startsWith(
-                'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}')),
-        auth:
-            true)).thenAnswer((_) async => Future.value(
-        jsonEncode({'value': sealer.encrypt(selfEncryptionKey, iv: iv)})));
+          that: startsWith(
+            'keys:get:keyName:123.${AtConstants.defaultSelfEncryptionKey}',
+          ),
+        ),
+        auth: true,
+      ),
+    ).thenAnswer(
+      (_) async => Future.value(
+        jsonEncode({'value': sealer.encrypt(selfEncryptionKey, iv: iv)}),
+      ),
+    );
     when(() => mockAtLookUp.pkamAuthenticate())
         .thenAnswer((_) => Future.value(true));
 
@@ -534,18 +670,20 @@ void main() {
         .thenAnswer((_) async => ());
 
     AtEnrollmentRequest enrollmentRequest = AtEnrollmentRequest(
-        session: AtAuthSession(
-            atSign: atSign,
-            rootDomain: AtRootDomain.atsignDomain,
-            atKeysIo: InMemoryAtKeysIo()),
-        appName: 'wavi',
-        deviceName: 'pixel',
-        otp: 'A123FE',
-        namespaces: {'wavi': 'rw'},
-        signingAlgo: SigningAlgoType.rsa2048);
+      session: AtAuthSession(
+        atSign: atSign,
+        rootDomain: AtRootDomain.atsignDomain,
+        atKeysIo: InMemoryAtKeysIo(),
+      ),
+      appName: 'wavi',
+      deviceName: 'pixel',
+      otp: 'A123FE',
+      namespaces: {'wavi': 'rw'},
+      signingAlgo: SigningAlgoType.rsa2048,
+    );
 
-    AtEnrollmentResponse atEnrollmentResponse =
-        await atEnrollmentServiceImpl.submit(enrollmentRequest, mockAtLookUp);
+    AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentServiceImpl
+        .submit(enrollmentRequest, mockAtLookUp);
     expect(atEnrollmentResponse.enrollmentId, '123');
     expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
   });
@@ -559,36 +697,46 @@ void main() {
       String? selfEncryptionKey = aesKeyMap[atSign]!;
       String? apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
 
-      String encryptedAPKAMSymmetricKey =
-          RSAPublicKey.fromString(encryptionPublicKey)
-              .encrypt(apkamSymmetricKey);
+      String encryptedAPKAMSymmetricKey = RSAPublicKey.fromString(
+        encryptionPublicKey,
+      ).encrypt(apkamSymmetricKey);
 
       AtLookUp mockAtLookUp = MockAtLookUp();
 
       AtEnrollment atEnrollmentBase = AtEnrollmentImpl();
 
-      when(() =>
-          mockAtLookUp.executeCommand(any(that: startsWith('enroll:approve')),
-              auth: true)).thenAnswer((_) => Future.value('data:${jsonEncode({
-                'status': 'approved',
-                'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'
-              })}'));
+      when(
+        () => mockAtLookUp.executeCommand(
+          any(that: startsWith('enroll:approve')),
+          auth: true,
+        ),
+      ).thenAnswer(
+        (_) => Future.value(
+          'data:${jsonEncode({'status': 'approved', 'enrollmentId': '4be2d358-074d-4e3b-99f3-64c4da01532f'})}',
+        ),
+      );
 
       EnrollmentRequestDecision enrollmentRequestDecision =
           EnrollmentRequestDecision.approved(
-        enrollmentId: '4be2d358-074d-4e3b-99f3-64c4da01532f',
-        apkamSymmetricKey: AtBytes.fromString(encryptedAPKAMSymmetricKey),
-        atSign: atSign,
-      );
+            enrollmentId: '4be2d358-074d-4e3b-99f3-64c4da01532f',
+            apkamSymmetricKey: AtBytes.fromString(encryptedAPKAMSymmetricKey),
+            atSign: atSign,
+          );
 
       AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase
-          .approve(enrollmentRequestDecision, mockAtLookUp, approverKeys: (
-        encryptionPrivateKey: encryptionPrivateKey,
-        selfEncryptionKey: selfEncryptionKey
-      ));
+          .approve(
+            enrollmentRequestDecision,
+            mockAtLookUp,
+            approverKeys: (
+              encryptionPrivateKey: encryptionPrivateKey,
+              selfEncryptionKey: selfEncryptionKey,
+            ),
+          );
 
-      expect(atEnrollmentResponse.enrollmentId,
-          '4be2d358-074d-4e3b-99f3-64c4da01532f');
+      expect(
+        atEnrollmentResponse.enrollmentId,
+        '4be2d358-074d-4e3b-99f3-64c4da01532f',
+      );
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.approved);
     });
   });
@@ -627,10 +775,7 @@ void main() {
     });
 
     test('fromJson restores enrollmentId and enrollStatus', () {
-      final json = {
-        'enrollmentId': 'enroll-456',
-        'enrollStatus': 'denied',
-      };
+      final json = {'enrollmentId': 'enroll-456', 'enrollStatus': 'denied'};
 
       final response = AtEnrollmentResponse.fromJson(json);
 
@@ -642,7 +787,7 @@ void main() {
       final json = {
         'enrollmentId': 'enroll-456',
         'enrollStatus': 'pending',
-        'atAuthKeys': AtKeys()
+        'atAuthKeys': AtKeys(),
       };
       expect(AtEnrollmentResponse.fromJson(json).atAuthKeys, isNull);
     });
@@ -662,19 +807,16 @@ void main() {
     test('fromJson throws when enrollmentId is missing', () {
       final json = {'enrollStatus': 'approved'};
 
-      expect(
-        () => AtEnrollmentResponse.fromJson(json),
-        throwsA(anything),
-      );
+      expect(() => AtEnrollmentResponse.fromJson(json), throwsA(anything));
     });
   });
 
   group('AtEnrollmentRequest session wiring', () {
     AtAuthSession selfHostedSession() => AtAuthSession(
-          atSign: '@alice🛠',
-          rootDomain: AtRootDomain('vip.ve.atsign.zone', 25000),
-          atKeysIo: InMemoryAtKeysIo(),
-        );
+      atSign: '@alice🛠',
+      rootDomain: AtRootDomain('vip.ve.atsign.zone', 25000),
+      atKeysIo: InMemoryAtKeysIo(),
+    );
 
     test('session is the source of atSign and rootDomain', () {
       final session = selfHostedSession();
@@ -691,8 +833,11 @@ void main() {
       expect(request.session, same(session));
       expect(request.atSign, '@alice🛠');
       expect(request.rootDomain, same(session.rootDomain));
-      expect(request.rootDomain.rootDomain, 'vip.ve.atsign.zone',
-          reason: 'a session naming a root other than the default keeps it');
+      expect(
+        request.rootDomain.rootDomain,
+        'vip.ve.atsign.zone',
+        reason: 'a session naming a root other than the default keeps it',
+      );
     });
 
     test('a pq request takes its atSign and rootDomain from the session', () {
@@ -733,21 +878,30 @@ void main() {
         );
 
     test(
-        'when it is built with rsa2048, then it is refused naming both rsa2048 '
-        'and the pq key exchange', () {
-      expect(
+      'when it is built with rsa2048, then it is refused naming both rsa2048 '
+      'and the pq key exchange',
+      () {
+        expect(
           () => pqRequest(SigningAlgoType.rsa2048),
-          throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
-              allOf(contains('rsa2048'), contains('pq key exchange')))));
-    });
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => '${e.message}',
+              'message',
+              allOf(contains('rsa2048'), contains('pq key exchange')),
+            ),
+          ),
+        );
+      },
+    );
 
     test('when it is built with mldsa65, then it is accepted', () {
-      expect(pqRequest(SigningAlgoType.mldsa65).signingAlgo,
-          SigningAlgoType.mldsa65);
+      expect(
+        pqRequest(SigningAlgoType.mldsa65).signingAlgo,
+        SigningAlgoType.mldsa65,
+      );
     });
 
-    test(
-        'when a legacy request is built with rsa2048 instead, then it is '
+    test('when a legacy request is built with rsa2048 instead, then it is '
         'accepted', () {
       final request = AtEnrollmentRequest(
         session: AtAuthSession(
@@ -773,55 +927,55 @@ void main() {
     (AtLookUp, List<String>) mockLookUpRecordingEnrollCommands() {
       final AtLookUp mockAtLookUp = MockAtLookUp();
       final sent = <String>[];
-      when(() =>
-              mockAtLookUp.executeVerb(any(that: LookUpVerbBuilderMatcher())))
-          .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]!}');
-      when(() => mockAtLookUp.executeCommand(any(that: startsWith('enroll:'))))
-          .thenAnswer((inv) {
+      when(
+        () => mockAtLookUp.executeVerb(any(that: LookUpVerbBuilderMatcher())),
+      ).thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]!}');
+      when(
+        () => mockAtLookUp.executeCommand(any(that: startsWith('enroll:'))),
+      ).thenAnswer((inv) {
         sent.add(inv.positionalArguments[0] as String);
-        return Future.value('data:${jsonEncode({
-              'enrollmentId': '123',
-              'status': 'pending',
-            })}');
+        return Future.value(
+          'data:${jsonEncode({'enrollmentId': '123', 'status': 'pending'})}',
+        );
       });
       return (mockAtLookUp, sent);
     }
 
     AtAuthSession freshSession() => AtAuthSession(
-        atSign: atSign,
-        rootDomain: AtRootDomain.atsignDomain,
-        atKeysIo: InMemoryAtKeysIo());
+      atSign: atSign,
+      rootDomain: AtRootDomain.atsignDomain,
+      atKeysIo: InMemoryAtKeysIo(),
+    );
 
     AtEnrollmentRequest requestWith(
-            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? builder) =>
-        AtEnrollmentRequest(
-          session: freshSession(),
-          appName: 'wavi',
-          deviceName: 'pixel',
-          namespaces: {'wavi': 'rw'},
-          otp: 'A123FE',
-          metadataBuilder: builder,
-          signingAlgo: SigningAlgoType.rsa2048,
-        );
+      FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? builder,
+    ) => AtEnrollmentRequest(
+      session: freshSession(),
+      appName: 'wavi',
+      deviceName: 'pixel',
+      namespaces: {'wavi': 'rw'},
+      otp: 'A123FE',
+      metadataBuilder: builder,
+      signingAlgo: SigningAlgoType.rsa2048,
+    );
 
     AtEnrollmentRequest pqRequestWith(
-            FutureOr<Map<String, dynamic>?> Function(AtKeysIo) builder) =>
-        AtEnrollmentRequest.pq(
-          session: freshSession(),
-          appName: 'wavi',
-          deviceName: 'pixel',
-          namespaces: {'wavi': 'rw'},
-          otp: 'A123FE',
-          metadataBuilder: builder,
-          // These tests stop at submit, so the resolver is never called; it is
-          // here because pq mode requires one, and the conveyance it stands
-          // for is covered separately.
-          apkamSymmetricKeyResolver: _unusedResolver,
-          signingAlgo: SigningAlgoType.mldsa65,
-        );
+      FutureOr<Map<String, dynamic>?> Function(AtKeysIo) builder,
+    ) => AtEnrollmentRequest.pq(
+      session: freshSession(),
+      appName: 'wavi',
+      deviceName: 'pixel',
+      namespaces: {'wavi': 'rw'},
+      otp: 'A123FE',
+      metadataBuilder: builder,
+      // These tests stop at submit, so the resolver is never called; it is
+      // here because pq mode requires one, and the conveyance it stands
+      // for is covered separately.
+      apkamSymmetricKeyResolver: _unusedResolver,
+      signingAlgo: SigningAlgoType.mldsa65,
+    );
 
-    test(
-        'receives the APKAM keypair this request will enroll, and no '
+    test('receives the APKAM keypair this request will enroll, and no '
         'enrollmentId', () async {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
       AtKeys? seen;
@@ -831,51 +985,71 @@ void main() {
       // has run and signed whatever it signed.
       Object? enrollmentIdWhenCalled;
 
-      await AtEnrollmentImpl().submit(requestWith((keysIo) async {
-        seen = await keysIo.read(atSign);
-        enrollmentIdWhenCalled = seen!.enrollmentId;
-        return {'keyPackage': 'built-by-the-caller'};
-      }), mockAtLookUp);
+      await AtEnrollmentImpl().submit(
+        requestWith((keysIo) async {
+          seen = await keysIo.read(atSign);
+          enrollmentIdWhenCalled = seen!.enrollmentId;
+          return {'keyPackage': 'built-by-the-caller'};
+        }),
+        mockAtLookUp,
+      );
 
       expect(seen, isNotNull, reason: 'the builder must actually be called');
-      expect(seen!.apkamPrivateKey, isNotNull,
-          reason: 'the private half is the whole point — the caller has to be '
-              'able to sign with the key this enrollment will use, and that '
-              'keypair does not exist before the request is assembled');
+      expect(
+        seen!.apkamPrivateKey,
+        isNotNull,
+        reason:
+            'the private half is the whole point — the caller has to be '
+            'able to sign with the key this enrollment will use, and that '
+            'keypair does not exist before the request is assembled',
+      );
       // The public half sent to the atServer must be the same keypair the
       // builder signed with, or a verifier fetching _apsk would check the
       // signature against a different key.
       expect(sent.single, contains(seen!.apkamPublicKey!.toString()));
 
-      expect(enrollmentIdWhenCalled, isNull,
-          reason: 'the atServer assigns it in the response to this very '
-              'request, so anything the builder signs must be valid without '
-              'one');
+      expect(
+        enrollmentIdWhenCalled,
+        isNull,
+        reason:
+            'the atServer assigns it in the response to this very '
+            'request, so anything the builder signs must be valid without '
+            'one',
+      );
     });
 
     test('its result rides the enroll command', () async {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await AtEnrollmentImpl().submit(
-          requestWith((_) async => {'keyPackage': 'opaque-to-at-auth'}),
-          mockAtLookUp);
+        requestWith((_) async => {'keyPackage': 'opaque-to-at-auth'}),
+        mockAtLookUp,
+      );
 
       expect(sent.single, contains('opaque-to-at-auth'));
     });
 
-    test('a builder that throws costs a log line, not the enrollment',
-        () async {
-      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+    test(
+      'a builder that throws costs a log line, not the enrollment',
+      () async {
+        final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
-      final response = await AtEnrollmentImpl().submit(
-          requestWith((_) => throw StateError('no keys')), mockAtLookUp);
+        final response = await AtEnrollmentImpl().submit(
+          requestWith((_) => throw StateError('no keys')),
+          mockAtLookUp,
+        );
 
-      expect(response.enrollmentId, '123',
-          reason: 'the metadata is opaque and additive, so a request without '
+        expect(
+          response.enrollmentId,
+          '123',
+          reason:
+              'the metadata is opaque and additive, so a request without '
               'it is still a valid request — failing the enrollment over an '
-              'optional payload would be the worse outcome');
-      expect(sent.single, isNot(contains('metadata')));
-    });
+              'optional payload would be the worse outcome',
+        );
+        expect(sent.single, isNot(contains('metadata')));
+      },
+    );
 
     test('no builder means no metadata on the wire', () async {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
@@ -889,42 +1063,65 @@ void main() {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await AtEnrollmentImpl().submit(
-          pqRequestWith((_) async => {'keyPackage': 'advertised'}),
-          mockAtLookUp);
+        pqRequestWith((_) async => {'keyPackage': 'advertised'}),
+        mockAtLookUp,
+      );
 
-      expect(sent.single, isNot(contains('encryptedAPKAMSymmetricKey')),
-          reason: 'a pq enrollment never generates the symmetric key — the '
-              'approver mints it and encapsulates it to the advertised public '
-              'half, so there is nothing to wrap and nothing an adversary '
-              'recording the request could harvest');
+      expect(
+        sent.single,
+        isNot(contains('encryptedAPKAMSymmetricKey')),
+        reason:
+            'a pq enrollment never generates the symmetric key — the '
+            'approver mints it and encapsulates it to the advertised public '
+            'half, so there is nothing to wrap and nothing an adversary '
+            'recording the request could harvest',
+      );
     });
 
-    test('legacy mode keeps the RSA wrap even when a key package is advertised',
-        () async {
-      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+    test(
+      'legacy mode keeps the RSA wrap even when a key package is advertised',
+      () async {
+        final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
-      await AtEnrollmentImpl().submit(
-          requestWith((_) async => {'keyPackage': 'advertised'}), mockAtLookUp);
+        await AtEnrollmentImpl().submit(
+          requestWith((_) async => {'keyPackage': 'advertised'}),
+          mockAtLookUp,
+        );
 
-      expect(sent.single, contains('encryptedAPKAMSymmetricKey'),
-          reason: 'a key package is also how an approver seals existing '
+        expect(
+          sent.single,
+          contains('encryptedAPKAMSymmetricKey'),
+          reason:
+              'a key package is also how an approver seals existing '
               'secrets to a new device, so advertising one must not silently '
-              'change how the symmetric key travels — only the mode does');
-      expect(sent.single, contains('advertised'),
-          reason: 'and the package still rides the request, because secret '
-              'conveyance needs it in every mode');
-    });
+              'change how the symmetric key travels — only the mode does',
+        );
+        expect(
+          sent.single,
+          contains('advertised'),
+          reason:
+              'and the package still rides the request, because secret '
+              'conveyance needs it in every mode',
+        );
+      },
+    );
 
-    test('the default key exchange mode is EnrollmentKeyExchangeMode.legacy',
-        () async {
-      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+    test(
+      'the default key exchange mode is EnrollmentKeyExchangeMode.legacy',
+      () async {
+        final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
-      await AtEnrollmentImpl().submit(requestWith(null), mockAtLookUp);
+        await AtEnrollmentImpl().submit(requestWith(null), mockAtLookUp);
 
-      expect(sent.single, contains('encryptedAPKAMSymmetricKey'),
-          reason: 'existing callers must keep their present behaviour byte '
-              'for byte until the default flips in the next major version');
-    });
+        expect(
+          sent.single,
+          contains('encryptedAPKAMSymmetricKey'),
+          reason:
+              'existing callers must keep their present behaviour byte '
+              'for byte until the default flips in the next major version',
+        );
+      },
+    );
 
     test('the constructor decides the mode, and carries what it requires', () {
       // A pq request without a resolver used to be a submit-time refusal.
@@ -936,23 +1133,34 @@ void main() {
 
       final legacy = requestWith(null);
       expect(legacy.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
-      expect(legacy.apkamSymmetricKeyResolver, isNull,
-          reason: 'a legacy request carries its own symmetric key in; there '
-              'is nothing waiting to be collected');
+      expect(
+        legacy.apkamSymmetricKeyResolver,
+        isNull,
+        reason:
+            'a legacy request carries its own symmetric key in; there '
+            'is nothing waiting to be collected',
+      );
     });
 
     test('pq mode without a key package is refused', () async {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await expectLater(
-          AtEnrollmentImpl()
-              .submit(pqRequestWith((_) async => null), mockAtLookUp),
-          throwsA(isA<AtEnrollmentException>()));
+        AtEnrollmentImpl().submit(
+          pqRequestWith((_) async => null),
+          mockAtLookUp,
+        ),
+        throwsA(isA<AtEnrollmentException>()),
+      );
 
-      expect(sent, isEmpty,
-          reason: 'there would be no public half for the approver to '
-              'encapsulate the symmetric key to, so the enrollment could '
-              'never obtain one');
+      expect(
+        sent,
+        isEmpty,
+        reason:
+            'there would be no public half for the approver to '
+            'encapsulate the symmetric key to, so the enrollment could '
+            'never obtain one',
+      );
     });
 
     /// The wire FORM of `_apsk`, which two composers decide and must decide
@@ -967,43 +1175,42 @@ void main() {
     /// exactly one active rsa2048 key is spelled bare, everything else as the
     /// array.
     group('the form follows the algorithm alone', () {
-      Future<Map<String, dynamic>> paramsFor(
-          {required SigningAlgoType signingAlgo,
-          ({
-            SigningAlgoType algorithm,
-            String publicKey,
-            String privateKey
-          })? advertised}) async {
+      Future<Map<String, dynamic>> paramsFor({
+        required SigningAlgoType signingAlgo,
+        ({SigningAlgoType algorithm, String publicKey, String privateKey})?
+        advertised,
+      }) async {
         final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
         Map<String, dynamic> keyPackage(AtKeysIo _) => {
-              'keyPackage': {'v': 1, 'keys': []}
-            };
+          'keyPackage': {'v': 1, 'keys': []},
+        };
         // NOTE: rsa2048 rides the legacy exchange, since a pq request refuses
         // it; a legacy request carries a key package just the same.
         await AtEnrollmentImpl().submit(
-            signingAlgo == SigningAlgoType.rsa2048
-                ? AtEnrollmentRequest(
-                    session: freshSession(),
-                    appName: 'wavi',
-                    deviceName: 'pixel',
-                    namespaces: {'wavi': 'rw'},
-                    otp: 'A123FE',
-                    signingAlgo: signingAlgo,
-                    advertisedSigningKey: advertised,
-                    metadataBuilder: keyPackage,
-                  )
-                : AtEnrollmentRequest.pq(
-                    session: freshSession(),
-                    appName: 'wavi',
-                    deviceName: 'pixel',
-                    namespaces: {'wavi': 'rw'},
-                    otp: 'A123FE',
-                    signingAlgo: signingAlgo,
-                    advertisedSigningKey: advertised,
-                    metadataBuilder: keyPackage,
-                    apkamSymmetricKeyResolver: _unusedResolver,
-                  ),
-            mockAtLookUp);
+          signingAlgo == SigningAlgoType.rsa2048
+              ? AtEnrollmentRequest(
+                  session: freshSession(),
+                  appName: 'wavi',
+                  deviceName: 'pixel',
+                  namespaces: {'wavi': 'rw'},
+                  otp: 'A123FE',
+                  signingAlgo: signingAlgo,
+                  advertisedSigningKey: advertised,
+                  metadataBuilder: keyPackage,
+                )
+              : AtEnrollmentRequest.pq(
+                  session: freshSession(),
+                  appName: 'wavi',
+                  deviceName: 'pixel',
+                  namespaces: {'wavi': 'rw'},
+                  otp: 'A123FE',
+                  signingAlgo: signingAlgo,
+                  advertisedSigningKey: advertised,
+                  metadataBuilder: keyPackage,
+                  apkamSymmetricKeyResolver: _unusedResolver,
+                ),
+          mockAtLookUp,
+        );
         return jsonDecode(sent.single.substring(sent.single.indexOf('{')))
             as Map<String, dynamic>;
       }
@@ -1014,28 +1221,42 @@ void main() {
         // is advertised, while a legacy request may still carry a package.
         final params = await paramsFor(signingAlgo: SigningAlgoType.rsa2048);
 
-        expect(params['apskLegacy'], params['apkamPublicKey'],
-            reason: 'the bare value IS the key, and the key here is the APKAM '
-                'one because the enrollment advertises no signing key of its '
-                'own');
-        expect(params['apsk'], isNull,
-            reason: 'never both - they would disagree about one record');
-        expect(params['apskLegacy'], isNot(startsWith('{')),
-            reason: 'stated the other way round, so this cannot pass on a '
-                'serialization that merely contains the key');
+        expect(
+          params['apskLegacy'],
+          params['apkamPublicKey'],
+          reason:
+              'the bare value IS the key, and the key here is the APKAM '
+              'one because the enrollment advertises no signing key of its '
+              'own',
+        );
+        expect(
+          params['apsk'],
+          isNull,
+          reason: 'never both - they would disagree about one record',
+        );
+        expect(
+          params['apskLegacy'],
+          isNot(startsWith('{')),
+          reason:
+              'stated the other way round, so this cannot pass on a '
+              'serialization that merely contains the key',
+        );
       });
 
-      test('an mldsa65 APKAM key with a key package is spelled as the ARRAY',
-          () async {
+      test('an mldsa65 APKAM key with a key package is spelled as the ARRAY', () async {
         // The control, and the discriminator: without it the assertion above
         // is satisfied by a writer that can only ever emit the bare form. Only
         // the algorithm moves between the two.
         final params = await paramsFor(signingAlgo: SigningAlgoType.mldsa65);
 
         expect(params['apskLegacy'], isNull);
-        expect((params['apsk']['keys'] as List).single['alg'], 'mldsa65',
-            reason: 'a bare value says rsa2048 by convention and cannot state '
-                'any other algorithm, so nothing could read this key from it');
+        expect(
+          (params['apsk']['keys'] as List).single['alg'],
+          'mldsa65',
+          reason:
+              'a bare value says rsa2048 by convention and cannot state '
+              'any other algorithm, so nothing could read this key from it',
+        );
       });
     });
   });
@@ -1047,17 +1268,15 @@ void main() {
     // open — the record's vintage is the writing approver's, not this
     // client's.
     for (final legacyIv in [true, false]) {
-      test(
-          legacyIv
-              ? 'a legacy record with no iv field opens under the zero IV'
-              : 'a modern record opens under its stored IV', () async {
+      test(legacyIv ? 'a legacy record with no iv field opens under the zero IV' : 'a modern record opens under its stored IV', () async {
         String atSign = '@alice\ud83d\udee0';
         final apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
         final encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
         final selfEncryptionKey = aesKeyMap[atSign]!;
 
-        final String? storedIvB64 =
-            legacyIv ? null : base64Encode(List<int>.filled(16, 7));
+        final String? storedIvB64 = legacyIv
+            ? null
+            : base64Encode(List<int>.filled(16, 7));
         final iv = storedIvB64 == null
             ? InitialisationVector.legacy()
             : InitialisationVector.fromBase64(storedIvB64);
@@ -1069,43 +1288,57 @@ void main() {
         AtLookupMuxable mockAtLookUp = MockAtLookUp();
         when(() => mockAtLookUp.pkamAuthenticate())
             .thenAnswer((_) async => true);
-        when(() => mockAtLookUp.executeCommand(
-                any(
-                    that: startsWith(
-                        'keys:get:keyName:123.default_enc_private_key')),
-                auth: any(named: 'auth')))
-            .thenAnswer((_) async => 'data:${jsonEncode({
-                      'value': await sealed(encryptionPrivateKey),
-                      if (storedIvB64 != null) 'iv': storedIvB64,
-                    })}');
-        when(() => mockAtLookUp.executeCommand(
+        when(
+          () => mockAtLookUp.executeCommand(
+            any(
+              that: startsWith('keys:get:keyName:123.default_enc_private_key'),
+            ),
+            auth: any(named: 'auth'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              'data:${jsonEncode({'value': await sealed(encryptionPrivateKey), if (storedIvB64 != null) 'iv': storedIvB64})}',
+        );
+        when(
+          () => mockAtLookUp.executeCommand(
             any(that: startsWith('keys:get:keyName:123.default_self_enc_key')),
-            auth: any(
-                named: 'auth'))).thenAnswer((_) async => 'data:${jsonEncode({
-                  'value': await sealed(selfEncryptionKey),
-                  if (storedIvB64 != null) 'iv': storedIvB64,
-                })}');
+            auth: any(named: 'auth'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              'data:${jsonEncode({'value': await sealed(selfEncryptionKey), if (storedIvB64 != null) 'iv': storedIvB64})}',
+        );
 
         final keys = AtKeys()
           ..apkamPublicKey = AtBytes.fromString(pkamPublicKeyMap[atSign]!)
           ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKeyMap[atSign]!)
-          ..defaultEncryptionPublicKey =
-              AtBytes.fromString(encryptionPublicKeyMap[atSign]!)
+          ..defaultEncryptionPublicKey = AtBytes.fromString(
+            encryptionPublicKeyMap[atSign]!,
+          )
           ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey);
-        final response = AtEnrollmentResponse('123', EnrollmentStatus.approved,
-            atSign: atSign,
-            rootDomain: AtRootDomain.atsignDomain,
-            atAuthKeys: keys);
+        final response = AtEnrollmentResponse(
+          '123',
+          EnrollmentStatus.approved,
+          atSign: atSign,
+          rootDomain: AtRootDomain.atsignDomain,
+          atAuthKeys: keys,
+        );
 
-        await AtEnrollmentImpl().waitForApproval(response,
-            atLookup: mockAtLookUp,
-            retryInterval: const Duration(milliseconds: 1),
-            logProgress: false);
+        await AtEnrollmentImpl().waitForApproval(
+          response,
+          atLookup: mockAtLookUp,
+          retryInterval: const Duration(milliseconds: 1),
+          logProgress: false,
+        );
 
-        expect(response.atAuthKeys!.defaultEncryptionPrivateKey!.toString(),
-            encryptionPrivateKey);
-        expect(response.atAuthKeys!.defaultSelfEncryptionKey!.toString(),
-            selfEncryptionKey);
+        expect(
+          response.atAuthKeys!.defaultEncryptionPrivateKey!.toString(),
+          encryptionPrivateKey,
+        );
+        expect(
+          response.atAuthKeys!.defaultSelfEncryptionKey!.toString(),
+          selfEncryptionKey,
+        );
       });
     }
   });
