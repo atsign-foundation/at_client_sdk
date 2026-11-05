@@ -80,8 +80,8 @@ void main() {
       // could not see it could not decrypt anything.
       final document = await writtenDocument(pinnedKeys());
 
-      expect(document[auth_constants.defaultSelfEncryptionKey],
-          selfEncryptionKey);
+      expect(
+          document[auth_constants.defaultSelfEncryptionKey], selfEncryptionKey);
     });
 
     test('reads back what openssl says those ciphertexts mean', () async {
@@ -98,6 +98,26 @@ void main() {
       expect(keys.apkamPrivateKey.toString(), alignedPlaintext);
     });
 
+    test('parseAtKeysFile reads the same text FileAtKeysIo reads', () async {
+      final text = jsonEncode({
+        auth_constants.defaultSelfEncryptionKey: selfEncryptionKey,
+        auth_constants.apkamPublicKey: shortCiphertext,
+        auth_constants.apkamPrivateKey: alignedCiphertext,
+      });
+
+      final keys = await parseAtKeysFile(text);
+
+      expect(keys.apkamPublicKey.toString(), shortPlaintext);
+      expect(keys.apkamPrivateKey.toString(), alignedPlaintext);
+    });
+
+    test('parseAtKeysFile refuses text that is not a JSON object', () async {
+      await expectLater(
+          parseAtKeysFile('not json'), throwsA(isA<AtKeysFormatException>()));
+      await expectLater(
+          parseAtKeysFile('[1]'), throwsA(isA<AtKeysFormatException>()));
+    });
+
     test('refuses a document whose fields it cannot decrypt', () async {
       // The key is required, not optional: silently leaving the ciphertext in
       // place would hand a caller an unusable key that looks like a key.
@@ -106,7 +126,8 @@ void main() {
         auth_constants.apkamPublicKey: shortCiphertext,
       }));
 
-      await expectLater(() => FileAtKeysIo(filePath: (_) => path).read('@alice'),
+      await expectLater(
+          () => FileAtKeysIo(filePath: (_) => path).read('@alice'),
           throwsA(isA<AtException>()));
     });
   });
@@ -121,8 +142,8 @@ void main() {
     test('round-trips to byte-identical ciphertext', () async {
       final original =
           jsonDecode(await fixture.readAsString()) as Map<String, dynamic>;
-      final keys = await FileAtKeysIo(filePath: (_) => fixture.path)
-          .read('@alice🛠');
+      final keys =
+          await FileAtKeysIo(filePath: (_) => fixture.path).read('@alice🛠');
 
       final rewritten = await writtenDocument(keys);
 
@@ -142,8 +163,8 @@ void main() {
       // `openssl enc -d -aes-256-ctr` returns for its aesEncryptPublicKey
       // under the key the document carries in the clear. A DER-encoded RSA
       // 2048-bit public key starts exactly this way.
-      final keys = await FileAtKeysIo(filePath: (_) => fixture.path)
-          .read('@alice🛠');
+      final keys =
+          await FileAtKeysIo(filePath: (_) => fixture.path).read('@alice🛠');
 
       expect(keys.defaultEncryptionPublicKey.toString(),
           startsWith('MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA'));

@@ -84,6 +84,10 @@
 - feat: `PqPosture.copyWith` builds a posture from a named stage, changing
   only the axes given: `PqPosture.pqActive.copyWith(disallowLegacyEncryption:
   false)` writes post-quantum and still allows legacy encryption.
+- feat: `package:at_client/remote_only.dart` is for a client with no local
+  database, such as a browser. It provides `RemoteOnlyAtClientStorage`, where
+  every read and write is a round trip to the atServer, and exports
+  `NotificationServiceImpl` for a client composed without `AtClientManager`.
 - feat: `AtKeysFormatException` comes through at_client, so an app tells a
   keyfile that is not a JSON object by its `reason` and `position` without
   importing at_auth.
