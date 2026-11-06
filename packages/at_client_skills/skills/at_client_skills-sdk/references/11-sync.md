@@ -111,7 +111,7 @@ next line, and neither tells you *when* it becomes true.
 no opt-in, and no change to third-party implementers:
 
 ```dart
-final sync = client.syncService;   // the client's own; the manager's getter is deprecated
+final sync = client.syncService;   // the client's own; 4.0 removed the manager's getter
 
 // Always bound the wait — see below.
 await sync.waitUntilCaughtUp(timeout: const Duration(seconds: 30));

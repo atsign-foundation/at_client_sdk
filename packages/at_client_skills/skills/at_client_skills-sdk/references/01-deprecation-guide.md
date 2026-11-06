@@ -100,57 +100,6 @@ await collection.delete(item);
 
 ---
 
-## Deprecated `AtClient` methods
-
-These are still on `AtClient`, so they compile and autocomplete — but each is
-annotated `@Deprecated` and several are slated for removal at the next major.
-Reaching for one is the usual sign an agent is working from older examples.
-
-| Was | Now |
-| --- | --- |
-| `atClient.notify(...)`, `notifyAll(...)`, `notifyChange(...)` | `atClient.notificationService.send(...)` |
-| `atClient.startMonitor(...)` | `atClient.notificationService.subscribe(...)` |
-| `atClient.uploadFile/downloadFile/reuploadFiles/shareFiles` | Nothing in the SDK — moved to the app layer |
-| `atClient.stream(...)`, `sendStreamAck(...)` | Nothing in the SDK — same as above |
-| `atClient.startCompactionJob()`, `stopCompactionJob()` | Nothing — just stop calling them |
-| `atClient.atChops` (getter and setter) | Build the client from its keyfile; nothing outside `at_client` needs it |
-
-**The notification family.** `startMonitor` is annotated *"Obsolete. Use the
-NotificationService"*, and the three `notify*` methods likewise. The whole
-group predates `NotificationService`; send with `send(...)` and receive with
-`subscribe(...)` — see [16-notifications.md](16-notifications.md). On
-`NotificationParams`, `forText` is *"No longer supported"* and `messageType`
-is superseded by `MessageType.key`.
-
-**`send(namespace:)` is now `send(idAndNamespace:)`.** Same value, same wire
-format — only the parameter name changed. Supply exactly one of the two;
-both or neither throws `ArgumentError`.
-
-**File transfer has no SDK replacement.** All four methods are annotated
-*"Method will be removed from SDK since method is moved to app layer"*, and
-the stream pair carries its own removal notice. There is no drop-in: encrypt
-the file client-side, upload the ciphertext wherever you like, and share the
-URL and decryption key as a normal encrypted item. That pattern is in
-[10-architecture-guide.md](10-architecture-guide.md).
-
-**Compaction is already gone.** `startCompactionJob` / `stopCompactionJob`
-are annotated as removed along with commit-log compaction itself, which the
-commit-log-free keystore did away with. Nothing replaces them — code calling
-them is doing nothing and can drop the calls.
-
-### Deprecated `AtClientPreference` fields
-
-| Was | Now |
-| --- | --- |
-| `hiveStoragePath`, `commitLogPath` | `HiveAtClientStorage(atSign:, storagePath:)` passed as `storage` |
-| `decryptPackets`, `tlsKeysSavePath`, `pathToCerts` | `lookUps: secureSocketLookUps(config: SecureSocketConfig(...))` |
-| `syncStrategy` | `SyncService` |
-| `useAtChops` | Nothing — at_chops is used by default |
-
-The transport fields moved because configuring the socket is the
-`AtLookUpFactory`'s job, not the preference's — see
-[15-client-lifecycle.md](15-client-lifecycle.md).
-
 ## Deprecated Packages
 
 | Package                 | Status          | Use instead                                               |
@@ -161,8 +110,8 @@ The transport fields moved because configuring the socket is the
 | `at_invitation_flutter` | ⛔ DEPRECATED   | `AtClientInvitations` in `at_client`                      |
 | `at_sync_ui_flutter`    | ⛔ DEPRECATED   | Avoid; being removed                                      |
 | `at_theme_flutter`      | ⛔ DEPRECATED   | Avoid; being removed                                      |
-| `at_cli_commons`        | ⛔ DEPRECATED   | `at_client_cli`; its 4.0.0 only re-exports it             |
-| `at_onboarding_cli`     | ⛔ DEPRECATED   | `at_client_cli`; its 2.0.0 only re-exports it             |
+| `at_cli_commons`        | ⛔ DEPRECATED   | `at_client_cli`, which its latest release only re-exports |
+| `at_onboarding_cli`     | ⛔ DEPRECATED   | `at_client_cli`, which its latest release only re-exports |
 
 ## Retired auth API (at_client_flutter 2.0, at_auth 4.0)
 
@@ -213,8 +162,8 @@ Both packages are being deprecated and removed. Do not use them in new projects.
 
 ### at_cli_commons / at_onboarding_cli
 
-Deprecated. Their last majors, at_cli_commons 4.0.0 and at_onboarding_cli
-2.0.0, only re-export `at_client_cli`, which carries their code. Depend on
+Deprecated. Their latest releases only re-export `at_client_cli`, which
+carries their code. Depend on
 `at_client_cli` and import `package:at_client_cli/at_client_cli.dart`; the
 command-line table under *Removed in at_client 4.0* below maps what changed.
 
@@ -249,7 +198,7 @@ replaces it because nothing read it.
 | `AtClientPreference.enforceNamespace`                                                        | Delete the assignment; every key except a `local:` one names a namespace                |
 | `AtClientPreference.decryptPackets`, `pathToCerts`, `tlsKeysSavePath`                        | `secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = ...)` as `lookUps:`    |
 | `atClient.stream(...)`, `sendStreamAck(...)`                                                 | `put` the value, or `notify` it                                                         |
-| `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`                                  | None; file transfer belongs in the app                                                  |
+| `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`                                  | None; file transfer belongs in the app — see [10-architecture-guide.md](10-architecture-guide.md) |
 | `ConnectivityListener`                                                                       | A connectivity package of the app's choosing                                            |
 | `RemoteSecondary.isAvailable()`                                                              | `checkAtSignServer(lookUp, atSign)`                                                     |
 | `atClient.persistenceBundle`                                                                 | The `AtClientStorage` the client was given                                              |
@@ -265,7 +214,7 @@ it, as [15-client-lifecycle.md](15-client-lifecycle.md) shows.
 Both packages' code lives in `at_client_cli`. A program depends on
 `at_client_cli` alone and imports `package:at_client_cli/at_client_cli.dart`.
 
-| Was (at_onboarding_cli 1.x, at_cli_commons 3.x)                    | Now (at_client_cli 1.0)                                                                  |
+| Was (at_onboarding_cli 1.x, at_cli_commons 3.x)                    | Now (at_client_cli)                                                                      |
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `AtOnboardingServiceImpl(atSign, pref).authenticate()`, `.atClient` | `CLIBase.fromCommandLineArgs(...)`, or `Atsign(atSign).open(...)` with `CliKeys`        |
 | `AtOnboardingPreference`                                           | `AtClientPreference`; the keyfile is `CliKeys.fileFor(atSign, path:, passPhrase:)` and the store `CliKeys.storageFor(atSign, program:, path:)` |
@@ -278,7 +227,6 @@ Both packages' code lives in `at_client_cli`. A program depends on
 ## Deprecated, still present in at_client 4.0
 
 These still compile, with a deprecation warning. Avoid them in new code.
-`AtClientPreference.hiveStoragePath` goes in 5.0.
 
 | Deprecated                                                   | Instead                                                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |

@@ -76,15 +76,15 @@ Install with `dart pub add` — it resolves the latest compatible version:
 | Dart CLI / daemon / server / IoT           | `at_client_cli` (`CLIBase`, `CliKeys`, and all of at_client's API)       |
 | Flutter app                                | `at_client_flutter` (the dialogs, the keychain, and all of at_client's API) |
 | Onboarding, login, APKAM                   | the platform package: the `Atsign` verbs, `CLIBase`, or the Flutter dialogs |
-| Raw cryptographic operations               | the platform package, plus `at_chops` (at_client 4.0 is on at_chops 3.7) |
+| Raw cryptographic operations               | the platform package, plus `at_chops`                                    |
 | A platform package, or a program that passes every dependency itself | `at_client`, the platform-neutral core                 |
 
 An app imports `package:at_client_cli/at_client_cli.dart` or
 `package:at_client_flutter/at_client_flutter.dart`, and nothing else from the
 SDK beyond any feature package it adds (`at_contact`, `at_policy`,
 `at_telemetry`). An app never imports `at_auth`: `at_client` owns onboarding,
-login and enrollment (see §11), and both platform packages re-export the one
-at_auth type an app may want, `RegistrarService`.
+login and enrollment (see §11), and both platform packages re-export the
+at_auth types an app uses, such as `AtKeysIo` and `RegistrarService`.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
 the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
@@ -93,7 +93,7 @@ deprecated `at_cli_commons` and `at_onboarding_cli`, whose last majors only
 re-export `at_client_cli`.
 
 > **Never hardcode version constraints** for `at_client_cli` /
-> `at_client_flutter` (e.g. `at_client_flutter: ^2.0.0`) in `pubspec.yaml` or
+> `at_client_flutter` (e.g. `at_client_flutter: ^<version>`) in `pubspec.yaml` or
 > generated templates — run
 > `dart pub add` and let pub choose. Pinned constraints go stale between SDK
 > releases and cause resolution conflicts; stability comes from a fixed
@@ -437,15 +437,15 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
 
 | Posture                          | Writes                                  | Reads post-quantum data | Needs                                                                       |
 | -------------------------------- | --------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
-| `PqPosture.legacy` (4.0 default) | legacy encryption                       | no                      | nothing new                                                                 |
+| `PqPosture.legacy` (the default) | legacy encryption                       | no                      | nothing new                                                                 |
 | `PqPosture.pqReady`              | legacy, so every peer can read it       | yes                     | an atServer that verifies ML-DSA-65 signatures                              |
 | `PqPosture.pqActive`             | post-quantum; a legacy write is refused | yes                     | every client of its namespaces on `pqReady` or later first; `namespace` set |
 
 - An app built on 3.x, whose data is legacy-encrypted, moves in two steps:
   rebuild it with `PqPosture.pqReady` and roll that out to every client, then
   rebuild it with `PqPosture.pqActive` and roll that out.
-- A preference that names no posture rides the SDK's default: `legacy` in
-  4.0, `pqReady` from a later 4.x and `pqActive` from 5.0.
+- A preference that names no posture rides the SDK's default, which is
+  `legacy` and may change in a later release. Name the posture explicitly.
 - A client never runs below its floor. A keyfile holding a namespace key's
   private sets `pqReady`; an ML-DSA-65 data signing key sets `pqActive`.
   Configured lower, the client logs a warning and is raised on
@@ -870,7 +870,7 @@ longer compiles:
 | Avoid                                                                                                                                                        | Use instead                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
 | `at_cli_commons`, `at_onboarding_cli` (their last majors re-export `at_client_cli`)                                                                          | `at_client_cli`                                  |
-| `AtClientPreference.hiveStoragePath` (at_client ignores it; at_client_flutter's dialogs read it when given no storage); removed in 5.0                       | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage` |
+| `AtClientPreference.hiveStoragePath` (at_client ignores it; at_client_flutter's dialogs read it when given no storage)                                        | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage` |
 | `at_common_flutter`                                                                                                                                          | `at_client_flutter`                              |
 | `at_backupkey_flutter`                                                                                                                                       | Copy `at_client_flutter` backup-key snippet      |
 | `at_invitation_flutter`                                                                                                                                      | `AtClientInvitations` in `at_client`             |

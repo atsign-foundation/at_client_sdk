@@ -76,7 +76,7 @@ dart pub add at_chops
 Add `at_chops` only if your app performs direct cryptographic operations
 (encrypt, decrypt, sign, verify, hash). Most apps never need this —
 `AtCollection<T>` and the auth dialogs handle all necessary cryptography
-internally. at_client 4.0 is on at_chops 3.7, so `dart pub add` picks a 3.x.
+internally. `dart pub add` picks the at_chops version at_client is built on.
 
 ---
 
@@ -143,16 +143,10 @@ writing a policy manager is an ordinary `AtRpc` responder. The rest lives in
 
 ---
 
-### Streaming (pre-release)
+### Streaming
 
-```sh
-dart pub add at_stream
-```
-
-`at_stream` streams data over the Atsign Platform through Dart's async stream
-interfaces. **Pre-release** (`0.1.0-dev.x`) — expect API churn; for most
-continuous-update cases, `notificationService.subscribe()` or a collection
-`watch()` is the stable choice.
+`at_stream` has no released version yet, so don't add it. For continuous
+updates, use `notificationService.subscribe()` or a collection `watch()`.
 
 ---
 
@@ -191,8 +185,8 @@ re-export, shown in
 
 ### `at_cli_commons` / `at_onboarding_cli` ⛔
 
-**Deprecated.** Their last majors, at_cli_commons 4.0.0 and at_onboarding_cli
-2.0.0, only re-export `at_client_cli`. Add `at_client_cli` instead. Their
+**Deprecated.** Their latest releases only re-export `at_client_cli`. Add
+`at_client_cli` instead. Their
 `AtOnboardingService`, `AtOnboardingPreference` and `OnboardingUtil` are
 gone, and `createAtClient` comes from `at_client_cli` unchanged; see
 [01-deprecation-guide.md](01-deprecation-guide.md) for what replaces each.
