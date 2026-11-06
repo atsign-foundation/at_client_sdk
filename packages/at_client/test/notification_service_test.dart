@@ -1743,6 +1743,63 @@ void main() {
               'notification, which the previous run already delivered');
     });
 
+    test(
+        'a resume from the stored watermark delivers none of the notifications '
+        'the previous run delivered in the watermark\'s millisecond', () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+      String? stored;
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((i) async {
+        stored = i.positionalArguments[1] as String;
+        return true;
+      });
+      when(() => mockAtClientImpl.get(any()))
+          .thenAnswer((_) async => AtValue()..value = stored);
+      String notification(String id, int millis) => 'notification: '
+          '{"id":"$id","from":"@alice","to":"@alice",'
+          '"key":"$id.wavi@alice","value":null,"operation":"update",'
+          '"epochMillis":$millis,'
+          '"messageType":"MessageType.key","isEncrypted":false}';
+
+      final first = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      first.subscribe(regex: '.*').listen((_) {});
+      for (final n in [
+        notification('old', 10),
+        notification('A', 20),
+        notification('B', 20)
+      ]) {
+        await first.handleNotificationReceipt(n);
+      }
+      await first.stop();
+
+      final second = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(second.stopAllSubscriptions);
+      final delivered = <String>[];
+      second.subscribe(regex: '.*').listen((n) => delivered.add(n.id));
+
+      expect(await second.getLastNotificationTime(), 20);
+      for (final id in ['A', 'B', 'C']) {
+        await second.handleNotificationReceipt(notification(id, 20));
+      }
+      await pumpEventQueue();
+
+      expect(delivered, ['C'],
+          reason: 'an inclusive since filter re-delivers every notification '
+              'stamped in the watermark\'s millisecond, not just its own');
+    });
+
     /// The test case verifies the following:
     /// When a new key (local:lastReceivedNotification) exists and return null,
     /// fetch the data from the old key return epochMillis.

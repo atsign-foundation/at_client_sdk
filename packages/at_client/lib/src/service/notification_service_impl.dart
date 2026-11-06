@@ -75,6 +75,12 @@ class NotificationServiceImpl extends NotificationService {
   /// order, so `.first` is the oldest).
   final _seenIds = <String>{};
 
+  /// The epoch millis of the stored watermark.
+  int? _watermarkMillis;
+
+  /// Ids of the notifications delivered at [_watermarkMillis], oldest first.
+  List<String> _watermarkIds = [];
+
   /// Whether [id] was already delivered, recording it when it was not. An
   /// inclusive since filter, a reconnect and a tab handoff all replay the
   /// notification a service already delivered, and subscribers must see it once.
@@ -436,13 +442,27 @@ class NotificationServiceImpl extends NotificationService {
   /// What gets persisted as the watermark: the notification minus its payload
   /// and its metadata blob.
   ///
-  /// Only `epochMillis` is ever read back — see [getLastNotificationTime]. The
-  /// payload is dropped because it is bounded only by
-  /// [AtClientPreference.maxDataSize], rewritten on every notification, and
-  /// held here without value-level encryption.
-  static String _watermarkValue(AtNotification n) => jsonEncode(n.toJson()
-    ..remove('value')
-    ..remove('metadata'));
+  /// [ids] are the notifications delivered at `n.epochMillis`, stored as
+  /// `idsAtEpochMillis`. Only `epochMillis`, `idsAtEpochMillis` and `id` are
+  /// ever read back — see [getLastNotificationTime]. The payload is dropped
+  /// because it is bounded only by [AtClientPreference.maxDataSize], rewritten
+  /// on every notification, and held here without value-level encryption.
+  static String _watermarkValue(AtNotification n, List<String> ids) =>
+      jsonEncode(n.toJson()
+        ..remove('value')
+        ..remove('metadata')
+        ..['idsAtEpochMillis'] = ids);
+
+  /// Records [n] as the newest watermark entry and returns the ids stored
+  /// with it: the ids already at its millisecond plus its own, capped at
+  /// [seenIdCapacity].
+  List<String> _recordWatermark(AtNotification n) {
+    _watermarkIds =
+        n.epochMillis == _watermarkMillis ? [..._watermarkIds, n.id] : [n.id];
+    _watermarkMillis = n.epochMillis;
+    if (_watermarkIds.length > seenIdCapacity) _watermarkIds.removeAt(0);
+    return _watermarkIds;
+  }
 
   /// Migrate any legacy (non-`local:`) forms of the
   /// last-received-notification key to the canonical
@@ -573,9 +593,14 @@ class NotificationServiceImpl extends NotificationService {
     if (atValue?.value != null) {
       logger.finer('json from hive: ${atValue?.value}');
       final watermark = jsonDecode(atValue?.value);
-      // Records the watermark's id as delivered, so its replay is dropped.
-      final id = watermark['id'];
-      if (id is String) _isDuplicate(id);
+      // Records every id delivered at the watermark's millisecond as
+      // delivered, so their replay is dropped.
+      final ids = watermark['idsAtEpochMillis'];
+      _watermarkIds = ids is List
+          ? ids.whereType<String>().toList()
+          : [if (watermark['id'] is String) watermark['id']];
+      _watermarkMillis = watermark['epochMillis'];
+      _watermarkIds.forEach(_isDuplicate);
       return watermark['epochMillis'];
     }
 
@@ -600,7 +625,8 @@ class NotificationServiceImpl extends NotificationService {
     // sequence as a failed connection and retries forever; not seeding the
     // watermark costs one replayed window.
     try {
-      await atClient.put(lastReceivedNotificationAtKey, _watermarkValue(n),
+      await atClient.put(
+          lastReceivedNotificationAtKey, _watermarkValue(n, [n.id]),
           putRequestOptions: _watermarkPutOptions);
     } on StoppedException {
       rethrow;
@@ -736,8 +762,8 @@ class NotificationServiceImpl extends NotificationService {
           }
           if (isStopped) return;
           try {
-            await atClient.put(
-                lastReceivedNotificationAtKey, _watermarkValue(n),
+            await atClient.put(lastReceivedNotificationAtKey,
+                _watermarkValue(n, _recordWatermark(n)),
                 putRequestOptions: _watermarkPutOptions);
           } catch (e) {
             if (isStopped) {
