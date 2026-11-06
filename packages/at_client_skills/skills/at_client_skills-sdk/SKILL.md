@@ -76,15 +76,15 @@ Install with `dart pub add` — it resolves the latest compatible version:
 | Dart CLI / daemon / server / IoT           | `at_client_cli` (`CLIBase`, `CliKeys`, and all of at_client's API)       |
 | Flutter app                                | `at_client_flutter` (the dialogs, the keychain, and all of at_client's API) |
 | Onboarding, login, APKAM                   | the platform package: the `Atsign` verbs, `CLIBase`, or the Flutter dialogs |
-| Raw cryptographic operations               | the platform package, plus `at_chops`                                    |
 | A platform package, or a program that passes every dependency itself | `at_client`, the platform-neutral core                 |
 
 An app imports `package:at_client_cli/at_client_cli.dart` or
 `package:at_client_flutter/at_client_flutter.dart`, and nothing else from the
 SDK beyond any feature package it adds (`at_contact`, `at_policy`,
-`at_telemetry`). An app never imports `at_auth`: `at_client` owns onboarding,
-login and enrollment (see §11), and both platform packages re-export the
-at_auth types an app uses, such as `AtKeysIo` and `RegistrarService`.
+`at_telemetry`). An app never adds or imports the packages underneath —
+`at_client`, `at_auth`, `at_commons`, `at_chops`, `at_lookup`, `at_utils`:
+`at_client` owns onboarding, login and enrollment (see §11), and what an app
+needs comes through its platform package.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
 the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,

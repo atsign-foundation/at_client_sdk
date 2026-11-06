@@ -75,7 +75,7 @@ Reach for `atsignDomain` unless your app talks to a non-standard root — then
 ## Flow 1: New atsign — CRAM Activation (first-time only)
 
 Use when a developer wants to activate a brand-new atsign for a user.
-Requires a `RegistrarService` (re-exported by `at_client_flutter`) configured
+Requires a `RegistrarService` (from `package:at_client_flutter`) configured
 with a registrar URL and API key. The service sends the key to the registrar
 on the calls that find a free atSign and exchange the code emailed to the
 user for that atSign's CRAM secret; it names the app to the registrar and

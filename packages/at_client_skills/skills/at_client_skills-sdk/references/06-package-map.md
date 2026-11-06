@@ -45,8 +45,7 @@ in-memory stores and its mixins, so a Flutter app only needs this one entry.
   `RegistrarCramDialog`, `AtKeysFileDialog`, `ApkamActivationDialog`
 - `KeychainStorage` — device keychain (iOS Keychain, Android Keystore)
 - `KeychainAtKeysIo` — read/write keys from the device keychain
-- `RegistrarService` (re-exported from at_auth) — the registrar client CRAM
-  onboarding needs
+- `RegistrarService` — the registrar client CRAM onboarding needs
 - Flutter extensions on core types
   (`import 'package:at_client_flutter/extensions.dart'`)
 
@@ -59,24 +58,11 @@ No extra package. Onboarding, login and enrollment are verbs on `Atsign` in
 both platform packages, and the approving side is `client.enrollments`; see
 [15-client-lifecycle.md](15-client-lifecycle.md). An app building its own UI
 calls those; a Flutter app uses the dialogs, a CLI program `CLIBase`. **Do not
-add `at_auth`**: it is the protocol layer under `at_client`, its 4.0 removed
-the request and response types apps used to hold, and the one type an app may
-want from it, `RegistrarService`, is re-exported by both platform packages.
+add `at_auth`**: it is the protocol layer under `at_client`, and its 4.0
+removed the request and response types apps used to hold. What an app needs
+for onboarding comes through its platform package.
 
 `AtRootDomain` comes from `at_commons`, surfaced via `at_client`.
-
----
-
-### Raw cryptographic operations
-
-```sh
-dart pub add at_chops
-```
-
-Add `at_chops` only if your app performs direct cryptographic operations
-(encrypt, decrypt, sign, verify, hash). Most apps never need this —
-`AtCollection<T>` and the auth dialogs handle all necessary cryptography
-internally. `dart pub add` picks the at_chops version at_client is built on.
 
 ---
 
@@ -215,18 +201,17 @@ a dependency on packages mid-migration.
 
 ---
 
-## Supporting / Utility Packages (usually transitive)
+## Packages Under the Platform Package (never added by an app)
 
-These are pulled in as transitive dependencies, and the platform package
-re-exports what an app uses of them. Add one directly only for an import the
-platform package does not carry.
+`at_client`, `at_auth`, `at_commons`, `at_chops`, `at_lookup` and `at_utils`
+are the layers under the platform package. They arrive as transitive
+dependencies; an app never adds or imports one. Everything an app needs —
+`AtKey`, `Metadata`, `Atsign`, `AtSignLogger`, the storage backends — comes
+through the platform package. Cryptography included: `AtCollection<T>`, the
+notification service and the auth flows encrypt, sign and verify for the app.
 
-| Package | When to add it explicitly |
-| --------- | ---------------------- |
-| `at_commons` | Only for `package:at_commons/at_builders.dart` (the verb builders); `AtKey`, `Metadata` and `Atsign` come through the platform package |
-| `at_utils` | Not for `AtSignLogger`, which the platform package re-exports; a `^3.x` constraint cannot resolve beside at_client 4 |
-| `at_lookup` | Rarely needed; low-level verb implementation |
-| `at_client` | Never in an app: the platform package re-exports all of it, the storage backends and mixins included |
+If an app genuinely cannot do something without one of these imports, that is
+an SDK gap, not a reason to add the package: report it as a bug.
 
 ---
 
@@ -243,7 +228,7 @@ dart pub add at_client_cli
 
 ```sh
 dart pub add at_client_flutter
-# at_client_flutter re-exports at_client's API (and RegistrarService) — one dep is enough
+# at_client_flutter re-exports at_client's API — one dep is enough
 # add path_provider only to build your own storage under getApplicationSupportDirectory()
 ```
 
