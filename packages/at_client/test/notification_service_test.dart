@@ -1704,6 +1704,45 @@ void main() {
               'notification arrives resumes from the same point');
     });
 
+    test(
+        'a resume from the stored watermark does not deliver the '
+        'watermark\'s own notification again', () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => AtValue()
+        ..value = jsonEncode({'id': 'stored-1', 'epochMillis': 1234567890123}));
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
+      final service = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(service.stopAllSubscriptions);
+      final delivered = <String>[];
+      service.subscribe(regex: '.*').listen((n) => delivered.add(n.id));
+
+      expect(await service.getLastNotificationTime(), 1234567890123);
+      for (final id in ['stored-1', 'next-2']) {
+        await service.handleNotificationReceipt('notification: '
+            '{"id":"$id","from":"@alice","to":"@alice",'
+            '"key":"$id.wavi@alice","value":null,"operation":"update",'
+            '"epochMillis":1234567890123,'
+            '"messageType":"MessageType.key","isEncrypted":false}');
+      }
+      await pumpEventQueue();
+
+      expect(delivered, ['next-2'],
+          reason: 'an inclusive since filter re-delivers the watermark\'s '
+              'notification, which the previous run already delivered');
+    });
+
     /// The test case verifies the following:
     /// When a new key (local:lastReceivedNotification) exists and return null,
     /// fetch the data from the old key return epochMillis.

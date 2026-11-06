@@ -572,7 +572,11 @@ class NotificationServiceImpl extends NotificationService {
     AtValue? atValue = await _migrateLegacyLastReceivedNotificationKeys();
     if (atValue?.value != null) {
       logger.finer('json from hive: ${atValue?.value}');
-      return jsonDecode(atValue?.value)['epochMillis'];
+      final watermark = jsonDecode(atValue?.value);
+      // Records the watermark's id as delivered, so its replay is dropped.
+      final id = watermark['id'];
+      if (id is String) _isDuplicate(id);
+      return watermark['epochMillis'];
     }
 
     // First-call branch: no last-received-notification record exists.
