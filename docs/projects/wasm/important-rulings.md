@@ -10,7 +10,7 @@
 | K-12 | The PKAM key is derived from the passkey, never stored | 2026-10-27 | [K-12](decisions.md#browser-at-keys-custody--k-1k-18) |
 | K-13 | K-12 fallbacks: passphrase-sealed server record for no-PRF, no recovery for a lost passkey, IndexedDB hint only, second passkey is its own enrollment, no key expiry | 2026-10-28 | [K-13](decisions.md#browser-at-keys-custody--k-1k-18) |
 | K-17 | The pointer's namespace is derived per passkey (`atkeys-ns`); only that passkey's enrollment can write it | 2026-10-31 | [K-17](decisions.md#browser-at-keys-custody--k-1k-18) |
-| K-18 | The passkey `user.id` is 64 random bytes; `user.name` carries the atSign; the hint holds the atSign; canonical atSign = `toAtsign()`; `user.displayName` = deviceName · enrollment date | 2026-11-05, amended 2026-11-06 | [K-18](decisions.md#browser-at-keys-custody--k-1k-18) |
+| K-18 | The passkey `user.id` is 64 random bytes; `user.name` carries the atSign; the hint holds the atSign; canonical atSign = `toAtsign()`; `user.displayName` = enrollment time · deviceName | 2026-11-05, amended 2026-11-06 | [K-18](decisions.md#browser-at-keys-custody--k-1k-18) |
 | R-a | An approver reinstates a revoked enrollment with `enroll:unrevoke` | 2026-10-27 | [Revocation](decisions.md#browser-at-keys-custody--k-1k-18) |
 | D-15 | Browser reaches the atServer on the direct path; the proxy is dev-only | 2026-09-13, amended 2026-10-23 | [D-15](decisions.md#d-15--the-transport-is-the-third-leg-of-the-platform-bundle-injected-at-the-doors-2026-09-13) |
 | D-26 | Browser SQLite storage is SimpleOPFS, one directory per (atSign, enrollmentId) | 2026-10-13 | [D-26](decisions.md#d-26--browser-sqlite-storage-is-simpleopfs-one-directory-per-atsign-enrollmentid-w4-resolved-2026-10-13) |

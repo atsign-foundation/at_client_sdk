@@ -43,8 +43,8 @@ An app client running in a browser must:
 | Codec | `{ v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv, ct }`, AAD = canonical JSON of the record without `ct` — **no atSign, no credential ID**. `typ` is `"eid"` (pointer) or `"atkeys"` (document) |
 | Pointer (K-10, K-17) | `public:_<lookupHex>.<ns>@<atSign>`, where `<ns>` is the passkey's own namespace (`atkeys-ns`, K-17); plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by the enrollment holding `<ns>:rw`, the only one that can (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.<ns>@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
 | Document (K-11) | `atkeys.<enrollmentId>.a.__e@<atSign>`, private, plaintext = the @keys JSON **without the APKAM private key**. Read and written over PKAM (`llookup:` / `update:`) by that enrollment only; opening it needs the kek, no private key. CRAM can read it but not write it. Not `_`-prefixed, so own-enrollment and CRAM scans list it. Probed P9, 2026-10-20 |
-| Passkey `user.id` | 64 random bytes (WebAuthn L3 §14.6.1); `user.name` = atSign; `user.displayName` = `<deviceName> · <enrollment date>` (K-18). Not mapped back: the atSign comes from the hint or, with no hint, from the user. Re-enrolling an atSign adds a passkey; it does not replace one |
-| IndexedDB | hint only (K-13 c1, amended by K-18): `atSign`, `credentialId`, `enrollmentId` — nothing secret. The atSign is the output of at_commons' `toAtsign()` (lowercase, `@` included), as UTF-8 bytes. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
+| Passkey `user.id` | 64 random bytes (WebAuthn L3 §14.6.1); `user.name` = atSign; `user.displayName` = `<enrollment time> · <deviceName>`, the time UTC to the minute, cut to 64 bytes (K-18). Not mapped back: the atSign comes from the hint or, with no hint, from the user. Re-enrolling an atSign adds a passkey; it does not replace one |
+| IndexedDB | hint only (K-13 c1, amended by K-18): `atSign`, `credentialId`, `enrollmentId` — nothing secret. The atSign is the output of at_commons' `toAtsign()` (lowercase, `@` included, dots removed after the `@`, so `@ali.ce` is `@alice`), as UTF-8 bytes. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
 | APKAM key for PKAM | not stored anywhere (K-11, K-12). **Derived from the passkey**: `authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1\|<atSign>")` seeds an ML-DSA-65 key — the primary path (K-12). With no PRF (K-13): the PKAM key is sealed under a passphrase-derived key in a server-held, public-readable record, no TTL (§3.5) |
 
 ### Bootstrap sources (how the first @keys arrive on a device)
@@ -69,7 +69,7 @@ sequenceDiagram
     participant A as Authenticator / password manager
     participant S as atServer
     U->>B: atSign
-    B->>A: create(user.id = 64 random bytes, user.name = atSign, user.displayName = deviceName · date, residentKey + UV required, prf)
+    B->>A: create(user.id = 64 random bytes, user.name = atSign, user.displayName = enrollment time · deviceName, residentKey + UV required, prf)
     A-->>B: credential ID (+ prf result, if the platform returns it at create)
     opt create returned no prf result
         B->>A: get(allowCredentials = [id], prf.eval.first = salt)
@@ -132,7 +132,7 @@ sequenceDiagram
     B->>B: only then use the @keys; store hint (atSign, credentialId, enrollmentId) in IndexedDB
 ```
 
-The picker in 3.3 can list several passkeys for one atSign, since re-enrollment adds one rather than replacing it (K-18). `user.displayName` (`<deviceName> · <enrollment date>`) tells them apart, since `user.name` already shows the atSign and an authenticator may truncate `displayName` to 64 bytes, and both failure branches let the user pick again.
+The picker in 3.3 can list several passkeys for one atSign, since re-enrollment adds one rather than replacing it (K-18). `user.displayName` (`<enrollment time> · <deviceName>`, UTC to the minute) tells them apart, even after a same-day revoke and re-enroll under one deviceName. The time leads because an authenticator may truncate `displayName` to 64 bytes, and `user.name` already shows the atSign; and both failure branches let the user pick again.
 
 Return and recovery differ only in the hint, and so in whether the user types the atSign: the server holds everything else and the passkey re-derives the PKAM key (K-12), so on the primary path a cleared browser loses nothing. The fallbacks are ruled by K-13 (§3.5, §3.6).
 
