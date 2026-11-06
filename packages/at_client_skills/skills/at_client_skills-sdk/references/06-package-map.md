@@ -99,18 +99,49 @@ Not needed in Flutter apps. It replaces `at_cli_commons` and
 
 ---
 
+### Add-ons released on their own schedule
+
+The feature packages an app may add beside its platform package —
+`at_contact`, `at_policy`, `at_telemetry`, and `noports_core` (below) — are
+released separately from the SDK, so after an SDK major release one may lag
+behind for a while. **Check that an add-on resolves before building on it:**
+its pub.dev release must depend on the same at_client major as your platform
+package — look at the dependencies on its pub.dev page, don't assume.
+
+- On an older major: `dart pub add` fails with "version solving failed"
+  naming at_client. Don't work around it with a git dependency,
+  `dependency_overrides`, or by pinning the SDK back. Use an alternative
+  until the add-on is released, and tell the developer it is waiting on that
+  package's release.
+- On the same major: the failure comes from the app's own pubspec — an old
+  constraint or a stale lockfile. `dart pub outdated` shows which.
+
+---
+
 ### Zero-open-port TCP tunnels
+
+NoPorts creates end-to-end encrypted TCP tunnels through the Atsign Platform
+with **no open listening ports** on either side — no firewall changes needed
+to reach a remote device. Docs: <https://docs.noports.com/>. Use it only when
+the app needs raw TCP/socket connectivity to remote machines; ordinary data
+exchange belongs in `AtCollection<T>` / notifications.
+
+**Most developers use the NoPorts programs, not a library.** `noports_core`
+is the shared library the NoPorts suite is built from — the `npt`, `sshnp`
+and `sshnpd` binaries and the NoPorts desktop app. Running a tunnel, or
+reaching a device, is a matter of installing and running those programs.
+
+Depend on `noports_core` only to drive tunnels from your own Dart code (the
+`Npt` interface) or to write a policy manager (below):
 
 ```sh
 dart pub add noports_core
 ```
 
-NoPorts creates end-to-end encrypted TCP tunnels through the Atsign Platform
-with **no open listening ports** on either side — no firewall changes needed
-to reach a remote device. CLI: the `npt` binary; programmatic: the `Npt`
-class. Docs: <https://docs.noports.com/>. Add only when the app needs raw
-TCP/socket connectivity to remote machines; ordinary data exchange belongs in
-`AtCollection<T>` / notifications.
+**Check that it resolves before building on it** — see
+[Add-ons released on their own schedule](#add-ons-released-on-their-own-schedule).
+While its pub.dev release is on an older at_client major, the alternative is
+the NoPorts programs.
 
 **NoPorts has its own access control**, separate from anything else in this
 skill — a device daemon decides which client atsigns may reach it, and that is

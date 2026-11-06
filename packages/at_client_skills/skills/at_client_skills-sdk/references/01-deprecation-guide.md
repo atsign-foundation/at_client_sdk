@@ -1,15 +1,15 @@
 # Deprecation Guide: What NOT to Use
 
 What at_client 4.0 removed, what it still carries deprecated, and the packages
-to avoid. An app upgrading from 3.x follows the upgrade guide, which goes by
-the error `dart analyze` reports:
+to avoid. An app upgrading from at_client 3.x follows the upgrade guide, which
+goes by the error `dart analyze` reports:
 
 <!-- pyml disable-next-line md013-->
 <https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md>
 
 ## The Removed `AtCollectionModel` API
 
-at_client 4.0 removed the legacy collection models, which 3.x had marked
+at_client 4.0 removed the legacy collection models, which at_client 3.x had marked
 `@Deprecated("Use AtClient.collection for collection-style operations")`:
 
 - `AtCollectionModel<T>`

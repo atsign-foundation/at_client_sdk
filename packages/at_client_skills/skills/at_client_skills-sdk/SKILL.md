@@ -51,7 +51,7 @@ class MyModel extends AtCollectionModel { ... }
 
 at_client 4.0 removed the entire `AtCollectionModel` hierarchy
 (`AtCollectionModel`, `AtJsonCollectionModel`, their factories and operations),
-which 3.x had deprecated in favour of `AtClient.collection`.
+which at_client 3.x had deprecated in favour of `AtClient.collection`.
 
 > **If asked how to use `AtCollectionModel`:** do NOT show any
 > `AtCollectionModel` code, even in a "before/removed" comparison. Show ONLY
@@ -61,6 +61,12 @@ which 3.x had deprecated in favour of `AtClient.collection`.
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
 for the full migration table from old to new API, and everything else
 at_client 4.0 removed.
+
+**Upgrading an app from at_client 3.x?** When the code, its `pubspec.yaml`
+or the errors point to at_client 3.x, follow the upgrade guide — it is
+organised by the error `dart analyze` / `flutter analyze` reports, and is kept
+current with the SDK: [Upgrading to at_client 4.0][upgrade-guide]. Upgrade to
+the latest packages; never pin back to at_client 3.x to make errors go away.
 
 ---
 
@@ -81,7 +87,9 @@ Install with `dart pub add` — it resolves the latest compatible version:
 An app imports `package:at_client_cli/at_client_cli.dart` or
 `package:at_client_flutter/at_client_flutter.dart`, and nothing else from the
 SDK beyond any feature package it adds (`at_contact`, `at_policy`,
-`at_telemetry`). An app never adds or imports the packages underneath —
+`at_telemetry`, `noports_core`; these are released separately, so check one
+resolves before building on it — see `references/06-package-map.md`). An app
+never adds or imports the packages underneath —
 `at_client`, `at_auth`, `at_commons`, `at_chops`, `at_lookup`, `at_utils`:
 `at_client` owns onboarding, login and enrollment (see §11), and what an app
 needs comes through its platform package.
@@ -433,7 +441,15 @@ carries them.
 
 **Posture — how far into post-quantum the client runs**, fixed when the
 preference is built. **A new app names `PqPosture.pqActive`** and sets
-`namespace`, as every snippet here does:
+`namespace`, as every snippet here does.
+
+The SDK's default is `legacy` (and may change in a later release), so a
+preference that names no posture builds an app that encrypts the old way —
+and nothing fails to tell you. Watch the places a preference is easy to leave
+out: `CLIBase` given no `preference:`, and `at_activate` run without
+`--posture pqActive`, including its `approve` command. A brand-new app has no
+older clients to wait for, so it goes straight to `pqActive`; the two-step move
+below is only for an app already deployed on legacy.
 
 | Posture                          | Writes                                  | Reads post-quantum data | Needs                                                                       |
 | -------------------------------- | --------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
@@ -441,11 +457,9 @@ preference is built. **A new app names `PqPosture.pqActive`** and sets
 | `PqPosture.pqReady`              | legacy, so every peer can read it       | yes                     | an atServer that verifies ML-DSA-65 signatures                              |
 | `PqPosture.pqActive`             | post-quantum; a legacy write is refused | yes                     | every client of its namespaces on `pqReady` or later first; `namespace` set |
 
-- An app built on 3.x, whose data is legacy-encrypted, moves in two steps:
+- An app built on at_client 3.x, whose data is legacy-encrypted, moves in two steps:
   rebuild it with `PqPosture.pqReady` and roll that out to every client, then
   rebuild it with `PqPosture.pqActive` and roll that out.
-- A preference that names no posture rides the SDK's default, which is
-  `legacy` and may change in a later release. Name the posture explicitly.
 - A client never runs below its floor. A keyfile holding a namespace key's
   private sets `pqReady`; an ML-DSA-65 data signing key sets `pqActive`.
   Configured lower, the client logs a warning and is raised on
@@ -837,7 +851,8 @@ what each operation throws and the two normalisation traps.
 ## 19. Removed or Deprecated — Do Not Use
 
 **Removed in at_client 4.0 and its platform packages** — code using these no
-longer compiles:
+longer compiles. To move a whole app off at_client 3.x, follow the
+[upgrade guide][upgrade-guide]:
 
 | Avoid                                                                                                                                                        | Use instead                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
@@ -895,13 +910,14 @@ for the full migration table from old `AtCollectionModel` patterns to
   `NotificationService` send/subscribe
 - `packages/at_client_flutter/example/todos/` — canonical Flutter reference app
 - `packages/at_client_flutter/example/dockerstats/` — notifications + SQLite
-- `docs/upgrade-to-4.md` — upgrading an app from at_client 3.x, by the error
-  `dart analyze` or `flutter analyze` reports
+- [Upgrading to at_client 4.0][upgrade-guide] — moving an app from
+  at_client 3.x, by the error `dart analyze` or `flutter analyze` reports
 
 **If asked about migrating from `atClient.put()` / `atClient.get()` to
 `AtCollection<T>`:** Both APIs share the same underlying atServer keystore but
 use different key-naming conventions — `AtCollection` data will not appear in
 raw `get()` queries and vice versa. Migration is non-trivial: read existing
 data with the raw API and re-write it through `AtCollection<T>`. Always test
-in a staging environment before touching production data. A formal migration
-guide is **coming in skill v2.0**.
+in a staging environment before touching production data.
+
+[upgrade-guide]: https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md

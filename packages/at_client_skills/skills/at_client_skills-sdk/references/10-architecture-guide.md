@@ -197,8 +197,10 @@ them:
   [13-rpc.md](13-rpc.md) when implementing request/response. Durable results
   still belong in an `AtCollection`, written by the responder.
 - **Raw TCP to a remote machine** (SSH, VNC, existing socket protocols) →
-  NoPorts (`noports_core`): E2E encrypted tunnels with zero open listening
-  ports. Not a data pattern — a connectivity one.
+  NoPorts: E2E encrypted tunnels with zero open listening ports, usually run
+  as the `npt` / `sshnp` programs rather than built in (see
+  [06-package-map.md](06-package-map.md)). Not a data pattern — a
+  connectivity one.
 - **Bulk file transfer** (payloads too large for a notification or item
   value): encrypt the file client-side, upload the ciphertext to any web file
   service, then share the URL + decryption key with the recipient as a normal

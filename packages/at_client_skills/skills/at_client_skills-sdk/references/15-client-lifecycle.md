@@ -113,11 +113,11 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
 - Omit it and the store is **borrowed**: `stop()` detaches from it and the
   caller closes it. Use this only when something else shares the store.
 - `storage:` is required, so a verb without one does not compile. at_client
-  ignores the deprecated `preference.hiveStoragePath`: to keep the store a 3.x
-  app used, pass that folder as `storagePath`. The Flutter dialogs, given no
-  storage, still open Hive under `hiveStoragePath` while the app sets it, and
-  otherwise in the app support directory. at_client 4.0 removed
-  `commitLogPath`; the client is commit-log-free.
+  ignores the deprecated `preference.hiveStoragePath`: to keep the store an
+  app used on at_client 3.x, pass that folder as `storagePath`. The Flutter
+  dialogs, given no storage, still open Hive under `hiveStoragePath` while
+  the app sets it, and otherwise in the app support directory. at_client 4.0
+  removed `commitLogPath`; the client is commit-log-free.
 - **Every process, and every client, needs its own store.** Two clients on one
   Hive location is refused, and a second process on a Hive store another
   holds is refused with `AtStorageInUseException` naming the location.
@@ -345,6 +345,13 @@ for (final e in await client.enrollments.pending()) {
   await client.enrollments.approve(e.enrollmentId!);   // or deny(id)
 }
 ```
+
+**The approver runs post-quantum too.** A device enrolling with the
+post-quantum key exchange needs its approver to mint and seal a key, which a
+client opened under `PqPosture.legacy` cannot do: `approve` throws
+`AtClientException` before the approval reaches the atServer, and the request
+stays pending. Open the approving client with `PqPosture.pqActive`, like every
+other client the app builds.
 
 **Show the request before approving it.** Each `Enrollment` carries more than
 its id, and an approval screen that does not display the rest is asking someone

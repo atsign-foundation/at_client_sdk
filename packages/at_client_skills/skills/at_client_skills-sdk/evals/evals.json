@@ -470,6 +470,50 @@
         "Flags that a request for the __manage namespace confers the ability to approve other enrollments",
         "Does not suggest looking the app or device name up from a separate source"
       ]
+    },
+    {
+      "id": 42,
+      "prompt": "Our security review asks whether the data our new atsign app writes would stand up to a future quantum computer. We set the client up the way the getting-started snippet we found does: AtClientPreference()..namespace = 'acme'. It's a brand-new app, nothing deployed yet. Is that enough, and if not what do we change?",
+      "expected_output": "Says no: with no posture named the app runs at the SDK's default, legacy. A brand-new app passes posture: PqPosture.pqActive to the AtClientPreference constructor and goes straight there, without the pqReady step.",
+      "expectations": [
+        "Says a preference with no posture runs at the default, legacy",
+        "Tells a new app to pass posture: PqPosture.pqActive to the AtClientPreference constructor",
+        "Says a new app with nothing deployed goes straight to pqActive, without the pqReady step",
+        "Mentions at least one other place the default slips in (CLIBase without a preference, or at_activate without --posture)",
+        "Does not claim the default is already post-quantum",
+        "Does not show a setter for the posture"
+      ]
+    },
+    {
+      "id": 43,
+      "prompt": "New devices enroll fine and their requests show up in our small Dart admin tool. But when the tool approves one, approve throws an AtClientException and the request just stays pending. The admin tool's preference only sets the namespace. The same approve code worked in our old tool on at_client 3.x. What's wrong?",
+      "expected_output": "Traces the failure to the admin tool's posture: its preference names none, so it runs legacy, and a legacy client cannot approve a post-quantum enrollment. Fix: open the approving client with PqPosture.pqActive and approve again — the request is still pending.",
+      "expectations": [
+        "Identifies the approving client's legacy (default) posture as the cause",
+        "Explains a post-quantum enrollment needs a post-quantum approver",
+        "Tells them to open the approving client with PqPosture.pqActive",
+        "Does not blame the enrolling device, the passcode or __manage"
+      ]
+    },
+    {
+      "id": 44,
+      "prompt": "I bumped our Flutter app's pubspec to the latest atsign packages and now flutter analyze shows about sixty errors across the project. Where do I even start?",
+      "expected_output": "Points to the official upgrade guide for moving from at_client 3.x, with its URL, as the way to work through the errors. Stays on the latest packages rather than pinning back.",
+      "expectations": [
+        "Points to the upgrade guide, with its URL",
+        "Does not suggest pinning back to at_client 3.x or downgrading"
+      ]
+    },
+    {
+      "id": 45,
+      "prompt": "My Dart service runs on at_client_cli. I want it to open tunnels to devices at customer sites, so I ran dart pub add noports_core and it fails: version solving failed, something about at_client. What do I do?",
+      "expected_output": "Points the service at the NoPorts programs (npt / sshnp, sshnpd on the devices) first, since noports_core is only for in-process tunnels or a policy manager. If the library is really needed, checks noports_core's pub.dev dependencies against at_client_cli's at_client major rather than assuming, and works around nothing.",
+      "expectations": [
+        "Recommends the NoPorts programs (npt / sshnp, with sshnpd on the devices) as the way for a service to open tunnels",
+        "Says noports_core is only needed to drive tunnels in-process (Npt) or to write a policy manager",
+        "Checks noports_core's pub.dev dependencies (or tells the developer to) instead of stating which at_client it uses",
+        "Does not suggest a git dependency, dependency_overrides, or pinning the SDK back"
+      ]
     }
   ]
 }

@@ -207,7 +207,9 @@ final passcode = await atClient.enrollments.otp();  // what the new device quote
 ```
 
 From a terminal, `at_activate approve`, `deny`, `revoke` and `auto` do the
-same.
+same. Pass them `--posture pqActive`: without it they run at at_client's
+default, legacy, and a legacy approver cannot approve a post-quantum request —
+it stays pending.
 
 The Flutter-side enrollment flows (the requesting device) are in
 [05-flutter-auth.md](05-flutter-auth.md) (Flow 4); the passcode and approver
