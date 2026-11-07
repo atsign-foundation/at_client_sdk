@@ -3358,10 +3358,16 @@ ruling, each with a differential test.
    rides `enroll:list`, which returns the record whole, so an owner can see what a
    stolen keyfile spawned. ⚠️ **This said `enroll:fetch` carries it too, until
    2026-08-27; it does not.** That verb returns exactly `appName`, `deviceName`,
-   `namespace`, `encryptedAPKAMSymmetricKey` and `status`. ⛔ **And the cascade
-   itself is unbuilt**: `parentEnrollmentId` is written by the retrofit and read by
-   nothing on at_server `origin/trunk`, so `enroll:revoke` does not cascade today
-   and the non-cascading `retire` mode does not exist either.
+   `namespace`, `encryptedAPKAMSymmetricKey` and `status`. **The cascade shipped**
+   in at_server #2781 ([ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)),
+   and it follows APPROVER links, never the replacement edge
+   ([ruling 133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)):
+   a successor copies its predecessor's `parentEnrollmentId`, so the two are
+   siblings, and the replacement is settled at the successor's first
+   authentication instead. The atServer refuses to un-revoke an enrollment whose
+   predecessor exists and is not currently `approved` (129 part 2). The
+   non-cascading `retire` mode does not exist on at_server trunk (read at
+   `886673594`). **Amended 2026-11-07:** this item said the cascade was unbuilt.
 
 3. **The cap slides.** [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
    formula — min(now + grace, the enrollment's own expiry) — is applied on every
@@ -13809,6 +13815,9 @@ everybody.
    start. ⚠️ **Two clients get no free ride:** one holding no enrollment id
    returns before fetching anything, and one whose fetch throws discards the
    list — for those there is nothing to ride and nothing is established.
+   **Amended 2026-11-07** by [ruling 162](#162-the-2026-11-07-plan-review-settles-nine-open-questions-2026-11-07) item 6: the primary
+   enrollment, a client holding no enrollment id or `primary`, gets the
+   backstop too, so `NskeySeeding.rotateIfRevoked` stops skipping it.
 
 ⛔ **The premise this ruling was FIRST built on was false, and the correction is
 the reason point 3 exists.** It said `enroll:list` returns every enrollment at
@@ -15881,3 +15890,63 @@ namespace", which these limits used to name, is gone with the mint it guarded.
 Supersedes [159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)
 item 1 and [160](#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01) items 2
 and 6, for shares.
+
+## 162. The 2026-11-07 plan review settles nine open questions (2026-11-07)
+
+**In brief:** *the first phase shipped, the plan was cut to what is still owed,
+and these nine questions were ruled rather than carried forward*
+
+**Ruled by gkc, 2026-11-07**, going through the implementation plan's rows one
+at a time after at_client 4.0.0 shipped. Each item closes a plan row or changes
+what one owes.
+
+1. **A keyfile restored from before a retrofit may retrofit again.** at_auth
+   decides "already retrofitted" from the keyfile alone, so a restored
+   pre-retrofit copy submits another self-enrollment. That is accepted as it
+   stands, and nothing recognises the earlier successor from the atServer.
+2. **A self-enrollment may inherit an unbounded expiry.** It inherits its
+   parent's `apkamKeysExpiryDuration`, and zero means never; a subtree under a
+   parent that never expires lasts until that parent is revoked, which cascades
+   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)).
+3. **The nine rows contested between test arms 1 and 3 stay proven where they
+   are.** UC-A5.2, UC-A5.3, UC-B1.1, UC-B1.2, UC-B4.4, UC-G1.2, UC-G1.5, UC-A4.2
+   and UC-B4.3 are PROVEN by their existing citations; arm 1 gains no cells for
+   them, and `acceptance.md` section 14 no longer states the two readings.
+4. **An atSign reachable only through wildcard enrollments has a namespace key
+   only where something of it runs.** A `*` grant seeds the namespace its app
+   runs in ([132](#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)
+   point 4) and every namespace a client shares into
+   ([142](#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30)
+   point 2). That it has none anywhere else, so nobody can seal to it there, is
+   intended.
+5. **A late-arriving nskey private is filed when it lands, asked for or not,**
+   provided its seed derives a published or named generation. That is what
+   `PqClientBootstrap`'s envelope handler does (`5dc4d64d1`), and what the wasm
+   plan's ruling of 2026-09-07 asked for; the PQ plan's text of the same day,
+   "only for a generation this client asked for", is withdrawn. The derivation
+   check is what keeps a stray key out of the keyfile.
+6. **The primary enrollment gets the revocation backstop.** A client running
+   with no enrollment id, or as `primary`, checks for revocations at start like
+   every other, amending
+   [130](#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
+   point 8.
+7. **Key packages and envelopes stop defaulting their APKAM signature to
+   `rsa2048`**, as
+   [136](#136-at_auth-stays-posture-blind-and-both-its-doors-demand-the-algorithm-2026-09-08)
+   removed two other such defaults: `enrollmentKeyPackageBuilder`'s
+   `signingAlgo`, at_auth's `FirstEnrollmentRequest.signingAlgo` and
+   `signingAlgoOf`'s fallback. The caller names the algorithm, or it follows the
+   enrollment's own authentication key.
+8. **All four self-to-self mirrors become catalogue rows** — of UC-A4.5,
+   UC-A4.7, UC-A4.6 and UC-A4.3 — by the rule that where a put, notify, get or
+   receipt use case has one direction, it has the other. Value was not the test:
+   UC-A4.3's mirror restates rows that already prove it, and it is added anyway.
+9. **The PQ doc set is design, use cases, the decision log and the open plan.**
+   `design.md` carries the current design and planned changes, `roadmap.md`
+   folded into it; `acceptance.md` the use cases; this ledger and its bodies
+   the decisions, unchanged; and `implementation-plan.md` only what is still
+   owed. `detail/implementation-plan.md` and `detail/acceptance.md` are
+   removed, and links into them point at their last version on GitHub. This
+   replaces the end state ruled 2026-08-23, five files with the ruling bodies
+   inlined into this ledger: the bodies stay in `detail/` so the index stays
+   bodyless.

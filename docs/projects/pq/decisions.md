@@ -98,7 +98,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [39]  | `_apsk` rides the same two-stage ladder                                                     | 2026-08-05 | LIVE                      |
 | [40]  | RF-SRV is the mechanism the whole model stands on                                           | 2026-08-05 | AMENDED 2026-08-27        |
 | [41]  | The to-define list                                                                          | 2026-08-05 | LIVE                      |
-| [42]  | The to-define list, ruled                                                                   | 2026-08-05 | AMENDED 2026-08-12        |
+| [42]  | The to-define list, ruled                                                                   | 2026-08-05 | AMENDED 2026-11-07        |
 | [43]  | RF-2b lands, and what the first genuine ML-DSA PKAM found                                   | 2026-08-05 | LIVE                      |
 | [44]  | RF-2c: the switch-over, and what it cost to make a client PQ                                | 2026-08-05 | LIVE                      |
 | [45]  | The retrofit rows, and the five defects the first end-to-end run found                      | 2026-08-05 | AMENDED 2026-08-15        |
@@ -187,7 +187,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | SUPERSEDED by 134         |
 | [128] | A retrofit's successor holds its predecessor's grants                                       | 2026-08-31 | LIVE               |
 | [129] | Revocation cascades to descendants, and the roster does the rest                            | 2026-08-31 | LIVE               |
-| [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | AMENDED 2026-10-13 |
+| [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | AMENDED 2026-11-07 |
 | [131] | The protected header names the KEY, and the enrollment moves to `enid`                      | 2026-08-31 | LIVE               |
 | [132] | The keys name the enrollment, and `primary` names the atSign's own credential               | 2026-09-07 | LIVE               |
 | [133] | A revocation follows approval, and a replacement settles itself                             | 2026-09-08 | LIVE               |
@@ -219,6 +219,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [159] | A write starts its walk at the namespace its key names in full                               | 2026-11-01 | AMENDED 2026-11-02 |
 | [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | AMENDED 2026-11-02 |
 | [161] | A share is sealed to the most specific key its recipient advertises                          | 2026-11-02 | AMENDED 2026-11-02 |
+| [162] | The 2026-11-07 plan review settles nine open questions                                       | 2026-11-07 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -382,3 +383,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [159]: detail/decisions.md#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01
 [160]: detail/decisions.md#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01
 [161]: detail/decisions.md#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02
+[162]: detail/decisions.md#162-the-2026-11-07-plan-review-settles-nine-open-questions-2026-11-07

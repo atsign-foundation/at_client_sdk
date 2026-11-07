@@ -2403,6 +2403,9 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/nskey_ladder_refusal_test.dart` | one generation advertising both X-Wing and ML-KEM-1024, and two writers differing only in `sealsToKeyAlgorithms`: each stamps its own conveyance provider, and a sibling install holding only the X-Wing conveyance provider cannot open the ML-KEM-sealed record — refused with `CryptoProviderNotRegistered` naming the missing id and listing what it does hold, with the same sibling opening an X-Wing record as the control. Cited by **UC-G2.11** and **UC-G2.10**. |
 | `packages/at_client/test/nskey_seeding_test.dart` | the namespace-key policy&#39;s second ask point and every condition under which it is skipped or its yes declined: nothing published, the posture not seeding, no substrate to convey over, and a policy that throws. Cited by **UC-A5.5** and **UC-A5.6**. |
 | `packages/at_client/test/nskey_rotation_test.dart` | what a namespace-key yes actually does — a fresh generation published, the superseded private kept, and the successor pushed to every authorised enrollment. Cited by **UC-A5.5**. |
+| `packages/at_client/test/ck_collection_test.dart` | when a superseded content key is collected: it is kept while a record still cites it, collected by the rotation once nothing does, and its grace (8 days by default) counts from its successor's cut, not its own. Cited by **UC-A5.4**. |
+| `packages/at_client/test/current_ck_pointer_test.dart` | the `__ckcur` pointer's shape, including one written before the own generation was recorded. Cited by **UC-A5.7**. |
+| `packages/at_client/test/envelope_signing_test.dart` | envelope verification against a withdrawn `_apsk`: a signer whose `_apsk` moved to `.r.__e` is refused as revoked or superseded. Cited by **UC-G2.7**. |
 
 ⚠️ **Being listed here is not a claim that a file is fully exercised** — it is
 the address of the evidence, so that a reader auditing a verdict can reach it
