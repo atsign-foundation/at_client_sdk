@@ -23,6 +23,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
         apskUri,
         EnvelopeType,
         requireApskEnrollmentId,
+        requireIssuer,
         SignedEnvelope,
         verifyEnvelope;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
@@ -272,6 +273,7 @@ Future<void> _verifyAgainstApsk(
         'signature against');
   }
   requireApskEnrollmentId(claimed);
+  requireIssuer(signedEnvelope, atSign);
   // NOTE: an absent `_apsk` does not come back null — the atServer answers
   // AT0015 and at_lookup throws it.
   final String? response = await atLookUp

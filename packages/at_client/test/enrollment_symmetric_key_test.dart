@@ -278,14 +278,16 @@ void main() {
           pollInterval: const Duration(milliseconds: 50));
       logs.records.clear();
 
+      final lookUp = serving(key, await approverEnvelope(issuer: '@bob'));
+
       await expectLater(
-          resolve(withKeyPackage(),
-                  serving(key, await approverEnvelope(issuer: '@bob')))
-              .toList(),
+          resolve(withKeyPackage(), lookUp).toList(),
           throwsA(isA<StateError>().having((e) => '$e', 'message',
               contains('No conveyed apkamSymmetricKey arrived'))));
       expect(logs.at('WARNING').where((m) => m.contains(key)),
           allOf(isNotEmpty, everyElement(contains('"@bob"'))));
+      verifyNever(() => lookUp.executeCommand(any(that: contains('_apsk')),
+          auth: any(named: 'auth')));
     });
 
     test('is skipped when it sits under a namespace its approver did not sign',
