@@ -453,9 +453,17 @@ void main() {
           'position and holds none of the key', () async {
         final (lookUp, sent) = recordingLookUp();
         final secret = supplied.privateKey;
-        for (final bad in [
-          '$secret\n',
-          '${secret.substring(0, 40)}!${secret.substring(41)}',
+        for (final (bad, expectedMessage) in [
+          (
+            '$secret\n',
+            'the supplied mldsa65 APKAM private key is not base64 '
+                '(at character ${secret.length})',
+          ),
+          (
+            '${secret.substring(0, 40)}!${secret.substring(41)}',
+            'the supplied mldsa65 APKAM private key is not base64 '
+                '(at character 40)',
+          ),
         ]) {
           Object? error;
           try {
@@ -468,15 +476,14 @@ void main() {
           } catch (e) {
             error = e;
           }
-          expect(error, isA<AtSigningException>());
-          final message = error.toString();
-          expect(message, contains('private'));
-          expect(message, matches(RegExp(r'at character \d+')));
           expect(
-            message,
-            isNot(contains(secret.substring(secret.length - 20))),
+            error,
+            isA<AtSigningException>().having(
+              (e) => e.message,
+              'message',
+              expectedMessage,
+            ),
           );
-          expect(message, isNot(contains(secret.substring(20, 40))));
         }
         expect(sent, isEmpty);
       });
