@@ -313,6 +313,14 @@ class SignedEnvelope {
           '${types.map((t) => '"$t"').join(', ')} — refusing rather than '
           'enforcing one of them and being read as another');
     }
+    final issuers = {for (final s in parsed) _issuerClaimOf(s)};
+    if (issuers.length > 1) {
+      throw AtSigningVerificationException(
+          'an envelope carries one signer\'s signatures, and its entries name '
+          '${issuers.map((i) => i ?? 'none').join(', ')} as the Atsign — '
+          'refusing rather than verifying under one of them and reporting '
+          'another');
+    }
     return SignedEnvelope._(payload, parsed);
   }
 
@@ -341,6 +349,14 @@ class SignedEnvelope {
   String toString() =>
       'SignedEnvelope(alg: ${signature.alg}, kid: $signerEnrollmentId, '
       'v: ${signature.version})';
+}
+
+/// [entry]'s Atsign claim quoted, canonical when it is an Atsign, or null
+/// when it makes none: what [SignedEnvelope.fromJson] compares across entries.
+String? _issuerClaimOf(EnvelopeSignature entry) {
+  if (!entry.header.containsKey('iss')) return null;
+  final claim = entry.header['iss'];
+  return jsonEncode(claim is String ? _atsignOrNull(claim) ?? claim : claim);
 }
 
 /// [entry]'s Atsign claim, canonical, or null when it makes none; throws

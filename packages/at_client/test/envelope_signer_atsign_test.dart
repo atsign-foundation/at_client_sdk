@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo;
+import 'package:at_chops/at_chops.dart'
+    show RsaKeyPair, SigningAlgoType, XWingPureDartAlgo;
 
 import 'package:at_client/at_client.dart' show SecretSharingAlgos;
 import 'package:at_client/at_client_mixins.dart'
@@ -85,6 +86,60 @@ void main() {
       final envelope = await spelt.signer.wrapAndSign({'result': 1});
 
       expect(headerOf(envelope.signature)['iss'], alice);
+    });
+  });
+
+  group('read with SignedEnvelope.fromJson', () {
+    late SignedEnvelope twoEntries;
+    late List<ApkamSigningKeys> keys;
+
+    setUp(() async {
+      final rsa = RsaKeyPair.generate();
+      keys = [
+        ofE.key,
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
+            publicKey: rsa.atPublicKey.publicKey,
+            privateKey: rsa.atPrivateKey.privateKey),
+      ];
+      twoEntries = signEnvelope({'result': 1},
+          keys: keys, type: EnvelopeType.app, atSign: alice, enrollmentId: e);
+    });
+
+    /// [twoEntries] with its RS256 entry's header passed through [edit].
+    Map<String, Object?> withSecondEntry(
+            Map<String, Object?> Function(Map<String, Object?>) edit) =>
+        resigned(twoEntries, keys,
+                (header) => header['alg'] == 'RS256' ? edit(header) : header)
+            .toJson();
+
+    for (final (other, edit) in [
+      ('naming iss "@bob"', (Map<String, Object?> h) => h..['iss'] = '@bob'),
+      ('naming no iss', (Map<String, Object?> h) => h..remove('iss')),
+    ]) {
+      test(
+          'An envelope whose entries disagree about the Atsign is refused when '
+          'read: one entry naming iss "@alice" and another $other', () {
+        expect(
+            () => SignedEnvelope.fromJson(withSecondEntry(edit)),
+            throwsA(isA<AtSigningVerificationException>()
+                .having((x) => x.message, 'message', contains('"@alice"'))
+                .having((x) => x.message, 'message',
+                    contains(other.contains('@bob') ? '"@bob"' : 'none'))));
+      });
+    }
+
+    group('Given an envelope whose entries name "@alice" and "@Alice"', () {
+      test(
+          'when it is read with SignedEnvelope.fromJson, then it is accepted '
+          'as one signer', () {
+        final envelope = SignedEnvelope.fromJson(
+            withSecondEntry((h) => h..['iss'] = '@Alice'));
+
+        expect(envelope.signerAtSign, alice);
+        expect(envelope.signatures, hasLength(2),
+            reason: 'the control: both entries are still there');
+      });
     });
   });
 
