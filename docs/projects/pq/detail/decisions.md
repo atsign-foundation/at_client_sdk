@@ -15881,3 +15881,47 @@ namespace", which these limits used to name, is gone with the mint it guarded.
 Supersedes [159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)
 item 1 and [160](#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01) items 2
 and 6, for shares.
+
+## 163. An envelope names its signer's Atsign, and verifies offline (2026-11-07)
+
+**Decided by gkc on 2026-11-07.** The protected header named a key and an
+enrollment but no Atsign, so a signature attributed an envelope to a key; and
+an Atsign not present when an envelope was made could verify it only through
+an `AtClient` and the network.
+
+1. **`iss` names the signer's Atsign** (N2): canonical, with its `@`, after
+   `kid` and before `enid`, in every protected header every signer writes. `v`
+   stays 1, since at_client 4.0.0 verifies a header carrying it. `iss` is not
+   listed in `crit`. Rejected: a new member name of our own, when JOSE already
+   registers `iss`; and bumping `v`, which would strand every 4.0.0 verifier.
+2. **Verifiers refuse a mismatch and accept an absence** (Q4a revised, N4,
+   N5): `verifyEnvelope` takes the signer's Atsign, and
+   `verifyEnvelopeSignature` compares before it fetches any `_apsk`. An
+   envelope naming no Atsign, as 4.0.0 signed them, is accepted until the
+   release that re-signs what an enrollment publishes. Rejected: refusing an
+   absence now (gkc: "I don't want 4.0.0 envelopes to be refused"), which
+   would break every stored 4.0.0 envelope at upgrade.
+3. **`fromJson` refuses entries that disagree about `iss`**, as it already
+   refuses them over `enid` and `typ`; an entry naming none disagrees with one
+   naming an Atsign.
+4. **An offline facade** (Q1, Q2, Q3, Q5, Q7, N1): `verifySignedEnvelope`
+   checks an application envelope against a `PublishedApsk` with no client,
+   network or clock, never throws, and returns `EnvelopeVerified` or
+   `EnvelopeRefused`. It refuses an absent or other `enid`, compared folded;
+   `minimumAlgorithm` refuses a weaker algorithm. `selectEnvelopeKey` makes
+   every check but the signature and is the selection the verifier uses.
+   `SignedEnvelope.parse` takes a required `maxLength` in UTF-8 bytes, and an
+   `_apsk` over 512 KiB is refused before it is read. All of it is
+   `@experimental`; the header format is not. Rejected: making the internal
+   verifiers public, whose `EnvelopeType` would let an app verify a chain link
+   or key package as if it were its own document.
+5. **An unreadable `_apsk` is a clean refusal on every path** (Q6): a value
+   that is empty, not base64, or not a JSON object is refused with
+   `AtSigningVerificationException`, never `FormatException`.
+6. **Test support lives apart from the barrels**: `TestEnvelopeSigner`, in
+   `package:at_client/testing.dart`, re-exported as each platform package's
+   own `testing.dart`, so production code importing a barrel is never offered
+   a signer that needs no enrollment.
+
+Scenarios: `features/at_client/envelope_signer_atsign.feature` and
+`features/at_client/envelope_verification.feature`.
