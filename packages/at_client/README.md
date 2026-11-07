@@ -26,8 +26,8 @@ Upgrading from 3.x: see
 
 | If you're building…                                     | Start with                                                                                                         |
 |---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools             |
-| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported)            |
+| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools. Import only its barrel; do not add at_client to your pubspec |
+| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported). Import only its barrel; do not add at_client to your pubspec |
 | A **platform package**, or a program that passes every dependency itself | this package                                                                      |
 | **Understanding** the atSign lifecycle                  | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup      |
 

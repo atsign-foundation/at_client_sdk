@@ -1,3 +1,12 @@
+/// The platform-neutral Atsign Protocol client: `AtClient`, its storage,
+/// crypto and services, and the offline envelope verifier.
+///
+/// Apps get this through their platform package's barrel,
+/// `package:at_client_cli/at_client_cli.dart` or
+/// `package:at_client_flutter/at_client_flutter.dart`, rather than importing
+/// it.
+library;
+
 export 'package:at_client/src/client/at_client_factory.dart';
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
