@@ -7,6 +7,8 @@
 - fix: notifications waiting for their key are no longer dropped sooner
   because several listeners want them, and one given up because its
   listener cancelled is reported on `droppedEvents`.
+- fix: `Enrollments.requests` reports only notifications from the client's
+  own atSign.
 
 ## 4.0.0
 
