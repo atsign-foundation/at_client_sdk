@@ -1,3 +1,19 @@
+## 3.8.0
+
+- feat: `MlDsa65PureDartAlgo.keyPairFromSeed` and `MlDsa65FfiAlgo.keyPairFromSeed`
+  derive the same ML-DSA-65 key pair from a 32-byte FIPS 204 seed
+  (`MlDsa65Sizes.seedBytes`). The seed is the private key; see the README's
+  "Persisting an ML-DSA-65 key".
+- feat: `AtSeededSignatureAlgorithm`, an `AtSignatureAlgorithm` that also has
+  `keyPairFromSeed` and `newSeed`. Both ML-DSA-65 classes implement it, and
+  `AtPqc.mlDsa65` is now typed as it, so a caller going through `AtPqc` can
+  reach the seeded path.
+- fix: the X25519, ML-DSA-65 and ML-KEM-768 FFI backends clear each native
+  buffer that held a private key, seed or shared secret before freeing it.
+  Copies the caller holds as `Uint8List` are not affected.
+- fix: `RsaSignatureAlgo`'s message for an unreadable private key names the
+  parse error's type rather than quoting its text.
+
 ## 3.7.1
 
 - chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.

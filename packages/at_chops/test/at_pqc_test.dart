@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:test/test.dart';
 
+import 'ml_dsa_65_acvp_vectors.dart';
+
 void main() {
   final DynamicLibrary? lib = tryLoadLibCrypto();
   final bool xWingFfi = lib != null && libCryptoSupportsMlKem768(lib);
@@ -144,6 +146,19 @@ void main() {
           await AtPqc.mlDsa65
               .verifyBytes(msg, signature: sig, publicKey: kp.publicKey),
           isTrue);
+    });
+
+    test(
+        'AtPqc.mlDsa65.keyPairFromSeed derives every ACVP keyGen vector, '
+        'on whichever backend AtPqc resolved', () async {
+      final AtSeededSignatureAlgorithm dsa = AtPqc.mlDsa65;
+      final vectors = mlDsa65KeyGenVectors();
+      expect(vectors, hasLength(25));
+      for (final v in vectors) {
+        final kp = await dsa.keyPairFromSeed(v.seed);
+        expect(kp.publicKey, v.pk, reason: 'tcId ${v.tcId} publicKey');
+        expect(kp.secretKey, v.sk, reason: 'tcId ${v.tcId} secretKey');
+      }
     });
 
     test(
