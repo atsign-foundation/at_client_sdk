@@ -729,7 +729,7 @@ the client holds no current copy of the recipient's key. Once a device has
 written in a namespace, it goes on writing there offline, across restarts.
 The design,
 the acceptance catalogue and the decision log are under
-[`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
+[`docs/projects/pq/`](../../docs/projects/pq/design.md).
 
 ## Known traps in sync
 

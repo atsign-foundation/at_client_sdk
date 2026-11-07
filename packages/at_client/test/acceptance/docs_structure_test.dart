@@ -1,10 +1,9 @@
 /// Guards the shape of the PQ doc set, which is a structure rather than a
 /// convention.
 ///
-/// The set is split in two: six **live** files carrying only what is current,
-/// and `detail/` carrying every ruling body and every completed or parked plan
-/// item, so that reading or grepping a live file cannot drag a rejected design
-/// into view.
+/// The set is five **live** files carrying only what is current, and
+/// `detail/` carrying every ruling body, so that reading or grepping a live
+/// file cannot drag a rejected design into view.
 ///
 /// ⚠️ **Only the structural rules are assertable.** Nothing here can tell
 /// whether a paragraph is true, so these rails go red for a broken link or a
@@ -42,7 +41,6 @@ const _liveFiles = <String>[
   'implementation-plan.md',
   'acceptance.md',
   'design.md',
-  'roadmap.md',
   'seal-spec.md',
 ];
 
@@ -61,12 +59,7 @@ void main() {
     // Scoped to slugs something actually LINKS to: a bare duplicate is
     // harmless, and the ledger legitimately repeats sub-headings like
     // "The ruling" under many rulings.
-    for (final file in [
-      ..._liveFiles,
-      'detail/acceptance.md',
-      'detail/decisions.md',
-      'detail/implementation-plan.md',
-    ]) {
+    for (final file in [..._liveFiles, 'detail/decisions.md']) {
       test('$file duplicates no slug that is linked', () {
         final headings = RegExp(r'^#{1,6}\s+(.*?)\s*$', multiLine: true)
             .allMatches(_read(file))
@@ -208,17 +201,15 @@ void main() {
   });
 
   group('the live files stay live', () {
-    test('the detail files exist and hold the bulk', () {
-      for (final f in const ['decisions.md', 'implementation-plan.md']) {
-        final detail = File('${_pq().path}/detail/$f');
-        expect(detail.existsSync(), isTrue,
-            reason: 'detail/$f is where $f\'s history lives; without it the '
-                'live file is not an index, it is a deletion');
-        expect(detail.readAsStringSync().split('\n').length,
-            greaterThan(_read(f).split('\n').length),
-            reason: 'detail/$f is no larger than the live $f. Either the '
-                'split was undone or the detail file was truncated');
-      }
+    test('the ruling bodies exist and hold the bulk', () {
+      final detail = File('${_pq().path}/detail/decisions.md');
+      expect(detail.existsSync(), isTrue,
+          reason: 'detail/decisions.md is where every ruling\'s reasoning '
+              'lives; without it the index is not an index, it is a deletion');
+      expect(detail.readAsStringSync().split('\n').length,
+          greaterThan(_read('decisions.md').split('\n').length),
+          reason: 'detail/decisions.md is no larger than the index. Either '
+              'the split was undone or the bodies were truncated');
     });
   });
 
@@ -331,7 +322,6 @@ void main() {
     // a failure. On an intended change, move the row — do not soften the body.
     test('no TODO row names a section whose body declares itself done', () {
       final plan = _read('implementation-plan.md');
-      final detail = _read('detail/implementation-plan.md');
 
       final todoStart = plan.indexOf('\n## TODO\n') + '\n## TODO\n'.length;
       expect(todoStart, greaterThan(0), reason: 'the TODO table did not parse');
@@ -350,20 +340,18 @@ void main() {
       final done = RegExp(r'✅|\bDONE\b|\bCOMPLETE\b|\bCLOSED\b');
       final wrong = <String>[];
       for (final id in rows) {
-        for (final text in [plan, detail]) {
-          final heading =
-              RegExp('^#{3,4} ${RegExp.escape(id)}[ \n]', multiLine: true)
-                  .firstMatch(text);
-          if (heading == null) continue;
-          final body = _withoutCodeSpans(text
-              .substring(heading.start)
-              .split('\n')
-              .skip(1)
-              .take(5)
-              .join(' '));
-          final hit = done.firstMatch(body);
-          if (hit != null) wrong.add('$id: body opens "${hit.group(0)}"');
-        }
+        final heading =
+            RegExp('^#{3,4} ${RegExp.escape(id)}[ \n]', multiLine: true)
+                .firstMatch(plan);
+        if (heading == null) continue;
+        final body = _withoutCodeSpans(plan
+            .substring(heading.start)
+            .split('\n')
+            .skip(1)
+            .take(5)
+            .join(' '));
+        final hit = done.firstMatch(body);
+        if (hit != null) wrong.add('$id: body opens "${hit.group(0)}"');
       }
       expect(wrong, isEmpty,
           reason: 'a TODO row points at a section that says it is finished. '
@@ -379,16 +367,13 @@ void main() {
   });
 
   group('the plan and the catalogue agree about what is done', () {
-    /// Every line of both plan files, each entry `<file>\u0000<line>`.
+    /// Every line of the plan, each entry `<file>\u0000<line>`.
     ///
     /// ⚠️ The NUL is written as an ESCAPE, never a raw byte: a literal
     /// NUL makes the whole file `data` to `file(1)`, so `grep` prints nothing
     /// and exits 1 while `git grep` still reads it.
     List<String> planLines() => [
-          for (final f in const [
-            'implementation-plan.md',
-            'detail/implementation-plan.md'
-          ])
+          for (final f in const ['implementation-plan.md'])
             ..._read(f).split('\n').map((l) => '$f\u0000$l'),
         ];
 
@@ -472,12 +457,7 @@ void main() {
 
     test('no doc carries a rule permitting stale prose', () {
       final offences = <String>[];
-      for (final file in [
-        ..._liveFiles,
-        'detail/acceptance.md',
-        'detail/decisions.md',
-        'detail/implementation-plan.md'
-      ]) {
+      for (final file in [..._liveFiles, 'detail/decisions.md']) {
         final text = _read(file);
         for (final entry in banned.entries) {
           for (final m in entry.key.allMatches(text)) {

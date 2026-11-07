@@ -236,10 +236,9 @@ true* and *how to test it*; it does not re-explain *how the mechanism works*.
 
 | For…                                              | See…                                  |
 |---------------------------------------------------|---------------------------------------|
-| Mechanics (key shapes, providers, substrate, verbs, at_chops primitives) | `design.md` — "do NOT re-explain the design here; reference it" |
-| Which project ships each UC, sequencing, effort   | `implementation-plan.md`              |
+| Mechanics (key shapes, providers, substrate, verbs, at_chops primitives), the high-level WHAT (D1/D2, migration philosophy) and planned changes | `design.md` — "do NOT re-explain the design here; reference it" |
+| What is still owed                                | `implementation-plan.md`              |
 | The WHY behind a ruling, the decisions, and timeline | `decisions.md`                        |
-| The high-level WHAT (D1/D2, migration philosophy) | `roadmap.md`                          |
 
 Substrate mechanics are cited to `design.md`; substrate-related rulings to
 `decisions.md`.
@@ -687,7 +686,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then (an unimplemented algorithm fails the mint):** it does not quietly mint the
   other one. This is the only moment an enrollment's encapsulation target can be set
   without the enrollment later sending `enroll:update` for itself.
-- **Cross-ref:** [`implementation-plan.md` 14.6](detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
+- **Cross-ref:** [`implementation-plan.md` 14.6](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
   (the door `enroll:update` opened).
 
 ### 3.5 UC-A2.5 — An enrollment amends its own key package (`enroll:update`)
@@ -1957,7 +1956,8 @@ map and be refused rather than obeyed.
 | E2      | cap    | legacy + nskey data path | legacy               |
 
 - **Cross-ref:** `design.md` [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).
-- **Impl/verify:** unit `crypto_era_default_test`, e2e `era_default_read_test`.
+- **Impl/verify:** unit `packages/at_client/test/crypto_era_default_test.dart`, functional
+  `tests/at_functional_test/test/crypto_era_default_test.dart`, e2e `era_default_read_test.dart`.
 
 ## 11. B4 · Mixed-PQ across atSigns
 
@@ -2046,9 +2046,9 @@ map and be refused rather than obeyed.
   PQ.
 
 - **Cross-ref:** `design.md` [section 1.6](design.md#16-the-uniform-data-flow--cold-start--resolutionordering) (cold start), [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d) (the two-release model);
-  `roadmap.md` (migration philosophy).
-- **Impl/verify:** unit `cold_start_test`, e2e `nskey_recipient_not_ready_test` and
-  `nskey_cross_atsign_test`; harness `tests/at_end2end_test`.
+  `design.md`'s overview (migration philosophy).
+- **Impl/verify:** unit `cold_start_test.dart`, e2e `nskey_recipient_not_ready_test.dart` and
+  `nskey_cross_atsign_test.dart`; harness `tests/at_end2end_test`.
 
 ## 12. B5 · Edge cases
 
@@ -2396,9 +2396,9 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/signing_key_mint_test.dart` | the one home for minting the data signing keypair an enrollment owns from birth, shared by the self-retrofit, the PQ-native activation and the CLI enrolment: that the algorithm minted is the one the in-use set names — so the first start&#39;s reconciliation is a no-op and `_apsk` is not rewritten — and what it refuses rather than guessing. Cited by **UC-G3.2**. |
 | `packages/at_client/test/enrollment_conveyance_guard_test.dart` | what a client configuring no post-quantum providers refuses and what it still does — the approval that throws before reaching the atServer so the enrolment stays pending, the sweep refusal, and both controls (a request carrying its own wrapped key is approved; a PQ-capable posture is refused neither). Cited by **UC-G3.10**. |
 | `packages/at_client/test/rotation_policy_test.dart` | the two developer-facing rotation defaults — `rotateCkAfterOneYear` and `rotateNskeyAfterOneYear`, each with its period pinned as a raw literal and its boundary inclusive — that every config the SDK builds carries them, the weekly and never alternatives, and that `now` is a parameter rather than a clock read, which is what makes an application&#39;s policy testable. Cited by **UC-A5.4** and **UC-A5.5**. |
-| `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this atSign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
-| `packages/at_client/test/nskey_private_ask_test.dart` | that asking the atSign's other enrollments for an own namespace-key private it does not hold keeps its cooldown when the ask fails, so a read miss cannot ask on every write. |
-| `packages/at_client/test/nskey_own_seal_test.dart` | that a content key sealed to the atSign's own namespace key goes to the public half the held private derives, never to the one the atServer serves, including for a generation this client minted with nowhere to file its private. |
+| `packages/at_client/test/ck_manager_test.dart` | where the content-key rotation policy is ASKED — before the current key is returned, with the destination in its context — and where the namespace-key hook is asked only for this Atsign&#39;s own key. Also the restart arm, where a resumed key takes its age from the conveyance record rather than this process&#39;s clock. Cited by **UC-A5.4** and **UC-A5.5**. |
+| `packages/at_client/test/nskey_private_ask_test.dart` | that asking the Atsign's other enrollments for an own namespace-key private it does not hold keeps its cooldown when the ask fails, so a read miss cannot ask on every write. |
+| `packages/at_client/test/nskey_own_seal_test.dart` | that a content key sealed to the Atsign's own namespace key goes to the public half the held private derives, never to the one the atServer serves, including for a generation this client minted with nowhere to file its private. |
 | `packages/at_client/test/legacy_client_refusal_test.dart` | that a legacy-only install — one whose posture registers no post-quantum providers at all — refuses a record stamped `at/symmetric/AES/GCM`, asserted on `CryptoProviderNotRegistered` and on its message naming the id, with the same install reading a `legacy`-stamped record as the control. Cited by **UC-B4.3**. |
 | `packages/at_client/test/nskey_ladder_refusal_test.dart` | one generation advertising both X-Wing and ML-KEM-1024, and two writers differing only in `sealsToKeyAlgorithms`: each stamps its own conveyance provider, and a sibling install holding only the X-Wing conveyance provider cannot open the ML-KEM-sealed record — refused with `CryptoProviderNotRegistered` naming the missing id and listing what it does hold, with the same sibling opening an X-Wing record as the control. Cited by **UC-G2.11** and **UC-G2.10**. |
 | `packages/at_client/test/nskey_seeding_test.dart` | the namespace-key policy&#39;s second ask point and every condition under which it is skipped or its yes declined: nothing published, the posture not seeding, no substrate to convey over, and a policy that throws. Cited by **UC-A5.5** and **UC-A5.6**. |
@@ -2406,73 +2406,78 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/ck_collection_test.dart` | when a superseded content key is collected: it is kept while a record still cites it, collected by the rotation once nothing does, and its grace (8 days by default) counts from its successor's cut, not its own. Cited by **UC-A5.4**. |
 | `packages/at_client/test/current_ck_pointer_test.dart` | the `__ckcur` pointer's shape, including one written before the own generation was recorded. Cited by **UC-A5.7**. |
 | `packages/at_client/test/envelope_signing_test.dart` | envelope verification against a withdrawn `_apsk`: a signer whose `_apsk` moved to `.r.__e` is refused as revoked or superseded. Cited by **UC-G2.7**. |
+| `packages/at_client/test/apkam_signing_keys_test.dart` | an enrollment's client data signing keys: one signature per held key, republishing an `_apsk` that differs from what is held, and which keypair a keyfile client signs with. Cited by UC-G2.9, UC-G3.3, UC-G3.6 and UC-G3.8. |
+| `packages/at_client/test/cold_start_test.dart` | a self write to a namespace with no key refuses, and the readiness query answers yes once the destination has published. Cited by UC-A3.3 and UC-B4.4. |
+| `tests/at_functional_test/test/conveyed_key_collection_test.dart` | a conveyed private is swept off the atServer and filed into the keyfile only when it is addressed to this key package. Cited by UC-B5.9. |
+| `tests/at_functional_test/test/copied_keyfile_test.dart` | a copied keyfile is the same enrollment and the same recipient. Cited by UC-A2.2. |
+| `tests/at_functional_test/test/enroll_update_live_test.dart` | `enroll:update` against a live atServer: a rekey keeps the enrollment id, needs proof of possession, cannot reach namespaces and is self-only. Cited by UC-G1.10 to UC-G1.13. |
+| `tests/at_functional_test/test/enrollment_namespace_gate_test.dart` | a scoped enrollment reads and writes the namespace it was granted, and cannot read another namespace's envelope channel. Cited by UC-A2.3, UC-A3.2 and UC-B1.3. |
+| `packages/at_client/test/enroll/enrollment_update_test.dart` | what a rotation sends — the new public key, its algorithm and the proof — and that nothing the API composes names namespaces or an approval state. Cited by UC-G1.10 and UC-G1.12. |
+| `packages/at_client/test/first_enrollment_identity_test.dart` | the device name a keyfile client asks for is not the bare constant, and two clients of one keyfile ask for different ones. Cited by UC-G3.11. |
+| `packages/at_client/test/kem_selection_test.dart` | the two KEMs are not interchangeable. Cited by UC-A4.5. |
+| `packages/at_client/test/key_package_registration_test.dart` | the key package: minting and advertising the configured KEM, the declared suites a sender negotiates against, refusing an unsigned, tampered or foreign-signed package, and the key-holder revocation moment. Cited by UC-A2.4, UC-A4.6, UC-A4.7, UC-G2.1, UC-G2.5 and the cross-cutting rows. |
+| `packages/at_client/test/nskey_kem_selection_test.dart` | which KEM conveys an nskey: the recipient's advertisement picks the provider, the sender's order decides between entries, and each entry stamps its own kid. Cited by UC-A3.5, UC-A4.5, UC-A4.6 and UC-G2.10. |
+| `tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart` | whichever enrollment of one Atsign writes, every enrollment of the other reads. Cited by UC-A4.1 and UC-A4.3. |
+| `packages/at_client/test/nskey_resolver_test.dart` | a widened advertisement serves each sender the entry it understands, and a narrowed one refuses with a message naming both sides. Cited by UC-A4.6, UC-G2.10 and UC-G2.11. |
+| `tests/at_functional_test/test/nskey_rollout_ladder_live_test.dart` | rollout 1 one install at a time, with both directions working throughout. Cited by UC-G2.11. |
+| `tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart` | with the fallback opted in, a write to a recipient with no key goes legacy, and the next write goes post-quantum once the recipient publishes. Cited by UC-B4.1 and UC-B4.4. |
+| `tests/at_functional_test/test/pq_matrix_reader_compiles_test.dart` | compiles the released arm's reader against this tree, so a change that breaks it fails to load rather than going unnoticed. |
+| `tests/at_functional_test/test/pq_native_app_enrollment_test.dart` | an app that enrols post-quantum from birth does not retrofit: its enrollment id does not change. |
+| `tests/at_functional_test/test/pq_native_onboard_live_test.dart` | a CRAM activation is post-quantum native and still reachable by a legacy peer. Cited by UC-A1.1. |
+| `packages/at_auth/test/pq_native_onboard_test.dart` | a post-quantum native onboard writes the private half to the keyfile under the enrollment id. Cited by UC-G3.1. `tests/at_client_cli_functional_tests/test/pq_native_onboard_test.dart` drives the same onboard through the CLI. |
+| `tests/at_end2end_test/test/pq/pq_notify_fallback_test.dart` | the opted-in fallback governs a notify as well as a put. Cited by UC-A4.4. |
+| `tests/at_functional_test/test/pq_released_peer_test.dart` | a pqReady client is invisible to a deployed peer. Cited by UC-G1.14. |
+| `tests/at_functional_test/test/pq_scoped_enrollment_self_read_test.dart` | a scoped ML-DSA enrollment reads its own namespace. Cited by UC-A2.1. |
+| `packages/at_client/test/pre_enrollment_retrofit_drive_test.dart` | a client holding no enrollment asks the atServer for one. Cited by UC-G3.11. |
+| `packages/at_client/test/secret_sharing_approver_test.dart` | an approval shares only the secrets of namespaces the approved enrollment is authorised for. Cited by UC-A2.3 and UC-B1.3. |
+| `tests/at_functional_test/test/signing_root_pull_test.dart` | an enrollment not entitled to the signing root does not ask for it. Cited by UC-B5.10. |
+| `tests/at_client_cli_functional_tests/test/pq_pre_enrollment_retrofit_test.dart` | a pre-enrollment Atsign gives itself a first enrollment through the shipped CLI, and the same Atsign shape at a legacy posture does not. Cited by **UC-G3.11**. |
 
 ⚠️ **Being listed here is not a claim that a file is fully exercised** — it is
 the address of the evidence, so that a reader auditing a verdict can reach it
 and a reader working the plan cannot rebuild what already exists.
 
-**Baseline (already shipped, not pending work).** The primitive layer is
-published: **#1930** (M0 crypto seam) and **#1993 / at_chops 3.3.0**
-(`pqSeal`/`pqOpen`), with **PR #2035** (design fixes) merged. at_chops-vector
-coverage exercises this shipped base. As of the **2026-07-17 release train** the
-baseline also includes **at_chops 3.4.0** (ML-DSA-65 verify dispatch, AES-GCM
-FFI), **at_commons 5.13.0**, **at_client 3.14.0** (carrying the SS-0 substrate,
-PR #2037) and **at_auth 3.3.0-rc1** (extended `AtKeys` + `AtKeysIo.flush()`), so
-SS-0 / SS-1b / S-1 / S-2 acceptance is against shipped code.
+⚠️ **`tests/` holds four live test packs and several helper packages.** The
+packs are the four with a `runLocal.sh`. The rest are child builds a live test
+drives: `tests/pq_matrix/{published,scenario}` hold the released arm that keeps
+[UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer) proven against a
+released at_client, and `tests/keyfile_capture` and `tests/upgrade` hold
+released builds whose output the unit and upgrade tests read. Count them with
+`git ls-files 'tests/*pubspec.yaml'`, never `tests/*/`: a depth-2 glob misses
+the nested ones and reads as the whole answer.
 
-⚠️ **`tests/` holds 6 Dart packages, of which 4 are live test packs.** The
-other 2 are `tests/pq_matrix/{published,scenario}` — the child processes the pair
-grid spawns, which is why the `published` column can hold a released at_client
-this tree cannot. ⚠️ Count them with `find tests -name pubspec.yaml`, never
-`tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
-
-Three `provenIn` citations reach a CLI pack, over two rows: **UC-G3.11** cites
-`pq_pre_enrollment_retrofit_test.dart` twice, and **UC-B1.4** cites
-`pq_native_enroll_test.dart` once. None reaches the **proxy** pack.
-
-Re-derive rather than quoting:
-`git grep -c at_client_cli_functional_tests -- packages/at_client/test/acceptance`.
-The CLI pack's two-arm posture differential — the best live evidence for
-UC-C1.6 and a second live proof of UC-A1.1 — is still invisible from this
-catalogue. The strict matcher gives **194** live `test()` declarations across
-all 4 packs and a multi-line-aware one **247**; the gap is entirely
-declarations whose name sits on the next line, since an any-position same-line
-matcher also returns 194.
+Few `provenIn` citations reach a CLI pack, and none reaches the **proxy** pack;
+re-derive which with
+`git grep -n at_client_cli_functional_tests -- packages/at_client/test/acceptance`.
+The CLI pack's two-arm posture differential is the best live evidence for
+UC-C1.6 and a second live proof of UC-A1.1. Count live `test()` declarations
+with a multi-line-aware matcher, since a declaration's name often sits on the
+next line:
 
 ```bash
-grep -rhoE "^[[:space:]]*test\([[:space:]]*'" tests/ --include='*.dart' | wc -l   # 194
 perl -0777 -ne 'while (/(?<![A-Za-z0-9_])test\(\s*[\x27"]/gs){$n++} END{print "$n\n"}' \
-  $(find tests -name '*.dart')                                                    # 247
+  $(find tests -name '*.dart')
 ```
-
 All **three** `runLocal.sh` harnesses take an image override,
 `VIRTUALENV_IMAGE`, each defaulting to the locally built `at_virtual_env:local`;
 CI runs against `atsigncompany/virtualenv:dev_env`. ⚠️ **A green local run does
 not imply CI parity** — check which image produced a result before citing it.
 
-### Where the catalogue actually stands
+### Reading the burn-down
 
-Coverage was never the gap. What is missing is the ability to address that
-proof: **161 citations, 81 into a live pack and 80 in-process**, over 73 rows. Half of this
-catalogue's PROVEN rows still rest on mocks, and the status table does not
-distinguish the two — which is what the [evidence standard](#0-purpose-scope--how-to-read-this-doc)
-and the burn-down below now do.
-
-**The burn-down is the measure to read, and it prints on every run of the
-acceptance suite:**
+A row reads `PROVEN` on one citation however many separate things its THEN
+states, and half the PROVEN rows rest on in-process proofs, which the status
+table does not distinguish. So the measure to read is the clause burn-down, and
+it prints on every run of the acceptance suite:
 
 ```
 BURN-DOWN  clauses proven: <N> of <T>   server-proven: <M> of <T>
 ```
 
-A row-level verdict cannot express what *done* means here, because a row reads
-`PROVEN` on one citation however many separate things its THEN states. The two
-columns are the definition: **proven** is a clause some
-citation pins, **server-proven** is a clause pinned by a citation into a live
-pack. `manifest.dart` records both as exact figures and `catalogue_test.dart`
-fails **in both directions**, so landing a pin and raising the count happen in
-one diff — a count and the thing it counts do not get to drift apart here
-again.
+**Proven** is a clause some citation pins; **server-proven** is a clause pinned
+by a citation into a live pack. `manifest.dart` records both as exact figures
+and `catalogue_test.dart` fails **in both directions**, so landing a pin and
+raising the count happen in one diff.
 
 ⚠️ **A pin is a claim, not a run.** The burn-down says a citation claims a
 clause and that the claim resolves; `tool/acceptance_ledger.dart` is what says
@@ -2486,87 +2491,62 @@ perl -0777 -ne 'while (/provenIn\(\s*'"'"'([^'"'"']+)'"'"'/gs) { print "$1\n" }'
 
 ⚠️ **Use that command rather than a single-line-anchored one.** `provenIn(` is
 routinely formatted with its path on the next line, so a same-line matcher
-reports 62 citations over 18 files — wrong, and it does not look wrong.
+under-counts, and it does not look wrong.
 
-A citation also cannot be told from prose: `proven_elsewhere.dart:40` is
-`expect(source.contains("'$testName"), isTrue)`, a bare substring anywhere in
-the file, so a comment, a `group(` name or a line of doc text satisfies one.
+A citation also cannot be told from prose: `provenIn` checks that the cited
+file contains `'<test name>` as a bare substring, so a comment, a `group(` name
+or a line of doc text satisfies one.
 
 ### Why a posture grid is the wrong default
 
-`PqPosture` declares 10 axes (`grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`) and only 7 vary across the 3 stages.
+`PqPosture` declares more axes than vary across its three stages:
 `mintLegacyMaterial`, `sealsToKeyAlgorithms` and `keyEstablishmentAlgorithms`
-are byte-identical at legacy, pqReady and pqActive, and the last one's dartdoc
-calls it a deployment decision rather than a stage decision. Any row whose
-clauses turn on those three is posture-invariant by construction.
+are identical at legacy, pqReady and pqActive, and the last one's dartdoc calls
+it a deployment decision rather than a stage decision. Any row whose clauses
+turn on those three is posture-invariant by construction. Re-derive the axes
+from `PqPosture` itself rather than from a count.
 
-A3 is the clearest case. The live proof in `nskey_data_path_live_test.dart`
-builds its client at a fixture posture holding every writing axis at `legacy`
-while configuring the post-quantum providers, and then sets
-`..crypto = CryptoConfig.nskey(...)`. Every clause it asserts is already proven
-with no writing axis moved and is identical at the other two stages.
+⚠️ **`PqPosture.legacy` configures no post-quantum providers**, so `legacy` +
+`CryptoConfig.nskey` is a combination `AtClientPreference.crypto` refuses
+outright. What the posture decides is not what the data path guarantees, but
+whether an app that configures nothing enters it. In A3,
+[UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for)
+varies by stage because `seedNamespaceKeys` is false at legacy — and the whole
+startup is off at that stage, so the mint is one of several things that do not
+happen — and
+[UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback)
+has a legacy escape hatch pqActive closes.
 
-⚠️ **`PqPosture.legacy` configures no post-quantum providers**, which makes
-`legacy` + `CryptoConfig.nskey` a combination `AtClientPreference.crypto`
-refuses outright — so the construction the invariance argument rested on cannot
-be built. **Whether the "3 of 5 do not vary" classification still holds is
-therefore open**: it was derived from a posture-invariance that one axis no
-longer has.
- What the posture decides is not what the data path guarantees, but
-whether an app that configures nothing enters it. 3 of the 5 A3 rows do not vary
-at all; the 2 that do are [UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for),
-because `seedNamespaceKeys` is false at legacy so whether the mint fires is a
-stage decision — and the whole startup is off at that stage, so the mint is one
-of several things that do not happen rather than the only one —
-and [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback),
-whose legacy escape hatch pqActive closes.
+Growing a grid to carry the catalogue would run every stage-invariant row as
+identical copies of one assertion, and the rows whose Given legacy cannot
+satisfy would pass vacuously there. The rollout matrix's own rule says why
+minting stays out of the cells: *"Minting happens ONCE, at enrolment time,
+never in the cells"*, because a per-cell re-mint churns the advertisement into a
+shape [UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer)'s released
+reader cannot take. So the catalogue is proven by three arms, each the shape a
+kind of row needs, and every other row is proven wherever it is proven today.
 
-Sorting all 68 by the shape that could prove them:
-
-| Kind | Rows | Shape that proves it | Arm |
-|-----------------------|-----:|------------------------------------|--------|
-| Axis rows | 6 | one client at a known stage | 1 |
-| Consequence rows | 15 | one client at a known stage | 1 |
-| Cross-stage rows | 3 | a sender × receiver cell | 2 |
-| Transition rows | 3 | a client that moves stage | 3 |
-| Stage-invariant | 38 | wherever they are proven now | ledger |
-| Vacuous at legacy | 3 | a stage-aware Given, or excluded | — |
-
-⚠️ **The consequence and transition counts disagree with the arm-3 paragraph
-below, and 4 rows are assigned to both arms.** Read [which rows arm 1
-owes](#which-rows-arm-1-owes) before building against any figure in this table.
-
-The existing 4×4 serves the 3 cross-stage rows and cannot express a transition.
-The rollout matrix's own dartdoc said why: *"Minting happens ONCE, at
-enrolment time, never in the cells"*, because a per-cell re-mint churns
-the advertisement into a shape [UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer)'s
-released reader cannot take. Growing the grid to carry the catalogue would run
-38 rows as 16 identical copies of one assertion, and 3 more would pass vacuously
-at legacy where their Given is unsatisfiable.
-
-There is also an axis that is not the client's posture at all:
+One axis is not the client's posture at all:
 [UC-B0.1](#uc-b01--a-pq-capable-client-cannot-pq-upgrade-against-a-legacy-atserver)
-varies by atServer version, and survives today as a tagged special case against
-a pinned `virtualenv:vip-p3.15.0` in its own CI job.
+varies by atServer version, and runs as a tagged special case against a pinned
+`virtualenv:vip-p3.15.0` in its own CI job.
 
 ### The arms
 
-**Arm 1, the stage arm.** 3 cells, one client per `PqPosture`, asserting the
-axis and consequence rows it owns — [which ones, and why the count is
-contested](#which-rows-arm-1-owes).
-`TestUtils.getPreference(atSign, posture:)` already takes a posture, so this is
-the cheapest arm to build, and it closes the highest value empty row as a
-by-product: `disallowLegacyEncryption` has no setter and no constructor
-argument, so a posture is the only way to reach it, and it has **0** hits under
-`tests/` against a live refusal in `CryptoRuntime.refuseLegacyIfDisallowed`
-(`crypto_runtime.dart:156`), reached once at provider selection and again at
-encryption time so the guarantee does not rest on which call path a write took.
-[UC-C1.2](#152-uc-c12--the-refusal-axis-the-posture-disallows-legacy-writes)
-has never executed.
+**Arm 1, the stage arm.**
+`tests/at_functional_test/test/pq_stage_arm_test.dart`: three enrollments of one
+Atsign, one client per `PqPosture`, asserting the axis and consequence rows in
+[the rows arm 1 covers](#the-rows-arm-1-covers). `disallowLegacyEncryption` has
+no setter and no constructor argument, so a posture is the only way to reach it;
+its live refusal is `CryptoRuntime.refuseLegacyIfDisallowed`, reached once at
+provider selection and again at encryption time, so the guarantee does not rest
+on which call path a write took. Arm 1 does **not** measure UC-C1.4:
+`enrolAndAuthenticate` builds pq-mode enrollments only, so all three cells hold
+`keyExchangeMode` constant.
 
 **Arm 2, the posture grid.**
 `tests/at_functional_test/test/pq_posture_grid_test.dart`, one enrollment per cell
-on 2 atSigns, every cell approved before any client opens and the seeding cells
+on 2 Atsigns, every cell approved before any client opens and the seeding cells
 opened last. Sender posture × receiver **readiness**, in **one
 process** in `tests/at_functional_test`, exercising self and cross-atSign puts,
 gets, and notification send and receive. The data-path axis is receiver
@@ -2580,17 +2560,11 @@ refuse is the finding. It also carries the signed-envelope exchange that
 needs, algorithm pins included — without those pins all nine envelope cells
 pass for an inert harness.
 
-This replaces the 4×4, and the `published` column goes with it. The
-two-process architecture existed for exactly one reason, which
-`tests/pq_matrix/README.md` states: *"the two halves run as separate processes
-because they are separate builds"*. With at_client 3.14.0 no longer a cell
-there is no second build to host, and the scenario package, the `##PQM##` line
-protocol and the per-arm `pub get` go with it. What survives of the released
-arm is a single standalone test that keeps
-[UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer) proven, because
-nothing else in the tree compares this tree's legacy posture against a released
-at_client, and that row's two positive controls both run *through* the released
-build.
+The grid runs in one process because nothing needs a second build: the one
+comparison against a released at_client that the tree still makes is
+[UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer)'s, in the
+standalone `pq_released_peer_test.dart`, whose two positive controls both run
+*through* the released build in `tests/pq_matrix/published`.
 
 ⚠️ **`keyExchangeMode` has no behavioural consumer in at_client at all** —
 every mention is a declaration, a constant or a comparison — which `PqPosture`'s
@@ -2610,11 +2584,11 @@ Its two rungs are different mechanisms, and neither is a call:
 - **legacy → pqReady happens by itself.** A client whose posture wants a
   stronger authentication algorithm than its key material holds is retrofitted
   by `AtClientImpl._settleEnrollmentIdentity` *during construction*, and comes
-  up on a **new** enrollment id. This is not hypothetical: 2 of arm 1's 3 cells
-  do it on every run. ⚠️ **It still needs the client cache evicted first.** The
-  enrollment id does change — but *inside* `create`, after the cache has already been checked
-  against the id the caller asked with, so a rung reusing one keyfile is
-  refused by `refuseChangedRolloutAxes` before the retrofit can run.
+  up on a **new** enrollment id; 2 of arm 1's 3 cells do it on every run.
+  ⚠️ **It still needs the client cache evicted first.** The enrollment id
+  changes *inside* `create`, after the cache has already been checked against
+  the id the caller asked with, so a rung reusing one keyfile is refused by
+  `refuseChangedRolloutAxes` before the retrofit can run.
 - **pqReady → pqActive keeps the enrollment.** Both authenticate with ML-DSA-65,
   so no retrofit is due; what moves is the data signing key, through
   `SigningKeyMinting.reconcileSigningKeys`, which reads a **final** preference
@@ -2623,16 +2597,16 @@ Its two rungs are different mechanisms, and neither is a call:
   refuses — so the rung evicts `AtClientImpl.atClientInstanceMap` first, as
   several at_client unit tests already do.
 
-⛔ **Arm 4 is cancelled.** The atServer-version axis is out of
-scope for this project: the hosted fleet will run the version a release
-requires, and atServers hosted elsewhere are not this project's concern.
+⛔ **There is no fourth arm.** The atServer-version axis is out of scope: the
+hosted fleet runs the version a release requires, and atServers hosted
+elsewhere are not this project's concern.
 [UC-B0.1](#uc-b01--a-pq-capable-client-cannot-pq-upgrade-against-a-legacy-atserver)
-therefore keeps its pinned-image special case rather than gaining an ordinary
-home, and the `legacy-server` tag stays.
+therefore keeps its pinned-image special case, and the `legacy-server` tag
+stays.
 
 ### How the postures are provisioned
 
-⚠️ **One namespace per posture on both atSigns cannot express the case the grid
+⚠️ **One namespace per posture on both Atsigns cannot express the case the grid
 exists for.** The nskey for a write to `@bob:k.<ns>@alice` is resolved at
 `(owner: bob, namespace: ns)`, and `ns` is the **sender's** namespace — so if
 every posture owns its namespace on both sides, every sender finds its peer
@@ -2660,11 +2634,10 @@ precisely the claim.
 
 Two namespaces carry readiness, and it is deliberately **asymmetric**: an
 enrollment seeds every namespace it is authorised for, so a sender able to
-write into the unready namespace necessarily seeds it on its own atSign. Only
+write into the unready namespace necessarily seeds it on its own Atsign. Only
 the receiver's side is asserted absent — which is also what proves a refusal is
-about the recipient rather than the sender.
-
-Measured live, 2026-08-24, `@alice🛠` sending to `@bob🛠`:
+about the recipient rather than the sender. Measured live, `@alice🛠` sending to
+`@bob🛠`:
 
 | Sender posture | → `pqgr` (peer seeded) | → `pqgn` (peer unseeded) |
 |-------------------------|------------------------|---------------------------------------|
@@ -2683,45 +2656,27 @@ are separate switches. So the fourth posture is **necessary and not sufficient**
 for the opted-in-fallback clauses; a cell wanting them must set the preference
 flag as well.
 
-⚠️ **An enrollment authorised for `*` seeds nothing.** `NskeySeeding` skips the
-wildcard deliberately, so a pqReady or pqActive enrollment approved with
-`{'*': 'rw'}` publishes no namespace key and then refuses every write it makes —
-a failure that looks like a broken data path and is a provisioning mistake. Each
-cell names its own namespaces, and the grid asserts that rather than relying
-on it.
+⚠️ **A wildcard-only enrollment seeds only the namespace its app runs in**, and
+every namespace it shares into, so a pqReady or pqActive enrollment approved
+with `{'*': 'rw'}` has no key in the grid's other namespaces. Each cell names
+its own namespaces, and the grid asserts that rather than relying on it.
 
-### Which rows arm 1 owes
+### The rows arm 1 covers
 
-⛔ **The table above and the arm-3 paragraph disagree, and this section is what
-a builder should work from until the disagreement is ruled.** The table says
-**3** transition rows. The arm-3 paragraph names the retrofit trio (UC-B1.1,
-UC-B1.2, UC-B1.3), the retirement pair (UC-B2.1, UC-B2.2), the capability flip
-(UC-B4.4), rotation and revocation (UC-A5.1, UC-A5.3), heal-from-a-holder
-(UC-B5.11) and UC-G1.7 to UC-G1.9 — **12**. Four of those twelve — UC-B1.1,
-UC-B1.2, UC-B4.4 and UC-A5.3 — are also inside the 15 consequence rows the
-table assigns to arm 1, so the same section hands them to arm 1 and arm 3 at
-once. The count of 21 is the sum of two cells one of those rows is double-counted
-in, which is why it cannot simply be trusted and edited down.
+Arm 1 asserts the 14 rows below. Nine more rows were bucketed differently by two
+readings of an earlier classification — UC-A5.2, UC-A5.3, UC-B1.1, UC-B1.2,
+UC-B4.4, UC-G1.2 and UC-G1.5, and UC-A4.2 and UC-B4.3 — and gkc ruled on
+2026-11-07 that they stay proven where they are, with no arm-1 cells
+([ruling 162](detail/decisions.md#162-the-2026-11-07-plan-review-settles-nine-open-questions-2026-11-07) item 3).
 
-**Neither reading is ruled here.** They differ in what arm 1 *is*: under the
-count, an arm-1 cell has to drive a retrofit, so the arm stops being three
-static clients; under the prose, a retrofit is a move and belongs to arm 3.
-The two readings are stated rather than resolved, so the choice is visible.
-
-**What arm 1 builds against in the meantime: the 14 rows both readings agree
-on.** A row here is an arm-1 row whichever way the disagreement goes, so a test
-written against it cannot be invalidated when the disagreement is settled:
-
-⚠️ **The ids below are backticked deliberately.** `docs_structure_test.dart:345`
+⚠️ **The ids below are backticked deliberately.** `docs_structure_test.dart`
 reads any line shaped `| UC-… | … | word |` as a row of the use-case **status**
-table, so a plain-id table here is counted as 14 more use cases and the
-catalogue's own summary sentence goes red against a total it never claimed. The
-fix is to not look like the thing it parses.
+table, so a plain-id table here would be counted as 14 more use cases.
 
 | Row | Kind | Live proof before arm 1 |
 |------------|-------------|-------------------------|
 | `UC-C1.1` | axis | partial |
-| `UC-C1.2` | axis | **none — has never executed** |
+| `UC-C1.2` | axis | none |
 | `UC-C1.4` | axis | partial |
 | `UC-C1.5` | axis | direct |
 | `UC-C1.6` | axis | partial |
@@ -2735,23 +2690,11 @@ fix is to not look like the thing it parses.
 | `UC-B4.1` | consequence | partial |
 | `UC-G1.9a` | consequence | partial |
 
-**Contested, and excluded from arm 1 until ruled** — UC-A5.2, UC-A5.3, UC-B1.1,
-UC-B1.2, UC-B4.4, UC-G1.2 and UC-G1.5 (the table calls them arm 1; a second
-reading calls them transition or stage-invariant), and UC-A4.2 and UC-B4.3 (the
-reverse — the table calls them cross-stage or invariant, a second reading calls
-them arm 1).
-
-⚠️ **The membership above was derived twice, independently**, and two
-derivations agreeing is weak evidence — so treat a row in the agreed set as
-*safe to build against*, not as *settled*.
-
 ### The generated ledger
 
-38 rows will never sit in a matrix and still have to be visible, so the
-definitive place is a generated page rather than a directory.
-
-The row-level ledger needs no change to any of the 194 live tests. Three
-pieces:
+Rows that will never sit in a matrix still have to be visible, so the
+definitive place is a generated page rather than a directory. The row-level
+ledger needs no change to any live test. Three pieces:
 
 - `provenIn` records each citation it makes — the use-case id, the cited file
   and test name — when `ACCEPTANCE_LEDGER=<path>` is set. Unset, it is inert
@@ -2759,11 +2702,11 @@ pieces:
   parsed out of the source, because a regex over `provenIn(` has to cope with
   the path sitting on the next line, which is the formatting most of them use.
 - Every runner emits the runner's own JSON stream, opt-in:
-  `ACCEPTANCE_REPORT=<path> ./runLocal.sh`, wired into all three of
+  `ACCEPTANCE_REPORT=<path> ./runLocal.sh`, wired into
   `at_functional_test`, `at_end2end_test` and
   `at_client_cli_functional_tests`. A run without it is byte-for-byte what
   it was. The unit suites need no wiring — `dart test --file-reporter json:…`
-  in `packages/at_client` and `packages/at_auth` covers the 67 citations that
+  in `packages/at_client` and `packages/at_auth` covers the citations that
   point at them.
 - `packages/at_client/tool/acceptance_ledger.dart` joins the two and renders
   every catalogue row with a verdict.
@@ -2777,20 +2720,19 @@ runs **at_auth**.
 
 ⚠️ **at_auth's suite runs only in `at_libraries.yaml`**
 (`grep -c at_auth .github/workflows/at_client_sdk.yaml` → 0), so if that
-workflow emits nothing the **12** citations pointing at at_auth can never be
-covered by CI artefacts, and a ledger rendered from a green CI run reports
-those rows `NOT-EXERCISED` permanently — indistinguishable from rows nothing
-tests. The matrix emits for **all eight** of its packages rather than only
-at_auth, so a citation added to a sibling later is covered without anyone
-remembering to widen a condition.
+workflow emits nothing the citations pointing at at_auth can never be covered
+by CI artefacts, and a ledger rendered from a green CI run reports those rows
+`NOT-EXERCISED` permanently — indistinguishable from rows nothing tests. The
+matrix emits for every one of its packages rather than only at_auth, so a
+citation added to a sibling later is covered without anyone remembering to widen
+a condition.
 
 ⛔ **The rendering step is NOT wired in CI, and that is a decision.** Combining
 the artefacts needs `actions/download-artifact`, which this repo has never
 used — every action here is SHA-pinned and there is no trusted pin for it here
-or in at_server. So CI publishes the inputs, and rendering is a local step.
-
-**Locally that step is one command**: `tools/acceptance_ledger.sh` runs the
-unit sources and renders, or `--with-live` runs the three live packs as well.
+or in at_server. So CI publishes the inputs, and rendering is a local step:
+`tools/acceptance_ledger.sh` runs the unit sources and renders, or
+`--with-live` runs the three live packs as well.
 
 **And the emitting is guarded**, by
 `packages/at_client/test/acceptance_ledger_wiring_test.dart`, across **both**
@@ -2800,50 +2742,31 @@ still sets `ACCEPTANCE_LEDGER`, every emitter still uploads with
 index so its legs cannot overwrite one another and still takes the report of
 every package the leg ran, and each runner still gates the reporter on
 `ACCEPTANCE_REPORT`.
-⚠️ **The rail's predicates read the workflow with comments stripped**, which is
-not a detail: an upload step is preceded by a comment explaining it, that
-comment names the very strings the predicates look for — this section's own
-`provenIn` weakness, a mention satisfying a check, one layer up. Every upload uses
+⚠️ **The rail's predicates read the workflow with comments stripped**: an
+upload step is preceded by a comment explaining it, and that comment names the
+very strings the predicates look for. Every upload uses
 `if-no-files-found: warn`, so a job that stops emitting stays green and the
 ledger simply reports fewer rows as exercised, which reads as missing coverage
 rather than as missing wiring.
 
 The verdicts are about the runs supplied, not about the code. **PROVEN** means
 a cited test ran and passed; **NOT-EXERCISED** means no supplied report covers
-it, which is the state the old design could not express at all, since a
-citation is satisfied whether or not anything ran; **NO-LIVE-CITATION** means
-the row proves itself in-process.
-
-Measured 2026-08-23 **from a real CI run's artefacts** — both workflows, five
-emitting jobs: `unit_at_client` (1532/1532, which also recorded the 139
-citations), `functional_tests` (186/186), `pqe2e_tests` (17/17),
-`legacy_server_tests` (2/2) and at_libraries' `build_and_test` for at_auth
-(342/342):
-
-**63 PROVEN · 0 NOT-EXERCISED · 6 NO-LIVE-CITATION** over 69 rows, and **6 of
-6** cross-cutting invariants PROVEN.
+it; **NO-LIVE-CITATION** means the row proves itself in-process.
 
 ⚠️ **A verdict table is not a coverage statement** — it is correct about the
 runs it was given, and no more. A local set cannot reach UC-B0.1, which needs
-CI's pinned pre-PQ atServer; a CI set reaches at_auth's 12 citations only
-because `build_and_test` emits. Only the two together reach every row that
-cites anything live, which is the point of the verdicts being about runs rather
-than about code.
+CI's pinned pre-PQ atServer and runs in its own `legacy_server_tests` job under
+the `legacy-server` tag; a CI set reaches at_auth's citations only because
+`build_and_test` emits. Only the two together reach every row that cites
+anything live.
 
 ⚠️ **Check the commits before joining artefacts from different runs**
 (`git show <sha> -- packages/at_client/test/acceptance/ | grep -c provenIn`): a
-citation added between them would silently go unmatched.
-
-The 6 are the 5 rows that prove themselves against mocks plus withdrawn
-UC-C1.3. UC-B0.1 needs a pinned pre-PQ atServer and runs in its own
-`legacy_server_tests` job under the `legacy-server` tag — which a local e2e run
-excludes and CI runs, so each figure is right about the runs it was handed.
-
-⚠️ **Re-derive this table rather than quoting it, and treat a low PROVEN count
-as a question about the matcher before it is a question about coverage.**
-`packages/at_client/test/acceptance_ledger_test.dart` pins that join in both
-directions, mutation-proven, because a defect in it does not look like a defect
-— it looks like a coverage report.
+citation added between them would silently go unmatched. And **treat a low
+PROVEN count as a question about the matcher before it is a question about
+coverage**: `packages/at_client/test/acceptance_ledger_test.dart` pins that join
+in both directions, mutation-proven, because a defect in it does not look like a
+defect — it looks like a coverage report.
 
 **The cross-cutting invariants get their own table**, so every citation is
 accounted for and none is dropped. [Section
@@ -2851,14 +2774,13 @@ accounted for and none is dropped. [Section
 flow and are deliberately unnumbered, so they are keyed by their own wording
 rather than forced into the use-case table or given invented ids — a reader
 asking "is this row proven" and one asking "does this invariant still hold" are
-asking different questions. Only 6 of the 10 appear, because the other 4
-assert in-process and cite nothing live; over all four report sources all
-**6 of 6** are PROVEN.
+asking different questions. Only the invariants that cite something live
+appear.
 
 A citation pins which of its row's THEN clauses it claims, with `clauses:` on
-`provenIn`, and the ledger renders a per-row checklist and a catalogue total.
-"UC-A2.5 has 3 unproven clauses" is computed rather than found by reading.
-⚠️ Run the suite for today's figures rather than quoting one here.
+`provenIn`, and the ledger renders a per-row checklist and a catalogue total, so
+how many clauses a row leaves unproven is computed rather than found by reading.
+Run the suite for today's figures rather than quoting one.
 
 A pin is a distinctive fragment of the clause, never its index, so inserting a
 clause does not re-point the pins after it — and editing a clause's wording
@@ -2875,110 +2797,50 @@ the page. Rewording a clause that wraps therefore needs the pin rewritten to
 span the join, not re-copied. The ratchet refuses the count when a pin breaks
 this way, which is why the count and the pins have to move in the same diff.
 
-⛔ **The clause level does NOT need `manifest.dart` moved to `lib/`.**
 `tool/acceptance_ledger.dart` imports `../test/acceptance/manifest.dart`
 directly, so the parser has one home and the tool, `provenIn` and the docs rail
-all read the same one. The move is wanted by the *in-pack rails* idea — a rail
-running in the package that owns the evidence, for which
-`tests/at_end2end_test/test/suite_manifest_test.dart` is the precedent — which
-is a different thing.
+all read the same one. `manifest.dart` lives under `packages/at_client/test/`,
+which no other package can reach, so a rail running in the pack that owns its
+evidence — the shape `tests/at_end2end_test/test/suite_manifest_test.dart`
+already has — would need it moved to `lib/` first.
 
 ### The two environments: VE and EE
 
-The suite is not constrained to the virtual environment.
+The suite is not constrained to the virtual environment, but nothing needs
+more. **Arm 3 runs in the VE**, and neither it nor arm 2 needs the EE: an
+advance is a self-enrollment, so the matrix's rule against re-minting *in a
+cell* does not reach it.
 
-**Arm 3 runs in the VE**, and neither it nor arm 2 needs the EE: across five
-live runs on one never-restarted virtualenv, 24 retrofits completed with no
-collision. An advance is a self-enrollment, so the matrix's rule against
-re-minting *in a cell* does not reach it.
-
-That leaves the EE with no arm asking for it, because the one that did — arm 4,
-the server-version axis — is cancelled. It is described here so a later reader
-knows what exists rather than re-deriving it. Read from `at_server` at
-`origin/trunk`:
+The EE, read from `at_server`'s `origin/trunk`, is the way to get an atServer at
+an arbitrary ref should anything need one:
 
 - `tools/build_ephemeral_environment/ee_base/Dockerfile` does `COPY . .` and
   compiles `packages/at_secondary_server/bin/main.dart`, so an EE built at ref X
-  **is** an atServer at ref X. That was arm 4's whole mechanism, and it remains
-  the way to get an atServer at an arbitrary ref should anything need one.
-- The atSign list is a mounted file (`/tmp/setup/atsigns`), defaulting to 26
-  phonetic-alphabet atSigns, so each arm gets atSigns named for their role and
+  **is** an atServer at ref X.
+- The Atsign list is a mounted file (`/tmp/setup/atsigns`), defaulting to 26
+  phonetic-alphabet Atsigns, so each arm gets Atsigns named for their role and
   freshly CRAM-activatable rather than drawn from a shared one-shot pool.
 - `runee.sh <name> <base-port>` runs several EEs side by side, each claiming a
   100-port range bound to 127.0.0.1.
 
 The harness already fits. The EE serves the same `vip.ve.atsign.zone`
-certificates as the VE, so the root domain does not change and the 42 files
+certificates as the VE, so the root domain does not change and the files
 carrying that literal are untouched. `TestUtils.rootServerPort` reads
 `VIRTUALENV_BASE_PORT`, and its comment — *"a base-port virtualenv puts the root
 server at the base port itself"* — describes the EE's `EPHEMERAL_BASE_PORT`
 contract exactly. Pointing an arm at an EE is 2 environment variables.
 
 ⛔ **Build every EE from a named ref; never pull `ephemeral:latest`.**
-`atsigncompany/ephemeral` is rebuilt **monthly** (newest tag 2026-08-15) while
-the VE publishes per commit, so `:latest` walks straight back into "the
-published image cannot verify ML-DSA PKAM". The VE stays as it is for the
-existing functional pack.
+`atsigncompany/ephemeral` is rebuilt far less often than the VE, which publishes
+per commit, so `:latest` can walk straight back into an atServer that cannot
+verify ML-DSA PKAM. The VE stays as it is for the existing functional pack.
 
-### Prerequisites for the build
+### What the harness cannot reach
 
-Four were named, each verified against the tree rather than assumed. **Two are
-discharged:**
+Four limits this catalogue states rather than hides:
 
-- ✅ **Test selection.** The functional pack declares the `pq`
-  tag and **34** of the 55 test files it weighs carry it, chosen by the
-  mechanisms they drive rather than their names — `copied_keyfile_test` and
-  `crypto_era_default_test` have no `pq` in their filenames and both needed it.
-  ⛔ No `paths:` allowlist, deliberately, and `test/pq_tag_test.dart` keeps the
-  set honest instead
-  ([why](detail/acceptance.md#why-the-functional-pack-has-no-paths-allowlist)).
-- ✅ **The pqActive monitor.** The failure is real but is
-  **not posture-dependent** — pqActive **16 of 18** monitors received against a
-  control's **18 of 20**, both arms failing alike with `AT0014` "the connection
-  went away", which is monitor-readiness flakiness of
-  [14.34](detail/implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
-  family rather than an algorithm problem. A pqActive cell is no worse off than
-  a legacy one. ⚠️ The rate is the rig's.
-
-**Two remain:**
-
-- **`manifest.dart` cannot be imported by the packs.** It lives under
-  `packages/at_client/test/`, which no other package can reach, so the in-pack
-  rails need it moved to `lib/` first. ⛔ It is not a prerequisite for the
-  ledger.
-- **`provenIn`'s matcher needs to require a `test(` token**, and that cannot be
-  a naive substring check: 53 declarations put `test(` and the name on separate
-  lines, so a naive tightening would falsely redden about a fifth of the
-  citations.
-
-### The build order, and what it leaves
-
-This is the measured recommendation rather than a decision.
-
-**What remains, in order:**
-
-1. ✅ **Arm 1**, the 3-cell stage arm, on the VE —
-   `tests/at_functional_test/test/pq_stage_arm_test.dart`, three enrollments of
-   one atSign at one posture each, and the ledger names that file in the proof
-   for UC-C1.1 and UC-C1.2. ⚠️ It covers the rows both derivations agree on, not
-   the contested 21 — see [which rows arm 1 owes](#which-rows-arm-1-owes) — and
-   it does **not** measure UC-C1.4: `enrolAndAuthenticate` builds pq-mode
-   enrollments only, so all three cells hold `keyExchangeMode` constant and
-   that axis is a constant here rather than a variable.
-2. ✅ **Arm 3** (`pq_advance_ladder_test.dart`); **arm 4 is cancelled**. Neither
-   needs the EE.
-3. ✅ **The clause level** — `clauses:` on `provenIn`, rendered by
-   `tool/acceptance_ledger.dart`.
-4. **The CI combining job**, once somebody picks an `actions/download-artifact`
-   pin. CI uploads the inputs today; only the rendering is manual.
-
-⚠️ **Check each entry against the tree before working it**, rather than against
-this list.
-
-Four residues this catalogue states rather than hides:
-
-- **UC-B0.1** belongs to the `legacy_server_tests` job and cannot be a cell
-  until arm 4 exists.
+- **UC-B0.1** belongs to the `legacy_server_tests` job and cannot be a cell,
+  since there is no server-version arm.
 - **UC-B2.2** is proven only in the e2e pack
   (`retrofit_retirement_e2e_test.dart`); no atServer setting ties it there, and
   moving it to the functional pack has not been tried.
@@ -2989,31 +2851,7 @@ Four residues this catalogue states rather than hides:
   nothing is collected and nothing is conveyed. A legacy cell would pass while
   measuring nothing, which is the failure a matrix is worst at showing.
 
-One thing remains open: the transition arm re-mints, and the matrix's recorded
-constraint against re-minting was written for a shared-atSign world. A fresh
-per-arm atSign is what makes the two compatible, and that reasoning has not yet
-been proven by a run.
-
-**UC → project coverage** (cross-ref only — the authoritative sequence / dependency
-graph / effort lives in `implementation-plan.md`; this is the one place acceptance.md
-restates project IDs, and only as a coverage map):
-
-| UC cluster                                                                      | Project(s)                      |
-|---------------------------------------------------------------------------------|---------------------------------|
-| A1.1 (PQ-native onboard, B4.2) | **ON-1**                        |
-| A2.x / A3.x / A4.x / A5.x                                                       | **SS-2, SS-4, B-1, B-2, RF-2b** |
-| A2.4 / A3.5 / A4.5 / A4.6 / A4.7 (KEM selection + construction negotiation)      | **KE-1**                        |
-| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path); the B3.x/B4.x data-path halves are built (B-1 + the two-release ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
-
-| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone) — landed; the default-flip these rows will then guard is **R-2** |
-
-Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
-RF-2c); Workstreams A and B are the cross-cutting strands of the "make it
-right" pass rather than numbered projects.
-
-- **Cross-ref:** `implementation-plan.md` (full plan, dependency graph, waves,
-  effort, critical path); `design.md` (harness mechanics).
-
+- **Cross-ref:** `design.md` (harness mechanics).
 
 # Part C — The rollout, driven by flags
 

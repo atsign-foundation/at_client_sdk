@@ -274,7 +274,7 @@ projects **S-5** (at_auth 4.0.0 — the `at_auth_io.dart` barrel, dropping the
 at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) — ⚠️ this cited
 **lines 312–339**, and a line number is not an address: that plan was restructured
 on 2026-08-26 and the range now lands on unrelated prose. Find S-5 and S-6 by name
-in [section 4 of `../pq/detail/implementation-plan.md`](../pq/detail/implementation-plan.md#4-phase-s--structural-enablers--key-management-s-1-s-2-s-3-s-5-s-6-kf-1),
+in [section 4 of `../pq/detail/implementation-plan.md`](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#4-phase-s--structural-enablers--key-management-s-1-s-2-s-3-s-5-s-6-kf-1),
 which holds the discharged gate bodies. That plan explicitly names *this* effort as the
 separate "wasm-port" that owns `at_lookup` and `at_chops`.
 
