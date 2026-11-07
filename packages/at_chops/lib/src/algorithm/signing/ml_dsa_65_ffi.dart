@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/secret_buffer.dart';
 import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
@@ -177,7 +178,7 @@ final class MlDsa65FfiAlgo
     MlDsa65Sizes.validateSeed(seed);
     final Pointer<Utf8> algName = 'ML-DSA-65'.toNativeUtf8();
     final Pointer<Utf8> paramName = 'seed'.toNativeUtf8();
-    final Pointer<Uint8> seedBuf = calloc<Uint8>(seed.length);
+    final Pointer<Uint8> seedBuf = allocSecret(seed.length);
     seedBuf.asTypedList(seed.length).setAll(0, seed);
 
     final Pointer<Pointer<EVP_PKEY>> pkeyPtr = calloc<Pointer<EVP_PKEY>>();
@@ -213,8 +214,7 @@ final class MlDsa65FfiAlgo
     } finally {
       if (ctx != null) _ctxFree(ctx);
       if (params != null) _paramFree(params);
-      seedBuf.asTypedList(seed.length).fillRange(0, seed.length, 0);
-      calloc.free(seedBuf);
+      freeSecret(seedBuf, seed.length);
       calloc.free(paramName);
       calloc.free(algName);
       calloc.free(pkeyPtr);
@@ -337,14 +337,15 @@ final class MlDsa65FfiAlgo
       if (_getRawPrivateKey(pkey, nullptr, lenPtr) <= 0) {
         throw StateError('EVP_PKEY_get_raw_private_key (size) failed');
       }
-      final Pointer<Uint8> buf = calloc<Uint8>(lenPtr.value);
+      final int bufLen = lenPtr.value;
+      final Pointer<Uint8> buf = allocSecret(bufLen);
       try {
         if (_getRawPrivateKey(pkey, buf, lenPtr) <= 0) {
           throw StateError('EVP_PKEY_get_raw_private_key failed');
         }
         return Uint8List.fromList(buf.asTypedList(lenPtr.value));
       } finally {
-        calloc.free(buf);
+        freeSecret(buf, bufLen);
       }
     } finally {
       calloc.free(lenPtr);
@@ -353,7 +354,7 @@ final class MlDsa65FfiAlgo
 
   Pointer<EVP_PKEY> _loadPrivateKey(Uint8List keyBytes) {
     final Pointer<Utf8> algName = 'ML-DSA-65'.toNativeUtf8();
-    final Pointer<Uint8> buf = calloc<Uint8>(keyBytes.length);
+    final Pointer<Uint8> buf = allocSecret(keyBytes.length);
     buf.asTypedList(keyBytes.length).setAll(0, keyBytes);
     try {
       final Pointer<EVP_PKEY> pkey =
@@ -363,7 +364,7 @@ final class MlDsa65FfiAlgo
       }
       return pkey;
     } finally {
-      calloc.free(buf);
+      freeSecret(buf, keyBytes.length);
       calloc.free(algName);
     }
   }
