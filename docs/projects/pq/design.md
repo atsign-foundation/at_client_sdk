@@ -475,7 +475,10 @@ start is what would publish a second key over the first.
 
 **The ttl is the only release, so it is also a cooldown.** Nothing deletes the lock. A rotation
 of a namespace minted or rotated within the ttl is refused rather than queued
-([ruling 105.6](detail/decisions.md#1056-built-the-cooldown-binds-rotation-too)). Release at
+([ruling 105.6](detail/decisions.md#1056-built-the-cooldown-binds-rotation-too)). Because
+`NskeyRotation.revokeEnrollmentAndRotate` revokes first and rotates after, a rotation the
+cooldown refuses leaves the revoked enrollment cut off from the atServer while still holding
+the live generation, until the caller retries after the ttl. Release at
 expiry needs at_server c3.16.2 or later, and the client does not check the version
 ([ruling 143.7](detail/decisions.md#1437-minting-needs-at_server-c3162-or-later)).
 
@@ -676,6 +679,12 @@ advertisement bytes it verified (`VerifiedAdvertisementRecord`):
 - **When it is used.** A start that cannot reach the atServer accepts its own advertisement
   from local storage only when this record vouches for exactly those bytes and for the keys the
   client holds now. When the atServer answers, the atServer decides.
+
+What this leaves open is a copy of local storage restored from before a rotation whose key
+never reached the client: it is accepted until sync pulls the current advertisement, as an
+online start already accepts it until then. A client restarted without its atServer trusts the
+last advertisement it verified online, however long ago; the next start that reaches its
+atServer checks it again.
 
 ### 1.6 The uniform data flow + cold-start + resolution/ordering
 
@@ -2324,7 +2333,9 @@ Inter-server authentication is the FROM/POL handshake. It is separate from the
 client-to-atServer data path that subsystems A and B secure: it proves that a
 connecting atServer holds its Atsign's server authentication signing key
 (`signing_privatekey`), while the TLS session secures the channel. The
-handshake signs with RSA-2048; the move to ML-DSA-65 is in
+handshake signs a per-session challenge with RSA-2048, which a large quantum
+computer can forge; signatures are not harvest-now-decrypt-later material, so
+the exposure is a live forged authentication, and the move to ML-DSA-65 is in
 [Planned changes](#planned-changes).
 
 ### 8.1 The handshake
@@ -2832,7 +2843,13 @@ signer or the purpose a caller reads
 *reading* is not staged: a client at `pqReady` verifies a `pqActive` peer's
 `mldsa65` envelope, so there is no verifier an overlap would rescue. A swap does
 not lose history: the retired key stays advertised, which keeps envelopes
-signed before the swap verifiable.
+signed before the swap verifiable. An application that names two algorithms in
+`dataSigningKeyAlgorithms` itself does get two signatures, one per held key, and
+they give only the weaker algorithm's protection, since a verifier takes the
+strongest algorithm the envelope still carries and no verifier can insist on the
+stronger
+([ruling 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28));
+narrowing that writer is in [`implementation-plan.md`](implementation-plan.md#todo).
 
 What the stage also carries is the *fleet's* position — the peers' readers have
 upgraded — which no client can observe for itself, and which is the
@@ -3287,6 +3304,11 @@ What is still to change in the design, and why. Owed fixes and chores are not he
   case gets its copy
   ([ruling 161](detail/decisions.md#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02),
   item 7).
+- **Keyfile protection at rest.** Once payloads are post-quantum, the `.atKeys` file holding
+  the post-quantum privates is the highest-value target on a device, so encrypting those
+  privates at rest, with a backup and restore story to match, is the planned answer (KF-1,
+  parked in [`implementation-plan.md`](implementation-plan.md#parked); issue
+  [#2129](https://github.com/atsign-foundation/at_client_sdk/issues/2129)). Not scheduled.
 - **Signing-root rotation.** The root record is rotatable in shape — it uses the `_apsk`
   vocabulary, with a `status` per key — but no rotation is built, so a lost or split root
   cannot be replaced today
