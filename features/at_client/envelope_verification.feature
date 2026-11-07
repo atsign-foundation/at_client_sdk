@@ -73,7 +73,8 @@ Feature: An application envelope verifies offline against a published _apsk
 
   @race
   Scenario: fetchPublishedApsk refuses an enrollment the atServer has revoked
-    Given @alice revoked E, so the atServer moved E's _apsk to public:_apsk.E.r.__e@alice
+    Given a client of @bob that fetched E's _apsk with fetchPublishedApsk a moment ago
+    And @alice then revoked E, so the atServer moved E's _apsk to public:_apsk.E.r.__e@alice
     When a client of @bob calls fetchPublishedApsk("@alice", E)
     Then it throws WithdrawnSigningKeyException with location r.__e
 

@@ -224,13 +224,22 @@ void main() {
 
     test('fetchPublishedApsk refuses an enrollment the atServer has revoked',
         () async {
+      final cachingByDefault = AtClientEnvelopeSigner(ofBob.atClient);
+      await cachingByDefault.fetchPublishedApsk(alice, e);
       remoteData['public:_apsk.$e.${EnrollmentConstants.perEnrollmentRevoked}'
           '$alice'] = remoteData.remove(apskUri(alice, e))!;
 
       await expectLater(
-          ofBob.fetchPublishedApsk(alice, e),
+          cachingByDefault.fetchPublishedApsk(alice, e),
           throwsA(isA<WithdrawnSigningKeyException>()
-              .having((x) => x.location, 'location', 'r.__e')));
+              .having((x) => x.location, 'location', 'r.__e')),
+          reason: 'with the default cache, a fetch a moment ago does not '
+              'answer for one now');
+      expect(
+          (await cachingByDefault.fetchPublishedApsk(alice, e, cached: true))
+              .value,
+          ofE.apsk,
+          reason: 'the control: a cached read returns what was fetched before');
     });
 
     test('A payload changed by one byte does not verify', () async {

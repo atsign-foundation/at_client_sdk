@@ -213,12 +213,20 @@ mixin EnvelopeSigning on ApkamSigning {
   /// Fetch the APKAM public signing key which [enrollmentId] of [atSign] has
   /// published in its per-enrollment namespace. See
   /// [ApkamSigning.publicSigningKeyUri].
-  Future<String> getApkamPublicKey(String atSign, String enrollmentId) async {
+  Future<String> getApkamPublicKey(String atSign, String enrollmentId) =>
+      _fetchApsk(atSign, enrollmentId, readCache: true);
+
+  /// [getApkamPublicKey], reading the cache only when [readCache] is true; a
+  /// value it fetches is cached either way.
+  Future<String> _fetchApsk(String atSign, String enrollmentId,
+      {required bool readCache}) async {
     atSign = atSign.toAtsign();
     requireApskEnrollmentId(enrollmentId);
 
-    String? cached = lookupPubKey(atSign, enrollmentId);
-    if (cached != null) return cached;
+    if (readCache) {
+      final cached = lookupPubKey(atSign, enrollmentId);
+      if (cached != null) return cached;
+    }
 
     var s = apskUri(atSign, enrollmentId);
     final AtValue av;
@@ -246,16 +254,16 @@ mixin EnvelopeSigning on ApkamSigning {
   /// Fetches the `_apsk` [enrollmentId] of [atSign] published, with whose it
   /// is; throws [WithdrawnSigningKeyException] when the atServer has moved it.
   ///
-  /// Reads through [getApkamPublicKey], and so through its cache: a value
-  /// fetched within [publicKeyCacheSettings]' `cacheExpiry` is returned as it
-  /// was, without asking the atServer whether it has since been moved.
+  /// Asks the atServer every time unless [cached] is true. A cached read
+  /// returns a value fetched within [publicKeyCacheSettings]' `cacheExpiry` as
+  /// it was, so it can miss a key rotated, or an enrollment revoked, since.
   @experimental
-  Future<PublishedApsk> fetchPublishedApsk(
-          String atSign, String enrollmentId) async =>
+  Future<PublishedApsk> fetchPublishedApsk(String atSign, String enrollmentId,
+          {bool cached = false}) async =>
       PublishedApsk(
           atSign: atSign,
           enrollmentId: enrollmentId,
-          value: await getApkamPublicKey(atSign, enrollmentId));
+          value: await _fetchApsk(atSign, enrollmentId, readCache: cached));
 
   /// Throws [WithdrawnSigningKeyException] when the atServer moved
   /// [enrollmentId]'s `_apsk` out of `.a.__e`, saying why.
