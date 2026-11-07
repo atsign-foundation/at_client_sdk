@@ -13,6 +13,11 @@
   Copies the caller holds as `Uint8List` are not affected.
 - fix: `RsaSignatureAlgo`'s message for an unreadable private key names the
   parse error's type rather than quoting its text.
+- fix: `AtChopsImpl.encryptBytes` and `decryptBytes` name the underlying
+  error's type rather than quoting its text. An `AtException`'s message is
+  kept.
+- fix: `libCryptoSupportsMlKem768` requires OpenSSL 3.5.1 or later. On 3.5.0,
+  `AtPqc.xWing` uses the pure-Dart backend.
 
 ## 3.7.1
 
