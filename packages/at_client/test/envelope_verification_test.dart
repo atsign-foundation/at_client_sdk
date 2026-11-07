@@ -71,7 +71,7 @@ void main() {
         array.replaceFirstMapped(RegExp(r'"pub":"([^"]+)"'),
             (m) => '"pub":"${m[1]!.substring(0, m[1]!.length - 1)}"'),
     'an array listing only an algorithm this build lacks': (_, array) =>
-        array.replaceAll('"alg":"mldsa65"', '"alg":"slhdsa65"'),
+        array.replaceAll('"alg":"mldsa65"', '"alg":"ed25519"'),
     'the empty string': (_, __) => '',
   };
 
@@ -385,6 +385,19 @@ void main() {
           result,
           refusedAs(EnvelopeRefusal.keyNotVouchedFor,
               kid: kidK(), naming: ['"suspended"']));
+    });
+
+    group(
+        "Given an _apsk whose only entry lists the envelope's key under a "
+        'status this build does not know', () {
+      test('when verified, then it is refused with keyNotVouchedFor', () async {
+        expect(
+            await verifySignedEnvelope(envelope,
+                signer:
+                    apskOfE([listedK(const KeyEntryStatus.of('suspended'))])),
+            refusedAs(EnvelopeRefusal.keyNotVouchedFor,
+                kid: kidK(), naming: ['"suspended"']));
+      });
     });
 
     test(
