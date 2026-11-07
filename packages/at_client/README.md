@@ -463,6 +463,19 @@ wire. Plenty of room: with 1-char collection / sub-collection
 names and a 15-char application namespace, the theoretical
 ceiling is **11 levels (root + 10 nested sub-collections)**.
 
+## Verifying a signed envelope offline
+
+`verifySignedEnvelope`, which is experimental, checks an application
+envelope from `wrapAndSign` against the `_apsk` its signer's enrollment
+published, held as a `PublishedApsk`, with no `AtClient`, network or clock.
+It returns `EnvelopeVerified`, naming the key, algorithm and key status, or
+`EnvelopeRefused`, naming an `EnvelopeRefusal` and a reason. Read envelope
+text with `SignedEnvelope.parse(text, maxLength: ...)`, and fetch the
+`_apsk` with `fetchPublishedApsk` or hold one read earlier.
+`selectEnvelopeKey` makes the same checks without the signature. In tests,
+`TestEnvelopeSigner`, from the platform package's `testing.dart`, signs
+offline and gives the `PublishedApsk` that verifies it.
+
 ## Crypto providers
 
 By default, encrypted writes use the built-in legacy Atsign encryption
