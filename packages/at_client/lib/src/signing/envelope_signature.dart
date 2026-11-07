@@ -12,7 +12,7 @@ import 'dart:convert'
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
-    show ApskSigningKey, apskSigningKeys, publicKeyKidOfBase64;
+    show ApskSigningKey, apskSigningKeys, publicKeyKid, publicKeyKidOfBase64;
 import 'package:collection/collection.dart' show ListEquality;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, RsaSignatureAlgo, SigningAlgoType;
@@ -501,6 +501,26 @@ Map<String, String> _signatureOver(
   };
 }
 
+/// Whether [signature] over [input] verifies under [publicKey], raw key
+/// material for [algorithm]; throws [AtSigningVerificationException] for an
+/// algorithm envelopes are not signed under.
+Future<bool> checkEnvelopeSignature(
+  SigningAlgoType algorithm, {
+  required Uint8List input,
+  required Uint8List signature,
+  required Uint8List publicKey,
+}) {
+  return switch (algorithm) {
+    SigningAlgoType.mldsa65 => MlDsa65PureDartAlgo()
+        .verifyBytes(input, signature: signature, publicKey: publicKey),
+    SigningAlgoType.rsa2048 => RsaSignatureAlgo.rsa2048()
+        .verifyBytes(input, signature: signature, publicKey: publicKey),
+    _ => throw AtSigningVerificationException(
+        'no verify routine for ${algorithm.name}, which this build claims to '
+        'sign envelopes with'),
+  };
+}
+
 /// A parsed `_apsk` value: which algorithm each key is for, and the key itself.
 ///
 /// The published record is either a bare RSA public key string, read as
@@ -552,29 +572,68 @@ class ParsedApsk {
       ];
 }
 
-/// Parses a fetched `_apsk` value, bare or array.
+/// Every key a fetched `_apsk` value lists under an algorithm this build has
+/// a [SigningAlgoType] for, whatever its status, or why the value cannot be
+/// read.
 ///
-/// Throws [AtSigningVerificationException] when the value names no algorithm
-/// this build has code for, rather than falling back to a key derived some
-/// other way: a signature means something only if the verifier used the key
-/// the signer published.
-ParsedApsk parseApskValue(String value) {
+/// A bare value is one RSA-2048 key; a structured one is the advertisement
+/// `apskAdvertisement` in at_auth writes. A value that is empty, a bare value
+/// that is not base64, a structured one that is not a JSON object, and an
+/// entry whose key is not base64 are each a [fault], never an exception.
+({List<ApskSigningKey> keys, String? fault}) readApsk(String value) {
+  ({List<ApskSigningKey> keys, String? fault}) fault(String why) =>
+      (keys: const [], fault: why);
+
   final trimmed = value.trim();
+  if (trimmed.isEmpty) return fault('the _apsk value is empty');
   if (!trimmed.startsWith('{')) {
-    return ParsedApsk(keys: [
-      ApskSigningKey(
-          kid: publicKeyKidOfBase64(trimmed),
-          alg: SigningAlgoType.rsa2048,
-          pub: trimmed)
-    ]);
+    try {
+      return (
+        keys: [
+          ApskSigningKey(
+              kid: publicKeyKid(base64Decode(trimmed)),
+              alg: SigningAlgoType.rsa2048,
+              pub: trimmed)
+        ],
+        fault: null,
+      );
+    } on FormatException catch (e) {
+      return fault('the _apsk value is not base64: ${e.message}');
+    }
   }
 
-  final Map<String, dynamic> advertisement;
+  final Object? decoded;
   try {
-    advertisement = jsonDecode(trimmed) as Map<String, dynamic>;
+    decoded = jsonDecode(trimmed);
   } on FormatException catch (e) {
-    throw AtSigningVerificationException(
-        'the _apsk value looks structured but is not valid JSON: ${e.message}');
+    return fault('the _apsk value looks structured but is not valid JSON: '
+        '${e.message}');
+  }
+  if (decoded is! Map<String, dynamic>) {
+    return fault('the _apsk value looks structured but is not a JSON object');
+  }
+  final keys = apskSigningKeys(decoded);
+  for (final key in keys) {
+    try {
+      base64Decode(key.pub);
+    } on FormatException catch (e) {
+      return fault('the _apsk lists key "${key.kid}" with a key that is not '
+          'base64: ${e.message}');
+    }
+  }
+  return (keys: keys, fault: null);
+}
+
+/// Parses a fetched `_apsk` value, bare or array.
+///
+/// Throws [AtSigningVerificationException] when [readApsk] cannot read the
+/// value, or when it names no algorithm this build has code for, rather than
+/// falling back to a key derived some other way: a signature means something
+/// only if the verifier used the key the signer published.
+ParsedApsk parseApskValue(String value) {
+  final reading = readApsk(value);
+  if (reading.fault case final fault?) {
+    throw AtSigningVerificationException(fault);
   }
 
   // NOTE: an entry whose status this build does not understand is dropped here
@@ -582,9 +641,8 @@ ParsedApsk parseApskValue(String value) {
   // republish a token they cannot read rather than delete it. Only active and
   // retired vouch for what a key already signed; anything else may be an owner
   // disowning the key, and verifying with it is unrecoverable.
-  final advertised = apskSigningKeys(advertisement)
-      .where((k) => k.vouchesForPastOperations)
-      .toList();
+  final advertised =
+      reading.keys.where((k) => k.vouchesForPastOperations).toList();
   if (advertised.isEmpty) {
     throw AtSigningVerificationException(
         'the _apsk advertises no signing key this build can verify with — '
@@ -635,7 +693,7 @@ Future<void> verifyEnvelope(
 
   final shared = <SigningAlgoType>{
     for (final k in parsed.keys)
-      if (envelope.signatures.any((s) => s.alg == _joseAlgFor(k.alg))) k.alg
+      if (envelope.signatures.any((s) => signsUnder(k.alg, s.alg))) k.alg
   };
   final SigningAlgoType? algo = SigningAlgoType.strongestOf(shared);
   if (algo == null) {
@@ -696,27 +754,16 @@ Future<void> verifyEnvelope(
         'does not carry is a different failure from a signature that does not '
         'verify');
   }
-  var ok = false;
-  {
-    final key = named;
-    switch (algo) {
-      case SigningAlgoType.mldsa65:
-        ok = await MlDsa65PureDartAlgo().verifyBytes(
-          signingInput,
-          signature: signatureBytes,
-          publicKey: base64Decode(key.pub),
-        );
-      case SigningAlgoType.rsa2048:
-        ok = await RsaSignatureAlgo.rsa2048().verifyBytes(
-          signingInput,
-          signature: signatureBytes,
-          publicKey: base64Decode(key.pub),
-        );
-      default:
-        throw AtSigningVerificationException(
-            'no verify routine for ${algo.name}, which this build claims to '
-            'sign envelopes with');
-    }
+  final bool ok;
+  try {
+    ok = await checkEnvelopeSignature(algo,
+        input: signingInput,
+        signature: signatureBytes,
+        publicKey: base64Decode(named.pub));
+  } on FormatException catch (e) {
+    throw AtSigningVerificationException(
+        'the published _apsk lists key "$namedKid" in a form it cannot be '
+        'used in: ${e.message}');
   }
   if (!ok) {
     throw AtSigningVerificationException(
