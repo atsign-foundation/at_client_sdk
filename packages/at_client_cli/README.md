@@ -301,7 +301,7 @@ at_onboarding_cli 1.x wrote is read unchanged.
 - [`at_client_flutter`](../at_client_flutter) — the Flutter-UI
   equivalent of this package
 - [`at_client_skills`' package map](../at_client_skills/skills/at_client_skills-sdk/references/06-package-map.md)
-  — which SDK package each name comes from, and which one a program imports
+  — which SDK package a program of each kind imports
 
 ## Open source usage and contributions
 
