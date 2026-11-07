@@ -531,8 +531,7 @@ once in `design.md`; UCs below reference them by name.
 |-----|-------|--------|---------|----|
 | E1  | pq    | ✓      | —       | ✓  |
 
-- **Impl/verify:** project **ON-1** (see `implementation-plan.md`); harness
-  `tests/at_functional_test` runLocal.sh (live CRAM onboard).
+- **Impl/verify:** harness `tests/at_functional_test` runLocal.sh (live CRAM onboard).
 
 ## 3. A2 · Enrollments (a new enrollment joins)
 
@@ -743,8 +742,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then (the arms must differ):** the accepted arm — E4 updating E4 — has to run in the
   same session, or the two refusals prove only that the verb refuses everything.
 
-- **Impl/verify (A2.x):** projects **SS-2 / SS-4** + **RF-2b**, and **KE-1** for
-  UC-A2.4; **KE-2** for UC-A2.5 / UC-A2.6, which need the live verb and therefore
+- **Impl/verify (A2.x):** UC-A2.5 and UC-A2.6 need the live verb, and therefore
   `tests/at_functional_test` against the locally built virtualenv image; harness
   `tests/at_functional_test` runLocal.sh (enroll/approve round-trip, `__ssenv` delivery).
   UC-A2.4 is a unit row for its **shapes**, which are decided entirely client-side before
@@ -947,9 +945,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Cross-ref:** `design.md` (nskey data path: 3 layers / 3 providers, CK model, the
   nskey + its eager publication).
-- **Impl/verify (A3.x):** **SS-4** (mints) + **B-1** (data path), and **KE-1** for
-  UC-A3.5; harness at_chops
-  vectors (KEM/seal) + at_client `dart test` round-trip for the data path, **plus**
+- **Impl/verify (A3.x):** harness at_chops vectors (KEM/seal) + at_client `dart test`
+  round-trip for the data path, **plus**
   `tests/at_functional_test` runLocal.sh for UC-A3.2's per-enrollment nskey push and
   its server-gated `__ssenv` refusal ("an `app_2.my_apps`-only client is refused the
   `app_1.my_apps` nskey private" is a live-atServer assertion, not a client-only one).
@@ -1294,8 +1291,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Cross-ref:** `design.md` (the nskey + its eager publication, bilateral
   inbound forward-secrecy).
-- **Impl/verify (A4.x):** **B-1** + **SS-4**, and **KE-1** for UC-A4.5/A4.6/A4.7; harness
-  `tests/at_end2end_test` (cross-atSign). The negotiation itself is unit-provable, but
+- **Impl/verify (A4.x):** harness `tests/at_end2end_test` (cross-atSign). The
+  negotiation itself is unit-provable, but
   **that the negotiated version is the version on the wire is not** — a fixture backing
   local storage and the atServer with one map cannot show it. That assertion is live, in
   `tests/at_functional_test/test/secret_sharing_delivery_test.dart`, reading the envelope
@@ -1494,8 +1491,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   revoking client holds a key for, one nested under a granted namespace included,
   such as `chat.app` under `app`.
 - **Cross-ref:** `design.md` [§1.7](design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) (CK rotation vs nskey-keypair rotation).
-- **Impl/verify (A5.x):** **B-2**.
-  A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
+- **Impl/verify (A5.x):** A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
   (both positions of the retention knob); A5.1(b), A5.2, A5.3's first clause and
   [UC-A5.7](#67-uc-a57--a-content-key-follows-both-namespace-keys-it-rests-on)'s main Then by
   `tests/at_functional_test/test/nskey_rotation_live_test.dart`, and UC-A5.7's
@@ -1865,8 +1861,7 @@ map and be refused rather than obeyed.
 
 - **Cross-ref:** `design.md` (authenticated self-retrofit flow + expiry copy/cap,
   `enroll:request` metadata tail).
-- **Impl/verify (B1.x):** **RF-SRV** (server auto-approve), **RF-2b** (client
-  mint+request), **RF-2c** (orchestration); harness `tests/at_end2end_test` runLocal.sh.
+- **Impl/verify (B1.x):** harness `tests/at_end2end_test` runLocal.sh.
   B1.4–B1.7 are `tests/at_functional_test/test/pq_retrofitted_scope_test.dart`
   (the startup route, four arms on one throwaway atSign),
   `tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart` (the
@@ -1905,8 +1900,7 @@ map and be refused rather than obeyed.
   ([UC-B1.2](#82-uc-b12--second-install-on-a-copied-keyfile-alice1c)).
 
 - **Cross-ref:** `design.md` (settlement).
-- **Impl/verify:** **RF-SRV** + **RF-2c**.
-  `tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart`. The
+- **Impl/verify:** `tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart`. The
   successor's first authentication revokes its predecessor as superseded, so
   the un-upgraded copy is refused with `AT0027 … is revoked`. Both legacy
   enrollments authenticate before the retrofit, which is what makes that
@@ -1963,8 +1957,7 @@ map and be refused rather than obeyed.
 | E2      | cap    | legacy + nskey data path | legacy               |
 
 - **Cross-ref:** `design.md` [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).
-- **Impl/verify:** the era default + data path (**built**; unit
-  `crypto_era_default_test`, e2e `era_default_read_test`) + **RF-2c**.
+- **Impl/verify:** unit `crypto_era_default_test`, e2e `era_default_read_test`.
 
 ## 11. B4 · Mixed-PQ across atSigns
 
@@ -2054,9 +2047,8 @@ map and be refused rather than obeyed.
 
 - **Cross-ref:** `design.md` [section 1.6](design.md#16-the-uniform-data-flow--cold-start--resolutionordering) (cold start), [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d) (the two-release model);
   `roadmap.md` (migration philosophy).
-- **Impl/verify:** cold start + fallback (**built**; unit `cold_start_test`, e2e
-  `nskey_recipient_not_ready_test`, `nskey_cross_atsign_test`) + **RF-2c** for
-  the retrofit-driven live orchestration; harness `tests/at_end2end_test`.
+- **Impl/verify:** unit `cold_start_test`, e2e `nskey_recipient_not_ready_test` and
+  `nskey_cross_atsign_test`; harness `tests/at_end2end_test`.
 
 ## 12. B5 · Edge cases
 
@@ -2113,7 +2105,6 @@ map and be refused rather than obeyed.
   the reconciliation that retires a held private the record does not advertise.
 
 - **Cross-ref:** `design.md` (push/pull duality — substrate facts stated once there).
-- **Impl/verify:** **RF-1** (`requestSecret` confirm) + **B-1** (provider routing).
 
 ### 12.4 UC-B5.4 — Two enrollments race to mint a namespace's nskey
 
@@ -2135,7 +2126,6 @@ only one of them eventually does.*
   from anyway.
 
 - **Cross-ref:** `design.md`'s nskey mint lock; `seal-spec.md` (kid addressing).
-- **Impl/verify:** **SS-4** (mint) + **B-1** (provider routing).
 
 ### 12.5 UC-B5.5 — The mint lock has no release but its ttl
 
@@ -2151,7 +2141,6 @@ only one of them eventually does.*
   record, a missing ttl would block minting permanently rather than late.
 
 - **Cross-ref:** `design.md` (the two mint locks and what each guards).
-- **Impl/verify:** **SS-4**.
 
 ### 12.6 UC-B5.6 — A rotation inside the cooldown is refused, and succeeds after it
 
@@ -2175,8 +2164,6 @@ absence are indistinguishable under mocks.
   than sleeping for the ttl inside a call that has already done the destructive
   half.
 
-- **Impl/verify:** **SS-4** + **B-2** (revocation).
-
 ### 12.7 UC-B5.7 — A winner that overruns its lease publishes nothing
 
 - **Given:** `alice1` takes the lock at T0 and is still minting at T0+ttl. The
@@ -2192,7 +2179,6 @@ absence are indistinguishable under mocks.
   property fails on any slow minter.
 
 - **Cross-ref:** `design.md` (the mint lock's two windows).
-- **Impl/verify:** **SS-4**.
 
 ### 12.8 UC-B5.8 — A client that configures nothing still takes part
 
@@ -2209,7 +2195,6 @@ flags are set.
   what the peer sealed. Configuration selects *behaviour*, never *capability*.
 
 - **Cross-ref:** `design.md` (the era default).
-- **Impl/verify:** **B-1** (provider routing) + **RF-2c**.
 
 ### 12.9 UC-B5.9 — A conveyed private is filed only if it is addressed here
 
@@ -2223,7 +2208,6 @@ flags are set.
   another's material by being first to look.
 
 - **Cross-ref:** `design.md` (conveyance and the key package).
-- **Impl/verify:** **SS-2**.
 
 ### 12.10 UC-B5.10 — An enrollment not entitled to the root does not ask for it
 
@@ -2239,7 +2223,6 @@ answer is the only thing standing between them.
   request, not only on the holder answering it.
 
 - **Cross-ref:** `design.md` (the signing chain and entitlement).
-- **Impl/verify:** **SS-1c**.
 
 ### 12.11 UC-B5.11 — An enrollment that missed the mint heals from a holder
 
@@ -2251,8 +2234,6 @@ answer is the only thing standing between them.
   *inert* rather than divergent, and it is why the nskey path needs no retire:
   a generation nobody advertises is never selected, because selection is by the
   kid in the envelope being opened.
-
-- **Impl/verify:** **SS-2** + **SS-4**.
 
 ### 12.12 UC-B5.12 — The owner verifies her own advertisement as a peer would
 
@@ -2269,7 +2250,6 @@ answer is the only thing standing between them.
   than to an error or a guess.
 
 - **Cross-ref:** [UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open).
-- **Impl/verify:** **SS-4** + **B-1**.
 
 ---
 
