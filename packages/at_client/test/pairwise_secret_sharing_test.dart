@@ -502,6 +502,17 @@ void main() {
         .singleWhere((k) => k.contains('.${sharerB.kpid}.__ssenv.'));
 
     test(
+        "Every envelope at_client signs names its signer's Atsign: a secret "
+        'envelope through AtClientSecretSharing', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
+
+      final envelope =
+          SignedEnvelope.fromJson(jsonDecode(remoteData[sentKey()]!) as Map);
+      expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign});
+      expect(envelope.signerAtSign, atSign);
+    });
+
+    test(
         'found under a namespace other than the one it was sent through, it is '
         'skipped and retained', () async {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});

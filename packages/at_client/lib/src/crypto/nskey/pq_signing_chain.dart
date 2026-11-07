@@ -164,6 +164,7 @@ class LinkVoucher {
       : _rootPrivate = private,
         _rootKid = kid,
         _key = null,
+        _atSign = null,
         _enrollmentId = null,
         keysWalked = const [];
 
@@ -171,9 +172,11 @@ class LinkVoucher {
   /// which walks to the root through [keysWalked].
   LinkVoucher.chain(
       {required ApkamSigningKeys key,
+      required String atSign,
       required String enrollmentId,
       required this.keysWalked})
       : _key = key,
+        _atSign = atSign,
         _enrollmentId = enrollmentId,
         _rootPrivate = null,
         _rootKid = null;
@@ -181,6 +184,7 @@ class LinkVoucher {
   final Uint8List? _rootPrivate;
   final String? _rootKid;
   final ApkamSigningKeys? _key;
+  final String? _atSign;
   final String? _enrollmentId;
 
   /// The keys this voucher's own key chains through, as
@@ -198,7 +202,7 @@ class LinkVoucher {
           rootPrivate: rootPrivate, rootKid: _rootKid!);
     }
     return PqSigningChain.signChainLink(payload,
-        key: _key!, signerEnrollmentId: _enrollmentId!);
+        key: _key!, signerAtSign: _atSign!, signerEnrollmentId: _enrollmentId!);
   }
 }
 
@@ -282,15 +286,17 @@ class PqSigningChain {
   }
 
   /// A chain link over [payload], signed with [key] alone, which
-  /// [signerEnrollmentId]'s `_apsk` lists.
+  /// [signerAtSign]'s enrollment [signerEnrollmentId] lists in its `_apsk`.
   static Map<String, Object?> signChainLink(
     Map<String, Object?> payload, {
     required ApkamSigningKeys key,
+    required String signerAtSign,
     required String signerEnrollmentId,
   }) =>
       signEnvelope(payload,
               keys: [key],
               type: EnvelopeType.chainLink,
+              atSign: signerAtSign,
               enrollmentId: signerEnrollmentId)
           .toJson();
 
@@ -586,7 +592,10 @@ class PqSigningChain {
       final walk = await walkFrom(signer, own, listed);
       if (walk.verdict == ChainVerdict.anchored) {
         return LinkVoucher.chain(
-            key: held, enrollmentId: ownId, keysWalked: walk.keysWalked);
+            key: held,
+            atSign: _atSign,
+            enrollmentId: ownId,
+            keysWalked: walk.keysWalked);
       }
     }
     return null;

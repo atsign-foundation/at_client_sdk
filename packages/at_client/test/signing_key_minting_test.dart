@@ -550,7 +550,9 @@ void main() {
       // NOTE: the control has to be taken before the move — without it, "no
       // RS256 entry" is satisfied by an envelope carrying no entries at all.
       final atRollout1Envelope = signEnvelope('written at rollout 1',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(
           atRollout1Envelope.signatures.map((s) => s.alg).toList(), ['RS256'],
           reason: 'the control: while rsa2048 is in use, the composed '
@@ -560,7 +562,9 @@ void main() {
       await minter().reconcileSigningKeys();
 
       final afterTheMove = signEnvelope('written after the move',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(afterTheMove.signatures.map((s) => s.alg).toList(), ['ML-DSA-65'],
           reason: 'ONE entry, under the new algorithm: the withdrawn key is '
               'no longer offered for new operations, so nothing signs with '
@@ -601,6 +605,7 @@ void main() {
 
       final rollout1Key = (await keyfile()).signingKeysFor('primary').single;
       final envelope = signEnvelope('what rollout 1 signed',
+          atSign: atSign,
           keys: [
             ApkamSigningKeys(
                 algorithm: rollout1Key.algorithm,
@@ -647,7 +652,9 @@ void main() {
       inUse({SigningAlgoType.rsa2048});
       await minter().reconcileSigningKeys();
       final one = signEnvelope('one member',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(one.signatures.map((s) => s.alg).toList(), ['RS256'],
           reason: 'the control: a single-member set emits exactly one '
               'signature, so the pair below is attributable to the SET rather '
@@ -657,7 +664,9 @@ void main() {
       inUse({SigningAlgoType.rsa2048, SigningAlgoType.mldsa65});
       await minter().reconcileSigningKeys();
       final two = signEnvelope('two members',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(two.signatures.map((s) => s.alg).toList(), ['ML-DSA-65', 'RS256'],
           reason: 'one signature per active signing key, strongest first — '
               'and reached through the PREFERENCE and the production selector, '

@@ -181,6 +181,7 @@ void main() {
           'b-1',
           key,
           PqSigningChain.signChainLink(PqSigningChain.linkPayload('b-1', key),
+              signerAtSign: atSign,
               key: ApkamSigningKeys(
                   algorithm: SigningAlgoType.mldsa65,
                   publicKey: rootPair.pub,
@@ -395,6 +396,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: aKey,
               signerEnrollmentId: 'a-1'));
       return (a: a, b: b, aKey: aKey);
@@ -448,7 +450,10 @@ void main() {
           'b-1',
           bEntry,
           signEnvelope(PqSigningChain.linkPayload('b-1', bEntry),
-                  keys: [f.aKey], type: EnvelopeType.app, enrollmentId: 'a-1')
+                  atSign: atSign,
+                  keys: [f.aKey],
+                  type: EnvelopeType.app,
+                  enrollmentId: 'a-1')
               .toJson());
 
       expect((await walk(f.b, 'b-1')).verdict, ChainVerdict.broken,
@@ -465,6 +470,7 @@ void main() {
           'b-1',
           bEntry,
           signEnvelope(PqSigningChain.linkPayload('b-1', bEntry),
+                  atSign: atSign,
                   keys: [mlKey, f.aKey],
                   type: EnvelopeType.chainLink,
                   enrollmentId: 'a-1')
@@ -485,7 +491,7 @@ void main() {
           PqSigningChain.signChainLink({
             ...PqSigningChain.linkPayload('b-1', bEntry),
             'enrollmentId': 'c-1'
-          }, key: f.aKey, signerEnrollmentId: 'a-1'));
+          }, signerAtSign: atSign, key: f.aKey, signerEnrollmentId: 'a-1'));
 
       final result = await walk(f.b, 'b-1');
 
@@ -518,6 +524,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: ApkamSigningKeys(
                   algorithm: SigningAlgoType.rsa2048,
                   publicKey: second.atPublicKey.publicKey,
@@ -600,6 +607,7 @@ void main() {
             keys[i],
             PqSigningChain.signChainLink(
                 PqSigningChain.linkPayload('b-1', keys[i]),
+                signerAtSign: atSign,
                 key: ApkamSigningKeys(
                     algorithm: SigningAlgoType.rsa2048,
                     publicKey: pairs[i - 1].atPublicKey.publicKey,
@@ -632,6 +640,7 @@ void main() {
           aEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('a-1', aEntry),
+              signerAtSign: atSign,
               key: bKey,
               signerEnrollmentId: 'b-1'));
       await store(
@@ -640,6 +649,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: aKey,
               signerEnrollmentId: 'a-1'));
 
@@ -668,6 +678,7 @@ void main() {
           aEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('a-1', aEntry),
+              signerAtSign: atSign,
               key: bKey,
               signerEnrollmentId: 'b-1'));
       final aVoucher = (await PqSigningChain(a)
@@ -683,6 +694,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: bKey,
               signerEnrollmentId: 'gone-1'));
       final linked = await PqSigningChain(a).linkKeysOf(
@@ -950,6 +962,7 @@ void main() {
       final bEntry = stale.keys.single;
       final chainLink = PqSigningChain.signChainLink(
           PqSigningChain.linkPayload('b-1', bEntry),
+          signerAtSign: atSign,
           key: aKey,
           signerEnrollmentId: 'a-1');
       await store(b, 'b-1', bEntry, chainLink);
@@ -1233,6 +1246,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: cKey,
               signerEnrollmentId: 'c-1'));
       linkCalls.clear();
@@ -1819,6 +1833,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: aKey,
               signerEnrollmentId: 'a-1'));
 

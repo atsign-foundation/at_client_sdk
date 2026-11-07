@@ -264,6 +264,7 @@ void main() {
     });
 
     SignedEnvelope rsaEnvelope() => signEnvelope(payload,
+        atSign: '@alice',
         keys: [
           ApkamSigningKeys(
               algorithm: SigningAlgoType.rsa2048,
@@ -275,6 +276,7 @@ void main() {
     /// An envelope signed ML-DSA-65, naming that algorithm in its protected
     /// header.
     SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
+        atSign: '@alice',
         keys: [
           ApkamSigningKeys(
               algorithm: SigningAlgoType.mldsa65,
@@ -328,6 +330,7 @@ void main() {
     test('signEnvelope signs ML-DSA when asked, and the result verifies',
         () async {
       final envelope = signEnvelope(payload,
+          atSign: '@alice',
           keys: [
             ApkamSigningKeys(
                 algorithm: SigningAlgoType.mldsa65,
@@ -356,6 +359,7 @@ void main() {
     test('signEnvelope refuses an algorithm it has no signing code for', () {
       expect(
           () => signEnvelope(payload,
+              atSign: '@alice',
               keys: [
                 ApkamSigningKeys(
                     algorithm: SigningAlgoType.ecc_secp256r1,

@@ -30,7 +30,7 @@ const fail = (name, err) => {
   console.error(`FAIL ${name} — ${err}`);
 };
 
-async function verifyArm(name, envelope, key, expectedAlg) {
+async function verifyArm(name, envelope, key, expectedAlg, expectedIss) {
   const { payload, protectedHeader } = await generalVerify(envelope, key);
   const decoded = Buffer.from(payload).toString('utf8');
   if (decoded !== expectedPayload) {
@@ -39,7 +39,10 @@ async function verifyArm(name, envelope, key, expectedAlg) {
   if (protectedHeader.alg !== expectedAlg) {
     throw new Error(`alg mismatch: ${protectedHeader.alg}`);
   }
-  ok(name, `alg=${protectedHeader.alg}, kid=${protectedHeader.kid}`);
+  if (protectedHeader.iss !== expectedIss) {
+    throw new Error(`iss mismatch: ${protectedHeader.iss}`);
+  }
+  ok(name, `alg=${protectedHeader.alg}, kid=${protectedHeader.kid}, iss=${protectedHeader.iss}`);
 
   // The tamper arm, so a verifier that accepts everything cannot pass.
   const tampered = {
@@ -48,7 +51,7 @@ async function verifyArm(name, envelope, key, expectedAlg) {
       .toString('base64url'),
   };
   try {
-    await flattenedVerify(tampered, key);
+    await generalVerify(tampered, key);
     fail(`${name} (tamper)`, 'a tampered payload verified');
   } catch {
     ok(`${name} (tamper)`, 'tampered payload refused');
@@ -62,7 +65,9 @@ try {
     format: 'der',
     type: 'spki',
   });
-  await verifyArm('RS256', vectors.rs256.envelope, rsaKey, 'RS256');
+  await verifyArm('RS256', vectors.rs256.envelope, rsaKey, 'RS256', undefined);
+  await verifyArm(
+    'RS256 iss', vectors.rs256Iss.envelope, rsaKey, 'RS256', '@alice');
 } catch (e) {
   fail('RS256', e);
 }
@@ -96,7 +101,11 @@ try {
     format: 'der',
     type: 'spki',
   });
-  await verifyArm('ML-DSA-65', vectors.mlDsa65.envelope, mlDsaKey, 'ML-DSA-65');
+  await verifyArm(
+    'ML-DSA-65', vectors.mlDsa65.envelope, mlDsaKey, 'ML-DSA-65', undefined);
+  await verifyArm(
+    'ML-DSA-65 iss', vectors.mlDsa65Iss.envelope, mlDsaKey, 'ML-DSA-65',
+    '@alice');
 } catch (e) {
   fail('ML-DSA-65', e);
 }

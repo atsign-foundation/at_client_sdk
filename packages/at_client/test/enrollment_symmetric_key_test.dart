@@ -70,6 +70,7 @@ void main() {
     final pkam = pkamKeyPairFor(atSign, signer);
     return jsonEncode(signEnvelope(
       {'toKpid': kpid},
+      atSign: atSign,
       keys: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
@@ -192,6 +193,7 @@ void main() {
         kid: kpid,
         sealed: base64Encode(sealed),
       ).toJson(),
+      atSign: atSign,
       keys: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,

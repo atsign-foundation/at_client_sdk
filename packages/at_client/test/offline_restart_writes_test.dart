@@ -322,6 +322,26 @@ void main() {
     expect(await record.vouchesFor(_namespace, payload), isTrue);
   });
 
+  test(
+      "Every envelope at_client signs names its signer's Atsign: its "
+      'verified-advertisement record through VerifiedAdvertisementRecord.'
+      'remember', () async {
+    final device = _Device('enroll-self', _AtServer());
+    await device.publishApsk();
+    await device.start().mintAndPublish(_namespace);
+    final record =
+        VerifiedAdvertisementRecord(device.client, filing: device.filing);
+    device.local.remove(device.recordKey);
+
+    await record.remember(
+        _namespace, device.server.records[_advertisementKey]!);
+
+    final envelope = SignedEnvelope.fromJson(
+        jsonDecode(device.local[device.recordKey]!) as Map);
+    expect(envelope.signatures.map((s) => s.iss).toSet(), {_atSign});
+    expect(envelope.signerAtSign, _atSign);
+  });
+
   test('A client stopped as it reads its local record says so', () async {
     final (:device, kid: _) = await mintedAndVerified();
     device.server.reachable = false;

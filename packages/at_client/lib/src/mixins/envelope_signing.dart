@@ -116,6 +116,7 @@ mixin EnvelopeSigning on ApkamSigning {
         payload,
         keys: keys,
         type: type,
+        atSign: atClient.getCurrentAtSign()!,
         enrollmentId: enrollmentId,
         toEncodable: toEncodable,
       );

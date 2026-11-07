@@ -18,7 +18,12 @@ import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, RsaSignatureAlgo, SigningAlgoType;
 import 'package:at_client/src/util/at_key_grammar.dart' show isIdShaped;
 import 'package:at_commons/at_commons.dart'
-    show AtSigningVerificationException, EnrollmentConstants;
+    show
+        AtSigningVerificationException,
+        EnrollmentConstants,
+        InvalidAtSignException;
+import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
+import 'package:meta/meta.dart' show experimental;
 
 /// The record name an enrollment's APKAM public signing key is published
 /// under: see [apskUri].
@@ -158,6 +163,10 @@ class EnvelopeSignature {
   String? get enid =>
       header['enid'] is String ? header['enid'] as String : null;
 
+  /// The signer's Atsign claim as the header spells it, or null when it makes
+  /// none, as no envelope at_client 4.0.0 signed does.
+  String? get iss => header['iss'] is String ? header['iss'] as String : null;
+
   /// What this signature was made for — the [EnvelopeType.typ] the signer
   /// stamped. Null when the header names none, which [verifyEnvelope] refuses
   /// rather than assuming a purpose.
@@ -249,6 +258,13 @@ class SignedEnvelope {
   /// enrollment's own `_apsk`.
   String? get signerEnrollmentId => signature.enid;
 
+  /// The signer's Atsign as the envelope names it, canonical, or null when it
+  /// names none, as every envelope at_client 4.0.0 signed.
+  ///
+  /// Throws [AtSigningVerificationException] when the claim is not an Atsign.
+  @experimental
+  Atsign? get signerAtSign => issuerOf(signature);
+
   /// The payload, decoded.
   ///
   /// Throws [AtSigningVerificationException] for a payload that does not
@@ -327,6 +343,27 @@ class SignedEnvelope {
       'v: ${signature.version})';
 }
 
+/// [entry]'s Atsign claim, canonical, or null when it makes none; throws
+/// [AtSigningVerificationException], quoting the claim, when it is not an
+/// Atsign.
+Atsign? issuerOf(EnvelopeSignature entry) {
+  if (!entry.header.containsKey('iss')) return null;
+  final claim = entry.header['iss'];
+  final issuer = claim is String ? _atsignOrNull(claim) : null;
+  if (issuer != null) return issuer;
+  throw AtSigningVerificationException(
+      'the envelope names its signer as ${jsonEncode(claim)}, which is not an '
+      'Atsign');
+}
+
+Atsign? _atsignOrNull(String text) {
+  try {
+    return text.toAtsign();
+  } on InvalidAtSignException {
+    return null;
+  }
+}
+
 /// One signing keypair and the algorithm it signs under — the public half is
 /// what a verifier fetches from the signer's `_apsk`, the private half signs.
 ///
@@ -375,13 +412,15 @@ String signableTextOf(
 /// Wraps [payload] in an RFC 7515 general JSON serialization envelope, one
 /// signature entry per key in [keys], verifiable by [verifyEnvelope].
 ///
-/// [type] is stamped into every protected header, where the signature covers
-/// it, and [enrollmentId] is stamped only when supplied — a signer with no
-/// enrollment yet omits the claim rather than guessing one.
+/// [type] and [atSign], canonical, are stamped into every protected header,
+/// where the signature covers them, and [enrollmentId] is stamped only when
+/// supplied — a signer with no enrollment yet omits the claim rather than
+/// guessing one.
 SignedEnvelope signEnvelope(
   Object? payload, {
   required List<ApkamSigningKeys> keys,
   required EnvelopeType type,
+  required String atSign,
   String? enrollmentId,
   Object? Function(Object? nonEncodable)? toEncodable,
 }) {
@@ -389,13 +428,14 @@ SignedEnvelope signEnvelope(
   // per key would let two entries sign different bytes.
   final payloadB64 = _base64UrlUnpadded(
       utf8.encode(jsonEncode(payload, toEncodable: toEncodable)));
+  final Atsign issuer = atSign.toAtsign();
 
   return SignedEnvelope.fromJson({
     'payload': payloadB64,
     'signatures': [
       for (final key in keys)
         _signatureOver(payloadB64,
-            keys: key, type: type, enrollmentId: enrollmentId)
+            keys: key, type: type, issuer: issuer, enrollmentId: enrollmentId)
     ],
   });
 }
@@ -406,6 +446,7 @@ Map<String, String> _signatureOver(
   String payloadB64, {
   required ApkamSigningKeys keys,
   required EnvelopeType type,
+  required Atsign issuer,
   String? enrollmentId,
 }) {
   final SigningAlgoType signingAlgo = keys.algorithm;
@@ -419,6 +460,7 @@ Map<String, String> _signatureOver(
     'alg': alg,
     'typ': type.typ,
     'kid': publicKeyKidOfBase64(keys.publicKey),
+    'iss': issuer,
     if (enrollmentId != null) 'enid': enrollmentId,
     'v': envelopeVersion,
   })));

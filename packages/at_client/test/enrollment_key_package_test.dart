@@ -123,6 +123,19 @@ void main() {
     );
   });
 
+  test(
+      "Every envelope at_client signs names its signer's Atsign: a key "
+      'package at enroll:request through enrollmentKeyPackageBuilder',
+      () async {
+    final (io, _, _) = await freshKeys();
+
+    final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
+    final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
+
+    expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign});
+    expect(envelope.signerAtSign, atSign);
+  });
+
   test('carries no enrollmentId claim — the atServer has not assigned one yet',
       () async {
     final (io, _, _) = await freshKeys();

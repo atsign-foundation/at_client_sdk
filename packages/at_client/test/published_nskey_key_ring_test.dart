@@ -655,6 +655,7 @@ void main() {
       // of base64url.
       final pair = bobApkam;
       final envelope = signEnvelope(advertisementPayload(bobKey),
+          atSign: bob,
           keys: [
             ApkamSigningKeys(
                 algorithm: SigningAlgoType.rsa2048,

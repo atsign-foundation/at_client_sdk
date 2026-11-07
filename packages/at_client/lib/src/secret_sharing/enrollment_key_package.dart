@@ -113,6 +113,7 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
       'keyPackage': signEnvelope(
         payload,
         type: EnvelopeType.keyPackage,
+        atSign: atSign,
         // NOTE: whichever key `_apsk` will advertise must be the one that signs
         // here. A peer verifies this package against that record before sealing
         // any secret to the enrollment, so the two disagreeing means the
