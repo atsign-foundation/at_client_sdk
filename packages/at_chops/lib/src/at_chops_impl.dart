@@ -37,6 +37,14 @@ class AtChopsImpl extends AtChops {
 
   final AtSignLogger _logger = AtSignLogger('AtChopsImpl');
 
+  /// The cause to report for [e] in an encryption or decryption exception.
+  ///
+  /// An [AtException]'s message is at_chops' or at_commons' own text, so it
+  /// is kept. Any other exception is named by its type only, because its
+  /// text can quote its input, and that input can be a key.
+  static String _describeCause(Exception e) =>
+      e is AtException ? e.message : e.runtimeType.toString();
+
   @override
   FutureOr<AtEncryptionResult> decryptBytes(
       Uint8List data, EncryptionKeyType encryptionKeyType,
@@ -65,11 +73,10 @@ class AtChopsImpl extends AtChops {
       }
       return atEncryptionResult;
     } on Exception catch (e) {
-      throw AtDecryptionException(e.toString())
-        ..stack(AtChainedException(
-            Intent.decryptData,
-            ExceptionScenario.decryptionFailed,
-            'Failed to decrypt ${e.toString()}'));
+      final String cause = _describeCause(e);
+      throw AtDecryptionException(cause)
+        ..stack(AtChainedException(Intent.decryptData,
+            ExceptionScenario.decryptionFailed, 'Failed to decrypt $cause'));
     }
   }
 
@@ -119,11 +126,10 @@ class AtChopsImpl extends AtChops {
       }
       return atEncryptionResult;
     } on Exception catch (e) {
-      throw AtEncryptionException(e.toString())
-        ..stack(AtChainedException(
-            Intent.decryptData,
-            ExceptionScenario.decryptionFailed,
-            'Failed to encrypt ${e.toString()}'));
+      final String cause = _describeCause(e);
+      throw AtEncryptionException(cause)
+        ..stack(AtChainedException(Intent.decryptData,
+            ExceptionScenario.decryptionFailed, 'Failed to encrypt $cause'));
     }
   }
 

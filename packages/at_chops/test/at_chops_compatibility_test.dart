@@ -240,6 +240,37 @@ void main() {
                   'Initialization vector required for decryption using SymmetricKey'))));
     });
 
+    // A corrupted key fails to decode, and the decoder's message quotes the
+    // text it was given. Only the error's type may reach the exception.
+    group('a corrupted AES key is not quoted in the exception', () {
+      final String key =
+          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+      final String corrupted = '!${key.substring(1)}';
+      final AtChopsImpl atChops =
+          AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(corrupted));
+      final InitialisationVector iv = AtChopsUtil.generateRandomIV(16);
+
+      Matcher withoutKey<T extends AtException>() => throwsA(predicate((e) =>
+          e is T &&
+          !e.toString().contains(key.substring(1)) &&
+          !e.getTraceMessage().contains(key.substring(1)) &&
+          e.message == 'FormatException'));
+
+      test('encryptBytes', () async {
+        await expectLater(
+            () async => await atChops.encryptBytes(
+                utf8.encode('abcd'), EncryptionKeyType.aes256, iv: iv),
+            withoutKey<AtEncryptionException>());
+      });
+
+      test('decryptBytes', () async {
+        await expectLater(
+            () async => await atChops.decryptBytes(
+                Uint8List(16), EncryptionKeyType.aes256, iv: iv),
+            withoutKey<AtDecryptionException>());
+      });
+    });
+
     test('validate encryption/decryption throws AtEncryptionException on unsupported keyName', () async {
       final atChopsKeys = AtChopsKeys();
       final atChops = AtChopsImpl(atChopsKeys);

@@ -8,6 +8,11 @@
   `keyPairFromSeed` and `newSeed`. Both ML-DSA-65 classes implement it, and
   `AtPqc.mlDsa65` is now typed as it, so a caller going through `AtPqc` can
   reach the seeded path.
+- fix: `AtChopsImpl.encryptBytes` and `decryptBytes` name the underlying
+  error's type rather than quoting its text. An `AtException`'s message is
+  kept.
+- fix: `libCryptoSupportsMlKem768` requires OpenSSL 3.5.1 or later. On 3.5.0,
+  `AtPqc.xWing` uses the pure-Dart backend.
 
 ## 3.7.1
 
