@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 2.0.1
+## 2.1.0
 
 - feat: `package:at_client_flutter/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
