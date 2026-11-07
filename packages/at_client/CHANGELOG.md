@@ -768,7 +768,7 @@ And some tech debt cleanup
 
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
-  `AtClientPreference.Atsign ProtocolEmitted` and change its default value
+  `AtClientPreference.atProtocolEmitted` and change its default value
   from 1.5.0 to 2.0.0
 
 ## 3.5.3

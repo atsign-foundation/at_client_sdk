@@ -70,7 +70,7 @@ class NotifyVerbBuilder extends AbstractVerbBuilder {
         ccd: atKey.metadata.ccd,
         isDelete: operation == OperationEnum.delete));
 
-    // Add in all of the metadata parameters in atProtocol command format
+    // Add in all of the metadata parameters in Atsign Protocol command format
     sb.write(atKey.metadata.toAtProtocolFragment());
 
     if (useAtKeyToString) {
