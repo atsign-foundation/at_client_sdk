@@ -136,6 +136,18 @@ void main() {
               signature: sig, publicKey: kp.publicKey),
           isTrue);
     });
+
+    test('a secret key OpenSSL refuses is still cleared', () async {
+      final algo = MlDsa65FfiAlgo.fromLib(lib!);
+      // Out-of-range s1/s2 coefficients: OpenSSL will not load this key.
+      final Uint8List refused = Uint8List(4032)..fillRange(0, 4032, 0xff);
+      expect(
+          await freedDuring(() => expectLater(
+              algo.signBytes(Uint8List.fromList('hello'.codeUnits),
+                  secretKey: refused),
+              throwsStateError)),
+          [4032]);
+    });
   });
 
   group('ML-KEM-768 FFI', () {
