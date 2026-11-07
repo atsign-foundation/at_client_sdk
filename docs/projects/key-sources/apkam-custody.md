@@ -328,8 +328,19 @@ the PRF, or an enrollment whose credential is the passkey. There is a third:
   APKAM key on every device it reaches, so they all authenticate as one
   enrollment, the atServer can't tell them apart, and revoking it signs them
   all out.
-- **Eviction loses nothing.** IndexedDB becomes a cache: after it is cleared,
-  the passkey re-derives the PKAM key and the atServer supplies the document.
+- **Eviction loses nothing, once the enrollment id survives it.** The goal is
+  for IndexedDB to be a cache: after it is cleared, the passkey re-derives the
+  PKAM key and the atServer supplies the document. But the `pkam:` command
+  (`enrollmentId:<id>`), the record name `atkeys.<enrollmentId>.a.__e` and the
+  envelope's AAD all need the enrollment id. The atServer assigns it after the
+  passkey exists, so it can't be the `userHandle` (above) or come from the PRF,
+  and with no public record there is nothing to read it from first. Nothing
+  that survives eviction holds it today, and a second device reached through
+  passkey sync has the same gap. Until it is closed, an evicted browser
+  re-enrolls with an OTP. Candidates: write the id to the passkey's `largeBlob`
+  after enrollment (support and sync vary by authenticator), or keep it in a
+  hidden `public:_` record named from the PRF, which holds no keys but brings
+  back a name that leaks through `lookup:` and logs.
 - **The cost:** the PKAM key sits in page memory for the session, the same
   exposure `design.md` section 9 already accepts for the data key.
 
@@ -359,6 +370,8 @@ be converted to compact hex. A pin test still guards it
 | Is the custody tier worth recording in the enrollment record, so policy can require hardware later? | A decision for at_server; not blocking |
 | How is a device secret rotated, and does revocation force it? | Design: new secret, new record name, old record deleted |
 | Is the PRF output stable across UV states on every authenticator? | Pin UV to `required` and probe hmac-secret with and without UV |
+| Where does an evicted browser, or a synced second device, get its enrollment id? ([section 9](#9-the-browser-as-the-only-device)) | Probe `largeBlob` write and sync on the target authenticators; otherwise decide whether a PRF-named `public:_` record holding only the id is acceptable |
+| How does a restore tell the current document from an older one the atServer replays? The AAD is the same on every write | A per-write counter in the AAD and a device-held high-water mark; the browser after eviction has none (see [`prf-server-keys-blob.md`](prf-server-keys-blob.md#open)) |
 
 ## 11. Changes by package
 

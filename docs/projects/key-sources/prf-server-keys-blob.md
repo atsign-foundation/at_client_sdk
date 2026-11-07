@@ -93,6 +93,11 @@ sequenceDiagram
     A->>AS: authenticate (PKAM)
 ```
 
+The decrypt step needs the enrollmentId for the AAD. Natively it sits in the
+keychain item beside the salt. In the browser it is an open gap
+([Threats](#open)): neither the passkey nor anything else that survives
+eviction holds it.
+
 ## Payload
 
 * The envelope carries the encryption key pair, the self-encryption key and
@@ -164,7 +169,7 @@ From an adversarial review of the first draft of this doc (33 findings).
 | Finding | Fix |
 | --- | --- |
 | A writer chooses the stored salt so `wrapKey = recordId`, then substitutes keys | No server-supplied PRF input; separate labels |
-| No AEAD, so blobs can be tampered with, spliced or rolled back | Envelope v2: AES-GCM, AAD = atSign, enrollmentId, version |
+| No AEAD, so blobs can be tampered with or spliced | Envelope v2: AES-GCM, AAD = atSign, enrollmentId, version (rollback is not fixed; see Open) |
 | Raw PRF output used as the name lets the server compute the key | Raw `ikm` never leaves the device |
 | recordId links atSigns; nothing binds the atSign | atSign in both labels and the AAD |
 | recordId reaches other apps through sync | `public:_` has no commit-log row |
@@ -195,7 +200,11 @@ From an adversarial review of the first draft of this doc (33 findings).
 | Same construction across platforms | Version byte and test vectors |
 | recordId in atServer logs: `LookupVerbHandler` logs the key at `finer` | Stop logging `public:_` names, or log a hash; until then a log reader can fetch the blob. Rotation means moving the record |
 | Concurrent writers lose updates | Conditional update on the atServer; a prerequisite, not optional (see [Handing the restored keys to a client](#handing-the-restored-keys-to-a-client)) |
+| Rollback: the AAD (atSign, enrollmentId, format version 2) is the same on every write, so an older envelope this enrollment wrote still verifies. An atServer that serves it gets past GCM and the published-key check (it can roll those back too, and the check doesn't see missing nskey privates or `apkamSymmetricKey`), and the next `flush` writes the stale document back, losing keys that can't be replaced | Bind a per-write counter in the AAD and reject any envelope below a high-water mark the device keeps (keychain natively). A browser after eviction holds no mark, so it can't detect a rollback by the atServer; until something that survives eviction holds one, the browser restore doesn't claim rollback protection |
+| Browser restore after eviction has no enrollmentId, which the AAD (and, under gate (c), PKAM and the record name) need | See [`apkam-custody.md` section 9](apkam-custody.md#9-the-browser-as-the-only-device); until solved, an evicted browser re-enrolls with an OTP |
 
 ### Better than today
 
-* A single-device web user whose storage is evicted recovers without an OTP.
+* A single-device web user whose storage is evicted recovers without an OTP,
+  once the enrollmentId survives eviction (see Open). Until then they
+  re-enroll with an OTP, as today.
