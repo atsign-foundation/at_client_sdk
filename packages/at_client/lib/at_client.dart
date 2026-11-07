@@ -21,11 +21,13 @@ export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/preference/pq_posture.dart';
 export 'package:at_auth/at_auth.dart'
     show
+        ApskSigningKey,
         AtKeys,
         AtKeysFormatException,
         AtKeysIo,
         EnrollmentKeyExchangeMode,
         InMemoryAtKeysIo,
+        KeyEntryStatus,
         NamespacePermission,
         WrittenAtKeysIo;
 export 'package:at_lookup/at_lookup.dart'
@@ -39,6 +41,9 @@ export 'package:at_lookup/at_lookup.dart'
         SecondaryAddress,
         SecondaryAddressFinder;
 export 'package:at_chops/at_chops.dart' show SigningAlgoType;
+export 'package:at_client/src/signing/envelope_signature.dart'
+    show EnvelopeSignature, SignedEnvelope;
+export 'package:at_client/src/signing/envelope_verification.dart';
 export 'package:at_utils/at_logger.dart' show AtSignLogger;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';

@@ -1,21 +1,39 @@
 import 'dart:convert';
+import 'dart:typed_data' show Uint8List;
 
-import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
+import 'package:crypto/crypto.dart' show sha256;
+
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, KeyEntryStatus, apskAdvertisement;
 import 'package:at_chops/at_chops.dart'
-    show RsaKeyPair, SigningAlgoType, XWingPureDartAlgo;
-import 'package:at_client/at_client.dart' show SecretSharingAlgos;
+    show MlDsa65PureDartAlgo, RsaKeyPair, SigningAlgoType, XWingPureDartAlgo;
+import 'package:at_client/at_client.dart'
+    show
+        EnvelopeKeySelected,
+        EnvelopeKeySelection,
+        EnvelopeRefusal,
+        EnvelopeRefused,
+        EnvelopeVerified,
+        PublishedApsk,
+        SecretSharingAlgos,
+        maxPublishedApskLength,
+        selectEnvelopeKey,
+        verifySignedEnvelope;
 import 'package:at_client/at_client_mixins.dart'
     show
         AtClientEnvelopeSigner,
         KeyPackage,
         KeyPackageStatus,
         PackageKey,
+        WithdrawnSigningKeyException,
         verifyAdvertisedKeyPackage;
 import 'package:at_client/src/signing/envelope_signature.dart';
-import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart'
+    show AtSigningVerificationException, EnrollmentConstants;
 import 'package:test/test.dart';
 
 import 'test_utils/envelope_signers.dart';
+import 'test_utils/envelope_tamper.dart';
 
 /// Catalogue: features/at_client/envelope_verification.feature
 void main() {
@@ -126,4 +144,605 @@ void main() {
       });
     }
   });
+
+  group('the offline facade', () {
+    late ({Uint8List publicKey, Uint8List secretKey}) k2Pair;
+    late SigningClient ofG;
+    late SigningClient ofF;
+
+    setUpAll(
+        () async => k2Pair = await MlDsa65PureDartAlgo().generateKeyPair());
+
+    setUp(() async {
+      ofG = await signingClient(alice, 'enroll-g', remoteData);
+      ofF = await signingClient(bob, 'enroll-f', remoteData);
+    });
+
+    // NOTE: recomputed from first principles rather than by the helper
+    // production uses, so a kid in a result is checked against its key.
+    String kidOf(String pub) =>
+        sha256.convert(base64Decode(pub)).toString().substring(0, 16);
+    String kidK() => kidOf(ofE.key.publicKey);
+    String kidK2() => kidOf(base64Encode(k2Pair.publicKey));
+    String kidR() => kidOf(rsaPair.atPublicKey.publicKey);
+
+    ApkamSigningKeys keyR() => ApkamSigningKeys(
+        algorithm: SigningAlgoType.rsa2048,
+        publicKey: rsaPair.atPublicKey.publicKey,
+        privateKey: rsaPair.atPrivateKey.privateKey);
+
+    ApskSigningKey listedK([KeyEntryStatus status = KeyEntryStatus.active]) =>
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65,
+            pub: ofE.key.publicKey,
+            status: status);
+    ApskSigningKey listedK2() => ApskSigningKey.forPublicKey(
+        alg: SigningAlgoType.mldsa65, pub: base64Encode(k2Pair.publicKey));
+    ApskSigningKey listedR() => ApskSigningKey.forPublicKey(
+        alg: SigningAlgoType.rsa2048, pub: rsaPair.atPublicKey.publicKey);
+
+    PublishedApsk apskOfE([List<ApskSigningKey>? listed]) => PublishedApsk(
+        atSign: alice,
+        enrollmentId: e,
+        value: listed == null
+            ? ofE.apsk
+            : jsonEncode(apskAdvertisement(keys: listed)));
+
+    SignedEnvelope signedByE(List<ApkamSigningKeys> keys,
+            {EnvelopeType type = EnvelopeType.app, String? enid = e}) =>
+        signEnvelope({'result': 1},
+            keys: keys, type: type, atSign: alice, enrollmentId: enid);
+
+    test('A valid envelope verifies against its signer\'s published _apsk',
+        () async {
+      final result = await verifySignedEnvelope(envelope,
+          signer: PublishedApsk(
+              atSign: alice,
+              enrollmentId: e,
+              value: remoteData[apskUri(alice, e)]!));
+
+      expect(
+          result,
+          isA<EnvelopeVerified>()
+              .having((r) => r.signer.atSign, 'atSign', alice)
+              .having((r) => r.signer.enrollmentId, 'enrollmentId', e)
+              .having((r) => r.kid, 'kid', kidK())
+              .having((r) => r.algorithm, 'algorithm', SigningAlgoType.mldsa65)
+              .having((r) => r.keyStatus, 'keyStatus', KeyEntryStatus.active)
+              .having((r) => r.issuerConfirmed, 'issuerConfirmed', isTrue));
+    });
+
+    test(
+        'fetchPublishedApsk returns the _apsk an enrollment published, with '
+        'whose it is', () async {
+      final fetched = await ofBob.fetchPublishedApsk(alice, e);
+
+      expect(fetched.atSign, alice);
+      expect(fetched.enrollmentId, e);
+      expect(fetched.value, remoteData[apskUri(alice, e)]);
+    });
+
+    test('fetchPublishedApsk refuses an enrollment the atServer has revoked',
+        () async {
+      remoteData['public:_apsk.$e.${EnrollmentConstants.perEnrollmentRevoked}'
+          '$alice'] = remoteData.remove(apskUri(alice, e))!;
+
+      await expectLater(
+          ofBob.fetchPublishedApsk(alice, e),
+          throwsA(isA<WithdrawnSigningKeyException>()
+              .having((x) => x.location, 'location', 'r.__e')));
+    });
+
+    test('A payload changed by one byte does not verify', () async {
+      final changed = envelope.withPayloadJson({'result': 2});
+
+      final result = await verifySignedEnvelope(changed, signer: apskOfE());
+
+      expect(result, refusedAs(EnvelopeRefusal.badSignature, kid: kidK()));
+    });
+
+    test(
+        'An envelope is refused against the _apsk of an Atsign it does not '
+        'name', () async {
+      final result = await verifySignedEnvelope(envelope,
+          signer: PublishedApsk(
+              atSign: bob, enrollmentId: 'enroll-f', value: ofF.apsk));
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.wrongAtSign,
+              kid: kidK(), naming: ['"@alice"', '"@bob"']));
+    });
+
+    test(
+        'An envelope that names no Atsign verifies, and says the signature '
+        'does not confirm the Atsign', () async {
+      final unnamed = claimless(envelope, [ofE.key]);
+
+      final result = await verifySignedEnvelope(unnamed, signer: apskOfE());
+
+      expect(
+          result,
+          isA<EnvelopeVerified>()
+              .having((r) => r.kid, 'kid', kidK())
+              .having((r) => r.issuerConfirmed, 'issuerConfirmed', isFalse));
+    });
+
+    test(
+        'An envelope is refused against the _apsk of an enrollment it does '
+        'not name', () async {
+      final result = await verifySignedEnvelope(envelope,
+          signer: PublishedApsk(
+              atSign: alice, enrollmentId: 'enroll-g', value: ofG.apsk));
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.wrongEnrollment,
+              kid: kidK(), naming: ['"enroll-e"', '"enroll-g"']));
+    });
+
+    test('An envelope that names no enrollment is refused', () async {
+      final result = await verifySignedEnvelope(
+          signedByE([ofE.key], enid: null),
+          signer: apskOfE());
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.wrongEnrollment,
+              kid: kidK(), naming: ['names no enrollment']));
+    });
+
+    test('An envelope signed for another purpose is refused', () async {
+      final result = await verifySignedEnvelope(
+          signedByE([ofE.key], type: EnvelopeType.keyPackage),
+          signer: apskOfE());
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.wrongType,
+              kid: kidK(), naming: ['"at-key-package+jws"', '"at-app+jws"']));
+    });
+
+    for (final (shape, fault) in [
+      ('a bare RSA-2048 key truncated by one character', 'not base64'),
+      ('a bare value carrying a character outside base64', 'not base64'),
+      ('an array truncated halfway', 'not valid JSON'),
+      ("an array whose one entry's pub is truncated", 'not base64'),
+      (
+        'an array listing only an algorithm this build lacks',
+        'no key this build can verify with'
+      ),
+      ('the empty string', 'is empty'),
+    ]) {
+      test('A malformed or truncated _apsk is refused with a reason: $shape',
+          () async {
+        final result = await verifySignedEnvelope(envelope,
+            signer: apskOfE()._withValue(unreadable[shape]!(bare(), ofE.apsk)));
+
+        expect(
+            result,
+            refusedAs(EnvelopeRefusal.malformedKeySet,
+                kid: kidK(), naming: [fault]));
+      });
+    }
+
+    test('A key the owner retired still verifies, and says so', () async {
+      final result = await verifySignedEnvelope(envelope,
+          signer: apskOfE([listedK(KeyEntryStatus.retired), listedK2()]));
+
+      expect(
+          result,
+          isA<EnvelopeVerified>()
+              .having((r) => r.kid, 'kid', kidK())
+              .having((r) => r.keyStatus, 'keyStatus', KeyEntryStatus.retired));
+    });
+
+    test('A key the _apsk does not list is refused', () async {
+      final result =
+          await verifySignedEnvelope(envelope, signer: apskOfE([listedK2()]));
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.keyNotInKeySet,
+              kid: kidK(), naming: ['"${kidK()}"', '"${kidK2()}"']));
+    });
+
+    test(
+        'A key the _apsk lists under a status this build does not know is '
+        'refused', () async {
+      final result = await verifySignedEnvelope(envelope,
+          signer: apskOfE(
+              [listedK(const KeyEntryStatus.of('suspended')), listedK2()]));
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.keyNotVouchedFor,
+              kid: kidK(), naming: ['"suspended"']));
+    });
+
+    test(
+        'An envelope verifies against an _apsk read before its enrollment '
+        'was revoked', () async {
+      final readAtT0 = await ofBob.fetchPublishedApsk(alice, e);
+      remoteData['public:_apsk.$e.${EnrollmentConstants.perEnrollmentRevoked}'
+          '$alice'] = remoteData.remove(apskUri(alice, e))!;
+
+      final result = await verifySignedEnvelope(envelope, signer: readAtT0);
+
+      expect(
+          result, isA<EnvelopeVerified>().having((r) => r.kid, 'kid', kidK()));
+      await expectLater(ofBob.fetchPublishedApsk(alice, e),
+          throwsA(isA<WithdrawnSigningKeyException>()),
+          reason: 'the control: the atServer did move it');
+    });
+
+    test(
+        'An envelope verifies under the strongest algorithm it shares with '
+        'the _apsk, and names it', () async {
+      final result = await verifySignedEnvelope(signedByE([keyR()]),
+          signer: apskOfE([listedK(), listedR()]));
+
+      expect(
+          result,
+          isA<EnvelopeVerified>().having((r) => r.kid, 'kid', kidR()).having(
+              (r) => r.algorithm, 'algorithm', SigningAlgoType.rsa2048));
+    });
+
+    test(
+        "A caller's minimum algorithm refuses an envelope that verifies only "
+        'under a weaker one', () async {
+      final result = await verifySignedEnvelope(signedByE([keyR()]),
+          signer: apskOfE([listedK(), listedR()]),
+          minimumAlgorithm: SigningAlgoType.mldsa65);
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.algorithmTooWeak,
+              kid: kidR(), naming: ['rsa2048', 'mldsa65']));
+    });
+
+    test(
+        'selectEnvelopeKey names the key and status verification would use, '
+        'without the payload', () {
+      final entriesOnly = SignedEnvelope.fromJson(
+          {'payload': '', 'signatures': envelope.toJson()['signatures']});
+
+      final selection = selectEnvelopeKey(entriesOnly, signer: apskOfE());
+
+      expect(
+          selection,
+          isA<EnvelopeKeySelected>()
+              .having((r) => r.kid, 'kid', kidK())
+              .having((r) => r.algorithm, 'algorithm', SigningAlgoType.mldsa65)
+              .having((r) => r.keyStatus, 'keyStatus', KeyEntryStatus.active)
+              .having((r) => r.issuerConfirmed, 'issuerConfirmed', isTrue));
+    });
+
+    test(
+        'selectEnvelopeKey reports a retired key, so a caller can refuse it '
+        'at receipt', () {
+      final selection = selectEnvelopeKey(envelope,
+          signer: apskOfE([listedK(KeyEntryStatus.retired), listedK2()]));
+
+      expect(
+          selection,
+          isA<EnvelopeKeySelected>()
+              .having((r) => r.kid, 'kid', kidK())
+              .having((r) => r.keyStatus, 'keyStatus', KeyEntryStatus.retired)
+              .having((r) => r.key.offeredForNewOperations,
+                  'offeredForNewOperations', isFalse));
+    });
+
+    test(
+        'selectEnvelopeKey refuses an _apsk that cannot be read, without '
+        'throwing', () {
+      final selection = selectEnvelopeKey(envelope,
+          signer: apskOfE()._withValue(
+              unreadable['an array truncated halfway']!(bare(), ofE.apsk)));
+
+      expect(
+          selection, refusedAs(EnvelopeRefusal.malformedKeySet, kid: kidK()));
+    });
+
+    for (final (listed, carried, outcome) in [
+      (
+        'K and an RSA-2048 key R',
+        'an ML-DSA-65 signature by K and an RS256 signature by R',
+        'kid K'
+      ),
+      (
+        'R only',
+        'an ML-DSA-65 signature by K and an RS256 signature by R',
+        'kid R'
+      ),
+      (
+        'K only',
+        'an RS256 signature by R only',
+        'EnvelopeRefused with keyNotInKeySet'
+      ),
+    ]) {
+      test(
+          'selectEnvelopeKey and verifySignedEnvelope choose the same key: '
+          '$listed, $carried', () async {
+        final signer = apskOfE(switch (listed) {
+          'R only' => [listedR()],
+          'K only' => [listedK()],
+          _ => [listedK(), listedR()],
+        });
+        final signed =
+            signedByE(carried.contains('only') ? [keyR()] : [ofE.key, keyR()]);
+
+        final selection = selectEnvelopeKey(signed, signer: signer);
+        final verification = await verifySignedEnvelope(signed, signer: signer);
+
+        switch (outcome) {
+          case 'kid K' || 'kid R':
+            final kid = outcome == 'kid K' ? kidK() : kidR();
+            expect(selection,
+                isA<EnvelopeKeySelected>().having((r) => r.kid, 'kid', kid));
+            expect(verification,
+                isA<EnvelopeVerified>().having((r) => r.kid, 'kid', kid));
+          default:
+            expect(selection, refusedAs(EnvelopeRefusal.keyNotInKeySet));
+            expect(verification, refusedAs(EnvelopeRefusal.keyNotInKeySet));
+        }
+      });
+    }
+
+    test('The same envelope presented twice verifies twice', () async {
+      final first = await verifySignedEnvelope(
+          SignedEnvelope.parse(jsonEncode(envelope.toJson()), maxLength: 65536),
+          signer: apskOfE()) as EnvelopeVerified;
+      final second = await verifySignedEnvelope(
+          SignedEnvelope.parse(jsonEncode(envelope.toJson()), maxLength: 65536),
+          signer: apskOfE()) as EnvelopeVerified;
+
+      expect([second.signer.atSign, second.signer.enrollmentId, second.kid],
+          [first.signer.atSign, first.signer.enrollmentId, first.kid]);
+      expect([second.algorithm, second.keyStatus],
+          [first.algorithm, first.keyStatus]);
+    });
+
+    test(
+        "Envelope text over the caller's bound in UTF-8 bytes is refused "
+        'before it is decoded', () {
+      final text = '${'é' * 30000}${'a' * 10000}';
+      expect([text.length, utf8.encode(text).length], [40000, 70000],
+          reason: 'the premise');
+
+      expect(
+          () => SignedEnvelope.parse(text, maxLength: 65536),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((x) => x.message, 'message', contains('65536 bytes'))));
+      expect(
+          () => SignedEnvelope.parse(text, maxLength: 70000),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((x) => x.message, 'message', contains('not JSON'))),
+          reason: 'the control: at its exact length the same text is decoded, '
+              'and refused as what it is');
+    });
+
+    test('An _apsk value over the cap is refused before it is read', () async {
+      final result = await verifySignedEnvelope(envelope,
+          signer: apskOfE()._withValue('x' * (maxPublishedApskLength + 1)));
+
+      expect(
+          result,
+          refusedAs(EnvelopeRefusal.oversize,
+              naming: ['$maxPublishedApskLength bytes']));
+      expect(
+          await verifySignedEnvelope(envelope,
+              signer: apskOfE()._withValue('x' * maxPublishedApskLength)),
+          isA<EnvelopeRefused>().having(
+              (r) => r.refusal, 'refusal', isNot(EnvelopeRefusal.oversize)),
+          reason: 'the control: at the cap the value is read');
+    });
+
+    group('Given a PublishedApsk built from "@Alice", "alice" or "@alice"', () {
+      test('when it is read, then its atSign is "@alice"', () {
+        for (final spelt in ['@Alice', 'alice', '@alice']) {
+          expect(
+              PublishedApsk(atSign: spelt, enrollmentId: e, value: '').atSign,
+              alice);
+        }
+      });
+    });
+
+    group('Given an envelope whose iss is "@Alice"', () {
+      test(
+          'when verified against PublishedApsk(atSign: "alice"), then it '
+          'verifies with issuerConfirmed true', () async {
+        final spelt =
+            resigned(envelope, [ofE.key], (h) => h..['iss'] = '@Alice');
+
+        final result = await verifySignedEnvelope(spelt,
+            signer: PublishedApsk(
+                atSign: 'alice', enrollmentId: e, value: ofE.apsk));
+
+        expect(
+            result,
+            isA<EnvelopeVerified>()
+                .having((r) => r.issuerConfirmed, 'c', true));
+      });
+    });
+
+    group('Given an envelope whose iss is not an Atsign', () {
+      test(
+          'when verified, then it is refused with wrongAtSign and nothing is '
+          'thrown', () async {
+        final notAnAtsign =
+            resigned(envelope, [ofE.key], (h) => h..['iss'] = 42);
+
+        expect(await verifySignedEnvelope(notAnAtsign, signer: apskOfE()),
+            refusedAs(EnvelopeRefusal.wrongAtSign, naming: ['42']));
+      });
+    });
+
+    group(
+        'Given an envelope whose enid differs from the supplied enrollment id '
+        'only in case', () {
+      test('when verified, then it is not refused with wrongEnrollment',
+          () async {
+        final spelt =
+            resigned(envelope, [ofE.key], (h) => h..['enid'] = 'ENROLL-E');
+
+        expect(await verifySignedEnvelope(spelt, signer: apskOfE()),
+            isA<EnvelopeVerified>());
+      });
+    });
+
+    group('Given fetchPublishedApsk called with "@ALICE"', () {
+      test('when it returns, then its atSign is "@alice"', () async {
+        expect((await ofBob.fetchPublishedApsk('@ALICE', e)).atSign, alice);
+      });
+    });
+
+    group('Given any malformed envelope or _apsk value', () {
+      test(
+          'when verified or selected, then an EnvelopeRefused is returned and '
+          'nothing is thrown', () async {
+        final envelopes = [
+          envelope.withEntryMember('signature', '!!not base64url!!'),
+          resigned(envelope, [ofE.key], (h) => h..remove('kid')),
+          resigned(envelope, [ofE.key], (h) => h..['v'] = 2),
+          resigned(envelope, [ofE.key], (h) => h..['typ'] = null),
+          resigned(envelope, [ofE.key], (h) => h..['enid'] = 7),
+          resigned(envelope, [ofE.key], (h) => h..remove('alg')),
+          envelope.withEntryMember('signature', ''),
+        ];
+        final values = [
+          for (final cut in unreadable.values) cut(bare(), ofE.apsk),
+          'x' * (maxPublishedApskLength + 1),
+          jsonEncode({'v': 1, 'keys': 'none'}),
+          '[1, 2]',
+          '{"v": 1, "keys": [{"kid": "k", "use": "sign", "alg": "mldsa65", '
+              '"pub": "AAAA"}]}',
+        ];
+        var checked = 0;
+        for (final candidate in envelopes) {
+          for (final signer in [
+            apskOfE(),
+            ...values.map(apskOfE()._withValue)
+          ]) {
+            expect(selectEnvelopeKey(candidate, signer: signer),
+                isA<EnvelopeKeySelection>());
+            final verified =
+                await verifySignedEnvelope(candidate, signer: signer);
+            expect(verified, isA<EnvelopeRefused>(),
+                reason: '$candidate against ${signer.value.length} chars');
+            checked++;
+          }
+        }
+        for (final value in values) {
+          expect(
+              await verifySignedEnvelope(envelope,
+                  signer: apskOfE()._withValue(value)),
+              isA<EnvelopeRefused>());
+          checked++;
+        }
+        expect(checked, envelopes.length * (values.length + 1) + values.length);
+      });
+    });
+
+    group(
+        'Given an envelope refused for its type, Atsign, enrollment or '
+        'algorithm whose signature is also corrupted', () {
+      test('when verified, then the refusal is that one and not badSignature',
+          () async {
+        SignedEnvelope corrupted(SignedEnvelope e) =>
+            e.withEntryMember('signature', 'AAAA');
+        final cases = [
+          (
+            corrupted(signedByE([ofE.key], type: EnvelopeType.keyPackage)),
+            apskOfE(),
+            null,
+            EnvelopeRefusal.wrongType
+          ),
+          (
+            corrupted(envelope),
+            PublishedApsk(
+                atSign: bob, enrollmentId: 'enroll-f', value: ofF.apsk),
+            null,
+            EnvelopeRefusal.wrongAtSign
+          ),
+          (
+            corrupted(envelope),
+            PublishedApsk(
+                atSign: alice, enrollmentId: 'enroll-g', value: ofG.apsk),
+            null,
+            EnvelopeRefusal.wrongEnrollment
+          ),
+          (
+            corrupted(signedByE([keyR()])),
+            apskOfE([listedK(), listedR()]),
+            SigningAlgoType.mldsa65,
+            EnvelopeRefusal.algorithmTooWeak
+          ),
+        ];
+        for (final (candidate, signer, minimum, refusal) in cases) {
+          expect(
+              await verifySignedEnvelope(candidate,
+                  signer: signer, minimumAlgorithm: minimum),
+              refusedAs(refusal));
+        }
+        expect(
+            await verifySignedEnvelope(corrupted(envelope), signer: apskOfE()),
+            refusedAs(EnvelopeRefusal.badSignature),
+            reason: 'the control: with nothing else wrong, the corruption is '
+                'what is refused');
+      });
+    });
+
+    group('Given an envelope carrying 1,000 RS256 entries', () {
+      late SignedEnvelope thousand;
+
+      setUp(() {
+        final one = signedByE([keyR()]).signature.toJson();
+        thousand = SignedEnvelope.fromJson({
+          'payload': signedByE([keyR()]).payloadB64,
+          'signatures': List.filled(1000, one),
+        });
+      });
+
+      test('when verified, then exactly one public-key verification runs',
+          () async {
+        final before = envelopeSignatureChecks;
+
+        final result = await verifySignedEnvelope(thousand,
+            signer: apskOfE([listedK(), listedR()]));
+
+        expect(result, isA<EnvelopeVerified>());
+        expect(envelopeSignatureChecks - before, 1);
+      });
+
+      test('when selected, then no public-key verification runs', () {
+        final before = envelopeSignatureChecks;
+
+        final selection = selectEnvelopeKey(thousand,
+            signer: apskOfE([listedK(), listedR()]));
+
+        expect(selection, isA<EnvelopeKeySelected>());
+        expect(envelopeSignatureChecks - before, 0);
+      });
+    });
+  });
+}
+
+/// A refusal of [refusal], naming [kid] when given and each of [naming] in
+/// its reason.
+Matcher refusedAs(EnvelopeRefusal refusal,
+    {String? kid, List<String> naming = const []}) {
+  var matcher =
+      isA<EnvelopeRefused>().having((r) => r.refusal, 'refusal', refusal);
+  if (kid != null) matcher = matcher.having((r) => r.kid, 'kid', kid);
+  for (final text in naming) {
+    matcher = matcher.having((r) => r.reason, 'reason', contains(text));
+  }
+  return matcher;
+}
+
+extension on PublishedApsk {
+  /// This `_apsk`'s Atsign and enrollment, holding [value] instead.
+  PublishedApsk _withValue(String value) =>
+      PublishedApsk(atSign: atSign, enrollmentId: enrollmentId, value: value);
 }

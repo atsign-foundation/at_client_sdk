@@ -23,7 +23,7 @@ import 'package:at_commons/at_commons.dart'
         EnrollmentConstants,
         InvalidAtSignException;
 import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
-import 'package:meta/meta.dart' show experimental;
+import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 /// The record name an enrollment's APKAM public signing key is published
 /// under: see [apskUri].
@@ -279,6 +279,30 @@ class SignedEnvelope {
     }
   }
 
+  /// Parses envelope JSON [text], refusing text longer than [maxLength] UTF-8
+  /// bytes before decoding it, with [AtSigningVerificationException], as it
+  /// refuses text that is not a JSON object or not structurally an envelope.
+  @experimental
+  factory SignedEnvelope.parse(String text, {required int maxLength}) {
+    RangeError.checkNotNegative(maxLength, 'maxLength');
+    if (exceedsUtf8Bytes(text, maxLength)) {
+      throw AtSigningVerificationException('the envelope text is longer than '
+          '$maxLength bytes in UTF-8, the bound it is read under');
+    }
+    final Object? json;
+    try {
+      json = jsonDecode(text);
+    } on FormatException catch (e) {
+      throw AtSigningVerificationException(
+          'the envelope text is not JSON: ${e.message}');
+    }
+    if (json is! Map) {
+      throw AtSigningVerificationException(
+          'the envelope text is not a JSON object');
+    }
+    return SignedEnvelope.fromJson(json);
+  }
+
   /// Parses [json], refusing anything that is not structurally an envelope.
   ///
   /// An empty `signatures` array is refused rather than treated as unsigned:
@@ -349,6 +373,26 @@ class SignedEnvelope {
   String toString() =>
       'SignedEnvelope(alg: ${signature.alg}, kid: $signerEnrollmentId, '
       'v: ${signature.version})';
+}
+
+/// Whether [text] is longer than [limit] bytes in UTF-8, counted without
+/// encoding it.
+bool exceedsUtf8Bytes(String text, int limit) {
+  // NOTE: a UTF-16 code unit is one to three UTF-8 bytes.
+  if (text.length > limit) return true;
+  if (text.length * 3 <= limit) return false;
+  var bytes = 0;
+  for (final rune in text.runes) {
+    bytes += rune < 0x80
+        ? 1
+        : rune < 0x800
+            ? 2
+            : rune < 0x10000
+                ? 3
+                : 4;
+    if (bytes > limit) return true;
+  }
+  return false;
 }
 
 /// [entry]'s Atsign claim quoted, canonical when it is an Atsign, or null
@@ -501,6 +545,10 @@ Map<String, String> _signatureOver(
   };
 }
 
+/// How many signatures [checkEnvelopeSignature] has checked in this isolate.
+@visibleForTesting
+int envelopeSignatureChecks = 0;
+
 /// Whether [signature] over [input] verifies under [publicKey], raw key
 /// material for [algorithm]; throws [AtSigningVerificationException] for an
 /// algorithm envelopes are not signed under.
@@ -510,6 +558,7 @@ Future<bool> checkEnvelopeSignature(
   required Uint8List signature,
   required Uint8List publicKey,
 }) {
+  envelopeSignatureChecks++;
   return switch (algorithm) {
     SigningAlgoType.mldsa65 => MlDsa65PureDartAlgo()
         .verifyBytes(input, signature: signature, publicKey: publicKey),
