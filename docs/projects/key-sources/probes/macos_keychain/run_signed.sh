@@ -35,9 +35,6 @@ sign() { # $1 = output name
 build writer w1; sign writer
 build other o1; sign other
 build unsigned u1
-cc -dynamiclib -Wno-deprecated-declarations -framework Security \
-  -framework CoreFoundation -o out/inject.dylib inject.c
-codesign --force -s - out/inject.dylib >/dev/null 2>&1
 for b in writer other unsigned; do
   echo "$b: $(codesign -dv "out/$b" 2>&1 | grep -E '^(Identifier|TeamIdentifier)=' | tr '\n' ' ')"
 done
@@ -55,9 +52,6 @@ echo '--- the second signed binary reads the all-applications item'
 out/other read "$ANY"
 echo '--- an unsigned binary reads the all-applications item'
 out/unsigned read "$ANY"
-echo '--- an ad-hoc dylib injected into the second signed binary reads the all-applications item'
-echo '    (a plain "mode=read" line for service x, not "PROBE injected", means dyld refused the dylib)'
-KCPROBE_INJECT_SERVICE="$ANY" DYLD_INSERT_LIBRARIES="$PWD/out/inject.dylib" out/other read x
 echo '--- the writer, rebuilt with a new code hash and re-signed, reads its default item'
 build writer w2-upgraded; sign writer
 out/writer read "$DEF"
