@@ -62,15 +62,35 @@ DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
   return null;
 }
 
-/// Returns `true` when [lib] supports the ML-KEM-768 algorithm.
+/// Returns `true` when [lib] is OpenSSL 3.5.1 or later and supports the
+/// ML-KEM-768 algorithm.
 ///
-/// ML-KEM-768 was added to the OpenSSL default provider in OpenSSL 3.5.
-/// Older 3.x builds (e.g. the 3.0.x shipped with Ubuntu 22.04/24.04) load
-/// fine but reject `EVP_PKEY_CTX_new_from_name("ML-KEM-768", ...)`.
+/// ML-KEM-768 was added to the OpenSSL default provider in OpenSSL 3.5, and
+/// at_chops uses it through FFI from 3.5.1 on: on 3.5.0 this returns `false`,
+/// so [AtPqc.xWing] uses the pure-Dart backend. Older 3.x builds (e.g. the
+/// 3.0.x shipped with Ubuntu 22.04/24.04) load fine but reject
+/// `EVP_PKEY_CTX_new_from_name("ML-KEM-768", ...)`.
 /// Call this before constructing [MlKem768FfiAlgo] to gate FFI tests or
 /// runtime fallback decisions.
 bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
-  return _libCryptoSupportsAlgorithm(lib, 'ML-KEM-768');
+  return _libCryptoVersionAtLeast(lib, _openSsl3_5_1) &&
+      _libCryptoSupportsAlgorithm(lib, 'ML-KEM-768');
+}
+
+/// OpenSSL 3.5.1 as `OpenSSL_version_num` encodes it: `0xMNN00PP0`.
+const int _openSsl3_5_1 = 0x30500010;
+
+/// Whether [lib]'s `OpenSSL_version_num()` is at least [minimum]. `false` if
+/// the symbol is missing.
+bool _libCryptoVersionAtLeast(DynamicLibrary lib, int minimum) {
+  try {
+    final versionNum =
+        lib.lookupFunction<UnsignedLong Function(), int Function()>(
+            'OpenSSL_version_num');
+    return versionNum() >= minimum;
+  } catch (_) {
+    return false;
+  }
 }
 
 /// Returns `true` when [lib] supports the ML-DSA-65 algorithm.
