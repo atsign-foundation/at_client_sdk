@@ -1601,6 +1601,46 @@ void main() {
 
         expect(await service.getLastNotificationTime(), createdAtMillis);
       });
+
+      group('delivery by notification id', () {
+        late List<String> delivered;
+
+        setUp(() {
+          delivered = [];
+          service.subscribe(regex: '.*').listen((n) => delivered.add(n.id));
+        });
+
+        test('the same id received twice reaches a subscriber once', () async {
+          await receive('1', createdAtMillis + 1000);
+          await receive('1', createdAtMillis + 1000);
+          await pumpEventQueue();
+
+          expect(delivered, ['1']);
+        });
+
+        test('stats notifications all carry id -1 and are never deduped',
+            () async {
+          await receive('-1', createdAtMillis + 1000);
+          await receive('-1', createdAtMillis + 2000);
+          await pumpEventQueue();
+
+          expect(delivered, ['-1', '-1']);
+        });
+
+        test('the seen-set is bounded: the oldest id is forgotten', () async {
+          for (var i = 0; i <= NotificationServiceImpl.seenIdCapacity; i++) {
+            await receive('id$i', createdAtMillis + 1000);
+          }
+          await receive('id0', createdAtMillis + 1000);
+          await receive('id2', createdAtMillis + 1000);
+          await pumpEventQueue();
+
+          expect(delivered.where((id) => id == 'id0'), hasLength(2),
+              reason: 'id0 was evicted, so its replay is delivered again');
+          expect(delivered.where((id) => id == 'id2'), hasLength(1),
+              reason: 'id2 is still remembered (re-adding id0 evicted id1)');
+        });
+      });
     });
 
     test(
@@ -1662,6 +1702,102 @@ void main() {
       expect((jsonDecode(seeded) as Map)['epochMillis'], answered,
           reason: 'seeded with the same time, so a reconnect before any '
               'notification arrives resumes from the same point');
+    });
+
+    test(
+        'a resume from the stored watermark does not deliver the '
+        'watermark\'s own notification again', () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => AtValue()
+        ..value = jsonEncode({'id': 'stored-1', 'epochMillis': 1234567890123}));
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
+      final service = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(service.stopAllSubscriptions);
+      final delivered = <String>[];
+      service.subscribe(regex: '.*').listen((n) => delivered.add(n.id));
+
+      expect(await service.getLastNotificationTime(), 1234567890123);
+      for (final id in ['stored-1', 'next-2']) {
+        await service.handleNotificationReceipt('notification: '
+            '{"id":"$id","from":"@alice","to":"@alice",'
+            '"key":"$id.wavi@alice","value":null,"operation":"update",'
+            '"epochMillis":1234567890123,'
+            '"messageType":"MessageType.key","isEncrypted":false}');
+      }
+      await pumpEventQueue();
+
+      expect(delivered, ['next-2'],
+          reason: 'an inclusive since filter re-delivers the watermark\'s '
+              'notification, which the previous run already delivered');
+    });
+
+    test(
+        'a resume from the stored watermark delivers none of the notifications '
+        'the previous run delivered in the watermark\'s millisecond', () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+      String? stored;
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((i) async {
+        stored = i.positionalArguments[1] as String;
+        return true;
+      });
+      when(() => mockAtClientImpl.get(any()))
+          .thenAnswer((_) async => AtValue()..value = stored);
+      String notification(String id, int millis) => 'notification: '
+          '{"id":"$id","from":"@alice","to":"@alice",'
+          '"key":"$id.wavi@alice","value":null,"operation":"update",'
+          '"epochMillis":$millis,'
+          '"messageType":"MessageType.key","isEncrypted":false}';
+
+      final first = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      first.subscribe(regex: '.*').listen((_) {});
+      for (final n in [
+        notification('old', 10),
+        notification('A', 20),
+        notification('B', 20)
+      ]) {
+        await first.handleNotificationReceipt(n);
+      }
+      await first.stop();
+
+      final second = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(second.stopAllSubscriptions);
+      final delivered = <String>[];
+      second.subscribe(regex: '.*').listen((n) => delivered.add(n.id));
+
+      expect(await second.getLastNotificationTime(), 20);
+      for (final id in ['A', 'B', 'C']) {
+        await second.handleNotificationReceipt(notification(id, 20));
+      }
+      await pumpEventQueue();
+
+      expect(delivered, ['C'],
+          reason: 'an inclusive since filter re-delivers every notification '
+              'stamped in the watermark\'s millisecond, not just its own');
     });
 
     /// The test case verifies the following:
