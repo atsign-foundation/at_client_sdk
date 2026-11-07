@@ -240,17 +240,32 @@ Future<EnvelopeVerification> verifySignedEnvelope(
     case EnvelopeKeySelected(:final key, :final kid, _entry: final entry):
       final Uint8List signature;
       try {
+        // NOTE: unpadded base64url only, so one signature has one spelling.
+        if (!_unpaddedBase64Url.hasMatch(entry.signature)) {
+          throw const FormatException('not unpadded base64url');
+        }
         signature = base64Decode(base64Url.normalize(entry.signature));
       } on FormatException catch (e) {
         return EnvelopeRefused._(signer, EnvelopeRefusal.malformedEnvelope,
             'the signature of key "$kid" is not base64url: ${e.message}', kid);
+      }
+      final Uint8List publicKey;
+      try {
+        publicKey = base64Decode(key.pub);
+      } on FormatException catch (e) {
+        return EnvelopeRefused._(
+            signer,
+            EnvelopeRefusal.malformedKeySet,
+            'the _apsk lists key "$kid" with a key that is not base64: '
+            '${e.message}',
+            kid);
       }
       final bool verified;
       try {
         verified = await checkEnvelopeSignature(key.alg,
             input: utf8.encode('${entry.protected}.${envelope.payloadB64}'),
             signature: signature,
-            publicKey: base64Decode(key.pub));
+            publicKey: publicKey);
       } on Object catch (e) {
         return EnvelopeRefused._(
             signer,
@@ -437,6 +452,8 @@ EnvelopeRefused _notVouched(ApskSigningKey key, _Refuse refuse) => refuse(
     'the _apsk lists key "${key.kid}" as "${key.status}", which does not '
     'vouch for what it signed',
     key.kid);
+
+final RegExp _unpaddedBase64Url = RegExp(r'^[A-Za-z0-9_-]*$');
 
 /// The kid of the entry signed under the strongest algorithm this build
 /// reads, or null when no entry is.

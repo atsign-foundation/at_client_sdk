@@ -693,6 +693,52 @@ void main() {
       });
     });
 
+    group('Given an _apsk that also lists an entry whose key is not base64',
+        () {
+      test(
+          'when an envelope signed by its active key is verified, then it '
+          'verifies', () async {
+        final value = jsonEncode({
+          ...apskAdvertisement(keys: [listedK()]),
+          'keys': [
+            ...apskAdvertisement(keys: [listedK()])['keys'] as List,
+            {'kid': 'k-ed', 'use': 'sign', 'alg': 'ed25519', 'pub': 'not!b64'},
+          ],
+        });
+
+        expect(
+            await verifySignedEnvelope(envelope,
+                signer: apskOfE()._withValue(value)),
+            isA<EnvelopeVerified>().having((r) => r.kid, 'kid', kidK()));
+        await verifyEnvelope(envelope,
+            signerPublicKey: value,
+            signerAtSign: alice,
+            expecting: EnvelopeType.app);
+      });
+    });
+
+    group(
+        'Given an envelope whose signature is spelt padded or in the '
+        'standard base64 alphabet', () {
+      test('when verified, then it is refused as malformedEnvelope', () async {
+        final unpadded = envelope.signature.signature;
+        final standard =
+            base64Encode(base64Url.decode(base64Url.normalize(unpadded)));
+        expect(standard, isNot(unpadded), reason: 'the premise');
+
+        for (final spelling in ['$unpadded=', standard]) {
+          expect(
+              await verifySignedEnvelope(
+                  envelope.withEntryMember('signature', spelling),
+                  signer: apskOfE()),
+              refusedAs(EnvelopeRefusal.malformedEnvelope, kid: kidK()));
+        }
+        expect(await verifySignedEnvelope(envelope, signer: apskOfE()),
+            isA<EnvelopeVerified>(),
+            reason: 'the control: the spelling it was signed in verifies');
+      });
+    });
+
     group('Given an envelope carrying 1,000 RS256 entries', () {
       late SignedEnvelope thousand;
 

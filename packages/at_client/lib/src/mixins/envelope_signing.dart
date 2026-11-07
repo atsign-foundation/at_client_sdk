@@ -246,7 +246,9 @@ mixin EnvelopeSigning on ApkamSigning {
   /// Fetches the `_apsk` [enrollmentId] of [atSign] published, with whose it
   /// is; throws [WithdrawnSigningKeyException] when the atServer has moved it.
   ///
-  /// Reads through [getApkamPublicKey], and so through its cache.
+  /// Reads through [getApkamPublicKey], and so through its cache: a value
+  /// fetched within [publicKeyCacheSettings]' `cacheExpiry` is returned as it
+  /// was, without asking the atServer whether it has since been moved.
   @experimental
   Future<PublishedApsk> fetchPublishedApsk(
           String atSign, String enrollmentId) async =>

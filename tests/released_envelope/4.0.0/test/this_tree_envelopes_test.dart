@@ -50,7 +50,8 @@ void main() {
       await expectLater(
           verifyEnvelope(tampered,
               signerPublicKey: apskOf(arm), expecting: EnvelopeType.app),
-          throwsA(anything),
+          throwsA(isA<Exception>()
+              .having((x) => '$x', 'message', contains('does not verify'))),
           reason: 'the control: this verifier refuses what does not verify');
     });
   }

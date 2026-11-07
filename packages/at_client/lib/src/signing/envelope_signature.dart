@@ -627,8 +627,9 @@ class ParsedApsk {
 ///
 /// A bare value is one RSA-2048 key; a structured one is the advertisement
 /// `apskAdvertisement` in at_auth writes. A value that is empty, a bare value
-/// that is not base64, a structured one that is not a JSON object, and an
-/// entry whose key is not base64 are each a [fault], never an exception.
+/// that is not base64, and a structured one that is not a JSON object are
+/// each a [fault], never an exception; an entry's key is decoded only when it
+/// is used.
 ({List<ApskSigningKey> keys, String? fault}) readApsk(String value) {
   ({List<ApskSigningKey> keys, String? fault}) fault(String why) =>
       (keys: const [], fault: why);
@@ -661,16 +662,7 @@ class ParsedApsk {
   if (decoded is! Map<String, dynamic>) {
     return fault('the _apsk value looks structured but is not a JSON object');
   }
-  final keys = apskSigningKeys(decoded);
-  for (final key in keys) {
-    try {
-      base64Decode(key.pub);
-    } on FormatException catch (e) {
-      return fault('the _apsk lists key "${key.kid}" with a key that is not '
-          'base64: ${e.message}');
-    }
-  }
-  return (keys: keys, fault: null);
+  return (keys: apskSigningKeys(decoded), fault: null);
 }
 
 /// Parses a fetched `_apsk` value, bare or array.
