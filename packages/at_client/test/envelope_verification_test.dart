@@ -254,6 +254,24 @@ void main() {
               kid: kidK(), naming: ['"@alice"', '"@bob"']));
     });
 
+    group(
+        "Given @bob's _apsk under the envelope's own enrollment id, listing "
+        'the key that signed it', () {
+      test('when verified, then it is refused with wrongAtSign', () async {
+        final sameKeyAsBob =
+            PublishedApsk(atSign: bob, enrollmentId: e, value: ofE.apsk);
+
+        expect(
+            await verifySignedEnvelope(envelope, signer: sameKeyAsBob),
+            refusedAs(EnvelopeRefusal.wrongAtSign,
+                kid: kidK(), naming: ['"@alice"', '"@bob"']));
+        expect(await verifySignedEnvelope(envelope, signer: apskOfE()),
+            isA<EnvelopeVerified>(),
+            reason: 'the control: the same enrollment id and value as '
+                "@alice's verifies, so the Atsign is all that differs");
+      });
+    });
+
     test(
         'An envelope that names no Atsign verifies, and says the signature '
         'does not confirm the Atsign', () async {
@@ -538,6 +556,50 @@ void main() {
           reason: 'the control: at the cap the value is read');
     });
 
+    group('Given a PublishedApsk whose value is over maxPublishedApskLength',
+        () {
+      test('when its keys are read, then it throws naming the cap', () {
+        expect(
+            () => apskOfE()._withValue('x' * (maxPublishedApskLength + 1)).keys,
+            throwsA(isA<AtSigningVerificationException>().having(
+                (x) => x.message,
+                'message',
+                contains('$maxPublishedApskLength bytes'))));
+        expect(apskOfE()._withValue('x' * maxPublishedApskLength).keys,
+            hasLength(1),
+            reason: 'the control: at the cap the value is read, as one bare '
+                'key');
+      });
+    });
+
+    group('Given an envelope whose selected entry names no key', () {
+      test(
+          'when verified or selected, then it is refused as malformedEnvelope '
+          'naming no kid', () async {
+        final noKid = resigned(envelope, [ofE.key], (h) => h..remove('kid'));
+
+        expect(selectEnvelopeKey(noKid, signer: apskOfE()), noKidRefusal);
+        expect(
+            await verifySignedEnvelope(noKid, signer: apskOfE()), noKidRefusal);
+      });
+    });
+
+    group("Given an _apsk listing the envelope's kid under another algorithm",
+        () {
+      test('when verified, then it is refused with keyNotInKeySet', () async {
+        final underRsa = ApskSigningKey(
+            kid: kidK(),
+            alg: SigningAlgoType.rsa2048,
+            pub: rsaPair.atPublicKey.publicKey);
+
+        expect(
+            await verifySignedEnvelope(envelope,
+                signer: apskOfE()._withValue(jsonEncode(
+                    apskAdvertisement(keys: [underRsa, listedK2()])))),
+            refusedAs(EnvelopeRefusal.keyNotInKeySet, kid: kidK()));
+      });
+    });
+
     group('Given a PublishedApsk built from "@Alice", "alice" or "@alice"', () {
       test('when it is read, then its atSign is "@alice"', () {
         for (final spelt in ['@Alice', 'alice', '@alice']) {
@@ -786,6 +848,11 @@ Matcher refusedAs(EnvelopeRefusal refusal,
   }
   return matcher;
 }
+
+/// A malformedEnvelope refusal naming no kid.
+final Matcher noKidRefusal = isA<EnvelopeRefused>()
+    .having((r) => r.refusal, 'refusal', EnvelopeRefusal.malformedEnvelope)
+    .having((r) => r.kid, 'kid', isNull);
 
 extension on PublishedApsk {
   /// This `_apsk`'s Atsign and enrollment, holding [value] instead.

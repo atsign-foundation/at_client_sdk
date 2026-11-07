@@ -24,6 +24,7 @@ import 'package:crypto/crypto.dart' show sha256;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/envelope_signers.dart' show resigned;
 import 'test_utils/fake_at_server.dart';
 import 'test_utils/mocks.dart'
     show MockAtLookUp, MockLocalSecondary, MockRemoteSecondary;
@@ -340,6 +341,31 @@ void main() {
         jsonDecode(device.local[device.recordKey]!) as Map);
     expect(envelope.signatures.map((s) => s.iss).toSet(), {_atSign});
     expect(envelope.signerAtSign, _atSign);
+  });
+
+  test(
+      'A record that names another Atsign does not vouch for the '
+      'advertisement', () async {
+    final device = _Device('enroll-self', _AtServer());
+    await device.publishApsk();
+    await device.start().mintAndPublish(_namespace);
+    final record =
+        VerifiedAdvertisementRecord(device.client, filing: device.filing);
+    final payload = device.server.records[_advertisementKey]!;
+    await record.remember(_namespace, payload);
+    final keys = await AtClientEnvelopeSigner(device.client).signingKeys;
+    final stored = SignedEnvelope.fromJson(
+        jsonDecode(device.local[device.recordKey]!) as Map);
+
+    SignedEnvelope namingAs(String atSign) =>
+        resigned(stored, keys, (header) => header..['iss'] = atSign);
+
+    device.local[device.recordKey] = jsonEncode(namingAs('@bob').toJson());
+    expect(await record.vouchesFor(_namespace, payload), isFalse);
+
+    device.local[device.recordKey] = jsonEncode(namingAs(_atSign).toJson());
+    expect(await record.vouchesFor(_namespace, payload), isTrue,
+        reason: 'the control: re-signed naming its own Atsign, it vouches');
   });
 
   test('A client stopped as it reads its local record says so', () async {

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/at_client.dart'
+    show EnvelopeVerified, PublishedApsk, verifySignedEnvelope;
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
@@ -78,6 +80,36 @@ void main() {
           '@alice');
     }
   });
+
+  for (final (name, apskOf, confirmed) in [
+    (
+      'rs256',
+      (Map<String, dynamic> arm) => arm['apskPublicKey'] as String,
+      false
+    ),
+    (
+      'rs256Iss',
+      (Map<String, dynamic> arm) => arm['apskPublicKey'] as String,
+      true
+    ),
+    ('mlDsa65', mlDsaApsk, false),
+    ('mlDsa65Iss', mlDsaApsk, true),
+  ]) {
+    test('the $name vector verifies offline, issuerConfirmed $confirmed',
+        () async {
+      final arm = vectors[name] as Map<String, dynamic>;
+
+      final result = await verifySignedEnvelope(
+          SignedEnvelope.fromJson(arm['envelope'] as Map),
+          signer: PublishedApsk(
+              atSign: '@alice', enrollmentId: 'vector-1', value: apskOf(arm)));
+
+      expect(
+          result,
+          isA<EnvelopeVerified>()
+              .having((r) => r.issuerConfirmed, 'issuerConfirmed', confirmed));
+    });
+  }
 
   test('the rs256Iss vector re-signs to the identical envelope', () {
     final arm = vectors['rs256Iss'] as Map<String, dynamic>;
