@@ -92,6 +92,7 @@ void main() {
               'to cover has moved');
 
       await verifyEnvelope(envelope,
+          signerAtSign: '@alice',
           signerPublicKey: rsaPair.atPublicKey.publicKey,
           expecting: EnvelopeType.app);
     });
@@ -112,6 +113,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
@@ -123,6 +125,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
@@ -136,6 +139,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
@@ -150,6 +154,7 @@ void main() {
       // carries AND what the advertisement offers.
       await expectLater(
           () => verifyEnvelope(mlDsaEnvelope(),
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()
@@ -159,7 +164,9 @@ void main() {
       // The control: a build that refused every ML-DSA envelope would satisfy
       // the arm above and fail here.
       await verifyEnvelope(mlDsaEnvelope(),
-          signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: mlDsaApsk(),
+          expecting: EnvelopeType.app);
     });
 
     test('a corrupted signature fails', () async {
@@ -170,6 +177,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
@@ -243,7 +251,9 @@ void main() {
 
     test('the control arm: both signatures valid, and it verifies', () async {
       await verifyEnvelope(bothSigned(),
-          signerPublicKey: bothApsk(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: bothApsk(),
+          expecting: EnvelopeType.app);
     });
 
     test('a valid RSA signature does NOT rescue a corrupt ML-DSA one',
@@ -267,7 +277,9 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(corrupted,
-              signerPublicKey: bothApsk(), expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: bothApsk(),
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
               'message', contains('mldsa65 signature does not verify'))),
           reason: 'the refusal must name ML-DSA — a message naming RSA would '
@@ -288,7 +300,9 @@ void main() {
       });
 
       await verifyEnvelope(reordered,
-          signerPublicKey: bothApsk(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: bothApsk(),
+          expecting: EnvelopeType.app);
 
       // Corrupt the RSA entry in each ordering: the verdict must not change,
       // because RSA is never the entry checked when ML-DSA is on offer.
@@ -313,6 +327,7 @@ void main() {
                     other.toJson()
               ],
             }),
+            signerAtSign: '@alice',
             signerPublicKey: bothApsk(),
             expecting: EnvelopeType.app);
       }
@@ -333,7 +348,9 @@ void main() {
       // advertisement at all, so a refusal below is about which algorithm was
       // chosen rather than about the reordering having broken the fixture.
       await verifyEnvelope(bothSigned(),
-          signerPublicKey: reversedApsk(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: reversedApsk(),
+          expecting: EnvelopeType.app);
 
       // ML-DSA is the stronger, so the corrupt RSA entry is never reached
       // under either advertisement ordering. Resolving by the advertisement's
@@ -353,7 +370,9 @@ void main() {
       });
       for (final apsk in [reversedApsk(), bothApsk()]) {
         await verifyEnvelope(corruptRsa,
-            signerPublicKey: apsk, expecting: EnvelopeType.app);
+            signerAtSign: '@alice',
+            signerPublicKey: apsk,
+            expecting: EnvelopeType.app);
       }
     });
 
@@ -399,7 +418,9 @@ void main() {
           '"enid":"enroll-pq","v":1}');
 
       await verifyEnvelope(envelope,
-          signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: mlDsaApsk(),
+          expecting: EnvelopeType.app);
     });
 
     test('a tampered payload fails', () async {
@@ -408,7 +429,9 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: mlDsaApsk(),
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
   });
@@ -556,6 +579,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
@@ -581,6 +605,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having(
@@ -648,13 +673,17 @@ void main() {
           type: EnvelopeType.app);
 
       await verifyEnvelope(envelope,
-          signerPublicKey: apskWithRetained(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: apskWithRetained(),
+          expecting: EnvelopeType.app);
     });
 
     test('and one signed by the current key verifies on the first attempt',
         () async {
       await verifyEnvelope(mlDsaEnvelope(),
-          signerPublicKey: apskWithRetained(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: apskWithRetained(),
+          expecting: EnvelopeType.app);
     });
 
     test('a signature under neither key is still refused', () async {
@@ -675,7 +704,9 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: apskWithRetained(), expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: apskWithRetained(),
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having(
               (e) => e.message,
               'message',
@@ -717,6 +748,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.chainLink),
           throwsA(isA<AtSigningVerificationException>().having(
@@ -729,6 +761,7 @@ void main() {
       // this arm the refusal above would also pass for an envelope that was
       // simply broken.
       await verifyEnvelope(envelope,
+          signerAtSign: '@alice',
           signerPublicKey: rsaPair.atPublicKey.publicKey,
           expecting: EnvelopeType.app);
     });
@@ -741,6 +774,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()

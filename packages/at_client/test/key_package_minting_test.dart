@@ -93,6 +93,7 @@ void main() {
     final envelope = SignedEnvelope.fromJson(
         updates.last.metadata!['keyPackage'] as Map<String, dynamic>);
     await verifyEnvelope(envelope,
+        signerAtSign: atSign,
         signerPublicKey: apkamPair.atPublicKey.publicKey,
         expecting: EnvelopeType.keyPackage);
     return KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId);

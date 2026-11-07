@@ -614,7 +614,9 @@ void main() {
           ],
           type: EnvelopeType.app);
       await verifyEnvelope(envelope,
-          signerPublicKey: published.single, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: published.single,
+          expecting: EnvelopeType.app);
 
       inUse({SigningAlgoType.mldsa65});
       await minter().reconcileSigningKeys();
@@ -624,7 +626,9 @@ void main() {
               'skipped the publish would leave the withdrawn key advertised '
               'as current');
       await verifyEnvelope(envelope,
-          signerPublicKey: published.last, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: published.last,
+          expecting: EnvelopeType.app);
     });
 
     /// UC-G2.9 — the overlap a migration with a verifier gap was thought to
@@ -673,10 +677,14 @@ void main() {
               'not from key material handed to signEnvelope by the test');
 
       await verifyEnvelope(two,
-          signerPublicKey: rsaOnlyApsk, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: rsaOnlyApsk,
+          expecting: EnvelopeType.app);
 
       await verifyEnvelope(two,
-          signerPublicKey: published.last, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: published.last,
+          expecting: EnvelopeType.app);
     });
   });
 

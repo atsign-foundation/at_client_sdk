@@ -330,7 +330,9 @@ void main() {
             auth: true))!
         .replaceFirst('data:', '');
     await verifyEnvelope(envelope,
-        signerPublicKey: apsk, expecting: EnvelopeType.app);
+        signerPublicKey: apsk,
+        signerAtSign: atSign,
+        expecting: EnvelopeType.app);
   });
 
   test(

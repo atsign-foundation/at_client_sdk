@@ -1,12 +1,31 @@
 import 'dart:convert';
+import 'dart:typed_data' show Uint8List;
 
+import 'package:at_chops/at_chops.dart' show XWingPureDartAlgo;
+
+import 'package:at_client/at_client.dart' show SecretSharingAlgos;
+import 'package:at_client/at_client_mixins.dart'
+    show
+        AtClientEnvelopeSigner,
+        KeyPackage,
+        KeyPackageStatus,
+        PackageKey,
+        verifyAdvertisedKeyPackage;
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show NskeyAdvertisement;
+import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
+    show ApkamSignedAdvertisedKeys;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show LinkVoucher;
 import 'package:at_client/src/signing/envelope_signature.dart';
+import 'package:at_commons/at_commons.dart'
+    show AtSigningVerificationException, AtValue;
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/envelope_signers.dart';
 import 'test_utils/envelope_tamper.dart';
+import 'test_utils/mocks.dart' show MockAtClient;
 
 /// Catalogue: features/at_client/envelope_signer_atsign.feature
 void main() {
@@ -66,6 +85,146 @@ void main() {
       final envelope = await spelt.signer.wrapAndSign({'result': 1});
 
       expect(headerOf(envelope.signature)['iss'], alice);
+    });
+  });
+
+  group('verifying', () {
+    const bob = '@bob';
+    late AtClientEnvelopeSigner ofBob;
+    late SignedEnvelope envelope;
+
+    setUp(() async {
+      ofBob = readerOf(bob, 'enroll-b', remoteData);
+      envelope = await ofE.signer.wrapAndSign({'result': 1});
+      // NOTE: @bob's enrollment E lists K too, so the claim is the only
+      // thing that tells the two Atsigns apart.
+      remoteData[apskUri(bob, e)] = ofE.apsk;
+    });
+
+    Future<AtValue> apskRead(AtClientEnvelopeSigner signer) =>
+        (signer.atClient as MockAtClient)
+            .get(any(), getRequestOptions: any(named: 'getRequestOptions'));
+
+    test('verifyEnvelopeSignature refuses an envelope naming another Atsign',
+        () async {
+      await expectLater(
+          ofBob.verifyEnvelopeSignature(envelope, signerAtSign: bob),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((x) => x.message, 'message', contains('"@alice"'))
+              .having((x) => x.message, 'message', contains('"@bob"'))));
+      verifyNever(() => apskRead(ofBob));
+
+      // NOTE: positive control — verified as @alice's, the same envelope
+      // fetches its _apsk and verifies.
+      await ofBob.verifyEnvelopeSignature(envelope, signerAtSign: alice);
+      verify(() => apskRead(ofBob)).called(1);
+    });
+
+    test('verifyEnvelopeSignature accepts an envelope that names no Atsign',
+        () async {
+      final unnamed = claimless(envelope, [ofE.key]);
+      expect(unnamed.signerAtSign, isNull);
+
+      await ofBob.verifyEnvelopeSignature(unnamed, signerAtSign: alice);
+    });
+
+    group("at_client's own verifiers", () {
+      late Uint8List encapsulationKey;
+
+      setUp(() async => encapsulationKey =
+          (await XWingPureDartAlgo.instance.generateKeyPair()).publicKey);
+
+      Future<SignedEnvelope> nskeyAdvertisement() => ofE.signer.wrapAndSign(
+          NskeyAdvertisement.single(
+                  publicKey: encapsulationKey, alg: SecretSharingAlgos.xWing)
+              .toPayload(),
+          type: EnvelopeType.nskeyRing);
+
+      Future<SignedEnvelope> keyPackage() => ofE.signer.wrapAndSign(
+          KeyPackage.payloadFor(createdAt: DateTime.utc(2026), keys: [
+            PackageKey(
+                use: SecretSharingAlgos.useEnc,
+                alg: SecretSharingAlgos.xWing,
+                pub: base64Encode(encapsulationKey))
+          ]),
+          type: EnvelopeType.keyPackage);
+
+      Future<KeyPackageStatus> keyPackageStatus(
+              SignedEnvelope envelope, String signerAtSign) async =>
+          (await verifyAdvertisedKeyPackage(envelope.toJson(),
+                  signer: ofBob, signerAtSign: signerAtSign, enrollmentId: e))
+              .$2;
+
+      test(
+          "at_client's own verifiers refuse a document naming another Atsign: "
+          'an nskey advertisement through ApkamSignedAdvertisedKeys.verify',
+          () async {
+        final advertised = jsonEncode((await nskeyAdvertisement()).toJson());
+
+        await expectLater(
+            ApkamSignedAdvertisedKeys(ofBob.atClient).verify(bob, advertised),
+            throwsA(isA<AtSigningVerificationException>()
+                .having((x) => x.message, 'message', contains('"@alice"'))
+                .having((x) => x.message, 'message', contains('"@bob"'))));
+      });
+
+      test(
+          "at_client's own verifiers refuse a document naming another Atsign: "
+          'a key package through verifyAdvertisedKeyPackage', () async {
+        final envelope = await keyPackage();
+
+        expect(
+            await keyPackageStatus(envelope, bob), KeyPackageStatus.rejected);
+        expect(
+            await keyPackageStatus(envelope, alice), KeyPackageStatus.present,
+            reason: 'the control: the same package, checked as @alice\'s');
+      });
+
+      test(
+          "at_client's own verifiers accept a document that names no Atsign: "
+          'an nskey advertisement through ApkamSignedAdvertisedKeys.verify',
+          () async {
+        final unnamed = claimless(await nskeyAdvertisement(), [ofE.key]);
+
+        final advertisement = await ApkamSignedAdvertisedKeys(ofBob.atClient)
+            .verify(alice, jsonEncode(unnamed.toJson()));
+
+        expect(advertisement.keys.single.pub, base64Encode(encapsulationKey));
+      });
+
+      test(
+          "at_client's own verifiers accept a document that names no Atsign: "
+          'a key package through verifyAdvertisedKeyPackage', () async {
+        final unnamed = claimless(await keyPackage(), [ofE.key]);
+
+        expect(
+            await keyPackageStatus(unnamed, alice), KeyPackageStatus.present);
+      });
+    });
+
+    group('Given an envelope whose iss is "@Alice"', () {
+      test(
+          'when verifyEnvelopeSignature checks it with signerAtSign "ALICE", '
+          'then it verifies', () async {
+        final spelt = resigned(
+            envelope, [ofE.key], (header) => header..['iss'] = '@Alice');
+
+        await ofBob.verifyEnvelopeSignature(spelt, signerAtSign: 'ALICE');
+      });
+    });
+
+    group('Given an envelope whose iss is not an Atsign', () {
+      test(
+          'when verifyEnvelopeSignature checks it, then it throws '
+          'AtSigningVerificationException naming the claim', () async {
+        final notAnAtsign = resigned(
+            envelope, [ofE.key], (header) => header..['iss'] = '@al ice');
+
+        await expectLater(
+            ofBob.verifyEnvelopeSignature(notAnAtsign, signerAtSign: alice),
+            throwsA(isA<AtSigningVerificationException>()
+                .having((x) => x.message, 'message', contains('"@al ice"'))));
+      });
     });
   });
 }

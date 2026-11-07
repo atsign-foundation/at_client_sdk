@@ -10,6 +10,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
         apskRecordName,
         apskUri,
         requireApskEnrollmentId,
+        requireIssuer,
         EnvelopeType,
         SignedEnvelope,
         signEnvelope,
@@ -163,12 +164,19 @@ mixin EnvelopeSigning on ApkamSigning {
   /// [expecting] is what the caller is verifying; an envelope signed for
   /// anything else is refused before its signature is checked. It defaults to
   /// [EnvelopeType.app] to pair with [wrapAndSign]'s default.
+  ///
+  /// Refuses an envelope whose `iss` names an Atsign other than
+  /// [signerAtSign], before fetching any `_apsk`. Accepts one that names no
+  /// Atsign, as at_client 4.0.0 signed them, until the release that re-signs
+  /// what an enrollment publishes.
   Future<void> verifyEnvelopeSignature(
     SignedEnvelope envelope, {
     required String signerAtSign,
     String? signerEnrollmentId,
     EnvelopeType expecting = EnvelopeType.app,
   }) async {
+    final atSign = signerAtSign.toAtsign();
+    requireIssuer(envelope, atSign);
     final String? id = signerEnrollmentId ?? envelope.signerEnrollmentId;
     if (id == null) {
       throw AtSigningVerificationException(
@@ -176,12 +184,13 @@ mixin EnvelopeSigning on ApkamSigning {
           'none: there is no _apsk to check the signature against');
     }
 
-    final atSign = signerAtSign.toAtsign();
     final cached = lookupPubKey(atSign, id);
     if (cached != null) {
       try {
         await verifyEnvelope(envelope,
-            signerPublicKey: cached, expecting: expecting);
+            signerPublicKey: cached,
+            signerAtSign: atSign,
+            expecting: expecting);
         return;
       } on AtSigningVerificationException {
         pubKeyCache.remove(_cacheKey(atSign, id));
@@ -190,7 +199,8 @@ mixin EnvelopeSigning on ApkamSigning {
 
     final pk = await getApkamPublicKey(atSign, id);
     try {
-      await verifyEnvelope(envelope, signerPublicKey: pk, expecting: expecting);
+      await verifyEnvelope(envelope,
+          signerPublicKey: pk, signerAtSign: atSign, expecting: expecting);
     } on AtSigningVerificationException catch (e) {
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '

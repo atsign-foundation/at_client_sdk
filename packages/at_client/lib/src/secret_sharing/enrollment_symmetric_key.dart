@@ -283,5 +283,7 @@ Future<void> _verifyAgainstApsk(
         'cannot be checked');
   }
   await verifyEnvelope(signedEnvelope,
-      signerPublicKey: publicKey, expecting: EnvelopeType.secretEnvelope);
+      signerPublicKey: publicKey,
+      signerAtSign: atSign,
+      expecting: EnvelopeType.secretEnvelope);
 }

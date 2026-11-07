@@ -24,6 +24,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/enroll_link_fake.dart';
+import 'test_utils/envelope_signers.dart' show claimless;
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/link_fixtures.dart';
 import 'test_utils/mocks.dart';
@@ -401,6 +402,66 @@ void main() {
               signerEnrollmentId: 'a-1'));
       return (a: a, b: b, aKey: aKey);
     }
+
+    /// [signerAtSign]'s enrollments a-1, anchored by a root link, and b-1,
+    /// whose only key a-1's key chain-links as [linkAtSign]'s, or with no
+    /// Atsign when [linkAtSign] is null; then the walk from b-1.
+    Future<ChainResult> chainedAs(String signerAtSign, String? linkAtSign,
+        {String? checkedAs}) async {
+      MockAtClient of(String id) => buildRemoteBackedMockClient(
+          atSign: signerAtSign,
+          enrollmentId: id,
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls);
+      final root = (await publishRoot(remoteData, signerAtSign)).voucher;
+      final a = of('a-1');
+      final aKey = await withSigningKey(a);
+      final aEntry = (await record(a, 'a-1')).keys.single;
+      await store(a, 'a-1', aEntry,
+          await root.sign(PqSigningChain.linkPayload('a-1', aEntry)));
+      final b = of('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      final link = PqSigningChain.signChainLink(
+          PqSigningChain.linkPayload('b-1', bEntry),
+          key: aKey,
+          signerAtSign: linkAtSign ?? signerAtSign,
+          signerEnrollmentId: 'a-1');
+      await store(
+          b,
+          'b-1',
+          bEntry,
+          linkAtSign == null
+              ? claimless(SignedEnvelope.fromJson(link), [aKey]).toJson()
+              : link);
+      return PqSigningChain(b).verifyChain(signerOf(b), 'b-1');
+    }
+
+    test(
+        "at_client's own verifiers refuse a document naming another Atsign: "
+        'a chain link on a key through PqSigningChain.verifyChain', () async {
+      final result = await chainedAs('@bob', '@alice');
+
+      expect(result.verdict, ChainVerdict.broken);
+      expect(result.reason, contains('"@alice"'));
+    });
+
+    test(
+        "the control for the row above: the same chain, its link naming the "
+        'Atsign it is checked for, reads anchored', () async {
+      final result = await chainedAs('@bob', '@bob');
+
+      expect(result.verdict, ChainVerdict.anchored, reason: result.reason);
+    });
+
+    test(
+        "at_client's own verifiers accept a document that names no Atsign: "
+        'a chain link on a key through PqSigningChain.verifyChain', () async {
+      final result = await chainedAs(atSign, null);
+
+      expect(result.verdict, isNot(ChainVerdict.broken), reason: result.reason);
+    });
 
     test(
         'when the walk runs, then it continues from that key and reads '

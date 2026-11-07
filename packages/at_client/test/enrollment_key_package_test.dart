@@ -95,6 +95,7 @@ void main() {
     final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
     await verifyEnvelope(envelope,
+        signerAtSign: atSign,
         signerPublicKey: apkam.atPublicKey.publicKey,
         expecting: EnvelopeType.keyPackage);
   });
@@ -117,6 +118,7 @@ void main() {
 
     await expectLater(
       () => verifyEnvelope(envelope.withPayloadJson(payload),
+          signerAtSign: atSign,
           signerPublicKey: apkam.atPublicKey.publicKey,
           expecting: EnvelopeType.keyPackage),
       throwsA(isA<AtSigningVerificationException>()),
@@ -174,11 +176,13 @@ void main() {
       final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
       await verifyEnvelope(envelope,
+          signerAtSign: atSign,
           signerPublicKey: signing.atPublicKey.publicKey,
           expecting: EnvelopeType.keyPackage);
 
       await expectLater(
         () => verifyEnvelope(envelope,
+            signerAtSign: atSign,
             signerPublicKey: apkam.atPublicKey.publicKey,
             expecting: EnvelopeType.keyPackage),
         throwsA(isA<Exception>()),
@@ -195,6 +199,7 @@ void main() {
 
       await verifyEnvelope(
           SignedEnvelope.fromJson(metadata!['keyPackage'] as Map),
+          signerAtSign: atSign,
           signerPublicKey: apkam.atPublicKey.publicKey,
           expecting: EnvelopeType.keyPackage);
     });

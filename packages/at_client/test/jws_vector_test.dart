@@ -44,13 +44,17 @@ void main() {
       final apsk = apskOf(arm);
 
       await verifyEnvelope(envelope,
-          signerPublicKey: apsk, expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: apsk,
+          expecting: EnvelopeType.app);
       expect(envelope.payload, vectors['payload']);
       expect(envelope.signerEnrollmentId, 'vector-1');
 
       await expectLater(
           () => verifyEnvelope(envelope.withPayloadJson({'doc': 'tampered'}),
-              signerPublicKey: apsk, expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: apsk,
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
   }

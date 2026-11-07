@@ -578,9 +578,31 @@ ParsedApsk parseApskValue(String value) {
   return ParsedApsk(keys: advertised);
 }
 
+/// Throws [AtSigningVerificationException] when an entry of [envelope] names
+/// its signer as an Atsign other than [signerAtSign], both canonical.
+///
+/// Accepts an envelope that names no Atsign, as at_client 4.0.0 signed them,
+/// until the release that re-signs what an enrollment publishes.
+void requireIssuer(SignedEnvelope envelope, String signerAtSign) {
+  final Atsign expected = signerAtSign.toAtsign();
+  for (final entry in envelope.signatures) {
+    final claimed = issuerOf(entry);
+    if (claimed != null && claimed != expected) {
+      throw AtSigningVerificationException(
+          'the envelope names its signer as "$claimed", and it is verified '
+          'as "$expected"\'s');
+    }
+  }
+}
+
 /// Verifies an envelope produced by [signEnvelope] against [signerPublicKey] —
-/// the `_apsk` value the signer's enrollment published, bare or array —
+/// the `_apsk` value [signerAtSign]'s enrollment published, bare or array —
 /// throwing [AtSigningVerificationException] if it does not check out.
+///
+/// Refuses an envelope whose `iss` names an Atsign other than
+/// [signerAtSign]. Accepts one that names no Atsign, as at_client 4.0.0
+/// signed them, until the release that re-signs what an enrollment
+/// publishes.
 ///
 /// [expecting] is the caller's type, never the envelope's, and the algorithm
 /// verified is the strongest the envelope and the `_apsk` have in common — its
@@ -589,8 +611,10 @@ ParsedApsk parseApskValue(String value) {
 Future<void> verifyEnvelope(
   SignedEnvelope envelope, {
   required String signerPublicKey,
+  required String signerAtSign,
   required EnvelopeType expecting,
 }) async {
+  requireIssuer(envelope, signerAtSign);
   final parsed = parseApskValue(signerPublicKey);
 
   final shared = <SigningAlgoType>{
