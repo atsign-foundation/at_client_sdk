@@ -677,8 +677,10 @@ class PublishedNskeyKeyRing
   /// and the generation keeps its `createdAt` and its record stamp, so an add
   /// after a revocation cannot read as a generation minted after it.
   ///
-  /// ⚠️ **The conveyance excludes nobody** — a child an enrollment self-spawned
-  /// before being revoked receives what this add conveys.
+  /// ⚠️ **The conveyance excludes nobody** — a successor an enrollment
+  /// self-enrolled before being revoked receives what this add conveys, since
+  /// a revocation cascades by approval and never reaches a self-enrolled
+  /// successor.
   ///
   /// [conveyFirst] is handed only the kids this add mints; [lockTtl] is as for
   /// [mintAndPublish].
