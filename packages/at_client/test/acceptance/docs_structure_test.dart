@@ -328,22 +328,29 @@ void main() {
       final rest = plan.substring(todoStart);
       final todo = rest.substring(0, rest.indexOf('\n## '));
 
-      final rows = RegExp(r'^\| \[(14\.\d+)\]', multiLine: true)
+      final anchors = RegExp(r'^\| \[[^\]]+\]\(#([\w-]+)\)', multiLine: true)
           .allMatches(todo)
           .map((m) => m.group(1)!)
           .toList();
-      expect(rows, isNotEmpty,
-          reason: 'no TODO rows parsed, so this guard checks nothing — the '
-              'probe that first found 14.17 reported zero rows because its '
-              'range ended on the heading that opened it');
+      expect(anchors, isNotEmpty,
+          reason: 'no TODO row links a section, so this guard checks nothing '
+              '— the probe that first found 14.17 reported zero rows because '
+              'its range ended on the heading that opened it');
 
+      final headings = [
+        for (final m
+            in RegExp(r'^#{3,4}\s+(.*?)\s*$', multiLine: true).allMatches(plan))
+          (slug: _slug(m.group(1)!), start: m.start),
+      ];
       final done = RegExp(r'✅|\bDONE\b|\bCOMPLETE\b|\bCLOSED\b');
       final wrong = <String>[];
-      for (final id in rows) {
-        final heading =
-            RegExp('^#{3,4} ${RegExp.escape(id)}[ \n]', multiLine: true)
-                .firstMatch(plan);
-        if (heading == null) continue;
+      final unresolved = <String>[];
+      for (final anchor in anchors) {
+        final heading = headings.where((h) => h.slug == anchor).firstOrNull;
+        if (heading == null) {
+          unresolved.add(anchor);
+          continue;
+        }
         final body = _withoutCodeSpans(plan
             .substring(heading.start)
             .split('\n')
@@ -351,8 +358,12 @@ void main() {
             .take(5)
             .join(' '));
         final hit = done.firstMatch(body);
-        if (hit != null) wrong.add('$id: body opens "${hit.group(0)}"');
+        if (hit != null) wrong.add('$anchor: body opens "${hit.group(0)}"');
       }
+      expect(unresolved, isEmpty,
+          reason: 'a TODO row links a section heading the plan does not '
+              'have, so its body cannot be checked:\n  '
+              '${unresolved.join('\n  ')}');
       expect(wrong, isEmpty,
           reason: 'a TODO row points at a section that says it is finished. '
               'DELETE the row — the plan records only what is still owed '
@@ -367,15 +378,7 @@ void main() {
   });
 
   group('the plan and the catalogue agree about what is done', () {
-    /// Every line of the plan, each entry `<file>\u0000<line>`.
-    ///
-    /// ⚠️ The NUL is written as an ESCAPE, never a raw byte: a literal
-    /// NUL makes the whole file `data` to `file(1)`, so `grep` prints nothing
-    /// and exits 1 while `git grep` still reads it.
-    List<String> planLines() => [
-          for (final f in const ['implementation-plan.md'])
-            ..._read(f).split('\n').map((l) => '$f\u0000$l'),
-        ];
+    List<String> planLines() => _read('implementation-plan.md').split('\n');
 
     final ucId = RegExp(ucIdPattern);
 
@@ -407,15 +410,13 @@ void main() {
       expect(status, isNotEmpty, reason: 'the status table did not parse');
 
       final wrong = <String>[];
-      for (final entry in planLines()) {
-        final parts = entry.split('\u0000');
-        final line = parts[1];
+      for (final line in planLines()) {
         if (!RegExp(r'\bDONE\b|✅').hasMatch(line)) continue;
         for (final m in ucId.allMatches(line)) {
           final st = status[m.group(0)] ?? '<no row>';
           if (st != 'PROVEN' && st != 'WITHDRAWN') {
-            wrong.add('${parts[0]}: a DONE row cites ${m.group(0)}, and the '
-                'catalogue says $st');
+            wrong.add('implementation-plan.md: a DONE row cites '
+                '${m.group(0)}, and the catalogue says $st');
           }
         }
       }

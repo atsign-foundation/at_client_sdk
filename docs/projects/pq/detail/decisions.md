@@ -44,8 +44,8 @@ framing:
 
 | Topic | Lives in |
 |---|---|
-| High-level WHY/WHAT, conceptual nskey shape, phase trajectory M0–M6 | `roadmap.md` |
-| Project sequence (P-1…D2-1, SS-*, RF-*), dependency graph, waves, effort, publish gates, critical path | `implementation-plan.md` |
+| High-level WHY/WHAT, conceptual nskey shape, phase trajectory M0–M6, planned changes | `design.md` (its overview and Planned changes) |
+| What is still owed | `implementation-plan.md` |
 | Per-subsystem mechanics (key shapes, `__ssenv`, `enroll:listns`, the enrollment record, providers) with file:line | `design.md` |
 | The given/when/then UC catalogue (A1.x–A5.x, B0.x–B5.x) | `acceptance.md` |
 
@@ -212,7 +212,7 @@ first increment**.
 | The 0001 "copyable shared key vs per-device keys" framing | False dichotomy: data is encrypted under symmetric keys delivered per-APKAM; there are no per-device data keys, and a future device is served by push, so instant/offline access and per-APKAM revocation coexist. |
 
 **Cross-refs:** the conceptual two-layer nskey shape and mixed-scheme philosophy
-are in `roadmap.md`; the 3-layer/3-provider mechanics, concrete key shapes, and
+are in `design.md`'s overview; the 3-layer/3-provider mechanics, concrete key shapes, and
 the forward-secrecy/rotation levers are in `design.md`; the A5.x
 rotation/revocation tests are in `acceptance.md`.
 
@@ -702,9 +702,9 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
 | **2026-08-03** | **Nested-namespace nskey resolution walks up, most-specific-first** ([19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)). A sender writing to `someid.d.c.b.a@alice` tries `d.c.b.a` … `a` and seals to the first nskey found; the CK is scoped to *that* namespace, so one conveyance serves every namespace beneath it. `appMetadata` gains `ns` (the record's own namespace) on every nskey-path record and `ckNs` (where the CK lives) on data values. Senders remember which namespaces an owner holds keys at, and that memo inherits `advertisementTtl` rather than adding a lifetime. | `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace cannot be recovered from the wire string — measured, not inferred. It never mattered because the legacy provider references `namespace` zero times; the nskey path references it 56, which is what makes the ambiguity newly critical. Exact-match was unavailable: AtCollection composes `<subName>.<parentId>.<ns>` per **item**, so it would need a keypair, an advertisement and a per-enrollment conveyance per item. Walking up is safe because it mirrors the atServer's own suffix authorisation, so the crypto gate never widens past the transport gate. `ckNs` is not redundant with `ns`: in the stale-sender window the reader would otherwise hunt for the conveyance in the wrong namespace and report "not yet synced" for an intact record, forever. |
 
-**Cross-refs:** the Wave-0 "already landed" detail and the project that follows
-each decision are in `implementation-plan.md`; the phase trajectory this timeline
-tracks is in `roadmap.md`.
+**Cross-refs:** the Wave-0 "already landed" detail and the project that followed
+each decision are in [the plan's detail file as it last stood](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md); the phase
+trajectory this timeline tracks is in `design.md`'s overview and Planned changes.
 
 ---
 

@@ -72,8 +72,8 @@ D1's data path has two providers, beside the built-in legacy one:
 An nskey is a KEM keypair that content keys are encapsulated to. It never encrypts application
 data. Each (Atsign, namespace) has one current nskey generation, which holds one key for each
 key-establishment algorithm the Atsign's clients mint. It is the recipient key in both
-directions: the owner seals her own content keys to it, and other Atsigns seal the content keys
-they share with her to it. So self data and a share use one mechanism, and differ only in which
+directions: the owner seals its own content keys to it, and other Atsigns seal the content keys
+they share with the owner to it. So self data and a share use one mechanism, and differ only in which
 Atsign owns the content-key record.
 
 - The private half lives in each of the owner's enrollments that may use the namespace. It is
@@ -236,8 +236,8 @@ seam underpins both section 1's providers and section 2's substrate.
 Application data is encrypted under a symmetric content key (CK). The CK is sealed once to the
 recipient's namespace key (nskey) and written as a conveyance record of its own, and the nskey
 private reaches each authorised enrollment over the secret-sharing substrate. Each (Atsign,
-namespace) has one current nskey generation: the owner seals her own content keys to it, and
-other Atsigns seal the content keys they share with her to it. Self data and sharing use the
+namespace) has one current nskey generation: the owner seals its own content keys to it, and
+other Atsigns seal the content keys they share with the owner to it. Self data and sharing use the
 same flow; only whose nskey the CK is sealed to differs. D1 is a single tier, and forward
 secrecy is a rotation policy of this one path rather than a separate provider
 ([ruling 2](detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted)).
@@ -315,20 +315,20 @@ Owner `@alice`, namespace `app_1.my_apps`.
 
 | Object | Shape | Published? | Private held by | Role |
 |---|---|---|---|---|
-| **nskey advertisement** | `public:__nskey.app_1.my_apps@alice`: mutable, a signed envelope ([section 1.3.1](#131-the-advertisements-signed-envelope)) over `{v, createdAt, keys:[{kid, use, alg, pub, status?}], suites}` | from mint. Hidden from scans, revealed only by an authenticated `showhidden` scan; served on an exact `plookup` to any Atsign | each of Alice's enrollments authorised for the namespace | Alice seals her own CKs to it, and other Atsigns seal shared CKs to it |
+| **nskey advertisement** | `public:__nskey.app_1.my_apps@alice`: mutable, a signed envelope ([section 1.3.1](#131-the-advertisements-signed-envelope)) over `{v, createdAt, keys:[{kid, use, alg, pub, status?}], suites}` | from mint. Hidden from scans, revealed only by an authenticated `showhidden` scan; served on an exact `plookup` to any Atsign | each of Alice's enrollments authorised for the namespace | Alice seals Alice's own CKs to it, and other Atsigns seal shared CKs to it |
 | **nskey mint lock** | `_nskeylock.app_1.my_apps@alice`: self key, immutable create, ttl `mintLockTtl` (2 minutes) plus a per-member budget | no | n/a | serialises mint, add and rotate between Alice's enrollments |
 | **signing-root mint lock** | `_rootlock@alice`: self key, no namespace, immutable create, ttl `signingRootMintLockTtl` (15 seconds) | no | n/a | serialises minting the signing root between Alice's fully privileged enrollments |
 | **CK conveyance** | `<ckKid>.__ck.app_1.my_apps@alice` (self data) | no | n/a | the `at/nskey/*` value: the CK sealed to the nskey key `nskeyKid` names |
-| **CK sibling copy** | `<ckKid>.__ck.<ckNs>@alice`, naming its recipient in `appMetadata` | no | n/a | Alice's own sealed copy of a CK she shared ([section 1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)) |
+| **CK sibling copy** | `<ckKid>.__ck.<ckNs>@alice`, naming its recipient in `appMetadata` | no | n/a | Alice's own sealed copy of a CK Alice shared ([section 1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)) |
 | **current-CK pointer** | `__ckcur.<destination>.<ckNs>.<enrollmentId>.a.__e@alice` | no | n/a | ids only: which CK this enrollment writes under for a destination ([section 1.5](#15-the-ck-model-cache-ckkid--appmetadata-encoding)) |
 | **verified-advertisement record** | `local:__nskeyverified.<ns>.<enrollmentId>.a.__e@alice` | no, and never synced | n/a | the client's signed record that it verified its own advertisement ([section 1.5.1](#151-the-local-record-of-a-verified-advertisement)) |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a key derived per value from a CK; cites `ckKid` |
 | **substrate envelope** | `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer 1: a secret, such as an nskey private, sealed to key package `kpid` ([section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)) |
 | **enrollment key package** | in the enrollment record ([section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)) | through `enroll:listns` | the enrollment | the recipient of Layer 1 |
 
-Across Atsigns the shapes mirror this, with `@bob` owning what he writes for Alice: the data
+Across Atsigns the shapes mirror this, with `@bob` owning what Bob writes for Alice: the data
 value `@alice:<key>.app_1.my_apps@bob` and the conveyance `@alice:<ckKid>.__ck.<ckNs>@bob`,
-both resting on Alice's nskey as fetched from her advertisement. The conveyance carries
+both resting on Alice's nskey as fetched from Alice's advertisement. The conveyance carries
 `ttr -1` and `ccd: true`, so Alice's atServer caches it from the notification and drops the
 copy when Bob deletes the original
 ([ruling 142.1](detail/decisions.md#1421-a-shared-conveyance-is-cached-at-its-recipient)).
@@ -344,7 +344,7 @@ up by `sharedBy`
 ([ruling 15](detail/decisions.md#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)).
 
 **The nskey private.** A generation holds one KEM private for each algorithm it carries. Each
-decapsulates content keys only, the owner's own and those sealed to her by others, and never
+decapsulates content keys only, the owner's own and those sealed to it by others, and never
 decrypts application data. A private is filed in the enrollment's keyfile as its seed, under
 the id `nskey.<namespace>.<nskeyKid>`, because an ML-KEM decapsulation key cannot be turned
 back into its public half.
@@ -662,7 +662,7 @@ the advertised kid with the one its current CK was conveyed under. A mismatch cu
 - **The owner's own advertisement** is read local-first, which sync keeps current, through the
   same cache, and is re-read early whenever sync lands a change to it. Bytes already verified
   are not verified again, so the owner's writes need no network while nothing has changed. The
-  privates her clients hold come from the substrate
+  privates Alice's clients hold come from the substrate
   ([section 2](#2-subsystem-b--the-secret-sharing-substrate)).
 
 #### 1.5.1 The local record of a verified advertisement
@@ -688,7 +688,7 @@ atServer checks it again.
 
 ### 1.6 The uniform data flow + cold-start + resolution/ordering
 
-One write and read pattern serves self data (Alice to herself) and sharing (Bob to Alice); only
+One write and read pattern serves self data (Alice to Alice) and sharing (Bob to Alice); only
 whose nskey is the target differs.
 
 **Write.** The CK manager (`CkManager`) runs before the put pipeline starts, and the data
@@ -864,11 +864,11 @@ cannot read data sealed after it. The order is the enforcement
 - **Two privileges.** Rotating needs `rw` on the namespace; revoking needs `rw` on `__manage`.
 
 **Forward secrecy across Atsigns is bilateral.** For self data the owner cuts the CK and owns
-the conveyance, so she can make her data forward-secret on her own. For inbound data the sender
-(`@bob`) cuts the CK on his own cadence, and the authoritative conveyance is a record he owns on
-his atServer; Alice holds only a cached replica opened with her own nskey private. Alice can
-purge her copy but cannot delete Bob's, so closing inbound forward secrecy depends on Bob, or on
-Alice rotating her namespace key (B5b). That is normal for any forward-secrecy system.
+the conveyance, so Alice can make Alice's data forward-secret alone. For inbound data the sender
+(`@bob`) cuts the CK on Bob's own cadence, and the authoritative conveyance is a record Bob owns on
+Bob's atServer; Alice holds only a cached replica opened with Alice's own nskey private. Alice can
+purge Alice's copy but cannot delete Bob's, so closing inbound forward secrecy depends on Bob, or on
+Alice rotating Alice's namespace key (B5b). That is normal for any forward-secrecy system.
 
 Per-message forward secrecy, O(log n) groups and groups decoupled from namespace authorisation
 are D2 ([Planned changes](#planned-changes)).
@@ -1074,12 +1074,12 @@ Each protected header carries:
 
 - `alg`: `ML-DSA-65` or `RS256`;
 - `typ`: what the envelope was signed for, here `at-secret-envelope+jws`;
-- `kid`: the signing key's kid;
+- `kid`: the client data signing key's kid;
 - `enid`: the signing enrollment, absent when the signer has no enrollment id
   to stamp;
 - `v`: `1`.
 
-There is one entry per signing key the sender holds. Every entry covers the
+There is one entry per client data signing key the sender holds. Every entry covers the
 same payload and names the same `enid` and `typ`. The sender signs with its
 enrollment's client data signing keys, which are the keys its `_apsk` advertises.
 An enrollment that holds none signs with its client authentication signing key
@@ -1397,7 +1397,7 @@ four-field spelling above is what a reader sees in practice.
 - A retired entry is skipped when choosing what to seal to or sign with, and kept
   for everything already sealed to or signed by it. An envelope lives seven days,
   so dropping a rotated key's entry would strand a week of traffic. Dropping a
-  rotated signing key's entry would retroactively unverify everything it ever
+  rotated client data signing key's entry would retroactively unverify everything it ever
   signed.
 - A value a reader does not recognise is carried through verbatim. It is neither
   offered for new operations nor trusted to verify what the key already did,
@@ -2023,15 +2023,15 @@ package is never published; the Atsign's other enrollments find it through the
 gated `enroll:listns` verb.
 
 The keys that matter are each Atsign's `at_talk` **nskey**. `@alice`'s public
-half is published as `public:__nskey.at_talk@alice` once she has minted it, and
+half is published as `public:__nskey.at_talk@alice` once Alice has minted it, and
 `@bob`'s likewise. **There is no group and no epoch key.** Alice→Bob data is
 encrypted under a content key (CK), conveyed once via `at/nskey` sealed to
 **Bob's published nskey**, at `@bob:<ckKid>.__ck.at_talk@alice`; Bob→Alice is
 symmetrical. The same CK is also sealed to Alice's own `at_talk` nskey as a
 sibling copy, `<ckKid>.__ck.at_talk@alice`, which names its recipient, so
-Alice's other enrollments can open what she sent
+Alice's other enrollments can open what Alice sent
 ([ruling 142](detail/decisions.md#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30)).
-CKs are scoped per recipient, so what Alice sends Bob and what she sends Carol
+CKs are scoped per recipient, so what Alice sends Bob and what Alice sends Carol
 use different CKs
 ([ruling 14](detail/decisions.md#14-content-keys-are-scoped-per-recipient-2026-08-02)).
 A CK is minted the first time a destination is written to.
@@ -2069,7 +2069,7 @@ Take `Kb3`, a new `@bob` keypair. It reads in two independent steps.
    `at/symmetric/AES/GCM` then decrypts the data values. **No epoch rotation on
    join, no per-message key push, no Add+Commit.** For `Ka3` (`@alice`), the
    same nskey private also opens Alice's self CKs and the sibling copies of
-   what she sent.
+   what Alice sent.
 
 **New and past data:**
 
@@ -2449,7 +2449,7 @@ a connection — `Atsign.open` through `AtClientImpl.create`,
 `Atsign.authenticatesAs`, and the authenticated lookup an enrollment or a
 decision runs on. It answers the one enrollment holding active authentication
 material, else the flat stored `enrollmentId`, else `primary`, the atServer's
-name for the Atsign's own credential; it throws rather than pick when several
+name for the primary enrollment; it throws rather than pick when several
 qualify. `resolveAuthenticatingEnrollment()` is the typed-only half of that
 answer. The keys decide because a caller-supplied id, with a cold start falling
 back to the flat block, left every keyfile-only caller running as the legacy
@@ -2745,8 +2745,8 @@ keys
 item 2): a key is retained for what it *signed*, and the authentication key
 signed nothing that outlives the move. What makes that hold is that a posture
 move **replaces** the enrollment: a credential whose posture wants a stronger
-authentication algorithm retrofits into a new enrollment that owns a data
-signing key from birth
+authentication algorithm retrofits into a new enrollment that owns a client
+data signing key from birth
 ([ruling 134](detail/decisions.md#134-a-posture-move-replaces-the-enrollment-so-the-authentication-key-is-never-retained-2026-09-08)).
 A fully privileged predecessor keeps its `_apsk` where verifiers read it; a
 non-root predecessor's moves to `.r.__e` when its successor first
@@ -2787,7 +2787,7 @@ senders sealing data nobody can open.
 
 Which writer depends on whether there is an enrollment record. An enrolled
 client sends `enroll:update`, because the atServer is the only writer of an
-enrollment's `_apsk`; a client running as the Atsign's own credential publishes
+enrollment's `_apsk`; a client running as the primary enrollment publishes
 the record itself, under `primary`.
 
 When an algorithm leaves the in-use set, signing with it stops; the key and its
@@ -3010,7 +3010,7 @@ at warning the enrollments it leaves.
 (`EnrollmentPrivilegeResolver.isFullyPrivileged`), while approval takes only
 `__manage`**, so a `__manage`-only approver approves without being fully
 privileged, and links with a key of its own that walks to the root. A client
-running as the Atsign's own credential, with no enrollment id or as `primary`,
+running as the primary enrollment, with no enrollment id or as `primary`,
 is fully privileged by construction, but is treated as the Atsign itself, never
 as an enrollment
 ([ruling 132](detail/decisions.md#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)),
@@ -3076,8 +3076,8 @@ dropping its own authentication key.
   is refused, so they cannot be omitted; the connection making the request has
   proved possession of the Atsign's own root credential and is already
   unscoped, so there is nothing narrower to bound it by.
-- ⛔ **There is no guard skipping the mint when the client runs as the Atsign's
-  own credential (no enrollment id, or `primary`).**
+- ⛔ **There is no guard skipping the mint when the client runs as the
+  primary enrollment (no enrollment id, or `primary`).**
   [Ruling 127](detail/decisions.md#127-a-client-with-no-enrollment-id-still-mints-and-publishes-its-own-signing-key-2026-08-30)
   rejected one: publishing `_apsk` directly under `primary`, without routing it
   through an enrollment record, is a working, pinned capability, and skipping
