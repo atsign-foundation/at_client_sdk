@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/secret_buffer.dart';
 import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
@@ -32,7 +33,8 @@ import 'package:ffi/ffi.dart';
 /// (OpenSSL < 3.5) fails lazily, as a [StateError] from the first
 /// [generateKeyPair]/[signBytes]/[verifyBytes] call. Gate on
 /// `libCryptoSupportsMlDsa65` if you pin the library yourself.
-final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
+final class MlDsa65FfiAlgo
+    implements AtSigningAlgorithm, AtSeededSignatureAlgorithm {
   final DynamicLibrary _lib;
 
   Uint8List? _secretKey;
@@ -55,6 +57,13 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   late final EvpDigestSignDart _digestSign;
   late final EvpDigestVerifyInitDart _digestVerifyInit;
   late final EvpDigestVerifyDart _digestVerify;
+  late final OsslParamBldNewDart _bldNew;
+  late final OsslParamBldFreeDart _bldFree;
+  late final OsslParamBldToParamDart _bldToParam;
+  late final OsslParamBldPushOctetPtrDart _bldPushOctetPtr;
+  late final OsslParamFreeDart _paramFree;
+  late final EvpPkeyFromdataInitDart _fromdataInit;
+  late final EvpPkeyFromdataDart _fromdata;
 
   MlDsa65FfiAlgo.fromLib(this._lib) {
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
@@ -93,6 +102,23 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     _digestVerify =
         _lib.lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
             'EVP_DigestVerify');
+    _bldNew = _lib.lookupFunction<OsslParamBldNewNative, OsslParamBldNewDart>(
+        'OSSL_PARAM_BLD_new');
+    _bldFree =
+        _lib.lookupFunction<OsslParamBldFreeNative, OsslParamBldFreeDart>(
+            'OSSL_PARAM_BLD_free');
+    _bldToParam =
+        _lib.lookupFunction<OsslParamBldToParamNative, OsslParamBldToParamDart>(
+            'OSSL_PARAM_BLD_to_param');
+    _bldPushOctetPtr = _lib.lookupFunction<OsslParamBldPushOctetPtrNative,
+        OsslParamBldPushOctetPtrDart>('OSSL_PARAM_BLD_push_octet_ptr');
+    _paramFree = _lib.lookupFunction<OsslParamFreeNative, OsslParamFreeDart>(
+        'OSSL_PARAM_free');
+    _fromdataInit =
+        _lib.lookupFunction<EvpPkeyFromdataInitNative, EvpPkeyFromdataInitDart>(
+            'EVP_PKEY_fromdata_init');
+    _fromdata = _lib.lookupFunction<EvpPkeyFromdataNative, EvpPkeyFromdataDart>(
+        'EVP_PKEY_fromdata');
   }
 
   /// Generate a fresh ML-DSA-65 key pair via OpenSSL.
@@ -116,23 +142,82 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
         if (_keygen(ctx, pkeyPtr) <= 0) {
           throw StateError('EVP_PKEY_keygen failed');
         }
-        final Pointer<EVP_PKEY> pkey = pkeyPtr.value;
-        try {
-          final Uint8List pk = _extractRawPublicKey(pkey);
-          final Uint8List sk = _extractRawPrivateKey(pkey);
-          checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
-              operation: 'EVP_PKEY_keygen', label: 'public key');
-          checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
-              operation: 'EVP_PKEY_keygen', label: 'secret key');
-          return (publicKey: pk, secretKey: sk);
-        } finally {
-          _pkeyFree(pkey);
-        }
+        return _takeRawKeyPair(pkeyPtr.value, operation: 'EVP_PKEY_keygen');
       } finally {
         calloc.free(pkeyPtr);
       }
     } finally {
       _ctxFree(ctx);
+    }
+  }
+
+  /// A fresh [MlDsa65Sizes.seedBytes]-long seed from the platform's secure
+  /// random source, ready for [keyPairFromSeed].
+  @override
+  Uint8List newSeed() => MlDsa65Sizes.newSeed();
+
+  /// Deterministically derive the ML-DSA-65 key pair for [seed], the 32-byte
+  /// FIPS 204 `ξ`, via `EVP_PKEY_fromdata` with OpenSSL's `seed` parameter.
+  ///
+  /// Returns `(publicKey: 1952 raw bytes, secretKey: 4032 raw bytes)`, the
+  /// same bytes [MlDsa65PureDartAlgo.keyPairFromSeed] returns for [seed].
+  ///
+  /// The seed *is* the private key: whoever holds it can rebuild the secret
+  /// key and sign, PKAM included, as the enrollment it belongs to. Keep it
+  /// as secret as the secret key. It must be [MlDsa65Sizes.seedBytes]
+  /// secret, uniformly random bytes, never a constant such as `Uint8List(32)`.
+  /// A seed taken from other key material, such as a passkey PRF output, must
+  /// first go through a KDF (e.g. HKDF) with a label of its own, so the same
+  /// bytes never seed another key.
+  ///
+  /// Throws [ArgumentError] (named `seed`) unless [seed] is
+  /// [MlDsa65Sizes.seedBytes] long.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+      Uint8List seed) async {
+    MlDsa65Sizes.validateSeed(seed);
+    final Pointer<Utf8> algName = 'ML-DSA-65'.toNativeUtf8();
+    final Pointer<Utf8> paramName = 'seed'.toNativeUtf8();
+    final Pointer<Uint8> seedBuf = allocSecret(seed.length);
+    seedBuf.asTypedList(seed.length).setAll(0, seed);
+
+    final Pointer<Pointer<EVP_PKEY>> pkeyPtr = calloc<Pointer<EVP_PKEY>>();
+    Pointer<OSSL_PARAM>? params;
+    Pointer<EVP_PKEY_CTX>? ctx;
+    try {
+      final Pointer<OSSL_PARAM_BLD> bld = _bldNew();
+      if (bld == nullptr) throw StateError('OSSL_PARAM_BLD_new failed');
+      // By reference, not push_octet_string: to_param would copy the seed
+      // into params, and OSSL_PARAM_free frees that copy without clearing it.
+      // seedBuf is cleared in finally; the copy EVP_PKEY keeps is cleared by
+      // EVP_PKEY_free.
+      if (_bldPushOctetPtr(bld, paramName, seedBuf, seed.length) <= 0) {
+        _bldFree(bld);
+        throw StateError('OSSL_PARAM_BLD_push_octet_ptr failed');
+      }
+      params = _bldToParam(bld);
+      _bldFree(bld);
+      if (params == nullptr) throw StateError('OSSL_PARAM_BLD_to_param failed');
+
+      ctx = _ctxNewFromName(nullptr, algName, nullptr);
+      if (ctx == nullptr) {
+        throw StateError('EVP_PKEY_CTX_new_from_name failed');
+      }
+      if (_fromdataInit(ctx) <= 0) {
+        throw StateError('EVP_PKEY_fromdata_init failed');
+      }
+      if (_fromdata(ctx, pkeyPtr, evpPkeyKeypair, params) <= 0) {
+        throw StateError('EVP_PKEY_fromdata (seed) failed');
+      }
+      return _takeRawKeyPair(pkeyPtr.value,
+          operation: 'EVP_PKEY_fromdata (seed)');
+    } finally {
+      if (ctx != null) _ctxFree(ctx);
+      if (params != null) _paramFree(params);
+      freeSecret(seedBuf, seed.length);
+      calloc.free(paramName);
+      calloc.free(algName);
+      calloc.free(pkeyPtr);
     }
   }
 
@@ -209,6 +294,23 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
 
   // ── Internal helpers ────────────────────────────────────────────────────────
 
+  /// Extracts and length-checks [pkey]'s raw key pair, then frees [pkey].
+  ({Uint8List publicKey, Uint8List secretKey}) _takeRawKeyPair(
+      Pointer<EVP_PKEY> pkey,
+      {required String operation}) {
+    try {
+      final Uint8List pk = _extractRawPublicKey(pkey);
+      final Uint8List sk = _extractRawPrivateKey(pkey);
+      checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
+          operation: operation, label: 'public key');
+      checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
+          operation: operation, label: 'secret key');
+      return (publicKey: pk, secretKey: sk);
+    } finally {
+      _pkeyFree(pkey);
+    }
+  }
+
   Uint8List _extractRawPublicKey(Pointer<EVP_PKEY> pkey) {
     final Pointer<IntPtr> lenPtr = calloc<IntPtr>();
     try {
@@ -235,14 +337,15 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
       if (_getRawPrivateKey(pkey, nullptr, lenPtr) <= 0) {
         throw StateError('EVP_PKEY_get_raw_private_key (size) failed');
       }
-      final Pointer<Uint8> buf = calloc<Uint8>(lenPtr.value);
+      final int bufLen = lenPtr.value;
+      final Pointer<Uint8> buf = allocSecret(bufLen);
       try {
         if (_getRawPrivateKey(pkey, buf, lenPtr) <= 0) {
           throw StateError('EVP_PKEY_get_raw_private_key failed');
         }
         return Uint8List.fromList(buf.asTypedList(lenPtr.value));
       } finally {
-        calloc.free(buf);
+        freeSecret(buf, bufLen);
       }
     } finally {
       calloc.free(lenPtr);
@@ -251,7 +354,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
 
   Pointer<EVP_PKEY> _loadPrivateKey(Uint8List keyBytes) {
     final Pointer<Utf8> algName = 'ML-DSA-65'.toNativeUtf8();
-    final Pointer<Uint8> buf = calloc<Uint8>(keyBytes.length);
+    final Pointer<Uint8> buf = allocSecret(keyBytes.length);
     buf.asTypedList(keyBytes.length).setAll(0, keyBytes);
     try {
       final Pointer<EVP_PKEY> pkey =
@@ -261,7 +364,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
       }
       return pkey;
     } finally {
-      calloc.free(buf);
+      freeSecret(buf, keyBytes.length);
       calloc.free(algName);
     }
   }

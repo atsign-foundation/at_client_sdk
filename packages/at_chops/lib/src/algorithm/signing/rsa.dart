@@ -149,7 +149,7 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
           'secretKey is not a readable RSA private key. Expected the raw DER '
           'bytes of a PKCS#8 PrivateKeyInfo — if what you hold is a base64 '
           'string (RsaKeyPair.atPrivateKey.privateKey, or the contents of a '
-          '.atKeys file), base64Decode it first. Parse error: $e');
+          '.atKeys file), base64Decode it first. Parse error: ${e.runtimeType}');
     }
     final int bits = key.asPointyCastle.n!.bitLength;
     if (bits != _modulusBits) {
