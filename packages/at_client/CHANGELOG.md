@@ -1,5 +1,8 @@
 ## 4.0.1
 
+- feat: `buildAtClient` takes `notificationLookUps`, a factory that builds the
+  monitor's connection in place of `lookUps`, so a browser can share one
+  monitor across its tabs.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata
