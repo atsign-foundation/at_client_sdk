@@ -178,7 +178,9 @@ void main() {
               .signBytes(message, secretKey: Uint8List.fromList([1, 2, 3])),
           throwsA(predicate((e) =>
               e is AtSigningException &&
-              e.toString().contains('PKCS#8 PrivateKeyInfo'))));
+              e.toString().contains('PKCS#8 PrivateKeyInfo') &&
+              // The parse error's type only, never its text.
+              RegExp(r'Parse error: \w+$').hasMatch(e.toString()))));
     });
 
     // verifyBytes is the boundary where wire-supplied bytes arrive, so every
