@@ -37,12 +37,13 @@ class AtChopsImpl extends AtChops {
 
   final AtSignLogger _logger = AtSignLogger('AtChopsImpl');
 
-  /// The cause to report for [e] in an encryption or decryption exception.
+  /// The cause to report for [e] in an encryption, decryption or signing
+  /// exception.
   ///
   /// An [AtException]'s message is at_chops' or at_commons' own text, so it
-  /// is kept. Any other exception is named by its type only, because its
-  /// text can quote its input, and that input can be a key.
-  static String _describeCause(Exception e) =>
+  /// is kept. Anything else is named by its type only, because its text can
+  /// quote its input, and that input can be a key.
+  static String _describeCause(Object e) =>
       e is AtException ? e.message : e.runtimeType.toString();
 
   @override
@@ -72,7 +73,8 @@ class AtChopsImpl extends AtChops {
         atEncryptionResult.result = encryptionAlgorithm.decrypt(data);
       }
       return atEncryptionResult;
-    } on Exception catch (e) {
+    } catch (e) {
+      if (e is! Exception && e is! Error) rethrow;
       final String cause = _describeCause(e);
       throw AtDecryptionException(cause)
         ..stack(AtChainedException(Intent.decryptData,
@@ -125,7 +127,8 @@ class AtChopsImpl extends AtChops {
         atEncryptionResult.result = encryptionAlgorithm.encrypt(data);
       }
       return atEncryptionResult;
-    } on Exception catch (e) {
+    } catch (e) {
+      if (e is! Exception && e is! Error) rethrow;
       final String cause = _describeCause(e);
       throw AtEncryptionException(cause)
         ..stack(AtChainedException(Intent.decryptData,
@@ -185,6 +188,9 @@ class AtChopsImpl extends AtChops {
           base64Encode(signingAlgorithm.sign(data) as List<int>);
     } on AtSigningException {
       rethrow;
+    } catch (e) {
+      if (e is! Exception && e is! Error) rethrow;
+      throw AtSigningException(_describeCause(e));
     }
     return atSigningResult;
   }
