@@ -593,14 +593,18 @@ class NotificationServiceImpl extends NotificationService {
     if (atValue?.value != null) {
       logger.finer('json from hive: ${atValue?.value}');
       final watermark = jsonDecode(atValue?.value);
-      // Records every id delivered at the watermark's millisecond as
-      // delivered, so their replay is dropped.
-      final ids = watermark['idsAtEpochMillis'];
-      _watermarkIds = ids is List
-          ? ids.whereType<String>().toList()
-          : [if (watermark['id'] is String) watermark['id']];
-      _watermarkMillis = watermark['epochMillis'];
-      _watermarkIds.forEach(_isDuplicate);
+      // On the first read only, records every id delivered at the
+      // watermark's millisecond as delivered, so their replay is dropped.
+      // Later reads keep the in-memory ids, which include any write still
+      // in flight.
+      if (_watermarkMillis == null) {
+        final ids = watermark['idsAtEpochMillis'];
+        _watermarkIds = ids is List
+            ? ids.whereType<String>().toList()
+            : [if (watermark['id'] is String) watermark['id']];
+        _watermarkMillis = watermark['epochMillis'];
+        _watermarkIds.forEach(_isDuplicate);
+      }
       return watermark['epochMillis'];
     }
 
