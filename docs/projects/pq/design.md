@@ -215,8 +215,8 @@ mechanism carries its reason in a sentence and links the ruling that settled it.
   ML-KEM-1024, `pqSeal`/`pqOpen`, ML-DSA.
 - [Section 4](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel):
   the `CryptoProvider` seam, `AtKeys`/`AtKeysIo` and the key stores, the WASM barrel split.
-- [Section 5](#5-subsystem-e--worked-walkthrough-at_talk): worked
-  walkthroughs, NoPorts and at_talk.
+- [Section 5](#5-subsystem-e--worked-walkthrough-at_talk): a worked
+  walkthrough of the nskey data path, at_talk.
 - [Section 6](#6-implementation-notes--file-level-pointers-consolidated): implementation
   notes.
 - [Section 7](#7-trust-model): the trust model.
@@ -1844,8 +1844,10 @@ These live in `lib/src/crypto/crypto.dart`.
   successful encrypt, so a provider only contributes `additional`.
 - **An unknown scheme** throws `CryptoProviderNotRegistered`.
 - **Per-operation override.** `PutRequestOptions.cryptoProviderId` chooses the
-  provider for one operation, which is the per-destination choice the NoPorts
-  walkthrough uses ([section 5](#5-subsystem-e--worked-walkthrough-at_talk)).
+  provider for one operation, so a caller can choose per destination, as a
+  NoPorts daemon replying in the scheme a request arrived in would
+  ([ruling 149](detail/decisions.md#149-how-a-shared-value-was-protected-is-read-from-its-metadata-and-a-reply-goes-in-kind-2026-10-05);
+  NoPorts' move is in [Planned changes](#planned-changes)).
   A provider the caller named that declines the key throws, while a defaulted one
   falls back to legacy.
 - **Optional provider interfaces.** `PreparesWrites` does work before the write

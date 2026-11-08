@@ -2390,6 +2390,7 @@ one over every file a `provenIn` citation names.
 | `packages/at_client/test/nskey_private_filing_test.dart` | how an nskey private is filed and read back, under UC-A3.5. |
 | `packages/at_client/test/at_client_impl_test.dart` | the era axis — a postured client writing PQ by default (UC-C1.1). |
 | `packages/at_client/test/lifecycle/authenticates_as_test.dart` | which enrollment each keyfile shape authenticates as — the flat stored id, a retrofit's successor, or `primary` for a keyfile naming none — after one PKAM as it and nothing built (UC-G1.1). |
+| `packages/at_client/test/lifecycle/enroll_test.dart` | the production submitter, `Atsign.enroll`, choosing the request shape from the posture: under `pqActive` the captured `enroll:request` carries a key package and no RSA-wrapped symmetric key, where `legacy` sends the wrapped-key shape. Cited by **UC-C1.4**. |
 | `packages/at_auth/test/at_self_enrollment_test.dart` | a retrofit leaving one active auth key and touching nothing legacy (UC-G1.2). |
 | `tests/at_functional_test/test/pkam_record_authoritative_test.dart` | the cross-cutting invariant that ML-DSA APKAM auth is record-authoritative. |
 | `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, that a gated-off step is skipped rather than waited on, and the enrollment snapshot's grant handling. |
@@ -2535,8 +2536,8 @@ varies by atServer version, and runs as a tagged special case against a pinned
 
 **Arm 1, the stage arm.**
 `tests/at_functional_test/test/pq_stage_arm_test.dart`: three enrollments of one
-Atsign, one client per `PqPosture`, asserting the axis and consequence rows in
-[the rows arm 1 covers](#the-rows-arm-1-covers). `disallowLegacyEncryption` has
+Atsign, one client per `PqPosture`. It asserts UC-C1.1 and UC-C1.2 today, and owes the
+rest of [the rows arm 1 owes](#the-rows-arm-1-owes). `disallowLegacyEncryption` has
 no setter and no constructor argument, so a posture is the only way to reach it;
 its live refusal is `CryptoRuntime.refuseLegacyIfDisallowed`, reached once at
 provider selection and again at encryption time, so the guarantee does not rest
@@ -2661,9 +2662,16 @@ every namespace it shares into, so a pqReady or pqActive enrollment approved
 with `{'*': 'rw'}` has no key in the grid's other namespaces. Each cell names
 its own namespaces, and the grid asserts that rather than relying on it.
 
-### The rows arm 1 covers
+### The rows arm 1 owes
 
-Arm 1 asserts the 14 rows below. Nine more rows were bucketed differently by two
+Arm 1 owes per-posture live assertions for the 14 rows below, and makes two of
+them today: `UC-C1.1` and `UC-C1.2`, the only rows whose `provenIn` citations
+name `pq_stage_arm_test.dart` (in `c1_rollout_test.dart`). The other 12 are
+owed, and the plan carries them as [one
+row](implementation-plan.md#p2--should-be-done-if-there-is-time); until a cell
+lands, each is proven only where its own citations prove it. `UC-C1.4` needs
+more than a cell: arm 1 holds `keyExchangeMode` constant ([the
+arms](#the-arms)), so its cells would have to vary it. Nine more rows were bucketed differently by two
 readings of an earlier classification — UC-A5.2, UC-A5.3, UC-B1.1, UC-B1.2,
 UC-B4.4, UC-G1.2 and UC-G1.5, and UC-A4.2 and UC-B4.3 — and gkc ruled on
 2026-11-07 that they stay proven where they are, with no arm-1 cells
@@ -2673,22 +2681,22 @@ UC-B4.4, UC-G1.2 and UC-G1.5, and UC-A4.2 and UC-B4.3 — and gkc ruled on
 reads any line shaped `| UC-… | … | word |` as a row of the use-case **status**
 table, so a plain-id table here would be counted as 14 more use cases.
 
-| Row | Kind | Live proof before arm 1 |
-|------------|-------------|-------------------------|
-| `UC-C1.1` | axis | partial |
-| `UC-C1.2` | axis | none |
-| `UC-C1.4` | axis | partial |
-| `UC-C1.5` | axis | direct |
-| `UC-C1.6` | axis | partial |
-| `UC-C1.7` | axis | partial |
-| `UC-A1.1` | consequence | partial |
-| `UC-A2.1` | consequence | partial |
-| `UC-A3.2` | consequence | partial |
-| `UC-A3.3` | consequence | partial |
-| `UC-B3.1` | consequence | partial |
-| `UC-B3.2` | consequence | partial |
-| `UC-B4.1` | consequence | partial |
-| `UC-G1.9a` | consequence | partial |
+| Row | Kind | Live proof before arm 1 | Arm 1 today |
+|------------|-------------|-------------------------|-------------|
+| `UC-C1.1` | axis | partial | asserted |
+| `UC-C1.2` | axis | none | asserted |
+| `UC-C1.4` | axis | partial | owed |
+| `UC-C1.5` | axis | direct | owed |
+| `UC-C1.6` | axis | partial | owed |
+| `UC-C1.7` | axis | partial | owed |
+| `UC-A1.1` | consequence | partial | owed |
+| `UC-A2.1` | consequence | partial | owed |
+| `UC-A3.2` | consequence | partial | owed |
+| `UC-A3.3` | consequence | partial | owed |
+| `UC-B3.1` | consequence | partial | owed |
+| `UC-B3.2` | consequence | partial | owed |
+| `UC-B4.1` | consequence | partial | owed |
+| `UC-G1.9a` | consequence | partial | owed |
 
 ### The generated ledger
 
