@@ -10,17 +10,23 @@
 /// over HTTPS and opens `wss://` straight to the atServer, which upgrades
 /// `/ws` on its own TLS port. [fixedAddressWebSocketLookUps] skips the
 /// atDirectory and connects every atSign to one atServer, for development.
+///
+/// [tabSharedLookUps] wraps either so that the tabs of one origin share one
+/// monitor connection, the one notifications arrive on, while each keeps a
+/// connection of its own for its requests.
 library;
 
 import 'package:at_commons/at_commons.dart' show AtRootDomain;
 
 import 'at_lookup.dart';
 
+import 'src/web/browser_shared_monitor_ports.dart';
 import 'src/web/https_secondary_address_finder.dart';
 import 'src/web/web_socket_transport_factory.dart'
     show WebSocketTransportFactory;
 
 export 'at_lookup.dart';
+export 'src/web/browser_shared_monitor_ports.dart';
 export 'src/web/https_secondary_address_finder.dart';
 export 'src/web/web_socket_transport.dart' show WebSocketTransport;
 export 'src/web/web_socket_transport_factory.dart'
@@ -70,6 +76,40 @@ AtLookUpFactory fixedAddressWebSocketLookUps({
         path: path,
         finderFor: (_) => FixedSecondaryAddressFinder(host, port),
         onConnect: onConnect);
+
+/// An [AtLookUpFactory] whose muxables share one monitor connection across
+/// the browser's tabs: one tab holds the Web Lock
+/// `at-monitor:<atSign>:<scope>`, runs notifications on the muxable [inner]
+/// builds for it and relays them on a `BroadcastChannel` of the same name;
+/// the other tabs listen. The lock passes when the holder closes, and is
+/// taken from a holder the browser has frozen when [steal] is true.
+///
+/// For `buildAtClient`'s `notificationLookUps`; the client's own requests
+/// keep going through [inner]. [scope] separates the clients of one atSign
+/// that must not share: pass the enrollment id the client runs as, or
+/// `'primary'`. The tabs that are to share must pass the same value.
+///
+/// [beaconInterval] is how often the leading tab says it is alive; a tab
+/// that misses three beacons and gets no answer to a hello steals the lock
+/// one interval later. [staleAfter] is how long the leader's connection may
+/// be silent before the page coming back into view makes it reconnect.
+AtLookUpFactory tabSharedLookUps(
+  AtLookUpFactory inner, {
+  required String scope,
+  Duration beaconInterval = const Duration(seconds: 30),
+  Duration staleAfter = const Duration(seconds: 60),
+  bool steal = true,
+}) =>
+    sharedMonitorLookUps(
+      inner,
+      lock: const BrowserMonitorLock(),
+      channels: BrowserMonitorChannel.new,
+      lifecycle: BrowserPageLifecycle(),
+      scope: scope,
+      beaconInterval: beaconInterval,
+      staleAfter: staleAfter,
+      steal: steal,
+    );
 
 AtLookUpFactory _webSocketLookUps({
   required String path,
