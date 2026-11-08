@@ -7,6 +7,9 @@
 - fix: notifications waiting for their key are no longer dropped sooner
   because several listeners want them, and one given up because its
   listener cancelled is reported on `droppedEvents`.
+- fix: the legacy encryption and decryption paths name the underlying
+  error's type in their `AtEncryptionException` and `AtDecryptionException`
+  rather than quoting its text.
 
 ## 4.0.0
 
