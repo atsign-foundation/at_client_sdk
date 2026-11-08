@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_version.dart';
 import 'package:ffi/ffi.dart';
 
 /// Candidate libcrypto paths tried in order when [_envVar] is unset or fails.
@@ -73,24 +74,8 @@ DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
 /// Call this before constructing [MlKem768FfiAlgo] to gate FFI tests or
 /// runtime fallback decisions.
 bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
-  return _libCryptoVersionAtLeast(lib, _openSsl3_5_1) &&
+  return libCryptoVersionSupportsMlKem768(lib) &&
       _libCryptoSupportsAlgorithm(lib, 'ML-KEM-768');
-}
-
-/// OpenSSL 3.5.1 as `OpenSSL_version_num` encodes it: `0xMNN00PP0`.
-const int _openSsl3_5_1 = 0x30500010;
-
-/// Whether [lib]'s `OpenSSL_version_num()` is at least [minimum]. `false` if
-/// the symbol is missing.
-bool _libCryptoVersionAtLeast(DynamicLibrary lib, int minimum) {
-  try {
-    final versionNum =
-        lib.lookupFunction<UnsignedLong Function(), int Function()>(
-            'OpenSSL_version_num');
-    return versionNum() >= minimum;
-  } catch (_) {
-    return false;
-  }
 }
 
 /// Returns `true` when [lib] supports the ML-DSA-65 algorithm.
