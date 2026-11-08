@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/secret_buffer.dart';
 import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:ffi/ffi.dart';
@@ -52,6 +53,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   late final OsslParamBldFreeDart _bldFree;
   late final OsslParamBldToParamDart _bldToParam;
   late final OsslParamBldPushOctetStringDart _bldPushOctet;
+  late final OsslParamBldPushOctetPtrDart _bldPushOctetPtr;
   late final OsslParamFreeDart _paramFree;
   late final EvpPkeyFromdataInitDart _fromdataInit;
   late final EvpPkeyFromdataDart _fromdata;
@@ -93,6 +95,8 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
             'OSSL_PARAM_BLD_to_param');
     _bldPushOctet = _lib.lookupFunction<OsslParamBldPushOctetStringNative,
         OsslParamBldPushOctetStringDart>('OSSL_PARAM_BLD_push_octet_string');
+    _bldPushOctetPtr = _lib.lookupFunction<OsslParamBldPushOctetPtrNative,
+        OsslParamBldPushOctetPtrDart>('OSSL_PARAM_BLD_push_octet_ptr');
     _paramFree = _lib.lookupFunction<OsslParamFreeNative, OsslParamFreeDart>(
         'OSSL_PARAM_free');
     _fromdataInit =
@@ -169,7 +173,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
     }
     final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
     final Pointer<Utf8> paramName = 'seed'.toNativeUtf8();
-    final Pointer<Uint8> seedBuf = calloc<Uint8>(seed.length);
+    final Pointer<Uint8> seedBuf = allocSecret(seed.length);
     seedBuf.asTypedList(seed.length).setAll(0, seed);
 
     final Pointer<Pointer<EVP_PKEY>> pkeyPtr = calloc<Pointer<EVP_PKEY>>();
@@ -178,9 +182,12 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
     try {
       final Pointer<OSSL_PARAM_BLD> bld = _bldNew();
       if (bld == nullptr) throw StateError('OSSL_PARAM_BLD_new failed');
-      if (_bldPushOctet(bld, paramName, seedBuf, seed.length) <= 0) {
+      // By reference, not push_octet_string: to_param would copy the seed
+      // into params, and OSSL_PARAM_free frees that copy without clearing it.
+      // seedBuf is cleared in finally.
+      if (_bldPushOctetPtr(bld, paramName, seedBuf, seed.length) <= 0) {
         _bldFree(bld);
-        throw StateError('OSSL_PARAM_BLD_push_octet_string failed');
+        throw StateError('OSSL_PARAM_BLD_push_octet_ptr failed');
       }
       params = _bldToParam(bld);
       _bldFree(bld);
@@ -203,7 +210,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
     } finally {
       if (ctx != null) _ctxFree(ctx);
       if (params != null) _paramFree(params);
-      calloc.free(seedBuf);
+      freeSecret(seedBuf, seed.length);
       calloc.free(paramName);
       calloc.free(algName);
       calloc.free(pkeyPtr);
@@ -230,7 +237,8 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
             throw StateError('EVP_PKEY_encapsulate size query failed');
           }
           final Pointer<Uint8> ctBuf = calloc<Uint8>(ctLen.value);
-          final Pointer<Uint8> ssBuf = calloc<Uint8>(ssLen.value);
+          final int ssBufLen = ssLen.value;
+          final Pointer<Uint8> ssBuf = allocSecret(ssBufLen);
           try {
             if (_encapsulate(ctx, ctBuf, ctLen, ssBuf, ssLen) <= 0) {
               throw StateError('EVP_PKEY_encapsulate failed');
@@ -245,7 +253,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
             );
           } finally {
             calloc.free(ctBuf);
-            calloc.free(ssBuf);
+            freeSecret(ssBuf, ssBufLen);
           }
         } finally {
           calloc.free(ctLen);
@@ -285,7 +293,8 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
         if (_decapsulate(ctx, nullptr, ssLen, ctBuf, ciphertext.length) <= 0) {
           throw StateError('EVP_PKEY_decapsulate size query failed');
         }
-        final Pointer<Uint8> ssBuf = calloc<Uint8>(ssLen.value);
+        final int ssBufLen = ssLen.value;
+        final Pointer<Uint8> ssBuf = allocSecret(ssBufLen);
         try {
           if (_decapsulate(ctx, ssBuf, ssLen, ctBuf, ciphertext.length) <= 0) {
             throw StateError('EVP_PKEY_decapsulate failed');
@@ -294,7 +303,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
               operation: 'EVP_PKEY_decapsulate', label: 'shared secret');
           return Uint8List.fromList(ssBuf.asTypedList(ssLen.value));
         } finally {
-          calloc.free(ssBuf);
+          freeSecret(ssBuf, ssBufLen);
         }
       } finally {
         calloc.free(ssLen);
