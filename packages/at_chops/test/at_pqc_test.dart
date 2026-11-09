@@ -199,7 +199,7 @@ void main() {
     test('X-Wing: FFI encapsulate, pure-Dart decapsulate', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!xWingFfi) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5.1)');
       }
 
       final XWingKeyPair kp = await XWingKeyPair.generate();
@@ -213,7 +213,7 @@ void main() {
     test('X-Wing: pure-Dart encapsulate, FFI decapsulate', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!xWingFfi) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5.1)');
       }
 
       final XWingKeyPair kp = await XWingKeyPair.generate();
