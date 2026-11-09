@@ -1394,7 +1394,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     `enroll:listns` returns approved enrollments only, so that subtree is off
     every roster at once — the rotation's conveyance cannot reach it and no
     holder will serve it the published generation. The atServer refuses to
-    un-revoke an enrollment whose predecessor **exists and** is not currently
+    un-revoke an enrollment whose approver **exists and** is not currently
     `approved`; it refuses a revoke whose cascade would remove **the caller**;
     and it refuses one that would leave no permanent fully privileged
     enrollment.
@@ -1441,11 +1441,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     then does the rest, for every client at once — including ones that never
     heard of the revocation.
 
-    ⚠️ **No enrollment carrying a predecessor is ever pending.** The APKAM
-    self-enrollment branch sets `approved` and writes `parentEnrollmentId` in
-    the same breath, and is the field's only writer — the ordinary request
-    branch, which sets `pending`, never records a predecessor. The approve path
-    carries the same predecessor test anyway, making the invariant total.
+    ⚠️ **No enrollment carrying a `parentEnrollmentId` is ever pending.** The
+    APKAM self-enrollment branch sets `approved` as it writes the field,
+    `enroll:approve` writes the approver's id as the enrollment leaves
+    `pending`, and a successor's first authentication only moves a value its
+    predecessor's approval children already carry; the ordinary request branch,
+    which sets `pending`, never writes it. The approve path carries the same
+    approver test anyway, making the invariant total.
 
   **Why the pair, and not either half, denies an attacker NEW data keys.**
   Revoking the enrollment and all of its descendants, *followed by* the rotation,

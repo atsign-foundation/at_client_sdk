@@ -3343,8 +3343,11 @@ ruling, each with a differential test.
    APKAM → approved subset child).
 
 2. **Revocation cascades eagerly, and revocation has two modes.** The parent link
-   lives where the spike put it: `parentEnrollmentId` on the enrollment record, set
-   only by self-enrollment. `enroll:revoke` in its default (compromise) mode
+   lives where the spike put it: `parentEnrollmentId` on the enrollment record. On
+   at_server trunk (`88667359`) `enroll:approve` sets it to the approving
+   enrollment's id, a self-enrollment copies its predecessor's, and a successor's
+   first authentication moves the predecessor's approval children onto it.
+   `enroll:revoke` in its default (compromise) mode
    enumerates enrollments, collects descendants transitively, marks each revoked,
    and drops each one's live connections — the existing per-id mechanics, applied
    over the walk. A lazy ancestor check at authentication was ruled out
@@ -3371,11 +3374,12 @@ ruling, each with a differential test.
    a successor copies its predecessor's `parentEnrollmentId`, so the two are
    siblings, and the replacement is settled at the successor's first
    authentication instead. The atServer refuses to un-revoke an enrollment whose
-   predecessor exists and is not currently `approved` (129 part 2). The
+   approver exists and is not currently `approved` (129 part 2). The
    non-cascading `retire` mode does not exist on at_server trunk (read at
    `886673594`). **Amended 2026-11-07:** this item said the cascade was unbuilt.
-   **Amended 2026-11-09:** it said `parentEnrollmentId` shows what a stolen
-   keyfile spawned.
+   **Amended 2026-11-09:** it said `parentEnrollmentId` is set only by
+   self-enrollment and shows what a stolen keyfile spawned, and that the
+   un-revoke refusal tests the predecessor.
 
 3. **The cap slides.** [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
    formula — min(now + grace, the enrollment's own expiry) — is applied on every
@@ -13561,25 +13565,40 @@ walk one*
    EXISTS and is not currently `approved`.** Without that guard the cascade is
    one-way only: un-revoking a descendant while its predecessor stays revoked
    would resurrect exactly the orphan the cascade exists to remove.
-   ⚠️ **The "exists" is load-bearing.** `parentEnrollmentId` is set only in the
-   APKAM self-enrollment branch, so every enrollment created through the ordinary
-   approver path has none. A rule phrased without it is literally satisfied by
-   those — *"whose predecessor is not currently approved"* is true when there is
-   no predecessor — and would permanently bar un-revoking any of them.
+   ⚠️ **"Predecessor" here is the enrollment `parentEnrollmentId` names, which
+   since [ruling 133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)
+   is the APPROVER.** On at_server trunk (`88667359`) `enroll:approve` writes the
+   approving enrollment's id into it, a self-enrollment copies its predecessor's,
+   and a successor's first authentication moves the predecessor's approval
+   children onto the successor. The rule as built, `_refuseIfApproverNotApproved`,
+   refuses an un-revoke or an approve while the enrollment that approved the
+   target exists and is not `approved`.
+   ⚠️ **The "exists" is essential.** An enrollment made over CRAM, such as the
+   first, has no `parentEnrollmentId`, nor has a successor that replaced it, and
+   an approver's record can be gone. A rule phrased without it is literally
+   satisfied by those — *"whose predecessor is not currently approved"* is true
+   when there is no predecessor — and would permanently bar un-revoking any of
+   them.
    ⛔ **This ruling claimed a PENDING descendant was a second route to the same
-   orphan. There is no such thing.** On `origin/trunk` the APKAM self-enrollment
-   branch sets `approved` and writes `parentEnrollmentId` in the same breath, and
-   that branch is the only writer of the field — the ordinary request branch,
-   which sets `pending`, never writes a predecessor. So no enrollment carrying a
-   predecessor is ever pending, and `enroll:approve` on one is already refused as
-   *"Only pending enrollments can be approved"*. The claim was inherited from an
-   audit and written here without being checked.
+   orphan. There is no such thing.** No writer of `parentEnrollmentId` touches a
+   pending enrollment: the APKAM self-enrollment branch sets `approved` as it
+   writes the field, `enroll:approve` writes it as the enrollment leaves
+   `pending`, and the first-authentication settlement only moves a value an
+   enrollment already carries. The ordinary request branch, which sets
+   `pending`, never writes it. So no enrollment carrying a predecessor is ever
+   pending, and `enroll:approve` on one is already refused as *"Only pending
+   enrollments can be approved"*. The claim was inherited from an audit and
+   written here without being checked.
    ⚠️ **The approve path still gets the same predecessor test, deliberately** —
    as belt-and-braces rather than as a hole being closed. It costs one condition
    on the helper the un-revoke guard needs anyway, and it makes the invariant
-   total: an enrollment does not become active while what it replaced is
+   total: an enrollment does not become active while what approved it is
    inactive, at *every* transition into an active state rather than only at the
    reachable one. It is unreachable today and its test says so.
+   ⚠️ **Amended 2026-11-09:** this part said `parentEnrollmentId` is set only in
+   the APKAM self-enrollment branch, its only writer, so that every enrollment
+   created through the approver path had none; and that the invariant kept an
+   enrollment inactive while what it *replaced* was.
 3. **The pair, not either half, denies an attacker NEW data keys.** Revoking the enrollment
    and all of its descendants, *followed by* the rotation, is what denies an
    attacker new data keys. The revocation alone leaves material already conveyed

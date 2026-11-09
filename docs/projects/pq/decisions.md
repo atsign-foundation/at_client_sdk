@@ -186,7 +186,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [126] | The mint barrier is deleted: legacy authentication and data signing are one keypair         | 2026-08-30 | AMENDED 2026-08-30        |
 | [127] | A client with no enrollment id still mints and publishes its own signing key                | 2026-08-30 | SUPERSEDED by 134         |
 | [128] | A retrofit's successor holds its predecessor's grants                                       | 2026-08-31 | LIVE               |
-| [129] | Revocation cascades to descendants, and the roster does the rest                            | 2026-08-31 | LIVE               |
+| [129] | Revocation cascades to descendants, and the roster does the rest                            | 2026-08-31 | AMENDED 2026-11-09 |
 | [130] | A revocation is discoverable per namespace                                                  | 2026-08-31 | AMENDED 2026-11-07 |
 | [131] | The protected header names the KEY, and the enrollment moves to `enid`                      | 2026-08-31 | LIVE               |
 | [132] | The keys name the enrollment, and `primary` names the atSign's own credential               | 2026-09-07 | LIVE               |
