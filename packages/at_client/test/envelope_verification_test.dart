@@ -932,6 +932,30 @@ void main() {
               reason: '$member: $reason');
           expect(reason.length, lessThan(400), reason: member);
         }
+        final bidi = PublishedApsk(
+            atSign: '@bo\u202eb', enrollmentId: e, value: ofE.apsk);
+        for (final (result, label) in [
+          (await verifySignedEnvelope(envelope, signer: bidi), 'atSign'),
+          (
+            await verifySignedEnvelope(unsigned({...base, 'typ': 'x\u0600y'}),
+                signer: apskOfE()),
+            'U+0600'
+          ),
+          (
+            await verifySignedEnvelope(
+                unsigned({...base, 'typ': 'x\u{1d173}y'}),
+                signer: apskOfE()),
+            'U+1D173'
+          ),
+        ]) {
+          final shown = '$result';
+          expect(
+              shown.runes.where((r) =>
+                  r == 0x202e || r == 0x0600 || r == 0x1d173 || r < 0x20),
+              isEmpty,
+              reason: '$label: $shown');
+        }
+
         final escaped = await verifySignedEnvelope(
             unsigned({...base, 'typ': 'x\nsecond line'}),
             signer: apskOfE()) as EnvelopeRefused;

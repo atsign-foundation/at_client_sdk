@@ -67,7 +67,7 @@ final class PublishedApsk {
 
   @override
   String toString() =>
-      'PublishedApsk(${apskUri(atSign, enrollmentId)}, ${value.length} '
+      'PublishedApsk(${quotedClaim(apskUri(atSign, enrollmentId))}, ${value.length} '
       'characters)';
 }
 
@@ -118,8 +118,8 @@ final class EnvelopeVerified implements EnvelopeVerification {
   final bool issuerConfirmed;
 
   @override
-  String toString() => 'EnvelopeVerified(${signer.atSign}, '
-      '${signer.enrollmentId}, kid: ${quotedClaim(kid)}, ${algorithm.name}, '
+  String toString() => 'EnvelopeVerified(${quotedClaim(signer.atSign)}, '
+      '${quotedClaim(signer.enrollmentId)}, kid: ${quotedClaim(kid)}, ${algorithm.name}, '
       '${quotedClaim(keyStatus)}, '
       'issuerConfirmed: $issuerConfirmed)';
 }
@@ -151,8 +151,8 @@ final class EnvelopeKeySelected implements EnvelopeKeySelection {
   KeyEntryStatus get keyStatus => key.status;
 
   @override
-  String toString() => 'EnvelopeKeySelected(${signer.atSign}, '
-      '${signer.enrollmentId}, kid: ${quotedClaim(kid)}, ${algorithm.name}, '
+  String toString() => 'EnvelopeKeySelected(${quotedClaim(signer.atSign)}, '
+      '${quotedClaim(signer.enrollmentId)}, kid: ${quotedClaim(kid)}, ${algorithm.name}, '
       '${quotedClaim(keyStatus)}, '
       'issuerConfirmed: $issuerConfirmed)';
 }
@@ -281,7 +281,7 @@ Future<EnvelopeVerification> verifySignedEnvelope(
             signer,
             EnvelopeRefusal.malformedKeySet,
             'the _apsk lists key ${quotedClaim(kid)} in a form it cannot be '
-            'used in: $e',
+            'used in: ${quotedClaim('$e')}',
             kid);
       }
       if (!verified) {
@@ -345,7 +345,7 @@ EnvelopeKeySelection selectEnvelopeKey(
     return refuse(
         EnvelopeRefusal.wrongAtSign,
         'the envelope names its signer as ${quotedClaim(claimed)}, and the _apsk is '
-        '"${signer.atSign}"\'s');
+        '${quotedClaim(signer.atSign)}\'s');
   }
 
   final enid = envelope.signerEnrollmentId;
@@ -353,13 +353,13 @@ EnvelopeKeySelection selectEnvelopeKey(
     return refuse(
         EnvelopeRefusal.wrongEnrollment,
         'the envelope names no enrollment, and the _apsk is enrollment '
-        '"${signer.enrollmentId}"\'s');
+        '${quotedClaim(signer.enrollmentId)}\'s');
   }
   if (enid.toLowerCase() != signer.enrollmentId.toLowerCase()) {
     return refuse(
         EnvelopeRefusal.wrongEnrollment,
         'the envelope names enrollment ${quotedClaim(enid)}, and the _apsk is enrollment '
-        '"${signer.enrollmentId}"\'s');
+        '${quotedClaim(signer.enrollmentId)}\'s');
   }
 
   final reading = readApsk(signer.value);

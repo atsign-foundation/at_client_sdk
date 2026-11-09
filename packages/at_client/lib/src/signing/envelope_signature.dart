@@ -462,7 +462,12 @@ bool _unprintable(int rune) =>
     rune < 0x20 ||
     (rune >= 0x7f && rune <= 0x9f) ||
     rune == 0xad ||
+    (rune >= 0x0600 && rune <= 0x0605) ||
     rune == 0x061c ||
+    rune == 0x06dd ||
+    rune == 0x070f ||
+    (rune >= 0x0890 && rune <= 0x0891) ||
+    rune == 0x08e2 ||
     rune == 0x180e ||
     (rune >= 0x200b && rune <= 0x200f) ||
     (rune >= 0x2028 && rune <= 0x202e) ||
@@ -470,6 +475,11 @@ bool _unprintable(int rune) =>
     (rune >= 0xd800 && rune <= 0xdfff) ||
     rune == 0xfeff ||
     (rune >= 0xfff9 && rune <= 0xfffb) ||
+    rune == 0x110bd ||
+    rune == 0x110cd ||
+    (rune >= 0x13430 && rune <= 0x1343f) ||
+    (rune >= 0x1bca0 && rune <= 0x1bca3) ||
+    (rune >= 0x1d173 && rune <= 0x1d17a) ||
     (rune >= 0xe0000 && rune <= 0xe007f);
 
 /// What kind of JSON value [value] is, named without encoding it.
