@@ -116,13 +116,26 @@ fi
 grep -q "Whole-record rollback" prf-server-keys-blob.md \
   || fail "whole-record rollback missing from the profile's Open table"
 
-# 2d. The enrollment id the gate (c) bootstrap needs must be carried in the
-#     record, in the clear, and the docs must say why.
-grep -q '"enrollmentId"' prf-server-keys-blob.md \
-  || fail "record body does not carry the enrollment id beside the envelope"
+# 2d. The bootstrap record must carry only the enrollment id in the clear,
+#     with the atKeys document stored exclusively in the private record.
+grep -q '"enrollmentId": "<id>"' prf-server-keys-blob.md \
+  || fail "bootstrap record body does not carry the enrollment id"
+if grep -Eq 'public:_<recordId>.*envelope|envelope.*public:_<recordId>' prf-server-keys-blob.md; then
+  fail "bootstrap record still described as carrying the envelope"
+fi
+grep -q 'atkeys\.<enrollmentId>\.a\.__e' prf-server-keys-blob.md \
+  || fail "atKeys document private record location missing from prf-server-keys-blob.md"
 grep -q "enrollment id in it in the clear" apkam-custody.md \
   || fail "apkam-custody.md does not cover where the enrollment id survives"
 grep -q "enrollment id, which the atServer assigns" design.md \
   || fail "design.md does not cover where the enrollment id survives"
+
+# 2e. Canonical atSign form in HKDF labels must specify as toAtsign() returns it.
+grep -q 'as `toAtsign()` returns it' prf-server-keys-blob.md \
+  || fail "prf-server-keys-blob.md does not specify canonical atSign via toAtsign()"
+grep -q 'as `toAtsign()` returns it' design.md \
+  || fail "design.md does not specify canonical atSign via toAtsign()"
+grep -q 'as `toAtsign()` returns it' apkam-custody.md \
+  || fail "apkam-custody.md does not specify canonical atSign via toAtsign()"
 
 echo "key-sources consistency: all checks passed"

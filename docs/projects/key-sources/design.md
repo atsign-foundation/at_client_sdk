@@ -216,8 +216,8 @@ run of [`probes/systemd_load_credential_encrypted.sh`](probes/systemd_load_crede
 whose tamper arm flipped a byte of the base64 *text* of the encrypted
 credential, not of the decoded blob, failing in `READ_FULL_FILE_UNBASE64`
 before any decryption or tag check. The arm now decodes the blob, flips a
-byte of the decoded ciphertext and re-encodes it. Re-measured on Ubuntu 24.04
-(systemd 255.4), systemd's default log level reports `Decryption failed
+byte of the decoded ciphertext and re-encodes it. Re-measured on 2026-11-09 in a
+privileged container (Ubuntu 24.04, systemd 255.4), systemd's default log level reports `Decryption failed
 (incorrect key?): error:00000000:lib(0)::reason(0)`, followed by `Failed to set
 up credentials: Protocol error` and exit status `243/CREDENTIALS`. The arm now
 reaches decryption and fails on the AES-GCM tag check.
@@ -381,16 +381,19 @@ needs a gate of its own. There are two, and they can be combined.
 
 The first is a record whose name is derived from the passkey, for example
 `public:_<HKDF(prf, salt, "atkeys-record-id|<atSign>")>`, domain-separated from
-the `HKDF(prf, salt, "atkeys-kek|<atSign>")` that encrypts it. The atSign in
-both labels keeps two atSigns on one device from sharing a record name or a
-kek; the `<atSign>` in each label is in canonical form (lower-case, leading `@`, e.g. `@alice`).
+the `HKDF(prf, salt, "atkeys-kek|<atSign>")` that wraps the document's data key.
+The atSign in both labels keeps two atSigns on one device from sharing a record
+name or a kek; the `<atSign>` in each label is in canonical form, as `toAtsign()` returns it
+(lower-case, leading `@`, dots removed, e.g. `@colinconstable`).
 The full derivation is in
 [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation). On at_server trunk (`47a6a978`,
 `scan_verb_handler.dart`), a scan hides every `public:_` key from other atSigns
 and from the owner, and `showhidden:true` re-admits only `public:__` and `_`
 keys. So the record can't be listed, and it can only be fetched by someone who
 already knows its 256-bit name. That hides the record's existence, size and
-update times, and only a reader who knows the name gets the ciphertext. A single-underscore
+update times, and denies an unauthenticated reader the enrollment id. The
+atKeys document itself is stored exclusively in `atkeys.<enrollmentId>.a.__e`
+behind PKAM authentication. A single-underscore
 `public:_` key gets no commit-log row (`HiveAtCommitLog` and
 `SqliteAtCommitLog` skip `public:_` and keep `public:__`), so the name never
 syncs to the owner's other clients, and `lookup:` runs over TLS. The name is
@@ -421,10 +424,10 @@ PKAM precedes the fetch of the private record, is in
 still needs the first gate as its bootstrap, because its PKAM carries the
 enrollment id, which the atServer assigns and nothing derives.
 
-The first gate alone gets the document but no PKAM key: after a wipe the browser
-holds nothing to authenticate with, so it has to be paired with the third, or
-the browser's APKAM private key has to travel in the document. See
-[`prf-server-keys-blob.md`](prf-server-keys-blob.md#payload).
+The first gate alone gets the bootstrap record and enrollment id, but no PKAM key:
+after a wipe the browser holds nothing to authenticate with to fetch the private document,
+so it has to be paired with the third, or the browser's APKAM private key has to travel
+in the document. See [`prf-server-keys-blob.md`](prf-server-keys-blob.md#payload).
 
 Updating the document needs the same atomicity `update` has for a file, and
 devices sharing a synced passkey share one document. at_server trunk has no

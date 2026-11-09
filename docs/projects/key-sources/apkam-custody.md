@@ -328,9 +328,10 @@ browser holds a PKAM key, and offers two: a hidden `public:_` record named from
 the PRF, or an enrollment whose credential is the passkey. There is a third:
 
 > Derive the APKAM key from the passkey. The PRF output, run through
-> `HKDF(prf, salt, "at_auth/custody/auth-seed/v1|<atSign>")`, seeds an ML-DSA-65 key
-> pair, which is enrolled as an ordinary APKAM key. The browser does a normal
-> PKAM, then reads the private `atkeys.<enrollmentId>.a.__e` record.
+> `HKDF(prf, salt, "at_auth/custody/auth-seed/v1|<atSign>")` (with `<atSign>`
+> in canonical form, as `toAtsign()` returns it, e.g. `@colinconstable`), seeds
+> an ML-DSA-65 key pair, which is enrolled as an ordinary APKAM key. The browser
+> does a normal PKAM, then reads the private `atkeys.<enrollmentId>.a.__e` record.
 
 - **No server change.** Trunk already verifies ML-DSA-65 PKAM, and no atServer
   implementation has to verify WebAuthn assertions.
