@@ -9,6 +9,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show
         apskRecordName,
         apskUri,
+        quotedClaim,
         requireApskEnrollmentId,
         requireIssuer,
         EnvelopeType,
@@ -204,9 +205,11 @@ mixin EnvelopeSigning on ApkamSigning {
       await verifyEnvelope(envelope,
           signerPublicKey: pk, signerAtSign: atSign, expecting: expecting);
     } on AtSigningVerificationException catch (e) {
+      // NOTE: pk is whatever the signer published, so it is quoted — escaped
+      // and cut short — as every other claim in a refusal is.
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '
-          '$signerAtSign enrollment $id : $pk — ${e.message}');
+          '$atSign enrollment $id : ${quotedClaim(pk)} —${e.message}');
     }
   }
 
