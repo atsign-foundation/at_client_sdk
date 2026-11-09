@@ -3,9 +3,23 @@ W=$(sudo mktemp -d /root/kcprobe.XXXXXX); U=kcprobe-$(date +%s)
 sudo python3 -c "import sys;sys.stdout.buffer.write(bytes((i*7+3)%251 for i in range(16384)))" | sudo tee $W/secret.bin >/dev/null
 echo "--- arm3: tpm2 on a host without a TPM"
 sudo systemd-creds encrypt --with-key=tpm2 --name=atkeys $W/secret.bin $W/tpm.cred 2>&1 | tail -1; echo "rc=${PIPESTATUS[0]}"
+# 1 if the first 32 payload bytes appear in the file raw or in its base64-decoded
+# form, else 0. Byte-level, so it doesn't depend on base64 alignment or padding.
+plaintext_in() { sudo python3 - "$1" "$W/secret.bin" <<'PY'
+import base64, binascii, sys
+blob = open(sys.argv[1], 'rb').read(); needle = open(sys.argv[2], 'rb').read()[:32]
+views = [blob]
+try: views.append(base64.b64decode(b''.join(blob.split()), validate=True))
+except (binascii.Error, ValueError): pass
+print(int(any(needle in v for v in views)))
+PY
+}
 echo "--- arm1: host key, delivered with LoadCredentialEncrypted"
-sudo systemd-creds encrypt --with-key=host --name=atkeys $W/secret.bin $W/atkeys.cred 2>&1 | tail -1; echo "encrypt rc=${PIPESTATUS[0]} blob=$(sudo stat -c %s $W/atkeys.cred) plaintext_in_blob=$(sudo grep -c "$(sudo head -c 32 $W/secret.bin | base64)" $W/atkeys.cred)"
-sudo rm -f $W/secret.bin
+sudo systemd-creds encrypt --with-key=host --name=atkeys $W/secret.bin $W/atkeys.cred 2>&1 | tail -1; echo "encrypt rc=${PIPESTATUS[0]} blob=$(sudo stat -c %s $W/atkeys.cred) plaintext_in_blob=$(plaintext_in $W/atkeys.cred)"
+# Controls: the same check must see the payload when it is stored unencrypted.
+sudo sh -c "base64 -w0 $W/secret.bin > $W/control_b64; cp $W/secret.bin $W/control_raw"
+echo "control: plaintext_in_unencrypted_b64=$(plaintext_in $W/control_b64) plaintext_in_unencrypted_raw=$(plaintext_in $W/control_raw) (both must be 1)"
+sudo rm -f $W/secret.bin $W/control_b64 $W/control_raw
 sudo tee $W/svc.sh >/dev/null <<'SVC'
 D="$CREDENTIALS_DIRECTORY"
 echo "fs=$(stat -f -c %T "$D") dir=$(stat -c '%a %U' "$D") file=$(stat -c '%a %U %s' "$D/atkeys")"

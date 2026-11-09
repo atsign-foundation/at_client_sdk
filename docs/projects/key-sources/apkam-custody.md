@@ -52,7 +52,8 @@ Secure Enclave key can't sync (a keychain item backed by the Secure Enclave
 can't be synchronisable), so for hw-kem a lost device means its server-held
 document can't be opened. Recovery is enrolling a new device and having an
 existing one approve it. A synced passkey does re-derive the same keys on
-another device ([section 9](#9-the-browser-as-the-only-device)). There is no
+another device, reading the enrollment id from the bootstrap record
+([section 9](#9-the-browser-as-the-only-device)). There is no
 manual export to another device in any tier.
 
 ## 2. What the hardware offers
@@ -356,8 +357,7 @@ the PRF, or an enrollment whose credential is the passkey. There is a third:
   all out.
 - **Eviction loses nothing.** IndexedDB becomes a cache: after it is cleared,
   the passkey re-derives the recordId and the PKAM key, the bootstrap record
-  supplies the enrollment id and the envelope, and the atServer supplies the
-  rest.
+  supplies the enrollment id, and the atServer supplies the document.
 - **The cost:** the PKAM key sits in page memory for the session, the same
   exposure `design.md` section 9 already accepts for the data key.
 

@@ -305,7 +305,11 @@ A device's secure hardware fits as one more source through a
 
 The content is encrypted with AES-256-GCM, with the atSign, the enrollment id
 and the version bound in as associated data, so a tampered, truncated or
-swapped document fails to decrypt rather than failing to parse.
+swapped document fails to decrypt rather than failing to parse. The version
+is the format's `"v": 2`, the same on every write, so this does not catch a
+rollback: an older document the same enrollment wrote still decrypts. Catching
+that needs a per-write counter in the associated data and a high-water mark
+kept where the store can't roll it back.
 
 `keys` is a list, so one data key can be wrapped by more than one source: a
 machine's TPM and a recovery passphrase, say, or two devices sharing a
