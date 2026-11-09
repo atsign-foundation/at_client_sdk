@@ -30,7 +30,7 @@ dependencies:
   at_lookup: ^4.0.0
   # InMemoryAtKeysIo's analyzer warning, which this package's CHANGELOG
   # describes, needs 4.0.0-rc8.
-  at_auth: ^4.0.0
+  at_auth: ^4.1.0
   at_persistence_secondary_server: ^5.4.0
   hive: ^2.2.3
   meta: ^1.16.0

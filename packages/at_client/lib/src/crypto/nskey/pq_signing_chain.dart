@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
-    show ApskSigningKey, AtKeysIo, publicKeyKidOfBase64;
+    show ApskSigningKey, AtKeysIo, apskSigningKeys, publicKeyKidOfBase64;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -19,7 +19,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show
-        readableApskSigningKeys,
         ApkamSigningKeys,
         EnvelopeType,
         SignedEnvelope,
@@ -144,7 +143,7 @@ class ApskRecord {
     try {
       final decoded = jsonDecode(value);
       if (decoded is! Map<String, dynamic>) return const [];
-      return readableApskSigningKeys(decoded)
+      return apskSigningKeys(decoded)
           .where((k) => k.vouchesForPastOperations)
           .toList();
     } on FormatException {

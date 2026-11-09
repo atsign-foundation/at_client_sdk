@@ -751,22 +751,16 @@ void main() {
       });
 
       test(
-          'when withoutUnreadableStatuses filters the advertisement, then it '
-          'drops the entry itself', () {
-        // NOTE: at_auth 4.1.0 also skips such an entry, but at_client still
-        // allows at_auth 4.0.0, which stringifies the status; this pins
-        // at_client's own filter, which no at_auth in the workspace can mask.
+          'when its keys are read, then every entry whose status is not a '
+          'string is left out', () {
+        const deep = '__DEEP__';
         final usable = {
           'kid': 'k1',
           'use': 'sign',
           'alg': 'mldsa65',
           'pub': 'AAAA',
         };
-        Object deep = <Object?>[];
-        for (var i = 0; i < 250000; i++) {
-          deep = [deep];
-        }
-        final advertisement = <String, dynamic>{
+        final value = jsonEncode({
           'v': 1,
           'keys': [
             usable,
@@ -781,18 +775,10 @@ void main() {
             {...usable, 'kid': 'k6', 'status': 'retired'},
             'not an entry',
           ],
-        };
+        }).replaceFirst('"$deep"', '${'[' * 250000}${']' * 250000}');
 
-        final kept = withoutUnreadableStatuses(advertisement);
-
-        final kids = [
-          for (final entry in kept['keys'] as List)
-            entry is Map ? entry['kid'] : entry
-        ];
-        expect(kept['v'], 1);
-        expect(kids, ['k1', 'k5', 'k6', 'not an entry']);
-        final noList = {'v': 1, 'keys': 'none'};
-        expect(withoutUnreadableStatuses(noList), noList);
+        expect(apskOfE()._withValue(value).keys.map((k) => k.kid),
+            ['k1', 'k5', 'k6']);
       });
     });
 

@@ -13,11 +13,10 @@ import 'package:at_auth/at_auth.dart'
         CryptographicMaterialStatus,
         WrittenAtKeysIo,
         apskAdvertisement,
+        apskSigningKeys,
         publicKeyKid;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show readableApskSigningKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
     show isFullyPrivileged;
@@ -212,7 +211,7 @@ class PqSigningRoot {
     Map<String, dynamic> record, {
     bool activeOnly = false,
   }) =>
-      readableApskSigningKeys(record)
+      apskSigningKeys(record)
           .where((e) => verifiableRootAlgos.contains(e.alg))
           .where((e) => !activeOnly || e.offeredForNewOperations)
           .toList()

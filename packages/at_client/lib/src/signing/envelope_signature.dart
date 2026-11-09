@@ -779,37 +779,6 @@ class ParsedApsk {
       ];
 }
 
-/// at_auth's `apskSigningKeys` over [advertisement], leaving out any entry
-/// whose status is present and is neither null nor a string: no reader can
-/// use such an entry, and none reads its status.
-List<ApskSigningKey> readableApskSigningKeys(
-        Map<String, dynamic> advertisement) =>
-    apskSigningKeys(withoutUnreadableStatuses(advertisement));
-
-/// [advertisement] without any `keys` entry whose status is present and is
-/// neither null nor a string, each such status left unread.
-///
-/// at_auth 4.1.0's `apskSigningKeys` skips these entries itself, but at_auth
-/// 4.0.0, which this package still allows, stringifies the status — and a
-/// deeply nested one overflows the stack doing so — so at_client drops them
-/// before at_auth sees them.
-@visibleForTesting
-Map<String, dynamic> withoutUnreadableStatuses(
-    Map<String, dynamic> advertisement) {
-  final keys = advertisement['keys'];
-  if (keys is! List) return advertisement;
-  return {
-    ...advertisement,
-    'keys': [
-      for (final entry in keys)
-        if (entry is! Map ||
-            entry['status'] == null ||
-            entry['status'] is String)
-          entry
-    ],
-  };
-}
-
 /// Every key a fetched `_apsk` value lists under an algorithm this build has
 /// a [SigningAlgoType] for, whatever its status, or why the value cannot be
 /// read.
@@ -851,7 +820,7 @@ Map<String, dynamic> withoutUnreadableStatuses(
   if (decoded is! Map<String, dynamic>) {
     return fault('the _apsk value looks structured but is not a JSON object');
   }
-  return (keys: readableApskSigningKeys(decoded), fault: null);
+  return (keys: apskSigningKeys(decoded), fault: null);
 }
 
 /// Parses a fetched `_apsk` value, bare or array.
