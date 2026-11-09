@@ -201,6 +201,11 @@ class EnvelopeSignature {
       throw AtSigningVerificationException(
           "the envelope's protected header is not a JSON object");
     }
+    if (decoded.containsKey('iss') && decoded['iss'] is! String) {
+      throw AtSigningVerificationException(
+          "the envelope's protected header names its signer as a JSON "
+          '${_jsonKind(decoded['iss'])}, which is not an Atsign');
+    }
     return EnvelopeSignature._(
         protected, signature, decoded.cast<String, Object?>());
   }
@@ -398,18 +403,28 @@ bool exceedsUtf8Bytes(String text, int limit) {
 /// [entry]'s Atsign claim quoted, canonical when it is an Atsign, or null
 /// when it makes none: what [SignedEnvelope.fromJson] compares across entries.
 String? _issuerClaimOf(EnvelopeSignature entry) {
-  if (!entry.header.containsKey('iss')) return null;
-  final claim = entry.header['iss'];
-  return jsonEncode(claim is String ? _atsignOrNull(claim) ?? claim : claim);
+  final claim = entry.iss;
+  if (claim == null) return null;
+  return jsonEncode(_atsignOrNull(claim) ?? claim);
 }
+
+/// What kind of JSON value [value] is, named without encoding it.
+String _jsonKind(Object? value) => switch (value) {
+      null => 'null',
+      Map() => 'object',
+      List() => 'array',
+      num() => 'number',
+      bool() => 'boolean',
+      _ => 'value',
+    };
 
 /// [entry]'s Atsign claim, canonical, or null when it makes none; throws
 /// [AtSigningVerificationException], quoting the claim, when it is not an
 /// Atsign.
 Atsign? issuerOf(EnvelopeSignature entry) {
-  if (!entry.header.containsKey('iss')) return null;
-  final claim = entry.header['iss'];
-  final issuer = claim is String ? _atsignOrNull(claim) : null;
+  final claim = entry.iss;
+  if (claim == null) return null;
+  final issuer = _atsignOrNull(claim);
   if (issuer != null) return issuer;
   throw AtSigningVerificationException(
       'the envelope names its signer as ${jsonEncode(claim)}, which is not an '

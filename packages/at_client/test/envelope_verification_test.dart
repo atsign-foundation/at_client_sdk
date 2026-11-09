@@ -655,10 +655,10 @@ void main() {
           'when verified, then it is refused with wrongAtSign and nothing is '
           'thrown', () async {
         final notAnAtsign =
-            resigned(envelope, [ofE.key], (h) => h..['iss'] = 42);
+            resigned(envelope, [ofE.key], (h) => h..['iss'] = '@al ice');
 
         expect(await verifySignedEnvelope(notAnAtsign, signer: apskOfE()),
-            refusedAs(EnvelopeRefusal.wrongAtSign, naming: ['42']));
+            refusedAs(EnvelopeRefusal.wrongAtSign, naming: ['"@al ice"']));
       });
     });
 

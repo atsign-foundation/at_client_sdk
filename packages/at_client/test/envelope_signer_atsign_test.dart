@@ -143,6 +143,38 @@ void main() {
     });
   });
 
+  group('Given a protected header whose iss is not a string', () {
+    String envelopeText(String issJson) => jsonEncode({
+          'payload': '',
+          'signatures': [
+            {
+              'protected': b64u('{"alg":"ML-DSA-65","typ":"at-app+jws",'
+                  '"kid":"k","iss":$issJson,"v":1}'),
+              'signature': '',
+            }
+          ],
+        });
+
+    test('when iss nests 300,000 arrays, then parsing refuses it cleanly', () {
+      final text = envelopeText('${'[' * 300000}${']' * 300000}');
+
+      expect(
+          () => SignedEnvelope.parse(text, maxLength: 1 << 21),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((x) => x.message, 'message', contains('not an Atsign'))));
+    });
+
+    test('when iss is a number, then parsing refuses it', () {
+      expect(() => SignedEnvelope.parse(envelopeText('42'), maxLength: 4096),
+          throwsA(isA<AtSigningVerificationException>()));
+      expect(
+          SignedEnvelope.parse(envelopeText('"@alice"'), maxLength: 4096)
+              .signerAtSign,
+          alice,
+          reason: 'the control: a string iss in the same envelope is read');
+    });
+  });
+
   group('verifying', () {
     const bob = '@bob';
     late AtClientEnvelopeSigner ofBob;
