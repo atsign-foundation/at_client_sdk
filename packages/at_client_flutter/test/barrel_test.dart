@@ -93,6 +93,83 @@ void main() {
       );
     });
   });
+
+  group(
+    'Given what package:at_client_flutter/at_client_flutter.dart exports',
+    () {
+      test('when its exports are followed, then no test-support library is '
+          'among them', () async {
+        final exported = await _exportClosure(
+          Uri.parse('package:at_client_flutter/at_client_flutter.dart'),
+        );
+
+        expect(
+          exported,
+          contains(
+            Uri.parse(
+              'package:at_client/src/signing/envelope_verification.dart',
+            ),
+          ),
+          reason: 'the control: the walk reaches the verifier itself',
+        );
+        expect(
+          exported.where((uri) => uri.pathSegments.last == 'testing.dart'),
+          isEmpty,
+        );
+      });
+    },
+  );
+}
+
+/// Every library [library] exports, directly or through what it exports,
+/// followed through the at_client packages.
+Future<Set<Uri>> _exportClosure(Uri library) async {
+  final resolve = _packageResolver();
+  final export = RegExp(r"^\s*export\s+'([^']+)'", multiLine: true);
+  final seen = <Uri>{};
+  final pending = [library];
+  while (pending.isNotEmpty) {
+    final uri = pending.removeLast();
+    if (!seen.add(uri)) continue;
+    final file = resolve(uri);
+    if (file == null) continue;
+    for (final match in export.allMatches(
+      File.fromUri(file).readAsStringSync(),
+    )) {
+      final target = uri.resolve(match[1]!);
+      if (target.scheme == 'package' &&
+          target.pathSegments.first.startsWith('at_client')) {
+        pending.add(target);
+      }
+    }
+  }
+  return seen;
 }
 
 class _SigningClient extends Mock implements AtClient {}
+
+/// Resolves a `package:` URI to its file through the nearest
+/// `.dart_tool/package_config.json` above the current directory.
+Uri? Function(Uri) _packageResolver() {
+  var dir = Directory.current.absolute;
+  while (!File('${dir.path}/.dart_tool/package_config.json').existsSync()) {
+    if (dir.parent.path == dir.path) {
+      fail('no .dart_tool/package_config.json above ${Directory.current.path}');
+    }
+    dir = dir.parent;
+  }
+  final config = File('${dir.path}/.dart_tool/package_config.json');
+  final roots = <String, Uri>{
+    for (final package
+        in (jsonDecode(config.readAsStringSync())
+                as Map<String, dynamic>)['packages']
+            as List)
+      (package as Map)['name'] as String: config.uri
+          .resolve('${package['rootUri']}/')
+          .resolve(package['packageUri'] as String),
+  };
+  return (uri) {
+    final root = roots[uri.pathSegments.first];
+    return root?.resolve(uri.pathSegments.skip(1).join('/'));
+  };
+}
