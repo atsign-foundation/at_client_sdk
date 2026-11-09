@@ -697,7 +697,10 @@ bool _rsaExponentInRange(Uint8List spki) {
   if (algorithm == null) return false;
   at += algorithm;
   final bits = enter(0x03);
-  if (bits == null || at + bits != spki.length || spki[at++] != 0) {
+  if (bits == null ||
+      bits == 0 ||
+      at + bits != spki.length ||
+      spki[at++] != 0) {
     return false;
   }
   final key = enter(0x30);
@@ -773,10 +776,22 @@ class ParsedApsk {
 /// whose status is present and is neither null nor a string: no reader can
 /// use such an entry, and none reads its status.
 List<ApskSigningKey> readableApskSigningKeys(
+        Map<String, dynamic> advertisement) =>
+    apskSigningKeys(withoutUnreadableStatuses(advertisement));
+
+/// [advertisement] without any `keys` entry whose status is present and is
+/// neither null nor a string, each such status left unread.
+///
+/// at_auth 4.1.0's `apskSigningKeys` skips these entries itself, but at_auth
+/// 4.0.0, which this package still allows, stringifies the status — and a
+/// deeply nested one overflows the stack doing so — so at_client drops them
+/// before at_auth sees them.
+@visibleForTesting
+Map<String, dynamic> withoutUnreadableStatuses(
     Map<String, dynamic> advertisement) {
   final keys = advertisement['keys'];
-  if (keys is! List) return apskSigningKeys(advertisement);
-  return apskSigningKeys({
+  if (keys is! List) return advertisement;
+  return {
     ...advertisement,
     'keys': [
       for (final entry in keys)
@@ -785,7 +800,7 @@ List<ApskSigningKey> readableApskSigningKeys(
             entry['status'] is String)
           entry
     ],
-  });
+  };
 }
 
 /// Every key a fetched `_apsk` value lists under an algorithm this build has

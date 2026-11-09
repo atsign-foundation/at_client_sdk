@@ -728,6 +728,51 @@ void main() {
         expect(selectEnvelopeKey(envelope, signer: apskOfE()._withValue(value)),
             refusedAs(EnvelopeRefusal.malformedKeySet));
       });
+
+      test(
+          'when withoutUnreadableStatuses filters the advertisement, then it '
+          'drops the entry itself', () {
+        // NOTE: at_auth 4.1.0 also skips such an entry, but at_client still
+        // allows at_auth 4.0.0, which stringifies the status; this pins
+        // at_client's own filter, which no at_auth in the workspace can mask.
+        final usable = {
+          'kid': 'k1',
+          'use': 'sign',
+          'alg': 'mldsa65',
+          'pub': 'AAAA',
+        };
+        Object deep = <Object?>[];
+        for (var i = 0; i < 250000; i++) {
+          deep = [deep];
+        }
+        final advertisement = <String, dynamic>{
+          'v': 1,
+          'keys': [
+            usable,
+            {...usable, 'kid': 'k2', 'status': deep},
+            {...usable, 'kid': 'k3', 'status': 7},
+            {
+              ...usable,
+              'kid': 'k4',
+              'status': {'since': 1}
+            },
+            {...usable, 'kid': 'k5', 'status': null},
+            {...usable, 'kid': 'k6', 'status': 'retired'},
+            'not an entry',
+          ],
+        };
+
+        final kept = withoutUnreadableStatuses(advertisement);
+
+        final kids = [
+          for (final entry in kept['keys'] as List)
+            entry is Map ? entry['kid'] : entry
+        ];
+        expect(kept['v'], 1);
+        expect(kids, ['k1', 'k5', 'k6', 'not an entry']);
+        final noList = {'v': 1, 'keys': 'none'};
+        expect(withoutUnreadableStatuses(noList), noList);
+      });
     });
 
     group(
@@ -794,8 +839,7 @@ void main() {
       });
     });
 
-    group('Given an _apsk RSA key whose public exponent has 3,000,001 bits',
-        () {
+    group('Given an _apsk RSA key', () {
       /// A bare `_apsk` value: [rsaPair]'s modulus with [exponent], as an
       /// X.509 SubjectPublicKeyInfo.
       String bareWithExponent(Uint8List exponent,
@@ -834,8 +878,9 @@ void main() {
           });
 
       test(
-          'when an envelope is verified against it, then it is refused before '
-          'any signature is checked', () async {
+          'when its public exponent has 3,000,001 bits and an envelope is '
+          'verified against it, then it is refused before any signature is '
+          'checked', () async {
         final huge = Uint8List(375001)
           ..[0] = 1
           ..[375000] = 1;
@@ -891,6 +936,68 @@ void main() {
             reason: 'the control: the same key with exponent 65537 reaches the '
                 'signature check');
       }, timeout: const Timeout(Duration(seconds: 60)));
+
+      test(
+          'when its exponent is even, at most 2^16 or over 256 bits, then it '
+          'is refused, and one odd, over 2^16 and of 256 bits is not',
+          () async {
+        final two = BigInt.two;
+        for (final (label, exponent) in [
+          ('3', BigInt.from(3)),
+          ('2^16 - 1, odd and 16 bits', two.pow(16) - BigInt.one),
+          ('2^16 + 2, even and 17 bits', two.pow(16) + two),
+          ('2^255 + 2^16, even and 256 bits', two.pow(255) + two.pow(16)),
+          ('2^256 + 1, odd and 257 bits', two.pow(256) + BigInt.one),
+        ]) {
+          final bare = bareWithExponent(_magnitude(exponent));
+          final checks = envelopeSignatureChecks;
+          expect(
+              await verifySignedEnvelope(signedBy(bare),
+                  signer: apskOfE()._withValue(bare)),
+              refusedAs(EnvelopeRefusal.malformedKeySet, naming: ['exponent']),
+              reason: label);
+          expect(envelopeSignatureChecks - checks, 0, reason: label);
+          await expectLater(
+              verifyEnvelope(signedBy(bare),
+                  signerPublicKey: bare,
+                  signerAtSign: alice,
+                  expecting: EnvelopeType.app),
+              throwsA(isA<AtSigningVerificationException>()
+                  .having((x) => x.message, 'message', contains('exponent'))),
+              reason: label);
+        }
+
+        for (final (label, exponent) in [
+          ('2^16 + 3, odd and 17 bits', two.pow(16) + BigInt.from(3)),
+          ('2^255 + 1, odd and 256 bits', two.pow(255) + BigInt.one),
+        ]) {
+          final bare = bareWithExponent(_magnitude(exponent));
+          expect(
+              await verifySignedEnvelope(signedBy(bare),
+                  signer: apskOfE()._withValue(bare)),
+              refusedAs(EnvelopeRefusal.badSignature),
+              reason: '$label reaches the signature check');
+        }
+      });
+
+      test(
+          'when its key is a zero-length BIT STRING, then verifying refuses it '
+          'rather than throwing an Error', () async {
+        // SEQUENCE { SEQUENCE {}, BIT STRING of no bytes }
+        const bare = 'MAQwAAMA';
+        expect(base64Decode(bare), [0x30, 0x04, 0x30, 0x00, 0x03, 0x00]);
+
+        expect(
+            await verifySignedEnvelope(signedBy(bare),
+                signer: apskOfE()._withValue(bare)),
+            refusedAs(EnvelopeRefusal.malformedKeySet));
+        await expectLater(
+            verifyEnvelope(signedBy(bare),
+                signerPublicKey: bare,
+                signerAtSign: alice,
+                expecting: EnvelopeType.app),
+            throwsA(isA<AtSigningVerificationException>()));
+      });
     });
 
     group('Given a typ, enid or kid carrying a newline or a control character',
