@@ -729,6 +729,43 @@ void main() {
               'spells active');
     });
 
+    test('a key package entry whose status is not a string is skipped', () {
+      final deep = jsonDecode('${'[' * 200000}${']' * 200000}');
+      for (final status in <Object>[
+        7,
+        true,
+        [1],
+        {'a': 1},
+        deep
+      ]) {
+        final clock = Stopwatch()..start();
+
+        expect(
+            PackageKey.fromJson({
+              'kid': 'k1',
+              'use': 'enc',
+              'alg': 'x-wing',
+              'pub': 'AAEC',
+              'status': status
+            }),
+            isNull,
+            reason: 'a status of the wrong kind is skipped like a kid, use, '
+                'alg or pub of the wrong kind, and is never read as a token');
+        expect(clock.elapsed, lessThan(const Duration(seconds: 1)),
+            reason: 'the value is not walked');
+      }
+      expect(
+          PackageKey.fromJson({
+            'kid': 'k1',
+            'use': 'enc',
+            'alg': 'x-wing',
+            'pub': 'AAEC',
+            'status': 'retired'
+          })?.status,
+          'retired',
+          reason: 'the control: a string status is read');
+    });
+
     test('an unrecognised status is carried through, not flattened', () {
       // Flattening an unknown token to `retired` would have the writer emit
       // `retired` back — an older build rewriting a newer one's statement
@@ -736,10 +773,6 @@ void main() {
       expect(KeyEntryStatus.fromWire('verifyOnly'), 'verifyOnly',
           reason: 'a token this build has never heard of survives the read, '
               'so republishing the record does not weaken what it says');
-      expect(KeyEntryStatus.fromWire(7), '7',
-          reason: 'a status that is not a string is malformed rather than '
-              'unknown, and stringifying keeps what was written visible '
-              'without repairing it into a token that means something');
 
       // Both answers are no, which is the whole point of preserving it: an
       // unknown token is MORE restrictive than either value this build knows,

@@ -318,6 +318,32 @@ void main() {
       expect(rewritten.single['status'], 'revoked');
     });
 
+    test('an entry whose status is not a string is skipped', () {
+      final deep = jsonDecode('${'[' * 200000}${']' * 200000}');
+      for (final status in <Object>[7, true, [1], {'a': 1}, deep]) {
+        final clock = Stopwatch()..start();
+        final read = apskSigningKeys({
+          'v': 1,
+          'keys': [
+            {'kid': 'k1', 'use': 'sign', 'alg': 'rsa2048', 'pub': 'AAEC'},
+            {
+              'kid': 'k2',
+              'use': 'sign',
+              'alg': 'rsa2048',
+              'pub': 'AAED',
+              'status': status
+            },
+          ]
+        });
+
+        expect(read.map((k) => k.kid), ['k1'],
+            reason: 'a status of the wrong kind is skipped like a kid, use, '
+                'alg or pub of the wrong kind, and is never read as a token');
+        expect(clock.elapsed, lessThan(const Duration(seconds: 1)),
+            reason: 'the value is not walked');
+      }
+    });
+
     test('active and retired are the two statuses that verify the past', () {
       // The pair of decisions the field exists for. Retirement withdraws the
       // future and keeps the past; only `active` offers the future.
