@@ -691,11 +691,59 @@ void main() {
           warningsAbout(keyName),
           [
             contains('signer enrollment enroll-c does not match claimed sender '
-                'enrollment enroll-a')
+                'enrollment "enroll-a"')
           ],
           reason: 'C sealed the body under the binding that names A, so only '
               'the check of signer against sender refuses it');
       expect(remoteData.containsKey(keyName), isTrue);
+    });
+
+    test(
+        'when its kpid, its claimed sender or the namespace it sits in holds an '
+        'escape, a U+202E and a long tail, then each warning shows the value '
+        'escaped and cut short', () async {
+      final sharerC = await enrolledSharerC();
+      final toB = sharerB.myKeyPackage.bestKeyFor(SecretSharingAlgos.keyAlgos)!;
+      final tail = '\u001b\u202e\u009b${'x' * 3000}';
+      Future<void> place(String keyName,
+          {String? toKpid, String fromEnrollmentId = 'enroll-c'}) async {
+        remoteData[keyName] = await sharerC.wrapAndSignAndJsonEncode(
+            SecretEnvelope(
+              fromKpid: sharerC.kpid,
+              fromEnrollmentId: fromEnrollmentId,
+              toKpid: toKpid ?? toB.kid,
+              appNamespace: 'myapp',
+              suite: SecretSharingAlgos.xWingRfc9180,
+              kid: toB.kid,
+              sealed: base64Encode(Uint8List(64)),
+            ).toJson(),
+            type: EnvelopeType.secretEnvelope);
+      }
+
+      await place('kpid.0.${toB.kid}.__ssenv.myapp@alice', toKpid: tail);
+      await place('sender.0.${toB.kid}.__ssenv.myapp@alice',
+          fromEnrollmentId: tail);
+      await place('space.0.${toB.kid}.__ssenv.my_app$tail@alice');
+      logs.records.clear();
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      final quoted = {
+        for (final (prefix, before, after) in [
+          ('kpid.0.', ' is addressed to ', ', not to any key'),
+          ('sender.0.', 'claimed sender enrollment ', '; skipping'),
+          ('space.0.', ' sits in ', ' but its sender'),
+        ])
+          prefix: [
+            for (final warning in logs.at('WARNING'))
+              if (warning.contains(prefix) && warning.contains(before))
+                warning.split(before).last.split(after).first
+          ]
+      };
+      for (final MapEntry(key: prefix, value: shown) in quoted.entries) {
+        expect(shown, hasLength(1), reason: 'the premise: $prefix is refused');
+        expect(shown.single.length, lessThan(200), reason: prefix);
+      }
     });
   });
 
@@ -1038,7 +1086,7 @@ void main() {
           warningsAbout(keyName),
           [
             contains(
-                'is addressed to some-other-kpid, not to any key this client '
+                'is addressed to "some-other-kpid", not to any key this client '
                 'holds')
           ],
           reason: 'refused by the addressee check, not by anything before it');
@@ -1140,7 +1188,8 @@ void main() {
       expect(
           warningsAbout(keyName),
           [
-            contains('is addressed to a-kpid-nobody-here-holds, not to any key '
+            contains(
+                'is addressed to "a-kpid-nobody-here-holds", not to any key '
                 'this client holds')
           ],
           reason: 'refused by the addressee check, not by anything before it');

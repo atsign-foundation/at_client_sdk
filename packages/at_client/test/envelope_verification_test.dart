@@ -984,6 +984,8 @@ void main() {
           await refused(label, bareWithExponent(_magnitude(exponent)));
         }
         for (final (label, content) in [
+          ('not minimal, 00 01 00 01', [0x00, 0x01, 0x00, 0x01]),
+          ('not minimal, 00 00 01 00 01', [0x00, 0x00, 0x01, 0x00, 0x01]),
           ('DER-negative, 81 00 01', [0x81, 0x00, 0x01]),
           (
             'DER-negative, ff then 30 zero bytes then 01',
@@ -1026,6 +1028,15 @@ void main() {
                 signerAtSign: alice,
                 expecting: EnvelopeType.app),
             throwsA(isA<AtSigningVerificationException>()));
+      });
+    });
+
+    group('Given a claim of 80 supplementary-plane format characters', () {
+      test('when it is quoted, then the quote stays short', () {
+        final quoted =
+            quotedClaim(String.fromCharCodes(List.filled(80, 0xe0001)));
+
+        expect(quoted.length, lessThan(100));
       });
     });
 

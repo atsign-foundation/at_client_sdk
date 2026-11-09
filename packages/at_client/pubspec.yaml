@@ -28,8 +28,8 @@ dependencies:
   at_utils: ^4.0.0
   at_chops: ^3.7.0
   at_lookup: ^4.0.0
-  # InMemoryAtKeysIo's analyzer warning, which this package's CHANGELOG
-  # describes, needs 4.0.0-rc8.
+  # apskSigningKeys skipping an entry whose status is not a string, which
+  # every _apsk and signing-root reader here relies on, needs 4.1.0.
   at_auth: ^4.1.0
   at_persistence_secondary_server: ^5.4.0
   hive: ^2.2.3

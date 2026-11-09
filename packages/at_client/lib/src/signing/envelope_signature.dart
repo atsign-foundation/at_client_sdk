@@ -424,29 +424,27 @@ String? _issuerClaimOf(EnvelopeSignature entry) {
 
 /// [text] quoted for a one-line message: JSON-style escapes for quotes,
 /// backslashes and every control, format and line-separator character, and
-/// at most [maxRunes] runes of it, the rest elided.
-String quotedClaim(String text, {int maxRunes = 80}) {
-  final out = StringBuffer('"');
-  var count = 0;
+/// at most [maxLength] characters of it as written, escapes included, the
+/// rest elided.
+String quotedClaim(String text, {int maxLength = 80}) {
+  final out = StringBuffer();
   for (final rune in text.runes) {
-    if (count++ == maxRunes) {
+    final shown = rune == 0x22
+        ? r'\"'
+        : rune == 0x5c
+            ? r'\\'
+            : _unprintable(rune)
+                ? rune > 0xffff
+                    ? '\\u{${rune.toRadixString(16)}}'
+                    : '\\u${rune.toRadixString(16).padLeft(4, '0')}'
+                : String.fromCharCode(rune);
+    if (out.length + shown.length > maxLength) {
       out.write('...');
       break;
     }
-    if (rune == 0x22) {
-      out.write(r'\"');
-    } else if (rune == 0x5c) {
-      out.write(r'\\');
-    } else if (_unprintable(rune)) {
-      out.write(rune > 0xffff
-          ? '\\u{${rune.toRadixString(16)}}'
-          : '\\u${rune.toRadixString(16).padLeft(4, '0')}');
-    } else {
-      out.writeCharCode(rune);
-    }
+    out.write(shown);
   }
-  out.write('"');
-  return out.toString();
+  return '"$out"';
 }
 
 /// [texts], each [quotedClaim]ed and a null as [absent], at most eight of
@@ -669,9 +667,9 @@ Future<bool> checkEnvelopeSignature(
 }
 
 /// Whether [spki], DER-encoded, is a SubjectPublicKeyInfo whose key, two
-/// INTEGERs, has a second INTEGER, the public exponent, that is positive, odd,
-/// above 2^16 and below 2^256, as FIPS 186-5 requires; every key at_chops
-/// generates uses 65537.
+/// INTEGERs, has a second INTEGER, the public exponent, that is minimally
+/// encoded, positive, odd, above 2^16 and below 2^256, as FIPS 186-5
+/// requires; every key at_chops generates uses 65537.
 ///
 /// Read from the DER lengths and the exponent's first and last bytes, so a key
 /// of any size is judged at once. A key not of that shape is refused, so no
@@ -716,7 +714,8 @@ bool _rsaExponentInRange(Uint8List spki) {
   if (length == null ||
       length == 0 ||
       at + length != spki.length ||
-      spki[at] & 0x80 != 0) {
+      spki[at] & 0x80 != 0 ||
+      (length > 1 && spki[at] == 0 && spki[at + 1] & 0x80 == 0)) {
     return false;
   }
   while (length! > 1 && spki[at] == 0) {

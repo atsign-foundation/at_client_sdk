@@ -706,19 +706,21 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
     if (!heldKpids.contains(envelope.toKpid)) {
       logger.warning('Envelope $envelopeKey is addressed to '
-          '${envelope.toKpid}, not to any key this client holds; skipping');
+          '${quotedClaim(envelope.toKpid)}, not to any key this client holds; '
+          'skipping');
       return null;
     }
     final signerClaim = signedEnvelope.signerEnrollmentId;
     if (signerClaim != envelope.fromEnrollmentId) {
       logger.warning('Envelope $envelopeKey: signer enrollment '
           '$signerClaim does not match claimed sender '
-          'enrollment ${envelope.fromEnrollmentId}; skipping');
+          'enrollment ${quotedClaim(envelope.fromEnrollmentId)}; skipping');
       return null;
     }
     final addressedThrough = EnvelopeAddressing.appNamespaceOf(envelopeKey);
     if (envelope.appNamespace != addressedThrough) {
-      logger.warning('Envelope $envelopeKey sits in $addressedThrough but its '
+      logger.warning('Envelope $envelopeKey sits in '
+          '${quotedClaim(addressedThrough)} but its '
           'sender signed it for ${quotedClaim(envelope.appNamespace)}; '
           'skipping');
       return null;
@@ -913,7 +915,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       // party that knows it did, and the requester cannot tell that from
       // nobody holding the secret or from the envelope never arriving.
       logger.warning('Declining to answer the secret request from kpid '
-          '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
+          '${quotedClaim(received.fromKpid)} (enrollment '
+          '${quotedClaim(received.fromEnrollmentId)}) in '
           '${received.appNamespace}: the answer policy refused it. The '
           'requester will see no reply.');
       return;
@@ -959,7 +962,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       // inside a dispatch loop, and a match is not by itself evidence that
       // anybody answered.
       logger.warning('Not answering request $requestId from kpid '
-          '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
+          '${quotedClaim(received.fromKpid)} (enrollment '
+          '${quotedClaim(received.fromEnrollmentId)}) in '
           '${received.appNamespace}: ${suppressedBy.length} envelope(s) '
           'already answer it. Matched: ${suppressedBy.join(", ")}');
       return;
@@ -983,7 +987,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           // Warning, not finer: a refused serve must be attributable, or it
           // presents as the holder never having answered.
           logger.warning('Not serving ${secret.name} to enrollment '
-              '${received.fromEnrollmentId} (kpid ${received.fromKpid}): '
+              '${quotedClaim(received.fromEnrollmentId)} (kpid '
+              '${quotedClaim(received.fromKpid)}): '
               'per-enrollment secrets are served only to fully privileged '
               'enrollments${gate == null ? ', and no privilege resolver is '
                   'wired on this sharing instance' : ''}');
