@@ -11,7 +11,6 @@ import 'package:at_chops/at_chops.dart'
 import 'package:at_client/at_client.dart'
     show
         EnvelopeKeySelected,
-        EnvelopeKeySelection,
         EnvelopeRefusal,
         EnvelopeRefused,
         EnvelopeVerified,
@@ -882,16 +881,33 @@ void main() {
 
     group('Given any malformed envelope or _apsk value', () {
       test(
-          'when verified or selected, then an EnvelopeRefused is returned and '
+          'when selected and verified, then both refuse it the same way and '
           'nothing is thrown', () async {
-        final envelopes = [
-          envelope.withEntryMember('signature', '!!not base64url!!'),
-          resigned(envelope, [ofE.key], (h) => h..remove('kid')),
-          resigned(envelope, [ofE.key], (h) => h..['v'] = 2),
-          resigned(envelope, [ofE.key], (h) => h..remove('typ')),
-          resigned(envelope, [ofE.key], (h) => h..remove('enid')),
-          resigned(envelope, [ofE.key], (h) => h..remove('alg')),
-          envelope.withEntryMember('signature', ''),
+        // NOTE: null where selection finds the key and only the signature is
+        // refused.
+        final envelopes = <(SignedEnvelope, EnvelopeRefusal?)>[
+          (envelope.withEntryMember('signature', '!!not base64url!!'), null),
+          (
+            resigned(envelope, [ofE.key], (h) => h..remove('kid')),
+            EnvelopeRefusal.malformedEnvelope
+          ),
+          (
+            resigned(envelope, [ofE.key], (h) => h..['v'] = 2),
+            EnvelopeRefusal.unsupportedVersion
+          ),
+          (
+            resigned(envelope, [ofE.key], (h) => h..remove('typ')),
+            EnvelopeRefusal.wrongType
+          ),
+          (
+            resigned(envelope, [ofE.key], (h) => h..remove('enid')),
+            EnvelopeRefusal.wrongEnrollment
+          ),
+          (
+            resigned(envelope, [ofE.key], (h) => h..remove('alg')),
+            EnvelopeRefusal.keyNotInKeySet
+          ),
+          (envelope.withEntryMember('signature', ''), null),
         ];
         final values = [
           for (final cut in unreadable.values) cut(bare(), ofE.apsk),
@@ -902,17 +918,27 @@ void main() {
               '"pub": "AAAA"}]}',
         ];
         var checked = 0;
-        for (final candidate in envelopes) {
-          for (final signer in [
-            apskOfE(),
-            ...values.map(apskOfE()._withValue)
-          ]) {
-            expect(selectEnvelopeKey(candidate, signer: signer),
-                isA<EnvelopeKeySelection>());
-            final verified =
-                await verifySignedEnvelope(candidate, signer: signer);
-            expect(verified, isA<EnvelopeRefused>(),
-                reason: '$candidate against ${signer.value.length} chars');
+        for (final (candidate, selectedAs) in envelopes) {
+          final selection = selectEnvelopeKey(candidate, signer: apskOfE());
+          final verification =
+              await verifySignedEnvelope(candidate, signer: apskOfE());
+          if (selectedAs == null) {
+            expect(selection, isA<EnvelopeKeySelected>(), reason: '$candidate');
+            expect(verification, isA<EnvelopeRefused>(), reason: '$candidate');
+          } else {
+            expect(selection, refusedAs(selectedAs), reason: '$candidate');
+            expect(verification, refusedAs(selectedAs), reason: '$candidate');
+          }
+          checked++;
+          for (final value in values) {
+            final signer = apskOfE()._withValue(value);
+            final selected = selectEnvelopeKey(candidate, signer: signer);
+            expect(
+                await verifySignedEnvelope(candidate, signer: signer),
+                selected is EnvelopeRefused
+                    ? refusedAs(selected.refusal)
+                    : isA<EnvelopeRefused>(),
+                reason: '$candidate against ${value.length} chars');
             checked++;
           }
         }

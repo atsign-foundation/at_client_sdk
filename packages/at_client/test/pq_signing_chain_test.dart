@@ -460,7 +460,7 @@ void main() {
         'a chain link on a key through PqSigningChain.verifyChain', () async {
       final result = await chainedAs(atSign, null);
 
-      expect(result.verdict, isNot(ChainVerdict.broken), reason: result.reason);
+      expect(result.verdict, ChainVerdict.anchored, reason: result.reason);
     });
 
     test(
