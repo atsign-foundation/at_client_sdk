@@ -7,6 +7,8 @@
 - fix: notifications waiting for their key are no longer dropped sooner
   because several listeners want them, and one given up because its
   listener cancelled is reported on `droppedEvents`.
+- fix: `Enrollments.requests` reports only notifications from the client's
+  own atSign.
 - fix: the legacy encryption and decryption paths name the underlying
   error's type in their `AtEncryptionException` and `AtDecryptionException`
   rather than quoting its text.
@@ -771,7 +773,7 @@ And some tech debt cleanup
 
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
-  `AtClientPreference.Atsign ProtocolEmitted` and change its default value
+  `AtClientPreference.atProtocolEmitted` and change its default value
   from 1.5.0 to 2.0.0
 
 ## 3.5.3
