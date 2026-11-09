@@ -1,19 +1,29 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:stream_channel/stream_channel.dart';
 
 /// An atDirectory's HTTPS face, over plain HTTP, with the CORS header a
-/// browser needs. Sends its port, then the raw path of each request.
+/// browser needs. Sends its port. Records the raw path of each request before
+/// answering it, and answers `GET /__answered` with a JSON list of the paths
+/// recorded since the last such request, which it never records.
 void hybridMain(StreamChannel channel) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   channel.sink.add(server.port);
+  final answered = <String>[];
 
   await for (HttpRequest request in server) {
     final path = request.uri.path;
-    channel.sink.add(path);
     final response = request.response
       ..headers.set('Access-Control-Allow-Origin', '*');
+    if (path == '/__answered') {
+      response.write(jsonEncode(answered));
+      answered.clear();
+      await response.close();
+      continue;
+    }
+    answered.add(path);
     if (path == '/@endless') {
       unawaited(_endless(response));
       continue;

@@ -9,36 +9,39 @@ import 'package:at_lookup/src/util/abandonment.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
+import 'answered_paths.dart';
+
 /// Catalogue: features/at_lookup/transports.feature
 void main() {
   late StreamChannel channel;
+  late int port;
   late HttpsSecondaryAddressFinder finder;
-  final paths = <String>[];
+
+  Future<List<String>> answered() => answeredPaths(port);
 
   setUpAll(() async {
     channel = spawnHybridUri('https_fake_directory.dart');
-    final port = Completer<int>();
-    channel.stream.listen((event) => port.isCompleted
-        ? paths.add(event as String)
-        : port.complete((event as num).toInt()));
-    finder = HttpsSecondaryAddressFinder('127.0.0.1',
-        port: await port.future, scheme: 'http');
+    final ready = Completer<int>();
+    channel.stream.listen((event) => ready.complete((event as num).toInt()));
+    port = await ready.future;
+    finder =
+        HttpsSecondaryAddressFinder('127.0.0.1', port: port, scheme: 'http');
   });
 
   tearDownAll(() => channel.sink.close());
 
-  setUp(paths.clear);
+  tearDown(answered);
 
   test('a 200 host:port answer is the atServer address', () async {
     final address = await finder.findSecondary('@alice');
     expect(address.host, 'vip.example.org');
     expect(address.port, 1234);
-    expect(paths, ['/@alice']);
+    expect(await answered(), ['/@alice']);
   });
 
   test('an atSign given without its @ is asked for with one', () async {
     expect((await finder.findSecondary('alice')).port, 1234);
-    expect(paths, ['/@alice']);
+    expect(await answered(), ['/@alice']);
   });
 
   test('a 404 is SecondaryNotFoundException', () async {
@@ -48,14 +51,16 @@ void main() {
 
   test('the atSign is asked for in its canonical form', () async {
     expect((await finder.findSecondary('@Alice')).port, 1234);
-    expect(paths, ['/@alice']);
+    expect(await answered(), ['/@alice']);
   });
 
   test('an atSign that is not one is refused before anything is asked',
       () async {
     await expectLater(finder.findSecondary('@a b/c?d'),
         throwsA(isA<InvalidAtSignException>()));
-    expect(paths, isEmpty);
+    expect(await answered(), isEmpty,
+        reason: 'the atDirectory took no request before one made after the '
+            'refusal');
   });
 
   test('an answer naming a host behind an @ is refused', () async {

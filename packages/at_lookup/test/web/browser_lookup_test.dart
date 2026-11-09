@@ -8,35 +8,34 @@ import 'package:at_lookup/at_lookup_web.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
+import 'answered_paths.dart';
+
 /// Catalogue: features/at_lookup/transports.feature
 ///
 /// Over `ws` and plain HTTP: that [webSocketLookUps] uses `wss` and an
 /// HTTPS atDirectory is `web_socket_lookups_test.dart`'s.
 void main() {
-  /// Spawns [server], which sends its port first and then, for the fake
-  /// atDirectory, each path it was asked for, kept in [paths].
-  Future<(StreamChannel, int)> spawn(String server,
-      [List<String>? paths]) async {
+  /// Spawns [server], which sends its port.
+  Future<(StreamChannel, int)> spawn(String server) async {
     final channel = spawnHybridUri(server);
     final port = Completer<int>();
-    channel.stream.listen((event) => port.isCompleted
-        ? paths?.add(event as String)
-        : port.complete((event as num).toInt()));
+    channel.stream.listen((event) => port.complete((event as num).toInt()));
     return (channel, await port.future);
   }
 
   group('against an atDirectory and its atServer', () {
     late StreamChannel channel;
     late int port;
-    final paths = <String>[];
+
+    Future<List<String>> answered() => answeredPaths(port);
 
     setUpAll(() async {
-      (channel, port) = await spawn('atserver_fake.dart', paths);
+      (channel, port) = await spawn('atserver_fake.dart');
     });
 
     tearDownAll(() => channel.sink.close());
 
-    setUp(paths.clear);
+    tearDown(answered);
 
     AtLookupMuxable lookUpFor(String atSign) => AtLookUp.withTransport(
         atSign: atSign,
@@ -54,7 +53,7 @@ void main() {
 
       expect(await lookUp.executeCommand('scan\n'), 'data:ok:scan');
 
-      expect(paths, ['/@alice', '/ws'],
+      expect(await answered(), ['/@alice', '/ws'],
           reason: 'it asked the atDirectory, then opened /ws at the host '
               'and port the answer named, and ran the command there');
     });
@@ -65,7 +64,7 @@ void main() {
 
       await lookUp.executeCommand('scan\n');
 
-      expect(paths.first, '/@alice');
+      expect(await answered(), ['/@alice', '/ws']);
     });
   });
 
