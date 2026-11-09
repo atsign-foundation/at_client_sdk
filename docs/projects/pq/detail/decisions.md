@@ -3354,13 +3354,15 @@ ruling, each with a differential test.
    planned migration off a shared keyfile; without it, retiring a cloned parent
    would kill the legitimate children each clone spawned. No authorisation delta:
    subset grants mean the parent's revoker is authorised for every descendant
-   (record that property in the implementing commit's body). The roster
-   (`toJsonRoster`) rides `enroll:list`, which returns the record whole, and
-   includes `retrofitPredecessorEnrollmentId`, so an owner can see what a stolen
-   keyfile self-enrolled — through that field rather than `parentEnrollmentId` (a
-   self-enrolled successor copies its predecessor's `parentEnrollmentId` rather
-   than naming the predecessor as parent). ⚠️ **This said `enroll:fetch`
-   carries it too, until 2026-08-27; it does not.** That verb returns exactly
+   (record that property in the implementing commit's body).
+   `retrofitPredecessorEnrollmentId` rides `enroll:list`, both in the whole
+   record, which a CRAM connection or an enrollment holding `__manage:rw` gets,
+   and in the roster (`toJsonRoster`), which an enrollment holding `__manage:r`
+   gets. So an owner can see what a stolen keyfile self-enrolled, through that
+   field rather than `parentEnrollmentId`: a self-enrolled successor copies its
+   predecessor's `parentEnrollmentId` rather than naming the predecessor as
+   parent. ⚠️ **This said `enroll:fetch` carries `parentEnrollmentId` too, until
+   2026-08-27; it does not.** That verb returns exactly
    `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey` and
    `status`. **The cascade shipped**
    in at_server #2781 ([ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)),
@@ -3372,6 +3374,8 @@ ruling, each with a differential test.
    predecessor exists and is not currently `approved` (129 part 2). The
    non-cascading `retire` mode does not exist on at_server trunk (read at
    `886673594`). **Amended 2026-11-07:** this item said the cascade was unbuilt.
+   **Amended 2026-11-09:** it said `parentEnrollmentId` shows what a stolen
+   keyfile spawned.
 
 3. **The cap slides.** [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
    formula — min(now + grace, the enrollment's own expiry) — is applied on every

@@ -98,7 +98,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [39]  | `_apsk` rides the same two-stage ladder                                                     | 2026-08-05 | LIVE                      |
 | [40]  | RF-SRV is the mechanism the whole model stands on                                           | 2026-08-05 | AMENDED 2026-08-27        |
 | [41]  | The to-define list                                                                          | 2026-08-05 | LIVE                      |
-| [42]  | The to-define list, ruled                                                                   | 2026-08-05 | AMENDED 2026-11-08        |
+| [42]  | The to-define list, ruled                                                                   | 2026-08-05 | AMENDED 2026-11-09        |
 | [43]  | RF-2b lands, and what the first genuine ML-DSA PKAM found                                   | 2026-08-05 | LIVE                      |
 | [44]  | RF-2c: the switch-over, and what it cost to make a client PQ                                | 2026-08-05 | LIVE                      |
 | [45]  | The retrofit rows, and the five defects the first end-to-end run found                      | 2026-08-05 | AMENDED 2026-08-15        |
