@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
@@ -60,6 +61,57 @@ void main() {
           httpClient: _mockResponse({}),
         ),
         throwsException,
+      );
+    });
+
+    test('throws ArgumentError naming registrarUrl when it is empty', () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    test('throws ArgumentError naming registrarUrl when it carries a scheme',
+        () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: 'https://$_registrarUrl',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    test('throws ArgumentError naming registrarUrl when it carries a path', () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '$_registrarUrl/path',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    test('accepts a bare host with a port', () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '$_registrarUrl:8443',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        returnsNormally,
       );
     });
   });
@@ -201,38 +253,90 @@ void main() {
   });
 
   group('RegistrarAdminService.registerAtsign', () {
-    test('returns the atsign and the stripped cramkey on success', () async {
+    test('returns the registered and requested atsign and the cramkey',
+        () async {
       final service = _makeAdminService(_mockResponse(
-          {'status': 'success', 'cramkey': 'prefix:ADMINCRAMKEY'}));
+          {'status': 'success', 'cramkey': '@alice:ADMINCRAMKEY'}));
       final result = await service.registerAtsign(atsign: '@alice'.toAtsign());
-      expect(result.atsign, equals('@alice'.toAtsign()));
+      expect(result.requestedAtsign, equals('@alice'.toAtsign()));
+      expect(result.registeredAtsign, equals('@alice'.toAtsign()));
       expect(result.cramKey, equals('ADMINCRAMKEY'));
     });
 
-    test('sends the super key and the atsign with its leading "@"', () async {
+    test(
+        'returns the registrar-chosen atsign, distinct from the one requested, '
+        'when a super key prefix/postfix was applied', () async {
+      final service = _makeAdminService(_mockResponse(
+          {'status': 'success', 'cramkey': '@acme_alice:ADMINCRAMKEY'}));
+      final result = await service.registerAtsign(atsign: '@alice'.toAtsign());
+      expect(result.requestedAtsign, equals('@alice'.toAtsign()));
+      expect(result.registeredAtsign, equals('@acme_alice'.toAtsign()));
+      expect(result.cramKey, equals('ADMINCRAMKEY'));
+    });
+
+    test('splits the cramkey at the first ":", not the last', () async {
+      final service = _makeAdminService(_mockResponse(
+          {'status': 'success', 'cramkey': '@alice:part1:part2'}));
+      final result = await service.registerAtsign(atsign: '@alice'.toAtsign());
+      expect(result.registeredAtsign, equals('@alice'.toAtsign()));
+      expect(result.cramKey, equals('part1:part2'));
+    });
+
+    test('sends the super key, the requested atsign and startatServer=true',
+        () async {
       late http.Request captured;
       final client = MockClient((req) async {
         captured = req;
         return http.Response(
-            jsonEncode({'status': 'success', 'cramkey': 'prefix:KEY'}), 200);
+            jsonEncode({'status': 'success', 'cramkey': '@alice:KEY'}), 200);
       });
       final service = _makeAdminService(client);
       await service.registerAtsign(atsign: '@alice'.toAtsign());
 
+      expect(captured.url.scheme, equals('https'));
+      expect(captured.url.host, equals(_registrarUrl));
       expect(captured.url.path, equals('/api/app/v4/register-atsign/'));
       expect(captured.headers['Authorization'], equals(_apiKey));
       final body = jsonDecode(captured.body) as Map<String, dynamic>;
       expect(body['atSign'], equals('@alice'));
       expect(body['operation'], equals('register'));
+      expect(body['startatServer'], equals('true'));
+      expect(body['startatServer'], isA<String>());
     });
 
     test(
-        'throws RegistrarException when register succeeds but the cramkey is missing',
-        () async {
+        'throws RegistrarException(noCramKey) when register succeeds but '
+        'the cramkey is missing', () async {
       final service = _makeAdminService(_mockResponse({'status': 'success'}));
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
-        throwsA(isA<RegistrarException>()),
+        throwsA(
+          isA<RegistrarException>()
+              .having((e) => e.reason, 'reason', RegistrarFailure.noCramKey)
+              .having((e) => e.endpoint, 'endpoint', '/register-atsign/'),
+        ),
+      );
+    });
+
+    test('throws RegistrarException when the cramkey has no "@" prefix',
+        () async {
+      final service = _makeAdminService(
+          _mockResponse({'status': 'success', 'cramkey': 'alice:KEY'}));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test('throws RegistrarException when the cramkey has no ":" separator',
+        () async {
+      final service = _makeAdminService(
+          _mockResponse({'status': 'success', 'cramkey': '@alice'}));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
       );
     });
 
@@ -247,13 +351,24 @@ void main() {
     });
 
     test(
-        'throws RegistrarException when the cramkey has no value after its prefix',
+        'throws RegistrarException when the cramkey has no value after its ":"',
         () async {
       final service = _makeAdminService(
-          _mockResponse({'status': 'success', 'cramkey': 'prefix:'}));
+          _mockResponse({'status': 'success', 'cramkey': '@alice:'}));
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(isA<RegistrarException>()),
+      );
+    });
+
+    test('throws RegistrarException when the cramkey names an invalid atsign',
+        () async {
+      final service = _makeAdminService(
+          _mockResponse({'status': 'success', 'cramkey': '@alice!:KEY'}));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
       );
     });
 
@@ -274,7 +389,20 @@ void main() {
       final service = _makeAdminService(client);
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
-        throwsA(isA<RegistrarException>()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test('throws RegistrarException(malformedResponse) on real non-JSON',
+        () async {
+      final client = MockClient(
+          (_) async => http.Response('<html>502 Bad Gateway</html>', 200));
+      final service = _makeAdminService(client);
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
       );
     });
 
@@ -282,9 +410,8 @@ void main() {
         'RegistrarException text carries neither the cramkey nor the server message',
         () async {
       final service = _makeAdminService(_mockResponse({
-        'status': 'error',
-        'message': 'super-secret-server-detail',
-        'cramkey': 'prefix:SHOULDNOTLEAK',
+        'status': 'success',
+        'cramkey': '@alice!invalid:SHOULDNOTLEAK',
       }));
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
@@ -292,63 +419,128 @@ void main() {
           predicate(
             (e) =>
                 e is RegistrarException &&
-                !e.toString().contains('SHOULDNOTLEAK') &&
-                !e.toString().contains('super-secret-server-detail'),
+                !e.toString().contains('SHOULDNOTLEAK'),
           ),
         ),
       );
     });
 
-    test('throws when status is not "success"', () async {
-      final service = _makeAdminService(_mockResponse(
-          {'status': 'error', 'message': 'atSign not available'}));
+    test('throws RegistrarException(unavailable) when status is "error"',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'error',
+        'message': 'super-secret-server-detail',
+      }));
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
-        throwsA(isA<RegistrarException>()),
+        throwsA(
+          isA<RegistrarException>()
+              .having((e) => e.reason, 'reason', RegistrarFailure.unavailable)
+              .having(
+                  (e) => e.toString().contains('super-secret-server-detail'),
+                  'leaks the server message',
+                  isFalse),
+        ),
       );
     });
 
-    test('throws on non-200 status', () async {
+    test('throws RegistrarException(unexpectedStatus) on non-200 status',
+        () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Server Error'}, status: 500));
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
-        throwsA(isA<RegistrarException>()),
+        throwsA(isA<RegistrarException>()
+            .having(
+                (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
+            .having((e) => e.statusCode, 'statusCode', 500)),
       );
     });
 
-    test('401 exception text does not contain the super key', () async {
+    test(
+        'throws RegistrarException(unexpectedStatus) on a non-200 whose body '
+        'looks like success', () async {
+      final service = _makeAdminService(_mockResponse(
+          {'status': 'success', 'cramkey': '@alice:k'},
+          status: 500));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having(
+                (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
+            .having((e) => e.statusCode, 'statusCode', 500)
+            .having((e) => e.endpoint, 'endpoint', '/register-atsign/')),
+      );
+    });
+
+    test('401 raises RegistrarException(authentication) without the super key',
+        () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Unauthorized'}, status: 401));
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(
-          predicate(
-            (e) =>
-                e.toString().contains('super-API-key') &&
-                e.toString().contains('/register-atsign/') &&
-                e.toString().contains('401') &&
-                !e.toString().contains(_apiKey),
-          ),
+          isA<RegistrarException>()
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.authentication)
+              .having((e) => e.statusCode, 'statusCode', 401)
+              .having((e) => e.endpoint, 'endpoint', '/register-atsign/')
+              .having((e) => e.toString().contains(_apiKey), 'leaks the key',
+                  isFalse),
         ),
       );
     });
 
-    test('403 exception text does not contain the super key', () async {
+    test('403 raises RegistrarException(authentication) without the super key',
+        () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Forbidden'}, status: 403));
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(
-          predicate(
-            (e) =>
-                e.toString().contains('super-API-key') &&
-                e.toString().contains('/register-atsign/') &&
-                e.toString().contains('403') &&
-                !e.toString().contains(_apiKey),
-          ),
+          isA<RegistrarException>()
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.authentication)
+              .having((e) => e.statusCode, 'statusCode', 403)
+              .having((e) => e.toString().contains(_apiKey), 'leaks the key',
+                  isFalse),
         ),
       );
+    });
+
+    test('times out instead of hanging forever', () async {
+      final neverResponds = Completer<http.StreamedResponse>();
+      final client = MockClient.streaming((request, bodyStream) async {
+        return await neverResponds.future;
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(milliseconds: 50),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      );
+    });
+
+    test('rejects a response body over the size cap', () async {
+      final oversized = 'x' * (70 * 1024);
+      final client = MockClient((_) async => http.Response(oversized, 200));
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
+      );
+    });
+
+    test('the deprecated superApiKey getter still returns the key', () {
+      final service = _makeAdminService(_mockResponse({}));
+      // ignore: deprecated_member_use_from_same_package
+      expect(service.superApiKey, equals(_apiKey));
     });
   });
 
@@ -384,7 +576,8 @@ void main() {
       expect(result.skippedAtSigns, equals(['@bogus']));
     });
 
-    test('throws when all atSigns are invalid', () async {
+    test('throws RegistrarException(unavailable) when all atSigns are invalid',
+        () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
         'message':
@@ -395,30 +588,65 @@ void main() {
       }));
       expect(
         () => service.generateAtSignDeleteToken(['@bogus']),
-        throwsException,
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.unavailable)
+            .having(
+                (e) => e.toString().contains(
+                    'One or more Atsigns mentioned are not associated with this account.'),
+                'leaks the server message',
+                isFalse)),
       );
     });
 
-    test('throws on non-200 status', () async {
+    test('throws RegistrarException(unexpectedStatus) on non-200 status',
+        () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Server Error'}, status: 500));
       expect(
         () => service.generateAtSignDeleteToken(['@one']),
-        throwsException,
+        throwsA(isA<RegistrarException>()
+            .having(
+                (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
+            .having((e) => e.statusCode, 'statusCode', 500)),
       );
     });
 
-    test('throws helpful exception on 403 auth failure', () async {
+    test(
+        '403 raises RegistrarException(authentication) naming /manage-atsigns/',
+        () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Forbidden'}, status: 403));
       expect(
         () => service.generateAtSignDeleteToken(['@one']),
         throwsA(
-          predicate(
-            (e) =>
-                e.toString().contains('super-API-key') &&
-                e.toString().contains('403'),
-          ),
+          isA<RegistrarException>()
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.authentication)
+              .having((e) => e.endpoint, 'endpoint', '/manage-atsigns/')
+              .having((e) => e.toString().contains('/manage-atsigns/'),
+                  'names the endpoint', isTrue)
+              .having((e) => e.toString().contains(_apiKey), 'leaks the key',
+                  isFalse),
+        ),
+      );
+    });
+
+    test(
+        '401 raises RegistrarException(authentication) naming /manage-atsigns/',
+        () async {
+      final service = _makeAdminService(
+          _mockResponse({'message': 'Unauthorized'}, status: 401));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(
+          isA<RegistrarException>()
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.authentication)
+              .having((e) => e.endpoint, 'endpoint', '/manage-atsigns/')
+              .having((e) => e.toString().contains('/manage-atsigns/'),
+                  'names the endpoint', isTrue)
+              .having((e) => e.toString().contains(_apiKey), 'leaks the key',
+                  isFalse),
         ),
       );
     });
@@ -448,7 +676,8 @@ void main() {
       expect(result.failed, equals([]));
     });
 
-    test('throws when status is not "success"', () async {
+    test('throws RegistrarException(unavailable) when status is not "success"',
+        () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
         'message':
@@ -459,17 +688,42 @@ void main() {
       }));
       expect(
         () => service.deleteAtSigns(token: 'bad-token', atSigns: ['@one']),
-        throwsException,
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.unavailable)),
       );
     });
 
-    test('throws on non-200 status', () async {
+    test('throws RegistrarException(unexpectedStatus) on non-200 status',
+        () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Server Error'}, status: 500));
       expect(
         () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
-        throwsException,
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)),
       );
+    });
+
+    test('requests the manage-atsigns endpoint over https', () async {
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response(
+            jsonEncode({
+              'status': 'success',
+              'data': {
+                'deleted': [],
+                'failed': [],
+              },
+            }),
+            200);
+      });
+      final service = _makeAdminService(client);
+      await service.deleteAtSigns(token: 'the-token', atSigns: ['@one']);
+
+      expect(captured.url.scheme, equals('https'));
+      expect(captured.url.host, equals(_registrarUrl));
+      expect(captured.url.path, equals('/api/app/v4/manage-atsigns/'));
     });
   });
 }

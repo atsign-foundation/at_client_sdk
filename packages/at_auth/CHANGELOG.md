@@ -6,7 +6,19 @@
   `AtSigningException` before `enroll:request` is sent.
 - feat: `RegistrarAdminService.registerAtsign`, registering an Atsign under
   the super API key alongside the existing `/manage-atsigns/` delete flow.
-  Returns a `RegisteredAtsign`.
+  Returns a `RegisteredAtsign`, whose `registeredAtsign` is the Atsign the
+  registrar actually registered (read from its cramkey; a super key may add
+  a prefix or postfix to the `requestedAtsign`) and must be the one a caller
+  activates.
+- feat: `RegistrarAdminService` takes a `requestTimeout` (default 30s) and
+  caps the registrar's response body at 64 KiB; both apply to
+  `registerAtsign` and the `/manage-atsigns/` delete methods.
+- feat: `RegistrarException` carries `endpoint`, `statusCode` and a `reason`
+  (`RegistrarFailure`), and is now thrown by `RegistrarAdminService`'s delete
+  methods too, including on a rejected super API key. Exception text never
+  carries the registrar's `message`, the cramkey or the super key.
+- deprecated: `RegistrarAdminService.superApiKey` will be removed in
+  at_auth 5.0.0; nothing should read the super key back.
 
 ## 4.0.0
 
