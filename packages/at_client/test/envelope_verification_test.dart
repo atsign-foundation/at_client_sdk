@@ -863,14 +863,21 @@ void main() {
     group('Given an _apsk RSA key', () {
       /// A bare `_apsk` value: [rsaPair]'s modulus with [exponent], as an
       /// X.509 SubjectPublicKeyInfo.
+      /// [exponentContent] is taken as the INTEGER's content bytes verbatim,
+      /// sign bit and all, rather than as a magnitude.
       String bareWithExponent(Uint8List exponent,
-          {List<int>? algorithm, int keyTag = 0x03, int unusedBits = 0}) {
+          {List<int>? algorithm,
+          int keyTag = 0x03,
+          int unusedBits = 0,
+          bool exponentContent = false}) {
         final modulus = _magnitude(
             crypton.RSAPublicKey.fromString(rsaPair.atPublicKey.publicKey)
                 .asPointyCastle
                 .modulus!);
-        final rsaKey =
-            _der(0x30, [..._derInteger(modulus), ..._derInteger(exponent)]);
+        final rsaKey = _der(0x30, [
+          ..._derInteger(modulus),
+          ...exponentContent ? _der(0x02, exponent) : _derInteger(exponent),
+        ]);
         return base64Encode(_der(0x30, [
           ...algorithm ??
               _der(0x30, [
@@ -959,18 +966,10 @@ void main() {
       }, timeout: const Timeout(Duration(seconds: 60)));
 
       test(
-          'when its exponent is even, at most 2^16 or over 256 bits, then it '
-          'is refused, and one odd, over 2^16 and of 256 bits is not',
-          () async {
-        final two = BigInt.two;
-        for (final (label, exponent) in [
-          ('3', BigInt.from(3)),
-          ('2^16 - 1, odd and 16 bits', two.pow(16) - BigInt.one),
-          ('2^16 + 2, even and 17 bits', two.pow(16) + two),
-          ('2^255 + 2^16, even and 256 bits', two.pow(255) + two.pow(16)),
-          ('2^256 + 1, odd and 257 bits', two.pow(256) + BigInt.one),
-        ]) {
-          final bare = bareWithExponent(_magnitude(exponent));
+          'when its exponent is even, at most 2^16, over 256 bits or '
+          'DER-negative, then it is refused, and one odd, over 2^16 and of 256 '
+          'bits is not', () async {
+        Future<void> refused(String label, String bare) async {
           final checks = envelopeSignatureChecks;
           expect(
               await verifySignedEnvelope(signedBy(bare),
@@ -986,6 +985,29 @@ void main() {
               throwsA(isA<AtSigningVerificationException>()
                   .having((x) => x.message, 'message', contains('exponent'))),
               reason: label);
+        }
+
+        final two = BigInt.two;
+        for (final (label, exponent) in [
+          ('3', BigInt.from(3)),
+          ('2^16 - 1, odd and 16 bits', two.pow(16) - BigInt.one),
+          ('2^16 + 2, even and 17 bits', two.pow(16) + two),
+          ('2^255 + 2^16, even and 256 bits', two.pow(255) + two.pow(16)),
+          ('2^256 + 1, odd and 257 bits', two.pow(256) + BigInt.one),
+        ]) {
+          await refused(label, bareWithExponent(_magnitude(exponent)));
+        }
+        for (final (label, content) in [
+          ('DER-negative, 81 00 01', [0x81, 0x00, 0x01]),
+          (
+            'DER-negative, ff then 30 zero bytes then 01',
+            [0xff, ...List.filled(30, 0), 0x01]
+          ),
+        ]) {
+          await refused(
+              label,
+              bareWithExponent(Uint8List.fromList(content),
+                  exponentContent: true));
         }
 
         for (final (label, exponent) in [

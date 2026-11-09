@@ -668,13 +668,16 @@ Future<bool> checkEnvelopeSignature(
   };
 }
 
-/// Whether [spki] is an X.509 SubjectPublicKeyInfo, DER-encoded, holding an
-/// RSA key whose public exponent is odd, above 2^16 and below 2^256, as FIPS
-/// 186-5 requires; every key at_chops generates uses 65537.
+/// Whether [spki], DER-encoded, is a SubjectPublicKeyInfo whose key, two
+/// INTEGERs, has a second INTEGER, the public exponent, that is positive, odd,
+/// above 2^16 and below 2^256, as FIPS 186-5 requires; every key at_chops
+/// generates uses 65537.
 ///
-/// Read from the DER lengths and the exponent's last byte, so a key of any
-/// size is judged at once. Any other shape is refused, so no key reaches the
-/// verifier without its exponent having been read here.
+/// Read from the DER lengths and the exponent's first and last bytes, so a key
+/// of any size is judged at once. A key not of that shape is refused, so no
+/// key reaches the verifier without its exponent having been read here. The
+/// algorithm identifier and the modulus are not read; the verifier judges
+/// those.
 bool _rsaExponentInRange(Uint8List spki) {
   var at = 0;
   int? enter(int tag) {
@@ -710,7 +713,10 @@ bool _rsaExponentInRange(Uint8List spki) {
   if (modulus == null) return false;
   at += modulus;
   var length = enter(0x02);
-  if (length == null || length == 0 || at + length != spki.length) {
+  if (length == null ||
+      length == 0 ||
+      at + length != spki.length ||
+      spki[at] & 0x80 != 0) {
     return false;
   }
   while (length! > 1 && spki[at] == 0) {
