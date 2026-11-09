@@ -118,8 +118,15 @@ grep -q "Whole-record rollback" prf-server-keys-blob.md \
 
 # 2d. The bootstrap record must carry only the enrollment id in the clear,
 #     with the atKeys document stored exclusively in the private record.
-grep -q '"enrollmentId": "<id>"' prf-server-keys-blob.md \
-  || fail "bootstrap record body does not carry the enrollment id"
+bootstrap_json="$(sed -n '/The bootstrap record is/,/```$/p' prf-server-keys-blob.md | sed -n '/^```json$/,/^```$/p' | grep -v '^```' | tr -d '[:space:]')"
+if [ "$bootstrap_json" != '{"enrollmentId":"<id>"}' ]; then
+  fail "bootstrap record JSON block must contain only {\"enrollmentId\": \"<id>\"}, found: $bootstrap_json"
+fi
+if grep -C 3 -i 'flush' prf-server-keys-blob.md | grep -q 'public:_'; then
+  fail "write-back in prf-server-keys-blob.md points at public:_ instead of atkeys.<enrollmentId>.a.__e"
+fi
+grep -C 3 -i 'flush' prf-server-keys-blob.md | grep -q 'atkeys\.<enrollmentId>\.a\.__e' \
+  || fail "write-back in prf-server-keys-blob.md does not write to atkeys.<enrollmentId>.a.__e"
 if grep -Eq 'public:_<recordId>.*envelope|envelope.*public:_<recordId>' prf-server-keys-blob.md; then
   fail "bootstrap record still described as carrying the envelope"
 fi

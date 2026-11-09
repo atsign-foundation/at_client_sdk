@@ -216,7 +216,7 @@ run of [`probes/systemd_load_credential_encrypted.sh`](probes/systemd_load_crede
 whose tamper arm flipped a byte of the base64 *text* of the encrypted
 credential, not of the decoded blob, failing in `READ_FULL_FILE_UNBASE64`
 before any decryption or tag check. The arm now decodes the blob, flips a
-byte of the decoded ciphertext and re-encodes it. Re-measured on 2026-11-09 in a
+byte of the decoded ciphertext and re-encodes it. Re-measured on 2026-11-05 in a
 privileged container (Ubuntu 24.04, systemd 255.4), systemd's default log level reports `Decryption failed
 (incorrect key?): error:00000000:lib(0)::reason(0)`, followed by `Failed to set
 up credentials: Protocol error` and exit status `243/CREDENTIALS`. The arm now
@@ -376,7 +376,7 @@ same key on every synced device. That's convenient, but it makes the passkey
 provider part of the trust base, and it blurs one enrollment per device unless
 each device has its own passkey and its own document.
 
-The browser has to fetch the document before it holds a PKAM key, so the fetch
+The browser has to bootstrap before it holds a PKAM key, so the bootstrap
 needs a gate of its own. There are two, and they can be combined.
 
 The first is a record whose name is derived from the passkey, for example
@@ -391,7 +391,7 @@ The full derivation is in
 and from the owner, and `showhidden:true` re-admits only `public:__` and `_`
 keys. So the record can't be listed, and it can only be fetched by someone who
 already knows its 256-bit name. That hides the record's existence, size and
-update times, and denies an unauthenticated reader the enrollment id. The
+update times. Only a reader who knows the name gets the enrollment id. The
 atKeys document itself is stored exclusively in `atkeys.<enrollmentId>.a.__e`
 behind PKAM authentication. A single-underscore
 `public:_` key gets no commit-log row (`HiveAtCommitLog` and

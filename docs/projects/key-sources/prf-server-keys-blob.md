@@ -120,7 +120,7 @@ sequenceDiagram
     AS-->>A: {"enrollmentId": "<id>"}
     Note over A: browser: APKAM key re-derived from the passkey (gate c)
     A->>AS: authenticate (PKAM, enrollmentId)
-    A->>AS: lookup atkeys.<enrollmentId>.a.__e
+    A->>AS: llookup atkeys.<enrollmentId>.a.__e
     AS-->>A: envelope
     A->>A: unwrap data key with kek, decrypt (AAD checked)
     A->>A: check keys match the published public keys
