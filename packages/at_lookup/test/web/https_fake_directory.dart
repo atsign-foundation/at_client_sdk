@@ -28,6 +28,10 @@ void hybridMain(StreamChannel channel) async {
       unawaited(_endless(response));
       continue;
     }
+    if (path == '/@slow') {
+      unawaited(_slow(response));
+      continue;
+    }
     switch (path) {
       case '/@alice':
         response.write('vip.example.org:1234');
@@ -41,9 +45,6 @@ void hybridMain(StreamChannel channel) async {
         response.write('a' * 1000000);
       case '/@broken':
         response.statusCode = HttpStatus.internalServerError;
-      case '/@slow':
-        await Future<void>.delayed(const Duration(seconds: 2));
-        response.write('vip.example.org:1234');
       default:
         response
           ..statusCode = HttpStatus.notFound
@@ -51,6 +52,13 @@ void hybridMain(StreamChannel channel) async {
     }
     await response.close();
   }
+}
+
+/// A `host:port` answer that takes 2 seconds, while other requests are taken.
+Future<void> _slow(HttpResponse response) async {
+  await Future<void>.delayed(const Duration(seconds: 2));
+  response.write('vip.example.org:1234');
+  await response.close();
 }
 
 /// A body with no end: chunks keep coming until the client goes away, or for

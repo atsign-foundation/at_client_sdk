@@ -19,6 +19,17 @@ void main() {
 
   Future<List<String>> answered() => answeredPaths(port);
 
+  /// The paths the atDirectory has taken, once it has taken any, waiting at
+  /// most 5 seconds.
+  Future<List<String>> firstTaken() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    var paths = await answered();
+    while (paths.isEmpty && DateTime.now().isBefore(deadline)) {
+      paths = await answered();
+    }
+    return paths;
+  }
+
   setUpAll(() async {
     channel = spawnHybridUri('https_fake_directory.dart');
     final ready = Completer<int>();
@@ -105,7 +116,8 @@ void main() {
   test('a close of the lookup it asks for ends the request at once', () async {
     final abandonment = Abandonment();
     final asked = abandonment.run(() => finder.findSecondary('@slow'));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(await firstTaken(), ['/@slow'],
+        reason: 'the request is in flight when the lookup closes');
     final closedAt = DateTime.now();
     abandonment.abandon();
 
@@ -116,8 +128,6 @@ void main() {
     expect(DateTime.now().difference(closedAt),
         lessThan(const Duration(seconds: 1)),
         reason: 'the atDirectory takes 2 seconds to answer @slow');
-    expect(await answered(), ['/@slow'],
-        reason: 'the request was in flight when the lookup closed');
   });
 
   for (final atSign in ['@malformed', '@badport']) {
@@ -147,11 +157,16 @@ void main() {
   });
 
   test('an answer slower than timeout is AtTimeoutException', () async {
-    await expectLater(
-        finder.findSecondary('@slow',
-            timeout: const Duration(milliseconds: 200)),
-        throwsA(isA<AtTimeoutException>()));
-    expect(await answered(), ['/@slow'],
-        reason: 'the request was in flight when the timeout ran out');
+    final asked =
+        finder.findSecondary('@slow', timeout: const Duration(seconds: 1));
+    var settled = false;
+    unawaited(asked.then((_) {}, onError: (_) {}).whenComplete(() {
+      settled = true;
+    }));
+    expect(await firstTaken(), ['/@slow'],
+        reason: 'the request reaches the atDirectory');
+    expect(settled, isFalse,
+        reason: 'the request is in flight before the timeout runs out');
+    await expectLater(asked, throwsA(isA<AtTimeoutException>()));
   });
 }
