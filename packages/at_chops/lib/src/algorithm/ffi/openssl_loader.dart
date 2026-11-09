@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_version.dart';
 import 'package:ffi/ffi.dart';
 
 /// Candidate libcrypto paths tried in order when [_envVar] is unset or fails.
@@ -62,15 +63,19 @@ DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
   return null;
 }
 
-/// Returns `true` when [lib] supports the ML-KEM-768 algorithm.
+/// Returns `true` when [lib] is OpenSSL 3.5.1 or later and supports the
+/// ML-KEM-768 algorithm.
 ///
-/// ML-KEM-768 was added to the OpenSSL default provider in OpenSSL 3.5.
-/// Older 3.x builds (e.g. the 3.0.x shipped with Ubuntu 22.04/24.04) load
-/// fine but reject `EVP_PKEY_CTX_new_from_name("ML-KEM-768", ...)`.
+/// ML-KEM-768 was added to the OpenSSL default provider in OpenSSL 3.5, and
+/// at_chops uses it through FFI from 3.5.1 on: on 3.5.0 this returns `false`,
+/// so [AtPqc.xWing] uses the pure-Dart backend. Older 3.x builds (e.g. the
+/// 3.0.x shipped with Ubuntu 22.04/24.04) load fine but reject
+/// `EVP_PKEY_CTX_new_from_name("ML-KEM-768", ...)`.
 /// Call this before constructing [MlKem768FfiAlgo] to gate FFI tests or
 /// runtime fallback decisions.
 bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
-  return _libCryptoSupportsAlgorithm(lib, 'ML-KEM-768');
+  return libCryptoVersionSupportsMlKem768(lib) &&
+      _libCryptoSupportsAlgorithm(lib, 'ML-KEM-768');
 }
 
 /// Returns `true` when [lib] supports the ML-DSA-65 algorithm.
