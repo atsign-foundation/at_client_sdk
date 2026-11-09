@@ -1179,8 +1179,14 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
 
   final stream = atClient.notificationService.subscribe(
       regex: r'.*\.new\.enrollments\.__manage', shouldDecrypt: false);
+  final atSign = atClient.getCurrentAtSign()!;
 
   Future<void> approveIfMatching(AtNotification n) async {
+    if (n.from.toAtsign() != atSign.toAtsign()) {
+      stderr.writeln('Ignoring notification ${n.key} from "${n.from}": only '
+          '$atSign announces its own enrollment requests');
+      return;
+    }
     String eId = n.key.substring(0, n.key.indexOf('.'));
 
     final er = jsonDecode(n.value ?? '');

@@ -1,4 +1,4 @@
-/// Policy management via atProtocol
+/// Policy management via Atsign Protocol
 library;
 
 export 'src/policy/interfaces.dart';
