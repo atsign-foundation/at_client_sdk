@@ -51,7 +51,7 @@ and an `update` that reads, mutates and writes as one operation.
 | Store              | Where                                                       | How it meets the contract                                                                                                                                                                               |
 | ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FileAtKeysIo`     | at_auth, `lib/src/keys/io/file_io.dart`                     | an inter-process lock file around `flush` and `update`, write-to-temp then rename, a rolling `.bak`, a one-off `.pre-v1` copy, and an optional passphrase envelope                                      |
-| `KeychainAtKeysIo` | at_client_flutter, `lib/src/keychain/keychain_io_impl.dart` | built on the `biometric_storage` Flutter plugin; one entry per app package holding every atSign, split into 2,560-byte segments on Windows; no lock, and `update` is the interface's non-atomic default |
+| `KeychainAtKeysIo` | at_client_flutter, `lib/src/keychain/keychain_io_impl.dart` | built on the `biometric_storage` Flutter plugin; one entry per app package holding every atSign, split into 2,560-byte segments on Windows; holds `KeychainStorage.writing` (an isolate-local write lock) and overrides `update` under it (no cross-process lock) |
 | `InMemoryAtKeysIo` | at_auth                                                     | process-local, for tests; never the store a client runs on (see [section 4](#4-the-split-a-store-and-a-key-source))                                                                                                                                                                                |
 
 Four facts shape the design.
@@ -76,9 +76,9 @@ have the serialiser use it.
 
 A legacy enrollment holds atSign-wide decryption keys. The approver encrypts
 the atSign's default encryption private key and self-encryption key for the new
-enrollment (`enrollment_approver.dart`, around line 55), and the enrollee's
-handshake fetches and files them (`enrollment_handshake.dart`, lines 99 to
-134). So one compromised enrollment can decrypt data for the whole atSign, not
+enrollment (`EnrollmentApprover.approve` in `enrollment_approver.dart`), and the enrollee's
+handshake fetches and files them (`EnrollmentHandshake._handshake` in
+`enrollment_handshake.dart`). So one compromised enrollment can decrypt data for the whole atSign, not
 only its own namespaces. The post-quantum per-namespace keys are the structural
 answer to that, and they are outside this design's scope.
 
@@ -224,19 +224,16 @@ That suits a key, but it can't carry the atKeys document itself, because the
 client writes to its keys while running: `flush` and `update` file namespace
 keys, signing keys and retrofit results.
 
-**Re-measure note on the flipped-byte row.** The recorded result came from a
+**Re-measure note on the flipped-byte row.** The original result came from a
 run of [`probes/systemd_load_credential_encrypted.sh`](probes/systemd_load_credential_encrypted.sh)
 whose tamper arm flipped a byte of the base64 *text* of the encrypted
-credential, not of the decoded blob. Every base64 alphabet byte and newline is
-below `0x80`, so the flipped byte became a non-base64 character, and systemd's
-read fails in `READ_FULL_FILE_UNBASE64` — before any decryption, before any
-tag check, and with no "Decryption failed" line in the journal. That is the
-same refusal a credential format with no authentication at all would give, so
-it cannot support the integrity property the row is cited for. The arm now
-decodes the blob, flips a byte of the decoded ciphertext and re-encodes it
-(`base64 -d`, flip, `base64`), and the row must be re-measured on a systemd 255
-host; the expected outcome is the same `243/CREDENTIALS` with a decryption
-failure in the journal.
+credential, not of the decoded blob, failing in `READ_FULL_FILE_UNBASE64`
+before any decryption or tag check. The arm now decodes the blob, flips a
+byte of the decoded ciphertext and re-encodes it. Re-measured on Ubuntu 24.04
+(systemd 255.4), systemd's default log level reports `Decryption failed
+(incorrect key?): error:00000000:lib(0)::reason(0)`, followed by `Failed to set
+up credentials: Protocol error` and exit status `243/CREDENTIALS`. The arm now
+reaches decryption and fails on the AES-GCM tag check.
 
 A container running systemd under Docker Desktop on macOS couldn't deliver any
 credential to a service, not even an inline `SetCredential=` value, and
@@ -369,7 +366,7 @@ A web page can't reach the OS keychain or the TPM directly. Its only route is
 WebAuthn, and WebAuthn signs but doesn't decrypt, so a private key held in the
 authenticator can't unwrap anything for the page. What it can do is the PRF
 extension: the authenticator holds a secret per passkey and, after a
-fingerprint or PIN, returns an HMAC of a salt the page supplies. The same salt
+fingerprint or PIN, returns an HMAC of an input the page supplies. The same input
 gives the same 32 bytes every time. The secret never leaves the authenticator,
 and only the derived value reaches the page, during unlock.
 
@@ -395,7 +392,8 @@ The first is a record whose name is derived from the passkey, for example
 `public:_<HKDF(prf, salt, "atkeys-record-id|<atSign>")>`, domain-separated from
 the `HKDF(prf, salt, "atkeys-kek|<atSign>")` that encrypts it. The atSign in
 both labels keeps two atSigns on one device from sharing a record name or a
-kek; the full derivation is in
+kek; the `<atSign>` in each label is in canonical form (lower-case, leading `@`, e.g. `@alice`).
+The full derivation is in
 [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation). On at_server trunk (`47a6a978`,
 `scan_verb_handler.dart`), a scan hides every `public:_` key from other atSigns
 and from the owner, and `showhidden:true` re-admits only `public:__` and `_`
@@ -439,8 +437,8 @@ the browser's APKAM private key has to travel in the document. See
 
 Updating the document needs the same atomicity `update` has for a file, and
 devices sharing a synced passkey share one document. at_server trunk has no
-conditional update (nothing like a compare-and-swap in its verb handlers;
-other atServer implementations not checked), and without one two devices updating at once lose a write; a lost
+conditional update (nothing like a compare-and-swap in its verb handlers),
+and without one two devices updating at once lose a write; a lost
 signing root or nskey private can't be replaced. A conditional update on the
 atServer is a prerequisite for the server-backed store, not an open question.
 

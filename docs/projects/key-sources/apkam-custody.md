@@ -152,7 +152,7 @@ abstract interface class SecurityPlatform {
 abstract interface class CustodySession {
   Future<Uint8List> sign(CustodyKey key, Uint8List message);
   Future<Uint8List> decapsulate(CustodyKey key, Uint8List enc);
-  Future<Uint8List> prf(CustodyKey key, Uint8List salt);
+  Future<Uint8List> prf(CustodyKey key, Uint8List input);
   Future<void> close();
 }
 ```
@@ -308,7 +308,7 @@ ships. Devices that share a synced passkey share one enrollment and one record
 ([section 9](#9-the-browser-as-the-only-device)), so two of them can write it at
 once, and with a plain `update` the later write drops what the earlier one
 filed. A dropped root or nskey private can't be replaced. at_server trunk has
-no compare-and-swap today; other atServer implementations not checked.
+no compare-and-swap today.
 
 Each platform reports whether it achieved per-operation, per-session or no
 prompting, so policy can see what it got.
@@ -327,7 +327,7 @@ browser holds a PKAM key, and offers two: a hidden `public:_` record named from
 the PRF, or an enrollment whose credential is the passkey. There is a third:
 
 > Derive the APKAM key from the passkey. The PRF output, run through
-> `HKDF(prf, "at_auth/custody/auth-seed/v1|<atSign>")`, seeds an ML-DSA-65 key
+> `HKDF(prf, salt, "at_auth/custody/auth-seed/v1|<atSign>")`, seeds an ML-DSA-65 key
 > pair, which is enrolled as an ordinary APKAM key. The browser does a normal
 > PKAM, then reads the private `atkeys.<enrollmentId>.a.__e` record.
 
@@ -340,11 +340,11 @@ the PRF, or an enrollment whose credential is the passkey. There is a third:
   IndexedDB is cleared, and a new device never had it — yet the PKAM verb
   (`pkam:...:enrollmentId:<id>:...`), the record name
   (`atkeys.<enrollmentId>.a.__e`) and the envelope's AAD all need it. So the
-  browser keeps the `public:_<recordId>` record from gate (a) and stores the
-  enrollment id in it beside the envelope, in the clear
-  ([`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)); the
-  restore reads the id from it, unwraps the envelope, re-derives the PKAM key
-  and only then does an ordinary PKAM. The record's name is still the secret;
+  browser keeps the `public:_<recordId>` bootstrap record from gate (a) and stores the
+  enrollment id in it in the clear (the document envelope is stored exclusively in
+  `atkeys.<enrollmentId>.a.__e`; see [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)); the
+  restore reads the id from it, re-derives the PKAM key, performs an ordinary PKAM, and
+  then reads and unwraps the private `atkeys.<enrollmentId>.a.__e` document. The record's name is still the secret;
   the id in the clear reaches only whoever already knows the name.
 - **Revocation** is enrollment revocation, as with any device, and it must
   also delete the gate (a) bootstrap record; until an atServer does that, the
@@ -396,9 +396,9 @@ be converted to compact hex. A pin test still guards it
 | at_chops | ML-DSA-65 `keyPairFromSeed` (pure Dart and FFI); `pqOpen` with an external decapsulator; conversion of ECDSA DER and raw r‖s output (Secure Enclave, TPM) to the compact hex `EccSigningAlgo` emits; one HKDF helper for the custody labels |
 | at_auth | `SecurityPlatform`, `CustodySession`, `CustodyKey`, `SoftwareSecurityPlatform`, `SecurityPlatformKeySource`; a tier selector; a `custody` field in keyfile material; the four raw-key signing paths routed through custody; the `_pkam` injected-signer path stops assuming RSA-2048 |
 | at_client | no keyless path: custody keys reach the client only through the `AtKeysIo` it is given, which must be a `WrittenAtKeysIo`; ES256 in `envelope_signature.dart`; key packages advertise the custody encapsulation key; a server-backed store at `atkeys.<enrollmentId>.a.__e`; `open`, `activate` and `enroll` go through the session; `PqPosture.custody` |
+| at_client_cli | `--security tpm2\|software`, with a tpm2-tss FFI platform in its own package |
 | at_client_flutter | A federated `at_security_platform` plugin for Darwin (CryptoKit), Android (Keystore) and Windows (NCrypt); `KeychainAtKeysIo` keeps only references and public halves |
-| at_client_wasm | `WebAuthnSecurityPlatform` on the existing passkey port, as in [section 9](#9-the-browser-as-the-only-device) |
-| at_onboarding_cli | `--security tpm2\|software`, with a tpm2-tss FFI platform in its own package |
+| at_client_web | `WebAuthnSecurityPlatform`, as in [section 9](#9-the-browser-as-the-only-device) |
 | at_commons, at_lookup | none; the PKAM grammar already carries `ecc_secp256r1` and `mldsa65` |
 | at_server | a conditional update (compare-and-swap) on a record, a prerequisite for the server-backed store ([section 8](#8-opening-a-session)); a pin test that ecc PKAM signatures are compact hex |
 | docs | a trusted-devices decision record that separates APKAM custody from the device-assertion credential, which must never be a PKAM key, and holds the tier rule: chosen once at enrollment, recorded, never run below |

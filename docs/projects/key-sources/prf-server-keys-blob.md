@@ -43,23 +43,34 @@ kek      = HKDF(ikm, salt = userHandle, info = "atkeys-kek|<atSign>")
   ([`apkam-custody.md` section 4](apkam-custody.md#4-custody-tiers-and-the-ranking-rule)),
   held by the authenticator, not stored beside the blob.
 * **atSign-bound.** One device with two atSigns gets two unrelated recordIds.
+  The `<atSign>` in each label is in canonical form (lower-case, leading `@`, e.g. `@alice`).
 * **Fresh key per write** comes from the envelope's random data key, not from a
   PRF salt. Rewrapping is 32 bytes.
 
-The record is `public:_<recordId>@<atSign>`, with a **single** underscore, and
-its body is the enrollment id in the clear beside the envelope:
+The bootstrap record is `public:_<recordId>@<atSign>`, with a **single**
+underscore, and its body carries the enrollment id:
 
 ```json
-{"enrollmentId": "<id>", "envelope": {"v": 2, ...}}
+{"enrollmentId": "<id>"}
+```
+
+The atKeys document itself is stored exclusively in the private record
+`atkeys.<enrollmentId>.a.__e@<atSign>`, so the document has a single home and
+cannot drift between two records:
+
+```json
+{"v": 2, ...}
 ```
 
 * The id can't be derived: the atServer assigns it at `enroll:request`, after
   the passkey and its `userHandle` already exist. After an eviction, or on a
   second synced device, nothing on the device holds it, yet gate (c)'s PKAM,
   the private record's name and the envelope's AAD all need it. So it travels
-  in the record, unencrypted. It reaches only someone who already knows the
-  256-bit name, and it is only an enrollment id: the envelope's data key
-  stays wrapped under the `kek`.
+  in the bootstrap record, in the clear. An unauthenticated lookup of
+  `public:_<recordId>` reaches only someone who already knows the 256-bit name,
+  and exposes only an enrollment id; the actual encrypted atKeys document
+  stays behind PKAM authentication in `atkeys.<enrollmentId>.a.__e`, wrapped
+  under the `kek`.
 * at_server gives `public:_` keys no commit-log row, so they never sync to
   other clients (`HiveAtCommitLog` and `SqliteAtCommitLog` skip `public:_`;
   `public:__` keys *do* sync).
@@ -167,7 +178,7 @@ root whose private is lost cannot be replaced.
 synced passkey share one record, so two of them can write it at once, and with
 a plain `update` the later write drops what the earlier one filed. A dropped
 signing root or nskey private can't be replaced. at_server trunk has no
-compare-and-swap today (other implementations not checked), so the
+compare-and-swap today, so the
 server-backed store does not ship until every atServer it runs against has
 one.
 
@@ -177,14 +188,14 @@ one.
 2. One PRF call, with a constant input (the `userHandle` arrives only in the
    response, so it is the HKDF salt); recordId and kek are domain-separated
    HKDF outputs bound to the atSign.
-3. Per-write freshness comes from the envelope's data key; no server-stored PRF salt.
+3. A fresh data key per write in the envelope; no server-stored PRF salt.
 4. The recordId hides the record; confidentiality rests on the kek.
 5. The record is `public:_`, so it is not synced or in the commit log.
 6. APKAM private keys never enter the blob.
 7. Build the web version first.
-8. The record carries the enrollment id in the clear beside the envelope, so
-   an evicted device or a new synced device can bootstrap gate (c), whose PKAM
-   and AAD both need it.
+8. The bootstrap record carries the enrollment id in the clear, so an evicted
+   device or a new synced device can bootstrap gate (c), whose PKAM and AAD both
+   need it. The atKeys document is stored in the private record.
 
 ## Threats
 
@@ -217,7 +228,7 @@ From an adversarial review of the first draft of this doc (33 findings).
 | --- | --- |
 | Gate (a) read is unauthenticated: anyone with the name can fetch | Not closed by gate (c): the record stays as the bootstrap that hands gate (c) the enrollment id, so the read stays unauthenticated. Only the id is in the clear and it is reachable only by name; the envelope stays under the kek. A fetch-gate on the record would close it |
 | Revocation doesn't reach a gate (a) record | Not closed by gate (c): revoking the enrollment must also delete or move the bootstrap record; until an atServer does that, a revoked record's id and ciphertext stay fetchable by name |
-| Whole-record rollback: the atServer, or a writer, answers the restore lookup with an older complete envelope for the same atSign and enrollment | AEAD doesn't catch it — the AAD values are the same for every write and each envelope carries its own data key, so an older envelope still unwraps and authenticates. The published-public-keys check catches only a rollback across a key the client checks. A monotonic write counter needs a client that has seen a newer write; a wiped client has nothing to compare against. Recovery floor: re-enrollment (OTP) |
+| Whole-record rollback: the atServer, or a writer, answers the restore lookup with an older complete envelope for the same atSign and enrollment | AEAD doesn't catch it — the AAD values are the same for every write and each envelope carries its own data key, so an older envelope still unwraps and authenticates. The published-public-keys check catches only a rollback across a key rotation where the client knows the new key; it does not catch a rollback if the atServer itself rolls back, because the same atServer answers that lookup. A monotonic write counter needs a client that has seen a newer write; a wiped client has nothing to compare against. Recovery floor: re-enrollment (OTP) |
 | Per-atSign rate limit would let anyone lock out restores | Limit misses per source, not per atSign |
 | Device secret never rotates | Rotation = new secret, new recordId, delete old record |
 | Wipe premise varies (uninstall, migration, TPM clear, biometric re-enroll) | Define "wipe" per platform; test it |

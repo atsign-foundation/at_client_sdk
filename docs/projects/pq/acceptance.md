@@ -2932,8 +2932,7 @@ server at the base port itself"* — describes the EE's `EPHEMERAL_BASE_PORT`
 contract exactly. Pointing an arm at an EE is 2 environment variables.
 
 ⛔ **Build every EE from a named ref; never pull `ephemeral:latest`.**
-`atsigncompany/ephemeral:latest` follows the production release and is rebuilt
-only when trunk's certificates change or on a manual dispatch, so it trails
+`atsigncompany/ephemeral:latest` follows the production release, so it trails
 trunk; `ephemeral:dev_env` follows trunk but moves with every commit. An arm
 needs an atServer at a ref it can name. The VE stays as it is for the existing
 functional pack.

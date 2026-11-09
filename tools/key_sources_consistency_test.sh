@@ -61,7 +61,7 @@ PY
 python3 -c "$arm2_py" "$WORK/atkeys.cred" "$WORK/bad.cred" \
   || fail "the probe's tamper arm python failed on a sample blob"
 
-python3 - "$WORK" <<'PY'
+python3 - "$WORK" <<'PY' || fail "tampered credential check failed"
 import base64, sys
 work = sys.argv[1]
 orig_text = open(f"{work}/atkeys.cred", "rb").read()
@@ -90,11 +90,15 @@ PY
 
 cd "$DOCS"
 
-# 2a. No unbound custody labels: they drift from the atSign-bound labels and
-#     reopen the cross-atSign linkage the profile records as fixed.
+# 2a. No unbound or unsalted custody labels: they drift from the atSign-bound
+#     labels with salt and reopen the cross-atSign linkage the profile records as fixed.
 if grep -n 'HKDF(prf, "atkeys-kek")\|HKDF(prf, "atkeys-record-id")' \
     design.md apkam-custody.md prf-server-keys-blob.md; then
   fail "unbound 'atkeys-kek'/'atkeys-record-id' label: bind it to the atSign"
+fi
+if grep -En 'HKDF\(prf,\s*"atkeys-kek|HKDF\(prf,\s*"atkeys-record-id|HKDF\(prf,\s*"at_auth/custody/auth-seed' \
+    design.md apkam-custody.md prf-server-keys-blob.md; then
+  fail "custody HKDF derivation drops the salt"
 fi
 
 # 2b. The userHandle must not be the WebAuthn PRF input: it arrives only in the
@@ -116,9 +120,9 @@ grep -q "Whole-record rollback" prf-server-keys-blob.md \
 #     record, in the clear, and the docs must say why.
 grep -q '"enrollmentId"' prf-server-keys-blob.md \
   || fail "record body does not carry the enrollment id beside the envelope"
-grep -q "enrollment id" apkam-custody.md \
+grep -q "enrollment id in it in the clear" apkam-custody.md \
   || fail "apkam-custody.md does not cover where the enrollment id survives"
-grep -q "enrollment id" design.md \
+grep -q "enrollment id, which the atServer assigns" design.md \
   || fail "design.md does not cover where the enrollment id survives"
 
 echo "key-sources consistency: all checks passed"
