@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/registrar/registrar.dart';
 import 'package:at_auth/src/registrar/registrar_admin_service.dart';
 import 'package:at_auth/src/registrar/registrar_service.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:test/test.dart';
@@ -198,15 +200,16 @@ void main() {
     });
   });
 
-  group('RegistrarAdminService.registerAtSign', () {
-    test('returns stripped cramkey on success', () async {
+  group('RegistrarAdminService.registerAtsign', () {
+    test('returns the atsign and the stripped cramkey on success', () async {
       final service = _makeAdminService(_mockResponse(
           {'status': 'success', 'cramkey': 'prefix:ADMINCRAMKEY'}));
-      final result = await service.registerAtSign(atSign: '@alice');
+      final result = await service.registerAtsign(atsign: '@alice'.toAtsign());
+      expect(result.atsign, equals('@alice'.toAtsign()));
       expect(result.cramKey, equals('ADMINCRAMKEY'));
     });
 
-    test('sends the super key and the given atSign', () async {
+    test('sends the super key and the atsign with its leading "@"', () async {
       late http.Request captured;
       final client = MockClient((req) async {
         captured = req;
@@ -214,7 +217,7 @@ void main() {
             jsonEncode({'status': 'success', 'cramkey': 'prefix:KEY'}), 200);
       });
       final service = _makeAdminService(client);
-      await service.registerAtSign(atSign: '@alice');
+      await service.registerAtsign(atsign: '@alice'.toAtsign());
 
       expect(captured.url.path, equals('/api/app/v4/register-atsign/'));
       expect(captured.headers['Authorization'], equals(_apiKey));
@@ -223,11 +226,76 @@ void main() {
       expect(body['operation'], equals('register'));
     });
 
-    test('throws when register succeeds but the cramkey is missing', () async {
+    test(
+        'throws RegistrarException when register succeeds but the cramkey is missing',
+        () async {
       final service = _makeAdminService(_mockResponse({'status': 'success'}));
       expect(
-        () => service.registerAtSign(atSign: '@alice'),
-        throwsException,
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()),
+      );
+    });
+
+    test('throws RegistrarException when the cramkey is an empty string',
+        () async {
+      final service = _makeAdminService(
+          _mockResponse({'status': 'success', 'cramkey': ''}));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()),
+      );
+    });
+
+    test(
+        'throws RegistrarException when the cramkey has no value after its prefix',
+        () async {
+      final service = _makeAdminService(
+          _mockResponse({'status': 'success', 'cramkey': 'prefix:'}));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()),
+      );
+    });
+
+    test('throws RegistrarException when the cramkey is not a string',
+        () async {
+      final service = _makeAdminService(
+          _mockResponse({'status': 'success', 'cramkey': 12345}));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()),
+      );
+    });
+
+    test(
+        'throws RegistrarException when the response body is not a JSON object',
+        () async {
+      final client = MockClient((_) async => http.Response('[1, 2, 3]', 200));
+      final service = _makeAdminService(client);
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()),
+      );
+    });
+
+    test(
+        'RegistrarException text carries neither the cramkey nor the server message',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'error',
+        'message': 'super-secret-server-detail',
+        'cramkey': 'prefix:SHOULDNOTLEAK',
+      }));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(
+          predicate(
+            (e) =>
+                e is RegistrarException &&
+                !e.toString().contains('SHOULDNOTLEAK') &&
+                !e.toString().contains('super-secret-server-detail'),
+          ),
+        ),
       );
     });
 
@@ -235,8 +303,8 @@ void main() {
       final service = _makeAdminService(_mockResponse(
           {'status': 'error', 'message': 'atSign not available'}));
       expect(
-        () => service.registerAtSign(atSign: '@alice'),
-        throwsException,
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()),
       );
     });
 
@@ -244,38 +312,40 @@ void main() {
       final service = _makeAdminService(
           _mockResponse({'message': 'Server Error'}, status: 500));
       expect(
-        () => service.registerAtSign(atSign: '@alice'),
-        throwsException,
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()),
       );
     });
 
-    test('throws helpful exception on 401 auth failure', () async {
+    test('401 exception text does not contain the super key', () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Unauthorized'}, status: 401));
       expect(
-        () => service.registerAtSign(atSign: '@alice'),
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(
           predicate(
             (e) =>
                 e.toString().contains('super-API-key') &&
                 e.toString().contains('/register-atsign/') &&
-                e.toString().contains('401'),
+                e.toString().contains('401') &&
+                !e.toString().contains(_apiKey),
           ),
         ),
       );
     });
 
-    test('throws helpful exception on 403 auth failure', () async {
+    test('403 exception text does not contain the super key', () async {
       final service = _makeAdminService(
           _mockResponse({'message': 'Forbidden'}, status: 403));
       expect(
-        () => service.registerAtSign(atSign: '@alice'),
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(
           predicate(
             (e) =>
                 e.toString().contains('super-API-key') &&
                 e.toString().contains('/register-atsign/') &&
-                e.toString().contains('403'),
+                e.toString().contains('403') &&
+                !e.toString().contains(_apiKey),
           ),
         ),
       );

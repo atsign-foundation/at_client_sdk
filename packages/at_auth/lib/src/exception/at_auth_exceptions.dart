@@ -92,3 +92,13 @@ class AtKeysSourceAbsentException extends AtException {
 class AtKeysNotInMemoryException extends AtKeysSourceAbsentException {
   AtKeysNotInMemoryException(super.message);
 }
+
+/// A registrar call failed: an unexpected status code, or a response whose
+/// shape the caller cannot use.
+///
+/// Never carries the server's `message` field or any other part of the
+/// response body, only the status code and endpoint path, so a registrar
+/// error can be logged or surfaced without leaking what the server said.
+class RegistrarException extends AtException {
+  RegistrarException(super.message);
+}

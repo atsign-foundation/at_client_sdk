@@ -1,10 +1,19 @@
 import 'dart:convert';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/registrar/registrar.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:http/http.dart' as http;
 
 const _apiBase = '/api/app/v4';
+
+/// The result of [RegistrarAdminService.registerAtsign].
+class RegisteredAtsign {
+  final Atsign atsign;
+  final String cramKey;
+
+  const RegisteredAtsign({required this.atsign, required this.cramKey});
+}
 
 /// The result of [RegistrarAdminService.generateAtSignDeleteToken].
 class DeleteTokenResult {
@@ -77,36 +86,51 @@ class RegistrarAdminService {
     return response;
   }
 
-  /// Registers [atSign] under the super API key, authorizing the same way
-  /// [_manageAtsignsRequest] does.
+  /// Registers [atsign] with the super API key and returns its CRAM key.
   ///
-  /// Throws [AtException] on an auth failure and [Exception] when the
-  /// response is not a 200, `status` is not `success`, or the cramkey is
-  /// missing.
-  Future<RegisterAtSignResult> registerAtSign({required String atSign}) async {
-    var res = await _adminRequest(
+  /// Throws [AtException] when the super key is rejected, and
+  /// [RegistrarException] when the registrar's response is not a usable
+  /// 200 with a cramkey.
+  ///
+  /// ```dart
+  /// final admin = RegistrarAdminService(
+  ///   registrarUrl: 'my.registrar.example',
+  ///   superApiKey: superApiKey,
+  /// );
+  /// final registered = await admin.registerAtsign(atsign: '@alice'.toAtsign());
+  /// ```
+  Future<RegisteredAtsign> registerAtsign({required Atsign atsign}) async {
+    final res = await _adminRequest(
       RegistrarApiEndpoint.registerAtsign,
-      {'operation': RegisterOperation.register.wireValue, 'atSign': atSign},
+      {'operation': RegisterOperation.register.wireValue, 'atSign': atsign},
     );
+    final endpointPath = RegistrarApiEndpoint.registerAtsign.path;
     if (res.statusCode != 200) {
-      throw Exception(
-          'Failed to register atSign: ${res.reasonPhrase} (status=${res.statusCode})');
+      throw RegistrarException(
+          'Failed to register an Atsign: status=${res.statusCode}, endpoint=$endpointPath');
     }
-    var payload = jsonDecode(res.body);
-    if (payload["status"] != "success") {
-      throw Exception(
-          'Failed to register atSign: ${payload["message"] ?? "Unknown error"}');
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(res.body);
+    } on FormatException {
+      throw RegistrarException(
+          'Failed to register an Atsign: response body is not valid JSON, endpoint=$endpointPath');
     }
-    String? cramKey = payload["cramkey"]?.split(':').last;
-    if (cramKey == null) {
-      throw Exception(
-          'Failed to register atSign: cramKey missing from payload');
+    if (decoded is! Map || decoded["status"] != "success") {
+      throw RegistrarException(
+          'Failed to register an Atsign: unexpected response shape, endpoint=$endpointPath');
     }
-    return RegisterAtSignResult(
-      cramKey: cramKey,
-      atSign: payload["atSign"],
-      message: payload["message"],
-    );
+    final rawCramkey = decoded["cramkey"];
+    if (rawCramkey is! String) {
+      throw RegistrarException(
+          'Failed to register an Atsign: cramkey missing from response, endpoint=$endpointPath');
+    }
+    final cramKey = rawCramkey.split(':').last;
+    if (cramKey.isEmpty) {
+      throw RegistrarException(
+          'Failed to register an Atsign: cramkey missing from response, endpoint=$endpointPath');
+    }
+    return RegisteredAtsign(atsign: atsign, cramKey: cramKey);
   }
 
   /// Generates a one-time delete token for [atSigns].

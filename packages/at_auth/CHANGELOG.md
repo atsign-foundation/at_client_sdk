@@ -4,8 +4,9 @@
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
   private half does not sign for its public half is refused with
   `AtSigningException` before `enroll:request` is sent.
-- feat: `RegistrarAdminService.registerAtSign`, registering an atSign under
+- feat: `RegistrarAdminService.registerAtsign`, registering an Atsign under
   the super API key alongside the existing `/manage-atsigns/` delete flow.
+  Returns a `RegisteredAtsign`.
 
 ## 4.0.0
 
