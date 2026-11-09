@@ -320,7 +320,13 @@ void main() {
 
     test('an entry whose status is not a string is skipped', () {
       final deep = jsonDecode('${'[' * 200000}${']' * 200000}');
-      for (final status in <Object>[7, true, [1], {'a': 1}, deep]) {
+      for (final status in <Object>[
+        7,
+        true,
+        [1],
+        {'a': 1},
+        deep
+      ]) {
         final clock = Stopwatch()..start();
         final read = apskSigningKeys({
           'v': 1,
