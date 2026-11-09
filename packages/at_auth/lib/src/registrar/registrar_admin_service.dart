@@ -25,6 +25,8 @@ class RegisteredAtsign {
   /// The Atsign the registrar actually registered, read from the cramkey it
   /// returned.
   final Atsign registeredAtsign;
+
+  /// The bare key, with the registrar's `@registeredAtsign:` prefix removed.
   final String cramKey;
 
   const RegisteredAtsign({
@@ -91,30 +93,62 @@ class RegistrarAdminService {
     _http = httpClient ?? http.Client();
   }
 
+  static final _hostPattern = RegExp(r'^[a-zA-Z0-9.-]+$');
+
   static void _validateRegistrarUrl(String registrarUrl) {
+    const invalidMessage =
+        'must be a bare host of letters, digits, "." and "-", optionally '
+        'followed by ":<port>", with no scheme, path or user info';
     if (registrarUrl.trim().isEmpty) {
       throw ArgumentError.value(
           registrarUrl, 'registrarUrl', 'must not be empty');
     }
-    if (registrarUrl.contains('/')) {
-      throw ArgumentError.value(registrarUrl, 'registrarUrl',
-          'must be a bare host, optionally with a port, with no scheme and no path');
-    }
     final hostAndPort = registrarUrl.split(':');
-    if (hostAndPort.length > 2 || hostAndPort.first.isEmpty) {
-      throw ArgumentError.value(registrarUrl, 'registrarUrl',
-          'must be a bare host, optionally followed by ":<port>"');
+    if (hostAndPort.length > 2) {
+      throw ArgumentError.value(registrarUrl, 'registrarUrl', invalidMessage);
     }
-    if (hostAndPort.length == 2 && int.tryParse(hostAndPort[1]) == null) {
-      throw ArgumentError.value(
-          registrarUrl, 'registrarUrl', 'port must be numeric');
+    final host = hostAndPort.first;
+    if (!_hostPattern.hasMatch(host)) {
+      throw ArgumentError.value(registrarUrl, 'registrarUrl', invalidMessage);
+    }
+    if (hostAndPort.length == 2) {
+      final port = int.tryParse(hostAndPort[1]);
+      if (port == null || port < 1 || port > 65535) {
+        throw ArgumentError.value(registrarUrl, 'registrarUrl',
+            'port must be numeric and between 1 and 65535');
+      }
+    }
+    final uri = Uri.https(registrarUrl, '/');
+    if (uri.userInfo.isNotEmpty ||
+        uri.authority != registrarUrl.toLowerCase()) {
+      throw ArgumentError.value(registrarUrl, 'registrarUrl', invalidMessage);
     }
   }
 
   Future<http.Response> _manageAtsignsRequest(Map<String, dynamic> data) =>
       _adminRequest(RegistrarApiEndpoint.manageAtsigns, data);
 
+  /// Sends [data] to [endpoint] and reads its response, both bounded
+  /// together by [requestTimeout]: a server that completes the send but
+  /// drips its body slowly must still finish within the same deadline.
   Future<http.Response> _adminRequest(
+    RegistrarApiEndpoint endpoint,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      return await _sendAndReadResponse(endpoint, data).timeout(
+        requestTimeout,
+      );
+    } on TimeoutException {
+      throw RegistrarException(
+        'Registrar request timed out after $requestTimeout.',
+        endpoint: endpoint.path,
+        reason: RegistrarFailure.timeout,
+      );
+    }
+  }
+
+  Future<http.Response> _sendAndReadResponse(
     RegistrarApiEndpoint endpoint,
     Map<String, dynamic> data,
   ) async {
@@ -124,36 +158,19 @@ class RegistrarAdminService {
       ..headers['Authorization'] = _superApiKey
       ..body = jsonEncode(data);
 
-    final http.StreamedResponse streamed;
-    try {
-      streamed = await _http.send(request).timeout(requestTimeout);
-    } on TimeoutException {
-      throw RegistrarException(
-        'Registrar request timed out after $requestTimeout.',
-        endpoint: endpoint.path,
-        reason: RegistrarFailure.timeout,
-      );
-    }
+    final streamed = await _http.send(request);
 
     final bodyBytes = <int>[];
-    try {
-      await for (final chunk in streamed.stream.timeout(requestTimeout)) {
-        bodyBytes.addAll(chunk);
-        if (bodyBytes.length > _maxResponseBytes) {
-          throw RegistrarException(
-            'Registrar response exceeded $_maxResponseBytes bytes.',
-            endpoint: endpoint.path,
-            statusCode: streamed.statusCode,
-            reason: RegistrarFailure.responseTooLarge,
-          );
-        }
+    await for (final chunk in streamed.stream) {
+      bodyBytes.addAll(chunk);
+      if (bodyBytes.length > _maxResponseBytes) {
+        throw RegistrarException(
+          'Registrar response exceeded $_maxResponseBytes bytes.',
+          endpoint: endpoint.path,
+          statusCode: streamed.statusCode,
+          reason: RegistrarFailure.responseTooLarge,
+        );
       }
-    } on TimeoutException {
-      throw RegistrarException(
-        'Registrar request timed out after $requestTimeout.',
-        endpoint: endpoint.path,
-        reason: RegistrarFailure.timeout,
-      );
     }
 
     if (streamed.statusCode == 401 || streamed.statusCode == 403) {
@@ -354,10 +371,25 @@ class RegistrarAdminService {
         reason: RegistrarFailure.unavailable,
       );
     }
+    final data = payload['data'];
+    final token = data is Map ? data['token'] : null;
+    final resultAtSigns = data is Map ? data['atSigns'] ?? [] : null;
+    final skippedAtSigns = data is Map ? data['skippedatSigns'] ?? [] : null;
+    if (data is! Map ||
+        token is! String ||
+        resultAtSigns is! List ||
+        skippedAtSigns is! List) {
+      throw RegistrarException(
+        'Failed to generate delete token: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
     return DeleteTokenResult(
-      token: payload['data']['token'],
-      atSigns: payload['data']['atSigns'] ?? [],
-      skippedAtSigns: payload['data']['skippedatSigns'] ?? [],
+      token: token,
+      atSigns: resultAtSigns,
+      skippedAtSigns: skippedAtSigns,
     );
   }
 
@@ -405,9 +437,17 @@ class RegistrarAdminService {
         reason: RegistrarFailure.unavailable,
       );
     }
-    return DeleteAtSignsResult(
-      deleted: payload['data']['deleted'] ?? [],
-      failed: payload['data']['failed'] ?? [],
-    );
+    final data = payload['data'];
+    final deleted = data is Map ? data['deleted'] ?? [] : null;
+    final failed = data is Map ? data['failed'] ?? [] : null;
+    if (data is! Map || deleted is! List || failed is! List) {
+      throw RegistrarException(
+        'Failed to delete atSigns: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    return DeleteAtSignsResult(deleted: deleted, failed: failed);
   }
 }

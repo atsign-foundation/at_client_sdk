@@ -114,6 +114,78 @@ void main() {
         returnsNormally,
       );
     });
+
+    test('throws ArgumentError naming registrarUrl when it carries user info',
+        () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '$_registrarUrl@evil.example',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    test('throws ArgumentError naming registrarUrl when it carries a fragment',
+        () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '$_registrarUrl#frag',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    test('throws ArgumentError naming registrarUrl when it carries a query',
+        () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '$_registrarUrl?q=1',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    test('throws ArgumentError naming registrarUrl when it carries whitespace',
+        () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '$_registrarUrl ',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    for (final port in ['0', '-1', '65536', 'abc']) {
+      test('throws ArgumentError naming registrarUrl when the port is $port',
+          () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: '$_registrarUrl:$port',
+            superApiKey: _apiKey,
+            httpClient: _mockResponse({}),
+          ),
+          throwsA(
+            isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+          ),
+        );
+      });
+    }
   });
 
   group('sendActivationOtp', () {
@@ -526,6 +598,34 @@ void main() {
       );
     });
 
+    test(
+        'times out on a body that drips slower in total than requestTimeout, '
+        'even though no single gap between chunks exceeds it', () async {
+      final client = MockClient.streaming((request, bodyStream) async {
+        final controller = StreamController<List<int>>();
+        Timer.periodic(const Duration(milliseconds: 20), (timer) {
+          if (timer.tick > 5) {
+            timer.cancel();
+            controller.close();
+            return;
+          }
+          controller.add(utf8.encode('x'));
+        });
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(milliseconds: 50),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      );
+    });
+
     test('rejects a response body over the size cap', () async {
       final oversized = 'x' * (70 * 1024);
       final client = MockClient((_) async => http.Response(oversized, 200));
@@ -650,6 +750,71 @@ void main() {
         ),
       );
     });
+
+    test('throws RegistrarException(malformedResponse) when data is not a Map',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': ['not', 'a', 'map'],
+      }));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when token is not a String',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'token': 12345, 'atSigns': [], 'skippedatSigns': []},
+      }));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when atSigns is not a List',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'token': 'the-token', 'atSigns': 'not-a-list'},
+      }));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test('requests the manage-atsigns endpoint over https for a delete token',
+        () async {
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response(
+            jsonEncode({
+              'status': 'success',
+              'data': {
+                'token': 'the-token',
+                'atSigns': [],
+                'skippedatSigns': []
+              },
+            }),
+            200);
+      });
+      final service = _makeAdminService(client);
+      await service.generateAtSignDeleteToken(['@one']);
+
+      expect(captured.url.scheme, equals('https'));
+      expect(captured.url.host, equals(_registrarUrl));
+      expect(captured.url.path, equals('/api/app/v4/manage-atsigns/'));
+    });
   });
 
   group('deleteAtSigns', () {
@@ -724,6 +889,47 @@ void main() {
       expect(captured.url.scheme, equals('https'));
       expect(captured.url.host, equals(_registrarUrl));
       expect(captured.url.path, equals('/api/app/v4/manage-atsigns/'));
+    });
+
+    test('throws RegistrarException(malformedResponse) when data is not a Map',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': 'not-a-map',
+      }));
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when deleted is not a List',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'deleted': 'not-a-list', 'failed': []},
+      }));
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when failed is not a List',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'deleted': [], 'failed': 'not-a-list'},
+      }));
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
     });
   });
 }

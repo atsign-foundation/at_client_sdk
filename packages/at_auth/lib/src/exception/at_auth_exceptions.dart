@@ -125,7 +125,7 @@ enum RegistrarFailure {
 /// super API key, so a registrar error can be logged or surfaced without
 /// leaking what the server said.
 class RegistrarException extends AtException {
-  /// The API path this call was made to, e.g. `/api/app/v4/register-atsign/`.
+  /// The API path this call was made to, e.g. `/register-atsign/`.
   final String endpoint;
 
   /// The HTTP status code the registrar returned, when one was received.
