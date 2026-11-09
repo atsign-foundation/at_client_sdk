@@ -51,9 +51,14 @@ class RegistrarAdminService {
     _http = httpClient ?? http.Client();
   }
 
-  Future<http.Response> _manageAtsignsRequest(Map<String, dynamic> data) async {
-    final url = Uri.https(
-        registrarUrl, "$_apiBase${RegistrarApiEndpoint.manageAtsigns.path}");
+  Future<http.Response> _manageAtsignsRequest(Map<String, dynamic> data) =>
+      _adminRequest(RegistrarApiEndpoint.manageAtsigns, data);
+
+  Future<http.Response> _adminRequest(
+    RegistrarApiEndpoint endpoint,
+    Map<String, dynamic> data,
+  ) async {
+    final url = Uri.https(registrarUrl, "$_apiBase${endpoint.path}");
     final response = await _http.post(
       url,
       body: jsonEncode(data),
@@ -64,12 +69,44 @@ class RegistrarAdminService {
     );
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw AtException(
-        'Registrar super-API-key authentication failed: the key is either '
-        'invalid, missing, or lacks the privilege manage-atsigns requires. '
-        'status=${response.statusCode}',
+        'Registrar super-API-key authentication failed on '
+        '${endpoint.path}: the key is either invalid, missing, or lacks '
+        'the privilege the endpoint requires. status=${response.statusCode}',
       );
     }
     return response;
+  }
+
+  /// Registers [atSign] under the super API key, authorizing the same way
+  /// [_manageAtsignsRequest] does.
+  ///
+  /// Throws [AtException] on an auth failure and [Exception] when the
+  /// response is not a 200, `status` is not `success`, or the cramkey is
+  /// missing.
+  Future<RegisterAtSignResult> registerAtSign({required String atSign}) async {
+    var res = await _adminRequest(
+      RegistrarApiEndpoint.registerAtsign,
+      {'operation': RegisterOperation.register.wireValue, 'atSign': atSign},
+    );
+    if (res.statusCode != 200) {
+      throw Exception(
+          'Failed to register atSign: ${res.reasonPhrase} (status=${res.statusCode})');
+    }
+    var payload = jsonDecode(res.body);
+    if (payload["status"] != "success") {
+      throw Exception(
+          'Failed to register atSign: ${payload["message"] ?? "Unknown error"}');
+    }
+    String? cramKey = payload["cramkey"]?.split(':').last;
+    if (cramKey == null) {
+      throw Exception(
+          'Failed to register atSign: cramKey missing from payload');
+    }
+    return RegisterAtSignResult(
+      cramKey: cramKey,
+      atSign: payload["atSign"],
+      message: payload["message"],
+    );
   }
 
   /// Generates a one-time delete token for [atSigns].

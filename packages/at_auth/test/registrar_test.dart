@@ -168,8 +168,7 @@ void main() {
       );
     });
 
-    test(
-        'does not throw for a missing cramkey when startAtServer is false',
+    test('does not throw for a missing cramkey when startAtServer is false',
         () async {
       final service = _makeService(_mockResponse({'status': 'success'}));
       final result = await service.registerAtSign(
@@ -189,12 +188,96 @@ void main() {
     });
 
     test('throws when status is not "success"', () async {
-      final service = _makeService(
-          _mockResponse({'status': 'error', 'message': 'atSign not available'}));
+      final service = _makeService(_mockResponse(
+          {'status': 'error', 'message': 'atSign not available'}));
       expect(
         () => service.registerAtSign(
             atSign: 'taken', operation: RegisterOperation.register),
         throwsException,
+      );
+    });
+  });
+
+  group('RegistrarAdminService.registerAtSign', () {
+    test('returns stripped cramkey on success', () async {
+      final service = _makeAdminService(_mockResponse(
+          {'status': 'success', 'cramkey': 'prefix:ADMINCRAMKEY'}));
+      final result = await service.registerAtSign(atSign: '@alice');
+      expect(result.cramKey, equals('ADMINCRAMKEY'));
+    });
+
+    test('sends the super key and the given atSign', () async {
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response(
+            jsonEncode({'status': 'success', 'cramkey': 'prefix:KEY'}), 200);
+      });
+      final service = _makeAdminService(client);
+      await service.registerAtSign(atSign: '@alice');
+
+      expect(captured.url.path, equals('/api/app/v4/register-atsign/'));
+      expect(captured.headers['Authorization'], equals(_apiKey));
+      final body = jsonDecode(captured.body) as Map<String, dynamic>;
+      expect(body['atSign'], equals('@alice'));
+      expect(body['operation'], equals('register'));
+    });
+
+    test('throws when register succeeds but the cramkey is missing', () async {
+      final service = _makeAdminService(_mockResponse({'status': 'success'}));
+      expect(
+        () => service.registerAtSign(atSign: '@alice'),
+        throwsException,
+      );
+    });
+
+    test('throws when status is not "success"', () async {
+      final service = _makeAdminService(_mockResponse(
+          {'status': 'error', 'message': 'atSign not available'}));
+      expect(
+        () => service.registerAtSign(atSign: '@alice'),
+        throwsException,
+      );
+    });
+
+    test('throws on non-200 status', () async {
+      final service = _makeAdminService(
+          _mockResponse({'message': 'Server Error'}, status: 500));
+      expect(
+        () => service.registerAtSign(atSign: '@alice'),
+        throwsException,
+      );
+    });
+
+    test('throws helpful exception on 401 auth failure', () async {
+      final service = _makeAdminService(
+          _mockResponse({'message': 'Unauthorized'}, status: 401));
+      expect(
+        () => service.registerAtSign(atSign: '@alice'),
+        throwsA(
+          predicate(
+            (e) =>
+                e.toString().contains('super-API-key') &&
+                e.toString().contains('/register-atsign/') &&
+                e.toString().contains('401'),
+          ),
+        ),
+      );
+    });
+
+    test('throws helpful exception on 403 auth failure', () async {
+      final service = _makeAdminService(
+          _mockResponse({'message': 'Forbidden'}, status: 403));
+      expect(
+        () => service.registerAtSign(atSign: '@alice'),
+        throwsA(
+          predicate(
+            (e) =>
+                e.toString().contains('super-API-key') &&
+                e.toString().contains('/register-atsign/') &&
+                e.toString().contains('403'),
+          ),
+        ),
       );
     });
   });
@@ -226,14 +309,16 @@ void main() {
           'skippedatSigns': ['@bogus'],
         },
       }));
-      final result = await service.generateAtSignDeleteToken(['@one', '@bogus']);
+      final result =
+          await service.generateAtSignDeleteToken(['@one', '@bogus']);
       expect(result.skippedAtSigns, equals(['@bogus']));
     });
 
     test('throws when all atSigns are invalid', () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
-        'message': 'One or more Atsigns mentioned are not associated with this account.',
+        'message':
+            'One or more Atsigns mentioned are not associated with this account.',
         'data': {
           'skippedatSigns': ['@bogus'],
         },
@@ -245,8 +330,8 @@ void main() {
     });
 
     test('throws on non-200 status', () async {
-      final service =
-          _makeAdminService(_mockResponse({'message': 'Server Error'}, status: 500));
+      final service = _makeAdminService(
+          _mockResponse({'message': 'Server Error'}, status: 500));
       expect(
         () => service.generateAtSignDeleteToken(['@one']),
         throwsException,
@@ -285,14 +370,19 @@ void main() {
         token: 'the-token',
         atSigns: ['@one'],
       );
-      expect(result.deleted, equals([{'atSign': '@one'}]));
+      expect(
+          result.deleted,
+          equals([
+            {'atSign': '@one'}
+          ]));
       expect(result.failed, equals([]));
     });
 
     test('throws when status is not "success"', () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
-        'message': 'One or more Atsigns mentioned are not associated with this account.',
+        'message':
+            'One or more Atsigns mentioned are not associated with this account.',
         'data': {
           'skippedatSigns': ['@one'],
         },
@@ -304,8 +394,8 @@ void main() {
     });
 
     test('throws on non-200 status', () async {
-      final service =
-          _makeAdminService(_mockResponse({'message': 'Server Error'}, status: 500));
+      final service = _makeAdminService(
+          _mockResponse({'message': 'Server Error'}, status: 500));
       expect(
         () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
         throwsException,
