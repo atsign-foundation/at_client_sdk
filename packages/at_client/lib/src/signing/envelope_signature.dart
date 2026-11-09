@@ -206,6 +206,18 @@ class EnvelopeSignature {
           "the envelope's protected header names its signer as a JSON "
           '${_jsonKind(decoded['iss'])}, which is not an Atsign');
     }
+    for (final member in const ['alg', 'typ', 'kid', 'enid']) {
+      if (decoded.containsKey(member) && decoded[member] is! String) {
+        throw AtSigningVerificationException(
+            "the envelope's protected header gives $member as a JSON "
+            '${_jsonKind(decoded[member])}, not a string');
+      }
+    }
+    if (decoded.containsKey('v') && decoded['v'] is! int) {
+      throw AtSigningVerificationException(
+          "the envelope's protected header gives v as a JSON "
+          '${_jsonKind(decoded['v'])}, not an integer');
+    }
     return EnvelopeSignature._(
         protected, signature, decoded.cast<String, Object?>());
   }
@@ -415,6 +427,7 @@ String _jsonKind(Object? value) => switch (value) {
       List() => 'array',
       num() => 'number',
       bool() => 'boolean',
+      String() => 'string',
       _ => 'value',
     };
 
@@ -677,6 +690,17 @@ class ParsedApsk {
   }
   if (decoded is! Map<String, dynamic>) {
     return fault('the _apsk value looks structured but is not a JSON object');
+  }
+  final entries = decoded['keys'];
+  if (entries is List) {
+    for (final entry in entries) {
+      if (entry is Map &&
+          entry.containsKey('status') &&
+          entry['status'] is! String) {
+        return fault('the _apsk lists a key whose status is a JSON '
+            '${_jsonKind(entry['status'])}, not a token');
+      }
+    }
   }
   return (keys: apskSigningKeys(decoded), fault: null);
 }

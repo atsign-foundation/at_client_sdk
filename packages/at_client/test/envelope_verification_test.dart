@@ -681,6 +681,81 @@ void main() {
       });
     });
 
+    group('Given a protected header whose v nests 200,000 arrays', () {
+      test(
+          'when it is read, then it is refused naming its kind, and nothing '
+          'else is thrown', () async {
+        final header = '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":"k",'
+            '"v":${'[' * 200000}${']' * 200000}}';
+
+        Object? outcome;
+        try {
+          final nested = SignedEnvelope.fromJson({
+            'payload': 'e30',
+            'signatures': [
+              {'protected': b64u(header), 'signature': 'AA'}
+            ],
+          });
+          outcome = await verifySignedEnvelope(nested,
+              signer:
+                  PublishedApsk(atSign: alice, enrollmentId: e, value: 'x'));
+        } on AtSigningVerificationException catch (refusal) {
+          outcome = refusal;
+        }
+
+        expect(
+            outcome,
+            isA<AtSigningVerificationException>()
+                .having((x) => x.message, 'message', contains('JSON array')));
+      });
+    });
+
+    group("Given an _apsk entry whose status nests 250,000 arrays", () {
+      test(
+          'when an envelope is verified against it, then it is refused as '
+          'malformedKeySet', () async {
+        final value = '{"v":1,"keys":[{"kid":"${kidK()}","use":"sign",'
+            '"alg":"mldsa65","pub":"${ofE.key.publicKey}","status":'
+            '${'[' * 250000}${']' * 250000}}]}';
+        expect(utf8.encode(value).length, lessThan(maxPublishedApskLength),
+            reason: 'the premise: under the cap, so it is read');
+
+        expect(
+            await verifySignedEnvelope(envelope,
+                signer: apskOfE()._withValue(value)),
+            refusedAs(EnvelopeRefusal.malformedKeySet,
+                kid: kidK(), naming: ['JSON array']));
+        expect(selectEnvelopeKey(envelope, signer: apskOfE()._withValue(value)),
+            refusedAs(EnvelopeRefusal.malformedKeySet));
+      });
+    });
+
+    group('Given a protected header member of the wrong JSON kind', () {
+      test('when it is read, then it is refused naming the kind', () {
+        for (final (member, value, kind) in [
+          ('alg', 7, 'number'),
+          ('typ', null, 'null'),
+          ('kid', <Object?>[], 'array'),
+          ('enid', 7, 'number'),
+          ('v', '1', 'string'),
+          ('v', <String, Object?>{}, 'object'),
+        ]) {
+          expect(
+              () => resigned(envelope, [ofE.key], (h) => h..[member] = value),
+              throwsA(isA<AtSigningVerificationException>()
+                  .having((x) => x.message, 'message', contains('JSON $kind'))),
+              reason: '$member as a JSON $kind');
+        }
+        expect(
+            resigned(envelope, [ofE.key], (h) => h..['v'] = 2)
+                .signature
+                .version,
+            2,
+            reason: 'the control: an integer v of another value is read, and '
+                'refused when verified');
+      });
+    });
+
     group('Given any malformed envelope or _apsk value', () {
       test(
           'when verified or selected, then an EnvelopeRefused is returned and '
@@ -689,8 +764,8 @@ void main() {
           envelope.withEntryMember('signature', '!!not base64url!!'),
           resigned(envelope, [ofE.key], (h) => h..remove('kid')),
           resigned(envelope, [ofE.key], (h) => h..['v'] = 2),
-          resigned(envelope, [ofE.key], (h) => h..['typ'] = null),
-          resigned(envelope, [ofE.key], (h) => h..['enid'] = 7),
+          resigned(envelope, [ofE.key], (h) => h..remove('typ')),
+          resigned(envelope, [ofE.key], (h) => h..remove('enid')),
           resigned(envelope, [ofE.key], (h) => h..remove('alg')),
           envelope.withEntryMember('signature', ''),
         ];
