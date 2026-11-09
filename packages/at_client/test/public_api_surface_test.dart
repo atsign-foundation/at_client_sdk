@@ -97,6 +97,29 @@ void main() {
   // an `src/` file exported by accident. Every change to what a barrel exports
   // is a deliberate diff against a checked-in set — an intended change updates
   // the golden set in the SAME commit, and that edit is the review.
+  group('the offline envelope verifier is reachable through the barrel', () {
+    test('every name its calls take and return is nameable', () {
+      final signer =
+          PublishedApsk(atSign: '@alice', enrollmentId: 'e1', value: '');
+      final SignedEnvelope envelope = SignedEnvelope.parse(
+          '{"payload": "", "signatures": [{"protected": "e30", '
+          '"signature": ""}]}',
+          maxLength: 1024);
+      final EnvelopeSignature entry = envelope.signature;
+      final EnvelopeKeySelection selection =
+          selectEnvelopeKey(envelope, signer: signer);
+
+      expect(entry.alg, isNull);
+      expect(selection, isA<EnvelopeRefused>());
+      expect(EnvelopeRefusal.values, hasLength(11));
+      expect([EnvelopeVerified, EnvelopeKeySelected, EnvelopeVerification],
+          everyElement(isA<Type>()));
+      expect(maxPublishedApskLength, 512 * 1024);
+      expect(verifySignedEnvelope, isA<Function>());
+      expect([ApskSigningKey, KeyEntryStatus], everyElement(isA<Type>()));
+    });
+  });
+
   group('the exported file surface is a reviewed golden', () {
     Set<String> exportsOf(String barrel) {
       final file = File('lib/$barrel');
@@ -209,6 +232,11 @@ const Set<String> _atClientBarrelExports = {
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',
+  // show-narrowed to SignedEnvelope and EnvelopeSignature: what
+  // verifySignedEnvelope and selectEnvelopeKey take, and its entries.
+  'package:at_client/src/signing/envelope_signature.dart',
+  // The experimental offline verifier of application envelopes.
+  'package:at_client/src/signing/envelope_verification.dart',
   // show-narrowed to AtSignLogger, so an app logs through the SDK's logger
   // without importing at_utils.
   'package:at_utils/at_logger.dart',

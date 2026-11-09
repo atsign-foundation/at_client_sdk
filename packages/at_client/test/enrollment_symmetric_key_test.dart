@@ -70,6 +70,7 @@ void main() {
     final pkam = pkamKeyPairFor(atSign, signer);
     return jsonEncode(signEnvelope(
       {'toKpid': kpid},
+      atSign: atSign,
       keys: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
@@ -162,8 +163,9 @@ void main() {
 
   /// [withKeyPackage]'s envelope sealed to the key package's real public half
   /// for `myapp` under a body naming [approver] as its sender, and signed by
-  /// [signer].
-  Future<String> approverEnvelope({String signer = approver}) async {
+  /// [signer] as [issuer]'s.
+  Future<String> approverEnvelope(
+      {String signer = approver, String issuer = atSign}) async {
     final kem = XWingPureDartAlgo.instance;
     final recipient = await kem
         .keyPairFromSeed(Uint8List.fromList(List<int>.generate(32, (i) => i)));
@@ -192,6 +194,7 @@ void main() {
         kid: kpid,
         sealed: base64Encode(sealed),
       ).toJson(),
+      atSign: issuer,
       keys: [
         ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
@@ -262,6 +265,29 @@ void main() {
                       await approverEnvelope()))
               .first,
           conveyed);
+    });
+
+    test(
+        'is skipped when it names an Atsign other than the one whose '
+        'enrollment sealed it', () async {
+      // NOTE: signed by the approver's own key, which its _apsk lists, so the
+      // Atsign the envelope names is the only thing that refuses it.
+      const key = 'msg.0.$kpid.__ssenv.myapp@alice';
+      final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+          timeout: const Duration(milliseconds: 200),
+          pollInterval: const Duration(milliseconds: 50));
+      logs.records.clear();
+
+      final lookUp = serving(key, await approverEnvelope(issuer: '@bob'));
+
+      await expectLater(
+          resolve(withKeyPackage(), lookUp).toList(),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('No conveyed apkamSymmetricKey arrived'))));
+      expect(logs.at('WARNING').where((m) => m.contains(key)),
+          allOf(isNotEmpty, everyElement(contains('"@bob"'))));
+      verifyNever(() => lookUp.executeCommand(any(that: contains('_apsk')),
+          auth: any(named: 'auth')));
     });
 
     test('is skipped when it sits under a namespace its approver did not sign',

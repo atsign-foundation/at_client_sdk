@@ -6692,7 +6692,9 @@ constants with `known`, and three functions:
 
 - `fromWire(Object?)` — absent is `active`, anything else is the token itself.
   A non-String is stringified rather than repaired, which keeps it out of both
-  known values and keeps what was written visible in a log.
+  known values and keeps what was written visible in a log. **Superseded
+  2026-11-09 (#2460):** `fromWire` takes a `String?`, and each reader skips an
+  entry whose status is not a string.
 - `offersNewOperations(String)` — the sign/seal question. Only `active`.
 - `vouchesForPastOperations(String)` — the verify question. `active` and
   `retired`, spelled out rather than as `known.contains`, because a token joins
@@ -6823,7 +6825,9 @@ was left open on purpose.
   the maximally restrictive reading — and it keeps what was actually written
   visible in a log. `active` would be fail-open, `retired` is the flattening
   this whole item removed, and a sentinel would put a token on the wire that no
-  writer ever meant.
+  writer ever meant. **Superseded 2026-11-09 (#2460):** stringifying walks the
+  whole value, so a reader now skips the entry instead, as it skips one whose
+  other fields are of the wrong kind.
 - **The empty string is not special-cased.** It is not `active`, so it is
   unknown, so it is maximally restrictive. A fourth behaviour for a value
   nothing writes is a branch nothing exercises.

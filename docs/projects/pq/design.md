@@ -955,7 +955,9 @@ ratified 2026-08-05: [decisions 42](detail/decisions.md#42-the-to-define-list-ru
 
 **Trust nuance.** The signature is verified against `_apsk`, which the atServer serves,
 so while the atServers serve keys faithfully it tells a reader which enrollment
-published a key, and no enrollment can publish one in another's name. This holds
+published a key, and no enrollment can publish one in another's name. An
+envelope's `iss` ties the signature to the Atsign whose `_apsk` it is checked
+against ([§9.4](#94-the-envelope)). This holds
 same-atSign and cross-atSign alike. It does not check the atServers themselves: an
 atSign's atServer stays trusted for the keys others seal to that atSign until the anchor
 is distributed outside it, which key transparency is on the roadmap to do. See
@@ -2402,9 +2404,9 @@ ruling 12.
 {
   "payload": "<base64url(JSON)>",
   "signatures": [
-    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"iss\":\"<@atSign>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"},
-    {"protected": "<base64url({\"alg\":\"RS256\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"RS256\",\"typ\":\"<type>\",\"kid\":\"<keyId>\",\"iss\":\"<@atSign>\",\"enid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"}
   ]
 }
@@ -2438,8 +2440,20 @@ there is an id to stamp, and on a key package re-published at `enroll:update`,
 which signs without the enrollment id it has in scope. Its readers pass the id
 in explicitly, so it still verifies.
 
-There is no top-level `v` or `enrollmentId`: both live **inside** each
-`protected` header, as `v` and `enid`, where the signature covers them. A
+`iss` names the signer's **Atsign**, canonical and with its `@`, after `kid`
+and before `enid`, ruled by
+[`decisions.md` 163](detail/decisions.md#163-an-envelope-names-its-signers-atsign-and-verifies-offline-2026-11-07).
+Every signer stamps it, and `v` stays 1: at_client 4.0.0 verifies an envelope
+carrying it. A verifier compares it with the Atsign whose `_apsk` it checks
+the signature against, both canonical, and refuses a different one before it
+fetches any `_apsk`. It accepts an envelope that names no Atsign, as
+at_client 4.0.0 signed them, until the release that re-signs what an
+enrollment publishes; the offline `verifySignedEnvelope` accepts one too and
+reports `issuerConfirmed` false.
+
+There is no top-level `v`, `enrollmentId` or Atsign: all three live **inside**
+each `protected` header, as `v`, `enid` and `iss`, where the signature covers
+them. A
 version or signer claim outside the signature is one an attacker can edit.
 
 There is no legacy branch, by decision. at_client 3.14.0 ships a flat
@@ -2497,7 +2511,8 @@ builds a new one through `fromJson`, so what it alters still passes the
 structural checks a received envelope does.
 
 **One signer and one purpose per envelope.** `fromJson` refuses an envelope
-whose entries name more than one `enid`, or more than one `typ`. A verifier
+whose entries name more than one `enid`, more than one `typ`, or more than one
+`iss`, an entry naming none counting as one more. A verifier
 picks its entry by algorithm, so entries that disagreed about the signer or the
 purpose would let the entry that verified and the entry a caller reads be
 different entries. Do not relax either refusal: a writer that only ever signs

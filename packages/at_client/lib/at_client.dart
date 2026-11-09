@@ -1,3 +1,12 @@
+/// The platform-neutral Atsign Protocol client: `AtClient`, its storage,
+/// crypto and services, and the offline envelope verifier.
+///
+/// Apps get this through their platform package's barrel,
+/// `package:at_client_cli/at_client_cli.dart` or
+/// `package:at_client_flutter/at_client_flutter.dart`, rather than importing
+/// it.
+library;
+
 export 'package:at_client/src/client/at_client_factory.dart';
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
@@ -21,11 +30,13 @@ export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/preference/pq_posture.dart';
 export 'package:at_auth/at_auth.dart'
     show
+        ApskSigningKey,
         AtKeys,
         AtKeysFormatException,
         AtKeysIo,
         EnrollmentKeyExchangeMode,
         InMemoryAtKeysIo,
+        KeyEntryStatus,
         NamespacePermission,
         WrittenAtKeysIo;
 export 'package:at_lookup/at_lookup.dart'
@@ -39,6 +50,9 @@ export 'package:at_lookup/at_lookup.dart'
         SecondaryAddress,
         SecondaryAddressFinder;
 export 'package:at_chops/at_chops.dart' show SigningAlgoType;
+export 'package:at_client/src/signing/envelope_signature.dart'
+    show EnvelopeSignature, SignedEnvelope;
+export 'package:at_client/src/signing/envelope_verification.dart';
 export 'package:at_utils/at_logger.dart' show AtSignLogger;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
