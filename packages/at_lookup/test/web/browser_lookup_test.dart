@@ -35,7 +35,8 @@ void main() {
 
     tearDownAll(() => channel.sink.close());
 
-    tearDown(answered);
+    tearDown(() async => expect(await answered(), isEmpty,
+        reason: 'each test names every request it makes'));
 
     AtLookupMuxable lookUpFor(String atSign) => AtLookUp.withTransport(
         atSign: atSign,

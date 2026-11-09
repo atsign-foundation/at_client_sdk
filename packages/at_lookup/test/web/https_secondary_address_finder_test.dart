@@ -30,7 +30,8 @@ void main() {
 
   tearDownAll(() => channel.sink.close());
 
-  tearDown(answered);
+  tearDown(() async => expect(await answered(), isEmpty,
+      reason: 'each test names every request it makes'));
 
   test('a 200 host:port answer is the atServer address', () async {
     final address = await finder.findSecondary('@alice');
@@ -47,6 +48,8 @@ void main() {
   test('a 404 is SecondaryNotFoundException', () async {
     await expectLater(finder.findSecondary('@nobody'),
         throwsA(isA<SecondaryNotFoundException>()));
+    expect(await answered(), ['/@nobody'],
+        reason: 'the 404 is the atDirectory\'s answer');
   });
 
   test('the atSign is asked for in its canonical form', () async {
@@ -68,6 +71,8 @@ void main() {
         finder.findSecondary('@elsewhere'),
         throwsA(isA<AtException>()
             .having((e) => e.message, 'message', contains('not host:port'))));
+    expect(await answered(), ['/@elsewhere'],
+        reason: 'the refusal is of the atDirectory\'s answer');
   });
 
   test('An oversized atDirectory answer is refused', () async {
@@ -79,6 +84,8 @@ void main() {
             allOf(contains('longer than 512 bytes'),
                 isNot(contains('aaaaaaaa'))))),
         reason: 'refused at the bound, without echoing what was read');
+    expect(await answered(), ['/@huge'],
+        reason: 'the refusal is of the atDirectory\'s answer');
   });
 
   test('An oversized atDirectory answer fails without reading the rest',
@@ -91,6 +98,8 @@ void main() {
         reason: 'the body never ends, so only a reader that stops at the '
             'bound can refuse it before the timeout');
     expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(await answered(), ['/@endless'],
+        reason: 'the refusal is of the atDirectory\'s answer');
   });
 
   test('a close of the lookup it asks for ends the request at once', () async {
@@ -107,6 +116,8 @@ void main() {
     expect(DateTime.now().difference(closedAt),
         lessThan(const Duration(seconds: 1)),
         reason: 'the atDirectory takes 2 seconds to answer @slow');
+    expect(await answered(), ['/@slow'],
+        reason: 'the request was in flight when the lookup closed');
   });
 
   for (final atSign in ['@malformed', '@badport']) {
@@ -115,12 +126,16 @@ void main() {
           finder.findSecondary(atSign),
           throwsA(allOf(
               isA<AtException>(), isNot(isA<SecondaryNotFoundException>()))));
+      expect(await answered(), ['/$atSign'],
+          reason: 'the refusal is of the atDirectory\'s answer');
     });
   }
 
   test('any other status is RootServerConnectivityException', () async {
     await expectLater(finder.findSecondary('@broken'),
         throwsA(isA<RootServerConnectivityException>()));
+    expect(await answered(), ['/@broken'],
+        reason: 'the status is the atDirectory\'s answer');
   });
 
   test('an unreachable atDirectory is RootServerConnectivityException',
@@ -136,5 +151,7 @@ void main() {
         finder.findSecondary('@slow',
             timeout: const Duration(milliseconds: 200)),
         throwsA(isA<AtTimeoutException>()));
+    expect(await answered(), ['/@slow'],
+        reason: 'the request was in flight when the timeout ran out');
   });
 }
