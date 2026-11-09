@@ -24,7 +24,7 @@ import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show EnvelopeType, SignedEnvelope;
+    show EnvelopeType, SignedEnvelope, quotedClaim;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_client/src/util/at_key_grammar.dart'
     show isAtKeyNamespace, isIdShaped;
@@ -719,12 +719,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     final addressedThrough = EnvelopeAddressing.appNamespaceOf(envelopeKey);
     if (envelope.appNamespace != addressedThrough) {
       logger.warning('Envelope $envelopeKey sits in $addressedThrough but its '
-          'sender signed it for ${envelope.appNamespace}; skipping');
+          'sender signed it for ${quotedClaim(envelope.appNamespace)}; '
+          'skipping');
       return null;
     }
     if (!isAtKeyNamespace(envelope.appNamespace)) {
       logger.warning('Envelope $envelopeKey names '
-          '${jsonEncode(envelope.appNamespace)}, which is not a namespace an '
+          '${quotedClaim(envelope.appNamespace)}, which is not a namespace an '
           'atKey can carry; skipping');
       return null;
     }

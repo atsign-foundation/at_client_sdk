@@ -41,10 +41,11 @@ String apskUri(String atSign, String enrollmentId) =>
     '${EnrollmentConstants.perEnrollmentApproved}$atSign';
 
 /// [enrollmentId] when it can name an `_apsk` record; throws
-/// [AtSigningVerificationException], quoting it on one line, otherwise.
+/// [AtSigningVerificationException], quoting it as [quotedClaim] does,
+/// otherwise.
 String requireApskEnrollmentId(String enrollmentId) {
   if (isIdShaped(enrollmentId)) return enrollmentId;
-  throw AtSigningVerificationException('${jsonEncode(enrollmentId)} is not '
+  throw AtSigningVerificationException('${quotedClaim(enrollmentId)} is not '
       'an enrollment id, so it names no $apskRecordName record');
 }
 

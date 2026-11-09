@@ -578,6 +578,27 @@ void main() {
           reason: 'the control: at the cap the value is read');
     });
 
+    group(
+        'Given an envelope whose enid is an escape, a U+202E, a U+009B and '
+        '300,000 more characters', () {
+      test(
+          'when verifyEnvelopeSignature refuses it, then the refusal shows it '
+          'escaped and cut short', () async {
+        final named = resigned(envelope, [ofE.key],
+            (h) => h..['enid'] = '\u001b\u202e\u009b${'x' * 300000}');
+
+        await expectLater(
+            ofBob.verifyEnvelopeSignature(named, signerAtSign: alice),
+            throwsA(isA<AtSigningVerificationException>()
+                .having(
+                    (e) => e.message.runes
+                        .where((r) => r == 0x1b || r == 0x202e || r == 0x9b),
+                    'raw boundary characters',
+                    isEmpty)
+                .having((e) => e.message.length, 'length', lessThan(400))));
+      });
+    });
+
     group('Given a PublishedApsk whose value is over maxPublishedApskLength',
         () {
       test('when its keys are read, then it throws naming the cap', () {

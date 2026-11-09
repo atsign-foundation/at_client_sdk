@@ -607,6 +607,35 @@ void main() {
       expect(await sharerB.sweepOnce(), 1);
     });
 
+    test(
+        'sent through a namespace holding an escape, a U+202E and a long tail, '
+        'the warning shows it escaped and cut short', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage,
+          'my-app\u001b\u202e\u009b${'x' * 3000}', {'n': 1});
+      final sent = sentKey();
+      logs.records.clear();
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      final quoted = [
+        for (final warning in logs.at('WARNING'))
+          if (warning.contains(sent.split('.__ssenv.').first) &&
+              warning.contains(', which is not a namespace'))
+            warning
+                .split(' names ')
+                .last
+                .split(', which is not a namespace')
+                .first
+      ];
+      expect(quoted, hasLength(1), reason: 'the premise: it is refused');
+      expect(
+          quoted.single.runes
+              .where((r) => r == 0x1b || r == 0x202e || r == 0x9b),
+          isEmpty,
+          reason: quoted.single);
+      expect(quoted.single.length, lessThan(200));
+    });
+
     test('a version 1 envelope is refused at parse', () async {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
       final json = Map<String, Object?>.from(
