@@ -650,28 +650,33 @@ class AtKeys {
   /// filed under it.
   ///
   /// Only for an enrollment that never went live — a submission that was
-  /// denied or expired — so an enrollment holding any active material is
-  /// refused with [ArgumentError]: key material that protected anything is
-  /// retired, never removed, and [retireKey] is the operation for it. Throws
-  /// too for an enrollment the keyfile does not hold.
+  /// denied or expired — so an enrollment holding any material that is not
+  /// [CryptographicMaterialStatus.pending] is refused with [ArgumentError]:
+  /// key material that ever protected anything is retired, never removed —
+  /// its retired bytes are the only copy of what verifies or decrypts that
+  /// enrollment's history — and [retireKey] is the operation for it. Active,
+  /// retired, dead and unknown statuses all pass that bar: a status this
+  /// build cannot place may sit beyond pending, so it is kept rather than
+  /// guessed at. Throws too for an enrollment the keyfile does not hold.
   void discardEnrollment(String enrollmentId) {
     final slot = _enrollments[enrollmentId];
     if (slot == null) {
       throw ArgumentError.value(
           enrollmentId, 'enrollmentId', 'AtKeys holds no such enrollment');
     }
-    final live = [
+    final everWentLive = [
       for (final byType in slot.materialsByKeyId.values)
         for (final material in byType.values)
-          if (material.status == CryptographicMaterialStatus.active)
+          if (material.status != CryptographicMaterialStatus.pending)
             material.keyId
     ];
-    if (live.isNotEmpty) {
+    if (everWentLive.isNotEmpty) {
       throw ArgumentError.value(
           enrollmentId,
           'enrollmentId',
-          'this enrollment holds active material (${live.toSet().join(', ')}), '
-              'which is retired rather than discarded');
+          'this enrollment holds material beyond pending '
+              '(${everWentLive.toSet().join(', ')}), which is retired rather '
+              'than discarded');
     }
     _enrollments.remove(enrollmentId);
   }

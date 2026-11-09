@@ -932,6 +932,31 @@ void main() {
           throwsA(isA<ArgumentError>()));
     });
 
+    test('discardEnrollment refuses an enrollment whose material was retired',
+        () {
+      // The guard is not "holds active material": retireKey can leave an
+      // enrollment with every material retired, and a retired keypair is the
+      // only copy of what verifies or decrypts that enrollment's history —
+      // passing the slot to discard would destroy the bytes retireKey's own
+      // contract says are never removed.
+      final atKeys = AtKeys(keysList: pendingApkam('e1'));
+      atKeys.activatePending('e1');
+      atKeys.retireKey('e1', 'auth:rsa2048:1');
+
+      expect(() => atKeys.discardEnrollment('e1'),
+          throwsA(isA<ArgumentError>()),
+          reason: 'an enrollment that went live keeps its slot even once '
+              'retired: the bytes stay to open what they protected');
+      expect(atKeys.enrollmentIds, ['e1']);
+      expect(atKeys.keysForEnrollment('e1'), hasLength(2),
+          reason: 'the retired keypair is still filed — keysForEnrollment '
+              'must not go empty, or nothing could verify its history');
+      expect(
+          atKeys.keysForKeyId('e1', 'auth:rsa2048:1'), hasLength(2),
+          reason: 'and it is still reachable by keyId, as retireKey\'s '
+              'never-remove rule promises');
+    });
+
     test('a pending enrollment round-trips through the document', () {
       final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: pendingApkam('e1'));
 

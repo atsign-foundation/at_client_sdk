@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
@@ -279,7 +280,7 @@ void main() {
 
   group('the default update', () {
     test('InMemoryAtKeysIo inherits read-mutate-flush', () async {
-      final io = InMemoryAtKeysIo();
+      final io = _CopyingAtKeysIo();
       await io.write(atSign, legacyAtKeys(atsign: atSign.toAtsign()));
 
       await io.update(atSign.toAtsign(), (keys) {
@@ -287,14 +288,21 @@ void main() {
         return true;
       });
 
+      // Asserted against a re-read, and only a re-read counts: [read] here
+      // hands back a copy of what the store holds, so the mutation the
+      // callback made is visible after this point only because update
+      // flushed it. A store that returned its own instance would show it
+      // either way and prove nothing.
       expect(
           (await io.read(atSign)).getAtSignKey(
               'first', CryptographicMaterialRole.privateDecapsulation),
-          isNotNull);
+          isNotNull,
+          reason: 'update reported the write done, so what it persisted is '
+              'what a later read finds');
     });
 
     test('and honours a false return', () async {
-      final io = InMemoryAtKeysIo();
+      final io = _CopyingAtKeysIo();
       await io.write(atSign, legacyAtKeys(atsign: atSign.toAtsign()));
 
       await io.update(atSign.toAtsign(), (keys) {
@@ -302,14 +310,37 @@ void main() {
         return false;
       });
 
-      // The in-memory store hands back the same object it holds, so "wrote
-      // nothing" is checked by re-reading a fresh copy of what was persisted
-      // rather than by inspecting the mutated instance.
-      expect((await io.read(atSign)).keys, hasLength(1),
-          reason: 'InMemoryAtKeysIo stores the instance itself, so a false '
-              'return leaves the in-place mutation visible — the contract it '
-              'can honour is that flush was not called, not that the object '
-              'was rolled back');
+      expect((await io.read(atSign)).keys, isEmpty,
+          reason: 'a false return abandons the write, so the store still holds '
+              'what it held before update read it. [read] returns a copy, so '
+              'this observes the persisted state and not the instance the '
+              'mutation edited in place');
     });
   });
+}
+
+/// An [InMemoryAtKeysIo] that reads and writes copies, not the instance it
+/// holds — the semantics every durable store has, and the point of the
+/// distinction: [InMemoryAtKeysIo.read] hands out the very object in its map,
+/// so a mutation made inside the default [WrittenAtKeysIo.update] is already
+/// visible on re-read whether update flushed, honoured a false return, or
+/// ignored it, and an assertion against it cannot catch any of the three.
+///
+/// Copies are made through the document, `toJson` then `fromJson`, which is
+/// also what a durable store's persistence is. It still inherits the default
+/// [WrittenAtKeysIo.update] untouched — that is the subject under test.
+class _CopyingAtKeysIo extends InMemoryAtKeysIo {
+  /// Through the document, as a durable store's persistence is. The atsign is
+  /// carried by hand because a legacy-only document (no typed material yet)
+  /// does not stamp one — the versioned document the mutation produces does.
+  AtKeys _copy(AtKeys keys) =>
+      AtKeys.fromJson(keys.toJson())..atsign = keys.atsign;
+
+  @override
+  Future<AtKeys> read(String atsign) async =>
+      _copy(await super.read(atsign));
+
+  @override
+  FutureOr<void> flush(Atsign atsign, AtKeys atKeys) =>
+      super.flush(atsign, _copy(atKeys));
 }

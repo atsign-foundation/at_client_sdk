@@ -20,11 +20,21 @@ void main() {
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
   String writeFilePath = 'test/data/@bober_key.atKeys';
   late String homeDirKeys;
+  // Where setUp parks a credential that already sits at [homeDirKeys] — the
+  // default location FileAtKeysIo() reads, so a developer running these tests
+  // may hold their own keyfile there. It is moved aside, never overwritten,
+  // and restored in tearDown.
+  late String homeDirKeysBackup;
 
   group('FileAtKeysIo tests', () {
     setUp(() {
       var homeDir = getHomeDirectory();
       homeDirKeys = '$homeDir/.atsign/keys/@alice🛠_key.atKeys';
+      homeDirKeysBackup = '$homeDirKeys.at-test-backup';
+      final existing = File(homeDirKeys);
+      if (existing.existsSync()) {
+        existing.renameSync(homeDirKeysBackup);
+      }
       Directory keysDir = Directory(homeDirKeys).parent;
       if (!keysDir.existsSync()) {
         keysDir.createSync(recursive: true);
@@ -811,7 +821,18 @@ void main() {
       if (keyFile.existsSync()) {
         keyFile.deleteSync();
       }
-      File(homeDirKeys).deleteSync();
+      // Remove only what setUp copied here, never a credential that was
+      // already at the default location: that one was moved aside in setUp
+      // and goes back now, so running these tests leaves the developer's own
+      // keyfile exactly as it was.
+      final testCopy = File(homeDirKeys);
+      if (testCopy.existsSync()) {
+        testCopy.deleteSync();
+      }
+      final backup = File(homeDirKeysBackup);
+      if (backup.existsSync()) {
+        backup.renameSync(homeDirKeys);
+      }
     });
   });
 
