@@ -1648,7 +1648,7 @@ build reaches:
 
 - It is a conditional export, `if (dart.library.ffi)`. A native build uses at_chops's
   OpenSSL backends where the loaded libcrypto supports the algorithm (AES-256-GCM with
-  any OpenSSL 3, X-Wing with OpenSSL 3.5 or later) and pure Dart otherwise; a web or
+  any OpenSSL 3, X-Wing with OpenSSL 3.5.1 or later) and pure Dart otherwise; a web or
   wasm build takes the pure-Dart branch and never reaches `dart:ffi`.
 - Every backend takes the persisted seed as its secret key, so a record written on a
   device with OpenSSL opens on one without, and back. ML-KEM-1024 has no OpenSSL

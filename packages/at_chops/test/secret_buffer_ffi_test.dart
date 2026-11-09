@@ -154,7 +154,7 @@ void main() {
     setUp(() {
       if (lib == null) fail('libcrypto not available on this host');
       if (!libCryptoSupportsMlKem768(lib)) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5.1)');
       }
     });
 
