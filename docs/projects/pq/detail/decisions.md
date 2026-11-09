@@ -3354,17 +3354,15 @@ ruling, each with a differential test.
    planned migration off a shared keyfile; without it, retiring a cloned parent
    would kill the legitimate children each clone spawned. No authorisation delta:
    subset grants mean the parent's revoker is authorised for every descendant
-   (record that property in the implementing commit's body). `parentEnrollmentId`
-   rides `enroll:list`, which returns the record whole, but it does **not** show
-   what a stolen keyfile spawned: a self-enrolled successor copies its
-   predecessor's `parentEnrollmentId` rather than naming the predecessor (below),
-   and an enrollment created through the approver path carries none
-   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
-   part 2), so what a stolen keyfile self-enrolled lists as its sibling, never
-   its child. ⚠️ **This said an owner could see what a stolen keyfile spawned,
-   until it was amended 2026-11-08.** ⚠️ **This said `enroll:fetch` carries it too, until
-   2026-08-27; it does not.** That verb returns exactly `appName`, `deviceName`,
-   `namespace`, `encryptedAPKAMSymmetricKey` and `status`. **The cascade shipped**
+   (record that property in the implementing commit's body). The roster
+   (`toJsonRoster`) rides `enroll:list`, which returns the record whole, and
+   includes `retrofitPredecessorEnrollmentId`, so an owner can see what a stolen
+   keyfile self-enrolled — through that field rather than `parentEnrollmentId` (a
+   self-enrolled successor copies its predecessor's `parentEnrollmentId` rather
+   than naming the predecessor as parent). ⚠️ **This said `enroll:fetch`
+   carries it too, until 2026-08-27; it does not.** That verb returns exactly
+   `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey` and
+   `status`. **The cascade shipped**
    in at_server #2781 ([ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)),
    and it follows APPROVER links, never the replacement edge
    ([ruling 133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)):
@@ -15926,21 +15924,17 @@ what one owes.
    decides "already retrofitted" from the keyfile alone, so a restored
    pre-retrofit copy submits another self-enrollment. That is accepted as it
    stands, and nothing recognises the earlier successor from the atServer.
-2. **A self-enrollment may inherit an unbounded expiry.** It inherits its
-   parent's `apkamKeysExpiryDuration`, and zero means never. ⚠️ **This item
-   said such a subtree lasts until that parent is revoked, which cascades, and
-   no such bound exists** (amended 2026-11-08). The cascade follows approval
-   and never the replacement edge
-   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
-   part 1,
-   [133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)):
-   a successor copies its predecessor's `parentEnrollmentId`, so the two are
-   siblings, and a scoped predecessor is revoked as `superseded` at its
-   successor's first authentication
-   ([132](#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07))
-   while the successor lives on. So a never-expiring self-enrollment lasts
-   until it is itself revoked. The acceptance rested on the false bound, so
-   the question is open again and the plan carries it back to gkc.
+2. **A self-enrollment may inherit an unbounded expiry.** It takes its
+   predecessor's place under the same approver and inherits the predecessor's
+   `apkamKeysExpiryDuration`, bounded by the predecessor's stored deadline, and
+   zero means never. Revoking that approver, or anything above it, reaches it
+   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31));
+   revoking the predecessor does not
+   ([133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)).
+   A retrofit of the root enrollment, which has no approver and keeps its life,
+   yields a successor that never expires and is revoked only by name. gkc
+   accepted that on 2026-11-07 and re-ruled it on the corrected facts on
+   2026-11-09.
 3. **The nine rows contested between test arms 1 and 3 stay proven where they
    are.** UC-A5.2, UC-A5.3, UC-B1.1, UC-B1.2, UC-B4.4, UC-G1.2, UC-G1.5, UC-A4.2
    and UC-B4.3 are PROVEN by their existing citations; arm 1 gains no cells for

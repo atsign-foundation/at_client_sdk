@@ -55,9 +55,9 @@ String _withoutCodeSpans(String s) => s.replaceAll(RegExp(r'`[^`]*`'), '');
 /// `pq_native_enroll_test.dart`, so a doc set naming only the second reads as
 /// naming the first. A name counts only where no word character, `.` or `-`
 /// sits right before it or right after it.
-bool _namesFile(String docs, String fileName) => RegExp(
-        '(?<![\\w.-])${RegExp.escape(fileName)}(?![\\w-]|\\.\\w)')
-    .hasMatch(docs);
+bool _namesFile(String docs, String fileName) =>
+    RegExp('(?<![\\w.-])${RegExp.escape(fileName)}(?![\\w-]|\\.\\w)')
+        .hasMatch(docs);
 
 /// The TODO rows of [plan] that link a `###`/`####` heading the plan does not
 /// have ([unresolved]), and those whose linked section says it is done
@@ -398,10 +398,8 @@ void main() {
     });
 
     test('a section marked done in its heading alone is caught', () {
-      // The plan's own convention put the marker in the heading
-      // (`### 14.5 … — DONE`), with a body whose first lines carry none; a
-      // guard reading only the body passed such a row once its anchor was
-      // updated to match.
+      // A section marked done in its heading (`### 14.5 … — DONE`) must be
+      // caught even when the first lines of its body carry no marker.
       const plan = '# plan\n'
           '\n'
           '## TODO\n'
@@ -619,8 +617,7 @@ void main() {
               'tests went away — fix the walk before believing the green');
 
       final docs = docSet();
-      final unnamed = names.where((n) => !_namesFile(docs, n)).toList()
-        ..sort();
+      final unnamed = names.where((n) => !_namesFile(docs, n)).toList()..sort();
       expect(unnamed, isEmpty,
           reason: 'name each of these under docs/projects/pq/ — in the '
               'catalogue row it proves, or the plan entry that built it — so '
@@ -665,8 +662,8 @@ void main() {
     });
 
     test('a file name counts only as a whole name', () {
-      // `enroll_test.dart` passed this rail for months as the tail of
-      // `pq_native_enroll_test.dart`, while no doc named it.
+      // A file name matches only as a whole name, so a shorter name is
+      // not matched by an unrelated file name that ends with it.
       const docs = 'see `tests/x/test/pq_native_enroll_test.dart`.';
       expect(_namesFile(docs, 'pq_native_enroll_test.dart'), isTrue);
       expect(_namesFile(docs, 'enroll_test.dart'), isFalse);

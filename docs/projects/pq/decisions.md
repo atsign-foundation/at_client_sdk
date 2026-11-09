@@ -219,7 +219,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [159] | A write starts its walk at the namespace its key names in full                               | 2026-11-01 | AMENDED 2026-11-02 |
 | [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | AMENDED 2026-11-02 |
 | [161] | A share is sealed to the most specific key its recipient advertises                          | 2026-11-02 | AMENDED 2026-11-02 |
-| [162] | The 2026-11-07 plan review settles nine open questions                                       | 2026-11-07 | AMENDED 2026-11-08 |
+| [162] | The 2026-11-07 plan review settles nine open questions                                       | 2026-11-07 | AMENDED 2026-11-09 |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
