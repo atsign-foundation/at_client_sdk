@@ -17,7 +17,7 @@ import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
     show ApkamSignedAdvertisedKeys;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
-    show LinkVoucher;
+    show LinkVoucher, PqSigningChain;
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException, AtValue;
@@ -65,6 +65,28 @@ void main() {
 
     expect(link.signatures.map((s) => s.iss).toSet(), {alice});
     expect(link.signerAtSign, alice);
+  });
+
+  group('Given a caller written against at_client 4.0.0', () {
+    test(
+        'when it signs a chain link with signChainLink and no Atsign, then the '
+        'link names none', () {
+      final link = SignedEnvelope.fromJson(PqSigningChain.signChainLink(
+          {'v': 2},
+          key: ofE.key, signerEnrollmentId: e));
+
+      expect(link.signerAtSign, isNull);
+      expect(link.signerEnrollmentId, e);
+    });
+
+    test(
+        'when it builds a LinkVoucher.chain with no Atsign, then the links it '
+        'signs name none', () async {
+      final link = SignedEnvelope.fromJson(await LinkVoucher.chain(
+          key: ofE.key, enrollmentId: e, keysWalked: const []).sign({'v': 2}));
+
+      expect(link.signerAtSign, isNull);
+    });
   });
 
   test(

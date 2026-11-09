@@ -168,11 +168,14 @@ class LinkVoucher {
         _enrollmentId = null,
         keysWalked = const [];
 
-  /// A voucher signing chain links with [key], which [enrollmentId] lists and
-  /// which walks to the root through [keysWalked].
+  /// A voucher signing chain links with [key], which [atSign]'s enrollment
+  /// [enrollmentId] lists and which walks to the root through [keysWalked].
+  ///
+  /// With no [atSign], the links it signs name no Atsign, as at_client 4.0.0
+  /// signed them.
   LinkVoucher.chain(
       {required ApkamSigningKeys key,
-      required String atSign,
+      String? atSign,
       required String enrollmentId,
       required this.keysWalked})
       : _key = key,
@@ -202,7 +205,7 @@ class LinkVoucher {
           rootPrivate: rootPrivate, rootKid: _rootKid!);
     }
     return PqSigningChain.signChainLink(payload,
-        key: _key!, signerAtSign: _atSign!, signerEnrollmentId: _enrollmentId!);
+        key: _key!, signerAtSign: _atSign, signerEnrollmentId: _enrollmentId!);
   }
 }
 
@@ -287,10 +290,13 @@ class PqSigningChain {
 
   /// A chain link over [payload], signed with [key] alone, which
   /// [signerAtSign]'s enrollment [signerEnrollmentId] lists in its `_apsk`.
+  ///
+  /// With no [signerAtSign], the link names no Atsign, as at_client 4.0.0
+  /// signed them.
   static Map<String, Object?> signChainLink(
     Map<String, Object?> payload, {
     required ApkamSigningKeys key,
-    required String signerAtSign,
+    String? signerAtSign,
     required String signerEnrollmentId,
   }) =>
       signEnvelope(payload,

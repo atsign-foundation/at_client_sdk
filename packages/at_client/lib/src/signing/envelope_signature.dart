@@ -488,14 +488,15 @@ String signableTextOf(
 /// signature entry per key in [keys], verifiable by [verifyEnvelope].
 ///
 /// [type] and [atSign], canonical, are stamped into every protected header,
-/// where the signature covers them, and [enrollmentId] is stamped only when
-/// supplied — a signer with no enrollment yet omits the claim rather than
-/// guessing one.
+/// where the signature covers them. [atSign] is null only for a caller that
+/// does not know whose key it signs with, and the envelope then names no
+/// Atsign. [enrollmentId] is stamped only when supplied — a signer with no
+/// enrollment yet omits the claim rather than guessing one.
 SignedEnvelope signEnvelope(
   Object? payload, {
   required List<ApkamSigningKeys> keys,
   required EnvelopeType type,
-  required String atSign,
+  required String? atSign,
   String? enrollmentId,
   Object? Function(Object? nonEncodable)? toEncodable,
 }) {
@@ -503,7 +504,7 @@ SignedEnvelope signEnvelope(
   // per key would let two entries sign different bytes.
   final payloadB64 = _base64UrlUnpadded(
       utf8.encode(jsonEncode(payload, toEncodable: toEncodable)));
-  final Atsign issuer = atSign.toAtsign();
+  final Atsign? issuer = atSign?.toAtsign();
 
   return SignedEnvelope.fromJson({
     'payload': payloadB64,
@@ -521,7 +522,7 @@ Map<String, String> _signatureOver(
   String payloadB64, {
   required ApkamSigningKeys keys,
   required EnvelopeType type,
-  required Atsign issuer,
+  required Atsign? issuer,
   String? enrollmentId,
 }) {
   final SigningAlgoType signingAlgo = keys.algorithm;
@@ -535,7 +536,7 @@ Map<String, String> _signatureOver(
     'alg': alg,
     'typ': type.typ,
     'kid': publicKeyKidOfBase64(keys.publicKey),
-    'iss': issuer,
+    if (issuer != null) 'iss': issuer,
     if (enrollmentId != null) 'enid': enrollmentId,
     'v': envelopeVersion,
   })));
