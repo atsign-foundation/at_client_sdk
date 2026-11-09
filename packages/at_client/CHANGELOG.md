@@ -27,6 +27,12 @@
   `AtSigningVerificationException` on every verification path, rather than
   escaping as a `FormatException`, so a key package whose enrollment's
   `_apsk` cannot be read is reported rejected.
+- fix: every verification path refuses an `_apsk` RSA key whose public
+  exponent is not odd, above 2^16 and below 2^256, and
+  `SignedEnvelope.fromJson` refuses a protected header whose `alg`, `typ`,
+  `kid`, `iss` or `enid` is not a string, or whose `v` is not an integer.
+- fix: an `_apsk`, signing-root or key package entry whose `status` is not a
+  string is skipped, as one whose other fields are of the wrong kind is.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata

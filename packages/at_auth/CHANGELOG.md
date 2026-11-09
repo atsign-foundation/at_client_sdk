@@ -1,3 +1,9 @@
+## 4.1.0
+
+- fix: `KeyEntryStatus.fromWire` takes a `String?`, and `apskSigningKeys`
+  skips an entry whose `status` is present and is not a string, as it skips
+  one whose other fields are of the wrong kind.
+
 ## 4.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
