@@ -580,13 +580,19 @@ int envelopeSignatureChecks = 0;
 
 /// Whether [signature] over [input] verifies under [publicKey], raw key
 /// material for [algorithm]; throws [AtSigningVerificationException] for an
-/// algorithm envelopes are not signed under.
+/// algorithm envelopes are not signed under, and for an RSA key whose public
+/// exponent is outside the range [_rsaExponentInRange] accepts.
 Future<bool> checkEnvelopeSignature(
   SigningAlgoType algorithm, {
   required Uint8List input,
   required Uint8List signature,
   required Uint8List publicKey,
 }) {
+  if (algorithm == SigningAlgoType.rsa2048 && !_rsaExponentInRange(publicKey)) {
+    throw AtSigningVerificationException('the RSA key has a public exponent '
+        'outside the range this build verifies with: odd, above 2^16 and '
+        'below 2^256');
+  }
   envelopeSignatureChecks++;
   return switch (algorithm) {
     SigningAlgoType.mldsa65 => MlDsa65PureDartAlgo()
@@ -597,6 +603,50 @@ Future<bool> checkEnvelopeSignature(
         'no verify routine for ${algorithm.name}, which this build claims to '
         'sign envelopes with'),
   };
+}
+
+/// Whether the public exponent of [spki], an X.509 SubjectPublicKeyInfo
+/// holding an RSA key, is odd, above 2^16 and below 2^256, as FIPS 186-5
+/// requires; every key at_chops generates uses 65537. Read from the DER
+/// lengths and the last byte, so a key of any size is judged at once. A key
+/// that is not of that shape passes, for the verifier to refuse.
+bool _rsaExponentInRange(Uint8List spki) {
+  var at = 0;
+  int? enter(int tag) {
+    if (at + 2 > spki.length || spki[at] != tag) return null;
+    at++;
+    var length = spki[at++];
+    if (length & 0x80 != 0) {
+      final count = length & 0x7f;
+      if (count == 0 || count > 4 || at + count > spki.length) return null;
+      length = 0;
+      for (var i = 0; i < count; i++) {
+        length = (length << 8) | spki[at++];
+      }
+    }
+    return at + length <= spki.length ? length : null;
+  }
+
+  if (enter(0x30) == null) return true;
+  final algorithm = enter(0x30);
+  if (algorithm == null) return true;
+  at += algorithm;
+  if (enter(0x03) == null || at >= spki.length || spki[at++] != 0) {
+    return true;
+  }
+  if (enter(0x30) == null) return true;
+  final modulus = enter(0x02);
+  if (modulus == null) return true;
+  at += modulus;
+  var length = enter(0x02);
+  if (length == null || length == 0) return true;
+  while (length! > 1 && spki[at] == 0) {
+    at++;
+    length--;
+  }
+  final last = spki[at + length - 1];
+  final bits = (length - 1) * 8 + spki[at].bitLength;
+  return last.isOdd && bits > 16 && bits <= 256;
 }
 
 /// A parsed `_apsk` value: which algorithm each key is for, and the key itself.

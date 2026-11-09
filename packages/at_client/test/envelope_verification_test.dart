@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:crypto/crypto.dart' show sha256;
+import 'package:crypton/crypton.dart' as crypton;
 
 import 'package:at_auth/at_auth.dart'
     show ApskSigningKey, KeyEntryStatus, apskAdvertisement;
@@ -756,6 +757,82 @@ void main() {
       });
     });
 
+    group('Given an _apsk RSA key whose public exponent has 3,000,001 bits',
+        () {
+      /// A bare `_apsk` value: [rsaPair]'s modulus with [exponent], as an
+      /// X.509 SubjectPublicKeyInfo.
+      String bareWithExponent(Uint8List exponent) {
+        final modulus = _magnitude(
+            crypton.RSAPublicKey.fromString(rsaPair.atPublicKey.publicKey)
+                .asPointyCastle
+                .modulus!);
+        return base64Encode(_der(0x30, [
+          ..._der(0x30, [
+            0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, //
+            0x05, 0x00,
+          ]),
+          ..._der(0x03, [
+            0x00,
+            ..._der(0x30, [..._derInteger(modulus), ..._derInteger(exponent)]),
+          ]),
+        ]));
+      }
+
+      SignedEnvelope signedBy(String bare) => SignedEnvelope.fromJson({
+            'payload': b64u('{"result":1}'),
+            'signatures': [
+              {
+                'protected': b64u(jsonEncode({
+                  'alg': 'RS256',
+                  'typ': 'at-app+jws',
+                  'kid': kidOf(bare),
+                  'iss': alice,
+                  'enid': e,
+                  'v': 1,
+                })),
+                'signature': b64u(String.fromCharCodes(List.filled(256, 1))),
+              }
+            ],
+          });
+
+      test(
+          'when an envelope is verified against it, then it is refused before '
+          'any signature is checked', () async {
+        final huge = Uint8List(375001)
+          ..[0] = 1
+          ..[375000] = 1;
+        final bare = bareWithExponent(huge);
+        expect(bare.length, lessThan(maxPublishedApskLength),
+            reason: 'the premise: under the cap, so it is read');
+        final before = envelopeSignatureChecks;
+        final clock = Stopwatch()..start();
+
+        final result = await verifySignedEnvelope(signedBy(bare),
+            signer: apskOfE()._withValue(bare));
+
+        clock.stop();
+        expect(result,
+            refusedAs(EnvelopeRefusal.malformedKeySet, naming: ['exponent']));
+        expect(envelopeSignatureChecks - before, 0);
+        await expectLater(
+            verifyEnvelope(signedBy(bare),
+                signerPublicKey: bare,
+                signerAtSign: alice,
+                expecting: EnvelopeType.app),
+            throwsA(isA<AtSigningVerificationException>()
+                .having((x) => x.message, 'message', contains('exponent'))));
+        printOnFailure('refused in ${clock.elapsedMilliseconds} ms');
+
+        final f4 = bareWithExponent(Uint8List.fromList([0x01, 0x00, 0x01]));
+        expect(
+            await verifySignedEnvelope(signedBy(f4),
+                signer: apskOfE()._withValue(f4)),
+            refusedAs(EnvelopeRefusal.badSignature),
+            reason: 'the control: the same key with exponent 65537 reaches the '
+                'signature check');
+      }, timeout: const Timeout(Duration(seconds: 60)));
+    });
+
     group('Given any malformed envelope or _apsk value', () {
       test(
           'when verified or selected, then an EnvelopeRefused is returned and '
@@ -956,3 +1033,34 @@ extension on PublishedApsk {
   PublishedApsk _withValue(String value) =>
       PublishedApsk(atSign: atSign, enrollmentId: enrollmentId, value: value);
 }
+
+/// [value]'s big-endian magnitude.
+Uint8List _magnitude(BigInt value) {
+  final hex = value.toRadixString(16);
+  final even = hex.length.isOdd ? '0$hex' : hex;
+  return Uint8List.fromList([
+    for (var i = 0; i < even.length; i += 2)
+      int.parse(even.substring(i, i + 2), radix: 16)
+  ]);
+}
+
+/// A DER element of [tag] holding [content].
+List<int> _der(int tag, List<int> content) {
+  final length = content.length;
+  final lengthBytes = length < 0x80
+      ? [length]
+      : [
+          for (var shift = 24; shift >= 0; shift -= 8)
+            if (length >> shift != 0 || shift == 0) (length >> shift) & 0xff
+        ];
+  return [
+    tag,
+    if (length >= 0x80) 0x80 | lengthBytes.length,
+    ...lengthBytes,
+    ...content
+  ];
+}
+
+/// A DER INTEGER holding the non-negative [magnitude].
+List<int> _derInteger(Uint8List magnitude) =>
+    _der(0x02, [if (magnitude.first & 0x80 != 0) 0, ...magnitude]);
