@@ -760,20 +760,21 @@ void main() {
         () {
       /// A bare `_apsk` value: [rsaPair]'s modulus with [exponent], as an
       /// X.509 SubjectPublicKeyInfo.
-      String bareWithExponent(Uint8List exponent) {
+      String bareWithExponent(Uint8List exponent,
+          {List<int>? algorithm, int keyTag = 0x03, int unusedBits = 0}) {
         final modulus = _magnitude(
             crypton.RSAPublicKey.fromString(rsaPair.atPublicKey.publicKey)
                 .asPointyCastle
                 .modulus!);
+        final rsaKey =
+            _der(0x30, [..._derInteger(modulus), ..._derInteger(exponent)]);
         return base64Encode(_der(0x30, [
-          ..._der(0x30, [
-            0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, //
-            0x05, 0x00,
-          ]),
-          ..._der(0x03, [
-            0x00,
-            ..._der(0x30, [..._derInteger(modulus), ..._derInteger(exponent)]),
-          ]),
+          ...algorithm ??
+              _der(0x30, [
+                0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, //
+                0x01, 0x05, 0x00,
+              ]),
+          ..._der(keyTag, [if (keyTag == 0x03) unusedBits, ...rsaKey]),
         ]));
       }
 
@@ -821,6 +822,28 @@ void main() {
             throwsA(isA<AtSigningVerificationException>()
                 .having((x) => x.message, 'message', contains('exponent'))));
         printOnFailure('refused in ${clock.elapsedMilliseconds} ms');
+
+        for (final (shape, spelt) in [
+          ('its key in an OCTET STRING', bareWithExponent(huge, keyTag: 0x04)),
+          (
+            'a BIT STRING naming unused bits',
+            bareWithExponent(huge, unusedBits: 1)
+          ),
+          (
+            'an algorithm that is a NULL',
+            bareWithExponent(huge, algorithm: [0x05, 0x00])
+          ),
+        ]) {
+          final checks = envelopeSignatureChecks;
+          final shapeClock = Stopwatch()..start();
+          expect(
+              await verifySignedEnvelope(signedBy(spelt),
+                  signer: apskOfE()._withValue(spelt)),
+              refusedAs(EnvelopeRefusal.malformedKeySet, naming: ['exponent']),
+              reason: shape);
+          expect(envelopeSignatureChecks - checks, 0, reason: shape);
+          printOnFailure('$shape: ${shapeClock.elapsedMilliseconds} ms');
+        }
 
         final f4 = bareWithExponent(Uint8List.fromList([0x01, 0x00, 0x01]));
         expect(

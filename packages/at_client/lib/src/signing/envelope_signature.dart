@@ -656,11 +656,13 @@ Future<bool> checkEnvelopeSignature(
   };
 }
 
-/// Whether the public exponent of [spki], an X.509 SubjectPublicKeyInfo
-/// holding an RSA key, is odd, above 2^16 and below 2^256, as FIPS 186-5
-/// requires; every key at_chops generates uses 65537. Read from the DER
-/// lengths and the last byte, so a key of any size is judged at once. A key
-/// that is not of that shape passes, for the verifier to refuse.
+/// Whether [spki] is an X.509 SubjectPublicKeyInfo, DER-encoded, holding an
+/// RSA key whose public exponent is odd, above 2^16 and below 2^256, as FIPS
+/// 186-5 requires; every key at_chops generates uses 65537.
+///
+/// Read from the DER lengths and the exponent's last byte, so a key of any
+/// size is judged at once. Any other shape is refused, so no key reaches the
+/// verifier without its exponent having been read here.
 bool _rsaExponentInRange(Uint8List spki) {
   var at = 0;
   int? enter(int tag) {
@@ -678,26 +680,31 @@ bool _rsaExponentInRange(Uint8List spki) {
     return at + length <= spki.length ? length : null;
   }
 
-  if (enter(0x30) == null) return true;
+  final whole = enter(0x30);
+  if (whole == null || at + whole != spki.length) return false;
   final algorithm = enter(0x30);
-  if (algorithm == null) return true;
+  if (algorithm == null) return false;
   at += algorithm;
-  if (enter(0x03) == null || at >= spki.length || spki[at++] != 0) {
-    return true;
+  final bits = enter(0x03);
+  if (bits == null || at + bits != spki.length || spki[at++] != 0) {
+    return false;
   }
-  if (enter(0x30) == null) return true;
+  final key = enter(0x30);
+  if (key == null || at + key != spki.length) return false;
   final modulus = enter(0x02);
-  if (modulus == null) return true;
+  if (modulus == null) return false;
   at += modulus;
   var length = enter(0x02);
-  if (length == null || length == 0) return true;
+  if (length == null || length == 0 || at + length != spki.length) {
+    return false;
+  }
   while (length! > 1 && spki[at] == 0) {
     at++;
     length--;
   }
   final last = spki[at + length - 1];
-  final bits = (length - 1) * 8 + spki[at].bitLength;
-  return last.isOdd && bits > 16 && bits <= 256;
+  final exponentBits = (length - 1) * 8 + spki[at].bitLength;
+  return last.isOdd && exponentBits > 16 && exponentBits <= 256;
 }
 
 /// A parsed `_apsk` value: which algorithm each key is for, and the key itself.
