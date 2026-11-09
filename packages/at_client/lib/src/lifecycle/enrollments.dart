@@ -6,11 +6,15 @@ import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show ChainResult, ChainVerdict, PqSigningChain;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart'
     show AtClientEnvelopeSigner;
+import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
 import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+final _logger = AtSignLogger('Enrollments');
 
 /// A passcode the atServer issued or accepted, and when it stops working;
 /// [expiry] is null when the atServer's own default decides that.
@@ -69,10 +73,29 @@ class Enrollments {
       list(statuses: const [EnrollmentStatus.pending]);
 
   /// Each new request as the atServer announces it, from the moment of
-  /// listening; the ones already waiting are [pending].
+  /// listening; the ones already waiting are [pending]. Only a notification
+  /// this client's own atSign sent is reported; any other is dropped with a
+  /// warning.
   Stream<Enrollment> get requests => _client.notificationService
       .subscribe(regex: r'.*\.new\.enrollments\.__manage', shouldDecrypt: false)
+      .where(_sentByOwnAtSign)
       .map(Enrollment.fromNotification);
+
+  bool _sentByOwnAtSign(AtNotification notification) {
+    if (_isSameAtSign(notification.from, _atSign)) return true;
+    _logger.warning('Dropping notification ${notification.key} from '
+        '"${notification.from}": only $_atSign announces its own enrollment '
+        'requests');
+    return false;
+  }
+
+  static bool _isSameAtSign(String a, String b) {
+    try {
+      return a.toAtsign() == b.toAtsign();
+    } on InvalidAtSignException {
+      return false;
+    }
+  }
 
   /// Approves [enrollmentId], conveying this atSign's secrets to the device
   /// it names, and returns its record as the atServer holds it afterwards,
