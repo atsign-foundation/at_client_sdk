@@ -833,6 +833,53 @@ void main() {
       }, timeout: const Timeout(Duration(seconds: 60)));
     });
 
+    group('Given a typ, enid or kid carrying a newline or a control character',
+        () {
+      SignedEnvelope unsigned(Map<String, Object?> header) =>
+          SignedEnvelope.fromJson({
+            'payload': 'e30',
+            'signatures': [
+              {'protected': b64u(jsonEncode(header)), 'signature': 'AA'}
+            ],
+          });
+      final base = {
+        'alg': 'ML-DSA-65',
+        'typ': 'at-app+jws',
+        'kid': 'k',
+        'iss': alice,
+        'enid': e,
+        'v': 1,
+      };
+
+      test('when refused, then the reason is one line, escaped and bounded',
+          () async {
+        for (final (member, value, refusal) in [
+          ('typ', 'x\nsecond line', EnvelopeRefusal.wrongType),
+          ('typ', 'x\u2028y\u202ez', EnvelopeRefusal.wrongType),
+          ('enid', 'enroll-e\r\nsecond line', EnvelopeRefusal.wrongEnrollment),
+          ('kid', 'k\nsecond line', EnvelopeRefusal.keyNotInKeySet),
+          ('typ', 'x' * 10000, EnvelopeRefusal.wrongType),
+        ]) {
+          final result = await verifySignedEnvelope(
+              unsigned({...base, member: value}),
+              signer: apskOfE());
+
+          expect(result, refusedAs(refusal), reason: member);
+          final reason = (result as EnvelopeRefused).reason;
+          expect(
+              reason.runes.where((r) => r < 0x20 || r == 0x2028 || r == 0x202e),
+              isEmpty,
+              reason: '$member: $reason');
+          expect(reason.length, lessThan(400), reason: member);
+        }
+        final escaped = await verifySignedEnvelope(
+            unsigned({...base, 'typ': 'x\nsecond line'}),
+            signer: apskOfE()) as EnvelopeRefused;
+        expect(escaped.reason, contains(r'"x\u000asecond line"'),
+            reason: 'the newline is shown, escaped');
+      });
+    });
+
     group('Given any malformed envelope or _apsk value', () {
       test(
           'when verified or selected, then an EnvelopeRefused is returned and '

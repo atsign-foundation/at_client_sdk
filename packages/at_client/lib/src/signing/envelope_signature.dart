@@ -344,14 +344,14 @@ class SignedEnvelope {
     if (enids.length > 1) {
       throw AtSigningVerificationException(
           'an envelope carries one signer\'s signatures, and this one names '
-          '${enids.map((e) => '"$e"').join(', ')} — refusing rather than '
+          '${quotedClaims(enids)} — refusing rather than '
           'verifying under one of them and reporting another');
     }
     final types = {for (final s in parsed) s.typ};
     if (types.length > 1) {
       throw AtSigningVerificationException(
           'an envelope is signed for one purpose, and this one is typed '
-          '${types.map((t) => '"$t"').join(', ')} — refusing rather than '
+          '${quotedClaims(types)} — refusing rather than '
           'enforcing one of them and being read as another');
     }
     final issuers = {for (final s in parsed) _issuerClaimOf(s)};
@@ -417,8 +417,59 @@ bool exceedsUtf8Bytes(String text, int limit) {
 String? _issuerClaimOf(EnvelopeSignature entry) {
   final claim = entry.iss;
   if (claim == null) return null;
-  return jsonEncode(_atsignOrNull(claim) ?? claim);
+  return quotedClaim(_atsignOrNull(claim) ?? claim);
 }
+
+/// [text] quoted for a one-line message: JSON-style escapes for quotes,
+/// backslashes and every control, format and line-separator character, and
+/// at most [maxRunes] runes of it, the rest elided.
+String quotedClaim(String text, {int maxRunes = 80}) {
+  final out = StringBuffer('"');
+  var count = 0;
+  for (final rune in text.runes) {
+    if (count++ == maxRunes) {
+      out.write('...');
+      break;
+    }
+    if (rune == 0x22) {
+      out.write(r'\"');
+    } else if (rune == 0x5c) {
+      out.write(r'\\');
+    } else if (_unprintable(rune)) {
+      out.write(rune > 0xffff
+          ? '\\u{${rune.toRadixString(16)}}'
+          : '\\u${rune.toRadixString(16).padLeft(4, '0')}');
+    } else {
+      out.writeCharCode(rune);
+    }
+  }
+  out.write('"');
+  return out.toString();
+}
+
+/// [texts], each [quotedClaim]ed and a null as `nothing`, at most eight of
+/// them and a count of the rest.
+String quotedClaims(Iterable<String?> texts) {
+  final all = texts.toList();
+  final shown = [
+    for (final text in all.take(8)) text == null ? 'nothing' : quotedClaim(text)
+  ].join(', ');
+  return all.length > 8 ? '$shown and ${all.length - 8} more' : shown;
+}
+
+bool _unprintable(int rune) =>
+    rune < 0x20 ||
+    (rune >= 0x7f && rune <= 0x9f) ||
+    rune == 0xad ||
+    rune == 0x061c ||
+    rune == 0x180e ||
+    (rune >= 0x200b && rune <= 0x200f) ||
+    (rune >= 0x2028 && rune <= 0x202e) ||
+    (rune >= 0x2060 && rune <= 0x206f) ||
+    (rune >= 0xd800 && rune <= 0xdfff) ||
+    rune == 0xfeff ||
+    (rune >= 0xfff9 && rune <= 0xfffb) ||
+    (rune >= 0xe0000 && rune <= 0xe007f);
 
 /// What kind of JSON value [value] is, named without encoding it.
 String _jsonKind(Object? value) => switch (value) {
@@ -440,8 +491,8 @@ Atsign? issuerOf(EnvelopeSignature entry) {
   final issuer = _atsignOrNull(claim);
   if (issuer != null) return issuer;
   throw AtSigningVerificationException(
-      'the envelope names its signer as ${jsonEncode(claim)}, which is not an '
-      'Atsign');
+      'the envelope names its signer as ${quotedClaim(claim)}, which is not '
+      'an Atsign');
 }
 
 Atsign? _atsignOrNull(String text) {
@@ -794,8 +845,8 @@ void requireIssuer(SignedEnvelope envelope, String signerAtSign) {
     final claimed = issuerOf(entry);
     if (claimed != null && claimed != expected) {
       throw AtSigningVerificationException(
-          'the envelope names its signer as "$claimed", and it is verified '
-          'as "$expected"\'s');
+          'the envelope names its signer as ${quotedClaim(claimed)}, and it is '
+          'verified as ${quotedClaim(expected)}\'s');
     }
   }
 }
@@ -829,7 +880,7 @@ Future<void> verifyEnvelope(
   final SigningAlgoType? algo = SigningAlgoType.strongestOf(shared);
   if (algo == null) {
     throw AtSigningVerificationException(
-        'the envelope is signed under ${envelope.signatures.map((s) => '"${s.alg}"').join(', ')} '
+        'the envelope is signed under ${quotedClaims(envelope.signatures.map((s) => s.alg))} '
         'and the published _apsk advertises ${parsed.keys.map((k) => '"${k.alg.name}"').join(', ')} '
         '— no algorithm in common, so there is no signature here this key can '
         'check. Refusing rather than falling back to a key derived some other '
@@ -842,7 +893,7 @@ Future<void> verifyEnvelope(
 
   if (entry.typ != expecting.typ) {
     throw AtSigningVerificationException('the envelope is typed '
-        '${entry.typ == null ? 'nothing' : '"${entry.typ}"'} and this reader '
+        '${entry.typ == null ? 'nothing' : quotedClaim(entry.typ!)} and this reader '
         'verifies "${expecting.typ}" — refusing rather than '
         'checking a signature that was made over a document meant for '
         'something else. The signature may well be valid; what it attests to '
@@ -878,9 +929,9 @@ Future<void> verifyEnvelope(
   }
   if (named == null) {
     throw AtSigningVerificationException(
-        'the envelope\'s ${algo.name} signature names key "$namedKid", and the '
+        'the envelope\'s ${algo.name} signature names key ${quotedClaim(namedKid)}, and the '
         'published _apsk advertises '
-        '${candidates.map((k) => '"${k.kid}"').join(', ')} under ${algo.name} '
+        '${quotedClaims(candidates.map((k) => k.kid))} under ${algo.name} '
         '— refusing, and naming the key it asked for: a key the advertisement '
         'does not carry is a different failure from a signature that does not '
         'verify');
@@ -893,13 +944,13 @@ Future<void> verifyEnvelope(
         publicKey: base64Decode(named.pub));
   } on FormatException catch (e) {
     throw AtSigningVerificationException(
-        'the published _apsk lists key "$namedKid" in a form it cannot be '
+        'the published _apsk lists key ${quotedClaim(namedKid)} in a form it cannot be '
         'used in: ${e.message}');
   }
   if (!ok) {
     throw AtSigningVerificationException(
         'the envelope\'s ${algo.name} signature does not verify against key '
-        '"$namedKid", which the published _apsk advertises and which the '
+        '${quotedClaim(namedKid)}, which the published _apsk advertises and which the '
         'signature itself names. Refusing outright — a weaker signature on the '
         'same envelope is not a second opinion, it is the algorithm being '
         'chosen by whoever wrote it');

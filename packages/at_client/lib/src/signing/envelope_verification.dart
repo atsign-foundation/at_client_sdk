@@ -17,6 +17,8 @@ import 'package:at_client/src/signing/envelope_signature.dart'
         checkEnvelopeSignature,
         envelopeVersion,
         exceedsUtf8Bytes,
+        quotedClaim,
+        quotedClaims,
         issuerOf,
         parseApskValue,
         readApsk,
@@ -117,7 +119,8 @@ final class EnvelopeVerified implements EnvelopeVerification {
 
   @override
   String toString() => 'EnvelopeVerified(${signer.atSign}, '
-      '${signer.enrollmentId}, kid: $kid, ${algorithm.name}, $keyStatus, '
+      '${signer.enrollmentId}, kid: ${quotedClaim(kid)}, ${algorithm.name}, '
+      '${quotedClaim(keyStatus)}, '
       'issuerConfirmed: $issuerConfirmed)';
 }
 
@@ -149,7 +152,8 @@ final class EnvelopeKeySelected implements EnvelopeKeySelection {
 
   @override
   String toString() => 'EnvelopeKeySelected(${signer.atSign}, '
-      '${signer.enrollmentId}, kid: $kid, ${algorithm.name}, $keyStatus, '
+      '${signer.enrollmentId}, kid: ${quotedClaim(kid)}, ${algorithm.name}, '
+      '${quotedClaim(keyStatus)}, '
       'issuerConfirmed: $issuerConfirmed)';
 }
 
@@ -171,7 +175,8 @@ final class EnvelopeRefused
   final String? kid;
 
   @override
-  String toString() => 'EnvelopeRefused(${refusal.name}, kid: $kid: $reason)';
+  String toString() => 'EnvelopeRefused(${refusal.name}, kid: '
+      '${kid == null ? 'none' : quotedClaim(kid!)}: $reason)';
 }
 
 /// Why an envelope was refused.
@@ -246,8 +251,12 @@ Future<EnvelopeVerification> verifySignedEnvelope(
         }
         signature = base64Decode(base64Url.normalize(entry.signature));
       } on FormatException catch (e) {
-        return EnvelopeRefused._(signer, EnvelopeRefusal.malformedEnvelope,
-            'the signature of key "$kid" is not base64url: ${e.message}', kid);
+        return EnvelopeRefused._(
+            signer,
+            EnvelopeRefusal.malformedEnvelope,
+            'the signature of key ${quotedClaim(kid)} is not base64url: '
+            '${e.message}',
+            kid);
       }
       final Uint8List publicKey;
       try {
@@ -256,7 +265,8 @@ Future<EnvelopeVerification> verifySignedEnvelope(
         return EnvelopeRefused._(
             signer,
             EnvelopeRefusal.malformedKeySet,
-            'the _apsk lists key "$kid" with a key that is not base64: '
+            'the _apsk lists key ${quotedClaim(kid)} with a key that is not '
+            'base64: '
             '${e.message}',
             kid);
       }
@@ -270,7 +280,8 @@ Future<EnvelopeVerification> verifySignedEnvelope(
         return EnvelopeRefused._(
             signer,
             EnvelopeRefusal.malformedKeySet,
-            'the _apsk lists key "$kid" in a form it cannot be used in: $e',
+            'the _apsk lists key ${quotedClaim(kid)} in a form it cannot be '
+            'used in: $e',
             kid);
       }
       if (!verified) {
@@ -278,7 +289,7 @@ Future<EnvelopeVerification> verifySignedEnvelope(
             signer,
             EnvelopeRefusal.badSignature,
             'the ${key.alg.name} signature does not verify against key '
-            '"$kid", which the _apsk lists and the envelope names',
+            '${quotedClaim(kid)}, which the _apsk lists and the envelope names',
             kid);
       }
       return EnvelopeVerified._(selection);
@@ -311,7 +322,7 @@ EnvelopeKeySelection selectEnvelopeKey(
   if (typ != EnvelopeType.app.typ) {
     return refuse(
         EnvelopeRefusal.wrongType,
-        'the envelope is typed ${typ == null ? 'nothing' : '"$typ"'}, and '
+        'the envelope is typed ${typ == null ? 'nothing' : quotedClaim(typ)}, and '
         'this verifies "${EnvelopeType.app.typ}"');
   }
 
@@ -333,7 +344,7 @@ EnvelopeKeySelection selectEnvelopeKey(
   if (claimed != null && claimed != signer.atSign) {
     return refuse(
         EnvelopeRefusal.wrongAtSign,
-        'the envelope names its signer as "$claimed", and the _apsk is '
+        'the envelope names its signer as ${quotedClaim(claimed)}, and the _apsk is '
         '"${signer.atSign}"\'s');
   }
 
@@ -347,7 +358,7 @@ EnvelopeKeySelection selectEnvelopeKey(
   if (enid.toLowerCase() != signer.enrollmentId.toLowerCase()) {
     return refuse(
         EnvelopeRefusal.wrongEnrollment,
-        'the envelope names enrollment "$enid", and the _apsk is enrollment '
+        'the envelope names enrollment ${quotedClaim(enid)}, and the _apsk is enrollment '
         '"${signer.enrollmentId}"\'s');
   }
 
@@ -421,8 +432,8 @@ EnvelopeRefused _unlisted(
   }
   return refuse(
       EnvelopeRefusal.keyNotInKeySet,
-      'the envelope names ${_quoted(envelope.signatures.map((s) => s.kid))}, '
-      'and the _apsk lists ${_quoted(usable.map((k) => k.kid))}',
+      'the envelope names ${quotedClaims(envelope.signatures.map((s) => s.kid))}, '
+      'and the _apsk lists ${quotedClaims(usable.map((k) => k.kid))}',
       reported);
 }
 
@@ -439,8 +450,9 @@ EnvelopeRefused _unlistedKey(
   if (listed != null) return _notVouched(listed, refuse);
   return refuse(
       EnvelopeRefusal.keyNotInKeySet,
-      'the envelope\'s ${algorithm.name} signature names key "${entry.kid}", '
-      'and the _apsk lists ${_quoted(usable.map((k) => k.kid))}',
+      'the envelope\'s ${algorithm.name} signature names key '
+      '${quotedClaim(entry.kid!)}, and the _apsk lists '
+      '${quotedClaims(usable.map((k) => k.kid))}',
       entry.kid);
 }
 
@@ -449,7 +461,7 @@ typedef _Refuse = EnvelopeRefused Function(
 
 EnvelopeRefused _notVouched(ApskSigningKey key, _Refuse refuse) => refuse(
     EnvelopeRefusal.keyNotVouchedFor,
-    'the _apsk lists key "${key.kid}" as "${key.status}", which does not '
+    'the _apsk lists key ${quotedClaim(key.kid)} as ${quotedClaim(key.status)}, which does not '
     'vouch for what it signed',
     key.kid);
 
@@ -469,6 +481,3 @@ String? _reportedKid(SignedEnvelope envelope) {
       .firstWhere((s) => signsUnder(algorithm, s.alg))
       .kid;
 }
-
-String _quoted(Iterable<String?> kids) =>
-    kids.map((k) => k == null ? 'no key' : '"$k"').join(', ');
