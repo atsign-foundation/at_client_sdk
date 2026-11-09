@@ -806,7 +806,7 @@ awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.
 
 Of the open ones, item 11 — an APKAM rotation that lands and is not persisted
 locks the enrollment out permanently — is the owed work, and step 20's rotation
-arm waits on it; 35 lands in `atGettingStarted`; 14 is not PQ; 10 is an
+arm waits on it; 35 lands in `atGettingStarted`; 10 is an
 unexplained functional run with two disproven theories; 20, 21 and 26 were
 examined and deliberately left.
 

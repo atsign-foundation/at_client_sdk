@@ -353,7 +353,7 @@ SignedEnvelope? _advertisedEnvelope(Object advertised,
   return envelope;
 }
 
-/// Strips the at-protocol `data:` prefix and JSON-decodes a verb response.
+/// Strips the Atsign Protocol `data:` prefix and JSON-decodes a verb response.
 Object? _data(String? raw) {
   if (raw == null) return null;
   final trimmed = raw.trim();
