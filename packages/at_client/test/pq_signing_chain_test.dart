@@ -1387,6 +1387,35 @@ void main() {
     });
   });
 
+  group('Given a chain voucher from PqSigningChain.voucher', () {
+    test(
+        'when it links another enrollment\'s key, then the link names this '
+        'client\'s Atsign', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      await withSigningKey(b);
+      await PqSigningChain(b).linkKeysOf(await record(b, 'b-1'), root,
+          authenticationKey:
+              pkamKeyPairFor(atSign, 'b-1').atPublicKey.publicKey,
+          verifier: signerOf(b));
+      final c = client('c-1');
+      final cKey = await withSigningKey(c);
+      final bVoucher = (await PqSigningChain(b)
+          .voucher(signerOf(b), isFullyPrivileged: () async => false))!;
+      expect(bVoucher.isRoot, isFalse, reason: 'the premise: a chain voucher');
+
+      await PqSigningChain(b).linkKeysOf(await record(b, 'c-1'), bVoucher,
+          authenticationKey:
+              pkamKeyPairFor(atSign, 'c-1').atPublicKey.publicKey,
+          verifier: signerOf(b));
+
+      final link =
+          (await record(c, 'c-1')).links[publicKeyKidOfBase64(cKey.publicKey)];
+      expect(link, isNotNull, reason: 'the premise: the voucher linked it');
+      expect(SignedEnvelope.fromJson(link!).signerAtSign, atSign);
+    });
+  });
+
   group('Given a client holding the signing root\'s private key', () {
     test('when it is not fully privileged, then it signs no root link with it',
         () async {
