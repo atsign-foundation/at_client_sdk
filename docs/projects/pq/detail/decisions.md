@@ -3354,11 +3354,15 @@ ruling, each with a differential test.
    planned migration off a shared keyfile; without it, retiring a cloned parent
    would kill the legitimate children each clone spawned. No authorisation delta:
    subset grants mean the parent's revoker is authorised for every descendant
-   (record that property in the implementing commit's body). `parentEnrollmentId`
-   rides `enroll:list`, which returns the record whole, so an owner can see what a
-   stolen keyfile spawned. ⚠️ **This said `enroll:fetch` carries it too, until
-   2026-08-27; it does not.** That verb returns exactly `appName`, `deviceName`,
-   `namespace`, `encryptedAPKAMSymmetricKey` and `status`. **The cascade shipped**
+   (record that property in the implementing commit's body). The roster
+   (`toJsonRoster`) rides `enroll:list`, which returns the record whole, and
+   includes `retrofitPredecessorEnrollmentId`, so an owner can see what a stolen
+   keyfile self-enrolled — through that field rather than `parentEnrollmentId` (a
+   self-enrolled successor copies its predecessor's `parentEnrollmentId` rather
+   than naming the predecessor as parent). ⚠️ **This said `enroll:fetch`
+   carries it too, until 2026-08-27; it does not.** That verb returns exactly
+   `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey` and
+   `status`. **The cascade shipped**
    in at_server #2781 ([ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)),
    and it follows APPROVER links, never the replacement edge
    ([ruling 133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)):
@@ -3446,10 +3450,18 @@ ruling, each with a differential test.
    the cap entirely, so for the owner holding one keyfile the credential is
    permanent rather than ageing out. 118 retires that exemption, which makes the
    sentence true again — by decision rather than by luck. Never `enroll:revoke`
-   as cleanup, since revocation cascades to every retrofitted child — this narrows
+   as cleanup, since revocation cascades to every descendant by approval
+   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
+   part 1) — this narrows
    [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s "(or an
-   explicit enroll:revoke)" aside to the compromise case, where cascading is the
-   point. A straggler past the window gets a loud auth failure, not data loss;
+   explicit enroll:revoke)" aside to the compromise case. ⚠️ **This said
+   revocation cascades to every retrofitted child, until it was amended
+   2026-11-08; it reaches none.** A retrofit's successor is its predecessor's
+   sibling, so for a compromised keyfile that has already been replaced the
+   operator revokes the SUCCESSOR; revoking the predecessor reaches nothing the
+   successor holds
+   ([133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)).
+   A straggler past the window gets a loud auth failure, not data loss;
    recovery is a copied upgraded keyfile or a fresh OTP enrollment. Once the
    upgraded keyfile is archived, destroy pre-PQ `.atKeys` copies — they hold the
    legacy encryption private (harvest-relevant) and, until the cap elapses, a live
@@ -13816,8 +13828,12 @@ everybody.
    returns before fetching anything, and one whose fetch throws discards the
    list — for those there is nothing to ride and nothing is established.
    **Amended 2026-11-07** by [ruling 162](#162-the-2026-11-07-plan-review-settles-nine-open-questions-2026-11-07) item 6: the primary
-   enrollment, a client holding no enrollment id or `primary`, gets the
-   backstop too, so `NskeySeeding.rotateIfRevoked` stops skipping it.
+   enrollment, a client holding no enrollment id or `primary`, is to get the
+   backstop too. ⚠️ **Ruled, not built:** `NskeySeeding.rotateIfRevoked` still
+   returns false for such a client, under a NOTE that the atServer will not
+   answer about the primary enrollment and that the verb behind the lookup is
+   APKAM-gated, so until it lands a client running as `primary` gets no
+   backstop. The change is owed, and the plan carries it.
 
 ⛔ **The premise this ruling was FIRST built on was false, and the correction is
 the reason point 3 exists.** It said `enroll:list` returns every enrollment at
@@ -13873,7 +13889,11 @@ anyone asserting a *locally computed* time on either path restores the trap.
 does not notice a revocation until it restarts. The revoker rotates immediately
 and this is the backstop for when it could not.
 
-**What each side owes: nothing, since 2026-09-09.** at_server: the revocation
+**What each side owes: point 8's 2026-11-07 amendment, and nothing else since
+2026-09-09.** The amendment is unbuilt: `rotateIfRevoked` skips the primary
+enrollment (point 8), so at_client owes the predicate change, and the NOTE
+beside the skip means the atServer may owe an answer about the primary
+enrollment as well. Everything below is about the points as first ruled. at_server: the revocation
 event log of point 1 and the per-namespace moment derived from it and served by
 `enroll:infons` — **both built**, and on `origin/trunk` since `105aff94`
 (2026-08-31). Verify rather than taking it from here: the netting in
@@ -15904,10 +15924,17 @@ what one owes.
    decides "already retrofitted" from the keyfile alone, so a restored
    pre-retrofit copy submits another self-enrollment. That is accepted as it
    stands, and nothing recognises the earlier successor from the atServer.
-2. **A self-enrollment may inherit an unbounded expiry.** It inherits its
-   parent's `apkamKeysExpiryDuration`, and zero means never; a subtree under a
-   parent that never expires lasts until that parent is revoked, which cascades
-   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)).
+2. **A self-enrollment may inherit an unbounded expiry.** It takes its
+   predecessor's place under the same approver and inherits the predecessor's
+   `apkamKeysExpiryDuration`, bounded by the predecessor's stored deadline, and
+   zero means never. Revoking that approver, or anything above it, reaches it
+   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31));
+   revoking the predecessor does not
+   ([133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)).
+   A retrofit of the root enrollment, which has no approver and keeps its life,
+   yields a successor that never expires and is revoked only by name. gkc
+   accepted that on 2026-11-07 and re-ruled it on the corrected facts on
+   2026-11-09.
 3. **The nine rows contested between test arms 1 and 3 stay proven where they
    are.** UC-A5.2, UC-A5.3, UC-B1.1, UC-B1.2, UC-B4.4, UC-G1.2, UC-G1.5, UC-A4.2
    and UC-B4.3 are PROVEN by their existing citations; arm 1 gains no cells for
