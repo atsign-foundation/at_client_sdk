@@ -46,6 +46,9 @@
   listener cancelled is reported on `droppedEvents`.
 - fix: `Enrollments.requests` reports only notifications from the client's
   own atSign.
+- fix: the legacy encryption and decryption paths name the underlying
+  error's type in their `AtEncryptionException` and `AtDecryptionException`
+  rather than quoting its text.
 
 ## 4.0.0
 

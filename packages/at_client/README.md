@@ -699,7 +699,7 @@ What each posture switches on:
   the new generation.
 - **OpenSSL.** On macOS (Homebrew) and Linux, where OpenSSL 3's libcrypto is
   installed, or wherever `AT_CHOPS_LIBCRYPTO_PATH` points, value AES-256-GCM
-  runs through it, and X-Wing does too with OpenSSL 3.5 or later. Elsewhere
+  runs through it, and X-Wing does too with OpenSSL 3.5.1 or later. Elsewhere
   both are pure Dart, and each opens what the other wrote.
 - **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
   `Atsign.enroll` submits a request that advertises a key package, and the

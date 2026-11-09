@@ -453,6 +453,10 @@ wall-clock. Nothing tests the property the concern is named for.
 | X-K18 | **Given** a second passkey (another device), **when** it enrolls, **then** it is its own enrollment with its own `enrollmentId` and a different derived PKAM key; it cannot open the first passkey's enrollment | K-13 d: PRF output differs per credential; not a backup |
 | X-K19 | **Given** any open or restore (PRF or no-PRF), **when** IndexedDB is inspected, **then** it holds only the hint (`atSign`, `credentialId`, `enrollmentId`; K-18 adds the atSign): no key material, no derived key, no passphrase The no-PRF case is deferred with K-13 a (K-16). | K-13 c1; c2 rejected, K-12 "never stored" |
 
+The key-sources design in [`../key-sources/design.md`](../key-sources/design.md#8-the-browser)
+places these gates beside a passkey-derived key and an atServer-held keys document,
+where the WebCrypto key becomes a local cache or a fallback.
+
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 
 | # | Gate | Proves |
