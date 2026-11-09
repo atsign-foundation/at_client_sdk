@@ -34,6 +34,7 @@ class _CapturedStdout extends Fake implements Stdout {
 
 /// Catalogue: features/enrollment/approver_sees_expiry.feature
 /// Catalogue: features/at_client_cli/auto_approve_keeps_listening.feature
+/// Catalogue: features/enrollment/auto_approve_from_own_atsign.feature
 void main() {
   const b = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
   late _MockAtClient client;
@@ -111,6 +112,36 @@ void main() {
     await IOOverrides.runZoned(() => auth_cli.autoApprove(args, client),
         stdout: () => out);
     return out;
+  }
+
+  /// Runs `at_activate auto_approve` with a limit of one over [arriving],
+  /// and hands back what it printed to stdout and to stderr; with [untilDone]
+  /// false it returns once the run has settled, whether or not it has ended.
+  Future<(_CapturedStdout, _CapturedStdout)> autoApproveFrom(
+      List<AtNotification> arriving,
+      {bool untilDone = true}) async {
+    final notifications = _MockNotificationService();
+    when(() => client.notificationService).thenReturn(notifications);
+    when(() => notifications.subscribe(
+            regex: any(named: 'regex'),
+            shouldDecrypt: any(named: 'shouldDecrypt')))
+        .thenAnswer((_) => Stream.fromIterable(arriving));
+    final args = AuthCliArgs().createAutoApproveCommandParser().parse([
+      '-a',
+      '@alice',
+      '--${AuthCliArgs.argNameAppNameRegex}',
+      'wavi',
+      '--${AuthCliArgs.argNameDeviceNameRegex}',
+      'phone',
+    ]);
+    final out = _CapturedStdout();
+    final err = _CapturedStdout();
+    await IOOverrides.runZoned(() async {
+      final run = auth_cli.autoApprove(args, client);
+      if (untilDone) await run;
+      await pumpEventQueue();
+    }, stdout: () => out, stderr: () => err);
+    return (out, err);
   }
 
   group('at_activate prints when an enrollment it approves expires', () {
@@ -207,33 +238,6 @@ void main() {
             false)
           ..value = value;
 
-    /// Runs `at_activate auto_approve` with a limit of one over [arriving],
-    /// and hands back what it printed to stdout and to stderr.
-    Future<(_CapturedStdout, _CapturedStdout)> autoApproveFrom(
-        List<AtNotification> arriving) async {
-      final notifications = _MockNotificationService();
-      when(() => client.notificationService).thenReturn(notifications);
-      when(() => notifications.subscribe(
-              regex: any(named: 'regex'),
-              shouldDecrypt: any(named: 'shouldDecrypt')))
-          .thenAnswer((_) => Stream.fromIterable(arriving));
-      final args = AuthCliArgs().createAutoApproveCommandParser().parse([
-        '-a',
-        '@alice',
-        '--${AuthCliArgs.argNameAppNameRegex}',
-        'wavi',
-        '--${AuthCliArgs.argNameDeviceNameRegex}',
-        'phone',
-      ]);
-      final out = _CapturedStdout();
-      final err = _CapturedStdout();
-      await IOOverrides.runZoned(() async {
-        await auth_cli.autoApprove(args, client);
-        await pumpEventQueue();
-      }, stdout: () => out, stderr: () => err);
-      return (out, err);
-    }
-
     final request = jsonEncode({'appName': 'wavi', 'deviceName': 'phone'});
 
     test('A notification that is not an enrollment request is passed over',
@@ -260,6 +264,65 @@ void main() {
       expect(out.text, contains('Approved 1 requests - limit was 1 - done.'));
       expect(err.text, contains('$a.new.enrollments.__manage@alice'),
           reason: 'the failed approval is reported');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+  });
+
+  AtNotification sentBy(String sender, String key) => AtNotification(
+      'n-$sender',
+      key,
+      sender,
+      '@alice',
+      DateTime.now().millisecondsSinceEpoch,
+      'key',
+      false)
+    ..value = jsonEncode({'appName': 'wavi', 'deviceName': 'phone'});
+
+  test(
+      'at_activate auto_approve acts only on requests announced by its own '
+      'atSign', () async {
+    serveB();
+    const key = '@alice:$b.new.enrollments.__manage@bob';
+
+    final (out, err) = await autoApproveFrom([
+      sentBy('@bob', key),
+      sentBy('@alice', '$b.new.enrollments.__manage@alice'),
+    ]);
+
+    expect('Got enrollment request ID'.allMatches(out.text), hasLength(1),
+        reason: 'auto_approve does not act on a request from another atSign');
+    expect(approvals, [b],
+        reason: 'the request from its own atSign is approved');
+    expect(err.text.split('\n'),
+        contains(allOf(contains(key), contains('from "@bob"'))),
+        reason: 'a warning names the sender and the key');
+  }, timeout: const Timeout(Duration(seconds: 5)));
+
+  group('Given at_activate auto_approve', () {
+    test(
+        'when a request arrives from @Alice for a run as @alice, then it is '
+        'approved', () async {
+      serveB();
+
+      await autoApproveFrom(
+          [sentBy('@Alice', '$b.new.enrollments.__manage@alice')],
+          untilDone: false);
+
+      expect(approvals, [b],
+          reason: 'the sender is compared in canonical form');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test(
+        'when a request arrives from @alice for a run as @Alice, then it is '
+        'approved', () async {
+      serveB();
+      when(() => client.getCurrentAtSign()).thenReturn('@Alice');
+
+      await autoApproveFrom(
+          [sentBy('@alice', '$b.new.enrollments.__manage@alice')],
+          untilDone: false);
+
+      expect(approvals, [b],
+          reason: 'the atSign it runs for is compared in canonical form');
     }, timeout: const Timeout(Duration(seconds: 5)));
   });
 
