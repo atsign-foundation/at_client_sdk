@@ -28,11 +28,15 @@
   escaping as a `FormatException`, so a key package whose enrollment's
   `_apsk` cannot be read is reported rejected.
 - fix: every verification path refuses an `_apsk` RSA key whose public
-  exponent is not odd, above 2^16 and below 2^256, and
+  exponent is not a positive odd number above 2^16 and below 2^256, and
   `SignedEnvelope.fromJson` refuses a protected header whose `alg`, `typ`,
   `kid`, `iss` or `enid` is not a string, or whose `v` is not an integer.
 - fix: an `_apsk`, signing-root or key package entry whose `status` is not a
   string is skipped, as one whose other fields are of the wrong kind is.
+- fix: a refusal that quotes an envelope's enrollment id or namespace, a
+  record's key id or Atsign, or the `_apsk` value `verifyEnvelopeSignature`
+  fetched shows it escaped and cut to 80 characters.
+- chore: requires at_auth 4.1.0.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata
