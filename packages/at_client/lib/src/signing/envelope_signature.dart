@@ -358,7 +358,7 @@ class SignedEnvelope {
     if (issuers.length > 1) {
       throw AtSigningVerificationException(
           'an envelope carries one signer\'s signatures, and its entries name '
-          '${issuers.map((i) => i ?? 'none').join(', ')} as the Atsign — '
+          '${quotedClaims(issuers, absent: 'none')} as the Atsign — '
           'refusing rather than verifying under one of them and reporting '
           'another');
     }
@@ -412,12 +412,13 @@ bool exceedsUtf8Bytes(String text, int limit) {
   return false;
 }
 
-/// [entry]'s Atsign claim quoted, canonical when it is an Atsign, or null
-/// when it makes none: what [SignedEnvelope.fromJson] compares across entries.
+/// [entry]'s Atsign claim, in full and canonical when it is an Atsign, or
+/// null when it makes none: what [SignedEnvelope.fromJson] compares across
+/// entries.
 String? _issuerClaimOf(EnvelopeSignature entry) {
   final claim = entry.iss;
   if (claim == null) return null;
-  return quotedClaim(_atsignOrNull(claim) ?? claim);
+  return _atsignOrNull(claim) ?? claim;
 }
 
 /// [text] quoted for a one-line message: JSON-style escapes for quotes,
@@ -447,12 +448,12 @@ String quotedClaim(String text, {int maxRunes = 80}) {
   return out.toString();
 }
 
-/// [texts], each [quotedClaim]ed and a null as `nothing`, at most eight of
+/// [texts], each [quotedClaim]ed and a null as [absent], at most eight of
 /// them and a count of the rest.
-String quotedClaims(Iterable<String?> texts) {
+String quotedClaims(Iterable<String?> texts, {String absent = 'nothing'}) {
   final all = texts.toList();
   final shown = [
-    for (final text in all.take(8)) text == null ? 'nothing' : quotedClaim(text)
+    for (final text in all.take(8)) text == null ? absent : quotedClaim(text)
   ].join(', ');
   return all.length > 8 ? '$shown and ${all.length - 8} more' : shown;
 }

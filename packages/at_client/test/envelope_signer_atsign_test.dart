@@ -151,6 +151,36 @@ void main() {
       });
     }
 
+    group('Given entries whose iss claims share their first 90 characters', () {
+      test('when it is read with SignedEnvelope.fromJson, then it is refused',
+          () {
+        final long = 'a' * 90;
+        Map<String, Object?> entryNaming(String claim, int index) =>
+            (resigned(twoEntries, keys, (h) => h..['iss'] = claim)
+                .toJson()['signatures'] as List)[index] as Map<String, Object?>;
+
+        expect(
+            () => SignedEnvelope.fromJson({
+                  'payload': twoEntries.payloadB64,
+                  'signatures': [
+                    entryNaming('$long@alice', 0),
+                    entryNaming('$long@bob', 1),
+                  ],
+                }),
+            throwsA(isA<AtSigningVerificationException>()));
+        expect(
+            SignedEnvelope.fromJson({
+              'payload': twoEntries.payloadB64,
+              'signatures': [
+                entryNaming('$long@alice', 0),
+                entryNaming('$long@alice', 1),
+              ],
+            }).signatures,
+            hasLength(2),
+            reason: 'the control: the same long claim in both is one signer');
+      });
+    });
+
     group('Given an envelope whose entries name "@alice" and "@Alice"', () {
       test(
           'when it is read with SignedEnvelope.fromJson, then it is accepted '
