@@ -1426,7 +1426,7 @@ void main() {
         'rehydrate drops past availableAt so stale server metadata does '
         "not leak into CItem", () async {
       // Regression: server-side metadata may carry a historic availableAt
-      // that is already in the past. The atProtocol metadata wire format
+      // that is already in the past. The Atsign Protocol metadata wire format
       // is additive — we can't clear it on the server — but the app view
       // must show it as null. Past availableAt on rehydrate → null here.
       final selfKey = AtKey.fromString('oldsched.$namespace$selfAtSignStr');

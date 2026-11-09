@@ -1,5 +1,9 @@
 ## 4.1.0
 
+- feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
+  enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
+  private half does not sign for its public half is refused with
+  `AtSigningException` before `enroll:request` is sent.
 - fix: `KeyEntryStatus.fromWire` takes a `String?`, and `apskSigningKeys`
   skips an entry whose `status` is present and is not a string, as it skips
   one whose other fields are of the wrong kind.

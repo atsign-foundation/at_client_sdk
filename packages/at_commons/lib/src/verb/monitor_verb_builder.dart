@@ -75,7 +75,7 @@ class MonitorVerbBuilder implements VerbBuilder {
     return true;
   }
 
-  /// Create a MonitorVerbBuilder from an atProtocol command string
+  /// Create a MonitorVerbBuilder from an Atsign Protocol command string
   static MonitorVerbBuilder getBuilder(String command) {
     if (command != command.trim()) {
       throw IllegalArgumentException(

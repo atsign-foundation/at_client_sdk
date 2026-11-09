@@ -3265,8 +3265,16 @@ its own. None blocks anything.
     for exactly this discoverability argument
     ([`decisions.md` 70](decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)).
 
-14. **⚠️ NOT PQ — parked here because this project has no other checked-in
-    owed-work list.** 16 prose uses of the banned "atProtocol" spelling
+14. ~~**⚠️ NOT PQ — parked here because this project has no other checked-in
+    owed-work list.**~~ **DONE 2026-11-07.** Every prose use now says
+    "Atsign Protocol": Markdown, YAML comments and `description:` fields,
+    podspec summaries, code comments and dartdoc, across the repository. Left
+    alone: identifiers, string literals, wire values, URLs and the
+    `at_protocol` repository's name. The command below now prints only
+    lines in this section that quote the spelling, and the `'atProtocol'`
+    event category quoted in `atserver_events.dart`'s dartdoc. The rest of
+    this item is as raised:
+    16 prose uses of the banned "atProtocol" spelling
     (it is **"Atsign Protocol"**, capital A, capital P, space-separated)
     survive outside `docs/projects/pq/`, which is clean. Found by the
     2026-08-14 docs sweep and deliberately not fixed then: they sit in six
