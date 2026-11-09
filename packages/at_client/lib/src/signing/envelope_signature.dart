@@ -759,6 +759,25 @@ class ParsedApsk {
       ];
 }
 
+/// at_auth's `apskSigningKeys` over [advertisement], leaving out any entry
+/// whose status is present and is neither null nor a string: no reader can
+/// use such an entry, and none reads its status.
+List<ApskSigningKey> readableApskSigningKeys(
+    Map<String, dynamic> advertisement) {
+  final keys = advertisement['keys'];
+  if (keys is! List) return apskSigningKeys(advertisement);
+  return apskSigningKeys({
+    ...advertisement,
+    'keys': [
+      for (final entry in keys)
+        if (entry is! Map ||
+            entry['status'] == null ||
+            entry['status'] is String)
+          entry
+    ],
+  });
+}
+
 /// Every key a fetched `_apsk` value lists under an algorithm this build has
 /// a [SigningAlgoType] for, whatever its status, or why the value cannot be
 /// read.
@@ -800,18 +819,7 @@ class ParsedApsk {
   if (decoded is! Map<String, dynamic>) {
     return fault('the _apsk value looks structured but is not a JSON object');
   }
-  final entries = decoded['keys'];
-  if (entries is List) {
-    for (final entry in entries) {
-      if (entry is Map &&
-          entry.containsKey('status') &&
-          entry['status'] is! String) {
-        return fault('the _apsk lists a key whose status is a JSON '
-            '${_jsonKind(entry['status'])}, not a token');
-      }
-    }
-  }
-  return (keys: apskSigningKeys(decoded), fault: null);
+  return (keys: readableApskSigningKeys(decoded), fault: null);
 }
 
 /// Parses a fetched `_apsk` value, bare or array.

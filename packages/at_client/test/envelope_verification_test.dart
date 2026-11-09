@@ -712,8 +712,8 @@ void main() {
 
     group("Given an _apsk entry whose status nests 250,000 arrays", () {
       test(
-          'when an envelope is verified against it, then it is refused as '
-          'malformedKeySet', () async {
+          'when an envelope is verified against it, then the entry is not '
+          'used and nothing is thrown', () async {
         final value = '{"v":1,"keys":[{"kid":"${kidK()}","use":"sign",'
             '"alg":"mldsa65","pub":"${ofE.key.publicKey}","status":'
             '${'[' * 250000}${']' * 250000}}]}';
@@ -724,9 +724,47 @@ void main() {
             await verifySignedEnvelope(envelope,
                 signer: apskOfE()._withValue(value)),
             refusedAs(EnvelopeRefusal.malformedKeySet,
-                kid: kidK(), naming: ['JSON array']));
+                kid: kidK(), naming: ['no key this build can verify with']));
         expect(selectEnvelopeKey(envelope, signer: apskOfE()._withValue(value)),
             refusedAs(EnvelopeRefusal.malformedKeySet));
+      });
+    });
+
+    group(
+        'Given an _apsk that also lists an entry whose status is a JSON '
+        'object, or lists its key with a null status', () {
+      test('when an envelope its key signed is verified, then it verifies',
+          () async {
+        final listed =
+            (jsonDecode(apskOfE([listedK()]).value) as Map)['keys'] as List;
+        for (final value in [
+          jsonEncode({
+            'v': 1,
+            'keys': [
+              ...listed,
+              {
+                'kid': 'k-enc',
+                'use': 'enc',
+                'alg': 'x-wing',
+                'pub': 'AAAA',
+                'status': {'since': 1}
+              },
+            ],
+          }),
+          jsonEncode({
+            'v': 1,
+            'keys': [
+              {...(listed.single as Map), 'status': null}
+            ],
+          }),
+        ]) {
+          expect(
+              await verifySignedEnvelope(envelope,
+                  signer: apskOfE()._withValue(value)),
+              isA<EnvelopeVerified>().having(
+                  (r) => r.keyStatus, 'keyStatus', KeyEntryStatus.active),
+              reason: value.substring(value.length - 60));
+        }
       });
     });
 

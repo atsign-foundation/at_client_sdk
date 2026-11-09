@@ -1387,6 +1387,42 @@ void main() {
     });
   });
 
+  group(
+      'Given an _apsk or signing root listing an entry whose status nests '
+      '250,000 arrays beside a usable key', () {
+    String withDeepStatus(String advertisement) {
+      final usable = (jsonDecode(advertisement) as Map)['keys'] as List;
+      return '{"v":1,"keys":[${jsonEncode(usable.single)},{"kid":"k2",'
+          '"use":"sign","alg":"mldsa65","pub":"AAAA","status":'
+          '${'[' * 250000}${']' * 250000}}]}';
+    }
+
+    test(
+        'when the chain walk reads the _apsk, then it reads the usable key '
+        'alone', () async {
+      final pub = base64Encode(
+          (await MlDsa65PureDartAlgo().generateKeyPair()).publicKey);
+      final value = withDeepStatus(jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: pub)
+      ])));
+
+      expect(
+          ApskRecord.parse('b-1', value, null).keys.map((k) => k.pub), [pub]);
+    });
+
+    test('when the signing root is read, then it reads the usable root alone',
+        () async {
+      await newRoot();
+      final key = 'public:${PqSigningRoot.recordName}$atSign';
+      remoteData[key] = withDeepStatus(remoteData[key]!);
+
+      expect(
+          (await PqSigningRoot.publishedRoots(client('a-1'), atSign))
+              .map((k) => k.pub),
+          [rootPair.pub]);
+    });
+  });
+
   group('Given a chain voucher from PqSigningChain.voucher', () {
     test(
         'when it links another enrollment\'s key, then the link names this '
