@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/remote_only.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client_wasm/at_client_wasm.dart';
 import 'package:at_client_wasm/src/session/remote_only_client.dart';
 import 'package:at_lookup/at_lookup.dart';
