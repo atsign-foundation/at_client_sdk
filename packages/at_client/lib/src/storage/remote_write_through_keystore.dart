@@ -1,17 +1,22 @@
 import 'dart:convert';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/storage/local_record_store.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 
 class RemoteWriteThroughKeyStore
-    implements AtKeyValueStore<String, AtData, AtMetaData?> {
+    implements
+        AtKeyValueStore<String, AtData, AtMetaData?>,
+        LocalRecordUpdater {
   RemoteSecondary remoteSecondary;
   final int maxAttempts;
 
-  final Map<String, AtData> _local = {};
+  final LocalRecordStore _store;
 
-  RemoteWriteThroughKeyStore(this.remoteSecondary, {this.maxAttempts = 3});
+  RemoteWriteThroughKeyStore(this.remoteSecondary,
+      {this.maxAttempts = 3, LocalRecordStore? localStore})
+      : _store = localStore ?? InMemoryLocalRecordStore();
 
   bool _isLocal(String key) {
     return key.toLowerCase().startsWith('local:');
@@ -43,7 +48,7 @@ class RemoteWriteThroughKeyStore
       {bool skipCommit = false,
       AtAssertedTimestamps? assertedTimestamps}) async {
     if (_isLocal(key)) {
-      _local[key] = value;
+      await _store.put(key, value);
       return null;
     }
     await _execute('update:$key ${value.data}');
@@ -55,7 +60,7 @@ class RemoteWriteThroughKeyStore
       {bool skipCommit = false,
       AtAssertedTimestamps? assertedTimestamps}) async {
     if (_isLocal(key)) {
-      _local[key]?.metaData = metadata;
+      await _store.update(key, (current) => current?..metaData = metadata);
       return null;
     }
     final fragment = metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
@@ -66,7 +71,7 @@ class RemoteWriteThroughKeyStore
   @override
   Future<int?> putAll(String key, AtData value, AtMetaData? metadata) async {
     if (_isLocal(key)) {
-      _local[key] = value..metaData = metadata;
+      await _store.put(key, value..metaData = metadata);
       return null;
     }
     final fragment = metadata?.toCommonsMetadata().toAtProtocolFragment() ?? '';
@@ -78,7 +83,7 @@ class RemoteWriteThroughKeyStore
   Future<int?> remove(String key,
       {bool skipCommit = false, DateTime? deletedAt}) async {
     if (_isLocal(key)) {
-      _local.remove(key);
+      await _store.remove(key);
       return null;
     }
     await _execute('delete:$key');
@@ -88,7 +93,7 @@ class RemoteWriteThroughKeyStore
   @override
   Future<AtData?> get(String key) async {
     if (_isLocal(key)) {
-      return _local[key] ??
+      return await _store.get(key) ??
           (throw KeyNotFoundException('$key does not exist in keystore'));
     }
     final builder = LLookupVerbBuilder()
@@ -127,10 +132,15 @@ class RemoteWriteThroughKeyStore
     final cleanResponse = response.replaceFirst(RegExp('^data:'), '');
     final list = jsonDecode(cleanResponse) as List<dynamic>;
     final pattern = regex == null ? null : RegExp(regex);
-    final localKeys =
-        _local.keys.where((k) => pattern == null || pattern.hasMatch(k));
+    final localKeys = (await _store.keys())
+        .where((k) => pattern == null || pattern.hasMatch(k));
     return Stream.fromIterable([...list.cast<String>(), ...localKeys]);
   }
+
+  @override
+  Future<AtData?> updateLocal(
+          String key, AtData? Function(AtData? current) apply) =>
+      _store.update(key, apply);
 
   // Dead but must answer
   @override

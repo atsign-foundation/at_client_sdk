@@ -1,5 +1,6 @@
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/storage/local_record_store.dart';
 import 'package:at_client/src/storage/remote_write_through_keystore.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/sync/sync_queue_store.dart';
@@ -16,11 +17,15 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
     required this.atSign,
     required RemoteSecondary remoteSecondary,
     this.keyStoreMaxAttempts = 3,
+    this.localRecordStore,
     super.closedByClient,
   }) : _remoteSecondary = remoteSecondary;
 
   final String atSign;
   final int keyStoreMaxAttempts;
+
+  /// Holds the device-local (`local:`) records; null keeps them in memory.
+  final LocalRecordStore? localRecordStore;
   RemoteSecondary _remoteSecondary;
 
   /// The connection every read and write goes over; setting it moves the open
@@ -53,7 +58,7 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
   Future<void> openBackend() async {
     if (_keyStore != null) return;
     final keyStore = RemoteWriteThroughKeyStore(remoteSecondary,
-        maxAttempts: keyStoreMaxAttempts);
+        maxAttempts: keyStoreMaxAttempts, localStore: localRecordStore);
     await keyStore.initialize();
     final queue = AtSyncQueue(atSign: atSign);
     await queue.open(store: const NoopSyncQueueStore());

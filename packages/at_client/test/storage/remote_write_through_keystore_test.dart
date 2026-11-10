@@ -3,6 +3,7 @@
 // per D-18 item 3 ("a write-through implementation satisfies the durable-
 // keystore contract"). See plans/wasm/spike/pb3-stage2b-plan.md.
 
+import 'package:at_client/src/storage/local_record_store.dart';
 import 'package:at_client/src/storage/remote_write_through_keystore.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -417,6 +418,94 @@ void main() {
           await (await store.getKeys(regex: 'lastreceived|k1')).toList();
 
       expect(keys, unorderedEquals(['@alice:k1@bob', localKey]));
+    });
+  });
+
+  group('local records go to the injected LocalRecordStore', () {
+    const localKey = 'local:x.wavi@alice';
+    late InMemoryLocalRecordStore localStore;
+    late RemoteWriteThroughKeyStore keystore;
+
+    setUp(() {
+      localStore = InMemoryLocalRecordStore();
+      keystore = RemoteWriteThroughKeyStore(remoteSecondary,
+          maxAttempts: 3, localStore: localStore);
+    });
+
+    test('put lands in the injected store and never reaches the remote',
+        () async {
+      await keystore.put(localKey, AtData()..data = 'v');
+
+      expect((await localStore.get(localKey))!.data, 'v');
+      verifyNever(() =>
+          remoteSecondary.executeCommand(any(), auth: any(named: 'auth')));
+      verifyNever(() => remoteSecondary.executeVerb(any()));
+    });
+
+    test('get reads a local key from the injected store', () async {
+      await localStore.put(localKey, AtData()..data = 'from-store');
+
+      expect((await keystore.get(localKey))!.data, 'from-store');
+    });
+
+    test('get of an absent local key throws KeyNotFoundException', () async {
+      expect(
+          () => keystore.get(localKey), throwsA(isA<KeyNotFoundException>()));
+    });
+
+    test('remove deletes from the injected store', () async {
+      await localStore.put(localKey, AtData()..data = 'v');
+      await keystore.remove(localKey);
+
+      expect(await localStore.get(localKey), isNull);
+    });
+
+    test('putMeta replaces the metadata of the injected value', () async {
+      await localStore.put(localKey, AtData()..data = 'v');
+      await keystore.putMeta(localKey, AtMetaData()..ttl = 7);
+
+      expect((await localStore.get(localKey))!.metaData!.ttl, 7);
+    });
+
+    test('putAll stores value and metadata in the injected store', () async {
+      await keystore.putAll(
+          localKey, AtData()..data = 'v', AtMetaData()..ttl = 3);
+
+      final got = await localStore.get(localKey);
+      expect(got!.data, 'v');
+      expect(got.metaData!.ttl, 3);
+    });
+
+    test('getKeys lists injected local keys matching the regex', () async {
+      when(() => remoteSecondary.executeVerb(any()))
+          .thenAnswer((_) async => 'data:[]');
+      await localStore.put(localKey, AtData()..data = 'v');
+      await localStore.put('local:other@alice', AtData()..data = 'v');
+
+      final keys = await (await keystore.getKeys(regex: 'x.wavi')).toList();
+
+      expect(keys, [localKey]);
+    });
+
+    test('is a LocalRecordUpdater whose updateLocal delegates to the store',
+        () async {
+      expect(keystore, isA<LocalRecordUpdater>());
+
+      final result = await (keystore as LocalRecordUpdater)
+          .updateLocal(localKey, (current) => AtData()..data = 'updated');
+
+      expect(result!.data, 'updated');
+      expect((await localStore.get(localKey))!.data, 'updated');
+    });
+
+    test('a second keystore over the same store sees the first one\'s put',
+        () async {
+      await keystore.put(localKey, AtData()..data = 'persisted');
+
+      final second =
+          RemoteWriteThroughKeyStore(remoteSecondary, localStore: localStore);
+
+      expect((await second.get(localKey))!.data, 'persisted');
     });
   });
 }

@@ -8,4 +8,6 @@ library;
 
 export 'package:at_client/src/service/notification_service_impl.dart'
     show NotificationServiceImpl;
+export 'package:at_client/src/storage/local_record_store.dart'
+    show LocalRecordStore, InMemoryLocalRecordStore;
 export 'package:at_client/src/storage/remote_only_at_client_storage.dart';
