@@ -160,6 +160,7 @@ class VerifiedAdvertisementRecord {
     try {
       await verifyEnvelope(envelope,
           signerPublicKey: await _signer.publicSigningKeyValue,
+          signerAtSign: _atClient.getCurrentAtSign()!,
           expecting: EnvelopeType.verifiedAdvertisement);
       return true;
     } on Exception {

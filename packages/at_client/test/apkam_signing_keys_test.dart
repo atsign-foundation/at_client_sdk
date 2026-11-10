@@ -306,6 +306,8 @@ void main() {
       expect(envelope.signatures.map((s) => s.enid).toSet(), {enrollmentId},
           reason: 'every entry names the same signing ENROLLMENT - that is '
               'what enid is for');
+      expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign},
+          reason: 'and the same Atsign, which is what iss is for');
       expect(envelope.signatures.map((s) => s.kid).toSet(), hasLength(2),
           reason: 'and a different KEY each, because kid names the key. This '
               'assertion read kid for the enrollment until 2026-08-31, when '

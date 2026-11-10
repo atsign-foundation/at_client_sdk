@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_version.dart';
 import 'package:at_chops/src/algorithm/ffi/secret_buffer.dart';
 import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
@@ -59,7 +60,11 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   late final EvpPkeyFromdataDart _fromdata;
   late final CryptoFreeDart _cryptoFree;
 
+  /// Throws [UnsupportedError] if [_lib] is older than OpenSSL 3.5.1.
   MlKem768FfiAlgo.fromLib(this._lib) {
+    if (!libCryptoVersionSupportsMlKem768(_lib)) {
+      throw UnsupportedError('MlKem768FfiAlgo requires OpenSSL 3.5.1 or later');
+    }
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
         EvpPkeyCtxNewFromNameDart>('EVP_PKEY_CTX_new_from_name');
     _ctxNew = _lib.lookupFunction<EvpPkeyCtxNewNative, EvpPkeyCtxNewDart>(

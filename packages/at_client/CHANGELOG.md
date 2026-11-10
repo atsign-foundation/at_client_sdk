@@ -1,11 +1,42 @@
 ## 4.1.0
 
-- feat: each notification is delivered once per id, including after a
-  reconnect, for the latest 1024 ids. `AtClientPreference.browser()` is a
-  new preset for browser clients.
-
-## 4.0.1
-
+- feat: every envelope at_client signs names its signer's Atsign, as `iss`
+  in its protected header. at_client's own verifiers, including
+  `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
+  the one it is verified for, and accept one naming none, as at_client 4.0.0
+  signed them, until a later release re-signs what an enrollment publishes.
+  at_client 4.0.0 verifies the new envelopes unchanged.
+- feat: experimental `verifySignedEnvelope` checks an application envelope
+  against an `_apsk` value the caller supplies as a `PublishedApsk`, with no
+  `AtClient`, network or clock, and returns `EnvelopeVerified`, naming the
+  key, algorithm and key status that verified, or `EnvelopeRefused` with the
+  reason. It refuses an envelope naming another Atsign, and one naming no
+  enrollment or another. One naming no Atsign, as at_client 4.0.0 signed
+  them, verifies with `issuerConfirmed` false, and `minimumAlgorithm` refuses
+  one signed only under a weaker algorithm. `SignedEnvelope.parse` refuses
+  envelope text over a length in UTF-8 bytes the caller names before
+  decoding it. Every name these take reaches a program through
+  `at_client.dart`, and so through at_client_cli and at_client_flutter.
+- feat: experimental `selectEnvelopeKey` makes every check
+  `verifySignedEnvelope` makes except the signature, without the payload,
+  and returns the key and status it would use; `fetchPublishedApsk` returns
+  an enrollment's `_apsk` as a `PublishedApsk`; and
+  `package:at_client/testing.dart` offers `TestEnvelopeSigner`, which signs
+  offline and gives the `PublishedApsk` that verifies it.
+- fix: an `_apsk` value that cannot be read is refused with
+  `AtSigningVerificationException` on every verification path, rather than
+  escaping as a `FormatException`, so a key package whose enrollment's
+  `_apsk` cannot be read is reported rejected.
+- fix: every verification path refuses an `_apsk` RSA key whose public
+  exponent is not a positive odd number above 2^16 and below 2^256, and
+  `SignedEnvelope.fromJson` refuses a protected header whose `alg`, `typ`,
+  `kid`, `iss` or `enid` is not a string, or whose `v` is not an integer.
+- fix: an `_apsk`, signing-root or key package entry whose `status` is not a
+  string is skipped, as one whose other fields are of the wrong kind is.
+- fix: a refusal that quotes an envelope's enrollment id or namespace, a
+  record's key id or Atsign, or the `_apsk` value `verifyEnvelopeSignature`
+  fetched shows it escaped and cut to 80 characters.
+- chore: requires at_auth 4.1.0.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata
@@ -13,6 +44,14 @@
 - fix: notifications waiting for their key are no longer dropped sooner
   because several listeners want them, and one given up because its
   listener cancelled is reported on `droppedEvents`.
+- fix: `Enrollments.requests` reports only notifications from the client's
+  own atSign.
+- fix: the legacy encryption and decryption paths name the underlying
+  error's type in their `AtEncryptionException` and `AtDecryptionException`
+  rather than quoting its text.
+- feat: each notification is delivered once per id, including after a
+  reconnect, for the latest 1024 ids. `AtClientPreference.browser()` is a
+  new preset for browser clients.
 
 ## 4.0.0
 
@@ -774,7 +813,7 @@ And some tech debt cleanup
 
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
-  `AtClientPreference.Atsign ProtocolEmitted` and change its default value
+  `AtClientPreference.atProtocolEmitted` and change its default value
   from 1.5.0 to 2.0.0
 
 ## 3.5.3

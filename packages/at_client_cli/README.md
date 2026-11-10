@@ -12,6 +12,13 @@ The Atsign Protocol for a Dart command-line program, daemon or server:
   online `AtClient`;
 - `CliKeys`, where those programs keep an atSign's keyfile and local store.
 
+A program imports `package:at_client_cli/at_client_cli.dart` and nothing else
+from the SDK, and does not add at_client to its pubspec. The barrel
+re-exports at_client, its storage backends and mixins, so `AtClient`,
+`Atsign`, `SignedEnvelope` and `verifySignedEnvelope` all come from that one
+import. A test may also import `package:at_client_cli/testing.dart`, for
+`TestEnvelopeSigner`.
+
 The lifecycle itself is [`at_client`](../at_client)'s — `Atsign.activate`,
 `Atsign.open` and `Atsign.enroll` do the work, and this package gives them a
 command line. It replaces at_onboarding_cli and at_cli_commons: see
@@ -129,7 +136,7 @@ Full step-by-step walkthrough:
 `CLIBase` turns the standard command-line flags into an online client:
 
 ```dart
-import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/at_client_cli.dart'; // the only SDK import
 
 Future<void> main(List<String> args) async {
   final parser = CLIBase.createArgsParser(namespace: 'my_app');
@@ -293,6 +300,8 @@ at_onboarding_cli 1.x wrote is read unchanged.
   protocol layer under at_client
 - [`at_client_flutter`](../at_client_flutter) — the Flutter-UI
   equivalent of this package
+- [`at_client_skills`' package map](../at_client_skills/skills/at_client_skills-sdk/references/06-package-map.md)
+  — which SDK package a program of each kind imports
 
 ## Open source usage and contributions
 

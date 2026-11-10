@@ -26,8 +26,8 @@ Upgrading from 3.x: see
 
 | If you're building…                                     | Start with                                                                                                         |
 |---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools             |
-| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported)            |
+| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools. Import only its barrel; do not add at_client to your pubspec |
+| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported). Import only its barrel; do not add at_client to your pubspec |
 | A **platform package**, or a program that passes every dependency itself | this package                                                                      |
 | **Understanding** the atSign lifecycle                  | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup      |
 
@@ -463,6 +463,19 @@ wire. Plenty of room: with 1-char collection / sub-collection
 names and a 15-char application namespace, the theoretical
 ceiling is **11 levels (root + 10 nested sub-collections)**.
 
+## Verifying a signed envelope offline
+
+`verifySignedEnvelope`, which is experimental, checks an application
+envelope from `wrapAndSign` against the `_apsk` its signer's enrollment
+published, held as a `PublishedApsk`, with no `AtClient`, network or clock.
+It returns `EnvelopeVerified`, naming the key, algorithm and key status, or
+`EnvelopeRefused`, naming an `EnvelopeRefusal` and a reason. Read envelope
+text with `SignedEnvelope.parse(text, maxLength: ...)`, and fetch the
+`_apsk` with `fetchPublishedApsk` or hold one read earlier.
+`selectEnvelopeKey` makes the same checks without the signature. In tests,
+`TestEnvelopeSigner`, from the platform package's `testing.dart`, signs
+offline and gives the `PublishedApsk` that verifies it.
+
 ## Crypto providers
 
 By default, encrypted writes use the built-in legacy Atsign encryption
@@ -686,7 +699,7 @@ What each posture switches on:
   the new generation.
 - **OpenSSL.** On macOS (Homebrew) and Linux, where OpenSSL 3's libcrypto is
   installed, or wherever `AT_CHOPS_LIBCRYPTO_PATH` points, value AES-256-GCM
-  runs through it, and X-Wing does too with OpenSSL 3.5 or later. Elsewhere
+  runs through it, and X-Wing does too with OpenSSL 3.5.1 or later. Elsewhere
   both are pure Dart, and each opens what the other wrote.
 - **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
   `Atsign.enroll` submits a request that advertises a key package, and the
@@ -729,7 +742,7 @@ the client holds no current copy of the recipient's key. Once a device has
 written in a namespace, it goes on writing there offline, across restarts.
 The design,
 the acceptance catalogue and the decision log are under
-[`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
+[`docs/projects/pq/`](../../docs/projects/pq/design.md).
 
 ## Known traps in sync
 
