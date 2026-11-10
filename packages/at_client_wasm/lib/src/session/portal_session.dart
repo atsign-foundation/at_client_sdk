@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/remote_only.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/client/remote_secondary.dart';
 
@@ -21,7 +22,8 @@ final _logger = AtSignLogger('portalSession');
 /// lookup over [lookUps] at [prefs]' root. [healServer] gives [heal] its
 /// server copy over the client's [RemoteSecondary], by default reading
 /// through [server] and writing on that connection. atSigns resolve with
-/// [secondaryAddressFinder], as [remoteOnlyClient] takes it.
+/// [secondaryAddressFinder], as [remoteOnlyClient] takes it. [openLocalRecords]
+/// is passed to [remoteOnlyClient].
 Future<AtClient> portalSession({
   required String atSign,
   required String app,
@@ -36,6 +38,7 @@ Future<AtClient> portalSession({
   Future<AtKeys> Function(String atSign)? uploadAtKeys,
   KeyEnvelopeCodec codec = const KeyEnvelopeCodec(),
   CredentialHintStore? hintStore,
+  Future<LocalRecordStore> Function(String enrollmentId)? openLocalRecords,
 }) async {
   final reader = server ??
       LookupServerCopyReader(
@@ -58,7 +61,8 @@ Future<AtClient> portalSession({
       prefs: prefs,
       keysIo: keys.keysIo,
       lookUps: lookUps,
-      secondaryAddressFinder: secondaryAddressFinder);
+      secondaryAddressFinder: secondaryAddressFinder,
+      openLocalRecords: openLocalRecords);
 
   final prf = keys.prf;
   if (prf != null) {

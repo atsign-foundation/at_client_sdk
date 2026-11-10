@@ -6,6 +6,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/remote_only.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:at_client_wasm/at_client_wasm.dart';
 import 'package:at_client_wasm/src/session/remote_only_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -132,6 +133,15 @@ class FakePasskeyPort implements PasskeyPort {
     lastAllowCredential = allowCredential;
     if (getError case final e?) throw e;
     return (credentialId: credentialId, prfFirst: prfFirst);
+  }
+}
+
+class _CountingLocalRecordStore extends InMemoryLocalRecordStore {
+  int closeCount = 0;
+
+  @override
+  Future<void> close() async {
+    closeCount++;
   }
 }
 
@@ -647,6 +657,58 @@ void main() {
           (client as AtClientImpl).storage! as RemoteOnlyAtClientStorage;
       expect(healedOver, same(storage.remoteSecondary));
       expect(healedOver, same(client.getRemoteSecondary()));
+    });
+
+    test('a create that fails closes the local record store it was given once',
+        () async {
+      final localStore = _CountingLocalRecordStore();
+      final failing = AtClientPreference()
+        ..namespace = _app
+        ..monitorAutoStart = false
+        ..crypto = CryptoConfig(defaultProviderId: 'missing');
+
+      await expectLater(
+          remoteOnlyClient(
+              atSign: _atSign,
+              app: _app,
+              prefs: failing,
+              keysIo: InMemoryAtKeysIo.holding(_atSign, keys),
+              lookUps: fakeLookUps,
+              secondaryAddressFinder: finder,
+              openLocalRecords: (_) async => localStore),
+          throwsA(isA<CryptoProviderNotRegistered>()));
+
+      expect(localStore.closeCount, 1);
+    });
+
+    test(
+        'openLocalRecords is called with the keys enrollment and its store holds local: records',
+        () async {
+      final localStore = InMemoryLocalRecordStore();
+      final opened = <String?>[];
+
+      final client = (await remoteOnlyClient(
+              atSign: _atSign,
+              app: _app,
+              prefs: prefs,
+              keysIo: InMemoryAtKeysIo.holding(_atSign, keys),
+              lookUps: fakeLookUps,
+              secondaryAddressFinder: finder,
+              openLocalRecords: (enrollmentId) async {
+                opened.add(enrollmentId);
+                return localStore;
+              }))
+          .client;
+
+      expect(opened, [keys.enrollmentToAuthenticateAs()]);
+
+      await (client as AtClientImpl).storage!.keyStore.put(
+          'local:a@alice',
+          AtData()
+            ..data = 'v1'
+            ..metaData = AtMetaData());
+
+      expect((await localStore.get('local:a@alice'))!.data, 'v1');
     });
   });
 }

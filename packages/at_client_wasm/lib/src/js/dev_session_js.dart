@@ -12,6 +12,7 @@ import '../keys/unlock_secret.dart';
 import '../keys/web_passkey_port.dart';
 import '../session/portal_session.dart';
 import '../session/proxy_lookups.dart';
+import '../storage/indexeddb_local_record_store.dart';
 import 'dev_session.dart';
 
 /// Opens the [DevSession] behind `atClientDev.openSession`.
@@ -256,6 +257,8 @@ Future<DevSession> defaultOpener(DevSessionOptions options,
     hintStore: store,
     promptPassphrase: promptPassphrase,
     uploadAtKeys: uploadAtKeys,
+    openLocalRecords: (enrollmentId) => IndexedDbLocalRecordStore.open(
+        atSign: options.atSign, enrollmentId: enrollmentId),
   );
   return AtClientDevSession(client, app: options.app);
 }
