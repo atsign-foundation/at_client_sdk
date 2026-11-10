@@ -494,6 +494,80 @@ void main() {
       );
     });
 
+    test(
+        'authenticationKeyPairFor refuses a public half under another keyId',
+        () {
+      CryptographicMaterial half(String role, String keyId, String bytes) =>
+          CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: typedEnrollmentId,
+            role: CryptographicMaterialRole.of(role),
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            bytes: AtBytes.fromString(bytes),
+            createdAt: DateTime.utc(2026, 1, 1),
+          );
+
+      final split = AtKeys()
+        ..addKey(
+          half('privateAuthentication', 'auth:mldsa65:1', 'cHJpdmF0ZQ=='),
+        )
+        ..addKey(
+          half('publicAuthentication', 'auth:mldsa65:2', typedApkamPublicKey),
+        );
+
+      expect(
+        () => split.authenticationKeyPairFor(typedEnrollmentId),
+        throwsA(isA<AtKeyNotFoundException>()),
+        reason:
+            'the two halves are not a keypair: picking them '
+            'independently pairs one generation\'s private key with '
+            'another\'s public one',
+      );
+    });
+
+    test(
+        'authenticationKeyPairFor refuses when the public half is retired',
+        () {
+      CryptographicMaterial half(
+        String role,
+        String keyId,
+        String bytes,
+        CryptographicMaterialStatus status,
+      ) => CryptographicMaterial(
+        keyId: keyId,
+        enrollmentId: typedEnrollmentId,
+        role: CryptographicMaterialRole.of(role),
+        algorithm: CryptographicMaterialAlgorithm.rsa2048,
+        bytes: AtBytes.fromString(bytes),
+        createdAt: DateTime.utc(2026, 1, 1),
+        status: status,
+      );
+
+      final withRetiredPublic = AtKeys()
+        ..addKey(
+          half(
+            'privateAuthentication',
+            'auth:rsa2048:1',
+            'cHJpdmF0ZQ==',
+            CryptographicMaterialStatus.active,
+          ),
+        )
+        ..addKey(
+          half(
+            'publicAuthentication',
+            'auth:rsa2048:1',
+            typedApkamPublicKey,
+            CryptographicMaterialStatus.retired,
+          ),
+        );
+
+      expect(
+        () => withRetiredPublic.authenticationKeyPairFor(typedEnrollmentId),
+        throwsA(isA<AtKeyNotFoundException>()),
+        reason: 'a retired public half is not usable for authentication',
+      );
+    });
+
     test('authenticationKeyPairFor answers null for a keyfile holding none',
         () {
       expect(AtKeys().authenticationKeyPairFor(null), isNull);
@@ -1032,6 +1106,41 @@ void main() {
         reason: 'one live enrollment holds one active authentication pair, '
             'and the per-(role, algorithm) rule cannot see across two '
             'algorithms — only the batch comparison can',
+      );
+      expect(
+        atKeys.keysForEnrollment('e1').map((m) => m.status),
+        everyElement(CryptographicMaterialStatus.pending),
+      );
+    });
+
+    test(
+        'activatePending refuses two pending signing materials of one algorithm '
+        'in one batch',
+        () {
+      CryptographicMaterial pendingSigning(String keyId) =>
+          CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: 'e1',
+            role: CryptographicMaterialRole.privateSigning,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString('cGVuZGluZw=='),
+            createdAt: DateTime.utc(2026, 9, 12),
+            status: CryptographicMaterialStatus.pending,
+          );
+
+      final atKeys = AtKeys(
+        keysList: [
+          pendingSigning('signing:rsa2048:1'),
+          pendingSigning('signing:rsa2048:2'),
+        ],
+      );
+
+      expect(
+        () => atKeys.activatePending('e1'),
+        throwsA(isA<ArgumentError>()),
+        reason:
+            'one enrollment may hold only one active key material per '
+            '(role, algorithm)',
       );
       expect(
         atKeys.keysForEnrollment('e1').map((m) => m.status),
