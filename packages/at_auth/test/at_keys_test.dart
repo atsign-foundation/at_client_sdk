@@ -906,6 +906,35 @@ void main() {
           throwsA(isA<ArgumentError>()));
     });
 
+    test(
+        'activatePending refuses two pending authentication materials of one '
+        'algorithm', () {
+      // Both are pending, so addKey accepts them; approving the enrollment
+      // would activate both and leave an AtKeys that every later parse and
+      // flush refuses.
+      CryptographicMaterial pendingAuth(String keyId) => CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: 'e1',
+            role: CryptographicMaterialRole.privateAuthentication,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString('cGVuZGluZw=='),
+            createdAt: DateTime.utc(2026, 9, 12),
+            status: CryptographicMaterialStatus.pending,
+          );
+
+      final atKeys = AtKeys(keysList: [
+        pendingAuth('auth:rsa2048:1'),
+        pendingAuth('auth:rsa2048:2'),
+      ]);
+
+      expect(() => atKeys.activatePending('e1'), throwsA(isA<ArgumentError>()),
+          reason: 'one enrollment may hold only one active authentication '
+              'key material per algorithm');
+      expect(atKeys.keysForEnrollment('e1').map((m) => m.status),
+          everyElement(CryptographicMaterialStatus.pending),
+          reason: 'a refused approval leaves the enrollment as it was');
+    });
+
     test('discardEnrollment removes a pending enrollment and its snapshot', () {
       final atKeys = AtKeys(keysList: pendingApkam('e1'))
         ..recordEnrollmentSnapshot('e1',
@@ -930,6 +959,21 @@ void main() {
       expect(atKeys.authenticatableEnrollmentIds, ['e1']);
       expect(() => atKeys.discardEnrollment('nope'),
           throwsA(isA<ArgumentError>()));
+    });
+
+    test('discardEnrollment refuses an enrollment whose material was retired',
+        () {
+      final atKeys = AtKeys(keysList: pendingApkam('e1'))
+        ..activatePending('e1');
+      atKeys.retireKey('e1', 'auth:rsa2048:1');
+
+      expect(() => atKeys.discardEnrollment('e1'),
+          throwsA(isA<ArgumentError>()),
+          reason: 'retired bytes are still needed to verify or open what '
+              'they produced; only pending material never protected anything '
+              'and may be removed');
+      expect(atKeys.keysForEnrollment('e1'), isNotEmpty,
+          reason: 'the retirement is kept');
     });
 
     test('a pending enrollment round-trips through the document', () {

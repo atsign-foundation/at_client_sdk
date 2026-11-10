@@ -639,6 +639,11 @@ class AtKeys {
       assurance.refuseSecondLiveEnrollment(
           existing: others, candidate: activated);
       assurance.validateAddKey(existing: others, candidate: activated);
+      // Each activation has to be visible to the validation of the next: the
+      // promised one-active-per-role-and-algorithm (and one live
+      // authentication key) refusal is about the state AFTER the approval,
+      // not the pending snapshot it started from.
+      others.add(activated);
     }
     for (final material in pending) {
       slot!.materialsByKeyId[material.keyId]![material.role] =
@@ -650,28 +655,33 @@ class AtKeys {
   /// filed under it.
   ///
   /// Only for an enrollment that never went live — a submission that was
-  /// denied or expired — so an enrollment holding any active material is
-  /// refused with [ArgumentError]: key material that protected anything is
-  /// retired, never removed, and [retireKey] is the operation for it. Throws
-  /// too for an enrollment the keyfile does not hold.
+  /// denied or expired — so an enrollment holding any material that is not
+  /// [CryptographicMaterialStatus.pending] is refused with [ArgumentError]:
+  /// key material that protected anything is retired, never removed, and
+  /// [retireKey] is the operation for it. Throws too for an enrollment the
+  /// keyfile does not hold.
   void discardEnrollment(String enrollmentId) {
     final slot = _enrollments[enrollmentId];
     if (slot == null) {
       throw ArgumentError.value(
           enrollmentId, 'enrollmentId', 'AtKeys holds no such enrollment');
     }
-    final live = [
+    // Pending is the only status that never protected anything. Retired and
+    // dead bytes are still needed to verify or open what they produced, and
+    // an unrecognised token is not a licence to delete it either.
+    final protected = [
       for (final byType in slot.materialsByKeyId.values)
         for (final material in byType.values)
-          if (material.status == CryptographicMaterialStatus.active)
+          if (material.status != CryptographicMaterialStatus.pending)
             material.keyId
     ];
-    if (live.isNotEmpty) {
+    if (protected.isNotEmpty) {
       throw ArgumentError.value(
           enrollmentId,
           'enrollmentId',
-          'this enrollment holds active material (${live.toSet().join(', ')}), '
-              'which is retired rather than discarded');
+          'this enrollment holds material that may have protected something '
+              '(${protected.toSet().join(', ')}), which is retired rather '
+              'than discarded');
     }
     _enrollments.remove(enrollmentId);
   }

@@ -20,6 +20,7 @@ void main() {
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
   String writeFilePath = 'test/data/@bober_key.atKeys';
   late String homeDirKeys;
+  late String? homeDirKeysBackup;
 
   group('FileAtKeysIo tests', () {
     setUp(() {
@@ -28,6 +29,22 @@ void main() {
       Directory keysDir = Directory(homeDirKeys).parent;
       if (!keysDir.existsSync()) {
         keysDir.createSync(recursive: true);
+      }
+      // These tests write the fixture to the user's DEFAULT keyfile path, so
+      // a real keyfile living there must be moved aside and put back: it is
+      // not ours to overwrite or delete. Renaming within the same directory
+      // keeps its bytes and permissions.
+      final existing = File(homeDirKeys);
+      if (existing.existsSync()) {
+        var backup = '$homeDirKeys.test-backup';
+        var suffix = 0;
+        while (File(backup).existsSync() || Directory(backup).existsSync()) {
+          backup = '$homeDirKeys.test-backup.${suffix++}';
+        }
+        existing.renameSync(backup);
+        homeDirKeysBackup = backup;
+      } else {
+        homeDirKeysBackup = null;
       }
       File(keyFilePath).copySync(homeDirKeys);
     });
@@ -811,7 +828,14 @@ void main() {
       if (keyFile.existsSync()) {
         keyFile.deleteSync();
       }
-      File(homeDirKeys).deleteSync();
+      final fixture = File(homeDirKeys);
+      if (fixture.existsSync()) {
+        fixture.deleteSync();
+      }
+      final backup = homeDirKeysBackup;
+      if (backup != null && File(backup).existsSync()) {
+        File(backup).renameSync(homeDirKeys);
+      }
     });
   });
 
