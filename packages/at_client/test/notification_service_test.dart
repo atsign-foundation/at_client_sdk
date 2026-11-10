@@ -2342,6 +2342,192 @@ void main() {
     });
   });
 
+  group('notificationReplay chooses where the replay starts', () {
+    late NotificationServiceImpl service;
+    late DateTime clock;
+    late DateTime createdBefore;
+    late DateTime createdAfter;
+
+    // Two hours past now, so that a window of one hour starts after the
+    // service's creation time and before the clock.
+    setUp(() {
+      clock = DateTime.now().add(const Duration(hours: 2));
+    });
+
+    tearDown(() => service.stopAllSubscriptions());
+
+    // Stores [stored] as the watermark, or nothing when it is null.
+    void storeWatermark(DateTime? stored) {
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => stored != null);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => stored ==
+              null
+          ? AtValue()
+          : (AtValue()
+            ..value =
+                jsonEncode({'epochMillis': stored.millisecondsSinceEpoch})));
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+    }
+
+    Future<void> start(NotificationReplay policy, {DateTime? stored}) async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..notificationReplay = policy);
+      storeWatermark(stored);
+      createdBefore = DateTime.now();
+      service = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      createdAfter = DateTime.now();
+      service.now = () => clock;
+      // NOTE: the mock client is shared across this file, so calls other tests
+      // made are still recorded on it.
+      clearInteractions(mockAtClientImpl);
+    }
+
+    Future<void> receive(String id, int epochMillis) =>
+        service.handleNotificationReceipt('notification: '
+            '{"id":"$id","from":"@alice","to":"@alice",'
+            '"key":"$id.wavi@alice","value":null,"operation":"update",'
+            '"epochMillis":$epochMillis,'
+            '"messageType":"MessageType.key","isEncrypted":false}');
+
+    test(
+        'connect answers the creation time and neither reads nor seeds the '
+        'store', () async {
+      await start(const NotificationReplay.connect(),
+          stored: clock.subtract(const Duration(hours: 5)));
+
+      expect(
+          await service.getLastNotificationTime(),
+          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
+              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)));
+      verifyNever(() => mockAtClientImpl.get(any()));
+      verifyNever(() => mockAtClientImpl.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions')));
+    });
+
+    test('full answers 0 and does not read the store', () async {
+      await start(const NotificationReplay.full(),
+          stored: clock.subtract(const Duration(hours: 5)));
+
+      expect(await service.getLastNotificationTime(), 0);
+      verifyNever(() => mockAtClientImpl.get(any()));
+    });
+
+    test(
+        'window answers now minus its duration when the stored watermark is '
+        'older', () async {
+      await start(const NotificationReplay.window(),
+          stored: clock.subtract(const Duration(hours: 2)));
+
+      expect(await service.getLastNotificationTime(),
+          clock.subtract(const Duration(hours: 1)).millisecondsSinceEpoch);
+    });
+
+    test('window answers the stored watermark when it is newer', () async {
+      final stored = clock.subtract(const Duration(minutes: 10));
+      await start(const NotificationReplay.window(), stored: stored);
+
+      expect(await service.getLastNotificationTime(),
+          stored.millisecondsSinceEpoch);
+    });
+
+    test(
+        'window with nothing stored answers now minus its duration and seeds '
+        'the store with the creation time', () async {
+      await start(const NotificationReplay.window());
+      final now = createdAfter.add(const Duration(minutes: 1));
+      service.now = () => now;
+
+      expect(await service.getLastNotificationTime(),
+          now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch);
+      final seeded = verify(() => mockAtClientImpl.put(any(), captureAny(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .captured
+          .single as String;
+      expect(
+          (jsonDecode(seeded) as Map)['epochMillis'],
+          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
+              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)));
+    });
+
+    for (final policy in [
+      const NotificationReplay.connect(),
+      const NotificationReplay.window(),
+      const NotificationReplay.full(),
+    ]) {
+      test('$policy answers the epochMillis of a receipt after it', () async {
+        await start(policy);
+        final received = clock.subtract(const Duration(minutes: 30));
+
+        await receive('1', received.millisecondsSinceEpoch);
+
+        expect(await service.getLastNotificationTime(),
+            received.millisecondsSinceEpoch);
+      });
+    }
+
+    test(
+        'window answers the same start while nothing is received, as the '
+        'clock advances', () async {
+      await start(const NotificationReplay.window());
+      final first = await service.getLastNotificationTime();
+
+      clock = clock.add(const Duration(minutes: 10));
+
+      expect(await service.getLastNotificationTime(), first,
+          reason: 'resolved once per service, so a reconnect during an outage '
+              'does not move the start forward and skip the gap');
+    });
+  });
+
+  group('notificationReplay preference', () {
+    test(
+        'fetchOfflineNotifications false sets connect; true sets resume only '
+        'from connect', () {
+      final preference = AtClientPreference()
+        ..fetchOfflineNotifications = false;
+      expect(preference.notificationReplay, const NotificationReplay.connect());
+
+      preference.notificationReplay = const NotificationReplay.window();
+      preference.fetchOfflineNotifications = true;
+      expect(preference.notificationReplay, const NotificationReplay.window(),
+          reason: 'true leaves a policy that already fetches as it is');
+
+      preference.notificationReplay = const NotificationReplay.full();
+      expect(preference.fetchOfflineNotifications, isTrue);
+    });
+
+    test('the getter is false only for connect', () {
+      final preference = AtClientPreference();
+      preference.notificationReplay = const NotificationReplay.connect();
+      expect(preference.fetchOfflineNotifications, isFalse);
+      preference.notificationReplay = const NotificationReplay.window();
+      expect(preference.fetchOfflineNotifications, isTrue);
+    });
+
+    test('the default is resume, and the copy method keeps the policy', () {
+      expect(AtClientPreference().notificationReplay,
+          const NotificationReplay.resume());
+
+      final preference = AtClientPreference(posture: PqPosture.legacy)
+        ..notificationReplay =
+            const NotificationReplay.window(Duration(minutes: 5));
+      final raised = preference.raisedTo(PqPosture.pqActive);
+
+      expect(identical(raised, preference), isFalse,
+          reason: 'the copy path is the one under test');
+      expect(raised.notificationReplay,
+          const NotificationReplay.window(Duration(minutes: 5)));
+    });
+  });
+
   /// The watermark is a `local:` record: never synced to the atServer, and
   /// already encrypted at rest by the keystore. It is written on every
   /// notification and only ever read for one field.

@@ -5,6 +5,7 @@ import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
 import 'package:at_client/src/preference/posture_floor.dart'
     show raisedDataSigning, strongerOf;
+import 'package:at_client/src/preference/notification_replay.dart';
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -172,7 +173,7 @@ class AtClientPreference {
       ..monitorSilenceTimeout = monitorSilenceTimeout
       ..monitorAutoStart = monitorAutoStart
       ..expiryCheckTimeInterval = expiryCheckTimeInterval
-      ..fetchOfflineNotifications = fetchOfflineNotifications
+      ..notificationReplay = notificationReplay
       ..atClientParticulars = atClientParticulars
       ..remoteLocalPref = remoteLocalPref
       ..crypto = crypto
@@ -375,16 +376,33 @@ class AtClientPreference {
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
-  /// Fetch the notifications received while the client was offline, from the
-  /// last one it received; a store that has received none starts from when its
-  /// client first started, so a new device or a reinstall gets nothing sent
-  /// before it. Notifications are not a history: keep history in records.
-  /// Defaults to true.
+  /// Where the monitor's notification replay starts on each connect.
+  /// Defaults to [NotificationReplay.resume]: the last notification the store
+  /// holds, or the service's creation time when it holds none. Notifications
+  /// are not a history: keep history in records.
   ///
-  /// Set to false to ignore those. Notifications received since the client's
-  /// notification service was created are delivered once either way, including
-  /// any that arrived before its monitor connected.
-  bool fetchOfflineNotifications = true;
+  /// Notifications received since the notification service was created are
+  /// delivered once under every policy, including any that arrived before
+  /// the monitor connected.
+  NotificationReplay notificationReplay = const NotificationReplay.resume();
+
+  /// Alias of [notificationReplay]. Reads false only for connect. Setting false
+  /// selects connect; setting true selects resume only when the policy is
+  /// connect.
+  @Deprecated('Set notificationReplay instead. '
+      'Use NotificationReplay.connect() for false and resume() for true.')
+  bool get fetchOfflineNotifications =>
+      notificationReplay != const NotificationReplay.connect();
+
+  @Deprecated('Set notificationReplay instead. '
+      'Use NotificationReplay.connect() for false and resume() for true.')
+  set fetchOfflineNotifications(bool value) {
+    if (!value) {
+      notificationReplay = const NotificationReplay.connect();
+    } else if (notificationReplay == const NotificationReplay.connect()) {
+      notificationReplay = const NotificationReplay.resume();
+    }
+  }
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
