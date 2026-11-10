@@ -264,6 +264,7 @@ void main() {
     });
 
     SignedEnvelope rsaEnvelope() => signEnvelope(payload,
+        atSign: '@alice',
         keys: [
           ApkamSigningKeys(
               algorithm: SigningAlgoType.rsa2048,
@@ -275,6 +276,7 @@ void main() {
     /// An envelope signed ML-DSA-65, naming that algorithm in its protected
     /// header.
     SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
+        atSign: '@alice',
         keys: [
           ApkamSigningKeys(
               algorithm: SigningAlgoType.mldsa65,
@@ -301,13 +303,16 @@ void main() {
     test('a bare RSA _apsk verifies an RSA envelope — today\'s traffic',
         () async {
       await verifyEnvelope(rsaEnvelope(),
+          signerAtSign: '@alice',
           signerPublicKey: rsaPair.atPublicKey.publicKey,
           expecting: EnvelopeType.app);
     });
 
     test('an array ML-DSA _apsk verifies an ML-DSA envelope', () async {
       await verifyEnvelope(mlDsaEnvelope(),
-          signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: mlDsaApsk(),
+          expecting: EnvelopeType.app);
     });
 
     test('an array RSA _apsk refuses an envelope claiming ML-DSA-65', () async {
@@ -319,7 +324,9 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: apsk, expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: apsk,
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),
           reason: 'the array carries the algorithm explicitly, so the claim '
               'cannot select a routine the published key does not call for');
@@ -328,6 +335,7 @@ void main() {
     test('signEnvelope signs ML-DSA when asked, and the result verifies',
         () async {
       final envelope = signEnvelope(payload,
+          atSign: '@alice',
           keys: [
             ApkamSigningKeys(
                 algorithm: SigningAlgoType.mldsa65,
@@ -345,17 +353,22 @@ void main() {
 
       final apsk = mlDsaApsk();
       await verifyEnvelope(envelope,
-          signerPublicKey: apsk, expecting: EnvelopeType.app);
+          signerAtSign: '@alice',
+          signerPublicKey: apsk,
+          expecting: EnvelopeType.app);
 
       await expectLater(
           () => verifyEnvelope(envelope.withPayloadJson('a different text'),
-              signerPublicKey: apsk, expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: apsk,
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
     test('signEnvelope refuses an algorithm it has no signing code for', () {
       expect(
           () => signEnvelope(payload,
+              atSign: '@alice',
               keys: [
                 ApkamSigningKeys(
                     algorithm: SigningAlgoType.ecc_secp256r1,
@@ -372,7 +385,9 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: apsk, expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: apsk,
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),
           reason: 'control: the ML-DSA branch must actually verify, or the '
               'happy path above proves routing and nothing else');
@@ -385,7 +400,9 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(rsaEnvelope(),
-              signerPublicKey: apsk, expecting: EnvelopeType.app),
+              signerAtSign: '@alice',
+              signerPublicKey: apsk,
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),
           reason: 'the key\'s declaration is authoritative — the claim cannot '
               'select a weaker routine than the published key calls for');
@@ -397,6 +414,7 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
+              signerAtSign: '@alice',
               signerPublicKey: rsaPair.atPublicKey.publicKey,
               expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),

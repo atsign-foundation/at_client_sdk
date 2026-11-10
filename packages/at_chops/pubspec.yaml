@@ -1,5 +1,5 @@
 name: at_chops
-description: Package for at_protocol cryptographic and hashing operations
+description: Package for Atsign Protocol cryptographic and hashing operations
 version: 3.8.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_chops
 homepage: https://atsign.com

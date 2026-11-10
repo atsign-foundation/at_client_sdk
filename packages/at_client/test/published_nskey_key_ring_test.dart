@@ -28,6 +28,8 @@ void main() {
   late XWingKeyPair bobKey;
   late RsaKeyPair bobApkam;
   late AtClientEnvelopeSigner bobSigner;
+  late RsaKeyPair aliceApkam;
+  late AtClientEnvelopeSigner aliceSigner;
 
   setUpAll(() async {
     bobKey = await XWingKeyPair.generate();
@@ -54,6 +56,9 @@ void main() {
     bobApkam = pkamKeyPairFor(bob, 'enroll-bob');
     bobSigner =
         AtClientEnvelopeSigner(signingClient(bob, 'enroll-bob', bobApkam));
+    aliceApkam = pkamKeyPairFor(alice, 'enroll-alice');
+    aliceSigner = AtClientEnvelopeSigner(
+        signingClient(alice, 'enroll-alice', aliceApkam));
   });
 
   /// Every field `mintAndPublish` writes, unsigned, so a test can take one
@@ -72,7 +77,18 @@ void main() {
           advertisementPayload(pair, suites: suites),
           type: EnvelopeType.nskeyRing);
 
+  /// [pair]'s advertisement as alice signs her own.
+  Future<String> ownPayloadFor(XWingKeyPair pair) async =>
+      aliceSigner.wrapAndSignAndJsonEncode(advertisementPayload(pair),
+          type: EnvelopeType.nskeyRing);
+
   String bobsApskPublicKey() => bobApkam.atPublicKey.publicKey;
+
+  /// The `_apsk` the atServer serves at [key]: alice's for one of hers, and
+  /// bob's for any other.
+  String apskAt(AtKey key) => key.sharedBy == alice
+      ? aliceApkam.atPublicKey.publicKey
+      : bobsApskPublicKey();
 
   /// Alice's client: her advertisement fetch succeeds [succeedFor] times and
   /// throws afterwards — the shape of an atServer that goes unreachable — and
@@ -98,7 +114,7 @@ void main() {
       final key = invocation.positionalArguments.first as AtKey;
       if (key.key != '__nskey') {
         if (apskFailure != null) throw apskFailure();
-        return AtValue()..value = apskPublicKey ?? bobsApskPublicKey();
+        return AtValue()..value = apskPublicKey ?? apskAt(key);
       }
       fetches.add(1);
       if (fetches.length > succeedFor) {
@@ -312,7 +328,7 @@ void main() {
       // nothing in memory while the advertisement sits on her own atServer.
       // Reporting that as a cold start and minting would rotate the key out
       // from under every peer that had already fetched it.
-      final c = client(payload: await signedPayloadFor(bobKey));
+      final c = client(payload: await ownPayloadFor(bobKey));
 
       final own = await PublishedNskeyKeyRing(c.atClient)
           .currentPublic(alice, namespace);
@@ -328,7 +344,7 @@ void main() {
         'a stop while checking our own advertisement is not read as '
         'unpublished', () async {
       final c = client(
-          payload: await signedPayloadFor(bobKey),
+          payload: await ownPayloadFor(bobKey),
           apskFailure: () => StoppedException('the client has stopped'));
 
       await expectLater(
@@ -362,7 +378,7 @@ void main() {
       Future<AtValue> answer(Invocation invocation) async {
         final key = invocation.positionalArguments.first as AtKey;
         if (key.key != '__nskey') {
-          return AtValue()..value = bobsApskPublicKey();
+          return AtValue()..value = apskAt(key);
         }
         final options =
             invocation.namedArguments[#getRequestOptions] as GetRequestOptions?;
@@ -404,7 +420,7 @@ void main() {
       // The advertisement is published to the atServer alone, so it reaches
       // this device only when sync pulls it down; a read that stopped at local
       // storage would report a published namespace as a cold start.
-      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+      final c = clientMissingLocally(await ownPayloadFor(bobKey));
 
       final own = await PublishedNskeyKeyRing(c.atClient)
           .currentPublic(alice, namespace);
@@ -419,7 +435,7 @@ void main() {
     test(
         'what the atServer answered is filed locally only if absent, and not '
         'offered back', () async {
-      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+      final c = clientMissingLocally(await ownPayloadFor(bobKey));
 
       await PublishedNskeyKeyRing(c.atClient).currentPublic(alice, namespace);
 
@@ -458,7 +474,7 @@ void main() {
     });
 
     test('what it minted itself costs no lookup', () async {
-      final c = client(payload: await signedPayloadFor(bobKey));
+      final c = client(payload: await ownPayloadFor(bobKey));
       final ring = PublishedNskeyKeyRing(c.atClient);
       // Stand in for mintAndPublish, which needs a remote secondary.
       ring.rememberOwn(
@@ -520,7 +536,7 @@ void main() {
 
   group('the client\'s own advertisement', () {
     test('is re-read once the TTL has passed, like a peer\'s', () async {
-      final c = client(payload: await signedPayloadFor(bobKey));
+      final c = client(payload: await ownPayloadFor(bobKey));
       final ring = PublishedNskeyKeyRing(c.atClient,
           advertisementTtl: const Duration(milliseconds: 1));
       // Stand in for mintAndPublish, which needs a remote secondary.
@@ -543,7 +559,7 @@ void main() {
     });
 
     test('an unchanged re-read is not verified again', () async {
-      final c = client(payload: await signedPayloadFor(bobKey));
+      final c = client(payload: await ownPayloadFor(bobKey));
       final verifier = _CountingVerifier(ApkamSignedAdvertisedKeys(c.atClient));
       final ring = PublishedNskeyKeyRing(c.atClient,
           verifier: verifier,
@@ -563,8 +579,8 @@ void main() {
     test('a changed one is verified again — the control', () async {
       final deepKey = await XWingKeyPair.generate();
       final c = client(payload: '', payloads: [
-        await signedPayloadFor(bobKey),
-        await signedPayloadFor(deepKey),
+        await ownPayloadFor(bobKey),
+        await ownPayloadFor(deepKey),
       ]);
       final verifier = _CountingVerifier(ApkamSignedAdvertisedKeys(c.atClient));
       final ring = PublishedNskeyKeyRing(c.atClient,
@@ -600,8 +616,8 @@ void main() {
       final changes = StreamController<DataEvent>.broadcast();
       addTearDown(changes.close);
       final c = client(payload: '', payloads: [
-        await signedPayloadFor(bobKey),
-        await signedPayloadFor(deepKey),
+        await ownPayloadFor(bobKey),
+        await ownPayloadFor(deepKey),
       ]);
       final ring =
           PublishedNskeyKeyRing(c.atClient, ownChanges: () => changes.stream);
@@ -619,7 +635,7 @@ void main() {
     test('a change to another record does not — the control', () async {
       final changes = StreamController<DataEvent>.broadcast();
       addTearDown(changes.close);
-      final c = client(payload: await signedPayloadFor(bobKey));
+      final c = client(payload: await ownPayloadFor(bobKey));
       final ring =
           PublishedNskeyKeyRing(c.atClient, ownChanges: () => changes.stream);
 
@@ -655,6 +671,7 @@ void main() {
       // of base64url.
       final pair = bobApkam;
       final envelope = signEnvelope(advertisementPayload(bobKey),
+          atSign: bob,
           keys: [
             ApkamSigningKeys(
                 algorithm: SigningAlgoType.rsa2048,
@@ -1003,7 +1020,7 @@ void main() {
 
       test('so does one whose signer publishes no _apsk', () async {
         final c = client(
-            payload: await signedPayloadFor(bobKey),
+            payload: await ownPayloadFor(bobKey),
             apskFailure: () => AtKeyNotFoundException('no _apsk here'));
 
         expect(await ownRecord(c.atClient), isNull);
@@ -1013,7 +1030,7 @@ void main() {
           'a failure fetching its signer\'s _apsk is thrown, not read as '
           'unpublished', () async {
         final c = client(
-            payload: await signedPayloadFor(bobKey),
+            payload: await ownPayloadFor(bobKey),
             apskFailure: () =>
                 SecondaryConnectException('atServer unreachable'));
 
@@ -1031,7 +1048,7 @@ void main() {
           ..clear()
           ..add(unusableEntry());
         final c = client(
-            payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+            payload: await aliceSigner.wrapAndSignAndJsonEncode(payload,
                 type: EnvelopeType.nskeyRing));
 
         await expectLater(

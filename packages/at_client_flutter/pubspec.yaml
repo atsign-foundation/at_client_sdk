@@ -25,7 +25,7 @@ dependencies:
   # once for an enrollment that has expired. Resolution in this workspace is by
   # path, so only a consumer resolving from pub.dev feels a floor set too low.
   at_auth: ^4.0.0
-  at_client: ^4.0.0
+  at_client: ^4.1.0
   encrypt: ^5.0.3
   intl: ^0.20.2
   file_picker: ^11.0.2
