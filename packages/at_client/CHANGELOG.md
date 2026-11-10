@@ -49,9 +49,8 @@
 - fix: the legacy encryption and decryption paths name the underlying
   error's type in their `AtEncryptionException` and `AtDecryptionException`
   rather than quoting its text.
-- feat: each notification is delivered once per id, including after a
-  reconnect, for the latest 1024 ids. `AtClientPreference.browser()` is a
-  new preset for browser clients.
+- feat: notifications are delivered once per id, even after a reconnect (latest
+  1024 ids). New `AtClientPreference.browser()` preset for browser clients.
 
 ## 4.0.0
 
