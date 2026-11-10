@@ -634,8 +634,7 @@ class AtKeys {
             material.status != CryptographicMaterialStatus.pending)
         .toList();
     for (final material in pending) {
-      final activated =
-          material.withStatus(CryptographicMaterialStatus.active);
+      final activated = material.withStatus(CryptographicMaterialStatus.active);
       assurance.refuseSecondLiveEnrollment(
           existing: others, candidate: activated);
       assurance.validateAddKey(existing: others, candidate: activated);
@@ -655,11 +654,14 @@ class AtKeys {
   /// filed under it.
   ///
   /// Only for an enrollment that never went live — a submission that was
-  /// denied or expired — so an enrollment holding any material that is not
-  /// [CryptographicMaterialStatus.pending] is refused with [ArgumentError]:
-  /// key material that protected anything is retired, never removed, and
-  /// [retireKey] is the operation for it. Throws too for an enrollment the
-  /// keyfile does not hold.
+  /// denied or expired, and so left pending. An enrollment holding any
+  /// material past pending is refused with [ArgumentError]: key material that
+  /// protected anything is retired, never removed, and [retireKey] is the
+  /// operation for it. The store's never-lose assurance refuses a write that
+  /// drops a retired or dead material, so removing one here would not merely
+  /// be wrong — it would make every later flush of this AtKeys throw, with the
+  /// material already gone from the instance that could still have been
+  /// written. Throws too for an enrollment the keyfile does not hold.
   void discardEnrollment(String enrollmentId) {
     final slot = _enrollments[enrollmentId];
     if (slot == null) {
@@ -1126,6 +1128,7 @@ class AtKeys {
   @Deprecated('a flat field of the legacy keyfile document: write it with '
       'fileLegacyMaterial and read it through storedEnrollmentId')
   String? enrollmentId;
+
   /// A legacy keyfile's entries outside the flat key schema: the atSign under
   /// `atsign` or `name`, and the self-encryption key stored under the atSign
   /// itself. The typed document has no equivalent, so a read and write cycle
@@ -1371,23 +1374,32 @@ class AtKeys {
   /// material names an algorithm this build cannot sign with, rather than
   /// answering from the flat fields, which on such a keyfile are a different
   /// enrollment's. A keyfile written by a newer client is the way this
-  /// happens.
+  /// happens. It throws the same way when the active halves do not pair up —
+  /// no public half under the private half's keyId, or two halves disagreeing
+  /// about their algorithm — because the pair it would otherwise return
+  /// cannot verify anything it signs.
   ({SigningAlgoType algorithm, String publicKey, String privateKey})?
       authenticationKeyPairFor(String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm != null) {
-      final materials = keysForEnrollment(enrollmentId!);
-      final private = materials
-          .where((m) =>
-              m.role == CryptographicMaterialRole.privateAuthentication &&
-              m.status == CryptographicMaterialStatus.active)
-          .firstOrNull;
-      final public = materials
-          .where((m) =>
-              m.role == CryptographicMaterialRole.publicAuthentication &&
-              m.status == CryptographicMaterialStatus.active)
-          .firstOrNull;
-      if (private == null || public == null) {
+      // Both halves come from ONE keyId, and from the SAME material the
+      // algorithm was resolved from. Picking each half independently by
+      // `firstOrNull` pairs whatever the map order puts first: `addKey`
+      // admits a keyId holding `privateAuthentication` of one algorithm and
+      // `publicAuthentication` of another — the per-(role, algorithm) rule
+      // cannot see across the two — so the record handed back would name one
+      // algorithm while carrying the other's public bytes, and every
+      // signature the private half makes would fail verification.
+      // `signingKeysFor` guards this same hazard; this path must too.
+      final private = _activeAuthenticationMaterial(enrollmentId!);
+      final public = private == null
+          ? null
+          : getKey(enrollmentId, private.keyId,
+              CryptographicMaterialRole.publicAuthentication);
+      if (private == null ||
+          public == null ||
+          public.status != CryptographicMaterialStatus.active ||
+          public.algorithm != private.algorithm) {
         throw AtKeyNotFoundException(
             'AtKeys holds no active authentication keypair for enrollment '
             '$enrollmentId');
@@ -1472,7 +1484,6 @@ class AtKeys {
     if (key == null) return null;
     return AESKey(key.toString());
   }
-
 }
 
 // metadata holds JSON-derived values, so nested maps/lists compare by

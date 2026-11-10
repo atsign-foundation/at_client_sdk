@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
@@ -160,6 +161,52 @@ void main() {
       expect(await File(pathFor(atSign)).readAsString(), before);
     });
 
+    test('a retired enrollment cannot be discarded, and the update is refused',
+        () async {
+      final io = FileAtKeysIo(filePath: pathFor);
+      CryptographicMaterial pendingHalf(String role) => CryptographicMaterial(
+            keyId: 'auth:rsa2048:1',
+            enrollmentId: 'e1',
+            role: CryptographicMaterialRole.of(role),
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString('cGVuZGluZw=='),
+            createdAt: DateTime.utc(2026, 9, 12),
+            status: CryptographicMaterialStatus.pending,
+          );
+      await io.update(atSign.toAtsign(), (keys) {
+        keys
+          ..addKey(pendingHalf('privateAuthentication'))
+          ..addKey(pendingHalf('publicAuthentication'));
+        return true;
+      });
+      await io.update(atSign.toAtsign(), (keys) {
+        keys.activatePending('e1');
+        return true;
+      });
+      await io.update(atSign.toAtsign(), (keys) {
+        keys.retireKey('e1', 'auth:rsa2048:1');
+        return true;
+      });
+
+      await expectLater(
+        io.update(atSign.toAtsign(), (keys) {
+          keys.discardEnrollment('e1');
+          return true;
+        }),
+        throwsA(isA<ArgumentError>()),
+        reason: 'discarding drops retired material, which the store refuses '
+            'to lose. The refusal must happen HERE, before the instance loses '
+            'it: the assurance exception a later flush raises leaves an '
+            'AtKeys that can never be flushed again',
+      );
+
+      final after = await io.read(atSign);
+      expect(after.keysForEnrollment('e1'), hasLength(2),
+          reason: 'both halves are still on disk');
+      expect(after.keysForEnrollment('e1').map((m) => m.status).toSet(),
+          {CryptographicMaterialStatus.retired});
+    });
+
     test('a mutation moving a status backward is still refused', () async {
       final io = FileAtKeysIo(filePath: pathFor);
       await io.update(atSign.toAtsign(), (keys) {
@@ -279,7 +326,7 @@ void main() {
 
   group('the default update', () {
     test('InMemoryAtKeysIo inherits read-mutate-flush', () async {
-      final io = InMemoryAtKeysIo();
+      final io = _CountingFlushesAtKeysIo();
       await io.write(atSign, legacyAtKeys(atsign: atSign.toAtsign()));
 
       await io.update(atSign.toAtsign(), (keys) {
@@ -287,6 +334,9 @@ void main() {
         return true;
       });
 
+      expect(io.flushes, 1,
+          reason: 'a true return is "persist this", so flush must run — the '
+              'control arm for the false-return test below');
       expect(
           (await io.read(atSign)).getAtSignKey(
               'first', CryptographicMaterialRole.privateDecapsulation),
@@ -294,7 +344,7 @@ void main() {
     });
 
     test('and honours a false return', () async {
-      final io = InMemoryAtKeysIo();
+      final io = _CountingFlushesAtKeysIo();
       await io.write(atSign, legacyAtKeys(atsign: atSign.toAtsign()));
 
       await io.update(atSign.toAtsign(), (keys) {
@@ -302,14 +352,30 @@ void main() {
         return false;
       });
 
-      // The in-memory store hands back the same object it holds, so "wrote
-      // nothing" is checked by re-reading a fresh copy of what was persisted
-      // rather than by inspecting the mutated instance.
-      expect((await io.read(atSign)).keys, hasLength(1),
-          reason: 'InMemoryAtKeysIo stores the instance itself, so a false '
-              'return leaves the in-place mutation visible — the contract it '
-              'can honour is that flush was not called, not that the object '
-              'was rolled back');
+      // Counting the flush, not re-reading the store: InMemoryAtKeysIo hands
+      // `read` back the very instance the callback mutated, so the added key
+      // is visible either way and a length check here passes just as well on
+      // an update that ignored the false return entirely.
+      expect(io.flushes, 0,
+          reason: 're-delivery is the substrate\'s normal mode, so a caller '
+              'that finds the material already there must be able to say so '
+              'without writing the store');
     });
   });
+}
+
+/// An [InMemoryAtKeysIo] that counts the flushes it is asked to perform.
+///
+/// [InMemoryAtKeysIo] aliases the instance it stores, so an in-place mutation
+/// made by an `update` callback is observable through `read` whether or not
+/// the write happened. The flush count is the only thing that distinguishes
+/// honouring the callback's false return from ignoring it.
+class _CountingFlushesAtKeysIo extends InMemoryAtKeysIo {
+  int flushes = 0;
+
+  @override
+  FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
+    flushes++;
+    return super.flush(atsign, atKeys);
+  }
 }
