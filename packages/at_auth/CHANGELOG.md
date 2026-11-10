@@ -7,6 +7,23 @@
 - fix: `KeyEntryStatus.fromWire` takes a `String?`, and `apskSigningKeys`
   skips an entry whose `status` is present and is not a string, as it skips
   one whose other fields are of the wrong kind.
+- fix: `AtKeys.discardEnrollment` refuses an enrollment holding any material
+  that is not pending (retired, dead, or a status this build doesn't know),
+  not only active material.
+- fix: `AtKeys.activatePending` validates each activated key against the
+  cumulative batch, preventing duplicate pending keys for the same role and
+  algorithm from activating simultaneously.
+- fix: `AtKeys.authenticationKeyPairFor` ensures both halves come from the same
+  keyId and share the same algorithm, and that the public half is active.
+- fix: `EnrollmentSubmitter` resolves the advertised signing key algorithm
+  before submitting enrollment requests to prevent orphaned server-side
+  enrollments when an algorithm is not supported locally.
+- fix: `AtKeysAssurance.validateKeyMaterials` indexes active materials by
+  typed `(role, algorithm)` record pair to avoid delimiter collisions.
+- fix: `AtKeysAssurance` normalizes atSigns canonically when validating
+  keyfile updates.
+- fix: `fileRetrofitSerializer` lock timeout outlasts its staleness threshold
+  so abandoned locks can be broken.
 
 ## 4.0.0
 

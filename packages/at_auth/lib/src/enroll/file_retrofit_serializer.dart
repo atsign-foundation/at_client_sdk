@@ -2,6 +2,7 @@ import 'package:at_auth/src/enroll/retrofit_serializer.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
+import 'package:meta/meta.dart';
 
 /// How long a retrofit waits for the keyfile lock before giving up.
 ///
@@ -10,6 +11,7 @@ import 'package:at_auth/src/keys/io/file_lock.dart';
 /// lock once its mtime is past the staleness threshold, so a timeout that
 /// expires first means a holder killed mid-retrofit leaves a lock nobody may
 /// break, and every retrofit from that keyfile throws until it ages out.
+@visibleForTesting
 const Duration fileRetrofitLockTimeout = Duration(minutes: 3);
 
 /// The age past which a lock held by a dead process is presumed abandoned and
@@ -18,7 +20,16 @@ const Duration fileRetrofitLockTimeout = Duration(minutes: 3);
 /// Generous, because the critical section spans a network round trip: the
 /// heartbeat keeps a live holder's lock fresh, so this need only exceed a stall
 /// long enough to be indistinguishable from a crash.
+@visibleForTesting
 const Duration fileRetrofitLockStaleAfter = Duration(minutes: 2);
+
+/// Creates the [AtKeysFileLock] used by [fileRetrofitSerializer].
+@visibleForTesting
+AtKeysFileLock createFileRetrofitLock(String keyFilePath) => AtKeysFileLock(
+  '$keyFilePath.retrofit',
+  timeout: fileRetrofitLockTimeout,
+  staleAfter: fileRetrofitLockStaleAfter,
+);
 
 /// Serialises a retrofit against other processes holding the same `.atKeys`
 /// file, by taking a lock beside it.
@@ -36,11 +47,12 @@ const Duration fileRetrofitLockStaleAfter = Duration(minutes: 2);
 /// made from what the read returned, so a second process must not be reading
 /// while this one is still deciding.
 Future<T> fileRetrofitSerializer<T>(
-    AtKeysIo keysIo, String atSign, Future<T> Function() action) {
+  AtKeysIo keysIo,
+  String atSign,
+  Future<T> Function() action,
+) {
   if (keysIo is FileAtKeysIo) {
-    return AtKeysFileLock('${keysIo.filePath!(atSign)}.retrofit',
-            timeout: fileRetrofitLockTimeout,
-            staleAfter: fileRetrofitLockStaleAfter)
+    return createFileRetrofitLock(keysIo.filePath!(atSign))
         .synchronized(action);
   }
   return action();

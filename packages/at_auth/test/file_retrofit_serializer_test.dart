@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
+import 'package:at_auth/src/enroll/file_retrofit_serializer.dart';
 import 'package:test/test.dart';
 
 /// [fileRetrofitSerializer] is what a `dart:io` caller assigns to
@@ -16,27 +17,39 @@ void main() {
   /// they entered and left in, e.g. `in0 out0 in1 out1` when serialised and
   /// `in0 in1 out0 out1` when not.
   Future<List<String>> interleavingOf(
-      RetrofitSerializer serialize, AtKeysIo keysIo) async {
+    RetrofitSerializer serialize,
+    AtKeysIo keysIo,
+  ) async {
     final trace = <String>[];
     Future<void> body(int i) => serialize<void>(keysIo, '@alice🛠', () async {
-          trace.add('in$i');
-          await Future.delayed(const Duration(milliseconds: 60));
-          trace.add('out$i');
-        });
+      trace.add('in$i');
+      await Future.delayed(const Duration(milliseconds: 60));
+      trace.add('out$i');
+    });
     await Future.wait([body(0), body(1)]);
     return trace;
   }
 
-  test('the wait outlasts the staleness threshold', () {
-    // AtKeysFileLock only breaks a lock once its mtime is past `staleAfter`,
-    // and only while the waiter is still waiting. A timeout that expires
-    // first means a process SIGKILLed inside a retrofit leaves a lock no
-    // waiter may break: every retrofit from that keyfile throws for the whole
-    // staleness window, though nobody holds the lock.
-    expect(fileRetrofitLockTimeout, greaterThan(fileRetrofitLockStaleAfter),
-        reason: 'a waiter must outlast an abandoned lock so it can break it '
-            '(file_lock.dart documents this ordering as required)');
-  });
+  test(
+    'the wait outlasts the staleness threshold and is wired into the lock',
+    () {
+      // AtKeysFileLock only breaks a lock once its mtime is past `staleAfter`,
+      // and only while the waiter is still waiting. A timeout that expires
+      // first means a process SIGKILLed inside a retrofit leaves a lock no
+      // waiter may break: every retrofit from that keyfile throws for the whole
+      // staleness window, though nobody holds the lock.
+      final lock = createFileRetrofitLock('/tmp/dummy');
+      expect(lock.timeout, fileRetrofitLockTimeout);
+      expect(lock.staleAfter, fileRetrofitLockStaleAfter);
+      expect(
+        lock.timeout,
+        greaterThan(lock.staleAfter),
+        reason:
+            'a waiter must outlast an abandoned lock so it can break it '
+            '(file_lock.dart documents this ordering as required)',
+      );
+    },
+  );
 
   test('a file-backed store runs retrofits one at a time', () async {
     final io = FileAtKeysIo(filePath: (a) => '${tmp.path}/$a.atKeys');
@@ -46,22 +59,32 @@ void main() {
     // pinned - either may win the lock - so this checks the shape, not who.
     expect(trace.length, 4);
     expect(trace[0].startsWith('in'), isTrue);
-    expect(trace[1], 'out${trace[0].substring(2)}',
-        reason: 'the second retrofit entered before the first left, so the '
-            'lock did not hold: $trace');
+    expect(
+      trace[1],
+      'out${trace[0].substring(2)}',
+      reason:
+          'the second retrofit entered before the first left, so the '
+          'lock did not hold: $trace',
+    );
   }, timeout: Timeout(Duration(seconds: 30)));
 
   test('an in-memory store runs them concurrently', () async {
     // The control. Without it, the test above would pass just as well against
     // a serialiser that always locks, or one that locks nothing and happens to
     // schedule sequentially - this proves the file case is doing the work.
-    final trace =
-        await interleavingOf(fileRetrofitSerializer, InMemoryAtKeysIo());
+    final trace = await interleavingOf(
+      fileRetrofitSerializer,
+      InMemoryAtKeysIo(),
+    );
 
     expect(trace.length, 4);
-    expect(trace.sublist(0, 2), ['in0', 'in1'],
-        reason: 'a store no other process can open should not be serialised, '
-            'but these did not overlap: $trace');
+    expect(
+      trace.sublist(0, 2),
+      ['in0', 'in1'],
+      reason:
+          'a store no other process can open should not be serialised, '
+          'but these did not overlap: $trace',
+    );
   }, timeout: Timeout(Duration(seconds: 30)));
 
   test('the lock file is cleaned up', () async {
