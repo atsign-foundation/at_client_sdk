@@ -95,6 +95,7 @@ void main() {
     final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
     await verifyEnvelope(envelope,
+        signerAtSign: atSign,
         signerPublicKey: apkam.atPublicKey.publicKey,
         expecting: EnvelopeType.keyPackage);
   });
@@ -117,10 +118,24 @@ void main() {
 
     await expectLater(
       () => verifyEnvelope(envelope.withPayloadJson(payload),
+          signerAtSign: atSign,
           signerPublicKey: apkam.atPublicKey.publicKey,
           expecting: EnvelopeType.keyPackage),
       throwsA(isA<AtSigningVerificationException>()),
     );
+  });
+
+  test(
+      "Every envelope at_client signs names its signer's Atsign: a key "
+      'package at enroll:request through enrollmentKeyPackageBuilder',
+      () async {
+    final (io, _, _) = await freshKeys();
+
+    final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
+    final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
+
+    expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign});
+    expect(envelope.signerAtSign, atSign);
   });
 
   test('carries no enrollmentId claim — the atServer has not assigned one yet',
@@ -161,11 +176,13 @@ void main() {
       final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
       await verifyEnvelope(envelope,
+          signerAtSign: atSign,
           signerPublicKey: signing.atPublicKey.publicKey,
           expecting: EnvelopeType.keyPackage);
 
       await expectLater(
         () => verifyEnvelope(envelope,
+            signerAtSign: atSign,
             signerPublicKey: apkam.atPublicKey.publicKey,
             expecting: EnvelopeType.keyPackage),
         throwsA(isA<Exception>()),
@@ -182,6 +199,7 @@ void main() {
 
       await verifyEnvelope(
           SignedEnvelope.fromJson(metadata!['keyPackage'] as Map),
+          signerAtSign: atSign,
           signerPublicKey: apkam.atPublicKey.publicKey,
           expecting: EnvelopeType.keyPackage);
     });

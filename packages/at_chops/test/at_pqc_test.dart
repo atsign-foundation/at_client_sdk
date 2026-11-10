@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:test/test.dart';
 
+import 'ml_dsa_65_acvp_vectors.dart';
+
 void main() {
   final DynamicLibrary? lib = tryLoadLibCrypto();
   final bool xWingFfi = lib != null && libCryptoSupportsMlKem768(lib);
@@ -147,6 +149,19 @@ void main() {
     });
 
     test(
+        'AtPqc.mlDsa65.keyPairFromSeed derives every ACVP keyGen vector, '
+        'on whichever backend AtPqc resolved', () async {
+      final AtSeededSignatureAlgorithm dsa = AtPqc.mlDsa65;
+      final vectors = mlDsa65KeyGenVectors();
+      expect(vectors, hasLength(25));
+      for (final v in vectors) {
+        final kp = await dsa.keyPairFromSeed(v.seed);
+        expect(kp.publicKey, v.pk, reason: 'tcId ${v.tcId} publicKey');
+        expect(kp.secretKey, v.sk, reason: 'tcId ${v.tcId} secretKey');
+      }
+    });
+
+    test(
         'XWingKeyPair.generate() (pure-Dart) is interoperable with AtPqc.xWing '
         'regardless of which backend AtPqc selects', () async {
       // XWingKeyPair.generate() is pure-Dart-only by design — it must stay
@@ -184,7 +199,7 @@ void main() {
     test('X-Wing: FFI encapsulate, pure-Dart decapsulate', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!xWingFfi) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5.1)');
       }
 
       final XWingKeyPair kp = await XWingKeyPair.generate();
@@ -198,7 +213,7 @@ void main() {
     test('X-Wing: pure-Dart encapsulate, FFI decapsulate', () async {
       if (lib == null) fail('libcrypto not available on this host');
       if (!xWingFfi) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5.1)');
       }
 
       final XWingKeyPair kp = await XWingKeyPair.generate();

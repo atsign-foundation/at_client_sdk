@@ -1,6 +1,24 @@
+## 1.1.0
+
+- feat: `package:at_client_cli/testing.dart` re-exports at_client's
+  experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
+- chore: requires at_client 4.1.0.
+- fix: `at_activate auto_approve` acts only on requests from its own atSign.
+
 ## 1.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- feat: `at_activate approve` warns when it approves a request made at the
+  legacy key exchange on an atSign that publishes a namespace key: the
+  approval conveys none of the atSign's namespace keys, and revoking it with
+  the `at_activate revoke` command it prints and requesting again at
+  `--posture pqReady` conveys them.
+- feat: a `CLIBase` program that cannot reach the atServer names the
+  atDirectory address and what failed.
+- feat: a `CLIBase` program whose keyfile holds no credential, as a denial,
+  a cancel or an expiry leaves it, says so on stderr and stops at once.
+- feat: a `CLIBase` program shows the SDK's warnings on stderr by default,
+  such as a notification it could not decrypt; `-v` shows the rest.
 - feat: `at_register`, and `at_activate onboard` without `-c`, ask the
   registrar with the API key in `AT_REGISTRAR_API_KEY` when it is set, and
   otherwise with a built-in key, so both work without it. A key that is set
@@ -58,5 +76,10 @@
   three seconds apart; the default of 10 waits about 30 seconds.
 - fix: at_register exits with at_activate's non-zero code, instead of 0,
   when the activation after registration fails.
+- fix: at_register confirms a verification code the registrar accepts with a
+  follow-up at once, so the third code accepted still gets the CRAM key. A
+  registrar that asks again to confirm a confirmed code ends the registration
+  with exit 4.
+- fix: the at_activate Dockerfile builds from the repo root on Dart 3.
 - fix: at_register exits 5, not 4, after three refused verification codes,
   and asks for no fourth code.

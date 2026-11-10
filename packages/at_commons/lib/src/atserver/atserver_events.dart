@@ -10,7 +10,7 @@ abstract interface class AtServerEvent {
   static const String atProtocolCategory = 'atProtocol';
   static const String atSignPKChangedEventName = 'atsign_pk_changed';
 
-  /// The category of event. Events which are part of the atProtocol will
+  /// The category of event. Events which are part of the Atsign Protocol will
   /// have a category of 'atProtocol'. Events which are specific to particular
   /// AtServer implementations should have a different category (e.g. the name
   /// of the implementation)

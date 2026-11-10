@@ -73,8 +73,8 @@ a read returns stale/empty data.
 **What's needed.** A "sync lifecycle" reference stating that:
 - all reads are **local-only** against a synced cache;
 - writes sync in the **background**;
-- sync cadence is `AtClientPreference.syncIntervalMins` (default 10 minutes) —
-  relevant for how quickly a missed live update is reconciled;
+- sync runs after a write, a notification, an app's `sync()`, and on a
+  30-second timer, which bounds how long a missed live update waits;
 - await/observe completion via `SyncService` + `SyncProgressListener`
   (`sync(onDone:)` is removed in at_client 4.0);
 - this is essential for tests and headless drivers that must wait until synced

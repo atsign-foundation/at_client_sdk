@@ -51,11 +51,12 @@ or decryption — it only excludes other apps' unrelated keys.
 - **Writes apply locally immediately, then sync in the background.** The write
   returns as soon as it's in the local store and queued for sync;
   `SyncService` pushes it to the atServer afterward.
-- **Fallback cadence: `AtClientPreference.syncIntervalMins` (default 10).** This
-  periodic full-sync reconciles a *missed* live notification (the app was
-  backgrounded, the monitor was reconnecting, or the recipient was offline when
-  the change was made). Lower it (e.g. `1`) so a change made on another device
-  or atsign still surfaces within a minute even when the live push didn't land.
+- **Fallback cadence: a 30-second timer.** This periodic sync reconciles a
+  *missed* live notification (the app was backgrounded, the monitor was
+  reconnecting, or the recipient was offline when the change was made), so a
+  change made on another device or atsign surfaces within about 30 seconds
+  even when the live push didn't land. It is not configurable; at_client 4.0
+  removed `AtClientPreference.syncIntervalMins`, which set nothing.
 
 ---
 

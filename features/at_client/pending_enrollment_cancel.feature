@@ -9,13 +9,17 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
 
   PendingEnrollment.cancel() ends the wait awaitApproval or client() is in.
   The wait throws AtEnrollmentCancelledException, an AtEnrollmentException,
-  and this enrollment's pending keys leave the store, as a denial's do. A
-  cancel that cannot remove them throws, and a later cancel tries again.
+  once this enrollment's pending keys have left the store, as a denial's do.
+  A cancel that cannot remove them throws, and a later cancel tries again.
   Nothing withdraws the request on the atServer: the atSign's manager can
   still approve it, and that approval names keys nobody holds.
 
   An expired request, which the atServer answers with AT0028, has its pending
   keys removed as a denial does.
+
+  A store a cancel, a denial or an expiry left with no credential is refused
+  by Atsign.open at once with AtNoCredentialException, which says to enroll
+  again, before it writes anything or opens a connection.
 
   Races: a stop or a cancel and an approval resolve at the write to the
   store. One that lands first leaves nothing written. stop then cancel
@@ -37,6 +41,12 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a pending enrollment waiting in awaitApproval
     When the app calls cancel
     Then awaitApproval throws AtEnrollmentCancelledException, the enrollment's pending keys are gone from the store, and no further poll reaches the atServer
+
+  Scenario: The cancelled wait throws only after the pending keys are gone
+    Given a pending enrollment waiting in client(), in a program that exits as soon as client() throws
+    When the program calls cancel() without awaiting it
+    Then when client() throws AtEnrollmentCancelledException the keyfile holds none of the enrollment's pending keys
+    And an approval of the request afterwards leaves nothing for resumeEnrollment or CLIBase to open
 
   Scenario: Cancel leaves no copy of the pending keys beside a keyfile
     Given a pending enrollment filed in a keyfile
@@ -166,3 +176,8 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a store holding two pending requests for one app, from two devices
     When the app calls resumeEnrollment with only the app
     Then it throws AtEnrollmentPendingException naming both and saying to name the app and device, and naming a device as well resumes that one
+
+  Scenario: A keyfile left empty by a denial or a cancel is refused at once
+    Given a keyfile whose enrollment request was denied, or cancelled, and so holds no credential
+    When a program opens it
+    Then the open throws at once a refusal saying the keyfile holds no credential and to enroll again, nothing is written to the keyfile, and no connection is attempted

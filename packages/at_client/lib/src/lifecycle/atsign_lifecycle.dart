@@ -69,6 +69,9 @@ extension AtsignLifecycle on Atsign {
   ///
   /// Keys that hold nothing but an enrollment awaiting approval are refused
   /// with [AtEnrollmentPendingException]: [resumeEnrollment] picks that up.
+  /// Keys that hold neither, as a denial, a cancel or an expiry leaves them,
+  /// are refused with [AtNoCredentialException] before anything is written or
+  /// any connection opened.
   ///
   /// [namespace] defaults to the preference's. [storage] is the client's
   /// local storage, borrowed unless it was built with `closedByClient: true`.
@@ -100,7 +103,7 @@ extension AtsignLifecycle on Atsign {
     AtServiceFactory? serviceFactory,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
-    await _refuseKeysStillPending(keys);
+    await _refuseKeysWithoutCredential(keys);
     final client = await buildAtClient(
       atSign: this,
       namespace: namespace ?? preference.namespace,
@@ -461,7 +464,7 @@ extension AtsignLifecycle on Atsign {
     return null;
   }
 
-  Future<void> _refuseKeysStillPending(AtKeysIo keys) async {
+  Future<void> _refuseKeysWithoutCredential(AtKeysIo keys) async {
     final AtKeys stored;
     try {
       stored = await keys.read(this);
@@ -469,10 +472,10 @@ extension AtsignLifecycle on Atsign {
       // Absent or unreadable keys are the client's to report as it always has.
       return;
     }
+    if (stored.holdsAuthenticationMaterial) return;
     final pending = stored.pendingEnrollmentIds.toList();
-    if (!stored.holdsAuthenticationMaterial && pending.isNotEmpty) {
-      throw AtEnrollmentPendingException(this, pending);
-    }
+    if (pending.isNotEmpty) throw AtEnrollmentPendingException(this, pending);
+    throw AtNoCredentialException(this);
   }
 
   /// A store [enroll] may write into: one holding nothing live for this

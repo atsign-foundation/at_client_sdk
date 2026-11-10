@@ -26,8 +26,8 @@ Upgrading from 3.x: see
 
 | If you're building…                                     | Start with                                                                                                         |
 |---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools             |
-| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported)            |
+| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools. Import only its barrel; do not add at_client to your pubspec |
+| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported). Import only its barrel; do not add at_client to your pubspec |
 | A **platform package**, or a program that passes every dependency itself | this package                                                                      |
 | **Understanding** the atSign lifecycle                  | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup      |
 
@@ -281,9 +281,16 @@ A share reads the recipient's key from their atServer whenever this client
 has no current copy of it, so it can need the network when the self copy
 does not. With the atServer out of reach, `create(sharedWith: ...)` writes
 the self copy and then throws a `CollectionOpException` naming each
-recipient's copy it could not write. The item is listed, and nothing sends
-the share later: retry it with `updateSharedWith(item, ...)`, not `create`,
-which would write a second item.
+recipient's copy it could not write. With an atServer that stops answering
+mid-connection, that takes up to about a minute at the default
+`networkTimeout`, and a call abandoned before then can still complete. The
+item is listed, and nothing sends the share later. Catch
+`CollectionOpException<T>`: its `item` is the item written, naming only the
+recipients whose copies were written, so `updateSharedWith(e.item!, ...)`
+retries the rest. Never retry with `create`, which would write a second
+item. When the self copy itself cannot be
+written, nothing else is: the exception names the self copy, and its
+`results` list each recipient's copy as `OpNotAttempted`.
 
 `update` / `delete` / `create` fire `CItemUpdated` / `CItemDeleted`
 on the writing collection's event streams as soon as the local write
@@ -298,6 +305,11 @@ local copy that the `at_client` SDK keeps current via real-time
 sync with the atServer. Value-level filtering is always on-device
 — records are end-to-end encrypted between atSigns, so the server
 never sees plaintext to filter on.
+
+A record this device cannot read yet, such as one sealed to a namespace key
+it does not hold, fails `getItems()` with a `CItemReadException` naming the
+record and why. `getItemsAsStream()` yields the same exception as an error
+and goes on, so a listener with an `onError` handler lists the rest.
 
 A composable `Query<T>` builder covers the common filter / sort /
 paginate / aggregate patterns:
@@ -451,6 +463,19 @@ wire. Plenty of room: with 1-char collection / sub-collection
 names and a 15-char application namespace, the theoretical
 ceiling is **11 levels (root + 10 nested sub-collections)**.
 
+## Verifying a signed envelope offline
+
+`verifySignedEnvelope`, which is experimental, checks an application
+envelope from `wrapAndSign` against the `_apsk` its signer's enrollment
+published, held as a `PublishedApsk`, with no `AtClient`, network or clock.
+It returns `EnvelopeVerified`, naming the key, algorithm and key status, or
+`EnvelopeRefused`, naming an `EnvelopeRefusal` and a reason. Read envelope
+text with `SignedEnvelope.parse(text, maxLength: ...)`, and fetch the
+`_apsk` with `fetchPublishedApsk` or hold one read earlier.
+`selectEnvelopeKey` makes the same checks without the signature. In tests,
+`TestEnvelopeSigner`, from the platform package's `testing.dart`, signs
+offline and gives the `PublishedApsk` that verifies it.
+
 ## Crypto providers
 
 By default, encrypted writes use the built-in legacy Atsign encryption
@@ -599,6 +624,14 @@ then rebuild it with `PqPosture.pqActive` and roll that out. A new app
 has no legacy readers and starts at `pqActive`. A posture is a floor for
 what a client drives, never a downgrade of what its atSign already holds.
 
+A client also has a floor of its own, and runs at the higher of the two: a
+keyfile holding a namespace key's private sets `pqReady`, and an active
+ML-DSA-65 data signing key sets `pqActive`. A client configured below its
+floor logs a warning and is raised to it on authentication, the data signing
+key, and reading and writing post-quantum. It seeds no namespace keys and
+mints no signing root that its configured posture would not, and its other
+settings, `disallowLegacyEncryption` among them, stay as configured.
+
 | Posture                      | Authentication                                                       | Data written                                    | Reads post-quantum data                                   |
 | ---------------------------- | -------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |
 | `PqPosture.legacy` (default) | RSA-2048 APKAM                                                       | legacy encryption                               | no: a record sealed to a namespace key is refused         |
@@ -639,15 +672,21 @@ What each posture switches on:
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` with
   `allowLegacyCryptoFallback` and requires each daemon's namespace. It can
   instead run `pqReady` with `allowLegacyCryptoFallback`, ask `canSealTo`,
-  and request `symmetricAesGcmCryptoProviderId` with `sealToNamespace` where
-  the answer is true.
+  and send with `sealToNamespace` where the answer is true. A share with
+  `sealToNamespace` and no `cryptoProviderId` is sealed with the
+  namespace-key provider, `symmetricAesGcmCryptoProviderId`, wherever the
+  client's config registers it, as `pqReady` and above do, and is refused,
+  naming the posture or the config, where it does not.
 - **A write right after opening.** A client's start-up publishes its
   namespace keys after `open` returns. A write to the client's own atSign
   that finds no key while start-up is still to publish one for its
   namespace waits for it, up to 30 seconds, then throws
   `NamespaceKeyUnavailableException` naming the key, with start-up's reason
   when it could not publish it. A write made with no atServer reachable does
-  not wait, and nor does a share.
+  not wait, and nor does a share. A write that finds the key published but
+  holds no private for it, while start-up is yet to ask, or is asking, the
+  atSign's other enrollments for that private, waits up to 30 seconds in all
+  for the answer, then throws `NskeyPrivateNotHeldException`.
 - **Who mints a namespace key.** Only an enrollment carrying a key package
   mints one, and it conveys the private to the namespace's other enrollments
   before publishing it. A client on the primary enrollment mints nothing,
@@ -660,7 +699,7 @@ What each posture switches on:
   the new generation.
 - **OpenSSL.** On macOS (Homebrew) and Linux, where OpenSSL 3's libcrypto is
   installed, or wherever `AT_CHOPS_LIBCRYPTO_PATH` points, value AES-256-GCM
-  runs through it, and X-Wing does too with OpenSSL 3.5 or later. Elsewhere
+  runs through it, and X-Wing does too with OpenSSL 3.5.1 or later. Elsewhere
   both are pure Dart, and each opens what the other wrote.
 - **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
   `Atsign.enroll` submits a request that advertises a key package, and the
@@ -673,7 +712,13 @@ What each posture switches on:
   left as they were. A client whose posture asks for a stronger
   authentication key than its enrollment holds re-enrolls itself at its
   first start and comes up on the new enrollment. This needs an atServer
-  that verifies ML-DSA signatures; a `legacy` client makes no such demand.
+  that verifies ML-DSA signatures; a `legacy` client makes no such demand
+  unless its key material raises it to a floor.
+  The new enrollment receives no namespace keys from an approval, so it asks
+  the atSign's other enrollments for them, and only one online at the time
+  can answer. On an atSign that has published any namespace key, enroll a
+  device at the posture its app runs at, `pqReady` or above, so that its
+  approval conveys the namespace keys.
 - **Signed advertisements and key packages.** Everything a peer relies on
   is carried in a signed envelope and verified before use; the signing keys
   chain to a per-atSign signing root that only fully privileged
@@ -697,7 +742,7 @@ the client holds no current copy of the recipient's key. Once a device has
 written in a namespace, it goes on writing there offline, across restarts.
 The design,
 the acceptance catalogue and the decision log are under
-[`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
+[`docs/projects/pq/`](../../docs/projects/pq/design.md).
 
 ## Known traps in sync
 

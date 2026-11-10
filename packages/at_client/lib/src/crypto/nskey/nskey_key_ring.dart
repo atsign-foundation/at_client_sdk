@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart'
+    show StartUpSeeding;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
@@ -268,8 +270,14 @@ abstract class NskeyKeyRing {
   /// received that generation. Holding none at all leaves the value undecryptable
   /// rather than silently skipped; missing only an older one is recoverable by
   /// pulling that generation over the substrate.
+  ///
+  /// [writtenBy] is the atSign that wrote the record naming the generation,
+  /// when a record is being opened: an implementation that pulls a missing
+  /// own generation may pull one no own advertisement names when the current
+  /// atSign wrote that record.
   Future<NskeyDecapsulationKey?> privateHalf(
-      String owner, String namespace, String nskeyKid);
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy});
 
   /// The public half of a *named generation* of `(owner, namespace)` whose
   /// private this client holds, taken from what it holds rather than read
@@ -298,6 +306,46 @@ abstract interface class LooksUpLevelsTogether {
   Future<({String namespace, NskeyAdvertisement advertisement})?>
       mostSpecificPublic(String owner, List<String> namespaces,
           {void Function(String namespace)? missed});
+}
+
+/// Implemented by an [NskeyKeyRing] whose client's start-up asks the atSign's
+/// other enrollments for the own privates it lacks.
+abstract interface class AwaitsStartUpAsk {
+  /// Start-up's ask for [namespace]'s generation [nskeyKid] while its answer is
+  /// awaited, or null; it completes once the answer is filed or the wait for
+  /// one ends.
+  Future<void>? startUpAskFor(String namespace, String nskeyKid);
+
+  /// Completes once the client's start-up has made its asks, or will make
+  /// none; null when its start-up was never to ask.
+  Future<void>? get startUpAsksPending;
+}
+
+/// The public half of [owner]'s own generation [nskeyKid] in [namespace] once
+/// this client holds its private, waiting until [until] for [ring]'s start-up
+/// to ask for it and for the answer; null when it is still not held.
+Future<PackageKey?> heldOwnAfterStartUpAsk(
+    NskeyKeyRing ring, String owner, String namespace, String nskeyKid,
+    {required DateTime until}) async {
+  final startUp = ring is AwaitsStartUpAsk ? ring as AwaitsStartUpAsk : null;
+  Future<PackageKey?> held() async =>
+      await ring.privateHalf(owner, namespace, nskeyKid) == null
+          ? null
+          : await ring.heldPublic(owner, namespace, nskeyKid);
+  // NOTE: read before the miss, so only start-up's ask holds a write.
+  var asked = startUp?.startUpAskFor(namespace, nskeyKid);
+  final asksPending = startUp?.startUpAsksPending;
+  var found = await held();
+  if (found == null && asked == null && asksPending != null) {
+    await StartUpSeeding.waitOn(asksPending, until: until);
+    asked = startUp!.startUpAskFor(namespace, nskeyKid);
+    found = await held();
+  }
+  if (found == null && asked != null) {
+    await StartUpSeeding.waitOn(asked, until: until);
+    found = await held();
+  }
+  return found;
 }
 
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.
@@ -366,7 +414,8 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
 
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-          String owner, String namespace, String nskeyKid) async =>
+          String owner, String namespace, String nskeyKid,
+          {String? writtenBy}) async =>
       _private[_generation(owner, namespace, nskeyKid)];
 
   @override

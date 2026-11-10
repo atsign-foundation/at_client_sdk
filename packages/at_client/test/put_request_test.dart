@@ -1,5 +1,6 @@
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/transformer/request_transformer/put_request_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_commons/at_builders.dart';

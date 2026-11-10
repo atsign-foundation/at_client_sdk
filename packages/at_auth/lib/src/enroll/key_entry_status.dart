@@ -82,12 +82,11 @@ extension type const KeyEntryStatus._(String value) implements String {
   /// path. It is a live path for the key package, which is rebuilt from the
   /// keyfile on every reconcile.
   ///
-  /// A `status` that is not a string at all is malformed rather than unknown,
-  /// and it is stringified rather than repaired. That keeps it out of both
-  /// [active] and [retired] — which is the answer that uses the key for
-  /// nothing — and keeps what was actually written visible in a log.
-  static KeyEntryStatus fromWire(Object? value) =>
-      value == null ? active : KeyEntryStatus._('$value');
+  /// A reader skips an entry whose `status` is present and is not a string,
+  /// as it skips one whose other fields are of the wrong kind, so this takes
+  /// a string or its absence only.
+  static KeyEntryStatus fromWire(String? value) =>
+      value == null ? active : KeyEntryStatus._(value);
 
   /// Whether [status] may be chosen for something **new** — a signer picking a
   /// key to sign with, a sender picking a key to seal to.

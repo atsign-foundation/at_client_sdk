@@ -46,7 +46,8 @@ need a person. A keyfile holding only an enrollment request is resumed:
 
 Every `at_client` process needs its **own** storage. One store is held by one
 live client: a second `open` on the same location in one process is refused,
-and two processes on one location corrupt it.
+and so is a second process opening a Hive store another holds, with
+`AtStorageInUseException` naming the location.
 
 ```dart
 import 'package:at_client_cli/at_client_cli.dart';

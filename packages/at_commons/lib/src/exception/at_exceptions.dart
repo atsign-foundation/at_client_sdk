@@ -3,7 +3,7 @@
 import 'package:at_commons/at_commons.dart';
 
 /// The class [AtException] and its subclasses represents various exceptions that can arise
-/// while using the @ protocol.
+/// while using the Atsign Protocol.
 class AtException implements Exception {
   /// Represents error message that details the cause of the exception
   String message;
@@ -96,7 +96,7 @@ class AtIOException extends AtException {
   AtIOException(String message) : super(message);
 }
 
-/// Exception thrown when an @ protocol verb has an invalid syntax.
+/// Exception thrown when an Atsign Protocol verb has an invalid syntax.
 class InvalidSyntaxException extends AtException {
   InvalidSyntaxException(String message) : super(message);
 }

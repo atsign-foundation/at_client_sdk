@@ -99,7 +99,7 @@ class PendingEnrollment {
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
   }) async {
-    _refuseIfEnded();
+    await _refuseIfEnded();
     final stored = await keys.read(atSign);
     if (!stored.pendingEnrollmentIds.contains(enrollmentId)) {
       throw AtEnrollmentException(
@@ -140,14 +140,14 @@ class PendingEnrollment {
             secondaryAddressFinder: _secondaryAddressFinder);
     if (_atLookUp == null) _ownHandshake = handshake;
     try {
-      _refuseIfEnded();
+      await _refuseIfEnded();
       await _enrollment.waitForApproval(response,
           retryInterval: retryInterval,
           maxRetries: maxRetries,
           atLookup: handshake,
           cancelled: _ended.future);
     } on Exception catch (e) {
-      if (_ended.isCompleted) throw _endedException();
+      if (_ended.isCompleted) throw await _endedOnceCancelled();
       final decided = e is! AtEnrollmentException
           ? null
           : e.message.contains('denied')
@@ -184,7 +184,7 @@ class PendingEnrollment {
       written = true;
       return true;
     });
-    if (!written) throw _endedException();
+    if (!written) throw await _endedOnceCancelled();
     _approved = true;
     _logger.info('enrollment $enrollmentId of $atSign is approved and its '
         'keys are complete');
@@ -228,9 +228,9 @@ class PendingEnrollment {
   }
 
   /// Ends the wait [client] or [awaitApproval] is in, which then throws
-  /// [AtEnrollmentCancelledException]; this enrollment's pending keys leave
-  /// [keys] as a denial's do. When [keys] cannot remove them, this throws what
-  /// it threw, and a later call tries again.
+  /// [AtEnrollmentCancelledException] once this enrollment's pending keys
+  /// have left [keys], as a denial's do. When [keys] cannot remove them, this
+  /// throws what it threw, and a later call tries again.
   ///
   /// An approval already written to [keys] stays there. A [client] call in
   /// flight has ended before this returns, having stopped any client it
@@ -306,8 +306,19 @@ class PendingEnrollment {
     }
   }
 
-  void _refuseIfEnded() {
-    if (_ended.isCompleted) throw _endedException();
+  Future<void> _refuseIfEnded() async {
+    if (_ended.isCompleted) throw await _endedOnceCancelled();
+  }
+
+  /// [_endedException], once the cancel that ended the wait, if one did, has
+  /// removed the pending keys, so a caller that exits on it leaves none
+  /// behind. The cancel's own failure is reported by [cancel].
+  Future<Exception> _endedOnceCancelled() async {
+    final cancelling = _cancelling;
+    if (_abandoned && cancelling != null) {
+      await cancelling.then((_) {}, onError: (Object _) {});
+    }
+    return _endedException();
   }
 
   /// What a wait that [cancel] or [stop] ended throws.
@@ -426,6 +437,18 @@ class PendingEnrollment {
 /// was in was ended by [PendingEnrollment.cancel].
 class AtEnrollmentCancelledException extends AtEnrollmentException {
   AtEnrollmentCancelledException(super.message);
+}
+
+/// `open` was asked to open a keyfile that holds no credential and no
+/// pending enrollment, as a denial, a cancel or an expiry leaves it, so there
+/// is nothing to authenticate with: the device has to enroll again.
+class AtNoCredentialException extends AtException {
+  final String atSign;
+
+  AtNoCredentialException(this.atSign)
+      : super('$atSign holds no credential in this keyfile: its enrollment '
+            'was denied, cancelled or expired, or never completed, so there '
+            'is nothing to authenticate with; enroll again');
 }
 
 /// `open` was asked to open a keyfile that holds nothing but an enrollment

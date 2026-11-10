@@ -42,7 +42,7 @@ and the **foundation** libraries beneath it never assume a platform at all.
    | Storage | Hive under `~/.atsign/storage/` | Hive in the app support directory | memory (a durable browser store later) |
    | Transport and atDirectory | TLS socket; cached TCP atDirectory finder | TLS socket; cached TCP atDirectory finder | `wss`; HTTPS atDirectory finder |
    | Keys | the `.atKeys` file | the OS keychain | a browser key store |
-   | Logging | stderr, or a file | the console | the browser console |
+   | Logging | stderr, or a file, in a `CLIBase` program; warnings to stdout in others | the console | the browser console |
    | Onboarding and enrollment | `at_activate`, `CLIBase`, `CliKeys` | dialogs and widgets | to come |
 
 4. **Every default can be overridden** by passing the same core type explicitly.

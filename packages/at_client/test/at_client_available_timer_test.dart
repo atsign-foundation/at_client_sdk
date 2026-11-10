@@ -14,6 +14,7 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';

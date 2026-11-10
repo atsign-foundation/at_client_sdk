@@ -256,6 +256,28 @@ void main() async {
       expect(cachingAtServerFinder.cacheContains(atSign), isFalse);
     });
 
+    test('DoS: the answer is bounded in size', () async {
+      requiredFailures = 0;
+      // The atDirectory prompts, then streams bytes with no line feed.
+      when(() => mockSocket.write('$noAtAtSign\n')).thenAnswer((_) async {
+        for (var i = 0; i < 100; i++) {
+          socketOnDataFn(('a' * 100).codeUnits);
+        }
+      });
+
+      final sw = Stopwatch()..start();
+      await expectLater(
+          cachingAtServerFinder.findSecondary(atSign,
+              timeout: const Duration(seconds: 5)),
+          throwsA(isA<AtException>().having(
+              (e) => e.message, 'message', contains('longer than 512 bytes'))),
+          reason: 'an answer past the bound is refused, not read until the '
+              'deadline');
+      expect(sw.elapsed, lessThan(const Duration(seconds: 3)),
+          reason: 'refused at the bound, not at the deadline');
+      expect(cachingAtServerFinder.cacheContains(atSign), isFalse);
+    });
+
     test('An atSign holding a line feed is not sent', () async {
       requiredFailures = 0;
 

@@ -10,6 +10,10 @@ Future<void> main() async {
     print('libcrypto not found');
     return;
   }
+  if (!libCryptoSupportsMlKem768(lib)) {
+    print('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5.1)');
+    return;
+  }
   final MlKem768FfiAlgo algo = MlKem768FfiAlgo.fromLib(lib);
 
   // Alice generates a key pair. The secretKey is an opaque 8-byte handle —

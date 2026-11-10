@@ -1,5 +1,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/remote_only.dart';
+// ignore: implementation_imports
+import 'package:at_client/src/client/remote_secondary.dart';
 
 /// An [AtClient] for [atSign] holding no local replica: its storage writes
 /// through the client's own authenticated [RemoteSecondary] over [lookUps],

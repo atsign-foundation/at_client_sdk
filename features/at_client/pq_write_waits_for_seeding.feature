@@ -9,7 +9,9 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
   waits when the atServer has answered that no key is published and start-up
   will seed a namespace that covers the key, or when the key it found is
   broader than a namespace start-up has said it will seed covering the key.
-  A share does not wait: it is sealed to the recipient's key, as
+  A write that holds no private for its namespace's current generation
+  waits, within the same bound, while start-up's ask to the atSign's other
+  enrollments for that generation is outstanding. A share does not wait: it is sealed to the recipient's key, as
   pq_share_level.feature has it. Reads do not seal, and are unchanged.
 
   Races: a write never mints to find its own value's key; only start-up
@@ -25,7 +27,8 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
   DoS: a waiting write holds no connection and makes no request while it
   waits; every waiting write shares one signal; each waits at most 30
   seconds; a write with no atServer, or in a namespace start-up will not
-  seed, does not wait; stop ends every wait at once.
+  seed, does not wait; stop ends every wait at once. A write waits at most
+  30 s whatever start-up does; no new asks are sent.
   Forgery and impersonation: what a write seals to, and for whom, is
   unchanged; waiting only delays when the existing rule is applied. A key's
   name cannot make start-up mint, since start-up mints only the namespaces
@@ -86,6 +89,11 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     When start-up's seeding of todos.demos fails
     Then the write throws NamespaceKeyUnavailableException naming todos.demos and carrying start-up's reason
 
+  Scenario: A start-up that cannot read its grants ends the wait with its reason
+    Given a write waiting for start-up, which has yet to say which namespaces it seeds
+    When start-up cannot read its grants
+    Then the write throws NamespaceKeyUnavailableException carrying start-up's reason
+
   Scenario: A key another enrollment minted first is the one a waiting write seals to
     Given a write waiting for start-up, and another enrollment of alice's publishing todos.demos's key first
     When start-up adopts that key
@@ -130,3 +138,13 @@ Feature: At pqActive, a write its client's start-up has yet to give a namespace 
     Given bob's client, whose start-up seeded his todos.demos key beforehand, and alice's client just opened
     When alice puts a value in todos.demos and shares one with bob at once
     Then both complete, sealed under alice's and bob's todos.demos keys
+
+  Scenario: A write that misses while its start-up ask is outstanding waits for the answer
+    Given an enrollment of @alice that holds no private for the current generation of todos, whose start-up has asked the other enrollments for it
+    When it writes in todos before an answer is filed
+    Then the write waits, at most 30 seconds, and succeeds once a holder's answer is filed; with no answer by then it throws naming the generation as not yet conveyed
+
+  Scenario: A write made before start-up asks for its key's private waits for the ask and its answer
+    Given an enrollment missing the current generation's private, and its start-up yet to ask for it
+    When it writes
+    Then the write waits for start-up's ask and its answer, at most 30 seconds in all, and goes on

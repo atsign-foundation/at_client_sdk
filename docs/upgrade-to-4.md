@@ -173,7 +173,9 @@ atSign again as an enrollment whose client is still live throws a
 
 On the first open of an atSign on a device, `Atsign.open` throws
 `AtEnrollmentPendingException` when the keys hold only an enrollment request
-that has not been approved, and
+that has not been approved, `AtNoCredentialException` at once when they hold
+no credential and no request, as a denial, a cancel or an expiry leaves them,
+and
 `AtOpenRefusedException` when the atServer refuses the keys or the atDirectory
 knows no atServer for the atSign; its `state` says which. Otherwise
 `Atsign.open` returns once its one attempt to reach the atServer has ended,
@@ -264,6 +266,7 @@ These fields are gone. Delete each assignment:
 | `commitLogPath`, `keyStoreSecret`, `downloadPath`, `atProtocolEmitted` | nothing; they were read by nothing |
 | `outboundConnectionTimeout` | nothing |
 | `syncStrategy`, and the `SyncStrategy` enum | nothing; they were read by nothing |
+| `syncIntervalMins` | nothing; it was read by nothing, and sync's fallback timer runs every 30 seconds |
 | `isLocalStoreRequired`, `useAtChops`, `hashingAlgoType` | nothing; they were read by nothing |
 | `privateKey`, `signingAlgoType` | nothing: a client signs with the keys in its `AtKeysIo`, which name the algorithm; a `RemoteSecondary` built without one takes `privateKey:` |
 | `enforceNamespace` | nothing; every key except a `local:` one names a namespace |
@@ -304,6 +307,17 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
         'notes.my_app', const Duration(days: 30));
 ```
 
+### `Undefined class 'LocalSecondary'`, or `'RemoteSecondary'`
+
+`package:at_client/at_client.dart` no longer exports `LocalSecondary` or
+`RemoteSecondary`: they are the client's own plumbing, and an app should not
+need them. `AtClient.getLocalSecondary()` and `getRemoteSecondary()` remain,
+and their dartdoc says the same. If you have to use one, because nothing else
+does what you need, please file a feature request at
+https://github.com/atsign-foundation/at_client_sdk/issues so that there is an
+alternative; until then the type comes from
+`package:at_client/src/client/local_secondary.dart` or `remote_secondary.dart`.
+
 ### Other methods that are gone
 
 | Before | After |
@@ -327,7 +341,7 @@ Future<AtCollection<Map<String, dynamic>>> notes(AtClient client) =>
 | `LocalSecondary.getPrivateKey()`, `getPublicKey()` | `getPkamPrivateKey()`, `getPkamPublicKey()` |
 | `EncryptionUtil.decryptKey(...)` | at_chops' `RsaEncryptionAlgo`, with the private key as its `atPrivateKey` |
 | `RemoteSecondary.authenticateCram(secret)` | `Atsign.activate`, which takes the CRAM secret |
-| `AtClientUtil.findSecondary(...)` | `RemoteSecondary.findSecondaryUrl()` |
+| `AtClientUtil.findSecondary(...)` | `findSecondary(atSign)` on the `SecondaryAddressFinder` the client was opened with |
 | `ApkamSigning.publicSigningKey`, `privateSigningKey` | `signingKeys` |
 | `atClient.persistenceBundle` | the `AtClientStorage` the client was given |
 | `AtUtils.formatAtSign` | `AtUtils.fixAtSign` |
@@ -810,7 +824,8 @@ a pending enrollment, and `saveSpp` takes a `Passcode`.
 An app built on 3.x writes legacy-encrypted data, and every client that
 reads it is a legacy client. at_client 4.0's default posture is still
 `PqPosture.legacy`, so an app upgraded by sections 1 to 4 reads and writes
-as it did. It moves to post-quantum in two steps, each one a release rolled
+as it did, unless its keyfile already holds post-quantum key material, when
+it runs at the floor that material sets (see the at_client README). It moves to post-quantum in two steps, each one a release rolled
 out to every client of the app:
 
 1. Rebuild it with `PqPosture.pqReady` and roll that out. Each client then

@@ -42,10 +42,11 @@ final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
 final enrolled = await pending.client(preference,
     storage: storage);                               // waits for the approval
-// pending.cancel() abandons the enrollment: it ends that wait and removes
-// the pending keys from `keys`, as a denial does, so resumeEnrollment finds
-// nothing. It throws when `keys` cannot remove them; call it again. Call it
-// when the user confirms they give up on the request (a Cancel button).
+// pending.cancel() abandons the enrollment: that wait throws once the
+// pending keys are gone from `keys`, as a denial's are, so resumeEnrollment
+// finds nothing. It throws when `keys` cannot remove them; call it again.
+// Call it when the user confirms they give up on the request (a Cancel
+// button).
 // pending.stop() ends the wait and keeps the request: call it from a
 // dispose() that only leaves the screen, and resumeEnrollment picks the
 // request up later. The request stays on the atServer until its manager
@@ -84,6 +85,8 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
 | `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
 | `AtEnrollmentPendingException`  | `resumeEnrollment` found several pending enrollments matching what it was given                          | Name both `app` and `device`                                  |
+| `AtNoCredentialException`       | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                 | Enroll again                                                  |
+| `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |
 | `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
 | `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired                                                | Tell the user; a new `enroll` is a new request                |
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
@@ -115,7 +118,8 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
   otherwise in the app support directory. at_client 4.0 removed
   `commitLogPath`; the client is commit-log-free.
 - **Every process, and every client, needs its own store.** Two clients on one
-  Hive location is refused; two processes on one location corrupt it.
+  Hive location is refused, and a second process on a Hive store another
+  holds is refused with `AtStorageInUseException` naming the location.
 - The store also keeps the last atServer address the atDirectory answered, so
   a start that cannot reach the atDirectory still finds the atServer.
 
@@ -206,8 +210,7 @@ the client the app switches to via `AtClientManager.listenToAtSignChange`.
 runs on its own from the moment the client is built:
 
 - a round on every **stats notification** the atServer sends (its commit id
-  moved), and every `AtClientPreference.syncIntervalMins` (default 10) as a
-  fallback;
+  moved), and on a 30-second timer as a fallback;
 - `sync()` requests a round now; requests coalesce, so a burst of calls is one
   round, and calls made while a round runs share one more round once it ends;
 - `isInSync()` asks the atServer fresh and answers whether nothing is left to

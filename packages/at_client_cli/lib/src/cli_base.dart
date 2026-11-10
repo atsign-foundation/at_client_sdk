@@ -216,7 +216,7 @@ class CLIBase {
   late final AtClient atClient;
 
   /// Validates parameters and constructs a CLIBase instance.
-  /// <br/> <br/>
+  ///
   /// Validation rules:
   /// - homeDir must be non-null when either of the atKeysFilePath or
   ///   storageDir parameters is null
@@ -224,12 +224,12 @@ class CLIBase {
   ///   `atRootDomain` is non-null then it is used, otherwise we parse
   ///   `rootDomain` to create an [AtRootDomain] and we use that.
   ///
-  /// <br/>
   /// Also configures the default AtSignLogger log level to be either INFO
-  /// if verbose is true, or SHOUT if verbose is false (the default). If the
+  /// if verbose is true, or WARNING if verbose is false (the default), so the
+  /// SDK's warnings, such as a notification it dropped, reach stderr. If the
   /// application wishes to use a different default log level then it can do
   /// something like this:
-  /// ```
+  /// ```dart
   ///     AtSignLogger.root_level = 'FINEST';
   ///     cliBase.logger.logger.level = Level.FINEST;
   /// ```
@@ -290,8 +290,8 @@ class CLIBase {
       AtSignLogger.root_level = 'INFO';
       logger.logger.level = Level.INFO;
     } else {
-      AtSignLogger.root_level = 'SHOUT';
-      logger.logger.level = Level.SHOUT;
+      AtSignLogger.root_level = 'WARNING';
+      logger.logger.level = Level.WARNING;
     }
   }
 
@@ -303,14 +303,18 @@ class CLIBase {
   /// does, asking every [approvalRetryInterval], then opens on the keys the
   /// approval completes.
   ///
-  /// Throws [AtCredentialRefusedException] when the atServer refuses the
+  /// Throws [AtNoCredentialException] at once when the keyfile holds no
+  /// credential, as a denial, a cancel or an expiry leaves it,
+  /// [AtStorageInUseException] when another process holds the store open,
+  /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentException] when the request is denied or expires,
   /// which removes its keys, [SecondaryNotFoundException] when the
   /// atDirectory has no atServer for the atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or
   /// at_activate's retries while waiting for approval
-  /// ([SecondaryServerConnectivityException] for the first). No client is
-  /// left open when it throws.
+  /// ([SecondaryServerConnectivityException] for the first, naming the
+  /// atDirectory address and what failed). No client is left open when it
+  /// throws.
   Future<void> init() async {
     AtServiceFactory? atServiceFactory;
 
@@ -352,6 +356,8 @@ class CLIBase {
             serviceFactory: atServiceFactory);
       } on AtOpenRefusedException catch (e) {
         throw _reported(_openFailure(e.state));
+      } on AtNoCredentialException catch (e) {
+        throw _reported(e);
       }
     }
 
@@ -422,7 +428,9 @@ class CLIBase {
     return SecondaryServerConnectivityException(
         'Failed to connect within $maxConnectAttempts attempts: '
         '${state.outcome.name}'
-        '${state.cause == null ? '' : ' (${state.cause!.name})'}');
+        '${state.cause == null ? '' : ' (${state.cause!.name})'}: atDirectory '
+        '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'
+        '${state.error == null ? '' : ': ${state.error}'}');
   }
 
   /// [e], once written to stderr after the progress line.
