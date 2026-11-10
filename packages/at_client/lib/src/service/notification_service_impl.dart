@@ -73,20 +73,22 @@ class NotificationServiceImpl extends NotificationService {
 
   /// Notifications already delivered, oldest first (a `LinkedHashMap` keeps insertion
   /// order, so `_seenNotifications.keys.first` is the oldest). Keyed by compound
-  /// key `'$from:$id'`.
-  final _seenNotifications = <String, ({int? epochMillis, String? key})>{};
+  /// record `(from.toAtsign(), id)`.
+  final _seenNotifications =
+      <(Atsign, String), ({int? epochMillis, String? key})>{};
 
   /// The epoch millis of the stored watermark.
   int? _watermarkMillis;
 
-  /// Compound ids (`'$from:$id'`) of notifications delivered at [_watermarkMillis],
+  /// Notification pairs `(from.toAtsign(), id)` delivered at [_watermarkMillis],
   /// oldest first.
-  List<String> _watermarkIds = [];
+  List<(Atsign, String)> _watermarkIds = [];
 
-  static String _compoundNotificationId(String from, String id) => '$from:$id';
+  static List<String> _watermarkPair(AtNotification n) =>
+      [n.from.toAtsign().toString(), n.id];
 
-  void _recordSeen(String compoundKey, {int? epochMillis, String? key}) {
-    _seenNotifications[compoundKey] = (epochMillis: epochMillis, key: key);
+  void _recordSeen((Atsign, String) entry, {int? epochMillis, String? key}) {
+    _seenNotifications[entry] = (epochMillis: epochMillis, key: key);
     // FIFO: replays arrive close behind the original, so recency of use adds
     // nothing over recency of first sight.
     if (_seenNotifications.length > seenIdCapacity) {
@@ -105,38 +107,29 @@ class NotificationServiceImpl extends NotificationService {
     // Every stats notification carries this id; none is a replay of another.
     if (n.id == '-1') return false;
 
-    final compoundKey = _compoundNotificationId(n.from, n.id);
-    var seen = _seenNotifications[compoundKey];
-    if (seen == null) {
-      if (_seenNotifications.containsKey(n.id)) {
-        seen = _seenNotifications.remove(n.id);
-        _seenNotifications[compoundKey] = seen!;
-      } else if (_seenNotifications.containsKey(':${n.id}')) {
-        seen = _seenNotifications.remove(':${n.id}');
-        _seenNotifications[compoundKey] = seen!;
-      }
-    }
+    final key = (n.from.toAtsign(), n.id);
+    final seen = _seenNotifications[key];
     if (seen != null) {
       final isMatch = (seen.key == null || seen.key == n.key) &&
           (seen.epochMillis == null || seen.epochMillis == n.epochMillis);
       if (isMatch) {
         if (seen.key == null) {
-          _seenNotifications[compoundKey] =
+          _seenNotifications[key] =
               (epochMillis: seen.epochMillis ?? n.epochMillis, key: n.key);
         }
         logger.finer(
-            'Ignoring ${n.key}: notification (${n.from}, ${n.id}) was already delivered');
+            'Ignoring ${n.key}: notification (${key.$1}, ${key.$2}) was already delivered');
       } else {
         _drop(
             n.key,
             'Dropping duplicate notification with conflicting key or timestamp: '
-            'from=${n.from} id=${n.id} (seen key=${seen.key} epoch=${seen.epochMillis}, '
+            'from=${key.$1} id=${key.$2} (seen key=${seen.key} epoch=${seen.epochMillis}, '
             'received key=${n.key} epoch=${n.epochMillis})');
       }
       return true;
     }
 
-    _recordSeen(compoundKey, epochMillis: n.epochMillis, key: n.key);
+    _recordSeen(key, epochMillis: n.epochMillis, key: n.key);
     return false;
   }
 
@@ -488,22 +481,22 @@ class NotificationServiceImpl extends NotificationService {
   /// What gets persisted as the watermark: the notification minus its payload
   /// and its metadata blob.
   ///
-  /// [ids] are the notifications delivered at `n.epochMillis`, stored as
-  /// `idsAtEpochMillis`. Only `epochMillis`, `idsAtEpochMillis` and `id` are
+  /// [pairs] are the notification `[from, id]` pairs delivered at `n.epochMillis`,
+  /// stored as `idsAtEpochMillis`. Only `epochMillis`, `idsAtEpochMillis` and `id` are
   /// ever read back — see [getLastNotificationTime]. The payload is dropped
   /// because it is bounded only by [AtClientPreference.maxDataSize], rewritten
   /// on every notification, and held here without value-level encryption.
-  static String _watermarkValue(AtNotification n, List<String> ids) =>
+  static String _watermarkValue(AtNotification n, List<List<String>> pairs) =>
       jsonEncode(n.toJson()
         ..remove('value')
         ..remove('metadata')
-        ..['idsAtEpochMillis'] = ids);
+        ..['idsAtEpochMillis'] = pairs);
 
-  /// Records [n] as the newest watermark entry and returns the compound ids
-  /// stored with it: the ids already at its millisecond plus its own, capped at
-  /// [seenIdCapacity].
-  List<String> _recordWatermark(AtNotification n) {
-    final entry = _compoundNotificationId(n.from, n.id);
+  /// Records [n] as the newest watermark entry and returns the notification
+  /// pairs `(from.toAtsign(), id)` stored with it: the pairs already at its
+  /// millisecond plus its own, capped at [seenIdCapacity].
+  List<(Atsign, String)> _recordWatermark(AtNotification n) {
+    final entry = (n.from.toAtsign(), n.id);
     _watermarkIds =
         n.epochMillis == _watermarkMillis ? [..._watermarkIds, entry] : [entry];
     _watermarkMillis = n.epochMillis;
@@ -645,24 +638,31 @@ class NotificationServiceImpl extends NotificationService {
       // Later reads keep the in-memory ids, which include any write still
       // in flight.
       if (_watermarkMillis == null) {
-        final ids = watermark['idsAtEpochMillis'];
-        final from = watermark['from'] as String?;
-        final rawIds = ids is List
-            ? ids.whereType<String>().toList()
-            : [if (watermark['id'] is String) watermark['id'] as String];
-        _watermarkIds = rawIds.map((entry) {
-          if (entry.contains(':')) return entry;
-          if (from != null && from.isNotEmpty) {
-            return _compoundNotificationId(from, entry);
+        final rawPairs = watermark['idsAtEpochMillis'];
+        final from = watermark['from'];
+        final id = watermark['id'];
+        _watermarkIds = [];
+        if (rawPairs is List) {
+          for (final item in rawPairs) {
+            if (item is List &&
+                item.length >= 2 &&
+                item[0] is String &&
+                item[1] is String) {
+              _watermarkIds
+                  .add(((item[0] as String).toAtsign(), item[1] as String));
+            } else if (item is String && from is String) {
+              // Legacy list of bare ids from an earlier build: associate with watermark's from
+              _watermarkIds.add((from.toAtsign(), item));
+            }
           }
-          return entry;
-        }).toList();
+        } else if (id is String && from is String) {
+          // 4.0.0 watermark: stores 'from' and 'id' as top-level strings, without idsAtEpochMillis
+          _watermarkIds.add((from.toAtsign(), id));
+        }
         _watermarkMillis = watermark['epochMillis'];
         final watermarkKey = watermark['key'] as String?;
         for (final entry in _watermarkIds) {
-          final isWatermarkSelf = (from != null &&
-                  entry == _compoundNotificationId(from, watermark['id'] ?? '')) ||
-              entry == watermark['id'];
+          final isWatermarkSelf = id is String && entry.$2 == id;
           _recordSeen(entry,
               epochMillis: _watermarkMillis,
               key: isWatermarkSelf ? watermarkKey : null);
@@ -692,9 +692,8 @@ class NotificationServiceImpl extends NotificationService {
     // sequence as a failed connection and retries forever; not seeding the
     // watermark costs one replayed window.
     try {
-      await atClient.put(
-          lastReceivedNotificationAtKey,
-          _watermarkValue(n, [_compoundNotificationId(n.from, n.id)]),
+      await atClient.put(lastReceivedNotificationAtKey,
+          _watermarkValue(n, [_watermarkPair(n)]),
           putRequestOptions: _watermarkPutOptions);
     } on StoppedException {
       rethrow;
@@ -829,8 +828,13 @@ class NotificationServiceImpl extends NotificationService {
           }
           if (isStopped) return;
           try {
-            await atClient.put(lastReceivedNotificationAtKey,
-                _watermarkValue(n, _recordWatermark(n)),
+            await atClient.put(
+                lastReceivedNotificationAtKey,
+                _watermarkValue(
+                    n,
+                    _recordWatermark(n)
+                        .map((p) => [p.$1.toString(), p.$2])
+                        .toList()),
                 putRequestOptions: _watermarkPutOptions);
           } catch (e) {
             if (isStopped) {

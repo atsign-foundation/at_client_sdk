@@ -1653,6 +1653,25 @@ void main() {
         });
 
         test(
+            'notifications with colons in ID are keyed by (from.toAtsign(), id) record and do not collide across senders',
+            () async {
+          // Sender @bob with id 'X', and sender @alice with id '@bob:X'
+          await receive('X', createdAtMillis + 1000, from: '@bob');
+          await receive('@bob:X', createdAtMillis + 1000, from: '@alice');
+          await pumpEventQueue();
+
+          expect(delivered, ['X', '@bob:X']);
+
+          // A replay of @bob's notification is not re-delivered
+          await receive('X', createdAtMillis + 1000, from: '@bob');
+          // A replay of @alice's notification is not re-delivered
+          await receive('@bob:X', createdAtMillis + 1000, from: '@alice');
+          await pumpEventQueue();
+
+          expect(delivered, ['X', '@bob:X']);
+        });
+
+        test(
             'a true duplicate replay is ignored quietly and not reported on droppedEvents',
             () async {
           final dropped = <DroppedNotification>[];
@@ -1664,6 +1683,29 @@ void main() {
 
           expect(delivered, ['dup-1']);
           expect(dropped, isEmpty);
+        });
+
+        test('a true duplicate replay logs quietly at finer and not at warning',
+            () async {
+          final records = <dynamic>[];
+          final sub = service.logger.logger.onRecord.listen(records.add);
+          addTearDown(sub.cancel);
+          service.logger.level = 'finer';
+
+          await receive('dup-log', createdAtMillis + 1000);
+          await receive('dup-log', createdAtMillis + 1000);
+          await pumpEventQueue();
+
+          expect(delivered, ['dup-log']);
+          final finers = records.where((r) =>
+              '${r.level.name}'.toUpperCase() == 'FINER' &&
+              '${r.message}'.contains('was already delivered'));
+          final warnings = records
+              .where((r) => '${r.level.name}'.toUpperCase() == 'WARNING');
+
+          expect(finers, isNotEmpty, reason: 'must log quiet replay at finer');
+          expect(warnings, isEmpty,
+              reason: 'must not log quiet replay at warning');
         });
 
         test(
@@ -1699,6 +1741,31 @@ void main() {
           expect(dropped, hasLength(1));
           expect(
               dropped.first.reason, contains('conflicting key or timestamp'));
+        });
+
+        test('a conflicting duplicate logs at warning and not at finer',
+            () async {
+          final records = <dynamic>[];
+          final sub = service.logger.logger.onRecord.listen(records.add);
+          addTearDown(sub.cancel);
+          service.logger.level = 'finer';
+
+          await receive('conflict-log', createdAtMillis + 1000,
+              key: 'first.key@alice');
+          await receive('conflict-log', createdAtMillis + 1000,
+              key: 'second.key@alice');
+          await pumpEventQueue();
+
+          expect(delivered, ['conflict-log']);
+          final warnings = records.where((r) =>
+              '${r.level.name}'.toUpperCase() == 'WARNING' &&
+              '${r.message}'.contains('conflicting key or timestamp'));
+          final finers = records.where((r) =>
+              '${r.level.name}'.toUpperCase() == 'FINER' &&
+              '${r.message}'.contains('was already delivered'));
+
+          expect(warnings, isNotEmpty, reason: 'must log conflict at warning');
+          expect(finers, isEmpty, reason: 'must not log conflict at finer');
         });
       });
     });
@@ -1775,7 +1842,11 @@ void main() {
       when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
           .thenAnswer((_) async => true);
       when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => AtValue()
-        ..value = jsonEncode({'id': 'stored-1', 'epochMillis': 1234567890123}));
+        ..value = jsonEncode({
+          'id': 'stored-1',
+          'from': '@alice',
+          'epochMillis': 1234567890123
+        }));
       when(() => mockAtClientImpl.put(any(), any(),
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
@@ -1801,6 +1872,80 @@ void main() {
       expect(delivered, ['next-2'],
           reason: 'an inclusive since filter re-delivers the watermark\'s '
               'notification, which the previous run already delivered');
+    });
+
+    test(
+        'a resume from a 4.0.0 watermark (from and id present, idsAtEpochMillis absent) '
+        'does not re-deliver the watermark notification', () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => AtValue()
+        ..value = jsonEncode({
+          'id': 'v4-stored',
+          'from': '@alice',
+          'to': '@bob',
+          'key': 'v4-stored.wavi@alice',
+          'epochMillis': 1234567890123
+        }));
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
+      final service = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(service.stopAllSubscriptions);
+      final delivered = <String>[];
+      service.subscribe(regex: '.*').listen((n) => delivered.add(n.id));
+
+      expect(await service.getLastNotificationTime(), 1234567890123);
+      for (final id in ['v4-stored', 'next-v4']) {
+        await service.handleNotificationReceipt('notification: '
+            '{"id":"$id","from":"@alice","to":"@bob",'
+            '"key":"$id.wavi@alice","value":null,"operation":"update",'
+            '"epochMillis":1234567890123,'
+            '"messageType":"MessageType.key","isEncrypted":false}');
+      }
+      await pumpEventQueue();
+
+      expect(delivered, ['next-v4'],
+          reason:
+              '4.0.0 watermark notification is recognized and not re-delivered');
+    });
+
+    test(
+        'a stored watermark whose id is not a string does not throw out of '
+        'getLastNotificationTime', () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => AtValue()
+        ..value = jsonEncode({
+          'id': 12345, // not a String
+          'from': '@alice',
+          'epochMillis': 1234567890123
+        }));
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
+      final service = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(service.stopAllSubscriptions);
+
+      expect(await service.getLastNotificationTime(), 1234567890123);
     });
 
     test(
@@ -1923,8 +2068,11 @@ void main() {
       await first.handleNotificationReceipt(notification('C'));
       await first.stop();
 
-      expect((jsonDecode(stored!) as Map)['idsAtEpochMillis'],
-          ['@alice:A', '@alice:B', '@alice:C']);
+      expect((jsonDecode(stored!) as Map)['idsAtEpochMillis'], [
+        ['@alice', 'A'],
+        ['@alice', 'B'],
+        ['@alice', 'C']
+      ]);
 
       final second = await NotificationServiceImpl.create(mockAtClientImpl,
               monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
@@ -2158,12 +2306,14 @@ void main() {
       await pumpEventQueue();
 
       final lastWatermark = jsonDecode(storedValues.last) as Map;
-      final ids = (lastWatermark['idsAtEpochMillis'] as List).cast<String>();
+      final ids =
+          (lastWatermark['idsAtEpochMillis'] as List).cast<List<dynamic>>();
       expect(ids.length, NotificationServiceImpl.seenIdCapacity,
           reason: 'watermark id list must be capped at seenIdCapacity (1024)');
-      expect(ids.contains('@alice:id0'), isFalse,
+      expect(ids.any((p) => p[0] == '@alice' && p[1] == 'id0'), isFalse,
           reason: 'first id should have been evicted when exceeding capacity');
-      expect(ids.last, '@alice:id${NotificationServiceImpl.seenIdCapacity}');
+      expect(
+          ids.last, ['@alice', 'id${NotificationServiceImpl.seenIdCapacity}']);
     });
 
     test('the stored watermark ids list resets at a new millisecond', () async {
@@ -2192,8 +2342,13 @@ void main() {
       await pumpEventQueue();
 
       final lastWatermark = jsonDecode(storedValues.last) as Map;
-      final ids = (lastWatermark['idsAtEpochMillis'] as List).cast<String>();
-      expect(ids, ['@alice:second'],
+      final ids =
+          (lastWatermark['idsAtEpochMillis'] as List).cast<List<dynamic>>();
+      expect(
+          ids,
+          [
+            ['@alice', 'second']
+          ],
           reason: 'ids list resets when epochMillis advances');
     });
 
