@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 import 'package:at_client_cli/src/commands/auth_cli_args.dart';

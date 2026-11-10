@@ -506,9 +506,10 @@ void main() {
       //       conveyed. For a generation none it holds names, it first reads
       //       the published advertisement, once per askCooldown per namespace
       //       and only in a namespace it holds an advertisement or a private
-      //       for. It asks about each generation once per askCooldown and not
-      //       while an earlier ask for it waits, and with askOnReadMiss off a
-      //       miss sends nothing.
+      //       for. For a record this atSign wrote it reads nothing and fetches
+      //       and asks as for an advertised generation. It asks about each
+      //       generation once per askCooldown and not while an earlier ask for
+      //       it waits, and with askOnReadMiss off a miss sends nothing.
       provenIn(
         'packages/at_client/test/nskey_private_fetch_test.dart',
         'when a conveyance record for it is waiting, then the fetch files it',
@@ -708,6 +709,53 @@ void main() {
             'lands. Mutation-proven: without the bound the write never '
             'returns',
         clauses: ['for a sweep already filing it'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'A device that re-enrolled itself reads what its atSign wrote before a '
+            'rotation',
+        proves: 'a miss on a superseded generation in a record @alice wrote '
+            'asks for it though no own advertisement names it, files the '
+            'holder\'s answer and opens on the next read, and a peer\'s record '
+            'naming an unadvertised generation asks nothing. Mutation-proven: '
+            'dropping the own-record arm reddens it with no ask',
+        clauses: ['wrote the record that names G1'],
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'a holder that filed a superseded generation answers an ask for it, '
+            'and the asker opens a record sealed to it',
+        proves: 'through the real answer path, a holder that filed g1 and g2 '
+            'answers an ask for g1, and the asker files it and opens a record '
+            'sealed to g1. Mutation-proven: priming only the newer generation '
+            'reddens it at the answer, and priming only g1 reddens only the '
+            'count checked after it',
+        clauses: ['wrote the record that names G1'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_data_path_test.dart',
+        'a read hands the key ring the atSign that wrote the record',
+        proves: 'the provider names the conveyance record\'s writer to the '
+            'ring. Mutation-proven: naming no writer, and naming the key\'s '
+            'owner, each redden it',
+        clauses: ['wrote the record that names G1'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the record is in a namespace it neither holds nor is granted',
+        proves: 'an own record in a namespace the client does not know reads, '
+            'fetches and asks nothing. Mutation-proven: dropping the '
+            'namespace check reddens it with a fetch',
+        clauses: ['by any of those three routes'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_private_fetch_test.dart',
+        'when the record was written by another atSign, then the miss fetches '
+            'and asks nothing',
+        proves: 'a peer\'s record naming a superseded generation reads the '
+            'advertisement and asks nothing. Mutation-proven: treating any '
+            'writer as own reddens it',
+        clauses: ['refused with no fetch and no ask'],
       );
     });
 

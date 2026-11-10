@@ -59,7 +59,8 @@ class PutRequestOptions extends RequestOptions {
 
   /// Overrides the configured crypto provider for this put request.
   ///
-  /// Leave null to use [AtClientPreference.crypto]'s default provider.
+  /// Leave null to use [AtClientPreference.crypto]'s default provider, or,
+  /// with [sealToNamespace] set, the namespace-key provider.
   String? cryptoProviderId;
 
   /// For a put shared with another atSign, the namespace of the recipient's
@@ -67,7 +68,9 @@ class PutRequestOptions extends RequestOptions {
   /// namespace, with no other tried. The key's name must end with it after a
   /// dot. Where the recipient advertises none there, the put is refused, or
   /// falls back to legacy as [AtClientPreference.allowLegacyCryptoFallback]
-  /// allows.
+  /// allows. With no [cryptoProviderId], the put uses the namespace-key
+  /// provider, `symmetricAesGcmCryptoProviderId`, and is refused where this
+  /// client's config does not register it, as at `PqPosture.legacy`.
   ///
   /// Null seals to the most specific namespace key the recipient advertises
   /// for the key's name. A put that is not encrypted, or is to this client's

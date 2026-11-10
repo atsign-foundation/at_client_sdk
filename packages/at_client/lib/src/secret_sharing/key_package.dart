@@ -76,13 +76,20 @@ class PackageKey {
         if (status != KeyEntryStatus.active) 'status': status,
       };
 
+  /// The entry [json] describes, or null when a field is missing or of the
+  /// wrong kind.
   static PackageKey? fromJson(Object? json) {
     if (json is! Map) return null;
     final kid = json['kid'];
     final use = json['use'];
     final alg = json['alg'];
     final pub = json['pub'];
-    if (kid is! String || use is! String || alg is! String || pub is! String) {
+    final status = json['status'];
+    if (kid is! String ||
+        use is! String ||
+        alg is! String ||
+        pub is! String ||
+        (status != null && status is! String)) {
       return null;
     }
     return PackageKey(
@@ -90,7 +97,7 @@ class PackageKey {
       use: use,
       alg: alg,
       pub: pub,
-      status: KeyEntryStatus.fromWire(json['status']),
+      status: KeyEntryStatus.fromWire(status as String?),
     );
   }
 }

@@ -1,10 +1,9 @@
 /// Guards the shape of the PQ doc set, which is a structure rather than a
 /// convention.
 ///
-/// The set is split in two: six **live** files carrying only what is current,
-/// and `detail/` carrying every ruling body and every completed or parked plan
-/// item, so that reading or grepping a live file cannot drag a rejected design
-/// into view.
+/// The set is five **live** files carrying only what is current, and
+/// `detail/` carrying every ruling body, so that reading or grepping a live
+/// file cannot drag a rejected design into view.
 ///
 /// ⚠️ **Only the structural rules are assertable.** Nothing here can tell
 /// whether a paragraph is true, so these rails go red for a broken link or a
@@ -42,7 +41,6 @@ const _liveFiles = <String>[
   'implementation-plan.md',
   'acceptance.md',
   'design.md',
-  'roadmap.md',
   'seal-spec.md',
 ];
 
@@ -50,6 +48,64 @@ const _liveFiles = <String>[
 /// past status rather than a status — a checker that counts the quotation
 /// reports the defect it has just fixed.
 String _withoutCodeSpans(String s) => s.replaceAll(RegExp(r'`[^`]*`'), '');
+
+/// Whether [docs] names the file [fileName] as a whole name.
+///
+/// ⚠️ A bare substring match is not enough: `enroll_test.dart` is the tail of
+/// `pq_native_enroll_test.dart`, so a doc set naming only the second reads as
+/// naming the first. A name counts only where no word character, `.` or `-`
+/// sits right before it or right after it.
+bool _namesFile(String docs, String fileName) =>
+    RegExp('(?<![\\w.-])${RegExp.escape(fileName)}(?![\\w-]|\\.\\w)')
+        .hasMatch(docs);
+
+/// The TODO rows of [plan] that link a `###`/`####` heading the plan does not
+/// have ([unresolved]), and those whose linked section says it is done
+/// ([wrong]).
+///
+/// The heading line itself is checked as well as the first five lines of the
+/// body, because this plan's own sections have declared themselves done in
+/// the heading (`### 14.2 … — DONE`, `### 14.33 CLOSED: …`) with a body whose
+/// first lines carry no marker.
+({List<String> unresolved, List<String> wrong}) _todoRowsNamingDoneSections(
+    String plan) {
+  final todoStart = plan.indexOf('\n## TODO\n') + '\n## TODO\n'.length;
+  expect(todoStart, greaterThan(0), reason: 'the TODO table did not parse');
+  final rest = plan.substring(todoStart);
+  final end = rest.indexOf('\n## ');
+  final todo = end < 0 ? rest : rest.substring(0, end);
+
+  final anchors = RegExp(r'^\| \[[^\]]+\]\(#([\w-]+)\)', multiLine: true)
+      .allMatches(todo)
+      .map((m) => m.group(1)!)
+      .toList();
+  expect(anchors, isNotEmpty,
+      reason: 'no TODO row links a section, so this guard checks nothing '
+          '— the probe that first found 14.17 reported zero rows because '
+          'its range ended on the heading that opened it');
+
+  final headings = [
+    for (final m
+        in RegExp(r'^#{3,4}\s+(.*?)\s*$', multiLine: true).allMatches(plan))
+      (slug: _slug(m.group(1)!), start: m.start),
+  ];
+  final done = RegExp(r'✅|\bDONE\b|\bCOMPLETE\b|\bCLOSED\b');
+  final wrong = <String>[];
+  final unresolved = <String>[];
+  for (final anchor in anchors) {
+    final heading = headings.where((h) => h.slug == anchor).firstOrNull;
+    if (heading == null) {
+      unresolved.add(anchor);
+      continue;
+    }
+    // The heading line and the five lines after it.
+    final section = _withoutCodeSpans(
+        plan.substring(heading.start).split('\n').take(6).join(' '));
+    final hit = done.firstMatch(section);
+    if (hit != null) wrong.add('$anchor: section opens "${hit.group(0)}"');
+  }
+  return (unresolved: unresolved, wrong: wrong);
+}
 
 void main() {
   group('no LINKED heading is duplicated', () {
@@ -61,12 +117,7 @@ void main() {
     // Scoped to slugs something actually LINKS to: a bare duplicate is
     // harmless, and the ledger legitimately repeats sub-headings like
     // "The ruling" under many rulings.
-    for (final file in [
-      ..._liveFiles,
-      'detail/acceptance.md',
-      'detail/decisions.md',
-      'detail/implementation-plan.md',
-    ]) {
+    for (final file in [..._liveFiles, 'detail/decisions.md']) {
       test('$file duplicates no slug that is linked', () {
         final headings = RegExp(r'^#{1,6}\s+(.*?)\s*$', multiLine: true)
             .allMatches(_read(file))
@@ -208,17 +259,15 @@ void main() {
   });
 
   group('the live files stay live', () {
-    test('the detail files exist and hold the bulk', () {
-      for (final f in const ['decisions.md', 'implementation-plan.md']) {
-        final detail = File('${_pq().path}/detail/$f');
-        expect(detail.existsSync(), isTrue,
-            reason: 'detail/$f is where $f\'s history lives; without it the '
-                'live file is not an index, it is a deletion');
-        expect(detail.readAsStringSync().split('\n').length,
-            greaterThan(_read(f).split('\n').length),
-            reason: 'detail/$f is no larger than the live $f. Either the '
-                'split was undone or the detail file was truncated');
-      }
+    test('the ruling bodies exist and hold the bulk', () {
+      final detail = File('${_pq().path}/detail/decisions.md');
+      expect(detail.existsSync(), isTrue,
+          reason: 'detail/decisions.md is where every ruling\'s reasoning '
+              'lives; without it the index is not an index, it is a deletion');
+      expect(detail.readAsStringSync().split('\n').length,
+          greaterThan(_read('decisions.md').split('\n').length),
+          reason: 'detail/decisions.md is no larger than the index. Either '
+              'the split was undone or the bodies were truncated');
     });
   });
 
@@ -330,41 +379,12 @@ void main() {
     // is not evidence of anything, so only "row says owed, body says done" is
     // a failure. On an intended change, move the row — do not soften the body.
     test('no TODO row names a section whose body declares itself done', () {
-      final plan = _read('implementation-plan.md');
-      final detail = _read('detail/implementation-plan.md');
-
-      final todoStart = plan.indexOf('\n## TODO\n') + '\n## TODO\n'.length;
-      expect(todoStart, greaterThan(0), reason: 'the TODO table did not parse');
-      final rest = plan.substring(todoStart);
-      final todo = rest.substring(0, rest.indexOf('\n## '));
-
-      final rows = RegExp(r'^\| \[(14\.\d+)\]', multiLine: true)
-          .allMatches(todo)
-          .map((m) => m.group(1)!)
-          .toList();
-      expect(rows, isNotEmpty,
-          reason: 'no TODO rows parsed, so this guard checks nothing — the '
-              'probe that first found 14.17 reported zero rows because its '
-              'range ended on the heading that opened it');
-
-      final done = RegExp(r'✅|\bDONE\b|\bCOMPLETE\b|\bCLOSED\b');
-      final wrong = <String>[];
-      for (final id in rows) {
-        for (final text in [plan, detail]) {
-          final heading =
-              RegExp('^#{3,4} ${RegExp.escape(id)}[ \n]', multiLine: true)
-                  .firstMatch(text);
-          if (heading == null) continue;
-          final body = _withoutCodeSpans(text
-              .substring(heading.start)
-              .split('\n')
-              .skip(1)
-              .take(5)
-              .join(' '));
-          final hit = done.firstMatch(body);
-          if (hit != null) wrong.add('$id: body opens "${hit.group(0)}"');
-        }
-      }
+      final (:unresolved, :wrong) =
+          _todoRowsNamingDoneSections(_read('implementation-plan.md'));
+      expect(unresolved, isEmpty,
+          reason: 'a TODO row links a section heading the plan does not '
+              'have, so its body cannot be checked:\n  '
+              '${unresolved.join('\n  ')}');
       expect(wrong, isEmpty,
           reason: 'a TODO row points at a section that says it is finished. '
               'DELETE the row — the plan records only what is still owed '
@@ -376,21 +396,39 @@ void main() {
               'because no commit can contain a thing that was never built:'
               '\n  ${wrong.join('\n  ')}');
     });
+
+    test('a section marked done in its heading alone is caught', () {
+      // A section marked done in its heading (`### 14.5 … — DONE`) must be
+      // caught even when the first lines of its body carry no marker.
+      const plan = '# plan\n'
+          '\n'
+          '## TODO\n'
+          '\n'
+          '| Item | What is owed | Blocked on |\n'
+          '| ---- | ------------ | ---------- |\n'
+          '| [14.44](#1444-residuals-from-the-at_chops-pr-review--done) | x | Nothing |\n'
+          '| [14.12](#1412-still-owed) | y | Nothing |\n'
+          '\n'
+          '## PARKED\n'
+          '\n'
+          '### 14.44 Residuals from the at_chops PR review — DONE\n'
+          '\n'
+          "**at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence,**\n"
+          '\n'
+          '### 14.12 Still owed\n'
+          '\n'
+          'Nothing here is finished.\n';
+      final (:unresolved, :wrong) = _todoRowsNamingDoneSections(plan);
+      expect(unresolved, isEmpty);
+      expect(wrong, [
+        '1444-residuals-from-the-at_chops-pr-review--done: '
+            'section opens "DONE"',
+      ]);
+    });
   });
 
   group('the plan and the catalogue agree about what is done', () {
-    /// Every line of both plan files, each entry `<file>\u0000<line>`.
-    ///
-    /// ⚠️ The NUL is written as an ESCAPE, never a raw byte: a literal
-    /// NUL makes the whole file `data` to `file(1)`, so `grep` prints nothing
-    /// and exits 1 while `git grep` still reads it.
-    List<String> planLines() => [
-          for (final f in const [
-            'implementation-plan.md',
-            'detail/implementation-plan.md'
-          ])
-            ..._read(f).split('\n').map((l) => '$f\u0000$l'),
-        ];
+    List<String> planLines() => _read('implementation-plan.md').split('\n');
 
     final ucId = RegExp(ucIdPattern);
 
@@ -422,15 +460,13 @@ void main() {
       expect(status, isNotEmpty, reason: 'the status table did not parse');
 
       final wrong = <String>[];
-      for (final entry in planLines()) {
-        final parts = entry.split('\u0000');
-        final line = parts[1];
+      for (final line in planLines()) {
         if (!RegExp(r'\bDONE\b|✅').hasMatch(line)) continue;
         for (final m in ucId.allMatches(line)) {
           final st = status[m.group(0)] ?? '<no row>';
           if (st != 'PROVEN' && st != 'WITHDRAWN') {
-            wrong.add('${parts[0]}: a DONE row cites ${m.group(0)}, and the '
-                'catalogue says $st');
+            wrong.add('implementation-plan.md: a DONE row cites '
+                '${m.group(0)}, and the catalogue says $st');
           }
         }
       }
@@ -472,12 +508,7 @@ void main() {
 
     test('no doc carries a rule permitting stale prose', () {
       final offences = <String>[];
-      for (final file in [
-        ..._liveFiles,
-        'detail/acceptance.md',
-        'detail/decisions.md',
-        'detail/implementation-plan.md'
-      ]) {
+      for (final file in [..._liveFiles, 'detail/decisions.md']) {
         final text = _read(file);
         for (final entry in banned.entries) {
           for (final m in entry.key.allMatches(text)) {
@@ -586,7 +617,7 @@ void main() {
               'tests went away — fix the walk before believing the green');
 
       final docs = docSet();
-      final unnamed = names.where((n) => !docs.contains(n)).toList()..sort();
+      final unnamed = names.where((n) => !_namesFile(docs, n)).toList()..sort();
       expect(unnamed, isEmpty,
           reason: 'name each of these under docs/projects/pq/ — in the '
               'catalogue row it proves, or the plan entry that built it — so '
@@ -619,7 +650,7 @@ void main() {
 
       final docs = docSet();
       final unnamed = cited
-          .where((p) => !docs.contains(p.split('/').last))
+          .where((p) => !_namesFile(docs, p.split('/').last))
           .toList()
         ..sort();
 
@@ -628,6 +659,18 @@ void main() {
               'document names, is work the next reader rebuilds — and the '
               'burn-down cannot be audited without being able to find it. '
               'Name each under docs/projects/pq/:\n${unnamed.join('\n')}');
+    });
+
+    test('a file name counts only as a whole name', () {
+      // A file name matches only as a whole name, so a shorter name is
+      // not matched by an unrelated file name that ends with it.
+      const docs = 'see `tests/x/test/pq_native_enroll_test.dart`.';
+      expect(_namesFile(docs, 'pq_native_enroll_test.dart'), isTrue);
+      expect(_namesFile(docs, 'enroll_test.dart'), isFalse);
+      expect(_namesFile('in lifecycle/enroll_test.dart.', 'enroll_test.dart'),
+          isTrue);
+      expect(_namesFile('`enroll_test.dart`', 'enroll_test.dart'), isTrue);
+      expect(_namesFile('enroll_test.dart.bak', 'enroll_test.dart'), isFalse);
     });
   });
 }

@@ -525,9 +525,9 @@ void main() {
     });
 
     test('but an explicit value may not be WEAKER than the posture', () {
-      // A posture is a floor: an app that must not move names
-      // PqPosture.legacy, rather than keeping a stronger posture and weakening
-      // an axis it is made of.
+      // A posture is a floor: an app that wants less names PqPosture.legacy,
+      // rather than keeping a stronger posture and weakening an axis it is
+      // made of.
       expect(
           () => AtClientPreference(
               posture: PqPosture.pqReady,

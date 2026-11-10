@@ -9,6 +9,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/pre_publish_conveyance.dart'
     show PrePublishConveyance;
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
+    show NskeySeeding;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -500,6 +502,17 @@ void main() {
         .singleWhere((k) => k.contains('.${sharerB.kpid}.__ssenv.'));
 
     test(
+        "Every envelope at_client signs names its signer's Atsign: a secret "
+        'envelope through AtClientSecretSharing', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
+
+      final envelope =
+          SignedEnvelope.fromJson(jsonDecode(remoteData[sentKey()]!) as Map);
+      expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign});
+      expect(envelope.signerAtSign, atSign);
+    });
+
+    test(
         'found under a namespace other than the one it was sent through, it is '
         'skipped and retained', () async {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
@@ -594,6 +607,35 @@ void main() {
       expect(await sharerB.sweepOnce(), 1);
     });
 
+    test(
+        'sent through a namespace holding an escape, a U+202E and a long tail, '
+        'the warning shows it escaped and cut short', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage,
+          'my-app\u001b\u202e\u009b${'x' * 3000}', {'n': 1});
+      final sent = sentKey();
+      logs.records.clear();
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      final quoted = [
+        for (final warning in logs.at('WARNING'))
+          if (warning.contains(sent.split('.__ssenv.').first) &&
+              warning.contains(', which is not a namespace'))
+            warning
+                .split(' names ')
+                .last
+                .split(', which is not a namespace')
+                .first
+      ];
+      expect(quoted, hasLength(1), reason: 'the premise: it is refused');
+      expect(
+          quoted.single.runes
+              .where((r) => r == 0x1b || r == 0x202e || r == 0x9b),
+          isEmpty,
+          reason: quoted.single);
+      expect(quoted.single.length, lessThan(200));
+    });
+
     test('a version 1 envelope is refused at parse', () async {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
       final json = Map<String, Object?>.from(
@@ -649,11 +691,59 @@ void main() {
           warningsAbout(keyName),
           [
             contains('signer enrollment enroll-c does not match claimed sender '
-                'enrollment enroll-a')
+                'enrollment "enroll-a"')
           ],
           reason: 'C sealed the body under the binding that names A, so only '
               'the check of signer against sender refuses it');
       expect(remoteData.containsKey(keyName), isTrue);
+    });
+
+    test(
+        'when its kpid, its claimed sender or the namespace it sits in holds an '
+        'escape, a U+202E and a long tail, then each warning shows the value '
+        'escaped and cut short', () async {
+      final sharerC = await enrolledSharerC();
+      final toB = sharerB.myKeyPackage.bestKeyFor(SecretSharingAlgos.keyAlgos)!;
+      final tail = '\u001b\u202e\u009b${'x' * 3000}';
+      Future<void> place(String keyName,
+          {String? toKpid, String fromEnrollmentId = 'enroll-c'}) async {
+        remoteData[keyName] = await sharerC.wrapAndSignAndJsonEncode(
+            SecretEnvelope(
+              fromKpid: sharerC.kpid,
+              fromEnrollmentId: fromEnrollmentId,
+              toKpid: toKpid ?? toB.kid,
+              appNamespace: 'myapp',
+              suite: SecretSharingAlgos.xWingRfc9180,
+              kid: toB.kid,
+              sealed: base64Encode(Uint8List(64)),
+            ).toJson(),
+            type: EnvelopeType.secretEnvelope);
+      }
+
+      await place('kpid.0.${toB.kid}.__ssenv.myapp@alice', toKpid: tail);
+      await place('sender.0.${toB.kid}.__ssenv.myapp@alice',
+          fromEnrollmentId: tail);
+      await place('space.0.${toB.kid}.__ssenv.my_app$tail@alice');
+      logs.records.clear();
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      final quoted = {
+        for (final (prefix, before, after) in [
+          ('kpid.0.', ' is addressed to ', ', not to any key'),
+          ('sender.0.', 'claimed sender enrollment ', '; skipping'),
+          ('space.0.', ' sits in ', ' but its sender'),
+        ])
+          prefix: [
+            for (final warning in logs.at('WARNING'))
+              if (warning.contains(prefix) && warning.contains(before))
+                warning.split(before).last.split(after).first
+          ]
+      };
+      for (final MapEntry(key: prefix, value: shown) in quoted.entries) {
+        expect(shown, hasLength(1), reason: 'the premise: $prefix is refused');
+        expect(shown.single.length, lessThan(200), reason: prefix);
+      }
     });
   });
 
@@ -996,7 +1086,7 @@ void main() {
           warningsAbout(keyName),
           [
             contains(
-                'is addressed to some-other-kpid, not to any key this client '
+                'is addressed to "some-other-kpid", not to any key this client '
                 'holds')
           ],
           reason: 'refused by the addressee check, not by anything before it');
@@ -1098,7 +1188,8 @@ void main() {
       expect(
           warningsAbout(keyName),
           [
-            contains('is addressed to a-kpid-nobody-here-holds, not to any key '
+            contains(
+                'is addressed to "a-kpid-nobody-here-holds", not to any key '
                 'this client holds')
           ],
           reason: 'refused by the addressee check, not by anything before it');
@@ -1685,6 +1776,86 @@ void main() {
           'KEYBYTES');
     });
 
+    test(
+        'a holder that filed a superseded generation answers an ask for it, '
+        'and the asker opens a record sealed to it', () async {
+      const namespace = 'app_1.my_apps';
+      directory.authorize(namespace, 'enroll-a');
+      directory.authorize(namespace, 'enroll-b');
+      final g1 = await XWingKeyPair.generate();
+      final g2 = await XWingKeyPair.generate();
+      final g1Kid = nskeyKidOf(g1.publicKeyBytes);
+
+      Future<NskeyPrivateFiling> filing(List<XWingKeyPair> held) async {
+        final io = InMemoryAtKeysIo();
+        await io.write(atSign, AtKeys());
+        final filing = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+        for (final pair in held) {
+          await filing.store(
+              namespace: namespace,
+              nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+              seed: NskeySeed(pair.privateKeyBytes));
+        }
+        return filing;
+      }
+
+      // B, the holder, filed g1 and then its successor g2, and its start
+      // primes what it answers from what it filed.
+      final holding = await filing([g1, g2]);
+      final primed = await NskeySeeding(
+              atClient: sharerB.atClient,
+              ring: PublishedNskeyKeyRing(sharerB.atClient,
+                  privateFiling: holding),
+              privateFiling: holding)
+          .hydrateStoreFromFiling(sharerB);
+
+      // A re-enrolled after the rotation, so it holds only g2.
+      final asking = await filing([g2]);
+      Future<void>? answered;
+      final ring = PublishedNskeyKeyRing(sharerA.atClient,
+          privateFiling: asking,
+          fetchConveyance: () async {},
+          requestConveyance: (ns, name) => answered =
+              requestAndFileNskeyPrivate(sharerA, asking, ns, name,
+                  logger: AtSignLogger('asker'),
+                  timeout: const Duration(seconds: 5)));
+
+      // A record @alice wrote before the rotation, sealed to g1.
+      final writer = NskeyProvider(
+          keyRing: InMemoryNskeyKeyRing()
+            ..seedKeypair(atSign, namespace,
+                publicKey: g1.publicKeyBytes, privateKey: g1.privateKeyBytes),
+          cache: ContentKeyCache());
+      final ck = ContentKey(Uint8List.fromList(List.generate(32, (i) => i)));
+      final record = AtKey()
+        ..key = '${ck.ckKid}.__ck'
+        ..namespace = namespace
+        ..sharedBy = atSign
+        ..metadata = Metadata();
+      final context = CryptoContext(atClient: sharerA.atClient);
+      final sealed = await writer.encrypt(context, record, ck.toBase64());
+      expect(record.metadata.appMetadata!.additional!['nskeyKid'], g1Kid);
+
+      final reader = NskeyProvider(keyRing: ring, cache: ContentKeyCache());
+      await expectLater(reader.decrypt(context, record, sealed),
+          throwsA(isA<NskeyPrivateUnavailableException>()),
+          reason: 'A holds no private for g1 yet, and the miss asks for it');
+      expect(answered, isNotNull, reason: 'the miss asked');
+      await pumpEventQueue();
+
+      expect(await sharerB.sweepOnce(), 1,
+          reason: 'B takes the request and answers it');
+      expect(await sharerA.sweepOnce(), 1, reason: 'A takes the answer');
+      await answered;
+
+      expect(await reader.decrypt(context, record, sealed), ck.toBase64(),
+          reason: 'A filed the private B answered with, and the record '
+              'sealed to the superseded generation opens');
+      expect(primed, 2,
+          reason: 'checked last, so a holder that primes one generation fails '
+              'above when that one is g1 and only here when it is g2');
+    });
+
     test('a request whose requestId is not id-shaped is answered unsolicited',
         () async {
       await sharerB.secretStore.putSecret(
@@ -2123,10 +2294,11 @@ void main() {
                 'here so the two results come from one run');
         expect(
             child.secretStore.getSecret('myapp', successor)!.value, 'SUCCESSOR',
-            reason: 'and the descendant is handed the generation the '
+            reason: 'and the successor the parent self-enrolled, which a '
+                'revocation does not cascade to, is handed the generation the '
                 'revocation was meant to cut off: excluding the parent from a '
-                'rotation buys nothing while what it spawned can pull the '
-                'successor from any holder that never heard of either');
+                'rotation does not exclude what it self-enrolled, which can '
+                'pull the successor from any holder that never heard of either');
       });
     });
 

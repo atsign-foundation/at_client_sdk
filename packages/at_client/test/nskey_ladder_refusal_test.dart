@@ -260,7 +260,8 @@ class _WidenedRing implements NskeyKeyRing {
 
   @override
   Future<NskeyDecapsulationKey?> privateHalf(
-      String owner, String namespace, String nskeyKid) async {
+      String owner, String namespace, String nskeyKid,
+      {String? writtenBy}) async {
     final secret = _privates[nskeyKid];
     return secret == null ? null : NskeyDecapsulationKey(secret);
   }

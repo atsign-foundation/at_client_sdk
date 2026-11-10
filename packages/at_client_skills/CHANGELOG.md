@@ -13,6 +13,27 @@
   (`references/15`).
 - `resumeEnrollment` refusing several matching requests is in the error
   table, with what picks one (`references/15`).
+- A cancelled wait throws once the pending keys are gone (`references/15`).
+- A collection write whose own copy fails writes no recipient's copy
+  (`references/02`).
+- A write waits up to 30 seconds in all for start-up to ask for its namespace
+  key's private and for the answer (`SKILL.md`).
+- A client never runs below its posture floor, set by its keyfile's keys
+  (`SKILL.md`).
+- Sync's fallback is a 30-second timer; `AtClientPreference.syncIntervalMins`,
+  which set nothing, is listed as removed in 4.0 (`SKILL.md`; `references/11`,
+  `15`).
+- A notification a subscription drops, one it cannot decrypt included, is
+  logged at warning and emitted on `droppedEvents` (`SKILL.md` §13).
+- A `create` whose share fails after its own copy is retried with
+  `updateSharedWith(e.item!, ...)`, catching `CollectionOpException<T>`
+  (`references/02`).
+- Keys a denial, a cancel or an expiry left with no credential are refused
+  by `open` with `AtNoCredentialException` (`SKILL.md`; `references/15`).
+- A second process on a Hive store another holds is refused with
+  `AtStorageInUseException` (`references/14`, `15`).
+- An item a collection cannot read yet is a `CItemReadException`, which
+  `.handleError` can test for (`references/02`, `references/07`).
 - A program serving a mixed fleet writes post-quantum with
   `PqPosture.pqActive.copyWith(disallowLegacyEncryption: false)` and
   `allowLegacyCryptoFallback`, requiring each peer's namespace (`SKILL.md`
@@ -20,6 +41,8 @@
 - A share goes to the most specific namespace key the recipient advertises;
   `sealToNamespace` requires one namespace, and `canSealTo` asks first
   (`SKILL.md`).
+- A `pqReady` program sends with `sealToNamespace` alone, which selects the
+  namespace-key provider (`SKILL.md`).
 - A new app names `PqPosture.pqActive`, as every snippet now does, and an
   app built on 3.x moves to it through `pqReady` in two releases; a table
   says what each posture writes, reads and needs (`SKILL.md` §11; the

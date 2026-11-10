@@ -862,15 +862,17 @@ void main() {
       // descendant scan returns the orphaned reply.
       // alive-at-mid-namespace scan returns no comments.
       // After the #1942 regex tightening, namespace dots are escaped
-      // and every scan is prefixed with `^(?!local:)(?:[^:]*:){0,2}`
+      // and every scan is prefixed with
+      // `^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}`
       // (up to two wrapper segments so received `cached:@self:` keys
       // scan — #2032).
       final escapedParentNs = parentNs.replaceAll('.', '\\.');
-      final directRegex = '^(?!local:)(?:[^:]*:){0,2}[^.]+\\.$escapedParentNs@';
+      final directRegex =
+          '^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}[^.]+\\.$escapedParentNs@';
       // Concrete owner suffix is end-anchored (`@self$`) so it can't
       // prefix-match a longer atSign — see _ownerAnchor.
       final descendantRegex =
-          '^(?!local:)(?:[^:]*:){0,2}.+\\.$escapedParentNs$selfAtSignStr\$';
+          '^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}.+\\.$escapedParentNs$selfAtSignStr\$';
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((inv) async {
         final regex = inv.namedArguments[#regex] as String;

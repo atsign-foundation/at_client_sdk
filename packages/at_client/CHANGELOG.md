@@ -1,3 +1,61 @@
+## 4.1.0
+
+- feat: every envelope at_client signs names its signer's Atsign, as `iss`
+  in its protected header. at_client's own verifiers, including
+  `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
+  the one it is verified for, and accept one naming none, as at_client 4.0.0
+  signed them, until a later release re-signs what an enrollment publishes.
+  at_client 4.0.0 verifies the new envelopes unchanged.
+- feat: experimental `verifySignedEnvelope` checks an application envelope
+  against an `_apsk` value the caller supplies as a `PublishedApsk`, with no
+  `AtClient`, network or clock, and returns `EnvelopeVerified`, naming the
+  key, algorithm and key status that verified, or `EnvelopeRefused` with the
+  reason. It refuses an envelope naming another Atsign, and one naming no
+  enrollment or another. One naming no Atsign, as at_client 4.0.0 signed
+  them, verifies with `issuerConfirmed` false, and `minimumAlgorithm` refuses
+  one signed only under a weaker algorithm. `SignedEnvelope.parse` refuses
+  envelope text over a length in UTF-8 bytes the caller names before
+  decoding it. Every name these take reaches a program through
+  `at_client.dart`, and so through at_client_cli and at_client_flutter.
+- feat: experimental `selectEnvelopeKey` makes every check
+  `verifySignedEnvelope` makes except the signature, without the payload,
+  and returns the key and status it would use; `fetchPublishedApsk` returns
+  an enrollment's `_apsk` as a `PublishedApsk`; and
+  `package:at_client/testing.dart` offers `TestEnvelopeSigner`, which signs
+  offline and gives the `PublishedApsk` that verifies it.
+- fix: an `_apsk` value that cannot be read is refused with
+  `AtSigningVerificationException` on every verification path, rather than
+  escaping as a `FormatException`, so a key package whose enrollment's
+  `_apsk` cannot be read is reported rejected.
+- fix: every verification path refuses an `_apsk` RSA key whose public
+  exponent is not a positive odd number above 2^16 and below 2^256, and
+  `SignedEnvelope.fromJson` refuses a protected header whose `alg`, `typ`,
+  `kid`, `iss` or `enid` is not a string, or whose `v` is not an integer.
+- fix: an `_apsk`, signing-root or key package entry whose `status` is not a
+  string is skipped, as one whose other fields are of the wrong kind is.
+- fix: a refusal that quotes an envelope's enrollment id or namespace, a
+  record's key id or Atsign, or the `_apsk` value `verifyEnvelopeSignature`
+  fetched shows it escaped and cut to 80 characters.
+- chore: requires at_auth 4.1.0.
+- fix: each listener on a notification subscription is released when it
+  cancels.
+- fix: a change one subscriber makes to a notification, its metadata
+  included, is no longer seen by another subscriber.
+- fix: notifications waiting for their key are no longer dropped sooner
+  because several listeners want them, and one given up because its
+  listener cancelled is reported on `droppedEvents`.
+- fix: `Enrollments.requests` reports only notifications from the client's
+  own atSign.
+- fix: the legacy encryption and decryption paths name the underlying
+  error's type in their `AtEncryptionException` and `AtDecryptionException`
+  rather than quoting its text.
+- feat: notifications are delivered once per (from, id) compound key, even
+  after a reconnect (latest 1024 ids capped per millisecond watermark).
+  Conflicting duplicate IDs trigger warnings and are reported on
+  `droppedEvents`.
+- feat: `buildAtClient` takes an optional `notificationLookUps` factory for the
+  monitor's connection.
+
 ## 4.0.0
 
 - feat: the first release with post-quantum cryptography, chosen by
@@ -5,21 +63,60 @@
   ML-DSA-65 signing, X-Wing and ML-KEM-1024 key establishment,
   per-namespace keys, a signing root, secret conveyance between an atSign's
   enrollments, and key rotation. The default posture is still
-  `PqPosture.legacy`, which runs none of it.
+  `PqPosture.legacy`, which runs none of it unless a keyfile's own
+  post-quantum key material raises the client to its floor.
+- feat: a client never runs below its posture floor: a keyfile holding a
+  namespace key's private sets `pqReady`, and an ML-DSA-65 data signing key
+  sets `pqActive`; a client configured lower logs a warning and is raised to
+  the floor, on its own copy of the preference, which `getPreferences()` and
+  `setPreferences()` reach. A raised client seeds no namespace keys and mints
+  no signing root that its configured posture would not.
+- feat: `NotificationService.droppedEvents` reports each notification a
+  client gives up on, such as one it cannot decrypt, with the reason it
+  logs at warning. A client whose posture reads no post-quantum data says
+  so when it drops one sealed post-quantum, that it is lost, and to
+  configure `pqReady` or above for later ones.
+- feat: `sealToNamespace` with no `cryptoProviderId` seals with the
+  namespace-key provider, so a `pqReady` program no longer names it; a
+  client whose config lacks it, as at `PqPosture.legacy`, is refused with
+  an error naming its posture or config.
+- feat: when `create`'s own copy is written and a recipient's is not, its
+  `CollectionOpException<T>` carries the item written as `item`, so the
+  share is retried with `updateSharedWith(e.item!, ...)` rather than a
+  second `create`.
+- fix: a collection item keeps its own copy of the recipient set it is given,
+  so a share that fails leaves the app's set as it was, and
+  `updateSharedWith(item, item.sharedWith)` no longer empties the item's set.
+- feat: `Atsign.open` refuses keys a denial, a cancel or an expiry left
+  with no credential at once, with `AtNoCredentialException` saying to
+  enroll again, rather than failing a minute later as unreachable.
+- feat: a second process opening a Hive store another process holds is
+  refused with `AtStorageInUseException` naming the store's location,
+  rather than with Hive's raw lock failure.
+- fix: a collection record this device cannot read yet fails `getItems()`
+  with a `CItemReadException` naming the record and the error its read
+  failed with, rather than a string; `getItemsAsStream()` with an `onError`
+  handler lists the rest.
 - note: an envelope's signature is verified with the strongest algorithm the
   envelope and its signer's `_apsk` both carry, against the key the signature
   names, and a key the `_apsk` lists as `retired` still verifies, so what an
   enrollment signed before a rotation stays valid. A later release re-signs
   what an enrollment publishes under its active key, and then withdraws the
   retired one.
+- fix: a client whose data signing set names only algorithms weaker than a
+  client data signing key its enrollment holds keeps signing with that key
+  and mints no weaker one, so its keyfile and `_apsk` stay as they were.
 - feat: a namespace key's private is conveyed, before the key is published,
   to every enrollment listed for its namespace that has a key package. An
   enrollment the conveyance misses first looks for an envelope addressed to
   it, then asks the others.
+- fix: a device that re-enrolled itself after a namespace key was rotated
+  reads what its atSign wrote before the rotation, once an enrollment still
+  holding the older key is online to answer its ask.
 - feat: `PendingEnrollment.cancel()` ends the wait `client` or
-  `awaitApproval` is in, which throws `AtEnrollmentCancelledException`, and
-  removes the enrollment's pending keys; it throws when the key store cannot,
-  and a later call tries again. The request stays on the atServer until the
+  `awaitApproval` is in, which throws `AtEnrollmentCancelledException` once
+  the enrollment's pending keys are removed; `cancel()` throws when the key
+  store cannot remove them, and a later call tries again. The request stays on the atServer until the
   atSign's manager decides it. A cancelled request cannot be resumed, even
   from the copy a file store keeps beside its keyfile; enroll again.
 - feat: `PendingEnrollment.stop()` ends the wait and keeps the request, which
@@ -76,11 +173,19 @@
   exchange before sending it, and a `PqPosture` refuses `rsa2048`
   authentication with the pq key exchange, or seeding namespace keys without
   it. Each refusal names both settings.
+- fix: a collection's items are the records its atSign writes and the shares
+  addressed to it; a public record in its namespace is never one.
+- fix: a collection item whose own copy cannot be written is not shared
+  either, so no recipient holds an item its owner cannot list; the
+  `CollectionOpException` lists each recipient's copy as `OpNotAttempted`.
 - fix: at `pqActive`, a collection in a dotted namespace such as
   `todos.demos` writes and shares its records.
 - feat: at `pqActive`, a write to the client's own atSign made right after it
   opens waits up to 30 seconds for the client to publish its namespace key,
   instead of failing.
+- feat: a write made while the client's start-up is yet to ask, or is
+  asking, the atSign's other enrollments for its namespace key's private
+  waits up to 30 seconds in all for the answer, instead of failing at once.
 - feat: at `pqActive`, a share is sealed to the most specific namespace key
   the recipient advertises for the key's whole name, and no longer waits for
   the writer's start-up.
@@ -242,6 +347,11 @@
   `useAtChops`, `signingAlgoType` and `hashingAlgoType` are removed. A client
   is given its storage, and signs with the keys in its `AtKeysIo`, which name
   the algorithm.
+- breaking: `at_client.dart` no longer exports `LocalSecondary` or
+  `RemoteSecondary`, which an app should not need; `getLocalSecondary()`
+  and `getRemoteSecondary()` remain, not for application use.
+- breaking: `AtClientPreference.syncIntervalMins` is removed; it set nothing,
+  and sync's fallback timer runs every 30 seconds.
 - breaking: `RemoteSecondary`'s `signingAlgoType` parameter and
   `PutRequestOptions.storeSharedKeyEncryptedMetadata`, which had no effect,
   are removed.
@@ -710,7 +820,7 @@ And some tech debt cleanup
 
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
-  `AtClientPreference.Atsign ProtocolEmitted` and change its default value
+  `AtClientPreference.atProtocolEmitted` and change its default value
   from 1.5.0 to 2.0.0
 
 ## 3.5.3

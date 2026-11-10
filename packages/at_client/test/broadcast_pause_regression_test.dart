@@ -4,9 +4,8 @@
 // Contract under test: a consumer-side pause does NOT propagate to
 // the upstream broadcast subscription returned by
 // `notificationService.subscribe(...)`. Propagating the pause would
-// back-pressure every other subscriber on the same broadcast (the
-// underlying controller is cached per regex) and would leak the
-// upstream-pause as a publicly-observable signal.
+// back-pressure every other listener on the same broadcast and would
+// expose the upstream pause as a publicly-observable signal.
 //
 // How that contract is enforced:
 //   - `subscribeFiltered`: the downstream consumer's pause only

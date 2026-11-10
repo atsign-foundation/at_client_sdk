@@ -357,9 +357,9 @@ class SyncServiceImpl implements SyncService {
     try {
       final inSync = await _isInSync(syncRequest, forceFresh: anAppIsWaiting);
       if (isStopped) {
-        // NOTE: stop() landed while _isInSync was parked on its network read.
-        // Anything this run did from here would be sync activity after stop()
-        // returned.
+        // NOTE: stop() can land after _isInSync's own check, while it reads
+        // local storage. Anything this run did from here would be sync
+        // activity after stop() returned.
         return;
       }
       if (inSync) {

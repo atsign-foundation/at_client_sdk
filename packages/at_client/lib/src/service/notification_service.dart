@@ -4,6 +4,11 @@ import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:uuid/uuid.dart';
 
+/// A notification [NotificationService.droppedEvents] reports as given up on:
+/// its key, empty when the frame could not be parsed into one, and the reason
+/// logged for it.
+typedef DroppedNotification = ({String key, String reason});
+
 abstract class NotificationService {
   /// Our atSign
   Atsign get atSign;
@@ -14,8 +19,13 @@ abstract class NotificationService {
   /// - When [shouldDecrypt] is true, then [AtNotification.value] is decrypted
   /// (if it was encrypted). [shouldDecrypt] defaults to false in order to
   /// preserve backwards compatibility.
-  /// - Calls with the same [regex] and [shouldDecrypt] share one subscription;
-  /// a call with the same [regex] and the other [shouldDecrypt] gets its own.
+  /// - Calls with the same [regex] and [shouldDecrypt] return streams that
+  /// compare equal.
+  /// - Each listener is a subscription of its own, with its own copy of each
+  /// notification; subscriptions asking for the same decryption share one
+  /// decryption of it.
+  /// - A listener's subscription is held until it cancels. Any notification it
+  /// was still waiting to decrypt is then reported on [droppedEvents].
   /// - when [AtClientPreference.monitorAutoStart] is true, the notifications listener
   /// will be started either the first time that [subscribe] is called by the
   /// application code, or 30 seconds after creation if there have been no
@@ -24,6 +34,13 @@ abstract class NotificationService {
   /// will not be started until explicitly requested to do so by the
   /// application, via [startListening]
   Stream<AtNotification> subscribe({String? regex, bool shouldDecrypt});
+
+  /// Every notification this service gives up on without delivering it, such
+  /// as one this client cannot decrypt, with the reason it logs at `warning`.
+  ///
+  /// A dropped notification is otherwise indistinguishable to a subscriber
+  /// from one that was never sent. Broadcast, and it does not replay.
+  Stream<DroppedNotification> get droppedEvents;
 
   /// Stops all subscriptions on the current instance. By default
   /// will also stop listening for notifications from the atServer. If you
