@@ -26,4 +26,8 @@ List of steps to run the examples for checking apkam enrollment
 6. Authenticate using the enrolled keys file<br>
     - 6.1 run: `dart example/bin/apkam_examples/apkam_authenticate.dart -a <atsign> -k <path_of_keys_file_from_#5.1>`
     - Note: this keys file is different from the keys file generated in Step#1. This new file only has access to the data that is allowed to access from this enrollment_id
-       
+
+## at_talk
+
+- `bin/at_talk.dart` is a chat CLI that talks to another atSign over notifications; it pairs with the browser page `web/talk.html` in at_client_wasm.
+- Run-book: [demo run-book](../../../docs/projects/wasm/at-talk-demo.md)
