@@ -135,6 +135,28 @@ void main() {
           verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign),
           throwsA(isA<AtSigningVerificationException>()));
     });
+
+    test(
+        'a refusal quotes the fetched _apsk escaped and cut short, whatever '
+        'the signer published', () async {
+      final envelope = await signerA.wrapAndSign({'a': 1});
+      stubApskGet(atClientB, '\u001b\u202e${'x' * 300000}');
+
+      Object? thrown;
+      try {
+        await verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown, isA<AtSigningVerificationException>());
+      final message = (thrown as AtSigningVerificationException).message;
+      expect(message.runes.where((r) => r < 0x20 || r == 0x7f || r == 0x202e),
+          isEmpty,
+          reason: message);
+      expect(message, contains(r'"\u001b\u202e'));
+      expect(message.length, lessThan(400), reason: message);
+    });
   });
 
   group('a key the atServer moved', () {

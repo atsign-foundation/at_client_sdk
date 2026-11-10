@@ -10,7 +10,9 @@ for atKeys, and Flutter-specific extensions — so a new Flutter app can
 go from "user has an atSign" to "`AtClient` in hand" with a few widget
 calls. One import covers an app:
 `package:at_client_flutter/at_client_flutter.dart` re-exports
-`at_client`, and nothing here asks an app to import `at_auth`.
+`at_client`, and nothing here asks an app to import `at_auth`. Import only
+that barrel, and do not add at_client to the app's pubspec. A test may also
+import `package:at_client_flutter/testing.dart`, for `TestEnvelopeSigner`.
 
 Supports mobile, desktop, and IoT targets via Flutter. **Flutter
 web is not supported** — atSign onboarding and key handling rely
@@ -29,6 +31,7 @@ implementations today.
 | Manage enrollments               | `client.enrollments` — list, approve, deny, revoke, passcodes (from `at_client`)                       |
 | Keychain read / write / delete   | `KeychainStorage` ([`lib/src/keychain/keychain_storage.dart`](lib/src/keychain/keychain_storage.dart)) |
 | Flutter helpers on core types    | `import 'package:at_client_flutter/extensions.dart';`                                                  |
+| Verify a signed envelope offline | `verifySignedEnvelope(envelope, signer: publishedApsk)` → `EnvelopeVerified` or `EnvelopeRefused` (experimental) |
 
 ## Examples
 

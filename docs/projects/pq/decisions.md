@@ -220,6 +220,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [160] | A write made before start-up has seeded waits for it                                         | 2026-11-01 | AMENDED 2026-11-02 |
 | [161] | A share is sealed to the most specific key its recipient advertises                          | 2026-11-02 | AMENDED 2026-11-02 |
 | [162] | The 2026-11-07 plan review settles nine open questions                                       | 2026-11-07 | AMENDED 2026-11-09 |
+| [163] | An envelope names its signer's Atsign, and verifies offline                                  | 2026-11-07 | LIVE               |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -384,3 +385,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [160]: detail/decisions.md#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01
 [161]: detail/decisions.md#161-a-share-is-sealed-to-the-most-specific-key-its-recipient-advertises-2026-11-02
 [162]: detail/decisions.md#162-the-2026-11-07-plan-review-settles-nine-open-questions-2026-11-07
+[163]: detail/decisions.md#163-an-envelope-names-its-signers-atsign-and-verifies-offline-2026-11-07

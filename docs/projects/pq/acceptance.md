@@ -3834,6 +3834,10 @@ is where its missing lever lives.
 
 ### 17.8 UC-G2.8 — A verifier resolves the algorithm by name, then the key by `kid`
 
+The signer's Atsign in the header, `iss`, and the offline verifier are
+specified in `features/at_client/envelope_signer_atsign.feature` and
+`features/at_client/envelope_verification.feature`.
+
 - **Given:** an `_apsk` advertising more than one key under the algorithm an
   envelope is signed with — the ordinary state of any enrollment that has ever
   rotated its signing key.
@@ -3854,10 +3858,8 @@ is where its missing lever lives.
     names the key, no released verifier holding the old shape;
   - **a header claiming a version this build does not know is refused**, rather
     than read as a shape it may not be — the mismatch is a refusal, not a
-    tolerated difference. `envelopeVersion` stays at **1** across the
-    key-identifier change, because nothing outside this tree holds the old header:
-    there is no verifier for a bump to strand, and none for an unbumped change to
-    confuse: published `at_client` 3.14.0 carries no `lib/src/signing` at all;
+    tolerated difference. `envelopeVersion` is **1**, and at_client 4.0.0
+    verifies a header carrying `iss`;
   - a signature naming a key the advertisement does not carry is **refused,
     naming that key** — a better diagnosis than a count, which cannot
     distinguish a wrong key from a bad signature. There is no candidate walk to
@@ -3884,7 +3886,9 @@ is where its missing lever lives.
     ⚠️ **Three absences are the reason the verifier cannot decline**, rather
     than behaviours of their own, which is why they are not clauses. There
     is **no minimum-algorithm check, no signature-count check, and no
-    accepted-algorithms field for signatures anywhere in `AtClientPreference`** —
+    accepted-algorithms field for signatures anywhere in `AtClientPreference`**
+    (the one floor is a caller's: `verifySignedEnvelope`'s `minimumAlgorithm`,
+    for the application envelopes it verifies offline) —
     asserted by `architecture_guard_test.dart`'s *the verifier has no accept
     lever for signatures*, which reads the source rather than the runtime,
     because the absence of a code path is not something a run can witness. That

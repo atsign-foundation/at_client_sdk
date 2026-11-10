@@ -789,6 +789,7 @@ void main() {
       // _apsk catches it.
       final d = await registered('enroll-d');
       final forged = signEnvelope(d.myKeyPackage.toJson(),
+          atSign: atSign,
           keys: [(await d.signingKeys).first],
           enrollmentId: 'enroll-b',
           type: EnvelopeType.keyPackage);
@@ -870,6 +871,7 @@ void main() {
         record(
             'enroll-future',
             signEnvelope({'shape': 'from a later version'},
+                atSign: atSign,
                 keys: [(await future.signingKeys).first],
                 enrollmentId: 'enroll-future',
                 type: EnvelopeType.keyPackage)),
@@ -913,6 +915,7 @@ void main() {
         record(
             'enroll-b',
             signEnvelope(b.myKeyPackage.toJson(),
+                atSign: atSign,
                 keys: [(await b.signingKeys).first],
                 enrollmentId: null,
                 type: EnvelopeType.keyPackage)),
@@ -951,6 +954,7 @@ void main() {
       // NOTE: built through the raw JSON because the type refuses this at
       // parse; the property under test is one layer down.
       final signed = signEnvelope(b.myKeyPackage.toJson(),
+          atSign: atSign,
           keys: [(await b.signingKeys).first],
           enrollmentId: 'enroll-b',
           type: EnvelopeType.keyPackage);

@@ -120,6 +120,7 @@ void main() {
       final key = (await record(f.sweeper, enrolleeId)).keys.single;
       final chainLink = PqSigningChain.signChainLink(
           PqSigningChain.linkPayload(enrolleeId, key),
+          signerAtSign: atSign,
           key: parentKey,
           signerEnrollmentId: 'parent-1');
       await PqSigningChain(parent).writeLinks(enrolleeId, {
