@@ -72,7 +72,7 @@ class NotificationServiceImpl extends NotificationService {
 
   /// The replay start, resolved from the policy on the first connect and then
   /// kept for the life of this service.
-  int? _replayFrom;
+  Future<int>? _replayFrom;
 
   /// The epoch millis of the latest notification this service received.
   int? _lastReceivedMillis;
@@ -629,9 +629,9 @@ class NotificationServiceImpl extends NotificationService {
   /// have sent notifications whose replies have arrived.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
-    _replayFrom ??=
-        await _resolveReplayFrom(atClient.getPreferences()!.notificationReplay);
-    return max(_replayFrom!, _lastReceivedMillis ?? 0);
+    final replayFrom = await (_replayFrom ??=
+        _resolveReplayFrom(atClient.getPreferences()!.notificationReplay));
+    return max(replayFrom, _lastReceivedMillis ?? 0);
   }
 
   /// The replay start [policy] resolves to. Reads and seeds the store only

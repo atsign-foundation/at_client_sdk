@@ -2485,6 +2485,31 @@ void main() {
           reason: 'resolved once per service, so a reconnect during an outage '
               'does not move the start forward and skip the gap');
     });
+
+    test('overlapping calls resolve the window once and seed the store once',
+        () async {
+      await start(const NotificationReplay.window());
+      // Reads that yield, so the two calls overlap in the store.
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async {
+        await Future<void>.delayed(Duration.zero);
+        return false;
+      });
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async {
+        await Future<void>.delayed(Duration.zero);
+        return AtValue();
+      });
+
+      final first = service.getLastNotificationTime();
+      service.now = () => clock.add(const Duration(minutes: 10));
+      final second = service.getLastNotificationTime();
+      final results = await Future.wait([first, second]);
+
+      expect(results[0], results[1],
+          reason: 'both overlapping calls must answer the same start');
+      verify(() => mockAtClientImpl.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions'))).called(1);
+    });
   });
 
   group('notificationReplay preference', () {
