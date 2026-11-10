@@ -326,7 +326,7 @@ class CLIBase {
       ..namespace = nameSpace
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort
-      ..fetchOfflineNotifications = true;
+      ..notificationReplay = const NotificationReplay.resume();
 
     if (!File(atKeysFilePathToUse).existsSync()) {
       // no atKeys file
