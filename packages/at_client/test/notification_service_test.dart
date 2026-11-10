@@ -1546,10 +1546,11 @@ void main() {
       late NotificationServiceImpl service;
       late int createdAtMillis;
 
-      Future<void> receive(String id, int epochMillis) =>
+      Future<void> receive(String id, int epochMillis,
+              {String from = '@alice', String? key}) =>
           service.handleNotificationReceipt('notification: '
-              '{"id":"$id","from":"@alice","to":"@alice",'
-              '"key":"$id.wavi@alice","value":null,"operation":"update",'
+              '{"id":"$id","from":"$from","to":"@alice",'
+              '"key":"${key ?? '$id.wavi@alice'}","value":null,"operation":"update",'
               '"epochMillis":$epochMillis,'
               '"messageType":"MessageType.key","isEncrypted":false}');
 
@@ -1639,6 +1640,65 @@ void main() {
               reason: 'id0 was evicted, so its replay is delivered again');
           expect(delivered.where((id) => id == 'id2'), hasLength(1),
               reason: 'id2 is still remembered (re-adding id0 evicted id1)');
+        });
+
+        test(
+            'notifications with the same id from different atSigns are both delivered',
+            () async {
+          await receive('shared-id', createdAtMillis + 1000, from: '@alice');
+          await receive('shared-id', createdAtMillis + 1000, from: '@bob');
+          await pumpEventQueue();
+
+          expect(delivered, ['shared-id', 'shared-id']);
+        });
+
+        test(
+            'a true duplicate replay is ignored quietly and not reported on droppedEvents',
+            () async {
+          final dropped = <DroppedNotification>[];
+          service.droppedEvents.listen(dropped.add);
+
+          await receive('dup-1', createdAtMillis + 1000);
+          await receive('dup-1', createdAtMillis + 1000);
+          await pumpEventQueue();
+
+          expect(delivered, ['dup-1']);
+          expect(dropped, isEmpty);
+        });
+
+        test(
+            'duplicate id with conflicting key is dropped and reported on droppedEvents',
+            () async {
+          final dropped = <DroppedNotification>[];
+          service.droppedEvents.listen(dropped.add);
+
+          await receive('conflict-1', createdAtMillis + 1000,
+              key: 'first.key@alice');
+          await receive('conflict-1', createdAtMillis + 1000,
+              key: 'second.key@alice');
+          await pumpEventQueue();
+
+          expect(delivered, ['conflict-1']);
+          expect(dropped, hasLength(1));
+          expect(dropped.first.key, 'second.key@alice');
+          expect(
+              dropped.first.reason, contains('conflicting key or timestamp'));
+        });
+
+        test(
+            'duplicate id with conflicting timestamp is dropped and reported on droppedEvents',
+            () async {
+          final dropped = <DroppedNotification>[];
+          service.droppedEvents.listen(dropped.add);
+
+          await receive('conflict-2', createdAtMillis + 1000);
+          await receive('conflict-2', createdAtMillis + 2000);
+          await pumpEventQueue();
+
+          expect(delivered, ['conflict-2']);
+          expect(dropped, hasLength(1));
+          expect(
+              dropped.first.reason, contains('conflicting key or timestamp'));
         });
       });
     });
@@ -1863,7 +1923,8 @@ void main() {
       await first.handleNotificationReceipt(notification('C'));
       await first.stop();
 
-      expect((jsonDecode(stored!) as Map)['idsAtEpochMillis'], ['A', 'B', 'C']);
+      expect((jsonDecode(stored!) as Map)['idsAtEpochMillis'],
+          ['@alice:A', '@alice:B', '@alice:C']);
 
       final second = await NotificationServiceImpl.create(mockAtClientImpl,
               monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
@@ -2070,6 +2131,70 @@ void main() {
       expect(puts, 1,
           reason: 'the second notification was handled after stop(); its '
               'watermark write would land on a store the stop has closed');
+    });
+
+    test('the stored watermark ids list is capped at seenIdCapacity (1024)',
+        () async {
+      final storedValues = <String>[];
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((i) async {
+        storedValues.add(i.positionalArguments[1] as String);
+        return true;
+      });
+      final live = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(live.stopAllSubscriptions);
+
+      const epoch = 50000;
+      for (var i = 0; i <= NotificationServiceImpl.seenIdCapacity; i++) {
+        await live.handleNotificationReceipt('notification: '
+            '{"id":"id$i","from":"@alice","to":"@alice",'
+            '"key":"id$i.wavi@alice","value":null,"operation":"update",'
+            '"epochMillis":$epoch,'
+            '"messageType":"MessageType.key","isEncrypted":false}');
+      }
+      await pumpEventQueue();
+
+      final lastWatermark = jsonDecode(storedValues.last) as Map;
+      final ids = (lastWatermark['idsAtEpochMillis'] as List).cast<String>();
+      expect(ids.length, NotificationServiceImpl.seenIdCapacity,
+          reason: 'watermark id list must be capped at seenIdCapacity (1024)');
+      expect(ids.contains('@alice:id0'), isFalse,
+          reason: 'first id should have been evicted when exceeding capacity');
+      expect(ids.last, '@alice:id${NotificationServiceImpl.seenIdCapacity}');
+    });
+
+    test('the stored watermark ids list resets at a new millisecond', () async {
+      final storedValues = <String>[];
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((i) async {
+        storedValues.add(i.positionalArguments[1] as String);
+        return true;
+      });
+      final live = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(live.stopAllSubscriptions);
+
+      await live.handleNotificationReceipt('notification: '
+          '{"id":"first","from":"@alice","to":"@alice",'
+          '"key":"first.wavi@alice","value":null,"operation":"update",'
+          '"epochMillis":1000,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+      await live.handleNotificationReceipt('notification: '
+          '{"id":"second","from":"@alice","to":"@alice",'
+          '"key":"second.wavi@alice","value":null,"operation":"update",'
+          '"epochMillis":2000,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+      await pumpEventQueue();
+
+      final lastWatermark = jsonDecode(storedValues.last) as Map;
+      final ids = (lastWatermark['idsAtEpochMillis'] as List).cast<String>();
+      expect(ids, ['@alice:second'],
+          reason: 'ids list resets when epochMillis advances');
     });
 
     test('is written only after the notification reaches its subscriber',

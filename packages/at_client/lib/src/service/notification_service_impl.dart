@@ -67,30 +67,76 @@ class NotificationServiceImpl extends NotificationService {
   /// The epoch millis of the latest notification this service received.
   int? _lastReceivedMillis;
 
-  /// How many notification ids [_isDuplicate] remembers.
+  /// How many notifications [_isDuplicate] remembers.
   @visibleForTesting
   static const seenIdCapacity = 1024;
 
-  /// Ids already delivered, oldest first (a `Set` literal keeps insertion
-  /// order, so `.first` is the oldest).
-  final _seenIds = <String>{};
+  /// Notifications already delivered, oldest first (a `LinkedHashMap` keeps insertion
+  /// order, so `_seenNotifications.keys.first` is the oldest). Keyed by compound
+  /// key `'$from:$id'`.
+  final _seenNotifications = <String, ({int? epochMillis, String? key})>{};
 
   /// The epoch millis of the stored watermark.
   int? _watermarkMillis;
 
-  /// Ids of the notifications delivered at [_watermarkMillis], oldest first.
+  /// Compound ids (`'$from:$id'`) of notifications delivered at [_watermarkMillis],
+  /// oldest first.
   List<String> _watermarkIds = [];
 
-  /// Whether [id] was already delivered, recording it when it was not. An
-  /// inclusive since filter, a reconnect and a tab handoff all replay the
-  /// notification a service already delivered, and subscribers must see it once.
-  bool _isDuplicate(String id) {
-    // Every stats notification carries this id; none is a replay of another.
-    if (id == '-1') return false;
-    if (!_seenIds.add(id)) return true;
+  static String _compoundNotificationId(String from, String id) => '$from:$id';
+
+  void _recordSeen(String compoundKey, {int? epochMillis, String? key}) {
+    _seenNotifications[compoundKey] = (epochMillis: epochMillis, key: key);
     // FIFO: replays arrive close behind the original, so recency of use adds
     // nothing over recency of first sight.
-    if (_seenIds.length > seenIdCapacity) _seenIds.remove(_seenIds.first);
+    if (_seenNotifications.length > seenIdCapacity) {
+      _seenNotifications.remove(_seenNotifications.keys.first);
+    }
+  }
+
+  /// Whether [n] was already delivered, recording it when it was not. An
+  /// inclusive since filter, a reconnect and a tab handoff all replay the
+  /// notification a service already delivered, and subscribers must see it once.
+  ///
+  /// Replays with matching key and timestamp log quietly at `finer`. A same-id
+  /// notification with a conflicting key or timestamp is logged at `warning`
+  /// and reported on [droppedEvents].
+  bool _isDuplicate(AtNotification n) {
+    // Every stats notification carries this id; none is a replay of another.
+    if (n.id == '-1') return false;
+
+    final compoundKey = _compoundNotificationId(n.from, n.id);
+    var seen = _seenNotifications[compoundKey];
+    if (seen == null) {
+      if (_seenNotifications.containsKey(n.id)) {
+        seen = _seenNotifications.remove(n.id);
+        _seenNotifications[compoundKey] = seen!;
+      } else if (_seenNotifications.containsKey(':${n.id}')) {
+        seen = _seenNotifications.remove(':${n.id}');
+        _seenNotifications[compoundKey] = seen!;
+      }
+    }
+    if (seen != null) {
+      final isMatch = (seen.key == null || seen.key == n.key) &&
+          (seen.epochMillis == null || seen.epochMillis == n.epochMillis);
+      if (isMatch) {
+        if (seen.key == null) {
+          _seenNotifications[compoundKey] =
+              (epochMillis: seen.epochMillis ?? n.epochMillis, key: n.key);
+        }
+        logger.finer(
+            'Ignoring ${n.key}: notification (${n.from}, ${n.id}) was already delivered');
+      } else {
+        _drop(
+            n.key,
+            'Dropping duplicate notification with conflicting key or timestamp: '
+            'from=${n.from} id=${n.id} (seen key=${seen.key} epoch=${seen.epochMillis}, '
+            'received key=${n.key} epoch=${n.epochMillis})');
+      }
+      return true;
+    }
+
+    _recordSeen(compoundKey, epochMillis: n.epochMillis, key: n.key);
     return false;
   }
 
@@ -453,12 +499,13 @@ class NotificationServiceImpl extends NotificationService {
         ..remove('metadata')
         ..['idsAtEpochMillis'] = ids);
 
-  /// Records [n] as the newest watermark entry and returns the ids stored
-  /// with it: the ids already at its millisecond plus its own, capped at
+  /// Records [n] as the newest watermark entry and returns the compound ids
+  /// stored with it: the ids already at its millisecond plus its own, capped at
   /// [seenIdCapacity].
   List<String> _recordWatermark(AtNotification n) {
+    final entry = _compoundNotificationId(n.from, n.id);
     _watermarkIds =
-        n.epochMillis == _watermarkMillis ? [..._watermarkIds, n.id] : [n.id];
+        n.epochMillis == _watermarkMillis ? [..._watermarkIds, entry] : [entry];
     _watermarkMillis = n.epochMillis;
     if (_watermarkIds.length > seenIdCapacity) _watermarkIds.removeAt(0);
     return _watermarkIds;
@@ -599,11 +646,27 @@ class NotificationServiceImpl extends NotificationService {
       // in flight.
       if (_watermarkMillis == null) {
         final ids = watermark['idsAtEpochMillis'];
-        _watermarkIds = ids is List
+        final from = watermark['from'] as String?;
+        final rawIds = ids is List
             ? ids.whereType<String>().toList()
-            : [if (watermark['id'] is String) watermark['id']];
+            : [if (watermark['id'] is String) watermark['id'] as String];
+        _watermarkIds = rawIds.map((entry) {
+          if (entry.contains(':')) return entry;
+          if (from != null && from.isNotEmpty) {
+            return _compoundNotificationId(from, entry);
+          }
+          return entry;
+        }).toList();
         _watermarkMillis = watermark['epochMillis'];
-        _watermarkIds.forEach(_isDuplicate);
+        final watermarkKey = watermark['key'] as String?;
+        for (final entry in _watermarkIds) {
+          final isWatermarkSelf = (from != null &&
+                  entry == _compoundNotificationId(from, watermark['id'] ?? '')) ||
+              entry == watermark['id'];
+          _recordSeen(entry,
+              epochMillis: _watermarkMillis,
+              key: isWatermarkSelf ? watermarkKey : null);
+        }
       }
       return watermark['epochMillis'];
     }
@@ -630,7 +693,8 @@ class NotificationServiceImpl extends NotificationService {
     // watermark costs one replayed window.
     try {
       await atClient.put(
-          lastReceivedNotificationAtKey, _watermarkValue(n, [n.id]),
+          lastReceivedNotificationAtKey,
+          _watermarkValue(n, [_compoundNotificationId(n.from, n.id)]),
           putRequestOptions: _watermarkPutOptions);
     } on StoppedException {
       rethrow;
@@ -721,8 +785,7 @@ class NotificationServiceImpl extends NotificationService {
           .getAtNotifications(notificationParser.parse(notificationJSON));
       _lastReceipt = DateTime.now().toUtc();
       for (var n in notifs) {
-        if (_isDuplicate(n.id)) {
-          logger.finer('Ignoring ${n.key}: id ${n.id} was already delivered');
+        if (_isDuplicate(n)) {
           continue;
         }
         if (n.key == myStatsNotifKey) {

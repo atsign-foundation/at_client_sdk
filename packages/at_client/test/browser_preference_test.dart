@@ -8,4 +8,11 @@ void main() {
         reason: 'the control: native keeps replaying from the store');
     expect(AtClientPreference.browser().fetchOfflineNotifications, isFalse);
   });
+
+  test('the browser preset preserves posture', () {
+    expect(AtClientPreference.browser(posture: PqPosture.pqReady).posture,
+        PqPosture.pqReady);
+    expect(AtClientPreference.browser(posture: PqPosture.pqActive).posture,
+        PqPosture.pqActive);
+  });
 }
