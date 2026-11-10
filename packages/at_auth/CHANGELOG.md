@@ -5,8 +5,8 @@
   private half does not sign for its public half is refused with
   `AtSigningException` before `enroll:request` is sent.
 - fix: `KeyEntryStatus.fromWire` takes a `String?`, and `apskSigningKeys`
-  skips an entry whose `status` is present and is not a string, as it skips
-  one whose other fields are of the wrong kind.
+  skips an entry whose `status` is present, not null and not a string, as it
+  skips one whose other fields are of the wrong kind.
 - fix: `AtKeys.discardEnrollment` refuses an enrollment holding any material
   that is not pending (retired, dead, or a status this build doesn't know),
   not only active material.
@@ -15,15 +15,14 @@
   algorithm from activating simultaneously.
 - fix: `AtKeys.authenticationKeyPairFor` ensures both halves come from the same
   keyId and share the same algorithm, and that the public half is active.
-- fix: `EnrollmentSubmitter` resolves the advertised signing key algorithm
-  before submitting enrollment requests to prevent orphaned server-side
-  enrollments when an algorithm is not supported locally.
+- fix: an enrollment request advertising a signing key whose algorithm the keyfile
+  cannot file is refused before `enroll:request` is sent.
 - fix: `AtKeysAssurance.validateKeyMaterials` indexes active materials by
   typed `(role, algorithm)` record pair to avoid delimiter collisions.
-- fix: `AtKeysAssurance` normalizes atSigns canonically when validating
-  keyfile updates.
-- fix: `fileRetrofitSerializer` lock timeout outlasts its staleness threshold
-  so abandoned locks can be broken.
+- fix: rewriting a typed keyfile compares the stored `atsign` and the new one
+  in canonical form.
+- fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
+  up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
 
 ## 4.0.0
 

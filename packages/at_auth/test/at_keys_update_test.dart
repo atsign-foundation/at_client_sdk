@@ -194,10 +194,9 @@ void main() {
           return true;
         }),
         throwsA(isA<ArgumentError>()),
-        reason: 'discarding drops retired material, which the store refuses '
-            'to lose. The refusal must happen HERE, before the instance loses '
-            'it: the assurance exception a later flush raises leaves an '
-            'AtKeys that can never be flushed again',
+        reason:
+            'only pending material may be discarded; an enrollment holding '
+            'retired material cannot be discarded',
       );
 
       final after = await io.read(atSign);

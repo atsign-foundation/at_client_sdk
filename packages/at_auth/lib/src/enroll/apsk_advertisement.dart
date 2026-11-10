@@ -138,7 +138,8 @@ class ApskSigningKey {
 /// `publishedRoots` takes the whole list for verifying and for judging whether
 /// a held private is one the record still vouches for.
 ///
-/// An entry whose `status` is present and is not a string is skipped too.
+/// An entry whose `status` is present, not null and not a string is skipped
+/// too.
 ///
 /// `kid` is required, like every other field: an entry without one is skipped.
 /// The atServer stores this document verbatim and forms no opinion on it, so a

@@ -43,11 +43,11 @@ class _EnrollmentSlot {
   final Map<String, Map<String, CryptographicMaterial>> materialsByKeyId = {};
 
   AtKeysEnrollment get snapshot => AtKeysEnrollment(
-    enrollmentId: enrollmentId,
-    namespaces: namespaces == null ? null : Map.unmodifiable(namespaces!),
-    appName: appName,
-    deviceName: deviceName,
-  );
+        enrollmentId: enrollmentId,
+        namespaces: namespaces == null ? null : Map.unmodifiable(namespaces!),
+        appName: appName,
+        deviceName: deviceName,
+      );
 }
 
 /// The in-memory model of an atsign's cryptographic keys.
@@ -98,16 +98,15 @@ class AtKeys {
   // Keyed by keyId, then role (see CryptographicMaterialRole for the known
   // tokens; unknown tokens are held too).
   final Map<String, Map<String, CryptographicMaterial>>
-  _atSignMaterialsByKeyId = {};
+      _atSignMaterialsByKeyId = {};
 
   /// Every typed material in the document, both containers, in no particular
   /// order.
   Iterable<CryptographicMaterial> get keys => [
-    ..._atSignMaterialsByKeyId.values.expand((byType) => byType.values),
-    ..._enrollments.values.expand(
-      (slot) => slot.materialsByKeyId.values.expand((b) => b.values),
-    ),
-  ];
+        ..._atSignMaterialsByKeyId.values.expand((byType) => byType.values),
+        ..._enrollments.values.expand(
+            (slot) => slot.materialsByKeyId.values.expand((b) => b.values)),
+      ];
 
   /// The atSign's own materials — the signing root, nskey privates — with no
   /// enrollment between them and the document.
@@ -119,7 +118,10 @@ class AtKeys {
   /// that predates it.
   Iterable<String> get enrollmentIds => _enrollments.keys;
 
-  AtKeys({this.atsign, List<CryptographicMaterial> keysList = const []}) {
+  AtKeys({
+    this.atsign,
+    List<CryptographicMaterial> keysList = const [],
+  }) {
     for (final key in keysList) {
       addKey(key);
     }
@@ -132,10 +134,8 @@ class AtKeys {
   /// The public constructor above is a writer's — app code assembling keys —
   /// and keeps the write-side policy. Sharing one path is what made the
   /// reader inherit the writer's refusal, which is the state this replaces.
-  AtKeys._parsed({
-    this.atsign,
-    required List<CryptographicMaterial> materials,
-  }) {
+  AtKeys._parsed(
+      {this.atsign, required List<CryptographicMaterial> materials}) {
     for (final material in materials) {
       _file(material);
     }
@@ -161,9 +161,7 @@ class AtKeys {
     String? deviceName,
   }) {
     final slot = _enrollments.putIfAbsent(
-      enrollmentId,
-      () => _EnrollmentSlot(enrollmentId),
-    );
+        enrollmentId, () => _EnrollmentSlot(enrollmentId));
     if (namespaces != null) slot.namespaces = Map.of(namespaces);
     if (appName != null) slot.appName = appName;
     if (deviceName != null) slot.deviceName = deviceName;
@@ -172,25 +170,21 @@ class AtKeys {
   /// Looks up one of [enrollmentId]'s materials by `(keyId, role)` —
   /// [type] is a [CryptographicMaterialRole] token.
   CryptographicMaterial? getKey(
-    String enrollmentId,
-    String keyId,
-    CryptographicMaterialRole type,
-  ) => _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
+          String enrollmentId, String keyId, CryptographicMaterialRole type) =>
+      _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
 
   /// Looks up one of the atSign's own materials by `(keyId, role)`.
   CryptographicMaterial? getAtSignKey(
-    String keyId,
-    CryptographicMaterialRole type,
-  ) => _atSignMaterialsByKeyId[keyId]?[type];
+          String keyId, CryptographicMaterialRole type) =>
+      _atSignMaterialsByKeyId[keyId]?[type];
 
   /// Every material of [enrollmentId] sharing [keyId] — e.g. the
   /// public+private halves of one keypair.
   ///
   /// Potentially might only contain a half of a keypair. Typically the public one.
   Iterable<CryptographicMaterial> keysForKeyId(
-    String enrollmentId,
-    String keyId,
-  ) => _enrollments[enrollmentId]?.materialsByKeyId[keyId]?.values ?? const [];
+          String enrollmentId, String keyId) =>
+      _enrollments[enrollmentId]?.materialsByKeyId[keyId]?.values ?? const [];
 
   /// Every atSign-scope material sharing [keyId].
   Iterable<CryptographicMaterial> atSignKeysForKeyId(String keyId) =>
@@ -198,9 +192,10 @@ class AtKeys {
 
   /// Returns every material tagged with [enrollmentId].
   Iterable<CryptographicMaterial> keysForEnrollment(String enrollmentId) =>
-      _enrollments[enrollmentId]?.materialsByKeyId.values.expand(
-        (byType) => byType.values,
-      ) ??
+      _enrollments[enrollmentId]
+          ?.materialsByKeyId
+          .values
+          .expand((byType) => byType.values) ??
       const [];
 
   /// Files [material] in the container its own `enrollmentId` names — that
@@ -211,10 +206,8 @@ class AtKeys {
   /// asymmetry is deliberate — see
   /// [AtKeysAssurance.refuseSecondLiveEnrollment].
   void addKey(CryptographicMaterial material) {
-    const AtKeysAssurance().refuseSecondLiveEnrollment(
-      existing: keys,
-      candidate: material,
-    );
+    const AtKeysAssurance()
+        .refuseSecondLiveEnrollment(existing: keys, candidate: material);
     _file(material);
   }
 
@@ -228,13 +221,11 @@ class AtKeys {
   void _file(CryptographicMaterial material) {
     const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
     _containerFor(material.enrollmentId)
-            .putIfAbsent(material.keyId, () => {})[material.role] =
-        material;
+        .putIfAbsent(material.keyId, () => {})[material.role] = material;
   }
 
   Map<String, Map<String, CryptographicMaterial>> _containerFor(
-    String? enrollmentId,
-  ) {
+      String? enrollmentId) {
     if (enrollmentId == null) return _atSignMaterialsByKeyId;
     return _enrollments
         .putIfAbsent(enrollmentId, () => _EnrollmentSlot(enrollmentId))
@@ -273,26 +264,20 @@ class AtKeys {
     final now = DateTime.now().toUtc();
     final generation = nextAuthenticationGeneration(enrollmentId, algorithm);
     final keyId = '${keyIdPrefix('auth', algorithm)}$generation';
-    addKey(
-      CryptographicMaterial(
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         role: CryptographicMaterialRole.privateAuthentication,
         algorithm: algorithm,
         bytes: AtBytes.fromString(privateKey),
-        createdAt: now,
-      ),
-    );
-    addKey(
-      CryptographicMaterial(
+        createdAt: now));
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         role: CryptographicMaterialRole.publicAuthentication,
         algorithm: algorithm,
         bytes: AtBytes.fromString(publicKey),
-        createdAt: now,
-      ),
-    );
+        createdAt: now));
   }
 
   /// The generation number [fileApkamMaterial] will use next for
@@ -303,12 +288,10 @@ class AtKeys {
   /// not a number is ignored rather than rejected: a keyfile written by a
   /// build that spells generations differently must still be readable.
   int nextAuthenticationGeneration(
-    String enrollmentId,
-    CryptographicMaterialAlgorithm algorithm,
-  ) => _nextGeneration(
-    _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
-    keyIdPrefix('auth', algorithm),
-  );
+          String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
+      _nextGeneration(
+          _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
+          keyIdPrefix('auth', algorithm));
 
   /// Files a signing keypair for [enrollmentId] under
   /// `sign:<algorithm>:<generation>`.
@@ -326,37 +309,29 @@ class AtKeys {
     final now = DateTime.now().toUtc();
     final generation = nextSigningGeneration(enrollmentId, algorithm);
     final keyId = '${keyIdPrefix('sign', algorithm)}$generation';
-    addKey(
-      CryptographicMaterial(
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         role: CryptographicMaterialRole.privateSigning,
         algorithm: algorithm,
         bytes: AtBytes.fromString(privateKey),
-        createdAt: now,
-      ),
-    );
-    addKey(
-      CryptographicMaterial(
+        createdAt: now));
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         role: CryptographicMaterialRole.publicVerification,
         algorithm: algorithm,
         bytes: AtBytes.fromString(publicKey),
-        createdAt: now,
-      ),
-    );
+        createdAt: now));
   }
 
   /// The generation [fileSigningMaterial] will use next for [enrollmentId]'s
   /// [algorithm] — one past the highest already filed, or 1.
   int nextSigningGeneration(
-    String enrollmentId,
-    CryptographicMaterialAlgorithm algorithm,
-  ) => _nextGeneration(
-    _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
-    keyIdPrefix('sign', algorithm),
-  );
+          String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
+      _nextGeneration(
+          _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
+          keyIdPrefix('sign', algorithm));
 
   /// The generation an atSign-scope keypair of [role] and [algorithm] should
   /// be filed under next — one past the highest already there, or 1.
@@ -366,12 +341,9 @@ class AtKeys {
   /// rather than over it; `addKey` refuses a duplicate keyId, which is what
   /// makes that safe rather than merely tidy.
   int nextAtSignGeneration(
-    String role,
-    CryptographicMaterialAlgorithm algorithm,
-  ) => _nextGeneration(
-    _atSignMaterialsByKeyId.keys,
-    keyIdPrefix(role, algorithm),
-  );
+          String role, CryptographicMaterialAlgorithm algorithm) =>
+      _nextGeneration(
+          _atSignMaterialsByKeyId.keys, keyIdPrefix(role, algorithm));
 
   /// The keyId prefix a [role]/[algorithm] pair is filed under —
   /// `<role>:<algorithm>:`, completed by a generation number.
@@ -385,9 +357,8 @@ class AtKeys {
   /// signing keypair) and `root` (the atSign's signing root, filed by
   /// at_client — atSign-scope material rather than an enrollment's).
   static String keyIdPrefix(
-    String role,
-    CryptographicMaterialAlgorithm algorithm,
-  ) => '$role:$algorithm:';
+          String role, CryptographicMaterialAlgorithm algorithm) =>
+      '$role:$algorithm:';
 
   /// Whether [keyId] names a keypair of [role] — `<role>:<algo>:<generation>`
   /// exactly, the shape [keyIdPrefix] composes and every generation parse
@@ -448,24 +419,17 @@ class AtKeys {
   /// the caller to the flat fields and sign the PKAM challenge as somebody
   /// else, which is why [authenticationKeyPairFor] refuses one instead.
   List<({SigningAlgoType algorithm, String publicKey, String privateKey})>
-  signingKeysFor(String enrollmentId) {
+      signingKeysFor(String enrollmentId) {
     final held =
         <({SigningAlgoType algorithm, String publicKey, String privateKey})>[];
-    for (final keyId
-        in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
-            const <String>[]) {
+    for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
+        const <String>[]) {
       if (!isRoleKeyId(keyId, 'sign')) continue;
 
-      final private = getKey(
-        enrollmentId,
-        keyId,
-        CryptographicMaterialRole.privateSigning,
-      );
+      final private =
+          getKey(enrollmentId, keyId, CryptographicMaterialRole.privateSigning);
       final public = getKey(
-        enrollmentId,
-        keyId,
-        CryptographicMaterialRole.publicVerification,
-      );
+          enrollmentId, keyId, CryptographicMaterialRole.publicVerification);
       if (private == null || public == null) continue;
       if (private.status != CryptographicMaterialStatus.active ||
           public.status != CryptographicMaterialStatus.active) {
@@ -524,31 +488,22 @@ class AtKeys {
   /// enrollment's other `privateSigning` material is not a signing key of its
   /// own and is not advertised as one.
   List<
-    ({
+      ({
+        SigningAlgoType algorithm,
+        String publicKey,
+        CryptographicMaterialStatus status
+      })> withdrawnSigningKeysFor(String enrollmentId) {
+    final withdrawn = <({
       SigningAlgoType algorithm,
       String publicKey,
-      CryptographicMaterialStatus status,
-    })
-  >
-  withdrawnSigningKeysFor(String enrollmentId) {
-    final withdrawn =
-        <
-          ({
-            SigningAlgoType algorithm,
-            String publicKey,
-            CryptographicMaterialStatus status,
-          })
-        >[];
-    for (final keyId
-        in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
-            const <String>[]) {
+      CryptographicMaterialStatus status
+    })>[];
+    for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
+        const <String>[]) {
       if (!isRoleKeyId(keyId, 'sign')) continue;
 
       final public = getKey(
-        enrollmentId,
-        keyId,
-        CryptographicMaterialRole.publicVerification,
-      );
+          enrollmentId, keyId, CryptographicMaterialRole.publicVerification);
       if (public == null ||
           public.status == CryptographicMaterialStatus.active ||
           public.status == CryptographicMaterialStatus.dead) {
@@ -596,21 +551,17 @@ class AtKeys {
   /// Withdrawing a signing key from service must not withdraw anything else
   /// that happens to sign.
   List<String> retireSigningKeys(
-    String enrollmentId,
-    CryptographicMaterialAlgorithm algorithm, {
-    CryptographicMaterialStatus to = CryptographicMaterialStatus.retired,
-  }) {
+      String enrollmentId, CryptographicMaterialAlgorithm algorithm,
+      {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) {
     final Map<String, Map<String, CryptographicMaterial>> byKeyId =
         _enrollments[enrollmentId]?.materialsByKeyId ?? const {};
     final keyIds = [
       for (final entry in byKeyId.entries)
         if (isRoleKeyId(entry.key, 'sign') &&
-            entry.value.values.any(
-              (material) =>
-                  material.status == CryptographicMaterialStatus.active &&
-                  material.algorithm == algorithm,
-            ))
-          entry.key,
+            entry.value.values.any((material) =>
+                material.status == CryptographicMaterialStatus.active &&
+                material.algorithm == algorithm))
+          entry.key
     ];
     for (final keyId in keyIds) {
       retireKey(enrollmentId, keyId, to: to);
@@ -630,13 +581,10 @@ class AtKeys {
   /// Every other field rides across untouched, `createdAt` and `status`
   /// included: at_auth carries key material and does not interpret it, so the
   /// only thing an adoption may change is whose enrollment it is.
-  void adoptMaterials(
-    Iterable<CryptographicMaterial> materials, {
-    required String enrollmentId,
-  }) {
+  void adoptMaterials(Iterable<CryptographicMaterial> materials,
+      {required String enrollmentId}) {
     for (final material in materials.toList()) {
-      addKey(
-        CryptographicMaterial(
+      addKey(CryptographicMaterial(
           keyId: material.keyId,
           enrollmentId: enrollmentId,
           role: material.role,
@@ -644,9 +592,7 @@ class AtKeys {
           bytes: material.bytes,
           operations: material.operations,
           createdAt: material.createdAt,
-          status: material.status,
-        ),
-      );
+          status: material.status));
     }
   }
 
@@ -654,13 +600,9 @@ class AtKeys {
   /// [CryptographicMaterialStatus.pending]: submitted, and not yet approved.
   /// The ones [activatePending] or [discardEnrollment] will settle.
   Iterable<String> get pendingEnrollmentIds => _enrollments.values
-      .where(
-        (slot) => slot.materialsByKeyId.values.any(
-          (byType) =>
-              byType[CryptographicMaterialRole.privateAuthentication]?.status ==
-              CryptographicMaterialStatus.pending,
-        ),
-      )
+      .where((slot) => slot.materialsByKeyId.values.any((byType) =>
+          byType[CryptographicMaterialRole.privateAuthentication]?.status ==
+          CryptographicMaterialStatus.pending))
       .map((slot) => slot.enrollmentId);
 
   /// Moves every [CryptographicMaterialStatus.pending] material of
@@ -676,33 +618,26 @@ class AtKeys {
   void activatePending(String enrollmentId) {
     final slot = _enrollments[enrollmentId];
     final pending = [
-      for (final byType
-          in slot?.materialsByKeyId.values ??
-              const <Map<String, CryptographicMaterial>>[])
+      for (final byType in slot?.materialsByKeyId.values ??
+          const <Map<String, CryptographicMaterial>>[])
         for (final material in byType.values)
-          if (material.status == CryptographicMaterialStatus.pending) material,
+          if (material.status == CryptographicMaterialStatus.pending) material
     ];
     if (pending.isEmpty) {
-      throw ArgumentError.value(
-        enrollmentId,
-        'enrollmentId',
-        'AtKeys holds no pending material for this enrollment',
-      );
+      throw ArgumentError.value(enrollmentId, 'enrollmentId',
+          'AtKeys holds no pending material for this enrollment');
     }
     const assurance = AtKeysAssurance();
     final others = keys
-        .where(
-          (material) =>
-              material.enrollmentId != enrollmentId ||
-              material.status != CryptographicMaterialStatus.pending,
-        )
+        .where((material) =>
+            material.enrollmentId != enrollmentId ||
+            material.status != CryptographicMaterialStatus.pending)
         .toList();
     for (final material in pending) {
-      final activated = material.withStatus(CryptographicMaterialStatus.active);
+      final activated =
+          material.withStatus(CryptographicMaterialStatus.active);
       assurance.refuseSecondLiveEnrollment(
-        existing: others,
-        candidate: activated,
-      );
+          existing: others, candidate: activated);
       assurance.validateAddKey(existing: others, candidate: activated);
       // Each activation has to be visible to the validation of the next: the
       // promised one-active-per-role-and-algorithm (and one live
@@ -711,8 +646,8 @@ class AtKeys {
       others.add(activated);
     }
     for (final material in pending) {
-      slot!.materialsByKeyId[material.keyId]![material.role] = material
-          .withStatus(CryptographicMaterialStatus.active);
+      slot!.materialsByKeyId[material.keyId]![material.role] =
+          material.withStatus(CryptographicMaterialStatus.active);
     }
   }
 
@@ -729,28 +664,23 @@ class AtKeys {
     final slot = _enrollments[enrollmentId];
     if (slot == null) {
       throw ArgumentError.value(
-        enrollmentId,
-        'enrollmentId',
-        'AtKeys holds no such enrollment',
-      );
+          enrollmentId, 'enrollmentId', 'AtKeys holds no such enrollment');
     }
-    // Pending is the only status that never protected anything. Retired and
-    // dead bytes are still needed to verify or open what they produced, and
-    // an unrecognised token is not a licence to delete it either.
-    final protected = [
+    // Only pending material may be discarded; an enrollment holding material
+    // in any other status (active, retired, dead, or unrecognised) cannot be
+    // discarded.
+    final nonPending = [
       for (final byType in slot.materialsByKeyId.values)
         for (final material in byType.values)
           if (material.status != CryptographicMaterialStatus.pending)
-            material.keyId,
+            material.keyId
     ];
-    if (protected.isNotEmpty) {
+    if (nonPending.isNotEmpty) {
       throw ArgumentError.value(
-        enrollmentId,
-        'enrollmentId',
-        'this enrollment holds material that may have protected something '
-            '(${protected.toSet().join(', ')}), which is retired rather '
-            'than discarded',
-      );
+          enrollmentId,
+          'enrollmentId',
+          'only pending material may be discarded; this enrollment holds '
+              'material that is not pending (${nonPending.toSet().join(', ')})');
     }
     _enrollments.remove(enrollmentId);
   }
@@ -763,48 +693,33 @@ class AtKeys {
   /// transition throws, as does an unknown [keyId] or `to:
   /// CryptographicMaterialStatus.active`, which is [activatePending]'s move
   /// alone.
-  void retireKey(
-    String enrollmentId,
-    String keyId, {
-    CryptographicMaterialStatus to = CryptographicMaterialStatus.retired,
-  }) => _retire(
-    _enrollments[enrollmentId]?.materialsByKeyId,
-    keyId,
-    to,
-    'enrollment "$enrollmentId"',
-  );
+  void retireKey(String enrollmentId, String keyId,
+          {CryptographicMaterialStatus to =
+              CryptographicMaterialStatus.retired}) =>
+      _retire(_enrollments[enrollmentId]?.materialsByKeyId, keyId, to,
+          'enrollment "$enrollmentId"');
 
   /// [retireKey] for the atSign's own material — the signing root, an nskey
   /// private.
-  void retireAtSignKey(
-    String keyId, {
-    CryptographicMaterialStatus to = CryptographicMaterialStatus.retired,
-  }) => _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
+  void retireAtSignKey(String keyId,
+          {CryptographicMaterialStatus to =
+              CryptographicMaterialStatus.retired}) =>
+      _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
 
-  void _retire(
-    Map<String, Map<String, CryptographicMaterial>>? container,
-    String keyId,
-    CryptographicMaterialStatus to,
-    String ownerLabel,
-  ) {
+  void _retire(Map<String, Map<String, CryptographicMaterial>>? container,
+      String keyId, CryptographicMaterialStatus to, String ownerLabel) {
     if (to == CryptographicMaterialStatus.active) {
       throw ArgumentError.value(to, 'to', 'retireKey cannot reactivate a key');
     }
     final toRank = CryptographicMaterialStatus.rankOf(to);
     if (toRank == null) {
       throw ArgumentError.value(
-        to,
-        'to',
-        'not a status this build knows how to move a key to',
-      );
+          to, 'to', 'not a status this build knows how to move a key to');
     }
     final byType = container?[keyId];
     if (byType == null) {
       throw ArgumentError.value(
-        keyId,
-        'keyId',
-        'AtKeys holds no such keyId for $ownerLabel',
-      );
+          keyId, 'keyId', 'AtKeys holds no such keyId for $ownerLabel');
     }
     for (final material in byType.values) {
       final fromRank = CryptographicMaterialStatus.rankOf(material.status);
@@ -814,19 +729,15 @@ class AtKeys {
       // which is what would let a future value be silently reactivated.
       if (fromRank == null) {
         throw ArgumentError.value(
-          to,
-          'to',
-          'keyId "$keyId" holds status "${material.status}", which this '
-              'build does not know: refusing to move a key whose position '
-              'in the forward order it cannot determine',
-        );
+            to,
+            'to',
+            'keyId "$keyId" holds status "${material.status}", which this '
+                'build does not know: refusing to move a key whose position '
+                'in the forward order it cannot determine');
       }
       if (fromRank > toRank) {
-        throw ArgumentError.value(
-          to,
-          'to',
-          'cannot move keyId "$keyId" backward from ${material.status}',
-        );
+        throw ArgumentError.value(to, 'to',
+            'cannot move keyId "$keyId" backward from ${material.status}');
       }
     }
     byType.updateAll((_, material) => material.withStatus(to));
@@ -863,19 +774,13 @@ class AtKeys {
   /// it stands while the winner is filed under the next generation, and a
   /// successor root is added beside its retired predecessor rather than
   /// replacing it — the predecessor is what verifies everything it signed.
-  void replaceKey(
-    String enrollmentId,
-    String keyId,
-    Iterable<CryptographicMaterial> replacements, {
-    CryptographicMaterialStatus to = CryptographicMaterialStatus.retired,
-  }) {
+  void replaceKey(String enrollmentId, String keyId,
+      Iterable<CryptographicMaterial> replacements,
+      {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) {
     final outgoing = keysForKeyId(enrollmentId, keyId).toList();
     if (outgoing.isEmpty) {
-      throw ArgumentError.value(
-        keyId,
-        'keyId',
-        'AtKeys holds no such keyId for enrollment "$enrollmentId"',
-      );
+      throw ArgumentError.value(keyId, 'keyId',
+          'AtKeys holds no such keyId for enrollment "$enrollmentId"');
     }
     retireKey(enrollmentId, keyId, to: to);
     final filed = <CryptographicMaterial>[];
@@ -914,13 +819,9 @@ class AtKeys {
   /// would send a caller to the flat fields, which on a retrofitted keyfile
   /// belong to somebody else.
   Iterable<String> get authenticatableEnrollmentIds => _enrollments.values
-      .where(
-        (slot) => slot.materialsByKeyId.values.any(
-          (byType) =>
-              byType[CryptographicMaterialRole.privateAuthentication]?.status ==
-              CryptographicMaterialStatus.active,
-        ),
-      )
+      .where((slot) => slot.materialsByKeyId.values.any((byType) =>
+          byType[CryptographicMaterialRole.privateAuthentication]?.status ==
+          CryptographicMaterialStatus.active))
       .map((slot) => slot.enrollmentId);
 
   /// The one enrollment this keyfile authenticates as, for a caller that has
@@ -941,11 +842,10 @@ class AtKeys {
     if (candidates.isEmpty) return null;
     if (candidates.length > 1) {
       throw AtKeysEnrollmentException(
-        'This keyfile holds active authentication material for '
-        '${candidates.length} enrollments (${candidates.join(', ')}), so '
-        'which one it authenticates as is not derivable. The caller must '
-        'name the enrollment it means.',
-      );
+          'This keyfile holds active authentication material for '
+          '${candidates.length} enrollments (${candidates.join(', ')}), so '
+          'which one it authenticates as is not derivable. The caller must '
+          'name the enrollment it means.');
     }
     return candidates.single;
   }
@@ -995,8 +895,7 @@ class AtKeys {
     final version = assurance.expectInt(json['version'], 'version');
     if (version != supportedVersion) {
       throw AtKeysUnsupportedVersionException(
-        'Unsupported atKeys version: $version',
-      );
+          'Unsupported atKeys version: $version');
     }
     // The top-level `keys` array is written empty on every versioned
     // document, and typed material lives in enrollments[]/atsignKeys[].
@@ -1009,64 +908,46 @@ class AtKeys {
       final legacyKeys = json['keys'];
       if (legacyKeys is! List || legacyKeys.isNotEmpty) {
         throw AtKeysValidationException(
-          'This keyfile carries a non-empty top-level "keys" array, the '
-          'shape that preceded enrollments[]/atsignKeys[]. It must be '
-          'regenerated; reading it here would file its key material as '
-          'legacy metadata and authenticate as the wrong enrollment.',
-        );
+            'This keyfile carries a non-empty top-level "keys" array, the '
+            'shape that preceded enrollments[]/atsignKeys[]. It must be '
+            'regenerated; reading it here would file its key material as '
+            'legacy metadata and authenticate as the wrong enrollment.');
       }
       // Dropped rather than carried: [toJson] writes its own.
       json = Map<String, dynamic>.from(json)..remove('keys');
     }
 
-    final atsign = assurance
-        .expectNonEmptyString(json['atsign'], 'atsign')
-        .toAtsign();
+    final atsign =
+        assurance.expectNonEmptyString(json['atsign'], 'atsign').toAtsign();
 
     final materials = <CryptographicMaterial>[];
     if (json.containsKey('atsignKeys')) {
-      materials.addAll(
-        parseAtKeysDocument(
+      materials.addAll(parseAtKeysDocument(
           assurance.expectList(json['atsignKeys'], 'atsignKeys'),
-          fieldPrefix: 'atsignKeys',
-        ),
-      );
+          fieldPrefix: 'atsignKeys'));
     }
 
     final snapshots = <AtKeysEnrollment>[];
     if (json.containsKey('enrollments')) {
-      final enrollmentsJson = assurance.expectList(
-        json['enrollments'],
-        'enrollments',
-      );
+      final enrollmentsJson =
+          assurance.expectList(json['enrollments'], 'enrollments');
       for (final entry in enrollmentsJson.asMap().entries) {
         final prefix = 'enrollments[${entry.key}]';
         final entryJson = assurance.expectMap(entry.value, prefix);
         final enrollmentId = assurance.expectNonEmptyString(
-          entryJson['enrollmentId'],
-          '$prefix.enrollmentId',
-        );
-        snapshots.add(
-          AtKeysEnrollment(
-            enrollmentId: enrollmentId,
-            namespaces: _namespacesOf(entryJson['namespaces'], prefix),
-            appName: assurance.optionalString(
-              entryJson['appName'],
-              '$prefix.appName',
-            ),
-            deviceName: assurance.optionalString(
-              entryJson['deviceName'],
-              '$prefix.deviceName',
-            ),
-          ),
-        );
-        materials.addAll(
-          parseAtKeysDocument(
+            entryJson['enrollmentId'], '$prefix.enrollmentId');
+        snapshots.add(AtKeysEnrollment(
+          enrollmentId: enrollmentId,
+          namespaces: _namespacesOf(entryJson['namespaces'], prefix),
+          appName:
+              assurance.optionalString(entryJson['appName'], '$prefix.appName'),
+          deviceName: assurance.optionalString(
+              entryJson['deviceName'], '$prefix.deviceName'),
+        ));
+        materials.addAll(parseAtKeysDocument(
             assurance.expectList(entryJson['keys'], '$prefix.keys'),
             enrollmentId: enrollmentId,
-            fieldPrefix: '$prefix.keys',
-          ),
-        );
+            fieldPrefix: '$prefix.keys'));
       }
     }
     assurance.validateKeyMaterials(materials);
@@ -1077,7 +958,10 @@ class AtKeys {
     };
 
     //form the new AtKeys
-    AtKeys atKeys = AtKeys._parsed(atsign: atsign, materials: materials);
+    AtKeys atKeys = AtKeys._parsed(
+      atsign: atsign,
+      materials: materials,
+    );
     // After the materials, so an enrollment carrying a snapshot and no keys
     // still gets its slot, and one carrying keys keeps the snapshot beside
     // them.
@@ -1104,9 +988,7 @@ class AtKeys {
     return {
       for (final entry in json.entries)
         entry.key: assurance.expectNonEmptyString(
-          entry.value,
-          '$prefix.namespaces.${entry.key}',
-        ),
+            entry.value, '$prefix.namespaces.${entry.key}'),
     };
   }
 
@@ -1126,8 +1008,7 @@ class AtKeys {
     if (atsign == null) {
       if (hasTypedContent) {
         throw AtKeysValidationException(
-          'atsign is required to serialize typed atKeys material',
-        );
+            'atsign is required to serialize typed atKeys material');
       }
       return _toLegacyJson();
     }
@@ -1161,9 +1042,8 @@ class AtKeys {
               if (slot.namespaces != null) 'namespaces': slot.namespaces,
               if (slot.appName != null) 'appName': slot.appName,
               if (slot.deviceName != null) 'deviceName': slot.deviceName,
-              'keys': encodeAtKeysDocument(
-                slot.materialsByKeyId.values.expand((byType) => byType.values),
-              ),
+              'keys': encodeAtKeysDocument(slot.materialsByKeyId.values
+                  .expand((byType) => byType.values)),
             },
         ],
     };
@@ -1206,60 +1086,45 @@ class AtKeys {
 
   @override
   int get hashCode => Object.hash(
-    atsign,
-    enrollmentId,
-    apkamPublicKey,
-    apkamPrivateKey,
-    defaultEncryptionPublicKey,
-    defaultEncryptionPrivateKey,
-    defaultSelfEncryptionKey,
-    apkamSymmetricKey,
-    _metadataHash(metadata),
-    // Commutative fold so hashCode matches the order-insensitive equality.
-    keys.fold<int>(0, (acc, material) => acc ^ material.hashCode),
-  );
+        atsign,
+        enrollmentId,
+        apkamPublicKey,
+        apkamPrivateKey,
+        defaultEncryptionPublicKey,
+        defaultEncryptionPrivateKey,
+        defaultSelfEncryptionKey,
+        apkamSymmetricKey,
+        _metadataHash(metadata),
+        // Commutative fold so hashCode matches the order-insensitive equality.
+        keys.fold<int>(0, (acc, material) => acc ^ material.hashCode),
+      );
 
   // ───── Legacy flat fields ─────
   // A legacy .atKeys file is a flat JSON object of the six fields below plus
   // enrollmentId and arbitrary metadata. They stay readable/writable (and
   // merge flatly into the typed-keys document) so existing files keep working.
 
-  @Deprecated(
-    'a flat field of the legacy keyfile document: write it with '
-    'fileLegacyMaterial and read it through authenticationKeyPairFor',
-  )
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through authenticationKeyPairFor')
   AtBytes? apkamPublicKey;
-  @Deprecated(
-    'a flat field of the legacy keyfile document: write it with '
-    'fileLegacyMaterial and read it through authenticationKeyPairFor',
-  )
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through authenticationKeyPairFor')
   AtBytes? apkamPrivateKey;
-  @Deprecated(
-    'a flat field of the legacy keyfile document: write it with '
-    'fileLegacyMaterial and read it through encryptionKeyPair',
-  )
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through encryptionKeyPair')
   AtBytes? defaultEncryptionPublicKey;
-  @Deprecated(
-    'a flat field of the legacy keyfile document: write it with '
-    'fileLegacyMaterial and read it through encryptionKeyPair',
-  )
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through encryptionKeyPair')
   AtBytes? defaultEncryptionPrivateKey;
-  @Deprecated(
-    'a flat field of the legacy keyfile document: write it with '
-    'fileLegacyMaterial and read it through selfEncryptionKey',
-  )
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through selfEncryptionKey')
   AtBytes? defaultSelfEncryptionKey;
-  @Deprecated(
-    'a flat field of the legacy keyfile document: write it with '
-    'fileLegacyMaterial and read it through enrollmentSymmetricKey',
-  )
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through enrollmentSymmetricKey')
   AtBytes? apkamSymmetricKey;
-  @Deprecated(
-    'a flat field of the legacy keyfile document: write it with '
-    'fileLegacyMaterial and read it through storedEnrollmentId',
-  )
+  @Deprecated('a flat field of the legacy keyfile document: write it with '
+      'fileLegacyMaterial and read it through storedEnrollmentId')
   String? enrollmentId;
-
   /// A legacy keyfile's entries outside the flat key schema: the atSign under
   /// `atsign` or `name`, and the self-encryption key stored under the atSign
   /// itself. The typed document has no equivalent, so a read and write cycle
@@ -1342,25 +1207,26 @@ class AtKeys {
     String? encryptionPrivateKey,
     String? selfEncryptionKey,
     String? enrollmentId,
-  }) => AtKeys()
-    ..fileLegacyMaterial(
-      apkamPublicKey: apkamPublicKey,
-      apkamPrivateKey: apkamPrivateKey,
-      apkamSymmetricKey: apkamSymmetricKey,
-      encryptionPublicKey: encryptionPublicKey,
-      encryptionPrivateKey: encryptionPrivateKey,
-      selfEncryptionKey: selfEncryptionKey,
-      enrollmentId: enrollmentId,
-    );
+  }) =>
+      AtKeys()
+        ..fileLegacyMaterial(
+          apkamPublicKey: apkamPublicKey,
+          apkamPrivateKey: apkamPrivateKey,
+          apkamSymmetricKey: apkamSymmetricKey,
+          encryptionPublicKey: encryptionPublicKey,
+          encryptionPrivateKey: encryptionPrivateKey,
+          selfEncryptionKey: selfEncryptionKey,
+          enrollmentId: enrollmentId,
+        );
 
   /// The APKAM symmetric key of the enrollment the flat fields carry, which
   /// unwraps what an approval released to it; null for a keyfile that
   /// predates enrollments or holds none.
   // ignore: deprecated_member_use_from_same_package
   AESKey? get enrollmentSymmetricKey => switch (apkamSymmetricKey) {
-    final AtBytes key => AESKey(key.toString()),
-    null => null,
-  };
+        final AtBytes key => AESKey(key.toString()),
+        null => null,
+      };
 
   /// The enrollment id the flat fields carry, exactly as stored: null for a
   /// keyfile from before enrollments, where [enrollmentToAuthenticateAs]
@@ -1374,17 +1240,17 @@ class AtKeys {
     return {
       auth_constants.apkamPublicKey: apkamPublicKey?.toString(),
       auth_constants.apkamPrivateKey: apkamPrivateKey?.toString(),
-      auth_constants.defaultEncryptionPublicKey: defaultEncryptionPublicKey
-          ?.toString(),
-      auth_constants.defaultEncryptionPrivateKey: defaultEncryptionPrivateKey
-          ?.toString(),
-      auth_constants.defaultSelfEncryptionKey: defaultSelfEncryptionKey
-          ?.toString(),
+      auth_constants.defaultEncryptionPublicKey:
+          defaultEncryptionPublicKey?.toString(),
+      auth_constants.defaultEncryptionPrivateKey:
+          defaultEncryptionPrivateKey?.toString(),
+      auth_constants.defaultSelfEncryptionKey:
+          defaultSelfEncryptionKey?.toString(),
       auth_constants.apkamSymmetricKey: apkamSymmetricKey?.toString(),
       'enrollmentId': enrollmentId,
       for (var entry in metadata.entries)
         if (!auth_constants.keySchemaList.contains(entry.key))
-          entry.key: entry.value,
+          entry.key: entry.value
     };
   }
 
@@ -1396,19 +1262,15 @@ class AtKeys {
     keys
       ..apkamPublicKey = bytesAt(auth_constants.apkamPublicKey)
       ..apkamPrivateKey = bytesAt(auth_constants.apkamPrivateKey)
-      ..defaultEncryptionPublicKey = bytesAt(
-        auth_constants.defaultEncryptionPublicKey,
-      )
-      ..defaultEncryptionPrivateKey = bytesAt(
-        auth_constants.defaultEncryptionPrivateKey,
-      )
-      ..defaultSelfEncryptionKey = bytesAt(
-        auth_constants.defaultSelfEncryptionKey,
-      )
+      ..defaultEncryptionPublicKey =
+          bytesAt(auth_constants.defaultEncryptionPublicKey)
+      ..defaultEncryptionPrivateKey =
+          bytesAt(auth_constants.defaultEncryptionPrivateKey)
+      ..defaultSelfEncryptionKey =
+          bytesAt(auth_constants.defaultSelfEncryptionKey)
       ..apkamSymmetricKey = bytesAt(auth_constants.apkamSymmetricKey)
-      ..enrollmentId = _existsAndNotNull(json, 'enrollmentId')
-          ? json['enrollmentId']
-          : null;
+      ..enrollmentId =
+          _existsAndNotNull(json, 'enrollmentId') ? json['enrollmentId'] : null;
     for (var entry in json.entries) {
       if (!auth_constants.keySchemaList.contains(entry.key)) {
         keys.metadata[entry.key] = entry.value;
@@ -1444,11 +1306,9 @@ class AtKeys {
   /// flat fields, which on a retrofitted keyfile belong to somebody else.
   CryptographicMaterial? _activeAuthenticationMaterial(String enrollmentId) =>
       keysForEnrollment(enrollmentId)
-          .where(
-            (m) =>
-                m.role == CryptographicMaterialRole.privateAuthentication &&
-                m.status == CryptographicMaterialStatus.active,
-          )
+          .where((m) =>
+              m.role == CryptographicMaterialRole.privateAuthentication &&
+              m.status == CryptographicMaterialStatus.active)
           .firstOrNull;
 
   /// The algorithm [authenticationKeyPairFor] signs [enrollmentId]'s PKAM
@@ -1472,11 +1332,10 @@ class AtKeys {
     final material = _activeAuthenticationMaterial(enrollmentId);
     if (material != null) {
       throw AtKeyNotFoundException(
-        'Enrollment $enrollmentId authenticates with '
-        '"${material.algorithm}", which this build cannot sign '
-        'with. Its keypair is in this keyfile; the flat fields are a '
-        'different enrollment\'s and are not a substitute for it.',
-      );
+          'Enrollment $enrollmentId authenticates with '
+          '"${material.algorithm}", which this build cannot sign '
+          'with. Its keypair is in this keyfile; the flat fields are a '
+          'different enrollment\'s and are not a substitute for it.');
     }
     return null;
   }
@@ -1516,7 +1375,7 @@ class AtKeys {
   /// about their algorithm — because the pair it would otherwise return
   /// cannot verify anything it signs.
   ({SigningAlgoType algorithm, String publicKey, String privateKey})?
-  authenticationKeyPairFor(String? enrollmentId) {
+      authenticationKeyPairFor(String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm != null) {
       // Both halves come from ONE keyId, and from the SAME material the
@@ -1531,19 +1390,15 @@ class AtKeys {
       final private = _activeAuthenticationMaterial(enrollmentId!);
       final public = private == null
           ? null
-          : getKey(
-              enrollmentId,
-              private.keyId,
-              CryptographicMaterialRole.publicAuthentication,
-            );
+          : getKey(enrollmentId, private.keyId,
+              CryptographicMaterialRole.publicAuthentication);
       if (private == null ||
           public == null ||
           public.status != CryptographicMaterialStatus.active ||
           public.algorithm != private.algorithm) {
         throw AtKeyNotFoundException(
-          'AtKeys holds no active authentication keypair for enrollment '
-          '$enrollmentId',
-        );
+            'AtKeys holds no active authentication keypair for enrollment '
+            '$enrollmentId');
       }
       return (
         algorithm: algorithm,
@@ -1565,9 +1420,8 @@ class AtKeys {
 
   /// The atSign's active material in [role], whatever algorithm it names.
   CryptographicMaterial? _activeAtSignMaterial(String role) => atSignKeys
-      .where(
-        (m) => m.role == role && m.status == CryptographicMaterialStatus.active,
-      )
+      .where((m) =>
+          m.role == role && m.status == CryptographicMaterialStatus.active)
       .firstOrNull;
 
   /// The atSign's RSA encryption keypair: the key a legacy shared key is
@@ -1587,20 +1441,16 @@ class AtKeys {
   /// Null unless the keyfile holds both halves. An atSign activated with
   /// `mintLegacyMaterial: false` holds neither.
   RsaKeyPair? get encryptionKeyPair {
-    final typedPublic = _activeAtSignMaterial(
-      CryptographicMaterialRole.publicEncryption,
-    );
-    final typedPrivate = _activeAtSignMaterial(
-      CryptographicMaterialRole.privateDecryption,
-    );
+    final typedPublic =
+        _activeAtSignMaterial(CryptographicMaterialRole.publicEncryption);
+    final typedPrivate =
+        _activeAtSignMaterial(CryptographicMaterialRole.privateDecryption);
     if (typedPublic != null &&
         typedPrivate != null &&
         typedPublic.algorithm == CryptographicMaterialAlgorithm.rsa2048 &&
         typedPrivate.algorithm == CryptographicMaterialAlgorithm.rsa2048) {
       return RsaKeyPair.create(
-        typedPublic.bytes.toString(),
-        typedPrivate.bytes.toString(),
-      );
+          typedPublic.bytes.toString(), typedPrivate.bytes.toString());
     }
     // ignore: deprecated_member_use_from_same_package
     final public = defaultEncryptionPublicKey;
@@ -1619,9 +1469,8 @@ class AtKeys {
   /// as [encryptionKeyPair]. Null where the keyfile holds neither, which an
   /// atSign activated with `mintLegacyMaterial: false` does not.
   AESKey? get selfEncryptionKey {
-    final typed = _activeAtSignMaterial(
-      CryptographicMaterialRole.symmetricEncryption,
-    );
+    final typed =
+        _activeAtSignMaterial(CryptographicMaterialRole.symmetricEncryption);
     if (typed != null &&
         typed.algorithm == CryptographicMaterialAlgorithm.aes256) {
       return AESKey(typed.bytes.toString());
@@ -1631,6 +1480,7 @@ class AtKeys {
     if (key == null) return null;
     return AESKey(key.toString());
   }
+
 }
 
 // metadata holds JSON-derived values, so nested maps/lists compare by
@@ -1671,11 +1521,8 @@ int _deepHash(Object? value) {
   if (value is Map) {
     final entries = value.entries.toList()
       ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
-    return Object.hashAll(
-      entries.map(
-        (entry) => Object.hash(entry.key.toString(), _deepHash(entry.value)),
-      ),
-    );
+    return Object.hashAll(entries.map(
+        (entry) => Object.hash(entry.key.toString(), _deepHash(entry.value))));
   }
   if (value is List) {
     return Object.hashAll(value.map(_deepHash));
