@@ -2294,10 +2294,11 @@ void main() {
                 'here so the two results come from one run');
         expect(
             child.secretStore.getSecret('myapp', successor)!.value, 'SUCCESSOR',
-            reason: 'and the descendant is handed the generation the '
+            reason: 'and the successor the parent self-enrolled, which a '
+                'revocation does not cascade to, is handed the generation the '
                 'revocation was meant to cut off: excluding the parent from a '
-                'rotation buys nothing while what it spawned can pull the '
-                'successor from any holder that never heard of either');
+                'rotation does not exclude what it self-enrolled, which can '
+                'pull the successor from any holder that never heard of either');
       });
     });
 

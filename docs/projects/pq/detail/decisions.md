@@ -44,8 +44,8 @@ framing:
 
 | Topic | Lives in |
 |---|---|
-| High-level WHY/WHAT, conceptual nskey shape, phase trajectory M0–M6 | `roadmap.md` |
-| Project sequence (P-1…D2-1, SS-*, RF-*), dependency graph, waves, effort, publish gates, critical path | `implementation-plan.md` |
+| High-level WHY/WHAT, conceptual nskey shape, phase trajectory M0–M6, planned changes | `design.md` (its overview and Planned changes) |
+| What is still owed | `implementation-plan.md` |
 | Per-subsystem mechanics (key shapes, `__ssenv`, `enroll:listns`, the enrollment record, providers) with file:line | `design.md` |
 | The given/when/then UC catalogue (A1.x–A5.x, B0.x–B5.x) | `acceptance.md` |
 
@@ -212,7 +212,7 @@ first increment**.
 | The 0001 "copyable shared key vs per-device keys" framing | False dichotomy: data is encrypted under symmetric keys delivered per-APKAM; there are no per-device data keys, and a future device is served by push, so instant/offline access and per-APKAM revocation coexist. |
 
 **Cross-refs:** the conceptual two-layer nskey shape and mixed-scheme philosophy
-are in `roadmap.md`; the 3-layer/3-provider mechanics, concrete key shapes, and
+are in `design.md`'s overview; the 3-layer/3-provider mechanics, concrete key shapes, and
 the forward-secrecy/rotation levers are in `design.md`; the A5.x
 rotation/revocation tests are in `acceptance.md`.
 
@@ -702,9 +702,9 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-08-03** | **`pqpublickey` stops being a KEM and becomes `public:pq_signing_root@<atSign>`, the user-owned signing root** ([18](#18-pq_signing_root-is-the-user-owned-signing-root-2026-08-03)). Cold-start has no PQ target and therefore **fails**, with legacy RSA reachable only by explicit opt-in; the release sequence makes that safe, since a final 3.x rebuild-and-rollout seeds the fleet with nskeys and roots before 4.x turns PQ on by default. SS-4 gates that 3.x release, `AtClientPreference.crypto` becomes nullable so the SDK owns the era default, and the root is written immutable with a `{v, keys[], successor}` payload. | A prove-possession step needs a signature, not a KEM, and one key doing both was the conflation to remove. Handing the root to the atServer was rejected: key transparency over an operator-held key records the operator's own signatures, so an auditor has nothing to catch, and the anchoring gap [12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02) records would become structural. Publishing a key whose private is not durably conveyed is worse than not publishing, because the far end gets undecryptable data instead of a fast sender-side failure — hence publish-after-convey and SS-4 as a 3.x blocker. `keys[]` and `successor` ship on day one because the record is immutable and the whole fleet mints during the rollout, so mint time is the only chance to allow a second algorithm or any revocation at all. |
 | **2026-08-03** | **Nested-namespace nskey resolution walks up, most-specific-first** ([19](#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)). A sender writing to `someid.d.c.b.a@alice` tries `d.c.b.a` … `a` and seals to the first nskey found; the CK is scoped to *that* namespace, so one conveyance serves every namespace beneath it. `appMetadata` gains `ns` (the record's own namespace) on every nskey-path record and `ckNs` (where the CK lives) on data values. Senders remember which namespaces an owner holds keys at, and that memo inherits `advertisementTtl` rather than adding a lifetime. | `AtKey.fromString` splits at the **last** dot, so a multi-segment namespace cannot be recovered from the wire string — measured, not inferred. It never mattered because the legacy provider references `namespace` zero times; the nskey path references it 56, which is what makes the ambiguity newly critical. Exact-match was unavailable: AtCollection composes `<subName>.<parentId>.<ns>` per **item**, so it would need a keypair, an advertisement and a per-enrollment conveyance per item. Walking up is safe because it mirrors the atServer's own suffix authorisation, so the crypto gate never widens past the transport gate. `ckNs` is not redundant with `ns`: in the stale-sender window the reader would otherwise hunt for the conveyance in the wrong namespace and report "not yet synced" for an intact record, forever. |
 
-**Cross-refs:** the Wave-0 "already landed" detail and the project that follows
-each decision are in `implementation-plan.md`; the phase trajectory this timeline
-tracks is in `roadmap.md`.
+**Cross-refs:** the Wave-0 "already landed" detail and the project that followed
+each decision are in [the plan's detail file as it last stood](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md); the phase
+trajectory this timeline tracks is in `design.md`'s overview and Planned changes.
 
 ---
 
@@ -3343,8 +3343,11 @@ ruling, each with a differential test.
    APKAM → approved subset child).
 
 2. **Revocation cascades eagerly, and revocation has two modes.** The parent link
-   lives where the spike put it: `parentEnrollmentId` on the enrollment record, set
-   only by self-enrollment. `enroll:revoke` in its default (compromise) mode
+   lives where the spike put it: `parentEnrollmentId` on the enrollment record. On
+   at_server trunk (`88667359`) `enroll:approve` sets it to the approving
+   enrollment's id, a self-enrollment copies its predecessor's, and a successor's
+   first authentication moves the predecessor's approval children onto it.
+   `enroll:revoke` in its default (compromise) mode
    enumerates enrollments, collects descendants transitively, marks each revoked,
    and drops each one's live connections — the existing per-id mechanics, applied
    over the walk. A lazy ancestor check at authentication was ruled out
@@ -3354,14 +3357,29 @@ ruling, each with a differential test.
    planned migration off a shared keyfile; without it, retiring a cloned parent
    would kill the legitimate children each clone spawned. No authorisation delta:
    subset grants mean the parent's revoker is authorised for every descendant
-   (record that property in the implementing commit's body). `parentEnrollmentId`
-   rides `enroll:list`, which returns the record whole, so an owner can see what a
-   stolen keyfile spawned. ⚠️ **This said `enroll:fetch` carries it too, until
-   2026-08-27; it does not.** That verb returns exactly `appName`, `deviceName`,
-   `namespace`, `encryptedAPKAMSymmetricKey` and `status`. ⛔ **And the cascade
-   itself is unbuilt**: `parentEnrollmentId` is written by the retrofit and read by
-   nothing on at_server `origin/trunk`, so `enroll:revoke` does not cascade today
-   and the non-cascading `retire` mode does not exist either.
+   (record that property in the implementing commit's body).
+   `retrofitPredecessorEnrollmentId` rides `enroll:list`, both in the whole
+   record, which a CRAM connection or an enrollment holding `__manage:rw` gets,
+   and in the roster (`toJsonRoster`), which an enrollment holding `__manage:r`
+   gets. So an owner can see what a stolen keyfile self-enrolled, through that
+   field rather than `parentEnrollmentId`: a self-enrolled successor copies its
+   predecessor's `parentEnrollmentId` rather than naming the predecessor as
+   parent. ⚠️ **This said `enroll:fetch` carries `parentEnrollmentId` too, until
+   2026-08-27; it does not.** That verb returns exactly
+   `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey` and
+   `status`. **The cascade shipped**
+   in at_server #2781 ([ruling 129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)),
+   and it follows APPROVER links, never the replacement edge
+   ([ruling 133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)):
+   a successor copies its predecessor's `parentEnrollmentId`, so the two are
+   siblings, and the replacement is settled at the successor's first
+   authentication instead. The atServer refuses to un-revoke an enrollment whose
+   approver exists and is not currently `approved` (129 part 2). The
+   non-cascading `retire` mode does not exist on at_server trunk (read at
+   `886673594`). **Amended 2026-11-07:** this item said the cascade was unbuilt.
+   **Amended 2026-11-09:** it said `parentEnrollmentId` is set only by
+   self-enrollment and shows what a stolen keyfile spawned, and that the
+   un-revoke refusal tests the predecessor.
 
 3. **The cap slides.** [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
    formula — min(now + grace, the enrollment's own expiry) — is applied on every
@@ -3440,10 +3458,18 @@ ruling, each with a differential test.
    the cap entirely, so for the owner holding one keyfile the credential is
    permanent rather than ageing out. 118 retires that exemption, which makes the
    sentence true again — by decision rather than by luck. Never `enroll:revoke`
-   as cleanup, since revocation cascades to every retrofitted child — this narrows
+   as cleanup, since revocation cascades to every descendant by approval
+   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31)
+   part 1) — this narrows
    [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s "(or an
-   explicit enroll:revoke)" aside to the compromise case, where cascading is the
-   point. A straggler past the window gets a loud auth failure, not data loss;
+   explicit enroll:revoke)" aside to the compromise case. ⚠️ **This said
+   revocation cascades to every retrofitted child, until it was amended
+   2026-11-08; it reaches none.** A retrofit's successor is its predecessor's
+   sibling, so for a compromised keyfile that has already been replaced the
+   operator revokes the SUCCESSOR; revoking the predecessor reaches nothing the
+   successor holds
+   ([133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)).
+   A straggler past the window gets a loud auth failure, not data loss;
    recovery is a copied upgraded keyfile or a fresh OTP enrollment. Once the
    upgraded keyfile is archived, destroy pre-PQ `.atKeys` copies — they hold the
    legacy encryption private (harvest-relevant) and, until the cap elapses, a live
@@ -4208,7 +4234,7 @@ Read rather than assumed:
 Per the rule that a ledger ruling names a mechanism only once its differential
 test is green, the above records defects and intent, not fixes. Four items are
 open with no code written, and they are **tracked in
-[`implementation-plan.md` §14](implementation-plan.md#14-backlog--carried-items-with-no-owning-project)**
+[`implementation-plan.md` §14](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#14-backlog--carried-items-with-no-owning-project)**
 so they are visible from the plan rather than only from here:
 
 1. the signing root's `keys[]` shape, the only one with a deadline — and the
@@ -4613,7 +4639,7 @@ mechanism:
   call site and both AEADs are Nk=32/Nn=12, so it was a free parameter.
 - Two blockers must clear first: `_envelopeVersion` is a global const with **no
   write-side version selector**, and `suites` on the key package
-  ([plan 14.4](implementation-plan.md#144-a-suites-list-on-the-key-package--done)) is
+  ([plan 14.4](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#144-a-suites-list-on-the-key-package--done)) is
   what makes the move a sender-side decision rather than a fleet-wide
   readers-first migration.
 - The **enrollment record's `metadata.keyPackage` is a signed envelope written
@@ -4771,7 +4797,7 @@ never what it can read.
 **A key that already exists keeps its own algorithm, whatever the preference
 later says.** The kpid is the address peers seal to and it is frozen in an
 enrollment record that is never rewritten
-([14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
+([14.6](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
 so re-minting under a newly configured KEM would move the client to an address
 nobody writes to — it would scan for envelopes being sent somewhere else.
 Changing the preference takes effect on the next enrollment, and the mismatch
@@ -4816,7 +4842,7 @@ advertisement's own for the CK conveyance. A sender takes the strongest entry
 both sides list and derives the `pqSeal` version from it. That is what let the
 wire move from `0x01` to `0x02` between modern peers **without a flag day** —
 which is the whole reason
-[14.4](implementation-plan.md#144-a-suites-list-on-the-key-package--done) was on
+[14.4](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#144-a-suites-list-on-the-key-package--done) was on
 the backlog.
 
 Three rules the lists obey, each preventing a specific failure:
@@ -5023,7 +5049,7 @@ The false arm also turns out to need no new at-rest machinery: `FileAtKeysIo`
 only reaches for the `selfEncryptionKey` when a legacy flat field is actually
 present, so a keyfile with none simply never asks for one.
 
-### 52.3 The signing root's shape, ruled — [14.1](implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) closed
+### 52.3 The signing root's shape, ruled — [14.1](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) closed
 
 14.1 said the deadline was "a state, not a date: before the next long-lived
 atSign runs a privileged PQ client". ON-1 **is** that state — every atSign
@@ -5050,7 +5076,7 @@ verified under the wrong routine.
 
 Three failures, each one assertion further in, and none of them a defect in the
 onboarding path itself — it worked on the first run. The root shape was
-[14.1](implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)
+[14.1](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)
 coming due. The other two were the test's own instrument: the atServer *throws*
 on a second immutable create rather than returning an error string, and
 `enroll:listns` requires its namespace argument and does not return
@@ -6542,7 +6568,7 @@ Three costs, all present in the tree today:
 3. **An unparseable package is terminal.** `KeyPackageStatus.unsupported` ends
    that enrollment's ability to receive a sealed conveyance for good; the only
    remedy is delete-and-re-enrol
-   ([implementation-plan 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)).
+   ([implementation-plan 14.6](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)).
 
 Against that, note what the freeze never bought. **It is not a security
 property.** Nothing trusts a key package because the record is immutable — a
@@ -6561,7 +6587,7 @@ sentence outlived the reason for it.
 | 4 | **Per-key set, never whole-map replace.** The request names the keys to set; keys it does not name survive untouched. Whole-map replace is read-mutate-write against shared durable state — a client that does not know about a future sibling field clobbers it, and two processes of one device are concurrent by construction |
 | 5 | **The server keeps no opinion.** Metadata stays opaque: no parsing, no signature check, no ordering of successive packages. The consequence is stated rather than mitigated — the server cannot detect a downgrade to an older validly-signed package, which is why ruling 2 carries the weight it does |
 | 6 | **A replaced kpid is not retired.** The client keeps the superseded private half and keeps answering at the old address. An envelope written before the update is addressed to the old kpid and must still open; the alternative is silent, unattributable loss of a secret that was correctly sent |
-| 7 | **A server without the sub-command must fail loudly**, and does: an unknown operation does not match the verb regex. This is strictly better than the `EnrollParams.metadata` passthrough it complements, which an old atServer drops silently — the gap recorded at [implementation-plan section 14 backlog](implementation-plan.md#14-backlog--carried-items-with-no-owning-project) ("a PQ-capable client cannot tell a legacy atServer from an old peer") |
+| 7 | **A server without the sub-command must fail loudly**, and does: an unknown operation does not match the verb regex. This is strictly better than the `EnrollParams.metadata` passthrough it complements, which an old atServer drops silently — the gap recorded at [implementation-plan section 14 backlog](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#14-backlog--carried-items-with-no-owning-project) ("a PQ-capable client cannot tell a legacy atServer from an old peer") |
 | 8 | **No peer invalidation is owed today, and the reason is checkable.** `VerbEnrollmentDirectory.listForNamespace` executes `enroll:listns` against the atServer on every call (`enrollment_directory.dart:141`) and caches nothing, so a sender reads the current package at seal time. Any future cache inherits an invalidation obligation from this ruling |
 
 ### 68.4 The verb
@@ -6623,7 +6649,7 @@ recognise itself. The check should compare `enrollmentId`, which is what it
 actually means and what `NamespaceMember` already carries.
 
 ⚠️ **Amended 2026-08-13 — most of this table is now built, and two of its rows
-were wrong.** [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+were wrong.** [14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
 step 5 landed the receiver-multi-kpid work as
 [95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 rulings 6–9, in `6a5eac838`, `f956b2146` and `f6fc3796e`. Everything above is
@@ -8049,7 +8075,7 @@ memory was wrong.
 the same failure [68](#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
 carried until the day before, and for the same reason: a status line is written
 once, at the moment it is true, and nothing takes you back to it. What landed is
-[14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+[14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
 steps 6-19 plus rows B1-B3 of ruling 98 — the typed keyfile, the `_apsk` array
 composer and reader, the multi-signature envelope, the strength order, the
 `enroll:update` caller, the in-use signing set, the minter, and the
@@ -8087,7 +8113,7 @@ Three costs follow, and all three are present in the tree:
 2. **It is written once, ever.** `publishPublicSigningKey`
    (`apkam_signing.dart:29`) reads the record first and logs "have already
    published" if it exists. A rotated key would never reach the atServer.
-   *Fixed 2026-08-13 by [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+   *Fixed 2026-08-13 by [14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
    step 13: it compares what is published against what the client holds and
    republishes on a difference, still writing nothing when the two agree.*
 3. **Key reuse across protocols.** An authentication signature proves liveness
@@ -8143,7 +8169,7 @@ changed two rulings:
 |---------|----------|-------------|
 | Bare-string `_apsk` | **Yes** — `mixins/apkam_signing.dart` ships in at_client **3.13.0** | Read as legacy, **and still emitted** — see below |
 | Unversioned envelope | **No** — `lib/src/signing/` ships in no release; at_client 3.14.0, the latest on pub.dev, has no such directory and no `parseApskValue` | Nothing to honour on read; the shape is deleted rather than versioned ([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 3) |
-| Versioned typed-keys document; `flush` upgrading a legacy file in place | **Yes** — at_auth **3.3.0** | ⚠️ **This cell read "`version: 1` keyfiles with an empty `keys` array exist in the wild and must be read" until 2026-08-18, and the code has done the opposite since `cb3848b4d` (2026-08-14):** any document carrying a top-level `keys`, empty array included, is **refused by name**. That was ruled deliberately — parsing one would sweep the array into metadata, leave the document reading as untyped, and authenticate from the flat block as the *legacy* enrollment while the live enrollment's credentials sat unread beside it. **What the cell never did was name a holder**, and the refusal's own message says such a file must be regenerated, so what is owed is to find out whether any such file exists outside this tree — see [14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) |
+| Versioned typed-keys document; `flush` upgrading a legacy file in place | **Yes** — at_auth **3.3.0** | ⚠️ **This cell read "`version: 1` keyfiles with an empty `keys` array exist in the wild and must be read" until 2026-08-18, and the code has done the opposite since `cb3848b4d` (2026-08-14):** any document carrying a top-level `keys`, empty array included, is **refused by name**. That was ruled deliberately — parsing one would sweep the array into metadata, leave the document reading as untyped, and authenticate from the flat block as the *legacy* enrollment while the live enrollment's credentials sat unread beside it. **What the cell never did was name a holder**, and the refusal's own message says such a file must be regenerated, so what is owed is to find out whether any such file exists outside this tree — see [14.19](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) |
 | `apkam:<enrollmentId>` keyIds | **No** — `fileApkamMaterial` is not on trunk | No read compatibility (ruling 3) |
 | Tagged single-key `_apsk`, `signedEnvelopeVersion`, `jwsEnvelopeVersion` | **No** — all D1-only | Removed, not versioned (rulings 8, 12) |
 
@@ -8288,7 +8314,7 @@ was carried as an open server defect it had already been proven not to be.
 the five [70](#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)
 established. Not a harness-only construct and not a fourth dimension.
 
-The consequence worth stating separately: **[14.13](implementation-plan.md#1413-a-passive-by-default-flag-surveyed-not-built)'s
+The consequence worth stating separately: **[14.13](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1413-a-passive-by-default-flag-surveyed-not-built)'s
 passive-by-default IS what `now` means.** That entry stops being a separate
 item and becomes the definition of the axis's first position — a client at
 `now` reads and routes post-quantum records and never writes one on its own
@@ -8322,7 +8348,7 @@ is the same lesson as a differential test having to prove its two arms differ �
 here the two arms are two *builds*, and simulating both in one build proves
 nothing about the one we did not write.
 
-**5. [14.9](implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly)
+**5. [14.9](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly)
 is CLOSED — a test-instrument failure, proven, not an atServer defect.** The
 record had softened only as far as "the attribution was never established,
 OPEN, not a known server defect." That understates it: the instrument was the
@@ -8358,7 +8384,7 @@ open unknown invited someone to go looking for a server bug that is not there.
 >
 > ⚠️ **This amendment is three days late.** The root cause was established
 > 2026-08-12 and reached
-> [14.9](implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly),
+> [14.9](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly),
 > but no ruling here was amended, so the ledger asserted the opposite of a
 > measured fix until 2026-08-15. A root cause that lands in the plan and not in
 > the ledger leaves the ledger arguing against it.
@@ -8387,7 +8413,7 @@ and 14.16's four residuals are all in scope, as are S-3's completion, B-3
 > 14.19, 14.20 and 14.21. Eight are closed — 14.1, 14.2, 14.3, 14.4, 14.5, 14.9
 > with 14.9a, 14.10 and 14.13. The split and its re-derivation date now live at
 > the head of
-> [`implementation-plan.md` §14](implementation-plan.md#14-backlog--carried-items-with-no-owning-project),
+> [`implementation-plan.md` §14](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#14-backlog--carried-items-with-no-owning-project),
 > which is the copy to read; repeating it here is what produced two stale lists.
 >
 > ⚠️ **One item is deliberately outside this ruling's scope claim.** 14.21 (the
@@ -8397,7 +8423,7 @@ and 14.16's four residuals are all in scope, as are S-3's completion, B-3
 > ruling. Whether the no-deferrals principle extends to it is unruled.
 
 The ordered sequence these rulings produce is
-[14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence).
+[14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence).
 
 ## 94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)
 
@@ -8567,7 +8593,7 @@ and its sender is the record's own owner. What converges is the
 **advertisement**, not the transport.
 
 **8. It lands before the `_apsk` array parser, or it is rework.**
-[14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)'s
+[14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)'s
 stage 1 opens with that parser; written bespoke it becomes the third
 hand-rolled codec for one shape, and the consolidation then has to unpick
 freshly written code. It becomes the new step 3 and the sequence renumbers to
@@ -8696,7 +8722,7 @@ advertisement stays — it versions the payload, not the wrapper.
 `{payload, signature, hashingAlgo, signingAlgo}` shape from its own copy in
 `noports_core`, signs with the encryption keypair and fetches `getRemotePK`
 rather than `_apsk`, so it consumes nothing this deletes — as
-[14.7](implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape)
+[14.7](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape)
 already established. The atServer is unaffected for a different reason: it
 stores `metadata` and `apsk` verbatim and has no opinion on either.
 
@@ -8799,7 +8825,7 @@ outcome and reads like a security check it is not. Belongs beside
 
 ## 96. The programme pair gets a home outside the workspace (2026-08-14)
 
-Steps 20–22 of [`implementation-plan.md` 14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+Steps 20–22 of [`implementation-plan.md` 14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
 specify a sender and a receiver taking `--stage published|now|rollout1|rollout2`,
 plus a driver running the matrix. [`acceptance.md` 16.1](../acceptance.md#161-the-harness)
 says what the pair must exercise and says the `published` arm runs the last
@@ -8863,7 +8889,7 @@ from memory of what was in it.
 
 ## 97. A keyfile status a build has never seen is read, not refused (2026-08-14)
 
-Settling [14.19 item 11](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+Settling [14.19 item 11](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 — where a rotated APKAM keypair is persisted — needed a way to mark a keypair
 as *staged*: filed, but not yet the one that authenticates. gkc ruled the
 **two-phase** shape, staged then promoted on the atServer's acceptance. That
@@ -9417,7 +9443,7 @@ say:
 
 **In brief:** *what 98 and 99 left unstated, and what row A1 encodes*
 
-[`implementation-plan.md` 14.20](implementation-plan.md#1420-building-rulings-98-and-99--the-sequence)
+[`implementation-plan.md` 14.20](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1420-building-rulings-98-and-99--the-sequence)
 listed six questions its build sequence does not answer and said to ask rather
 than guess, because each decides a shape and guessing wrong builds the wrong
 thing silently. A seventh surfaced while checking the six against the tree. All
@@ -9538,7 +9564,7 @@ each state in their own dartdoc.
 From a question gkc asked while reading the at-rest shape: what is persisted for
 the atSign's root signing key, and can it be rotated later. The answer was no —
 for four reasons beyond the record's immutability, stated at
-[`implementation-plan.md` 14.21](implementation-plan.md#1421-the-signing-root-cannot-be-rotated--raised-2026-08-15).
+[`implementation-plan.md` 14.21](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1421-the-signing-root-cannot-be-rotated--raised-2026-08-15).
 gkc set two requirements, and between them they settle it: the root is
 persisted like every other signing key, and D1 does everything that makes
 rotation possible **without building the rotation**.
@@ -9599,7 +9625,7 @@ reconciliation, which stays: read the published record, compare what is held
 against it, retire a pair that corresponds to nothing. It was written for a
 lost immutable create and answers the same question here.
 
-> ✅ **BUILT 2026-08-15 by [14.22](implementation-plan.md#1422-making-the-signing-root-rotatable--decisions-101)
+> ✅ **BUILT 2026-08-15 by [14.22](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1422-making-the-signing-root-rotatable--decisions-101)
 > row 6, with three amendments this ruling did not anticipate.**
 > (1) `NskeyMintLock` is now **`MintLock`** and takes the lock's `AtKey`, so
 > one implementation serves `_nskeylock.<ns>@<owner>` and the new
@@ -9609,7 +9635,7 @@ lost immutable create and answers the same question here.
 > holder is still inside the critical section, and `_release` force-deletes
 > without checking it still owns the lock, so a late holder can delete a
 > successor's. The second is pre-existing and applies to the nskey path too;
-> it is [`implementation-plan.md` 14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+> it is [`implementation-plan.md` 14.19](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 > item 18. The reconciliation this paragraph names covers both **for the
 > root**; whether the nskey path has an equivalent is not measured.
 > (3) The mint reads the record **twice** — the second read under the lock —
@@ -9667,7 +9693,7 @@ is the whole of requirement 2.
 **In brief:** *the publish-before-file window, three refused guards, and why the rule has no meaning on `primary`*
 
 From the examination
-[`implementation-plan.md` 14.19 item 15](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+[`implementation-plan.md` 14.19 item 15](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 asked for: can the record's several writers publish different compositions?
 Measured answer — at rest they agree, and inside one window they do not.
 
@@ -9761,7 +9787,7 @@ application call racing the unawaited `startup()`." Both halves are false.**
 It was measured on 2026-08-17 from the atServer's own log, and reaching it
 needed no application race at all — the ordinary approver flow does it on every
 run when the approver is built `postQuantum`
-([`implementation-plan.md` 14.32](implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)).
+([`implementation-plan.md` 14.32](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)).
 
 `public:_apsk.primary.a.__e@alice🛠` starts absent and takes four updates: bare
 RSA, bare RSA, **the `mldsa65` array**, **bare RSA again**. Instrumenting
@@ -9853,7 +9879,7 @@ signer:exit, mint:exit`.
 
 **In brief:** *per-use `typ` in the protected header; a verifier is handed the type it expects*
 
-Step 27, [`implementation-plan.md` 14.8](implementation-plan.md#148-domain-separation-on-the-signed-envelope).
+Step 27, [`implementation-plan.md` 14.8](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#148-domain-separation-on-the-signed-envelope).
 [Ruling 51](#51-the-from-challenge-and-a-signed-envelope-must-never-share-a-shape-2026-08-08)
 asked for domain separation between the `from:` challenge and a signed
 envelope. Building it turned up a second, nearer confusion, and the ruling
@@ -10030,7 +10056,7 @@ defect, and its fix in at_server). The defect was found here and is the reason
 exists.
 
 The route here was
-[`implementation-plan.md` 14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+[`implementation-plan.md` 14.19](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 item 18 — `MintLock._release` force-deletes a lock it may no longer own.
 Answering "is that worth fixing" meant measuring what the lock was buying, and
 the measurement is what moved the design.
@@ -10271,7 +10297,7 @@ check the lookup path already applies.
 **What it cost.** A design where the winner never deletes the lock and lets the
 ttl release it — otherwise the best shape available, because no release means
 no *stolen* release and
-[14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+[14.19](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 item 18 ceases to exist rather than being fixed — did not work on this
 atServer. The release was mandatory, and item 18 came back with it.
 
@@ -10429,7 +10455,7 @@ at_server, rebuild `at_virtual_env:local`, then build the client — and all
 three are done ([104.10](#10410-fixed-in-at_server-and-merged)). **Step 6 of
 the protocol therefore holds**: the winner never deletes the lock, the ttl
 releases it, and
-[14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+[14.19](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 item 18 ceased to exist rather than being fixed.
 
 On the client, `MintLock` has no release at all, and `withLock` refuses a lock
@@ -10624,7 +10650,7 @@ candidate directions, neither ruled:
    notification and re-drive it when the filing point signals, rather than
    dropping it. The design for this was worked out in full on 2026-08-16 and
    deliberately not built; it is recorded in
-   [14.30](implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it).
+   [14.30](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it).
 2. **Make the client's readiness observable** — a caller that must not miss
    early notifications can already `await pqBootstrap.startupComplete`, but
    nothing says so at the point a client is handed back, and no production
@@ -10818,7 +10844,7 @@ equals the number of active signing keys, floor one, and no stage files two.
 
 **Ruled by gkc 2026-08-18**, after the alternative — an overlapping `rollout2`
 — was put and declined. Raised by a source audit of plan
-[14.17](implementation-plan.md#1417-signature-agility--complete),
+[14.17](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1417-signature-agility--complete),
 which found `wrapAndSign`'s own comment describing the overlap as the operating
 mode (*"an envelope carrying both is readable by the peer that has upgraded and
 by the peer that has not"*) while no stage could produce one.
@@ -11086,7 +11112,7 @@ passphrase this client was not given returned exactly what a keyfile holding no
 such entry returns, and at `finer` the difference was invisible in every pack.
 
 **Why it stopped being cosmetic.** Before
-[14.30](implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)
+[14.30](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)
 the caller above dropped the notification; now it **parks** it, waiting for a
 filing signal. A genuine absence is a message that is merely early, and the
 park is exactly right for it. An unreadable keyfile produces the identical
@@ -11500,7 +11526,7 @@ verifier, it is writing the first one.
 > for the reason given.
 
 **Ruled by gkc, 2026-08-21**, closing the race
-[14.48](implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
+[14.48](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
 filed as a product row: the PQ startup mints an enrollment's signing keys
 concurrently with whatever the app does next, and the composition withdraws
 the authentication key from the published `_apsk` the moment the mint
@@ -11666,7 +11692,7 @@ ladder, which is 12 rows once expanded against the catalogue — and 4 of them
 (UC-B1.1, UC-B1.2, UC-B4.4, UC-A5.3) are inside the 15 consequence rows the
 table hands to arm 1. So 21 double-counts. The two readings and the 14 rows
 they agree on are in
-[`acceptance.md` section 14](../acceptance.md#which-rows-arm-1-owes); the choice
+[`acceptance.md` section 14](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/acceptance.md#which-rows-arm-1-owes); the choice
 between them is gkc's and is not made here. The per-row membership behind these
 counts was never written into the ruling, which is why the contradiction
 survived being read several times: two totals in one section look consistent
@@ -11686,7 +11712,7 @@ has open — and it belongs beside the catalogue it exists to prove.
 
 - **Arm 1, the stage arm** — 3 cells, one client per `PqPosture`, for the axis
   and consequence rows ([which ones, and why the count of 21 is
-  contested](../acceptance.md#which-rows-arm-1-owes)). ✅ **BUILT 2026-08-23**
+  contested](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/acceptance.md#which-rows-arm-1-owes)). ✅ **BUILT 2026-08-23**
   as `tests/at_functional_test/test/pq_stage_arm_test.dart`, and it executed
   UC-C1.2 for the first time. It is 3 *enrollments* rather than 3 clients:
   `refuseChangedRolloutAxes` refuses a second client on one cache key under
@@ -11791,7 +11817,7 @@ which is before **both** observations — checked against the tree as it stood o
 never authenticating RSA for want of anything setting its algorithm.
 
 That also re-reads
-[14.34](implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
+[14.34](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
 evidence rather than leaving it as a defect: `signingAlgoOf` resolves from key
 material, and that run had two clients — the legacy owner and the retrofitted
 one. A monitor whose PKAM went out as `signingAlgo:rsa2048` was the **legacy**
@@ -11898,7 +11924,7 @@ place with what it used to say.
    records the two defects that breadth was introduced to fix.
 4. **A suite-versus-key-algorithm guard in `_consume` would change no
    outcome.** Once a client can hold keys under more than one KEM
-   ([14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 5), an
+   ([14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 5), an
    envelope can name an ML-KEM suite and an X-Wing key, and it looks like
    something to refuse before the open. It is not: at_chops maps the
    wrong-length secret key to a `PqOpenException`, which the open already
@@ -11919,7 +11945,7 @@ place with what it used to say.
    source there points the client at a store that may hold another atSign's
    keys, or none. The asymmetry is correct: onboarding *mints* keys and needs
    somewhere to write them, while authenticating does not. Proposed and
-   rejected 2026-08-13 while wiring [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+   rejected 2026-08-13 while wiring [14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
    step 11; the same reasoning is now a comment above the method, because the
    invitation is in the file rather than in this document.
 6. **Do NOT add `update` to at_client's `EnrollmentService`.** The invitation is
@@ -11936,13 +11962,13 @@ place with what it used to say.
    rests on. Note also that the facade does **not** mirror `AtEnrollment` today —
    it carries no `submit`, no `list`, no otp verbs — so "it forwards the others"
    was never the rule. Proposed and rejected 2026-08-13 while landing
-   [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 16. When
+   [14.18](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 16. When
    steps 17–18 need to reach `update` from at_client, give it a seam of its own
    on the signing path rather than widening this one.
 
 7. **Do NOT make the mint lock release itself while its lease is unspent.**
    Proposed 2026-08-16 — by me, and *recommended* — when the first live run of
-   [14.24](implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) showed a
+   [14.24](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) showed a
    rotation refused for the two minutes after a mint. The argument was that it
    is sound by construction: `MintLease.expiresAt` is stamped *before* the take
    goes out, so "unspent by my clock" implies the atServer has not expired it
@@ -11957,7 +11983,7 @@ place with what it used to say.
    visible from the code is that a lock nobody deletes has **no**
    stolen-release window to close, and adding a delete back reintroduces the
    whole class — which is what
-   [14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18
+   [14.19](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18
    was, and it took two sessions to kill. If this is re-opened, the thing to
    change is the *protocol*, in a ruling — not `MintLock`. See
    [decisions 105.6](#1056-built-the-cooldown-binds-rotation-too).
@@ -13399,7 +13425,7 @@ grants a connection with no enrollment id full access — measured live against 
 running atServer: `pending`, then `approved`, with the new enrollment
 authenticating afterwards. The route, its controls and the answer to what
 becomes of the legacy credential are in
-[Why commit 7 needs no atServer change](implementation-plan.md#why-commit-7-needs-no-atserver-change).
+[Why commit 7 needs no atServer change](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#why-commit-7-needs-no-atserver-change).
 
 **The ruling stands, on the reason that never depended on this.** The null-id
 publish is a pinned working capability, and a client that has not retrofitted is
@@ -13539,25 +13565,40 @@ walk one*
    EXISTS and is not currently `approved`.** Without that guard the cascade is
    one-way only: un-revoking a descendant while its predecessor stays revoked
    would resurrect exactly the orphan the cascade exists to remove.
-   ⚠️ **The "exists" is load-bearing.** `parentEnrollmentId` is set only in the
-   APKAM self-enrollment branch, so every enrollment created through the ordinary
-   approver path has none. A rule phrased without it is literally satisfied by
-   those — *"whose predecessor is not currently approved"* is true when there is
-   no predecessor — and would permanently bar un-revoking any of them.
+   ⚠️ **"Predecessor" here is the enrollment `parentEnrollmentId` names, which
+   since [ruling 133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)
+   is the APPROVER.** On at_server trunk (`88667359`) `enroll:approve` writes the
+   approving enrollment's id into it, a self-enrollment copies its predecessor's,
+   and a successor's first authentication moves the predecessor's approval
+   children onto the successor. The rule as built, `_refuseIfApproverNotApproved`,
+   refuses an un-revoke or an approve while the enrollment that approved the
+   target exists and is not `approved`.
+   ⚠️ **The "exists" is essential.** An enrollment made over CRAM, such as the
+   first, has no `parentEnrollmentId`, nor has a successor that replaced it, and
+   an approver's record can be gone. A rule phrased without it is literally
+   satisfied by those — *"whose predecessor is not currently approved"* is true
+   when there is no predecessor — and would permanently bar un-revoking any of
+   them.
    ⛔ **This ruling claimed a PENDING descendant was a second route to the same
-   orphan. There is no such thing.** On `origin/trunk` the APKAM self-enrollment
-   branch sets `approved` and writes `parentEnrollmentId` in the same breath, and
-   that branch is the only writer of the field — the ordinary request branch,
-   which sets `pending`, never writes a predecessor. So no enrollment carrying a
-   predecessor is ever pending, and `enroll:approve` on one is already refused as
-   *"Only pending enrollments can be approved"*. The claim was inherited from an
-   audit and written here without being checked.
+   orphan. There is no such thing.** No writer of `parentEnrollmentId` touches a
+   pending enrollment: the APKAM self-enrollment branch sets `approved` as it
+   writes the field, `enroll:approve` writes it as the enrollment leaves
+   `pending`, and the first-authentication settlement only moves a value an
+   enrollment already carries. The ordinary request branch, which sets
+   `pending`, never writes it. So no enrollment carrying a predecessor is ever
+   pending, and `enroll:approve` on one is already refused as *"Only pending
+   enrollments can be approved"*. The claim was inherited from an audit and
+   written here without being checked.
    ⚠️ **The approve path still gets the same predecessor test, deliberately** —
    as belt-and-braces rather than as a hole being closed. It costs one condition
    on the helper the un-revoke guard needs anyway, and it makes the invariant
-   total: an enrollment does not become active while what it replaced is
+   total: an enrollment does not become active while what approved it is
    inactive, at *every* transition into an active state rather than only at the
    reachable one. It is unreachable today and its test says so.
+   ⚠️ **Amended 2026-11-09:** this part said `parentEnrollmentId` is set only in
+   the APKAM self-enrollment branch, its only writer, so that every enrollment
+   created through the approver path had none; and that the invariant kept an
+   enrollment inactive while what it *replaced* was.
 3. **The pair, not either half, denies an attacker NEW data keys.** Revoking the enrollment
    and all of its descendants, *followed by* the rotation, is what denies an
    attacker new data keys. The revocation alone leaves material already conveyed
@@ -13809,6 +13850,13 @@ everybody.
    start. ⚠️ **Two clients get no free ride:** one holding no enrollment id
    returns before fetching anything, and one whose fetch throws discards the
    list — for those there is nothing to ride and nothing is established.
+   **Amended 2026-11-07** by [ruling 162](#162-the-2026-11-07-plan-review-settles-nine-open-questions-2026-11-07) item 6: the primary
+   enrollment, a client holding no enrollment id or `primary`, is to get the
+   backstop too. ⚠️ **Ruled, not built:** `NskeySeeding.rotateIfRevoked` still
+   returns false for such a client, under a NOTE that the atServer will not
+   answer about the primary enrollment and that the verb behind the lookup is
+   APKAM-gated, so until it lands a client running as `primary` gets no
+   backstop. The change is owed, and the plan carries it.
 
 ⛔ **The premise this ruling was FIRST built on was false, and the correction is
 the reason point 3 exists.** It said `enroll:list` returns every enrollment at
@@ -13864,7 +13912,11 @@ anyone asserting a *locally computed* time on either path restores the trap.
 does not notice a revocation until it restarts. The revoker rotates immediately
 and this is the backstop for when it could not.
 
-**What each side owes: nothing, since 2026-09-09.** at_server: the revocation
+**What each side owes: point 8's 2026-11-07 amendment, and nothing else since
+2026-09-09.** The amendment is unbuilt: `rotateIfRevoked` skips the primary
+enrollment (point 8), so at_client owes the predicate change, and the NOTE
+beside the skip means the atServer may owe an answer about the primary
+enrollment as well. Everything below is about the points as first ruled. at_server: the revocation
 event log of point 1 and the per-namespace moment derived from it and served by
 `enroll:infons` — **both built**, and on `origin/trunk` since `105aff94`
 (2026-08-31). Verify rather than taking it from here: the netting in
@@ -14514,7 +14566,7 @@ is stamped onto the legacy shape.
 
 **Decided by gkc on 2026-09-30**, in the content-key area of the key-caching
 work-through (the section *PQ key writing and fetching* in
-[`implementation-plan.md`](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
+[`implementation-plan.md`](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
 items 1–6, which record the behaviour each part replaces). 142.1 is built in
 `ckConveyanceKey` and `SymmetricAesGcmProvider._resolveFromConveyance`, and
 proven live: the recipient's atServer caches the conveyance with its
@@ -14682,7 +14734,7 @@ explicitly scan and view them if it wishes to"); the proposed switch is
 
 **Decided by gkc on 2026-09-30**, in the advertisement area of the key-caching
 work-through (items 7–13 of the implementation plan's
-[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
+[section](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching),
 which record the behaviour each part replaces). 143.1 is pinned: the command
 every mint, rotation and add sends is asserted raw in
 `test/nskey_minting_test.dart`. 143.2, 143.4 and 143.5 are built in
@@ -14802,7 +14854,7 @@ failure: mutual exclusion holds, and the delay ends on its own.
 
 **Decided by gkc on 2026-09-30**, in the `_apsk` area of the key-caching
 work-through (items 14–17 of the implementation plan's
-[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
+[section](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)).
 144.1 is built in `EnvelopeSigning`: a fixed expiry from the fetch, one re-fetch
 after a cached key fails, and one cache per AtClient. 144.2 is built in
 `PqSigningChain.republishedAppMetadata`, which `publishPublicSigningKey` sends.
@@ -14936,7 +14988,7 @@ scenarios in at_server's `features/enrollment/expired_enrollment_data.feature`.
 
 **Decided by gkc on 2026-09-30**, as item 18 of the key-caching work-through
 (the implementation plan's
-[section](../implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)),
+[section](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#pq-key-writing-and-fetching-lifetimes-and-caching)),
 and widened by him on 2026-10-10. The client half is built:
 `LookUpBuilderManager.get` sets `bypassCache` on every lookup of an `_apsk` or
 `__nskey` record, pinned in `test/verb_builder_test.dart`. The atServer half is
@@ -15881,6 +15933,73 @@ namespace", which these limits used to name, is gone with the mint it guarded.
 Supersedes [159](#159-a-write-starts-its-walk-at-the-namespace-its-key-names-in-full-2026-11-01)
 item 1 and [160](#160-a-write-made-before-start-up-has-seeded-waits-for-it-2026-11-01) items 2
 and 6, for shares.
+
+## 162. The 2026-11-07 plan review settles nine open questions (2026-11-07)
+
+**In brief:** *the first phase shipped, the plan was cut to what is still owed,
+and these nine questions were ruled rather than carried forward*
+
+**Ruled by gkc, 2026-11-07**, going through the implementation plan's rows one
+at a time after at_client 4.0.0 shipped. Each item closes a plan row or changes
+what one owes.
+
+1. **A keyfile restored from before a retrofit may retrofit again.** at_auth
+   decides "already retrofitted" from the keyfile alone, so a restored
+   pre-retrofit copy submits another self-enrollment. That is accepted as it
+   stands, and nothing recognises the earlier successor from the atServer.
+2. **A self-enrollment may inherit an unbounded expiry.** It takes its
+   predecessor's place under the same approver and inherits the predecessor's
+   `apkamKeysExpiryDuration`, bounded by the predecessor's stored deadline, and
+   zero means never. Revoking that approver, or anything above it, reaches it
+   ([129](#129-revocation-cascades-to-descendants-and-the-roster-does-the-rest-2026-08-31));
+   revoking the predecessor does not
+   ([133](#133-a-revocation-follows-approval-and-a-replacement-settles-itself-2026-09-08)).
+   A retrofit of the root enrollment, which has no approver and keeps its life,
+   yields a successor that never expires and is revoked only by name. gkc
+   accepted that on 2026-11-07 and re-ruled it on the corrected facts on
+   2026-11-09.
+3. **The nine rows contested between test arms 1 and 3 stay proven where they
+   are.** UC-A5.2, UC-A5.3, UC-B1.1, UC-B1.2, UC-B4.4, UC-G1.2, UC-G1.5, UC-A4.2
+   and UC-B4.3 are PROVEN by their existing citations; arm 1 gains no cells for
+   them, and `acceptance.md` section 14 no longer states the two readings.
+4. **An atSign reachable only through wildcard enrollments has a namespace key
+   only where something of it runs.** A `*` grant seeds the namespace its app
+   runs in ([132](#132-the-keys-name-the-enrollment-and-primary-names-the-atsigns-own-credential-2026-09-07)
+   point 4) and every namespace a client shares into
+   ([142](#142-content-keys-recipients-cache-shared-conveyances-siblings-open-every-key-and-a-key-goes-once-nothing-cites-it-and-its-grace-is-over-2026-09-30)
+   point 2). That it has none anywhere else, so nobody can seal to it there, is
+   intended.
+5. **A late-arriving nskey private is filed when it lands, asked for or not,**
+   provided its seed derives a published or named generation. That is what
+   `PqClientBootstrap`'s envelope handler does (`5dc4d64d1`), and what the wasm
+   plan's ruling of 2026-09-07 asked for; the PQ plan's text of the same day,
+   "only for a generation this client asked for", is withdrawn. The derivation
+   check is what keeps a stray key out of the keyfile.
+6. **The primary enrollment gets the revocation backstop.** A client running
+   with no enrollment id, or as `primary`, checks for revocations at start like
+   every other, amending
+   [130](#130-a-revocation-is-discoverable-per-namespace-and-rotates-unconditionally-2026-08-31)
+   point 8.
+7. **Key packages and envelopes stop defaulting their APKAM signature to
+   `rsa2048`**, as
+   [136](#136-at_auth-stays-posture-blind-and-both-its-doors-demand-the-algorithm-2026-09-08)
+   removed two other such defaults: `enrollmentKeyPackageBuilder`'s
+   `signingAlgo`, at_auth's `FirstEnrollmentRequest.signingAlgo` and
+   `signingAlgoOf`'s fallback. The caller names the algorithm, or it follows the
+   enrollment's own authentication key.
+8. **All four self-to-self mirrors become catalogue rows** — of UC-A4.5,
+   UC-A4.7, UC-A4.6 and UC-A4.3 — by the rule that where a put, notify, get or
+   receipt use case has one direction, it has the other. Value was not the test:
+   UC-A4.3's mirror restates rows that already prove it, and it is added anyway.
+9. **The PQ doc set is design, use cases, the decision log and the open plan.**
+   `design.md` carries the current design and planned changes, `roadmap.md`
+   folded into it; `acceptance.md` the use cases; this ledger and its bodies
+   the decisions, unchanged; and `implementation-plan.md` only what is still
+   owed. `detail/implementation-plan.md` and `detail/acceptance.md` are
+   removed, and links into them point at their last version on GitHub. This
+   replaces the end state ruled 2026-08-23, five files with the ruling bodies
+   inlined into this ledger: the bodies stay in `detail/` so the index stays
+   bodyless.
 
 ## 163. An envelope names its signer's Atsign, and verifies offline (2026-11-07)
 

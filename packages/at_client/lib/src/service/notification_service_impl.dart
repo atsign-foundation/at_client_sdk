@@ -67,6 +67,72 @@ class NotificationServiceImpl extends NotificationService {
   /// The epoch millis of the latest notification this service received.
   int? _lastReceivedMillis;
 
+  /// How many notifications [_isDuplicate] remembers.
+  @visibleForTesting
+  static const seenIdCapacity = 1024;
+
+  /// Notifications already delivered, oldest first (a `LinkedHashMap` keeps insertion
+  /// order, so `_seenNotifications.keys.first` is the oldest). Keyed by compound
+  /// record `(from.toAtsign(), id)`.
+  final _seenNotifications =
+      <(Atsign, String), ({int? epochMillis, String? key})>{};
+
+  /// The epoch millis of the stored watermark.
+  int? _watermarkMillis;
+
+  /// Notification pairs `(from.toAtsign(), id)` delivered at [_watermarkMillis],
+  /// oldest first.
+  List<(Atsign, String)> _watermarkIds = [];
+
+  static List<String> _watermarkPair(AtNotification n) =>
+      [n.from.toAtsign().toString(), n.id];
+
+  void _recordSeen((Atsign, String) entry, {int? epochMillis, String? key}) {
+    _seenNotifications[entry] = (epochMillis: epochMillis, key: key);
+    // FIFO: replays arrive close behind the original, so recency of use adds
+    // nothing over recency of first sight.
+    if (_seenNotifications.length > seenIdCapacity) {
+      _seenNotifications.remove(_seenNotifications.keys.first);
+    }
+  }
+
+  /// Whether [n] was already delivered, recording it when it was not. An
+  /// inclusive since filter, a reconnect and a tab handoff all replay the
+  /// notification a service already delivered, and subscribers must see it once.
+  ///
+  /// Replays with matching key and timestamp log quietly at `finer`. A same-id
+  /// notification with a conflicting key or timestamp is logged at `warning`
+  /// and reported on [droppedEvents].
+  bool _isDuplicate(AtNotification n) {
+    // Every stats notification carries this id; none is a replay of another.
+    if (n.id == '-1') return false;
+
+    final key = (n.from.toAtsign(), n.id);
+    final seen = _seenNotifications[key];
+    if (seen != null) {
+      final isMatch = (seen.key == null || seen.key == n.key) &&
+          (seen.epochMillis == null || seen.epochMillis == n.epochMillis);
+      if (isMatch) {
+        if (seen.key == null) {
+          _seenNotifications[key] =
+              (epochMillis: seen.epochMillis ?? n.epochMillis, key: n.key);
+        }
+        logger.finer(
+            'Ignoring ${n.key}: notification (${key.$1}, ${key.$2}) was already delivered');
+      } else {
+        _drop(
+            n.key,
+            'Dropping duplicate notification with conflicting key or timestamp: '
+            'from=${key.$1} id=${key.$2} (seen key=${seen.key} epoch=${seen.epochMillis}, '
+            'received key=${n.key} epoch=${n.epochMillis})');
+      }
+      return true;
+    }
+
+    _recordSeen(key, epochMillis: n.epochMillis, key: n.key);
+    return false;
+  }
+
   @visibleForTesting
   AtClientValidation atClientValidation = AtClientValidation();
 
@@ -415,13 +481,28 @@ class NotificationServiceImpl extends NotificationService {
   /// What gets persisted as the watermark: the notification minus its payload
   /// and its metadata blob.
   ///
-  /// Only `epochMillis` is ever read back — see [getLastNotificationTime]. The
-  /// payload is dropped because it is bounded only by
-  /// [AtClientPreference.maxDataSize], rewritten on every notification, and
-  /// held here without value-level encryption.
-  static String _watermarkValue(AtNotification n) => jsonEncode(n.toJson()
-    ..remove('value')
-    ..remove('metadata'));
+  /// [pairs] are the notification `[from, id]` pairs delivered at `n.epochMillis`,
+  /// stored as `idsAtEpochMillis`. Only `epochMillis`, `idsAtEpochMillis` and `id` are
+  /// ever read back — see [getLastNotificationTime]. The payload is dropped
+  /// because it is bounded only by [AtClientPreference.maxDataSize], rewritten
+  /// on every notification, and held here without value-level encryption.
+  static String _watermarkValue(AtNotification n, List<List<String>> pairs) =>
+      jsonEncode(n.toJson()
+        ..remove('value')
+        ..remove('metadata')
+        ..['idsAtEpochMillis'] = pairs);
+
+  /// Records [n] as the newest watermark entry and returns the notification
+  /// pairs `(from.toAtsign(), id)` stored with it: the pairs already at its
+  /// millisecond plus its own, capped at [seenIdCapacity].
+  List<(Atsign, String)> _recordWatermark(AtNotification n) {
+    final entry = (n.from.toAtsign(), n.id);
+    _watermarkIds =
+        n.epochMillis == _watermarkMillis ? [..._watermarkIds, entry] : [entry];
+    _watermarkMillis = n.epochMillis;
+    if (_watermarkIds.length > seenIdCapacity) _watermarkIds.removeAt(0);
+    return _watermarkIds;
+  }
 
   /// Migrate any legacy (non-`local:`) forms of the
   /// last-received-notification key to the canonical
@@ -551,7 +632,61 @@ class NotificationServiceImpl extends NotificationService {
     AtValue? atValue = await _migrateLegacyLastReceivedNotificationKeys();
     if (atValue?.value != null) {
       logger.finer('json from hive: ${atValue?.value}');
-      return jsonDecode(atValue?.value)['epochMillis'];
+      final watermark = jsonDecode(atValue?.value);
+      // On the first read only, records every id delivered at the
+      // watermark's millisecond as delivered, so their replay is dropped.
+      // Later reads keep the in-memory ids, which include any write still
+      // in flight.
+      if (_watermarkMillis == null) {
+        final rawPairs = watermark['idsAtEpochMillis'];
+        final from = watermark['from'];
+        final id = watermark['id'];
+        _watermarkIds = [];
+
+        Atsign? parseAtsign(dynamic s) {
+          if (s is! String || s.isEmpty) return null;
+          try {
+            return s.toAtsign();
+          } on InvalidAtSignException {
+            return null;
+          }
+        }
+
+        if (rawPairs is List) {
+          for (final item in rawPairs) {
+            if (item is List &&
+                item.length >= 2 &&
+                item[0] is String &&
+                item[1] is String) {
+              final sender = parseAtsign(item[0]);
+              if (sender != null) {
+                _watermarkIds.add((sender, item[1] as String));
+              }
+            } else if (item is String && from is String) {
+              // Legacy list of bare ids from an earlier build: associate with watermark's from
+              final sender = parseAtsign(from);
+              if (sender != null) {
+                _watermarkIds.add((sender, item));
+              }
+            }
+          }
+        } else if (id is String && from is String) {
+          // 4.0.0 watermark: stores 'from' and 'id' as top-level strings, without idsAtEpochMillis
+          final sender = parseAtsign(from);
+          if (sender != null) {
+            _watermarkIds.add((sender, id));
+          }
+        }
+        _watermarkMillis = watermark['epochMillis'];
+        final watermarkKey = watermark['key'] as String?;
+        for (final entry in _watermarkIds) {
+          final isWatermarkSelf = id is String && entry.$2 == id;
+          _recordSeen(entry,
+              epochMillis: _watermarkMillis,
+              key: isWatermarkSelf ? watermarkKey : null);
+        }
+      }
+      return watermark['epochMillis'];
     }
 
     // First-call branch: no last-received-notification record exists.
@@ -575,7 +710,8 @@ class NotificationServiceImpl extends NotificationService {
     // sequence as a failed connection and retries forever; not seeding the
     // watermark costs one replayed window.
     try {
-      await atClient.put(lastReceivedNotificationAtKey, _watermarkValue(n),
+      await atClient.put(lastReceivedNotificationAtKey,
+          _watermarkValue(n, [_watermarkPair(n)]),
           putRequestOptions: _watermarkPutOptions);
     } on StoppedException {
       rethrow;
@@ -666,6 +802,9 @@ class NotificationServiceImpl extends NotificationService {
           .getAtNotifications(notificationParser.parse(notificationJSON));
       _lastReceipt = DateTime.now().toUtc();
       for (var n in notifs) {
+        if (_isDuplicate(n)) {
+          continue;
+        }
         if (n.key == myStatsNotifKey) {
           logger.finer('Received ${n.key} (serverCommitId) ${n.value}');
         } else {
@@ -708,7 +847,12 @@ class NotificationServiceImpl extends NotificationService {
           if (isStopped) return;
           try {
             await atClient.put(
-                lastReceivedNotificationAtKey, _watermarkValue(n),
+                lastReceivedNotificationAtKey,
+                _watermarkValue(
+                    n,
+                    _recordWatermark(n)
+                        .map((p) => [p.$1.toString(), p.$2])
+                        .toList()),
                 putRequestOptions: _watermarkPutOptions);
           } catch (e) {
             if (isStopped) {
