@@ -52,7 +52,7 @@
 - feat: notifications are delivered once per (from, id) compound key, even
   after a reconnect (latest 1024 ids capped per millisecond watermark).
   Conflicting duplicate IDs trigger warnings and are reported on
-  `droppedEvents`. New `AtClientPreference.browser()` preset for browser clients.
+  `droppedEvents`.
 - feat: `buildAtClient` takes an optional `notificationLookUps` factory for the
   monitor's connection.
 

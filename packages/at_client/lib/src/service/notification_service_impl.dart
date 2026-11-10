@@ -642,22 +642,40 @@ class NotificationServiceImpl extends NotificationService {
         final from = watermark['from'];
         final id = watermark['id'];
         _watermarkIds = [];
+
+        Atsign? parseAtsign(dynamic s) {
+          if (s is! String || s.isEmpty) return null;
+          try {
+            return s.toAtsign();
+          } on InvalidAtSignException {
+            return null;
+          }
+        }
+
         if (rawPairs is List) {
           for (final item in rawPairs) {
             if (item is List &&
                 item.length >= 2 &&
                 item[0] is String &&
                 item[1] is String) {
-              _watermarkIds
-                  .add(((item[0] as String).toAtsign(), item[1] as String));
+              final sender = parseAtsign(item[0]);
+              if (sender != null) {
+                _watermarkIds.add((sender, item[1] as String));
+              }
             } else if (item is String && from is String) {
               // Legacy list of bare ids from an earlier build: associate with watermark's from
-              _watermarkIds.add((from.toAtsign(), item));
+              final sender = parseAtsign(from);
+              if (sender != null) {
+                _watermarkIds.add((sender, item));
+              }
             }
           }
         } else if (id is String && from is String) {
           // 4.0.0 watermark: stores 'from' and 'id' as top-level strings, without idsAtEpochMillis
-          _watermarkIds.add((from.toAtsign(), id));
+          final sender = parseAtsign(from);
+          if (sender != null) {
+            _watermarkIds.add((sender, id));
+          }
         }
         _watermarkMillis = watermark['epochMillis'];
         final watermarkKey = watermark['key'] as String?;

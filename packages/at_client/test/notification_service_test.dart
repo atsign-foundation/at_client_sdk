@@ -1949,6 +1949,119 @@ void main() {
     });
 
     test(
+        'a stored pair whose sender is not an atSign does not throw out of '
+        'getLastNotificationTime and skips the entry', () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => AtValue()
+        ..value = jsonEncode({
+          'id': 'valid-1',
+          'from': '@alice',
+          'epochMillis': 1234567890123,
+          'idsAtEpochMillis': [
+            ['', 'invalid-sender'],
+            ['@alice', 'valid-1'],
+          ]
+        }));
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
+      final service = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(service.stopAllSubscriptions);
+
+      expect(await service.getLastNotificationTime(), 1234567890123);
+
+      final delivered = <String>[];
+      service
+          .subscribe(regex: '.*')
+          .listen((n) => delivered.add('${n.from}:${n.id}'));
+
+      // valid-1 from @alice is in seen, so replay is dropped
+      await service.handleNotificationReceipt('notification: '
+          '{"id":"valid-1","from":"@alice","to":"@alice",'
+          '"key":"valid-1.wavi@alice","value":null,"operation":"update",'
+          '"epochMillis":1234567890123,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+
+      // invalid-sender was skipped, but when replayed as valid notification it is delivered
+      await service.handleNotificationReceipt('notification: '
+          '{"id":"invalid-sender","from":"@alice","to":"@alice",'
+          '"key":"invalid-sender.wavi@alice","value":null,"operation":"update",'
+          '"epochMillis":1234567890123,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+
+      await pumpEventQueue();
+      expect(delivered, ['@alice:invalid-sender']);
+    });
+
+    test(
+        'a resume from stored pairs with two different senders preserves each sender',
+        () async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async => AtValue()
+        ..value = jsonEncode({
+          'id': 'watermark-id',
+          'from': '@alice',
+          'epochMillis': 1234567890123,
+          'idsAtEpochMillis': [
+            ['@alice', 'id-1'],
+            ['@bob', 'id-2'],
+          ]
+        }));
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+
+      final service = await NotificationServiceImpl.create(mockAtClientImpl,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(service.stopAllSubscriptions);
+
+      expect(await service.getLastNotificationTime(), 1234567890123);
+
+      final delivered = <String>[];
+      service
+          .subscribe(regex: '.*')
+          .listen((n) => delivered.add('${n.from}:${n.id}'));
+
+      // Replay of (@bob, id-2) must be dropped
+      await service.handleNotificationReceipt('notification: '
+          '{"id":"id-2","from":"@bob","to":"@alice",'
+          '"key":"id-2.wavi@bob","value":null,"operation":"update",'
+          '"epochMillis":1234567890123,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+
+      // Notification with same id ('id-2') but from @alice must NOT be dropped,
+      // proving that (@bob, id-2) was not recorded as (@alice, id-2)
+      await service.handleNotificationReceipt('notification: '
+          '{"id":"id-2","from":"@alice","to":"@alice",'
+          '"key":"id-2.wavi@alice","value":null,"operation":"update",'
+          '"epochMillis":1234567890123,'
+          '"messageType":"MessageType.key","isEncrypted":false}');
+
+      await pumpEventQueue();
+      expect(delivered, ['@alice:id-2'],
+          reason:
+              'only @alice:id-2 is delivered; @bob:id-2 was dropped from stored pair');
+    });
+
+    test(
         'a resume from the stored watermark delivers none of the notifications '
         'the previous run delivered in the watermark\'s millisecond', () async {
       registerFallbackValue(FakeAtKey());

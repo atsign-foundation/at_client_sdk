@@ -82,15 +82,6 @@ class AtClientPreference {
   /// dropped algorithm is refused rather than downgraded.
   final List<String> sealsToKeyAlgorithms;
 
-  /// The preference a browser client starts from.
-  ///
-  /// [fetchOfflineNotifications] is false: the monitor resumes a dropped
-  /// connection from the notifications this page has already received, in
-  /// memory, rather than from a stored watermark a browser store may not
-  /// hold.
-  factory AtClientPreference.browser({PqPosture posture = PqPosture.legacy}) =>
-      AtClientPreference(posture: posture)..fetchOfflineNotifications = false;
-
   AtClientPreference(
       {this.posture = PqPosture.legacy,
       this.pqStartupGates,
