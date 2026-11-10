@@ -633,12 +633,27 @@ class AtKeys {
             material.enrollmentId != enrollmentId ||
             material.status != CryptographicMaterialStatus.pending)
         .toList();
-    for (final material in pending) {
-      final activated =
-          material.withStatus(CryptographicMaterialStatus.active);
+    final activated = [
+      for (final material in pending)
+        material.withStatus(CryptographicMaterialStatus.active)
+    ];
+    // NOTE: each candidate is checked against the rest of the BATCH as well as
+    // against `others`. `others` excludes every pending material of this
+    // enrollment, so a batch checked only against it is never compared with
+    // itself: two pending authentication materials of one role and algorithm —
+    // a re-submitted request filed a second keypair — would both pass and both
+    // go active. The document that produces is one this build's own reader
+    // rejects (`validateKeyMaterials`), so the approval's write is refused and
+    // the enrollment stays pending in the keyfile while approved server-side.
+    for (var i = 0; i < activated.length; i++) {
+      final peers = [
+        ...others,
+        for (var j = 0; j < activated.length; j++)
+          if (j != i) activated[j],
+      ];
       assurance.refuseSecondLiveEnrollment(
-          existing: others, candidate: activated);
-      assurance.validateAddKey(existing: others, candidate: activated);
+          existing: peers, candidate: activated[i]);
+      assurance.validateAddKey(existing: peers, candidate: activated[i]);
     }
     for (final material in pending) {
       slot!.materialsByKeyId[material.keyId]![material.role] =
@@ -650,10 +665,14 @@ class AtKeys {
   /// filed under it.
   ///
   /// Only for an enrollment that never went live — a submission that was
-  /// denied or expired — so an enrollment holding any active material is
-  /// refused with [ArgumentError]: key material that protected anything is
-  /// retired, never removed, and [retireKey] is the operation for it. Throws
-  /// too for an enrollment the keyfile does not hold.
+  /// denied or expired, and so left pending. An enrollment holding any
+  /// material past pending is refused with [ArgumentError]: key material that
+  /// protected anything is retired, never removed, and [retireKey] is the
+  /// operation for it. The store's never-lose assurance refuses a write that
+  /// drops a retired or dead material, so removing one here would not merely
+  /// be wrong — it would make every later flush of this AtKeys throw, with the
+  /// material already gone from the instance that could still have been
+  /// written. Throws too for an enrollment the keyfile does not hold.
   void discardEnrollment(String enrollmentId) {
     final slot = _enrollments[enrollmentId];
     if (slot == null) {
@@ -663,15 +682,16 @@ class AtKeys {
     final live = [
       for (final byType in slot.materialsByKeyId.values)
         for (final material in byType.values)
-          if (material.status == CryptographicMaterialStatus.active)
+          if (material.status != CryptographicMaterialStatus.pending)
             material.keyId
     ];
     if (live.isNotEmpty) {
       throw ArgumentError.value(
           enrollmentId,
           'enrollmentId',
-          'this enrollment holds active material (${live.toSet().join(', ')}), '
-              'which is retired rather than discarded');
+          'this enrollment holds material that has left pending '
+              '(${live.toSet().join(', ')}), which is retired rather than '
+              'discarded');
     }
     _enrollments.remove(enrollmentId);
   }
@@ -1361,23 +1381,32 @@ class AtKeys {
   /// material names an algorithm this build cannot sign with, rather than
   /// answering from the flat fields, which on such a keyfile are a different
   /// enrollment's. A keyfile written by a newer client is the way this
-  /// happens.
+  /// happens. It throws the same way when the active halves do not pair up —
+  /// no public half under the private half's keyId, or two halves disagreeing
+  /// about their algorithm — because the pair it would otherwise return
+  /// cannot verify anything it signs.
   ({SigningAlgoType algorithm, String publicKey, String privateKey})?
       authenticationKeyPairFor(String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm != null) {
-      final materials = keysForEnrollment(enrollmentId!);
-      final private = materials
-          .where((m) =>
-              m.role == CryptographicMaterialRole.privateAuthentication &&
-              m.status == CryptographicMaterialStatus.active)
-          .firstOrNull;
-      final public = materials
-          .where((m) =>
-              m.role == CryptographicMaterialRole.publicAuthentication &&
-              m.status == CryptographicMaterialStatus.active)
-          .firstOrNull;
-      if (private == null || public == null) {
+      // Both halves come from ONE keyId, and from the SAME material the
+      // algorithm was resolved from. Picking each half independently by
+      // `firstOrNull` pairs whatever the map order puts first: `addKey`
+      // admits a keyId holding `privateAuthentication` of one algorithm and
+      // `publicAuthentication` of another — the per-(role, algorithm) rule
+      // cannot see across the two — so the record handed back would name one
+      // algorithm while carrying the other's public bytes, and every
+      // signature the private half makes would fail verification.
+      // `signingKeysFor` guards this same hazard; this path must too.
+      final private = _activeAuthenticationMaterial(enrollmentId!);
+      final public = private == null
+          ? null
+          : getKey(enrollmentId, private.keyId,
+              CryptographicMaterialRole.publicAuthentication);
+      if (private == null ||
+          public == null ||
+          public.status != CryptographicMaterialStatus.active ||
+          public.algorithm != private.algorithm) {
         throw AtKeyNotFoundException(
             'AtKeys holds no active authentication keypair for enrollment '
             '$enrollmentId');

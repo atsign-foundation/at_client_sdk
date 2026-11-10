@@ -346,6 +346,16 @@ class EnrollmentSubmitter {
       ..namespaces = atEnrollmentRequest.namespaces
       ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration
       ..metadata = metadata;
+    // NOTE: the keyfile's spelling of the advertised algorithm is resolved
+    // BEFORE the request goes out. [_materialAlgorithmOf] throws for an
+    // algorithm no material can be filed under, and once `enroll:` has run
+    // that throw escapes past the point where the enrollment id is known:
+    // the caller loses the id of a record the atServer has already created,
+    // so a retry files a second enrollment beside the first.
+    final signing = atEnrollmentRequest.advertisedSigningKey;
+    final signingMaterialAlgo =
+        signing == null ? null : _materialAlgorithmOf(signing.algorithm);
+
     // Without an `_apsk` the atServer publishes nothing, and the approver has
     // no key to verify the advertised key package against — so it seals no
     // secrets to an enrollment that is otherwise perfectly good. It advertises
@@ -402,11 +412,10 @@ class EnrollmentSubmitter {
     // enrollment's own signing material, not something the metadataBuilder
     // minted, and it is filed here because only now is there an id to file it
     // under.
-    final signing = atEnrollmentRequest.advertisedSigningKey;
     if (signing != null) {
       atAuthKeys.fileSigningMaterial(
           enrollmentId: enrollmentIdFromServer,
-          algorithm: _materialAlgorithmOf(signing.algorithm),
+          algorithm: signingMaterialAlgo!,
           publicKey: signing.publicKey,
           privateKey: signing.privateKey);
     }
@@ -512,6 +521,17 @@ class EnrollmentSubmitter {
             atAuthKeys: existing,
             session: request.session);
       }
+
+      // NOTE: the advertised signing key's keyfile spelling is resolved BEFORE
+      // anything is sent, for the same reason as the OTP path. Resolving it
+      // after `enroll:` would throw past the approval, leaving an enrollment
+      // the atServer has already approved with no keyfile holding its private
+      // half — and a retry, finding nothing filed, creates a second one. It
+      // sits after the re-run check above so an idempotent re-run still
+      // returns the existing enrollment without filing anything.
+      final signingMaterialAlgo = request.advertisedSigningKey == null
+          ? null
+          : _materialAlgorithmOf(request.advertisedSigningKey!.algorithm);
 
       // NOTE: the keyfile must take a write before anything is minted or sent.
       // `update`, not `flush`: a flush recreates a keyfile deleted since the
@@ -630,7 +650,7 @@ class EnrollmentSubmitter {
       if (signing != null) {
         existing.fileSigningMaterial(
             enrollmentId: newEnrollmentId,
-            algorithm: _materialAlgorithmOf(signing.algorithm),
+            algorithm: signingMaterialAlgo!,
             publicKey: signing.publicKey,
             privateKey: signing.privateKey);
       }
