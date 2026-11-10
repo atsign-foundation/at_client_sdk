@@ -51,6 +51,8 @@
   rather than quoting its text.
 - feat: notifications are delivered once per id, even after a reconnect (latest
   1024 ids). New `AtClientPreference.browser()` preset for browser clients.
+- feat: `buildAtClient` takes an optional `notificationLookUps` factory for the
+  monitor's connection.
 
 ## 4.0.0
 
