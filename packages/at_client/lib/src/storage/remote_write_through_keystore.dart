@@ -93,8 +93,11 @@ class RemoteWriteThroughKeyStore
   @override
   Future<AtData?> get(String key) async {
     if (_isLocal(key)) {
-      return await _store.get(key) ??
-          (throw KeyNotFoundException('$key does not exist in keystore'));
+      final value = await _store.get(key);
+      if (value == null) {
+        throw KeyNotFoundException('$key does not exist in keystore');
+      }
+      return value..key = key;
     }
     final builder = LLookupVerbBuilder()
       ..atKey = AtKey.fromString(key)

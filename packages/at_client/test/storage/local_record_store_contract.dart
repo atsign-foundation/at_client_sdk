@@ -2,6 +2,7 @@
 // file calls localRecordStoreContract with its own factory.
 
 import 'package:at_client/src/storage/local_record_store.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:test/test.dart';
 
@@ -90,6 +91,58 @@ void localRecordStoreContract(
 
       expect(result!.data, 'stored');
       expect(result.metaData!.ttl, 9);
+    });
+
+    test(
+        'update whose apply throws rethrows that error and keeps the prior value',
+        () async {
+      await store.put('local:a@alice', datum('v1'));
+      final boom = StateError('apply failed');
+
+      await expectLater(store.update('local:a@alice', (_) => throw boom),
+          throwsA(same(boom)));
+
+      expect((await store.get('local:a@alice'))!.data, 'v1');
+    });
+
+    test('metadata with null timestamps and version round-trips', () async {
+      await store.put(
+          'local:a@alice',
+          AtData()
+            ..data = 'v1'
+            ..metaData = (AtMetaData()
+              ..createdAt = null
+              ..updatedAt = null
+              ..version = null));
+
+      final meta = (await store.get('local:a@alice'))!.metaData!;
+      expect(meta.createdAt, isNull);
+      expect(meta.updatedAt, isNull);
+      expect(meta.version, isNull);
+    });
+
+    test(
+        'metadata with encryption, expiry, pubKeyHash and appMetadata round-trips',
+        () async {
+      final expiresAt = DateTime.utc(2030, 1, 2, 3, 4, 5);
+      await store.put(
+          'local:a@alice',
+          AtData()
+            ..data = 'v1'
+            ..metaData = (AtMetaData()
+              ..isEncrypted = true
+              ..expiresAt = expiresAt
+              ..pubKeyHash = PublicKeyHash('hash-value', 'sha256')
+              ..appMetadata = AppMetadata(
+                  providerId: 'provider-x', additional: {'k': 'v'})));
+
+      final meta = (await store.get('local:a@alice'))!.metaData!;
+      expect(meta.isEncrypted, isTrue);
+      expect(meta.expiresAt, expiresAt);
+      expect(meta.pubKeyHash!.hash, 'hash-value');
+      expect(meta.pubKeyHash!.hashingAlgo, 'sha256');
+      expect(meta.appMetadata!.providerId, 'provider-x');
+      expect(meta.appMetadata!.additional, {'k': 'v'});
     });
   });
 }

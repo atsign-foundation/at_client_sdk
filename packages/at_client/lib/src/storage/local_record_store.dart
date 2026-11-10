@@ -10,6 +10,9 @@ abstract interface class LocalRecordStore {
   /// Atomically replaces the value at [key] with `apply(current)`; current is
   /// null when absent; a null result removes the key. Returns the new value.
   Future<AtData?> update(String key, AtData? Function(AtData? current) apply);
+
+  /// Releases the store; no call may follow.
+  Future<void> close();
 }
 
 /// Implemented by keystores that expose an atomic read-modify-write of a local record.
@@ -48,4 +51,7 @@ class InMemoryLocalRecordStore implements LocalRecordStore {
     }
     return next;
   }
+
+  @override
+  Future<void> close() async {}
 }

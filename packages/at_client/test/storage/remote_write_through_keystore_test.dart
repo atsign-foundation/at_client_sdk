@@ -299,6 +299,17 @@ void main() {
       expect(await store.exists(localKey), isFalse);
       verifyNever(() => remoteSecondary.executeVerb(any()));
     });
+
+    test('a local get stamps the AtData with the key it was read under',
+        () async {
+      const localKey = 'local:lastreceivednotification@alice';
+      await store.put(localKey, AtData()..data = 'n-42');
+
+      final value = await store.get(localKey);
+
+      expect(value!.key, localKey);
+      expect(value.data, 'n-42');
+    });
   });
 
   group('unsupported members', () {

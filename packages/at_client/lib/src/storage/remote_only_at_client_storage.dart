@@ -25,6 +25,7 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
   final int keyStoreMaxAttempts;
 
   /// Holds the device-local (`local:`) records; null keeps them in memory.
+  /// Closed by [closeBackend], together with this storage.
   final LocalRecordStore? localRecordStore;
   RemoteSecondary _remoteSecondary;
 
@@ -71,6 +72,7 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
     // remoteSecondary is injected, not owned by this storage — it is the
     // caller's to close, not ours.
     await _queue?.close();
+    await localRecordStore?.close();
   }
 
   @override
