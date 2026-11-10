@@ -22,6 +22,8 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/preference/notification_replay.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/watermark_merge.dart';
+import 'package:at_client/src/storage/local_record_store.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:at_client/src/manager/monitor.dart';
@@ -79,7 +81,7 @@ class NotificationServiceImpl extends NotificationService {
 
   /// How many notifications [_isDuplicate] remembers.
   @visibleForTesting
-  static const seenIdCapacity = 1024;
+  static const seenIdCapacity = watermarkIdCapacity;
 
   /// Notifications already delivered, oldest first (a `LinkedHashMap` keeps insertion
   /// order, so `_seenNotifications.keys.first` is the oldest). Keyed by compound
@@ -488,6 +490,24 @@ class NotificationServiceImpl extends NotificationService {
   static PutRequestOptions get _watermarkPutOptions =>
       PutRequestOptions()..shouldEncrypt = false;
 
+  /// Writes [watermark] to [lastReceivedNotificationAtKey]. Over a
+  /// [LocalRecordUpdater] keystore it merges with the stored value in one
+  /// atomic update via [mergeWatermarkJson]; otherwise it puts unencrypted.
+  Future<void> _writeWatermark(String watermark) async {
+    final ks = atClient.getLocalSecondary()?.keyStore;
+    if (ks case LocalRecordUpdater updater) {
+      await updater.updateLocal(
+          lastReceivedNotificationAtKey.toString(),
+          (cur) => at_persistence_secondary_server.AtData()
+            ..data = mergeWatermarkJson(cur?.data, watermark)
+            ..metaData =
+                cur?.metaData ?? at_persistence_secondary_server.AtMetaData());
+    } else {
+      await atClient.put(lastReceivedNotificationAtKey, watermark,
+          putRequestOptions: _watermarkPutOptions);
+    }
+  }
+
   /// What gets persisted as the watermark: the notification minus its payload
   /// and its metadata blob.
   ///
@@ -591,9 +611,8 @@ class NotificationServiceImpl extends NotificationService {
       if (canonicalValue == null) {
         try {
           final v = await atClient.get(AtKey.fromString(legacyStr));
-          if (v.value != null) {
-            await atClient.put(lastReceivedNotificationAtKey, v.value,
-                putRequestOptions: _watermarkPutOptions);
+          if (v.value case final String legacy) {
+            await _writeWatermark(legacy);
             canonicalValue = v;
           }
         } on StoppedException {
@@ -733,9 +752,7 @@ class NotificationServiceImpl extends NotificationService {
     // sequence as a failed connection and retries forever; not seeding the
     // watermark costs one replayed window.
     try {
-      await atClient.put(lastReceivedNotificationAtKey,
-          _watermarkValue(n, [_watermarkPair(n)]),
-          putRequestOptions: _watermarkPutOptions);
+      await _writeWatermark(_watermarkValue(n, [_watermarkPair(n)]));
     } on StoppedException {
       rethrow;
     } catch (e) {
@@ -869,14 +886,12 @@ class NotificationServiceImpl extends NotificationService {
           }
           if (isStopped) return;
           try {
-            await atClient.put(
-                lastReceivedNotificationAtKey,
-                _watermarkValue(
-                    n,
-                    _recordWatermark(n)
-                        .map((p) => [p.$1.toString(), p.$2])
-                        .toList()),
-                putRequestOptions: _watermarkPutOptions);
+            final mine = _watermarkValue(
+                n,
+                _recordWatermark(n)
+                    .map((p) => [p.$1.toString(), p.$2])
+                    .toList());
+            await _writeWatermark(mine);
           } catch (e) {
             if (isStopped) {
               logger.finer('Not saving the last received notification ID: '

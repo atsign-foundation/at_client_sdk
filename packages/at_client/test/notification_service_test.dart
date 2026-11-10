@@ -8,6 +8,8 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_client/src/storage/local_record_store.dart';
+import 'package:at_client/src/storage/remote_write_through_keystore.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_commons/at_builders.dart';
@@ -2767,6 +2769,164 @@ void main() {
               (_) async => AtValue()..value = jsonEncode(legacyShape.toJson()));
 
       expect(await service.getLastNotificationTime(), 1234567890123);
+    });
+  });
+
+  group('the watermark over a LocalRecordUpdater keystore', () {
+    const epoch = 5000;
+    const watermarkKey = 'local:lastreceivednotification.wavi@alice';
+
+    late InMemoryLocalRecordStore localStore;
+    late MockRemoteSecondary remote;
+    late MockAtClientImpl client;
+
+    String notification(String id, {int epochMillis = epoch}) =>
+        'notification: {"id":"$id","from":"@alice","to":"@alice",'
+        '"key":"$id.wavi@alice","value":null,"operation":"update",'
+        '"epochMillis":$epochMillis,'
+        '"messageType":"MessageType.key","isEncrypted":false}';
+
+    String storedWatermark({
+      required int epochMillis,
+      required List<List<String>> ids,
+    }) =>
+        jsonEncode({'epochMillis': epochMillis, 'idsAtEpochMillis': ids});
+
+    Future<NotificationServiceImpl> newService() async {
+      final service = await NotificationServiceImpl.create(client,
+              monitor: fakeMonitor, secondaryAddressFinder: defaultAtDirectory)
+          as NotificationServiceImpl;
+      addTearDown(service.stopAllSubscriptions);
+      return service;
+    }
+
+    setUp(() {
+      registerFallbackValue(FakeAtKey());
+      registerFallbackValue(LLookupVerbBuilder());
+      localStore = InMemoryLocalRecordStore();
+      remote = MockRemoteSecondary();
+      // NOTE: the legacy-key probes carry no `local:` prefix, so they reach the
+      // remote; the atServer holds none of them.
+      when(() => remote.executeVerb(any()))
+          .thenThrow(KeyNotFoundException('legacy key not on the atServer'));
+      client = MockAtClientImpl();
+      client.mockLocalSecondary = MockLocalSecondary()
+        ..keyStore = RemoteWriteThroughKeyStore(remote, localStore: localStore);
+      when(() => client.getPreferences()).thenAnswer((_) => AtClientPreference()
+        ..namespace = 'wavi'
+        ..fetchOfflineNotifications = true);
+      when(() => client.get(any())).thenAnswer((i) async {
+        final key = (i.positionalArguments[0] as AtKey).toString();
+        return AtValue()..value = (await localStore.get(key))?.data;
+      });
+      when(() => client.delete(any())).thenAnswer((_) async => true);
+      when(() => client.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+    });
+
+    test(
+        'a received notification writes the watermark through updateLocal, '
+        'not put', () async {
+      final service = await newService();
+
+      await service.handleNotificationReceipt(notification('n1'));
+
+      verifyNever(() => client.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions')));
+      final stored = await localStore.get(watermarkKey);
+      expect(stored, isNotNull,
+          reason: 'the watermark is written to the local record store');
+      expect((jsonDecode(stored!.data!) as Map)['idsAtEpochMillis'], [
+        ['@alice', 'n1']
+      ]);
+    });
+
+    test('the watermark is written under the key the put path uses', () async {
+      final service = await newService();
+
+      await service.handleNotificationReceipt(notification('n1'));
+
+      expect(service.lastReceivedNotificationAtKey.toString(), watermarkKey);
+      expect(await localStore.keys(), [watermarkKey]);
+    });
+
+    test(
+        'a stored watermark at the same epochMillis is merged, keeping its ids',
+        () async {
+      await localStore.put(
+          watermarkKey,
+          AtData()
+            ..data = storedWatermark(epochMillis: epoch, ids: [
+              ['@bob', 'b1']
+            ]));
+      final service = await newService();
+
+      await service.handleNotificationReceipt(notification('n1'));
+
+      final stored = await localStore.get(watermarkKey);
+      expect(
+          (jsonDecode(stored!.data!) as Map)['idsAtEpochMillis'],
+          [
+            ['@bob', 'b1'],
+            ['@alice', 'n1'],
+          ],
+          reason: 'the other service\'s id at this millisecond is kept');
+    });
+
+    test('a stored watermark with a higher epochMillis is kept unchanged',
+        () async {
+      final higher = storedWatermark(epochMillis: epoch + 10, ids: [
+        ['@bob', 'b1']
+      ]);
+      await localStore.put(watermarkKey, AtData()..data = higher);
+      final service = await newService();
+
+      await service.handleNotificationReceipt(notification('n1'));
+
+      expect((await localStore.get(watermarkKey))!.data, higher);
+    });
+
+    test('a second service over the same store resumes from the watermark',
+        () async {
+      final first = await newService();
+      await first.handleNotificationReceipt(notification('n1'));
+
+      final second = await newService();
+
+      expect(await second.getLastNotificationTime(), epoch,
+          reason: 'resume starts at the epochMillis written through '
+              'updateLocal');
+    });
+
+    test('the createdAt seed on a fresh store goes through updateLocal',
+        () async {
+      final service = await newService();
+
+      await service.getLastNotificationTime();
+
+      verifyNever(() => client.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions')));
+      final stored = await localStore.get(watermarkKey);
+      expect(stored, isNotNull, reason: 'the seed lands in the record store');
+      expect((jsonDecode(stored!.data!) as Map)['epochMillis'], isA<int>());
+    });
+
+    test('the createdAt seed never lowers a watermark stored meanwhile',
+        () async {
+      final higher = storedWatermark(
+          epochMillis: DateTime.now().millisecondsSinceEpoch + 60000,
+          ids: [
+            ['@bob', 'b1']
+          ]);
+      await localStore.put(watermarkKey, AtData()..data = higher);
+      when(() => client.get(any())).thenAnswer((_) async => AtValue());
+      final service = await newService();
+
+      await service.getLastNotificationTime();
+
+      expect((await localStore.get(watermarkKey))!.data, higher,
+          reason: 'a watermark another service wrote after the read is kept');
     });
   });
 
