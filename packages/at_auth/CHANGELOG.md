@@ -11,6 +11,8 @@
 ## 4.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- feat: `parseAtKeysFile` parses an atKeys file's text without `dart:io`,
+  so a browser client can read an uploaded file.
 - feat: an atKeys file that is not a JSON object is read as
   `AtKeysFormatException`, a `FormatException` whose `reason` and `position`
   say why and at which character, and which holds none of the file's text. A

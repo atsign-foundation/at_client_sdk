@@ -21,6 +21,8 @@
   `MlKem768FfiAlgo.fromLib` and `XWingFfiAlgo.fromLib` throw an
   `UnsupportedError` on an earlier release. On 3.5.0, `AtPqc.xWing` uses the
   pure-Dart backend.
+- feat: `PassphraseKdf` (`Argon2idKdf`, `Pbkdf2Sha256Kdf`, `kdfFor`) with
+  JSON-serialisable `KdfParams`.
 
 ## 3.7.1
 
