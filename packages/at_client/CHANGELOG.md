@@ -1,3 +1,9 @@
+## 4.1.0
+
+- feat: each notification is delivered once per id, including after a
+  reconnect, for the latest 1024 ids. `AtClientPreference.browser()` is a
+  new preset for browser clients.
+
 ## 4.0.1
 
 - fix: each listener on a notification subscription is released when it
