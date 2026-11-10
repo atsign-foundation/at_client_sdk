@@ -206,7 +206,7 @@ skill-creator will prompt you to draft quantitative assertions during the run.
 ## @‎library release process
 
 The Atsign Foundation produces several widgets and libraries that the app developer
-can make use of to develop apps on @‎protocol. These libraries are developed in
+can make use of to develop apps on Atsign Protocol. These libraries are developed in
 Dart & Flutter and published to [pub.dev](https://pub.dev/publishers/atsign.org/packages).
 
 ![alt_text](images/image1.png "Version flow")
@@ -227,8 +227,8 @@ chronological order.
 
 ## Reporting a bug
 
-The best place to start reporting bugs on the libraries published by 
-@‎protocol would be the “View/report issues” link available on
+The best place to start reporting bugs on the libraries published for the
+Atsign Protocol would be the “View/report issues” link available on
 [pub.dev](https://pub.dev/publishers/atsign.org/packages).
 
 ![alt_text](images/image4.png "View/report issues highlight")

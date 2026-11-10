@@ -1,4 +1,4 @@
-/// A library to provide location sharing functionality used by the at_protocol packages and apps
+/// A library to provide location sharing functionality used by the Atsign Protocol packages and apps
 library at_location_flutter;
 
 export 'package:at_location_flutter/at_location_flutter_plugin.dart';

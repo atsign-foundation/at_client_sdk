@@ -1,3 +1,10 @@
+## 1.1.0
+
+- feat: `package:at_client_cli/testing.dart` re-exports at_client's
+  experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
+- chore: requires at_client 4.1.0.
+- fix: `at_activate auto_approve` acts only on requests from its own atSign.
+
 ## 1.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.

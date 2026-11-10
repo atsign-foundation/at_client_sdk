@@ -1,10 +1,10 @@
 name: at_client
-description: The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the atProtocol.
+description: The at_client library is the non-platform specific Client SDK which provides the essential methods for building an app using the Atsign Protocol.
 
 ##
 ##
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
-version: 4.0.1
+version: 4.1.0
 ## NB: When incrementing the version, please also increment the version in AtClientConfig file
 ##
 
@@ -28,9 +28,9 @@ dependencies:
   at_utils: ^4.0.0
   at_chops: ^3.7.0
   at_lookup: ^4.0.0
-  # InMemoryAtKeysIo's analyzer warning, which this package's CHANGELOG
-  # describes, needs 4.0.0-rc8.
-  at_auth: ^4.0.0
+  # apskSigningKeys skipping an entry whose status is not a string, which
+  # every _apsk and signing-root reader here relies on, needs 4.1.0.
+  at_auth: ^4.1.0
   at_persistence_secondary_server: ^5.4.0
   hive: ^2.2.3
   meta: ^1.16.0

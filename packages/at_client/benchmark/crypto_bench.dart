@@ -264,7 +264,7 @@ Future<(List<Timing>, List<String>)> perBackend(int iterations) async {
     results.addAll([sealFfi, sealDart, openFfi, openDart]);
   } else {
     skipped.add('X-Wing: the loaded libcrypto has no ML-KEM-768 '
-        '(OpenSSL 3.5 or later), so at_client uses pure Dart');
+        '(OpenSSL 3.5.1 or later), so at_client uses pure Dart');
   }
 
   if (lib != null && libCryptoSupportsAesGcm(lib)) {
