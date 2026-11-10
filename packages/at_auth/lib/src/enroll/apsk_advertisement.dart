@@ -159,10 +159,7 @@ List<ApskSigningKey> apskSigningKeys(Map<String, dynamic> advertisement) {
         use is! String ||
         alg is! String ||
         pub is! String ||
-        // An explicit `"status": null` decodes to Dart null exactly like an
-        // absent one, so presence is `containsKey`, not `!= null`. Present and
-        // not a string is skipped, as the contract says.
-        (entry.containsKey('status') && status is! String)) {
+        (status != null && status is! String)) {
       continue;
     }
     if (use != 'sign') continue;

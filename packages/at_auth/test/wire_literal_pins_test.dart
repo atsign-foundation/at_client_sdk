@@ -320,16 +320,12 @@ void main() {
 
     test('an entry whose status is not a string is skipped', () {
       final deep = jsonDecode('${'[' * 200000}${']' * 200000}');
-      for (final status in <Object?>[
+      for (final status in <Object>[
         7,
         true,
         [1],
         {'a': 1},
-        deep,
-        // Present and JSON null, which `jsonDecode` maps to Dart null exactly
-        // like an absent field. Presence is `containsKey`, so this must be
-        // skipped rather than read as the active default.
-        null,
+        deep
       ]) {
         final clock = Stopwatch()..start();
         final read = apskSigningKeys({
