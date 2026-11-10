@@ -56,6 +56,12 @@ flowchart LR
 - Awaiting `StreamSubscription.cancel()` on a controller without `onCancel` returns the root zone's null future; under `fakeAsync` the continuation never runs. The wrapper never awaits cancels.
 - Instance-method tear-offs are `==` but never `identical`; tests compare watermark callbacks with `equals`.
 
+## Limits
+
+- One shared connection per enrollment per origin. The lock and channel are named `at-monitor:<atSign>:<scope>` and `scope` is the enrollment id (`'primary'` for the primary keys), so only tabs that run as the same enrollment share. A browser with tabs under N enrollments of one atSign opens N monitor connections, each with its own leader.
+- Sharing is origin-bound: Web Locks and `BroadcastChannel` do not cross origins, so two apps on different origins never share, even under one enrollment.
+- The monitor runs with no regex; each tab's subscriptions filter on the client. A tab only sees the namespaces its enrollment was granted, and sharing cannot widen that. Serving several enrollments over one connection would need a connection authorised for the union of their namespaces, which APKAM does not provide.
+
 ## Out of scope (P3b, P5)
 
 Disconnect-reason taxonomy and retry triggers beyond `online`; the JS facade's listener state and OS notifications, which consume this layer.
