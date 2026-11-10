@@ -1075,25 +1075,29 @@ Each protected header carries:
 - `alg`: `ML-DSA-65` or `RS256`;
 - `typ`: what the envelope was signed for, here `at-secret-envelope+jws`;
 - `kid`: the client data signing key's kid;
+- `iss`: the signer's Atsign, canonical and with its `@`;
 - `enid`: the signing enrollment, absent when the signer has no enrollment id
   to stamp;
 - `v`: `1`.
 
-There is one entry per client data signing key the sender holds. Every entry covers the
-same payload and names the same `enid` and `typ`. The sender signs with its
-enrollment's client data signing keys, which are the keys its `_apsk` advertises.
-An enrollment that holds none signs with its client authentication signing key
-([section 9.1](#91-the-two-roles)).
+There is one entry per client data signing key the sender holds. Every entry
+covers the same payload and names the same `iss`, `enid` and `typ`. The sender
+signs with its enrollment's client data signing keys, which are the keys its
+`_apsk` advertises. An enrollment that holds none signs with its client
+authentication signing key ([section 9.1](#91-the-two-roles)).
 
 A verifier fetches the `_apsk` of the enrollment the header names, at
 `public:_apsk.<enrollmentId>.a.__e@<atSign>` (`apskUri`). It takes the strongest
 algorithm the envelope and the `_apsk` share, finds the advertised key the
 header's `kid` names, and verifies that one entry. A failure is final; it never
 falls back to a weaker signature. It refuses an envelope whose `typ` is not the
-one it expects, whose `v` it does not know, or whose entries disagree on `enid`
-or `typ`. A cached `_apsk` that fails is dropped and fetched once more. When the
-`_apsk` has moved to `r.__e` (revoked or superseded) or `d.__e` (deleted or
-expired), the signature is refused as withdrawn (`WithdrawnSigningKeyException`).
+one it expects, whose `v` it does not know, whose `iss` names an Atsign other
+than the one whose `_apsk` it checks against, or whose entries disagree on
+`iss`, `enid` or `typ`. An envelope naming no Atsign, as at_client 4.0.0 signed
+them, is accepted ([section 9.4.2](#942-the-protected-header)). A cached `_apsk`
+that fails is dropped and fetched once more. When the `_apsk` has moved to
+`r.__e` (revoked or superseded) or `d.__e` (deleted or expired), the signature
+is refused as withdrawn (`WithdrawnSigningKeyException`).
 
 #### 2.1.3 Two gates
 
@@ -1198,8 +1202,10 @@ enrollment's `_apsk` is how signature agility works
 
 The signature is verified against `_apsk`, which the atServer serves. So while the
 atServers serve keys faithfully, it tells a reader which enrollment published a
-key, and no enrollment can publish one in another's name. This holds within one
-Atsign and between Atsigns alike. It does not check the atServers themselves: an
+key, and no enrollment can publish one in another's name. An envelope's `iss`
+ties the signature to the Atsign whose `_apsk` it is checked against
+([section 9.4.2](#942-the-protected-header)). This holds within one Atsign and
+between Atsigns alike. It does not check the atServers themselves: an
 Atsign's atServer stays trusted for the keys others seal to that Atsign until the
 anchor is distributed outside it, which key transparency is on the roadmap to do
 ([section 7.4](#74-key-transparency-is-on-the-roadmap)). See
@@ -2516,6 +2522,8 @@ it, so a record rebuilt by an older build cannot weaken what its owner said
 about a key — and it answers **no** to both questions the field exists for: it
 is not offered for new operations, and it does not vouch for what the key
 already did. Unknown is *more* restrictive than either known value, never less.
+A `status` that is present but not a string is not a token at all: a reader
+skips that entry, as it skips one with any other field of the wrong kind.
 
 A reader accepts this form and the bare string, which is an `rsa2048` key. A
 writer emits the bare string only for a single active `rsa2048` key, and this
@@ -2687,13 +2695,14 @@ passes the structural checks a received envelope does.
 
 **One signer and one purpose per envelope.** `fromJson` refuses an envelope
 whose entries name more than one `enid`, more than one `typ`, or more than one
-`iss`, an entry naming none counting as one more. A verifier
-picks its entry by algorithm, so entries that disagreed about the signer or the
-purpose would let the entry that verified and the entry a caller reads be
-different entries. Neither refusal is to be relaxed: a writer that only ever
-signs once does not stop a second entry being appended. Two accessors read the
-first entry rather than the one a verifier checked: `.signature` is the first
-entry, and `.signerEnrollmentId` is its `enid`, which every entry shares.
+`iss`, an entry naming none counting as one more. A verifier picks its entry by
+algorithm, so entries that disagreed about the signer or the purpose would let
+the entry that verified and the entry a caller reads be different entries. None
+of the three refusals is to be relaxed: a writer that only ever signs once does
+not stop a second entry being appended. Three accessors read the first entry
+rather than the one a verifier checked: `.signature` is the first entry,
+`.signerEnrollmentId` is its `enid` and `.signerAtSign` its `iss`, both of which
+every entry shares.
 
 #### 9.4.5 The root link is not an envelope
 
@@ -2852,7 +2861,7 @@ changes.
 Each stage's default set holds at most one algorithm — `{}`, `{rsa2048}`,
 `{mldsa65}` — so no posture this SDK ships emits a two-signature envelope. The
 multi-signature reader stays: `SignedEnvelope.fromJson`'s refusals of differing
-`enid` and differing `typ` stop an entry appended in flight from changing the
+`enid`, `typ` and `iss` stop an entry appended in flight from changing the
 signer or the purpose a caller reads
 ([section 9.4.4](#944-the-envelope-in-code)). It is safe to swap because
 *reading* is not staged: a client at `pqReady` verifies a `pqActive` peer's
