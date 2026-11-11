@@ -58,9 +58,11 @@
 
     let session = null;
 
-    // ?direct=1: no proxy; each atSign's atServer is found through the root's
-    // HTTPS lookup and reached on its /ws. ?root=host:port names the root.
+    // Default: no proxy; each atSign's atServer is found through the root's
+    // HTTPS lookup and reached on its /ws. ?proxy=1 sends the proxyHost and
+    // proxyPort inputs instead. ?root=host:port names the root.
     const params = new URLSearchParams(location.search);
+    const PROXY = params.get('proxy') === '1';
     const ROOT = params.get('root');
 
     document.getElementById('btnOpen').addEventListener('click', async () => {
@@ -68,9 +70,10 @@
         const options = {
           atSign: document.getElementById('atSign').value,
           app: document.getElementById('app').value,
-          proxyHost: document.getElementById('proxyHost').value,
-          proxyPort: parseInt(document.getElementById('proxyPort').value, 10),
-          direct: params.get('direct') === '1',
+          ...(PROXY && {
+            proxyHost: document.getElementById('proxyHost').value,
+            proxyPort: parseInt(document.getElementById('proxyPort').value, 10)
+          }),
           ...(ROOT && { root: ROOT })
         };
         session = await globalThis.atClientDev.openSession(options, (atSign) => {

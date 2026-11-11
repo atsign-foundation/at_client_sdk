@@ -1,6 +1,6 @@
-# Direct mode (`?direct=1`)
+# Direct mode (the default)
 
-The browser reaches each atSign's own atServer over `wss://host:port/ws`, with no proxy. Proxy mode (the default) sends every connection to one proxy instead.
+The browser reaches each atSign's own atServer over `wss://host:port/ws`, with no proxy. Proxy mode (`proxyHost`/`proxyPort`; `?proxy=1` on `index.html`) sends every connection to one proxy instead.
 
 ```mermaid
 flowchart LR
@@ -27,6 +27,6 @@ Both modes are trunk's at_lookup, chosen once by `devTransport(options)`.
 - A production atServer upgrades `/ws` for a foreign Origin (101).
 
 ## Open
-- Browser-verified once (2026-11-03, dart2js, two production atSigns): an encrypted notify from a Chrome tab reached the Dart `at_talk` CLI. That run used the at_talk demo page. `index.html?direct=1` sends the same `direct`/`root` options to `openSession` but has not been run in a browser. dart2wasm in direct mode has not been tried.
+- Browser-verified once (2026-11-03, dart2js, two production atSigns): an encrypted notify from a Chrome tab reached the Dart `at_talk` CLI. That run used the at_talk demo page. `index.html` with no params sends the same direct options (`root` only) to `openSession` but has not been run in a browser. dart2wasm in direct mode has not been tried.
 - Browser-tagged tests (`test/js`, `test/web`): 40 passed under `-p chrome` in CI (2026-11-03, #2431's `at_client_wasm_browser`).
 - The VE root needs a trunk rebuild (at_server#2894) before `?root=` can target it.

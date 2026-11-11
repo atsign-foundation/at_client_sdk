@@ -151,26 +151,32 @@ void main() {
     expect(opened?.proxyPort, 443);
   });
 
-  test('direct mode needs no proxy and defaults the root', () async {
-    await _call(
-        _atClientDev,
-        'openSession',
-        _options(without: {'proxyHost', 'proxyPort'}, extra: {'direct': true}),
-        _promptResolving('pw'));
+  test('only atSign and app open direct with the atsign root', () async {
+    await _call(_atClientDev, 'openSession',
+        _options(without: {'proxyHost', 'proxyPort'}), _promptResolving('pw'));
     expect(opened?.direct, isTrue);
     expect(opened?.root, AtRootDomain.atsignDomain);
   });
 
-  test('direct mode takes a root override', () async {
+  test('a proxyHost with a proxyPort opens through the proxy', () async {
+    await open();
+    expect(opened?.direct, isFalse);
+    expect(opened?.proxyHost, 'proxy.example');
+    expect(opened?.proxyPort, 443);
+  });
+
+  test('a root override in direct mode reaches the HTTPS finder', () async {
     await _call(
         _atClientDev,
         'openSession',
         _options(
             without: {'proxyHost', 'proxyPort'},
-            extra: {'direct': true, 'root': 'vip.ve.atsign.zone:64'}),
+            extra: {'root': 'vip.ve.atsign.zone:64'}),
         _promptResolving('pw'));
     expect(opened?.root.rootDomain, 'vip.ve.atsign.zone');
     expect(opened?.root.rootPort, 64);
+    final finder = devTransport(opened!).finder as HttpsSecondaryAddressFinder;
+    expect((finder.host, finder.port), ('vip.ve.atsign.zone', 64));
   });
 
   test('a malformed root rejects with an Error naming it', () async {
@@ -181,11 +187,10 @@ void main() {
   });
 
   group('devTransport', () {
-    test('direct resolves atSigns through the root over HTTPS', () {
+    test('no proxy resolves atSigns through the root over HTTPS', () {
       final t = devTransport(DevSessionOptions(
           atSign: '@alice',
           app: 'wavi',
-          direct: true,
           root: AtRootDomain('root.example', 64)));
       expect(t.finder, isA<HttpsSecondaryAddressFinder>());
       final finder = t.finder as HttpsSecondaryAddressFinder;
@@ -198,12 +203,13 @@ void main() {
           app: 'wavi',
           proxyHost: 'proxy.example',
           proxyPort: 443));
+      expect(t.finder, isA<FixedSecondaryAddressFinder>());
       final address = await t.finder.findSecondary('@bob');
       expect((address.host, address.port), ('proxy.example', 443));
     });
   });
 
-  test('T2 a missing option rejects with an Error naming it', () async {
+  test('a proxyHost without a proxyPort rejects naming proxyPort', () async {
     final error = await _rejection(() => _call(_atClientDev, 'openSession',
         _options(without: {'proxyPort'}), _promptResolving('pw')));
     expect(error.instanceOfString('Error'), isTrue);
@@ -211,19 +217,33 @@ void main() {
     expect(opened, isNull);
   });
 
-  test('T2 direct defaults to false and is read when present', () async {
-    await open();
-    expect(opened?.direct, isFalse);
-
-    await _call(_atClientDev, 'openSession', _options(extra: {'direct': true}),
-        _promptResolving('pw'));
-    expect(opened?.direct, isTrue);
+  test('an empty proxyHost rejects naming proxyHost', () async {
+    final error = await _rejection(() => _call(_atClientDev, 'openSession',
+        _options(extra: {'proxyHost': ''}), _promptResolving('pw')));
+    expect((error['message'] as JSString).toDart, contains('proxyHost'));
+    expect(opened, isNull);
   });
 
-  test('T2 a non-boolean direct rejects with an Error naming it', () async {
+  test('a proxyPort without a proxyHost rejects naming proxyPort', () async {
     final error = await _rejection(() => _call(_atClientDev, 'openSession',
-        _options(extra: {'direct': 'yes'}), _promptResolving('pw')));
-    expect((error['message'] as JSString).toDart, contains('direct'));
+        _options(without: {'proxyHost'}), _promptResolving('pw')));
+    expect((error['message'] as JSString).toDart, contains('proxyPort'));
+    expect(opened, isNull);
+  });
+
+  test('a non-string proxyHost rejects naming proxyHost', () async {
+    final error = await _rejection(() => _call(_atClientDev, 'openSession',
+        _options(extra: {'proxyHost': 7}), _promptResolving('pw')));
+    expect((error['message'] as JSString).toDart, contains('proxyHost'));
+    expect(opened, isNull);
+  });
+
+  test('a direct key of any value rejects naming direct', () async {
+    for (final value in <Object>[true, false, 'yes']) {
+      final error = await _rejection(() => _call(_atClientDev, 'openSession',
+          _options(extra: {'direct': value}), _promptResolving('pw')));
+      expect((error['message'] as JSString).toDart, contains('direct'));
+    }
     expect(opened, isNull);
   });
 

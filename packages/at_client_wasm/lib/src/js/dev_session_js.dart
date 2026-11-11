@@ -28,13 +28,12 @@ typedef DevSessionOpener = Future<DevSession> Function(
 class DevSessionOptions {
   final String atSign;
   final String app;
-  final String proxyHost;
-  final int proxyPort;
 
-  /// Whether every atSign's own atServer is reached over its `/ws`, found
-  /// through the root's HTTPS lookup, with no proxy. [proxyHost] and
-  /// [proxyPort] are then unused.
-  final bool direct;
+  /// The dev proxy every connection goes through; empty in direct mode.
+  final String proxyHost;
+
+  /// The dev proxy's port; 0 in direct mode.
+  final int proxyPort;
 
   /// The root server (atDirectory) atSigns are looked up at: by [direct]'s
   /// lookup, and by the key-copy lookup in every mode.
@@ -45,12 +44,16 @@ class DevSessionOptions {
     required this.app,
     this.proxyHost = '',
     this.proxyPort = 0,
-    this.direct = false,
     this.root = AtRootDomain.atsignDomain,
   });
 
+  /// No proxy: each atSign's own atServer is reached over its `/ws`, found
+  /// through the root's HTTPS lookup.
+  bool get direct => proxyHost.isEmpty;
+
   /// Reads [options]; a missing or wrong-typed field throws an
-  /// [ArgumentError] naming it.
+  /// [ArgumentError] naming it. A `direct` key of any value, an empty
+  /// `proxyHost`, or a `proxyPort` without a `proxyHost` throws.
   factory DevSessionOptions.fromJs(JSObject options) {
     T? optional<T extends JSAny>(String name, String type) {
       final value = options.getProperty<JSAny?>(name.toJS);
@@ -65,14 +68,25 @@ class DevSessionOptions {
         optional<T>(name, type) ??
         (throw ArgumentError.value(null, name, 'must be a $type'));
 
-    final direct = optional<JSBoolean>('direct', 'boolean')?.toDart ?? false;
+    if (options.hasProperty('direct'.toJS).toDart) {
+      throw ArgumentError.value(
+          null, 'direct', 'was removed; omit proxyHost for direct mode');
+    }
+    final proxyHost = optional<JSString>('proxyHost', 'string')?.toDart;
+    if (proxyHost != null && proxyHost.isEmpty) {
+      throw ArgumentError.value(proxyHost, 'proxyHost', 'must not be empty');
+    }
+    final proxyPort = proxyHost == null
+        ? null
+        : field<JSNumber>('proxyPort', 'number').toDartInt;
+    if (proxyHost == null && options.hasProperty('proxyPort'.toJS).toDart) {
+      throw ArgumentError.value(null, 'proxyPort', 'needs a proxyHost');
+    }
     return DevSessionOptions(
       atSign: field<JSString>('atSign', 'string').toDart,
       app: field<JSString>('app', 'string').toDart,
-      // Direct mode names no proxy; every other mode needs one.
-      proxyHost: direct ? '' : field<JSString>('proxyHost', 'string').toDart,
-      proxyPort: direct ? 0 : field<JSNumber>('proxyPort', 'number').toDartInt,
-      direct: direct,
+      proxyHost: proxyHost ?? '',
+      proxyPort: proxyPort ?? 0,
       root: switch (optional<JSString>('root', 'string')?.toDart) {
         final root? => _parseRoot(root),
         null => AtRootDomain.atsignDomain,
@@ -205,10 +219,10 @@ typedef DevTransport = ({
   SecondaryAddressFinder finder,
 });
 
-/// [DevSessionOptions.direct]: a WebSocket straight to each atSign's own
-/// atServer, which the root's HTTPS lookup names. Otherwise every
-/// connection goes to the proxy, opening with the `from:` that says which
-/// atServer it is for.
+/// Direct mode ([DevSessionOptions.direct]): a WebSocket straight to each
+/// atSign's own atServer, which the root's HTTPS lookup names. Proxy mode:
+/// every connection goes to the proxy, opening with the `from:` that says
+/// which atServer it is for.
 DevTransport devTransport(DevSessionOptions options) => options.direct
     ? (
         lookUps: webSocketLookUps(directoryPort: options.root.rootPort),

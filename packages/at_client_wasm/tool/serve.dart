@@ -62,9 +62,9 @@ void main(List<String> args) async {
   }
   stdout
     ..writeln(
-        '  ?direct=1        straight to each atSign\'s own atServer, found through the atDirectory; no proxy')
+        '  ?proxy=1         through the dev proxy (proxyHost/proxyPort inputs); without it, straight to each atSign\'s own atServer')
     ..writeln(
-        '  &root=host:port  the atDirectory to ask (default root.atsign.org:64)')
+        '  ?root=host:port  the atDirectory to ask (default root.atsign.org:64)')
     ..writeln(
         '  &wasm=1          dart2wasm build, on pages that load at_client.mjs');
 }
