@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_auth/src/registrar/registrar.dart';
 import 'package:at_auth/src/registrar/registrar_admin_service.dart';
@@ -167,6 +168,24 @@ void main() {
         ),
         throwsA(
           isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        ),
+      );
+    });
+
+    test('ArgumentError for registrarUrl never echoes the offending value', () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: 'user:secret@host',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(
+          predicate(
+            (e) =>
+                e is ArgumentError &&
+                e.name == 'registrarUrl' &&
+                !e.toString().contains('secret'),
+          ),
         ),
       );
     });
@@ -696,6 +715,90 @@ void main() {
             .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
       );
       expect(wasCancelled, isTrue);
+    });
+
+    test('aborts the in-flight request via Abortable when it times out',
+        () async {
+      http.BaseRequest? captured;
+      final client = MockClient.streaming((request, bodyStream) async {
+        captured = request;
+        return await Completer<http.StreamedResponse>().future;
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(milliseconds: 50),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      );
+      expect(captured, isA<http.Abortable>());
+      await expectLater((captured as http.Abortable).abortTrigger, completes);
+    });
+
+    test(
+        'cancelling the body subscription on timeout does not surface an '
+        'unhandled error when onCancel throws', () async {
+      final client = MockClient.streaming((request, bodyStream) async {
+        final controller = StreamController<List<int>>(
+          onCancel: () => throw StateError('onCancel boom'),
+        );
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(milliseconds: 50),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      );
+    });
+
+    test(
+        'rejecting an oversized body does not surface an unhandled error '
+        'when onCancel throws', () async {
+      final oversized = Uint8List((70 * 1024));
+      final client = MockClient.streaming((request, bodyStream) async {
+        late final StreamController<List<int>> controller;
+        controller = StreamController<List<int>>(
+          onListen: () {
+            controller.add(oversized);
+          },
+          onCancel: () => throw StateError('onCancel boom'),
+        );
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(network) for a non-ClientException '
+        'Exception, dropping the inner message', () async {
+      final client = MockClient((_) async {
+        throw const FormatException('super-secret-inner-detail');
+      });
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(
+          isA<RegistrarException>()
+              .having((e) => e.reason, 'reason', RegistrarFailure.network)
+              .having((e) => e.toString().contains('super-secret-inner-detail'),
+                  'leaks the inner message', isFalse),
+        ),
+      );
     });
   });
 

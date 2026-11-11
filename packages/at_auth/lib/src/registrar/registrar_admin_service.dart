@@ -18,8 +18,16 @@ class _ReadCancelToken {
     _subscription = subscription;
   }
 
-  void cancel() {
-    _subscription?.cancel();
+  /// Cancels the attached subscription, swallowing any error its `onCancel`
+  /// raises: the caller has already decided how to report the failure that
+  /// triggered the cancel, and a throwing `onCancel` must not replace that
+  /// with an unhandled error instead.
+  Future<void> cancel() async {
+    try {
+      await _subscription?.cancel();
+    } catch (_) {
+      // Deliberately ignored; see doc comment.
+    }
   }
 }
 
@@ -112,31 +120,32 @@ class RegistrarAdminService {
 
   static void _validateRegistrarUrl(String registrarUrl) {
     const invalidMessage =
-        'must be a bare host of letters, digits, "." and "-", optionally '
-        'followed by ":<port>", with no scheme, path or user info';
+        'registrarUrl must be a bare host of letters, digits, "." and "-", '
+        'optionally followed by ":<port>", with no scheme, path or user '
+        'info';
     if (registrarUrl.trim().isEmpty) {
-      throw ArgumentError.value(
-          registrarUrl, 'registrarUrl', 'must not be empty');
+      throw ArgumentError('registrarUrl must not be empty', 'registrarUrl');
     }
     final hostAndPort = registrarUrl.split(':');
     if (hostAndPort.length > 2) {
-      throw ArgumentError.value(registrarUrl, 'registrarUrl', invalidMessage);
+      throw ArgumentError(invalidMessage, 'registrarUrl');
     }
     final host = hostAndPort.first;
     if (!_hostPattern.hasMatch(host)) {
-      throw ArgumentError.value(registrarUrl, 'registrarUrl', invalidMessage);
+      throw ArgumentError(invalidMessage, 'registrarUrl');
     }
     if (hostAndPort.length == 2) {
       final port = int.tryParse(hostAndPort[1]);
       if (port == null || port < 1 || port > 65535) {
-        throw ArgumentError.value(registrarUrl, 'registrarUrl',
-            'port must be numeric and between 1 and 65535');
+        throw ArgumentError(
+            'registrarUrl port must be numeric and between 1 and 65535',
+            'registrarUrl');
       }
     }
     final uri = Uri.https(registrarUrl, '/');
     if (uri.userInfo.isNotEmpty ||
         uri.authority != registrarUrl.toLowerCase()) {
-      throw ArgumentError.value(registrarUrl, 'registrarUrl', invalidMessage);
+      throw ArgumentError(invalidMessage, 'registrarUrl');
     }
   }
 
@@ -151,18 +160,22 @@ class RegistrarAdminService {
     Map<String, dynamic> data,
   ) async {
     final cancelToken = _ReadCancelToken();
+    final abortTrigger = Completer<void>();
     try {
-      return await _sendAndReadResponse(endpoint, data, cancelToken).timeout(
-        requestTimeout,
-      );
+      return await _sendAndReadResponse(
+              endpoint, data, cancelToken, abortTrigger)
+          .timeout(requestTimeout);
     } on TimeoutException {
-      cancelToken.cancel();
+      if (!abortTrigger.isCompleted) abortTrigger.complete();
+      await cancelToken.cancel();
       throw RegistrarException(
         'Registrar request timed out after $requestTimeout.',
         endpoint: endpoint.path,
         reason: RegistrarFailure.timeout,
       );
-    } on http.ClientException {
+    } on RegistrarException {
+      rethrow;
+    } on Exception {
       throw RegistrarException(
         'Registrar request to ${endpoint.path} failed: the connection could '
         'not be completed.',
@@ -176,17 +189,30 @@ class RegistrarAdminService {
     RegistrarApiEndpoint endpoint,
     Map<String, dynamic> data,
     _ReadCancelToken cancelToken,
+    Completer<void> abortTrigger,
   ) async {
     final url = Uri.https(registrarUrl, "$_apiBase${endpoint.path}");
-    final request = http.Request('POST', url)
+    final requestBody = utf8.encode(jsonEncode(data));
+    final request = http.AbortableStreamedRequest(
+      'POST',
+      url,
+      abortTrigger: abortTrigger.future,
+    )
       ..headers['Content-Type'] = 'application/json'
       ..headers['Authorization'] = _superApiKey
-      ..body = jsonEncode(data);
+      ..contentLength = requestBody.length
+      ..sink.add(requestBody);
+    unawaited(request.sink.close());
 
     final streamed = await _http.send(request);
 
     if (streamed.statusCode == 401 || streamed.statusCode == 403) {
-      await streamed.stream.listen(null).cancel();
+      try {
+        await streamed.stream.listen(null).cancel();
+      } catch (_) {
+        // Deliberately ignored: the authentication failure below is the
+        // failure to report, not a throwing `onCancel`.
+      }
       throw RegistrarException(
         'Registrar super-API-key authentication failed on ${endpoint.path}: '
         'the key is either invalid, missing, or lacks the privilege the '
@@ -201,10 +227,15 @@ class RegistrarAdminService {
     final bodyRead = Completer<void>();
     late final StreamSubscription<List<int>> subscription;
     subscription = streamed.stream.listen(
-      (chunk) {
+      (chunk) async {
         bodyBytes.addAll(chunk);
         if (bodyBytes.length > _maxResponseBytes) {
-          subscription.cancel();
+          try {
+            await subscription.cancel();
+          } catch (_) {
+            // Deliberately ignored: responseTooLarge below is the failure
+            // to report, not a throwing `onCancel`.
+          }
           if (!bodyRead.isCompleted) {
             bodyRead.completeError(RegistrarException(
               'Registrar response exceeded $_maxResponseBytes bytes.',
@@ -288,6 +319,15 @@ class RegistrarAdminService {
   /// (a super key can add a prefix or postfix); the result's
   /// `registeredAtsign` is the one to activate, read from the registrar's
   /// cramkey, never the one requested.
+  ///
+  /// The register call is a single POST, not idempotent: if this throws
+  /// [RegistrarException] with [RegistrarFailure.timeout],
+  /// [RegistrarFailure.network] or [RegistrarFailure.malformedResponse], the
+  /// registrar may already have committed the registration before the
+  /// failure, and its cramkey is then lost to this caller: [atsign] is
+  /// registered with a CRAM secret nobody holds, under a name that stays
+  /// taken until the super key deletes it. Reconcile — look the Atsign up,
+  /// or run the delete flow — before retrying with the same [atsign].
   ///
   /// ```dart
   /// final admin = RegistrarAdminService(

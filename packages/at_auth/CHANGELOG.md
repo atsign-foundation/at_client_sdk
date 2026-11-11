@@ -29,6 +29,22 @@
 - fix: a 401/403 on a `RegistrarAdminService` call is now checked before the
   response body is read, and the body stream is cancelled rather than
   drained; the same cancellation now applies when a request times out.
+- fix: `RegistrarAdminService` requests the registrar over an abortable
+  `http` request, so a timed-out request's underlying connection is now
+  torn down instead of left open (requires `http: ^1.5.0`).
+- fix: a timed-out or dropped `.cancel()` on the response-body subscription
+  no longer surfaces as an unhandled async error if the stream's
+  `onCancel` throws.
+- fix: `RegistrarAdminService`'s `registrarUrl` validation no longer echoes
+  the offending value into `ArgumentError`, so a URL that embeds user info
+  cannot leak it through the exception text.
+- fix: any `Exception` escaping `RegistrarAdminService`'s request/response
+  handling that is not already a `RegistrarException` is now wrapped as
+  `RegistrarFailure.network`, dropping its inner message.
+- docs: `RegistrarAdminService.registerAtsign`'s doc comment now states that
+  a `timeout`, `network` or `malformedResponse` failure may mean the
+  registrar already committed the registration, and that a caller must
+  reconcile (or delete) before retrying.
 
 ## 4.0.0
 
