@@ -11,8 +11,8 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 /// Composes stage2a's [NoopSyncQueueStore] (nothing to redeliver — delivery
 /// already happened synchronously in the keystore's own retry) with stage2b's
 /// [RemoteWriteThroughKeyStore].
-class RemoteOnlyAtClientStorage extends AtClientStorageBase {
-  RemoteOnlyAtClientStorage({
+class NoStorageAtClientStorage extends AtClientStorageBase {
+  NoStorageAtClientStorage({
     required this.atSign,
     required RemoteSecondary remoteSecondary,
     this.keyStoreMaxAttempts = 3,
@@ -71,7 +71,7 @@ class RemoteOnlyAtClientStorage extends AtClientStorageBase {
   @override
   Future<void> clearData() async {
     throw UnsupportedError(
-        'RemoteOnlyAtClientStorage.clearData: clearing a live atServer is a '
+        'NoStorageAtClientStorage.clearData: clearing a live atServer is a '
         'destructive remote operation, not implemented in this slice');
   }
 }

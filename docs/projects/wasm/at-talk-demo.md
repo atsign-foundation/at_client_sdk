@@ -74,7 +74,7 @@ The VE root needs a trunk rebuild (at_server#2894) before `?direct=1&root=` can 
 | `AT0009` on the peer-key lookup (direct) | a fixed address sent the peer's key-copy lookup to the user's own atServer | the peer-key lookup passes no finder, so the root lookup applies |
 | `AT0014 Unexpected response found` on open (proxy) | the proxy closes the socket and the client reports the raw response, which hides the proxy's reason | read the proxy log |
 | `StateError: There is no atDirectory lookup on the web` | `NotificationServiceImpl` defaulted to the atDirectory finder | `secondaryAddressFinder` threaded through the session openers |
-| `ArgumentError (storage)` on a second open | a failed open left the client in the `AtClientImpl` cache | `remoteOnlyClient` stops the client when `NotificationServiceImpl.create` throws |
+| `ArgumentError (storage)` on a second open | a failed open left the client in the `AtClientImpl` cache | `noStorageClient` stops the client when `NotificationServiceImpl.create` throws |
 | a fix "didn't take" | a stale cached `at_client.js` | a `no-store` dev server |
 | CLI → browser message lost | Chrome froze the background tab (no heartbeats for 7 min); on refocus the monitor reconnected with no watermark | keep the tab visible; replay fixed in `at_client` (below) |
 | C CLI aborts at exit, losing stdout | `free()` of `optarg` | at_c#728 |

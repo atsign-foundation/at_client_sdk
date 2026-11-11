@@ -8,7 +8,7 @@ import '../keys/passkey_kek.dart';
 import '../keys/unlock_secret.dart';
 import 'key_acquisition.dart';
 import 'lookup_server_copy.dart';
-import 'remote_only_client.dart';
+import 'no_storage_client.dart';
 import 'server_copy.dart';
 
 final _logger = AtSignLogger('portalSession');
@@ -21,7 +21,7 @@ final _logger = AtSignLogger('portalSession');
 /// lookup over [lookUps] at [prefs]' root. [healServer] gives [heal] its
 /// server copy over the client's [RemoteSecondary], by default reading
 /// through [server] and writing on that connection. atSigns resolve with
-/// [secondaryAddressFinder], as [remoteOnlyClient] takes it.
+/// [secondaryAddressFinder], as [noStorageClient] takes it.
 Future<AtClient> portalSession({
   required String atSign,
   required String app,
@@ -52,7 +52,7 @@ Future<AtClient> portalSession({
     codec: codec,
     hintStore: hintStore,
   );
-  final (:client, :remote) = await remoteOnlyClient(
+  final (:client, :remote) = await noStorageClient(
       atSign: atSign,
       app: app,
       prefs: prefs,

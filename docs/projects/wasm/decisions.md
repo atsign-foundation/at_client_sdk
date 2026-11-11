@@ -671,7 +671,7 @@ queue is a no-op.
 
 > **Amended 2026-09-06.** First written as *"an injected write-through `Secondary`"*,
 > decided before D-12. D-12's bundle is now the injection gateway, so remote-only ships as
-> a `RemoteOnlyAtClientStorage implements AtClientStorage` rather than as a second,
+> `AtClientStorage.none()`, which returns a `NoStorageAtClientStorage implements AtClientStorage`, rather than as a second,
 > parallel injection route. **One gateway, not two** — that is the whole substance of the
 > amendment; the reasoning below is unchanged.
 

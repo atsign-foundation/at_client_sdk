@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_client/src/manager/monitor.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:mocktail/mocktail.dart';

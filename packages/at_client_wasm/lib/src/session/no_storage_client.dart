@@ -1,5 +1,4 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_client/remote_only.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/client/remote_secondary.dart';
 
@@ -10,7 +9,7 @@ import 'package:at_client/src/client/remote_secondary.dart';
 /// service resolve atSigns with [secondaryAddressFinder]. A start that fails once the client
 /// is built stops it, so a retry builds afresh. Returns that
 /// [RemoteSecondary] alongside the client.
-Future<({AtClient client, RemoteSecondary remote})> remoteOnlyClient({
+Future<({AtClient client, RemoteSecondary remote})> noStorageClient({
   required String atSign,
   required String app,
   required AtClientPreference prefs,
@@ -32,7 +31,7 @@ Future<({AtClient client, RemoteSecondary remote})> remoteOnlyClient({
     lookUps: lookUps,
     secondaryAddressFinder: secondaryAddressFinder,
     remoteSecondary: remote,
-    storage: RemoteOnlyAtClientStorage(
+    storage: AtClientStorage.none(
         atSign: atSign, remoteSecondary: remote, closedByClient: true),
   )) as AtClientImpl;
   try {

@@ -1,4 +1,6 @@
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/storage/no_storage_at_client_storage.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -17,6 +19,22 @@ import 'package:meta/meta.dart';
 /// End-to-end-encrypted values are stored as their ciphertext, never in the
 /// clear.
 abstract class AtClientStorage {
+  /// Storage with no local database: every read and write is a round trip to
+  /// the atServer through [remoteSecondary]. The only local state is the
+  /// client's own `local:` bookkeeping, the notification watermark.
+  factory AtClientStorage.none({
+    required String atSign,
+    required RemoteSecondary remoteSecondary,
+    int keyStoreMaxAttempts = 3,
+    bool closedByClient = false,
+  }) =>
+      NoStorageAtClientStorage(
+        atSign: atSign,
+        remoteSecondary: remoteSecondary,
+        keyStoreMaxAttempts: keyStoreMaxAttempts,
+        closedByClient: closedByClient,
+      );
+
   /// Claims this storage for [owner].
   ///
   /// Throws [StateError] if a different client holds it, or if a different

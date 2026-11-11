@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';

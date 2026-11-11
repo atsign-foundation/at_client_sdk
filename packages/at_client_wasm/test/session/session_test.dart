@@ -4,10 +4,9 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/remote_only.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client_wasm/at_client_wasm.dart';
-import 'package:at_client_wasm/src/session/remote_only_client.dart';
+import 'package:at_client_wasm/src/session/no_storage_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
@@ -468,9 +467,9 @@ void main() {
       ..monitorAutoStart = false;
     final finder = FixedSecondaryAddressFinder('proxy.test', 1);
 
-    Future<AtClient> remoteOnly(
+    Future<AtClient> noStorage(
             AtClientPreference prefs, AtLookUpFactory lookUps) async =>
-        (await remoteOnlyClient(
+        (await noStorageClient(
                 atSign: _atSign,
                 app: _app,
                 prefs: prefs,
@@ -488,14 +487,16 @@ void main() {
         ..crypto = CryptoConfig(defaultProviderId: 'missing');
 
       Future<AtClient> attempt(AtClientPreference p) =>
-          remoteOnly(p, fakeLookUps);
+          noStorage(p, fakeLookUps);
 
       await expectLater(
           attempt(failing), throwsA(isA<CryptoProviderNotRegistered>()));
       final client = await attempt(prefs);
 
       expect(
-          (client as AtClientImpl).storage, isA<RemoteOnlyAtClientStorage>());
+          (client as AtClientImpl).storage,
+          isA<AtClientStorageBase>()
+              .having((s) => s.location, 'location', 'remote:$_atSign'));
     });
 
     test(
@@ -515,18 +516,20 @@ void main() {
                   authenticator: authenticator);
 
       Future<AtClient> attempt(AtLookUpFactory lookUps) =>
-          remoteOnly(prefs, lookUps);
+          noStorage(prefs, lookUps);
 
       await expectLater(attempt(failingMonitor), throwsStateError);
       final client = await attempt(fakeLookUps);
 
       expect(
-          (client as AtClientImpl).storage, isA<RemoteOnlyAtClientStorage>());
+          (client as AtClientImpl).storage,
+          isA<AtClientStorageBase>()
+              .having((s) => s.location, 'location', 'remote:$_atSign'));
     });
 
     test('the notification monitor connects through the injected lookUps',
         () async {
-      final client = await remoteOnly(prefs, fakeLookUps);
+      final client = await noStorage(prefs, fakeLookUps);
 
       final service = client.notificationService as NotificationServiceImpl;
       expect(service.monitor.lookUp, isA<FakeAtLookUp>());
@@ -535,7 +538,7 @@ void main() {
 
     test('the notification service resolves atSigns with the injected finder',
         () async {
-      final client = await remoteOnly(prefs, fakeLookUps);
+      final client = await noStorage(prefs, fakeLookUps);
 
       final service = client.notificationService as NotificationServiceImpl;
       final address =
@@ -545,7 +548,7 @@ void main() {
 
     test('a started monitor delivers what its lookUp receives to subscribers',
         () async {
-      final client = await remoteOnly(prefs, fakeLookUps);
+      final client = await noStorage(prefs, fakeLookUps);
       final service = client.notificationService as NotificationServiceImpl;
       final lookUp = service.monitor.lookUp as FakeAtLookUp;
       final received = service.subscribe(regex: 'ai6bh', shouldDecrypt: false);
@@ -569,12 +572,10 @@ void main() {
 
     test('remote-only client storage is remote-only and authenticates',
         () async {
-      final client = await remoteOnly(prefs, fakeLookUps);
+      final client = await noStorage(prefs, fakeLookUps);
 
-      final storage =
-          (client as AtClientImpl).storage! as RemoteOnlyAtClientStorage;
-      expect((storage.remoteSecondary.atLookUp as FakeAtLookUp).authenticator,
-          isNotNull);
+      final remote = client.getRemoteSecondary()!;
+      expect((remote.atLookUp as FakeAtLookUp).authenticator, isNotNull);
     });
 
     test('Mode P first visit heals the server copy after start', () async {
@@ -595,7 +596,9 @@ void main() {
           codec: codec);
 
       expect(
-          (client as AtClientImpl).storage, isA<RemoteOnlyAtClientStorage>());
+          (client as AtClientImpl).storage,
+          isA<AtClientStorageBase>()
+              .having((s) => s.location, 'location', 'remote:$_atSign'));
       expect(server.puts, 1);
       expect(await opens(server.held, port.secret), isTrue);
       expect(await opens(server.held, cut.passphrase), isTrue);
@@ -643,9 +646,6 @@ void main() {
           promptPassphrase: (_) async => cut.passphrase,
           codec: codec);
 
-      final storage =
-          (client as AtClientImpl).storage! as RemoteOnlyAtClientStorage;
-      expect(healedOver, same(storage.remoteSecondary));
       expect(healedOver, same(client.getRemoteSecondary()));
     });
   });

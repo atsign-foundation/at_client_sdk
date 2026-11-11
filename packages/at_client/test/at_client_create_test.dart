@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/src/client/durable_address_finder.dart';
-import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
