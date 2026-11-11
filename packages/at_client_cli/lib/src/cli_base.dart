@@ -322,11 +322,13 @@ class CLIBase {
       atServiceFactory = ServiceFactoryWithNoOpSyncService();
     }
 
+    // NOTE: the replay policy is left as the caller set it, and as
+    // AtClientPreference's default (resume) when there is no preference. A
+    // caller that asks for connect, window or full keeps what it asked for.
     final config = (preference ?? AtClientPreference())
       ..namespace = nameSpace
       ..rootDomain = atRootDomain.rootDomain
-      ..rootPort = atRootDomain.rootPort
-      ..notificationReplay = const NotificationReplay.resume();
+      ..rootPort = atRootDomain.rootPort;
 
     if (!File(atKeysFilePathToUse).existsSync()) {
       // no atKeys file

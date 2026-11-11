@@ -1,7 +1,16 @@
 /// Where a monitor's notification replay starts when it connects.
 ///
 /// Set with [AtClientPreference.notificationReplay]. The start is resolved
-/// once per notification service, so a reconnect does not move it forward.
+/// once per notification service, so a reconnect does not move it forward, and
+/// a policy changed after the service's first connect is not seen: set the
+/// policy before that connect.
+///
+/// [resume] and [window] carry their start across a restart only when the
+/// client's storage does. On in-memory storage [resume] behaves as [connect]
+/// on every start, and [window] replays the same window.
+///
+/// Every policy writes the last-received watermark as notifications arrive;
+/// [connect] and [full] never read it.
 sealed class NotificationReplay {
   const NotificationReplay();
 
@@ -15,11 +24,15 @@ sealed class NotificationReplay {
 
   /// Replays from the later of the last notification the store holds and
   /// [within] before now, which defaults to one hour. A store holding none
-  /// starts [within] before now.
+  /// starts [within] before now. A negative [within] is treated as zero, and
+  /// the start never precedes the service's creation time, so notifications
+  /// received since then are delivered once.
   const factory NotificationReplay.window([Duration within]) = _Window;
 
-  /// Replays everything the atServer still holds for this atSign. The store is
-  /// not read.
+  /// Replays everything the atServer still holds for this atSign, on every
+  /// start: the dedupe remembers only the latest 1024 notifications, so a
+  /// larger backlog is delivered again. The store is not read, but each
+  /// receipt still writes the watermark.
   const factory NotificationReplay.full() = _Full;
 
   /// Calls the callback for this policy. Exhaustive: a new policy is a

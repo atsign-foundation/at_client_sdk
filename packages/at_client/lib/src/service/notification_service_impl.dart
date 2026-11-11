@@ -71,7 +71,8 @@ class NotificationServiceImpl extends NotificationService {
   DateTime Function() now = DateTime.now;
 
   /// The replay start, resolved from the policy on the first connect and then
-  /// kept for the life of this service.
+  /// kept for the life of this service. Cleared when a resolution fails, so a
+  /// store that was not ready yet is read again on the next connect.
   Future<int>? _replayFrom;
 
   /// The epoch millis of the latest notification this service received.
@@ -629,9 +630,19 @@ class NotificationServiceImpl extends NotificationService {
   /// have sent notifications whose replies have arrived.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
-    final replayFrom = await (_replayFrom ??=
-        _resolveReplayFrom(atClient.getPreferences()!.notificationReplay));
-    return max(replayFrom, _lastReceivedMillis ?? 0);
+    final pending = _replayFrom ??=
+        _resolveReplayFrom(atClient.getPreferences()!.notificationReplay);
+    try {
+      final replayFrom = await pending;
+      return max(replayFrom, _lastReceivedMillis ?? 0);
+    } catch (_) {
+      // A failed resolution is not a start: keep it for nobody, so the next
+      // connect reads the store again rather than rethrow this error forever.
+      // A concurrent caller may already have replaced it, so only clear the
+      // one that failed.
+      if (identical(_replayFrom, pending)) _replayFrom = null;
+      rethrow;
+    }
   }
 
   /// The replay start [policy] resolves to. Reads and seeds the store only
@@ -641,8 +652,22 @@ class NotificationServiceImpl extends NotificationService {
         resume: () async =>
             (await _storedOrSeededWatermark()) ??
             _createdAt.millisecondsSinceEpoch,
-        window: (within) async => max((await _storedOrSeededWatermark()) ?? 0,
-            now().subtract(within).millisecondsSinceEpoch),
+        window: (within) async {
+          final createdAtMillis = _createdAt.millisecondsSinceEpoch;
+          // A negative duration would put the start after now, so it is
+          // treated as zero: the window starts when it is resolved. Computed
+          // in millis so even a duration as long as a `Duration` can hold
+          // cannot overflow a `DateTime`.
+          final withinMillis = within.inMilliseconds;
+          final requestedMillis = now().millisecondsSinceEpoch -
+              (withinMillis < 0 ? 0 : withinMillis);
+          // Everything received since the service was created is delivered
+          // once under every policy, so the start never precedes creation.
+          return max(
+              max((await _storedOrSeededWatermark()) ?? createdAtMillis,
+                  requestedMillis),
+              createdAtMillis);
+        },
         full: () async => 0,
       );
 

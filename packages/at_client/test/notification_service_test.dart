@@ -2439,14 +2439,18 @@ void main() {
     });
 
     test(
-        'window with nothing stored answers now minus its duration and seeds '
-        'the store with the creation time', () async {
+        'window with nothing stored seeds the store with the creation time, '
+        'and starts no earlier than it', () async {
       await start(const NotificationReplay.window());
       final now = createdAfter.add(const Duration(minutes: 1));
       service.now = () => now;
 
-      expect(await service.getLastNotificationTime(),
-          now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch);
+      expect(
+          await service.getLastNotificationTime(),
+          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
+              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)),
+          reason: 'now - 1h is before creation, so the start is creation, not '
+              'a moment whose notifications this service never saw');
       final seeded = verify(() => mockAtClientImpl.put(any(), captureAny(),
               putRequestOptions: any(named: 'putRequestOptions')))
           .captured
@@ -2510,6 +2514,98 @@ void main() {
       verify(() => mockAtClientImpl.put(any(), any(),
           putRequestOptions: any(named: 'putRequestOptions'))).called(1);
     });
+
+    test(
+        'window starts no earlier than the creation time, so what arrived '
+        'between creation and the first connect is delivered', () async {
+      // The clock is two hours after the service was created, so a three-hour
+      // window reaches back before creation.
+      await start(const NotificationReplay.window(Duration(hours: 3)));
+
+      expect(
+          await service.getLastNotificationTime(),
+          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
+              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)),
+          reason: 'now - 3h is before creation, and everything received since '
+              'creation must still be delivered once');
+    });
+
+    test('a negative window is treated as zero, not a start in the future',
+        () async {
+      await start(const NotificationReplay.window(Duration(minutes: -5)));
+
+      final answered = await service.getLastNotificationTime();
+      expect(answered, lessThanOrEqualTo(clock.millisecondsSinceEpoch),
+          reason: 'a start after now would replay nothing that arrives');
+      expect(answered, clock.millisecondsSinceEpoch,
+          reason: 'window(0) starts now, which the test clock sets two hours '
+              'ahead of creation');
+    });
+
+    test('a window longer than a DateTime can hold is clamped to creation',
+        () async {
+      await start(const NotificationReplay.window(Duration(days: 100000)));
+
+      expect(
+          await service.getLastNotificationTime(),
+          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
+              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)),
+          reason: 'the subtraction must not overflow a DateTime');
+    });
+
+    test('a shorter window starts later than a longer one', () async {
+      final stored = clock.subtract(const Duration(hours: 3));
+      await start(const NotificationReplay.window(Duration(minutes: 90)),
+          stored: stored);
+      final longer = await service.getLastNotificationTime();
+      service.stopAllSubscriptions();
+
+      await start(const NotificationReplay.window(Duration(minutes: 30)),
+          stored: stored);
+      final shorter = await service.getLastNotificationTime();
+
+      expect(longer,
+          clock.subtract(const Duration(minutes: 90)).millisecondsSinceEpoch);
+      expect(shorter,
+          clock.subtract(const Duration(minutes: 30)).millisecondsSinceEpoch);
+      expect(shorter, greaterThan(longer!),
+          reason: 'each window measures back from now by its own duration');
+    });
+
+    test('a receipt older than the resolved start does not move it back',
+        () async {
+      final stored = clock.subtract(const Duration(hours: 5));
+      await start(const NotificationReplay.resume(), stored: stored);
+      expect(await service.getLastNotificationTime(),
+          stored.millisecondsSinceEpoch);
+
+      // Older than the stored watermark the start resolved to.
+      await receive('old',
+          clock.subtract(const Duration(hours: 6)).millisecondsSinceEpoch);
+
+      expect(await service.getLastNotificationTime(),
+          stored.millisecondsSinceEpoch,
+          reason: 'the later of the policy start and the latest receipt');
+    });
+
+    test(
+        'a start read that fails is attempted again on the next call, not '
+        'reported for the life of the service', () async {
+      await start(const NotificationReplay.resume());
+      var reads = 0;
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(any())).thenAnswer((_) async {
+        if (++reads == 1) throw StateError('the store is not ready');
+        return AtValue()..value = jsonEncode({'epochMillis': 1234567890123});
+      });
+
+      await expectLater(
+          service.getLastNotificationTime(), throwsA(isA<StateError>()));
+      expect(await service.getLastNotificationTime(), 1234567890123,
+          reason: 'a failed resolution is not kept, so the next connect asks '
+              'the store again rather than rethrowing the same error');
+    });
   });
 
   group('notificationReplay preference', () {
@@ -2535,6 +2631,30 @@ void main() {
       expect(preference.fetchOfflineNotifications, isFalse);
       preference.notificationReplay = const NotificationReplay.window();
       expect(preference.fetchOfflineNotifications, isTrue);
+    });
+
+    test('true selects resume when, and only when, the policy is connect', () {
+      final preference = AtClientPreference()
+        ..notificationReplay = const NotificationReplay.connect();
+
+      preference.fetchOfflineNotifications = true;
+
+      expect(preference.notificationReplay, const NotificationReplay.resume());
+    });
+
+    test(
+        'policies built at run time compare by value, a window by its duration',
+        () {
+      final five = Duration(minutes: 5);
+
+      expect(NotificationReplay.window(five), NotificationReplay.window(five));
+      expect(NotificationReplay.window(five).hashCode,
+          NotificationReplay.window(five).hashCode,
+          reason: 'equal policies hash equal');
+      expect(NotificationReplay.window(five),
+          isNot(NotificationReplay.window(Duration(minutes: 6))));
+      expect(
+          NotificationReplay.window(), isNot(NotificationReplay.window(five)));
     });
 
     test('the default is resume, and the copy method keeps the policy', () {

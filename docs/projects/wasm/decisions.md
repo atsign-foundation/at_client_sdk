@@ -833,7 +833,7 @@ The client chooses where its monitor replays from, when its notification service
 | --- | --- | --- |
 | **connect** | the notification service's creation | no |
 | **resume** | the last notification received (the checkpoint) | yes |
-| **window(d)**, `d` defaulting to **1 hour** | `max(checkpoint, now − d)`; `now − d` when there is no checkpoint | when there is one |
+| **window(d)**, `d` defaulting to **1 hour** | `max(checkpoint, now − d, creation)`; `max(now − d, creation)` when there is no checkpoint, and a negative `d` is zero | when there is one |
 | **full** | everything the atServer still holds | no |
 
 **Defaults.** Native keeps **resume**, today's `fetchOfflineNotifications = true`. The
@@ -864,9 +864,14 @@ holds. That turns OQ-13's silent unbounded replay into a stated, bounded one.
 browser lane shipping notifications; it is required only for a browser client that opts
 into **resume**.
 
-**Not yet implemented.** at_client exposes only the `fetchOfflineNotifications` bool, which
-is *connect* (false) or *resume* (true). The policy preference, *window* and *full*, and
-the bool's deprecation are a follow-up at_client change.
+**Implemented in [#2476](https://github.com/atsign-foundation/at_client_sdk/pull/2476).**
+`AtClientPreference.notificationReplay` takes `NotificationReplay.connect()`, `resume()`
+(the default), `window(d)` and `full()`; the deprecated `fetchOfflineNotifications` bool
+maps to *connect* and *resume*. The start is resolved once per notification service, as
+the bound above says, and a failed first read is retried on the next connect. A
+`window(d)` start is capped at the service's creation time, and a negative `d` is
+treated as zero. `at_client_cli` keeps *resume*; the `dockerstats` example uses
+*connect*.
 
 > **Amended 2026-11-02 (browser notifications, [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439); [rulings](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840)).**
 >
@@ -1419,3 +1424,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-05 | Doc set brought current: #2214 closed, superseded by [#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415) (4.0.0 package set; #2399's transport reached trunk through it). The remote-only classes and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430), with CI in [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431) and tracking in [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437). Every wasm-gated barrel now has 0 blocked packages. OQ-13's correction revised: `exists` is implemented in #2430, and the watermark is an in-memory `local:` key, so a reload, not a reconnect, loses the gap. From the #2428 review: **K-18** (`user.id` = 64 random bytes; the hint gains the atSign; canonical atSign = `toAtsign()`; first ruled as `SHA-256(atSign)` the same day); D-19's `BroadcastChannel` keyed like its lock, with last-seen handover; D-24's browser preset marked not on trunk (then built in #2451, which took it out before merging; see 2026-11-10); D-25 amended for 4.0.0's required `storage`; OQ-7's production state (CORS `*` on `:64`, direct path ran 2026-11-03); the 2026-11-02 rulings recorded on [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840). (ruled by srieteja) |
 | 2026-11-06 | From the #2428 review: **K-18 amended**: a random `user.id` makes re-enrollment add a passkey; `user.displayName` = `<enrollment time> · <deviceName>`, the time UTC to the minute and the deviceName cut to fit 64 bytes (the atSign is in `user.name`; a same-day revoke and re-enroll keeps the deviceName); recovery offers another passkey or atSign on no pointer and on a refused PKAM (`AT0027` or `AT0028`). D-24's inclusive-filter amendment carries #2451's detail (the server change, handover replay, `_isDuplicate`) so #2451 no longer edits this file. Later: the dedupe is seeded from every id the stored watermark keeps at its millisecond, at_server#2922 waits for a release carrying it, follower tabs dedupe forwarded lines, and K-18's canonical atSign also covers K-3 and K-17. (ruled by srieteja) |
 | 2026-11-10 | D-24 brought current once [#2451](https://github.com/atsign-foundation/at_client_sdk/pull/2451) merged: the dedupe is on trunk, keyed by the pair (from, id) with the sender canonical, and the watermark stores `[from, id]` pairs capped at 1024. D-19's handover dedupes by the same pair. The browser preset was taken out of #2451 before it merged, and where browser presets live is still open. |
+| 2026-11-11 | D-24's policy is implemented in [#2476](https://github.com/atsign-foundation/at_client_sdk/pull/2476): `AtClientPreference.notificationReplay` takes `connect`, `resume` (the default), `window(d)` and `full`, and `fetchOfflineNotifications` is deprecated. The start resolves once per notification service and a failed read is retried on the next connect; a window start never precedes service creation and a negative duration is zero. A live test covers `full` sending `monitor:0` to an atServer. (implemented by srieteja) |

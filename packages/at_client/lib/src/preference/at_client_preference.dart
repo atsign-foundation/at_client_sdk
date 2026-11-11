@@ -376,7 +376,7 @@ class AtClientPreference {
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
-  /// Where the monitor's notification replay starts on each connect.
+  /// Where the monitor's notification replay starts.
   /// Defaults to [NotificationReplay.resume]: the last notification the store
   /// holds, or the service's creation time when it holds none. Notifications
   /// are not a history: keep history in records.
@@ -384,6 +384,10 @@ class AtClientPreference {
   /// Notifications received since the notification service was created are
   /// delivered once under every policy, including any that arrived before
   /// the monitor connected.
+  ///
+  /// The service reads this once, when it first resolves its start. Changing
+  /// it afterwards does not affect that service; build a new notification
+  /// service to change policy.
   NotificationReplay notificationReplay = const NotificationReplay.resume();
 
   /// Alias of [notificationReplay]. Reads false only for connect. Setting false
