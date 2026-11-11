@@ -28,13 +28,9 @@ enum RegistrarFailure {
   network,
 }
 
-/// A registrar call failed: an unexpected status code, or a response whose
-/// shape the caller cannot use.
+/// A registrar call failed.
 ///
-/// [message] may contain [endpoint] and [statusCode], but never the server's
-/// `message` field, any other part of the response body, a cramkey or the
-/// super API key, so a registrar error can be logged or surfaced without
-/// leaking what the server said.
+/// [message] never contains the server's response or credentials.
 class RegistrarException extends AtException {
   /// The API path this call was made to, e.g. `/register-atsign/`.
   final String endpoint;
