@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -13,6 +14,31 @@ import 'package:test/test.dart';
 
 const _registrarUrl = 'my.registrar.test';
 const _apiKey = 'test-api-key';
+
+/// A [List] that records whether its elements were ever read, so a test can
+/// tell whether a chunk was copied into a buffer without a new public API.
+class _SpyBytes extends ListBase<int> {
+  final List<int> _bytes;
+  bool wasRead = false;
+
+  _SpyBytes(this._bytes);
+
+  @override
+  int get length => _bytes.length;
+
+  @override
+  set length(int newLength) => throw UnsupportedError('fixed length');
+
+  @override
+  int operator [](int index) {
+    wasRead = true;
+    return _bytes[index];
+  }
+
+  @override
+  void operator []=(int index, int value) =>
+      throw UnsupportedError('fixed length');
+}
 
 RegistrarService _makeService(MockClient client) => RegistrarService(
       registrarUrl: _registrarUrl,
@@ -654,6 +680,54 @@ void main() {
         throwsA(isA<RegistrarException>().having(
             (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
       );
+    });
+
+    test(
+        'enforces the response cap before buffering a single oversized '
+        'chunk', () async {
+      final spyChunk = _SpyBytes(List<int>.filled(70 * 1024, 0));
+      final client = MockClient.streaming((request, bodyStream) async {
+        final controller = StreamController<List<int>>();
+        controller.add(spyChunk);
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
+      );
+      expect(spyChunk.wasRead, isFalse,
+          reason: 'an oversized chunk must never be copied into the buffer');
+    });
+
+    test('cancels the stream once many small chunks cross the response cap',
+        () async {
+      var cancelled = false;
+      var chunksSent = 0;
+      final client = MockClient.streaming((request, bodyStream) async {
+        final controller = StreamController<List<int>>(
+          onCancel: () => cancelled = true,
+        );
+        unawaited(() async {
+          for (var i = 0; i < 20 && !cancelled; i++) {
+            chunksSent++;
+            controller.add(List<int>.filled(4 * 1024, 0));
+            await Future<void>.delayed(Duration.zero);
+          }
+          if (!controller.isClosed) await controller.close();
+        }());
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
+      );
+      expect(chunksSent, lessThan(20),
+          reason: 'the stream must be cancelled once the cap is crossed, '
+              'not drained to completion');
     });
 
     test('the deprecated superApiKey getter still returns the key', () {

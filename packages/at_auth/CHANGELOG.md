@@ -64,6 +64,9 @@
   a `timeout`, `network` or `malformedResponse` failure may mean the
   registrar already committed the registration, and that a caller must
   reconcile (or delete) before retrying.
+- fix: `RegistrarAdminService`'s 64 KiB response cap is now enforced before a
+  chunk is buffered, so a single oversized chunk is never copied into
+  memory before being rejected.
 
 ## 4.0.0
 

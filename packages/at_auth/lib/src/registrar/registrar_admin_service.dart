@@ -8,9 +8,14 @@ import 'package:http/http.dart' as http;
 
 const _apiBase = '/api/app/v4';
 
-/// Lets an outer timeout cancel the body-read subscription a
-/// [RegistrarAdminService] request started, so a slow-draining stream stops
-/// as soon as the deadline fires instead of continuing in the background.
+/// Cancels [subscription], swallowing any error its `onCancel` raises.
+Future<void> _cancelQuietly<T>(StreamSubscription<T>? subscription) async {
+  try {
+    await subscription?.cancel();
+  } catch (_) {}
+}
+
+/// Lets an outer timeout cancel a request's active body-read subscription.
 class _ReadCancelToken {
   StreamSubscription<List<int>>? _subscription;
 
@@ -18,17 +23,8 @@ class _ReadCancelToken {
     _subscription = subscription;
   }
 
-  /// Cancels the attached subscription, swallowing any error its `onCancel`
-  /// raises: the caller has already decided how to report the failure that
-  /// triggered the cancel, and a throwing `onCancel` must not replace that
-  /// with an unhandled error instead.
-  Future<void> cancel() async {
-    try {
-      await _subscription?.cancel();
-    } catch (_) {
-      // Deliberately ignored; see doc comment.
-    }
-  }
+  /// Cancels the attached subscription, if any.
+  Future<void> cancel() => _cancelQuietly(_subscription);
 }
 
 /// The most bytes a registrar response body may hold before
@@ -37,10 +33,8 @@ const _maxResponseBytes = 64 * 1024;
 
 /// The result of [RegistrarAdminService.registerAtsign].
 ///
-/// A super key may add a prefix or postfix to the requested name, so
-/// [registeredAtsign] can differ from [requestedAtsign] and is not knowable
-/// in advance. Callers must activate as [registeredAtsign], never
-/// [requestedAtsign].
+/// [registeredAtsign] may differ from [requestedAtsign]; activate as
+/// [registeredAtsign].
 class RegisteredAtsign {
   /// The Atsign that was asked for.
   final Atsign requestedAtsign;
@@ -152,9 +146,8 @@ class RegistrarAdminService {
   Future<http.Response> _manageAtsignsRequest(Map<String, dynamic> data) =>
       _adminRequest(RegistrarApiEndpoint.manageAtsigns, data);
 
-  /// Sends [data] to [endpoint] and reads its response, both bounded
-  /// together by [requestTimeout]: a server that completes the send but
-  /// drips its body slowly must still finish within the same deadline.
+  /// Sends [data] to [endpoint] and reads its response, bounded together by
+  /// [requestTimeout].
   Future<http.Response> _adminRequest(
     RegistrarApiEndpoint endpoint,
     Map<String, dynamic> data,
@@ -207,12 +200,7 @@ class RegistrarAdminService {
     final streamed = await _http.send(request);
 
     if (streamed.statusCode == 401 || streamed.statusCode == 403) {
-      try {
-        await streamed.stream.listen(null).cancel();
-      } catch (_) {
-        // Deliberately ignored: the authentication failure below is the
-        // failure to report, not a throwing `onCancel`.
-      }
+      await _cancelQuietly(streamed.stream.listen(null));
       throw RegistrarException(
         'Registrar super-API-key authentication failed on ${endpoint.path}: '
         'the key is either invalid, missing, or lacks the privilege the '
@@ -228,14 +216,8 @@ class RegistrarAdminService {
     late final StreamSubscription<List<int>> subscription;
     subscription = streamed.stream.listen(
       (chunk) async {
-        bodyBytes.addAll(chunk);
-        if (bodyBytes.length > _maxResponseBytes) {
-          try {
-            await subscription.cancel();
-          } catch (_) {
-            // Deliberately ignored: responseTooLarge below is the failure
-            // to report, not a throwing `onCancel`.
-          }
+        if (bodyBytes.length + chunk.length > _maxResponseBytes) {
+          await _cancelQuietly(subscription);
           if (!bodyRead.isCompleted) {
             bodyRead.completeError(RegistrarException(
               'Registrar response exceeded $_maxResponseBytes bytes.',
@@ -244,7 +226,9 @@ class RegistrarAdminService {
               reason: RegistrarFailure.responseTooLarge,
             ));
           }
+          return;
         }
+        bodyBytes.addAll(chunk);
       },
       onDone: () {
         if (!bodyRead.isCompleted) bodyRead.complete();
@@ -261,12 +245,8 @@ class RegistrarAdminService {
         headers: streamed.headers, reasonPhrase: streamed.reasonPhrase);
   }
 
-  /// Parses a raw cramkey of the form `@registeredAtsign:key` into the
-  /// [Atsign] the registrar actually registered and the bare key.
-  ///
-  /// `:` is reserved in an Atsign (`at_commons`' `Atsign`), so splitting at
-  /// the first `:` always separates the Atsign from the key, however long
-  /// a prefix or postfix the registrar added to it.
+  /// Parses a raw cramkey (`@registeredAtsign:key`) into the registered
+  /// [Atsign] and the bare key, splitting at the first `:`.
   (Atsign, String) _parseCramKey(
     String rawCramkey, {
     required String endpoint,
@@ -315,25 +295,13 @@ class RegistrarAdminService {
 
   /// Registers [atsign] with the super API key and returns its CRAM key.
   ///
-  /// The registrar may register a different Atsign than the one requested
-  /// (a super key can add a prefix or postfix); the result's
-  /// `registeredAtsign` is the one to activate, read from the registrar's
-  /// cramkey, never the one requested.
-  ///
-  /// The register call is a single POST, not idempotent: if this throws
-  /// [RegistrarException] with [RegistrarFailure.timeout],
-  /// [RegistrarFailure.network] or [RegistrarFailure.malformedResponse], the
-  /// registrar may already have committed the registration before the
-  /// failure, and its cramkey is then lost to this caller: [atsign] is
-  /// registered with a CRAM secret nobody holds, under a name that stays
-  /// taken until the super key deletes it. Reconcile — look the Atsign up,
-  /// or run the delete flow — before retrying with the same [atsign].
+  /// Not idempotent: a [RegistrarFailure.timeout], [RegistrarFailure.network]
+  /// or [RegistrarFailure.malformedResponse] failure may still have
+  /// committed the registration, leaving [atsign] registered under a CRAM
+  /// secret nobody holds. Reconcile — look it up, or run the delete flow —
+  /// before retrying with the same [atsign].
   ///
   /// ```dart
-  /// final admin = RegistrarAdminService(
-  ///   registrarUrl: 'my.registrar.example',
-  ///   superApiKey: superApiKey,
-  /// );
   /// final registered = await admin.registerAtsign(atsign: '@alice'.toAtsign());
   /// ```
   Future<RegisteredAtsign> registerAtsign({required Atsign atsign}) async {
