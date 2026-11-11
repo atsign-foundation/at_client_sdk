@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/registrar/registrar.dart';
+import 'package:at_auth/src/registrar/registrar_exceptions.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:http/http.dart' as http;
 
