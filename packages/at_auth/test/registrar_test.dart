@@ -642,6 +642,61 @@ void main() {
       // ignore: deprecated_member_use_from_same_package
       expect(service.superApiKey, equals(_apiKey));
     });
+
+    test(
+        'throws RegistrarException(network) when the connection fails, '
+        'without leaking the super key', () async {
+      final client = MockClient((_) async {
+        throw http.ClientException('Connection refused');
+      });
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(
+          isA<RegistrarException>()
+              .having((e) => e.reason, 'reason', RegistrarFailure.network)
+              .having((e) => e.endpoint, 'endpoint', '/register-atsign/')
+              .having((e) => e.toString().contains(_apiKey), 'leaks the key',
+                  isFalse),
+        ),
+      );
+    });
+
+    test(
+        'a 401 whose body exceeds the size cap still reports authentication, '
+        'not responseTooLarge', () async {
+      final oversized = 'x' * (70 * 1024);
+      final client = MockClient((_) async => http.Response(oversized, 401));
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.authentication)
+            .having((e) => e.statusCode, 'statusCode', 401)),
+      );
+    });
+
+    test('cancels the body subscription when the request times out', () async {
+      var wasCancelled = false;
+      final client = MockClient.streaming((request, bodyStream) async {
+        final controller = StreamController<List<int>>(
+          onCancel: () => wasCancelled = true,
+        );
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(milliseconds: 50),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      );
+      expect(wasCancelled, isTrue);
+    });
   });
 
   group('generateAtSignDeleteToken', () {
@@ -792,6 +847,44 @@ void main() {
       );
     });
 
+    test('throws RegistrarException(malformedResponse) when status is missing',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'data': {'token': 'the-token', 'atSigns': [], 'skippedatSigns': []},
+      }));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when status is '
+        'unrecognized', () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'weird',
+        'data': {'token': 'the-token', 'atSigns': [], 'skippedatSigns': []},
+      }));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when status is '
+        '"success" but data is null', () async {
+      final service =
+          _makeAdminService(_mockResponse({'status': 'success', 'data': null}));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
     test('requests the manage-atsigns endpoint over https for a delete token',
         () async {
       late http.Request captured;
@@ -866,6 +959,63 @@ void main() {
         () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
         throwsA(isA<RegistrarException>().having(
             (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)),
+      );
+    });
+
+    test('throws RegistrarException(malformedResponse) when status is missing',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'data': {'deleted': [], 'failed': []},
+      }));
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when status is '
+        'unrecognized', () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'weird',
+        'data': {'deleted': [], 'failed': []},
+      }));
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when status is '
+        '"success" but data is null', () async {
+      final service =
+          _makeAdminService(_mockResponse({'status': 'success', 'data': null}));
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(network) for a delete call when the '
+        'connection fails', () async {
+      final client = MockClient((_) async {
+        throw http.ClientException('Connection refused');
+      });
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(
+          isA<RegistrarException>()
+              .having((e) => e.reason, 'reason', RegistrarFailure.network)
+              .having((e) => e.endpoint, 'endpoint', '/manage-atsigns/')
+              .having((e) => e.toString().contains(_apiKey), 'leaks the key',
+                  isFalse),
+        ),
       );
     });
 

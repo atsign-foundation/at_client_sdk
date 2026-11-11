@@ -8,6 +8,21 @@ import 'package:http/http.dart' as http;
 
 const _apiBase = '/api/app/v4';
 
+/// Lets an outer timeout cancel the body-read subscription a
+/// [RegistrarAdminService] request started, so a slow-draining stream stops
+/// as soon as the deadline fires instead of continuing in the background.
+class _ReadCancelToken {
+  StreamSubscription<List<int>>? _subscription;
+
+  void attach(StreamSubscription<List<int>> subscription) {
+    _subscription = subscription;
+  }
+
+  void cancel() {
+    _subscription?.cancel();
+  }
+}
+
 /// The most bytes a registrar response body may hold before
 /// [RegistrarFailure.responseTooLarge] is thrown.
 const _maxResponseBytes = 64 * 1024;
@@ -135,15 +150,24 @@ class RegistrarAdminService {
     RegistrarApiEndpoint endpoint,
     Map<String, dynamic> data,
   ) async {
+    final cancelToken = _ReadCancelToken();
     try {
-      return await _sendAndReadResponse(endpoint, data).timeout(
+      return await _sendAndReadResponse(endpoint, data, cancelToken).timeout(
         requestTimeout,
       );
     } on TimeoutException {
+      cancelToken.cancel();
       throw RegistrarException(
         'Registrar request timed out after $requestTimeout.',
         endpoint: endpoint.path,
         reason: RegistrarFailure.timeout,
+      );
+    } on http.ClientException {
+      throw RegistrarException(
+        'Registrar request to ${endpoint.path} failed: the connection could '
+        'not be completed.',
+        endpoint: endpoint.path,
+        reason: RegistrarFailure.network,
       );
     }
   }
@@ -151,6 +175,7 @@ class RegistrarAdminService {
   Future<http.Response> _sendAndReadResponse(
     RegistrarApiEndpoint endpoint,
     Map<String, dynamic> data,
+    _ReadCancelToken cancelToken,
   ) async {
     final url = Uri.https(registrarUrl, "$_apiBase${endpoint.path}");
     final request = http.Request('POST', url)
@@ -160,20 +185,8 @@ class RegistrarAdminService {
 
     final streamed = await _http.send(request);
 
-    final bodyBytes = <int>[];
-    await for (final chunk in streamed.stream) {
-      bodyBytes.addAll(chunk);
-      if (bodyBytes.length > _maxResponseBytes) {
-        throw RegistrarException(
-          'Registrar response exceeded $_maxResponseBytes bytes.',
-          endpoint: endpoint.path,
-          statusCode: streamed.statusCode,
-          reason: RegistrarFailure.responseTooLarge,
-        );
-      }
-    }
-
     if (streamed.statusCode == 401 || streamed.statusCode == 403) {
+      await streamed.stream.listen(null).cancel();
       throw RegistrarException(
         'Registrar super-API-key authentication failed on ${endpoint.path}: '
         'the key is either invalid, missing, or lacks the privilege the '
@@ -183,6 +196,35 @@ class RegistrarAdminService {
         reason: RegistrarFailure.authentication,
       );
     }
+
+    final bodyBytes = <int>[];
+    final bodyRead = Completer<void>();
+    late final StreamSubscription<List<int>> subscription;
+    subscription = streamed.stream.listen(
+      (chunk) {
+        bodyBytes.addAll(chunk);
+        if (bodyBytes.length > _maxResponseBytes) {
+          subscription.cancel();
+          if (!bodyRead.isCompleted) {
+            bodyRead.completeError(RegistrarException(
+              'Registrar response exceeded $_maxResponseBytes bytes.',
+              endpoint: endpoint.path,
+              statusCode: streamed.statusCode,
+              reason: RegistrarFailure.responseTooLarge,
+            ));
+          }
+        }
+      },
+      onDone: () {
+        if (!bodyRead.isCompleted) bodyRead.complete();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!bodyRead.isCompleted) bodyRead.completeError(error, stackTrace);
+      },
+      cancelOnError: true,
+    );
+    cancelToken.attach(subscription);
+    await bodyRead.future;
 
     return http.Response.bytes(bodyBytes, streamed.statusCode,
         headers: streamed.headers, reasonPhrase: streamed.reasonPhrase);
@@ -363,12 +405,21 @@ class RegistrarAdminService {
         reason: RegistrarFailure.malformedResponse,
       );
     }
-    if (payload['status'] != 'success' || payload['data'] == null) {
+    final status = payload['status'];
+    if (status == 'error') {
       throw RegistrarException(
         'Failed to generate delete token: the registrar reported an error.',
         endpoint: endpointPath,
         statusCode: res.statusCode,
         reason: RegistrarFailure.unavailable,
+      );
+    }
+    if (status != 'success' || payload['data'] is! Map) {
+      throw RegistrarException(
+        'Failed to generate delete token: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
       );
     }
     final data = payload['data'];
@@ -429,12 +480,21 @@ class RegistrarAdminService {
         reason: RegistrarFailure.malformedResponse,
       );
     }
-    if (payload['status'] != 'success' || payload['data'] == null) {
+    final status = payload['status'];
+    if (status == 'error') {
       throw RegistrarException(
         'Failed to delete atSigns: the registrar reported an error.',
         endpoint: endpointPath,
         statusCode: res.statusCode,
         reason: RegistrarFailure.unavailable,
+      );
+    }
+    if (status != 'success' || payload['data'] is! Map) {
+      throw RegistrarException(
+        'Failed to delete atSigns: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
       );
     }
     final data = payload['data'];

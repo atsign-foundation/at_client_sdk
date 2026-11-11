@@ -19,6 +19,16 @@
   carries the registrar's `message`, the cramkey or the super key.
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in
   at_auth 5.0.0; nothing should read the super key back.
+- fix: a connection failure (refused, DNS, or dropped mid-request) on a
+  `RegistrarAdminService` call now throws `RegistrarException` with the new
+  `RegistrarFailure.network`, instead of an unwrapped `http.ClientException`.
+- fix: `generateAtSignDeleteToken` and `deleteAtSigns` now throw
+  `RegistrarFailure.malformedResponse` for a missing or unrecognized
+  `status`, or a `"success"` status whose `data` is null or not a map,
+  matching `registerAtsign`'s decoding.
+- fix: a 401/403 on a `RegistrarAdminService` call is now checked before the
+  response body is read, and the body stream is cancelled rather than
+  drained; the same cancellation now applies when a request times out.
 
 ## 4.0.0
 

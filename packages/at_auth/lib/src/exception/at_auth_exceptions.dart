@@ -115,6 +115,10 @@ enum RegistrarFailure {
 
   /// The response body exceeded the configured size cap.
   responseTooLarge,
+
+  /// The request failed before a response arrived: the connection was
+  /// refused, DNS resolution failed, or the connection dropped mid-request.
+  network,
 }
 
 /// A registrar call failed: an unexpected status code, or a response whose

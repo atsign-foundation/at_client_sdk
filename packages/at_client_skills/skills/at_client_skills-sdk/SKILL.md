@@ -84,7 +84,10 @@ An app imports `package:at_client_cli/at_client_cli.dart` or
 SDK beyond any feature package it adds (`at_contact`, `at_policy`,
 `at_telemetry`). An app never imports `at_auth`: `at_client` owns onboarding,
 login and enrollment (see §11), and both platform packages re-export the one
-at_auth type an app may want, `RegistrarService`.
+at_auth type an app may want, `RegistrarService`. `RegistrarAdminService`
+(super-API-key registration and deletion) is admin/backend tooling, never a
+client app; its `registerAtsign` returns a `RegisteredAtsign`, and callers
+activate as `registeredAtsign`.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
 the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
