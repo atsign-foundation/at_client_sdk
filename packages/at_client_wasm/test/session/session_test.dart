@@ -681,6 +681,61 @@ void main() {
       expect(localStore.closeCount, 1);
     });
 
+    test('a local record store that fails to open builds no connection',
+        () async {
+      var lookUpCalls = 0;
+      AtLookupMuxable countingLookUps(
+          {required String atSign,
+          required AtRootDomain rootDomain,
+          required AtAuthenticator? authenticator,
+          SecondaryAddressFinder? secondaryAddressFinder}) {
+        lookUpCalls++;
+        return fakeLookUps(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: authenticator,
+            secondaryAddressFinder: secondaryAddressFinder);
+      }
+
+      await expectLater(
+          remoteOnlyClient(
+              atSign: _atSign,
+              app: _app,
+              prefs: prefs,
+              keysIo: InMemoryAtKeysIo.holding(_atSign, keys),
+              lookUps: countingLookUps,
+              secondaryAddressFinder: finder,
+              openLocalRecords: (_) async => throw StateError('no db')),
+          throwsA(isA<StateError>()));
+
+      expect(lookUpCalls, 0);
+    });
+
+    test(
+        'a connection that fails to build closes the opened local record store once',
+        () async {
+      final localStore = _CountingLocalRecordStore();
+
+      await expectLater(
+          remoteOnlyClient(
+              atSign: _atSign,
+              app: _app,
+              prefs: prefs,
+              keysIo: InMemoryAtKeysIo.holding(_atSign, keys),
+              lookUps: ({
+                required String atSign,
+                required AtRootDomain rootDomain,
+                required AtAuthenticator? authenticator,
+                SecondaryAddressFinder? secondaryAddressFinder,
+              }) =>
+                  throw StateError('no lookup'),
+              secondaryAddressFinder: finder,
+              openLocalRecords: (_) async => localStore),
+          throwsA(isA<StateError>()));
+
+      expect(localStore.closeCount, 1);
+    });
+
     test(
         'openLocalRecords is called with the keys enrollment and its store holds local: records',
         () async {

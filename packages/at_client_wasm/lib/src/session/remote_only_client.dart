@@ -11,7 +11,9 @@ import 'package:at_client/src/client/remote_secondary.dart';
 /// is built stops it, so a retry builds afresh. Returns that
 /// [RemoteSecondary] alongside the client. [openLocalRecords] opens the
 /// store for the `local:` records, given the enrollment the keys
-/// authenticate as; without it those records stay in memory.
+/// authenticate as; without it those records stay in memory. The store opens
+/// before the connection is built, and is closed if building the connection
+/// throws.
 Future<({AtClient client, RemoteSecondary remote})> remoteOnlyClient({
   required String atSign,
   required String app,
@@ -23,16 +25,23 @@ Future<({AtClient client, RemoteSecondary remote})> remoteOnlyClient({
 }) async {
   final keys = await keysIo.read(atSign);
   final enrollmentId = keys.enrollmentToAuthenticateAs();
-  final remote = RemoteSecondary(atSign, prefs,
-      atKeysIo: keysIo,
-      lookUps: lookUps,
-      secondaryAddressFinder: secondaryAddressFinder,
-      enrollmentId: enrollmentId);
-  final storage = RemoteOnlyAtClientStorage(
-      atSign: atSign,
-      remoteSecondary: remote,
-      closedByClient: true,
-      localRecordStore: await openLocalRecords?.call(enrollmentId));
+  final localRecords = await openLocalRecords?.call(enrollmentId);
+  final RemoteOnlyAtClientStorage storage;
+  try {
+    storage = RemoteOnlyAtClientStorage(
+        atSign: atSign,
+        remoteSecondary: RemoteSecondary(atSign, prefs,
+            atKeysIo: keysIo,
+            lookUps: lookUps,
+            secondaryAddressFinder: secondaryAddressFinder,
+            enrollmentId: enrollmentId),
+        closedByClient: true,
+        localRecordStore: localRecords);
+  } catch (_) {
+    await localRecords?.close();
+    rethrow;
+  }
+  final remote = storage.remoteSecondary;
   final AtClientImpl client;
   try {
     client = (await AtClientImpl.create(
