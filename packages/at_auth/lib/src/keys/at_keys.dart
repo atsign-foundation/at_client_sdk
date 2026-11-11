@@ -639,6 +639,11 @@ class AtKeys {
       assurance.refuseSecondLiveEnrollment(
           existing: others, candidate: activated);
       assurance.validateAddKey(existing: others, candidate: activated);
+      // Each activation has to be visible to the validation of the next: the
+      // promised one-active-per-role-and-algorithm (and one live
+      // authentication key) refusal is about the state AFTER the approval,
+      // not the pending snapshot it started from.
+      others.add(activated);
     }
     for (final material in pending) {
       slot!.materialsByKeyId[material.keyId]![material.role] =
@@ -649,29 +654,33 @@ class AtKeys {
   /// Removes [enrollmentId] from the keyfile: its snapshot and every material
   /// filed under it.
   ///
-  /// Only for an enrollment that never went live — a submission that was
-  /// denied or expired — so an enrollment holding any active material is
-  /// refused with [ArgumentError]: key material that protected anything is
-  /// retired, never removed, and [retireKey] is the operation for it. Throws
-  /// too for an enrollment the keyfile does not hold.
+  /// Only for an enrollment that never went live — a submission that was denied
+  /// or expired, and so left pending. An enrollment holding any material that
+  /// is not pending is refused with [ArgumentError]: only pending material may
+  /// be removed; material that may have protected anything is retired, never
+  /// removed, and [retireKey] is the operation for it. Throws too for an
+  /// enrollment the keyfile does not hold.
   void discardEnrollment(String enrollmentId) {
     final slot = _enrollments[enrollmentId];
     if (slot == null) {
       throw ArgumentError.value(
           enrollmentId, 'enrollmentId', 'AtKeys holds no such enrollment');
     }
-    final live = [
+    // Only pending material may be discarded; an enrollment holding material
+    // in any other status (active, retired, dead, or unrecognised) cannot be
+    // discarded.
+    final nonPending = [
       for (final byType in slot.materialsByKeyId.values)
         for (final material in byType.values)
-          if (material.status == CryptographicMaterialStatus.active)
+          if (material.status != CryptographicMaterialStatus.pending)
             material.keyId
     ];
-    if (live.isNotEmpty) {
+    if (nonPending.isNotEmpty) {
       throw ArgumentError.value(
           enrollmentId,
           'enrollmentId',
-          'this enrollment holds active material (${live.toSet().join(', ')}), '
-              'which is retired rather than discarded');
+          'only pending material may be discarded; this enrollment holds '
+              'material that is not pending (${nonPending.toSet().join(', ')})');
     }
     _enrollments.remove(enrollmentId);
   }
@@ -1361,23 +1370,32 @@ class AtKeys {
   /// material names an algorithm this build cannot sign with, rather than
   /// answering from the flat fields, which on such a keyfile are a different
   /// enrollment's. A keyfile written by a newer client is the way this
-  /// happens.
+  /// happens. It throws the same way when the active halves do not pair up —
+  /// no public half under the private half's keyId, or two halves disagreeing
+  /// about their algorithm — because the pair it would otherwise return
+  /// cannot verify anything it signs.
   ({SigningAlgoType algorithm, String publicKey, String privateKey})?
       authenticationKeyPairFor(String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm != null) {
-      final materials = keysForEnrollment(enrollmentId!);
-      final private = materials
-          .where((m) =>
-              m.role == CryptographicMaterialRole.privateAuthentication &&
-              m.status == CryptographicMaterialStatus.active)
-          .firstOrNull;
-      final public = materials
-          .where((m) =>
-              m.role == CryptographicMaterialRole.publicAuthentication &&
-              m.status == CryptographicMaterialStatus.active)
-          .firstOrNull;
-      if (private == null || public == null) {
+      // Both halves come from ONE keyId, and from the SAME material the
+      // algorithm was resolved from. Picking each half independently by
+      // `firstOrNull` pairs whatever the map order puts first: `addKey`
+      // admits a keyId holding `privateAuthentication` of one algorithm and
+      // `publicAuthentication` of another — the per-(role, algorithm) rule
+      // cannot see across the two — so the record handed back would name one
+      // algorithm while carrying the other's public bytes, and every
+      // signature the private half makes would fail verification.
+      // `signingKeysFor` guards this same hazard; this path must too.
+      final private = _activeAuthenticationMaterial(enrollmentId!);
+      final public = private == null
+          ? null
+          : getKey(enrollmentId, private.keyId,
+              CryptographicMaterialRole.publicAuthentication);
+      if (private == null ||
+          public == null ||
+          public.status != CryptographicMaterialStatus.active ||
+          public.algorithm != private.algorithm) {
         throw AtKeyNotFoundException(
             'AtKeys holds no active authentication keypair for enrollment '
             '$enrollmentId');

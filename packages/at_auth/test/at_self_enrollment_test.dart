@@ -453,6 +453,34 @@ void main() {
               'authenticates and signs, and the record names it');
     });
 
+    test('an advertised algorithm the keyfile cannot file refuses before the '
+        'request', () async {
+      final (keysIo, session) = await sessionWithLegacyKeyfile();
+      final mock = approvingLookUp();
+
+      await expectLater(
+          AtEnrollmentImpl().submit(
+              AtSelfEnrollmentRequest(
+                  session: session,
+                  appName: 'selfapp',
+                  deviceName: 'selfdevice',
+                  namespaces: {'app_1': 'rw'},
+                  advertisedSigningKey: (
+                    algorithm: SigningAlgoType.ed25519,
+                    publicKey: b64('ed25519-public'),
+                    privateKey: b64('ed25519-private')
+                  )),
+              mock),
+          throwsA(isA<AtEnrollmentException>()));
+
+      verifyNever(() => mock.executeCommand(any(that: startsWith('enroll:')),
+          auth: any(named: 'auth')));
+      expect((await keysIo.read(atSign)).enrollmentIds, isEmpty,
+          reason: 'nothing is sent, so the atServer creates no approved '
+              'enrollment whose keyfile material could not be filed — and a '
+              'retry has no orphan to duplicate');
+    });
+
     test('the signing key is FILED, not merely advertised', () async {
       final keysIo = InMemoryAtKeysIo();
       await keysIo.write(atSign, legacyKeys());
