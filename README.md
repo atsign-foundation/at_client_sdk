@@ -169,7 +169,7 @@ app names `pqReady` or `pqActive` to move first.
 
 The developer's view, the goals and the ladder are in the
 [at_client README](./packages/at_client/README.md#post-quantum-cryptography);
-the design is under [`docs/projects/pq/`](./docs/projects/pq/roadmap.md).
+the design is under [`docs/projects/pq/`](docs/projects/pq/design.md).
 
 ## Upgrading
 

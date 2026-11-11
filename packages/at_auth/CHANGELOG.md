@@ -4,6 +4,25 @@
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
   private half does not sign for its public half is refused with
   `AtSigningException` before `enroll:request` is sent.
+- fix: `KeyEntryStatus.fromWire` takes a `String?`, and `apskSigningKeys`
+  skips an entry whose `status` is present, not null and not a string, as it
+  skips one whose other fields are of the wrong kind.
+- fix: `AtKeys.discardEnrollment` refuses an enrollment holding any material
+  that is not pending (retired, dead, or a status this build doesn't know),
+  not only active material.
+- fix: `AtKeys.activatePending` validates each activated key against the
+  cumulative batch, preventing duplicate pending keys for the same role and
+  algorithm from activating simultaneously.
+- fix: `AtKeys.authenticationKeyPairFor` ensures both halves come from the same
+  keyId and share the same algorithm, and that the public half is active.
+- fix: an enrollment request advertising a signing key whose algorithm the keyfile
+  cannot file is refused before `enroll:request` is sent.
+- fix: `AtKeysAssurance.validateKeyMaterials` indexes active materials by
+  typed `(role, algorithm)` record pair to avoid delimiter collisions.
+- fix: rewriting a typed keyfile compares the stored `atsign` and the new one
+  in canonical form.
+- fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
+  up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
 - feat: `RegistrarAdminService.registerAtsign`, registering an Atsign under
   the super API key alongside the existing `/manage-atsigns/` delete flow.
   Returns a `RegisteredAtsign`, whose `registeredAtsign` is the Atsign the

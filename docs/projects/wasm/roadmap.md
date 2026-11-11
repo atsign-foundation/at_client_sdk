@@ -278,15 +278,13 @@ already gone). Those are breaking changes and are accepted as such —
 
 ## 5. Ownership boundary against the PQ program
 
-`at_auth`'s WASM split is **owned by the PQ program**, not by this project:
+`at_auth`'s WASM split was **owned by the PQ program**, not by this project:
 projects **S-5** (at_auth 4.0.0 — the `at_auth_io.dart` barrel, dropping the
 `FileAtKeysIo` default, registrar onto `package:http`) and **S-6** (consumer bumps),
-at [`../pq/implementation-plan.md`](../pq/implementation-plan.md) — ⚠️ this cited
-**lines 312–339**, and a line number is not an address: that plan was restructured
-on 2026-08-26 and the range now lands on unrelated prose. Find S-5 and S-6 by name
-in [section 4 of `../pq/detail/implementation-plan.md`](../pq/detail/implementation-plan.md#4-phase-s--structural-enablers--key-management-s-1-s-2-s-3-s-5-s-6-kf-1),
-which holds the discharged gate bodies. That plan explicitly names *this* effort as the
-separate "wasm-port" that owns `at_lookup` and `at_chops`.
+both done and shipped in at_auth 4.0.0 (2026-11-04). Their gate bodies are in
+[section 4 of the PQ plan's detail file as it last stood](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/detail/implementation-plan.md#4-phase-s--structural-enablers--key-management-s-1-s-2-s-3-s-5-s-6-kf-1),
+which also names *this* effort as the separate "wasm-port" that owns `at_lookup`
+and `at_chops`.
 
 This project therefore owns: `at_lookup`, `at_client`, `at_utils`,
 `at_server_status`, the at_chops dependency verification, the persistence work in

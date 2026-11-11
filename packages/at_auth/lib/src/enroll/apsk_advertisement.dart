@@ -138,6 +138,9 @@ class ApskSigningKey {
 /// `publishedRoots` takes the whole list for verifying and for judging whether
 /// a held private is one the record still vouches for.
 ///
+/// An entry whose `status` is present, not null and not a string is skipped
+/// too.
+///
 /// `kid` is required, like every other field: an entry without one is skipped.
 /// The atServer stores this document verbatim and forms no opinion on it, so a
 /// writer that omits `kid` produces an advertisement every reader treats as
@@ -152,7 +155,12 @@ List<ApskSigningKey> apskSigningKeys(Map<String, dynamic> advertisement) {
     final use = entry['use'];
     final alg = entry['alg'];
     final pub = entry['pub'];
-    if (kid is! String || use is! String || alg is! String || pub is! String) {
+    final status = entry['status'];
+    if (kid is! String ||
+        use is! String ||
+        alg is! String ||
+        pub is! String ||
+        (status != null && status is! String)) {
       continue;
     }
     if (use != 'sign') continue;
@@ -162,7 +170,7 @@ List<ApskSigningKey> apskSigningKeys(Map<String, dynamic> advertisement) {
         kid: kid,
         alg: algo,
         pub: pub,
-        status: KeyEntryStatus.fromWire(entry['status'])));
+        status: KeyEntryStatus.fromWire(status as String?)));
   }
   return result;
 }

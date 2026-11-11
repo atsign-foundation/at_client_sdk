@@ -502,6 +502,17 @@ void main() {
         .singleWhere((k) => k.contains('.${sharerB.kpid}.__ssenv.'));
 
     test(
+        "Every envelope at_client signs names its signer's Atsign: a secret "
+        'envelope through AtClientSecretSharing', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
+
+      final envelope =
+          SignedEnvelope.fromJson(jsonDecode(remoteData[sentKey()]!) as Map);
+      expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign});
+      expect(envelope.signerAtSign, atSign);
+    });
+
+    test(
         'found under a namespace other than the one it was sent through, it is '
         'skipped and retained', () async {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
@@ -596,6 +607,35 @@ void main() {
       expect(await sharerB.sweepOnce(), 1);
     });
 
+    test(
+        'sent through a namespace holding an escape, a U+202E and a long tail, '
+        'the warning shows it escaped and cut short', () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage,
+          'my-app\u001b\u202e\u009b${'x' * 3000}', {'n': 1});
+      final sent = sentKey();
+      logs.records.clear();
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      final quoted = [
+        for (final warning in logs.at('WARNING'))
+          if (warning.contains(sent.split('.__ssenv.').first) &&
+              warning.contains(', which is not a namespace'))
+            warning
+                .split(' names ')
+                .last
+                .split(', which is not a namespace')
+                .first
+      ];
+      expect(quoted, hasLength(1), reason: 'the premise: it is refused');
+      expect(
+          quoted.single.runes
+              .where((r) => r == 0x1b || r == 0x202e || r == 0x9b),
+          isEmpty,
+          reason: quoted.single);
+      expect(quoted.single.length, lessThan(200));
+    });
+
     test('a version 1 envelope is refused at parse', () async {
       await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'n': 1});
       final json = Map<String, Object?>.from(
@@ -651,11 +691,59 @@ void main() {
           warningsAbout(keyName),
           [
             contains('signer enrollment enroll-c does not match claimed sender '
-                'enrollment enroll-a')
+                'enrollment "enroll-a"')
           ],
           reason: 'C sealed the body under the binding that names A, so only '
               'the check of signer against sender refuses it');
       expect(remoteData.containsKey(keyName), isTrue);
+    });
+
+    test(
+        'when its kpid, its claimed sender or the namespace it sits in holds an '
+        'escape, a U+202E and a long tail, then each warning shows the value '
+        'escaped and cut short', () async {
+      final sharerC = await enrolledSharerC();
+      final toB = sharerB.myKeyPackage.bestKeyFor(SecretSharingAlgos.keyAlgos)!;
+      final tail = '\u001b\u202e\u009b${'x' * 3000}';
+      Future<void> place(String keyName,
+          {String? toKpid, String fromEnrollmentId = 'enroll-c'}) async {
+        remoteData[keyName] = await sharerC.wrapAndSignAndJsonEncode(
+            SecretEnvelope(
+              fromKpid: sharerC.kpid,
+              fromEnrollmentId: fromEnrollmentId,
+              toKpid: toKpid ?? toB.kid,
+              appNamespace: 'myapp',
+              suite: SecretSharingAlgos.xWingRfc9180,
+              kid: toB.kid,
+              sealed: base64Encode(Uint8List(64)),
+            ).toJson(),
+            type: EnvelopeType.secretEnvelope);
+      }
+
+      await place('kpid.0.${toB.kid}.__ssenv.myapp@alice', toKpid: tail);
+      await place('sender.0.${toB.kid}.__ssenv.myapp@alice',
+          fromEnrollmentId: tail);
+      await place('space.0.${toB.kid}.__ssenv.my_app$tail@alice');
+      logs.records.clear();
+
+      expect(await sharerB.sweepOnce(), 0);
+
+      final quoted = {
+        for (final (prefix, before, after) in [
+          ('kpid.0.', ' is addressed to ', ', not to any key'),
+          ('sender.0.', 'claimed sender enrollment ', '; skipping'),
+          ('space.0.', ' sits in ', ' but its sender'),
+        ])
+          prefix: [
+            for (final warning in logs.at('WARNING'))
+              if (warning.contains(prefix) && warning.contains(before))
+                warning.split(before).last.split(after).first
+          ]
+      };
+      for (final MapEntry(key: prefix, value: shown) in quoted.entries) {
+        expect(shown, hasLength(1), reason: 'the premise: $prefix is refused');
+        expect(shown.single.length, lessThan(200), reason: prefix);
+      }
     });
   });
 
@@ -998,7 +1086,7 @@ void main() {
           warningsAbout(keyName),
           [
             contains(
-                'is addressed to some-other-kpid, not to any key this client '
+                'is addressed to "some-other-kpid", not to any key this client '
                 'holds')
           ],
           reason: 'refused by the addressee check, not by anything before it');
@@ -1100,7 +1188,8 @@ void main() {
       expect(
           warningsAbout(keyName),
           [
-            contains('is addressed to a-kpid-nobody-here-holds, not to any key '
+            contains(
+                'is addressed to "a-kpid-nobody-here-holds", not to any key '
                 'this client holds')
           ],
           reason: 'refused by the addressee check, not by anything before it');
@@ -2205,10 +2294,11 @@ void main() {
                 'here so the two results come from one run');
         expect(
             child.secretStore.getSecret('myapp', successor)!.value, 'SUCCESSOR',
-            reason: 'and the descendant is handed the generation the '
+            reason: 'and the successor the parent self-enrolled, which a '
+                'revocation does not cascade to, is handed the generation the '
                 'revocation was meant to cut off: excluding the parent from a '
-                'rotation buys nothing while what it spawned can pull the '
-                'successor from any holder that never heard of either');
+                'rotation does not exclude what it self-enrolled, which can '
+                'pull the successor from any holder that never heard of either');
       });
     });
 

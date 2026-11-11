@@ -20,8 +20,6 @@ import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_client/src/service/enrollment_service_impl.dart'
     show EnrollmentServiceImpl;
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/hive.dart' show HiveInstances;
 import 'package:hive/hive.dart';
