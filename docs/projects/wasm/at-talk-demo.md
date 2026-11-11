@@ -1,6 +1,6 @@
 # at_talk in the browser — demo
 
-**Status:** two-way chat working through the dev proxy (2026-10-27) and direct on production atSigns, both ways (2026-11-03) · **Bead:** `at_client_sdk-5q6` · **Code:** the session opener, both transports (`devTransport`) and the peer-key fix are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). The chat page `web/talk.html` and the Dart `at_talk` CLI example are committed on #2430's branch but not pushed, so they are in no PR yet; how to run them lands with them.
+**Status:** two-way chat working through the dev proxy (2026-10-27) and direct on production atSigns, both ways (2026-11-03) · **Bead:** `at_client_sdk-5q6` · **Code:** the session opener, both transports (`devTransport`) and the peer-key fix are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). The chat page `web/talk.html` and the Dart `at_talk` CLI example (`packages/at_client_cli/example/bin/at_talk.dart`) are on `st/wasm/at-talk-demo-2430`, stacked on #2430.
 
 A Chrome tab (`web/talk.html` on the `at_client_wasm` dev harness) chats end-to-end encrypted with an `at_talk` CLI. Two transports, chosen once per page load:
 
@@ -34,7 +34,19 @@ flowchart LR
 
 ## Running it
 
-Both modes need `talk.html`, so neither can be followed until it lands (see Status). The proxy environment below is kept for reference and is dev-only.
+**Direct (production atSigns)**
+
+Start the CLI first, then open the tab.
+
+| Piece | How |
+|---|---|
+| page | `packages/at_client_wasm/tool/build.sh`, then serve `build/` on `localhost:8080` with `Cache-Control: no-store` (`tool/serve.dart`). Open `http://localhost:8080/talk.html?direct=1` (add `&wasm=1` for dart2wasm, `&root=host:port` for another root). |
+| browser | Enter your own atSign as Me and the CLI's atSign as Peer. On the first open, choose your `.atKeys` file when asked; it is sealed under a new passkey on the device, and later opens need only the passkey. |
+| CLI | In packages/at_client_cli, in your own terminal (it exits on stdin EOF): `dart run example/bin/at_talk.dart -a <cli atSign> -t <browser atSign> -k <path to cli .atKeys> --never-sync` |
+
+`--never-sync` only turns sync off; notifications don't need sync. Both sides use the wire key `attalk.ai6bh`.
+
+The proxy environment below is dev-only.
 
 **Proxy (local virtualenv, dev-only)**
 
@@ -44,7 +56,7 @@ Both modes need `talk.html`, so neither can be followed until it lands (see Stat
 | pkam keys | `supervisorctl start pkamLoad` inside the container (it is `autostart=false`) before any PKAM auth. |
 | hosts | `/etc/hosts`: `127.0.0.1 vip.ve.atsign.zone` |
 | proxy | `at_secondary_proxy` from `at_services`: `dart run bin/main.dart --proxy-url vip.ve.atsign.zone:8443 --root-url vip.ve.atsign.zone:64 --bind-port 8443 --cert-dir certs`, certs copied out of the container (`/atsign/secondary/base/certs`). |
-| page | `talk.html` (not yet pushed), built with `tool/build.sh` and served from `localhost` with `Cache-Control: no-store`, without `?direct=1` |
+| page | `talk.html`, built with `tool/build.sh` and served from `localhost` with `Cache-Control: no-store`, without `?direct=1` |
 | CLI | C `at_talk` with at_c#728 and `ROOT_HOST=vip.ve.atsign.zone`; keys in `$HOME/.atsign/keys/` |
 
 The VE root needs a trunk rebuild (at_server#2894) before `?direct=1&root=` can target it, so the virtualenv still runs through the proxy.

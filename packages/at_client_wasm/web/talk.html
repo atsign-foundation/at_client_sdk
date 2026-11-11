@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>at_talk</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #eef1f6;
+      --card: #ffffff;
+      --panel: #f6f8fb;
+      --border: #e1e6ee;
+      --text: #172033;
+      --muted: #6b7690;
+      --accent: #2f6bff;
+      --accent-text: #ffffff;
+      --me-bg: var(--accent);
+      --me-text: #ffffff;
+      --peer-bg: #e9edf4;
+      --peer-text: #172033;
+      --err-bg: #fdecec;
+      --err-text: #b42318;
+      --ok: #1a9a57;
+      --warn: #d98a0b;
+      --off: #98a2b8;
+      --shadow: 0 10px 40px rgba(23, 32, 51, .10);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0c1018;
+        --card: #151b27;
+        --panel: #1a2130;
+        --border: #263044;
+        --text: #e6ebf5;
+        --muted: #8a96b0;
+        --accent: #4d86ff;
+        --peer-bg: #232c3e;
+        --peer-text: #e6ebf5;
+        --err-bg: #3a1a1d;
+        --err-text: #ff8a80;
+        --ok: #3ecf8e;
+        --warn: #f5b942;
+        --off: #5d6880;
+        --shadow: 0 10px 40px rgba(0, 0, 0, .45);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; padding: 16px;
+      background: var(--bg); color: var(--text);
+      font: 15px/1.45 var(--font);
+      display: flex; justify-content: center;
+    }
+    .card {
+      width: 100%; max-width: 760px; height: 100%; max-height: 900px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+      box-shadow: var(--shadow);
+      display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+    }
+
+    header {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+    }
+    .brand { flex: 1 1 180px; min-width: 0; }
+    h1 { margin: 0; font-size: 18px; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .build {
+      font: 600 11px var(--mono); color: var(--muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px;
+    }
+    .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 999px; padding: 4px 11px; white-space: nowrap;
+    }
+    .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--off); }
+    .pill[data-state="connecting"] { color: var(--warn); }
+    .pill[data-state="connecting"]::before { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+    .pill[data-state="connected"] { color: var(--ok); }
+    .pill[data-state="connected"]::before { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+    @keyframes pulse { 50% { opacity: .3; } }
+
+    button {
+      font: inherit; font-weight: 600; cursor: pointer;
+      border-radius: 10px; border: 1px solid var(--border);
+      background: var(--panel); color: var(--text); padding: 7px 14px;
+      transition: filter .15s, transform .05s;
+    }
+    button:hover:not(:disabled) { filter: brightness(.96); }
+    button:active:not(:disabled) { transform: translateY(1px); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    details.settings { border-bottom: 1px solid var(--border); background: var(--panel); }
+    details.settings > summary {
+      cursor: pointer; padding: 9px 18px; font-size: 12px; font-weight: 600; color: var(--muted);
+      list-style: none; display: flex; align-items: center; gap: 8px; user-select: none;
+    }
+    details.settings > summary::-webkit-details-marker { display: none; }
+    details.settings > summary::before { content: "\25B8"; transition: transform .15s; }
+    details.settings[open] > summary::before { transform: rotate(90deg); }
+    #summaryText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+    fieldset { border: 0; margin: 0; padding: 2px 18px 14px; min-width: 0;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 12px; }
+    fieldset label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .05em; color: var(--muted); min-width: 0; }
+    fieldset label[hidden] { display: none; }
+    .proxy { grid-column: 1 / -1; }
+    .proxy .pair { display: flex; gap: 8px; }
+    .proxy .pair input:first-child { flex: 1 1 auto; min-width: 0; }
+    .proxy .pair input:last-child { flex: 0 0 90px; }
+    input {
+      font: inherit; font-size: 14px; text-transform: none; letter-spacing: 0; font-weight: 400;
+      width: 100%; min-width: 0; color: var(--text); background: var(--card);
+      border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px;
+    }
+    input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+    input:disabled { opacity: .7; background: transparent; }
+
+    #log {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+      padding: 18px; display: flex; flex-direction: column; gap: 6px;
+    }
+    #log:empty::before {
+      content: "No messages yet. Open a session to start talking.";
+      margin: auto; color: var(--muted); font-size: 13px; text-align: center;
+    }
+    .msg { display: flex; flex-direction: column; max-width: 78%; min-width: 0; }
+    .msg.me { align-self: flex-end; align-items: flex-end; }
+    .msg.peer { align-self: flex-start; align-items: flex-start; }
+    .who { font-size: 11px; font-weight: 600; color: var(--muted); margin: 0 6px 2px; max-width: 100%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bubble {
+      padding: 8px 13px; border-radius: 18px; white-space: pre-wrap;
+      overflow-wrap: anywhere; word-break: break-word; max-width: 100%;
+    }
+    .me .bubble { background: var(--me-bg); color: var(--me-text); border-bottom-right-radius: 5px; }
+    .peer .bubble { background: var(--peer-bg); color: var(--peer-text); border-bottom-left-radius: 5px; }
+    time { font-size: 10.5px; color: var(--muted); margin: 3px 6px 0; font-variant-numeric: tabular-nums; }
+    .note {
+      align-self: center; max-width: 92%; text-align: center; margin: 4px 0;
+      font-size: 12px; color: var(--muted); overflow-wrap: anywhere;
+    }
+    .note time { margin: 0 6px 0 0; }
+    .note.err { background: var(--err-bg); color: var(--err-text); border-radius: 999px; padding: 3px 12px; }
+    .note.err time { color: inherit; opacity: .7; }
+
+    #send {
+      display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); background: var(--card);
+    }
+    #line { flex: 1 1 auto; border-radius: 999px; padding: 10px 16px; background: var(--panel); }
+    #send button { border-radius: 999px; padding: 9px 20px; }
+
+    /* The client's own log, beside the chat. */
+    body { gap: 16px; }
+    .card { flex: 1 1 560px; }
+    .trace {
+      flex: 1 1 460px; max-width: 640px; height: 100%; max-height: 900px; min-width: 0;
+      background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+      box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+    }
+    .trace header { padding: 10px 14px; flex-wrap: nowrap; }
+    .trace h2 { margin: 0; font-size: 13px; flex: 1 1 auto; }
+    .trace button { padding: 4px 10px; font-size: 12px; }
+    #trace {
+      flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 10px 14px;
+      font: 11.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    #trace div { border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+    #trace .warn { color: var(--warn); }
+    #trace .error { color: var(--err-text); }
+    #trace .dim { color: var(--muted); }
+
+    @media (max-width: 1100px) {
+      body { flex-direction: column; height: auto; min-height: 100%; }
+      .card { flex: none; height: 80vh; max-width: none; }
+      .trace { flex: none; height: 50vh; max-width: none; }
+    }
+    @media (max-width: 520px) {
+      body { padding: 0; gap: 0; }
+      .card, .trace { border-radius: 0; border: 0; max-height: none; }
+      .msg { max-width: 88%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <header>
+      <div class="brand">
+        <h1>at_talk <span id="build" class="build"></span></h1>
+        <div class="sub">end-to-end encrypted &middot; atProtocol</div>
+      </div>
+      <div class="actions">
+        <span id="status" class="pill" data-state="disconnected">Disconnected</span>
+        <button id="btnOpen" class="primary">Open</button>
+        <button id="btnClose">Close</button>
+      </div>
+    </header>
+
+    <details id="settings" class="settings" open>
+      <summary>Connection <span id="summaryText"></span></summary>
+      <fieldset id="fields">
+        <label>Me <input id="me" placeholder="@alice" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>Peer <input id="peer" placeholder="@bob" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>App <input id="app" value="attalk" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label class="proxy">Proxy
+          <span class="pair"><input id="proxyHost" value="vip.ve.atsign.zone" spellcheck="false"><input id="proxyPort" type="number" value="8443" aria-label="Proxy port"></span>
+        </label>
+      </fieldset>
+    </details>
+
+    <div id="log" role="log" aria-live="polite"></div>
+    <form id="send">
+      <input id="line" autocomplete="off" placeholder="Message" aria-label="Message" disabled>
+      <button class="primary" disabled>Send</button>
+    </form>
+  </main>
+
+  <aside class="trace" aria-label="Client log">
+    <header>
+      <h2>Client log</h2>
+      <button id="btnCopyTrace" type="button">Copy</button>
+      <button id="btnClearTrace" type="button">Clear</button>
+    </header>
+    <div id="trace" role="log"></div>
+  </aside>
+
+  <script>
+    // Mirror the console into the trace panel before anything else runs, so the
+    // Dart client's own log lines (written with print) are captured from load.
+    // The panel shows the newest TRACE_SHOWN lines; Copy takes every line kept
+    // in memory (up to TRACE_KEPT), so nothing a long session logged is lost.
+    const TRACE_SHOWN = 1000, TRACE_KEPT = 50000;
+    const traceLines = [];
+    function trace(level, args) {
+      const box = document.getElementById('trace');
+      if (!box) return;
+      const row = document.createElement('div');
+      row.className = level;
+      const t = new Date().toLocaleTimeString([], { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0');
+      row.textContent = `${t} ${args.map((a) => (typeof a === 'string' ? a : a instanceof Error ? a.stack || a.message : JSON.stringify(a))).join(' ')}`;
+      traceLines.push(row.textContent);
+      if (traceLines.length > TRACE_KEPT) traceLines.shift();
+      box.append(row);
+      while (box.childElementCount > TRACE_SHOWN) box.firstChild.remove();
+      box.scrollTop = box.scrollHeight;
+    }
+    for (const level of ['log', 'info', 'debug', 'warn', 'error']) {
+      const original = console[level].bind(console);
+      console[level] = (...args) => { original(...args); trace(level === 'info' || level === 'debug' ? 'dim' : level, args); };
+    }
+    addEventListener('error', (e) => trace('error', [`uncaught: ${e.message}`]));
+    addEventListener('unhandledrejection', (e) => trace('error', [`unhandled rejection: ${e.reason?.message ?? e.reason}`]));
+    document.getElementById('btnClearTrace').addEventListener('click', () => {
+      traceLines.length = 0;
+      document.getElementById('trace').textContent = '';
+    });
+    // The async clipboard API is refused in some browsers and contexts; selecting
+    // the text and using execCommand works wherever a click started it.
+    document.getElementById('btnCopyTrace').addEventListener('click', async (ev) => {
+      const text = traceLines.join('\n');
+      let ok = true;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const area = Object.assign(document.createElement('textarea'), { value: text });
+        document.body.append(area);
+        area.select();
+        ok = document.execCommand('copy');
+        area.remove();
+      }
+      ev.target.textContent = ok ? `Copied ${traceLines.length} lines` : 'Select & copy by hand';
+      setTimeout(() => { ev.target.textContent = 'Copy'; }, 2000);
+    });
+
+    const NAME = 'attalk', NAMESPACE = 'ai6bh', EXPIRY_MS = 60000, SKEW_MS = 30000;
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    const wasm = params.get('wasm') === '1';
+    // ?direct=1: no proxy. Each atSign's own atServer is found through the root's
+    // HTTPS lookup and reached on its /ws. ?root=host:port names the root (default
+    // root.atsign.org:64). Without direct, every connection goes to the proxy field.
+    const DIRECT = params.get('direct') === '1';
+    const ROOT = params.get('root');
+    if (DIRECT) document.querySelector('label.proxy').hidden = true;
+    $('build').textContent = wasm ? 'dart2wasm' : 'dart2js';
+
+    function setStatus(state, label) {
+      $('status').dataset.state = state;
+      $('status').textContent = label;
+    }
+
+    // Plain lines (sys/err) render as centred notices; me/peer render as bubbles with a sender label.
+    function log(text, cls = 'sys', sender = null) {
+      const row = document.createElement('div');
+      row.className = sender === null ? `note ${cls}` : `msg ${cls}`;
+      const time = document.createElement('time');
+      time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (sender === null) {
+        const body = document.createElement('span');
+        body.textContent = text;
+        row.append(time, body);
+      } else {
+        const who = document.createElement('div');
+        who.className = 'who';
+        who.textContent = sender;
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = text;
+        row.append(who, bubble, time);
+      }
+      $('log').append(row);
+      $('log').scrollTop = $('log').scrollHeight;
+    }
+
+    async function loadAtClientDev() {
+      if (wasm) {
+        const { compileStreaming } = await import('./at_client.mjs');
+        const app = await (await compileStreaming(fetch('at_client.wasm'))).instantiate();
+        app.invokeMain();
+      } else {
+        await new Promise((resolve, reject) => {
+          const s = Object.assign(document.createElement('script'), { src: 'at_client.js' });
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('at_client.js failed to load'));
+          document.head.append(s);
+        });
+      }
+      return globalThis.atClientDev;
+    }
+
+    const ready = loadAtClientDev();
+    let session = null, unsubscribe = null;
+
+    function setOpen(open) {
+      for (const el of $('send').elements) el.disabled = !open;
+      $('btnOpen').disabled = open;
+      $('fields').disabled = open;
+      $('settings').open = !open;
+      $('summaryText').textContent = open ? `· ${$('me').value} ↔ ${$('peer').value}` : '';
+      setStatus(open ? 'connected' : 'disconnected', open ? 'Connected' : 'Disconnected');
+      if (open) $('line').focus();
+    }
+
+    // The first open on a device needs the .atKeys file; the passkey unlocks
+    // the device copy every time after. The input is shown for the user to
+    // click: a picker opened from script after async work has no user gesture,
+    // and Safari silently ignores it.
+    const pickAtKeys = (atSign) => new Promise((resolve, reject) => {
+      const label = document.createElement('label');
+      label.append(`${atSign} .atKeys `);
+      const input = Object.assign(document.createElement('input'), { type: 'file' });
+      label.append(input);
+      $('fields').append(label);
+      $('settings').open = true;
+      setStatus('connecting', `Choose ${atSign}'s .atKeys file`);
+      input.addEventListener('change', () => {
+        label.remove();
+        const file = input.files[0];
+        if (file) file.text().then(resolve, reject);
+        else reject(new Error(`no .atKeys file chosen for ${atSign}`));
+      });
+    });
+
+    $('btnOpen').addEventListener('click', async () => {
+      $('btnOpen').disabled = true;
+      setStatus('connecting', 'Connecting…');
+      try {
+        const atClientDev = await ready;
+        const me = $('me').value, peer = $('peer').value;
+        session = await atClientDev.openSession({
+          atSign: me, app: $('app').value,
+          proxyHost: $('proxyHost').value, proxyPort: parseInt($('proxyPort').value, 10),
+          direct: DIRECT,
+          ...(ROOT && { root: ROOT }),
+        }, async (atSign) => {
+          const passphrase = window.prompt(`Passphrase for ${atSign}`);
+          if (passphrase === null) throw new Error('passphrase entry cancelled');
+          return passphrase;
+        }, pickAtKeys);
+        const openedAt = Date.now();
+        unsubscribe = session.onNotification(`${NAME}\\.${NAMESPACE}@`, (e) => {
+          if (e.epochMillis < openedAt - SKEW_MS) {
+            return log(`dropped ${e.from} (${openedAt - e.epochMillis} ms before open)`);
+          }
+          if (e.from === peer) log(e.value, 'peer', e.from);
+          else log(`${e.from}: ${e.value}`);
+        });
+        setOpen(true);
+        log(`opened ${me}, talking to ${peer}`);
+      } catch (err) {
+        $('btnOpen').disabled = false;
+        setStatus('disconnected', 'Disconnected');
+        log(`open: ${err.message}`, 'err');
+      }
+    });
+
+    $('btnClose').addEventListener('click', async () => {
+      if (!session) return;
+      unsubscribe?.();
+      await session.close().catch((err) => log(`close: ${err.message}`, 'err'));
+      session = unsubscribe = null;
+      setOpen(false);
+      if (wasm) $('btnOpen').disabled = true;
+      log(wasm ? 'closed; reload to reopen' : 'closed');
+    });
+
+    $('send').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const text = $('line').value;
+      if (!text || !session) return;
+      $('line').value = '';
+      // The client logs nothing for notify at INFO, so the page traces each send.
+      // err.message is '<DartType>: <message>'; err.code is the AT error code, if any.
+      const to = $('peer').value, started = Date.now();
+      console.info(`send: notify ${NAME}.${NAMESPACE} → ${to}, ${text.length} chars, expiry ${EXPIRY_MS} ms`);
+      try {
+        await session.notify(to, NAME, NAMESPACE, text, EXPIRY_MS);
+        console.info(`send: delivered to ${to} in ${Date.now() - started} ms`);
+        log(text, 'me', $('me').value);
+      } catch (err) {
+        const code = err.code ? ` [${err.code}]` : '';
+        console.error(`send: failed after ${Date.now() - started} ms${code}`, err);
+        log(`send${code}: ${err.message}`, 'err');
+      }
+    });
+
+  </script>
+</body>
+</html>
