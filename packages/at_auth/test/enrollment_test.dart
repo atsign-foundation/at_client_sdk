@@ -195,6 +195,42 @@ void main() {
       );
     });
 
+    test('an advertised algorithm the keyfile cannot file refuses before the '
+        'request', () async {
+      // The atServer auto-approves nothing here, but the ordering still
+      // matters: once `enroll:` has run the caller holds a pending record
+      // whose id is lost with the throw, so a retry leaves a second one
+      // behind on the roster.
+      final mock = approvingLookUp();
+
+      await expectLater(
+        AtEnrollmentImpl().submit(
+          AtEnrollmentRequest(
+            session: AtAuthSession(
+              atSign: atSign,
+              rootDomain: AtRootDomain.atsignDomain,
+              atKeysIo: InMemoryAtKeysIo(),
+            ),
+            appName: 'wavi',
+            deviceName: 'iphone',
+            otp: 'ABC123',
+            namespaces: {'wavi': 'rw'},
+            signingAlgo: SigningAlgoType.rsa2048,
+            advertisedSigningKey: (
+              algorithm: SigningAlgoType.ed25519,
+              publicKey: 'ZWRfcHVibGlj',
+              privateKey: 'ZWRfcHJpdmF0ZQ=='
+            ),
+          ),
+          mock,
+        ),
+        throwsA(isA<AtEnrollmentException>()),
+      );
+
+      verifyNever(() => mock.executeCommand(any(that: startsWith('enroll:')),
+          auth: any(named: 'auth')));
+    });
+
     test('without one, nothing is filed', () async {
       // The negative control, and it is every caller in the tree today: no
       // AtEnrollmentRequest sets advertisedSigningKey, so this path must be
