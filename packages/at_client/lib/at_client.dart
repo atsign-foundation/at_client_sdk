@@ -63,8 +63,6 @@ export 'package:at_client/src/rpc/at_rpc.dart';
 export 'package:at_client/src/rpc/at_rpc_types.dart';
 export 'package:at_client/src/service/enrollment_service.dart';
 export 'package:at_client/src/service/notification_service.dart';
-export 'package:at_client/src/service/notification_service_impl.dart'
-    show NotificationServiceImpl;
 export 'package:at_client/src/service/sync_service.dart';
 export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';

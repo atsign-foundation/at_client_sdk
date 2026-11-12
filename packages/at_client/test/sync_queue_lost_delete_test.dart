@@ -16,6 +16,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';

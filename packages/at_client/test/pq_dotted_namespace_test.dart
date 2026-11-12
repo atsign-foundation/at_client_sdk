@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 

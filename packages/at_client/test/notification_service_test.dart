@@ -7,6 +7,7 @@ import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_commons/at_builders.dart';
