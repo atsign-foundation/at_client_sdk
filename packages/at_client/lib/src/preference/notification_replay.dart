@@ -24,15 +24,16 @@ sealed class NotificationReplay {
 
   /// Replays from the later of the last notification the store holds and
   /// [within] before now, which defaults to one hour. A store holding none
-  /// starts [within] before now. A negative [within] is treated as zero, and
-  /// the start never precedes the service's creation time, so notifications
-  /// received since then are delivered once.
+  /// starts [within] before now. The start is never later than the service's
+  /// creation time, so notifications received since then are delivered once:
+  /// a short [within] replays from creation, and a negative [within], treated
+  /// as zero, does the same.
   const factory NotificationReplay.window([Duration within]) = _Window;
 
   /// Replays everything the atServer still holds for this atSign, on every
-  /// start: the dedupe remembers only the latest 1024 notifications, so a
-  /// larger backlog is delivered again. The store is not read, but each
-  /// receipt still writes the watermark.
+  /// start: the dedupe is in memory and this policy does not read the stored
+  /// ids, so each start delivers the whole retained backlog again. The store
+  /// is not read, but each receipt still writes the watermark.
   const factory NotificationReplay.full() = _Full;
 
   /// Calls the callback for this policy. Exhaustive: a new policy is a

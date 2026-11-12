@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' show max;
+import 'dart:math' show max, min;
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_server_features.dart'
@@ -659,14 +659,16 @@ class NotificationServiceImpl extends NotificationService {
           // in millis so even a duration as long as a `Duration` can hold
           // cannot overflow a `DateTime`.
           final withinMillis = within.inMilliseconds;
-          final requestedMillis = now().millisecondsSinceEpoch -
-              (withinMillis < 0 ? 0 : withinMillis);
-          // Everything received since the service was created is delivered
-          // once under every policy, so the start never precedes creation.
-          return max(
-              max((await _storedOrSeededWatermark()) ?? createdAtMillis,
-                  requestedMillis),
-              createdAtMillis);
+          final requestedMillis = max(
+              0,
+              now().millisecondsSinceEpoch -
+                  (withinMillis < 0 ? 0 : withinMillis));
+          // The later of the checkpoint and the window's reach, but never
+          // later than creation: what arrived between creation and this
+          // connect is delivered once under every policy.
+          final checkpoint = await _storedOrSeededWatermark();
+          return min(createdAtMillis,
+              max(checkpoint ?? requestedMillis, requestedMillis));
         },
         full: () async => 0,
       );

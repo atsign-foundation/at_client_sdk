@@ -2348,11 +2348,20 @@ void main() {
     late DateTime createdBefore;
     late DateTime createdAfter;
 
-    // Two hours past now, so that a window of one hour starts after the
-    // service's creation time and before the clock.
+    // Two hours past now for the policies that do not read it. The window
+    // tests move it with [clockJustAfterCreation].
     setUp(() {
       clock = DateTime.now().add(const Duration(hours: 2));
     });
+
+    // The first connect a few seconds after the service was created, which is
+    // the case a window's cap at creation exists for.
+    void clockJustAfterCreation() =>
+        clock = createdAfter.add(const Duration(seconds: 5));
+
+    Matcher atCreation() => allOf(
+        greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
+        lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch));
 
     tearDown(() => service.stopAllSubscriptions());
 
@@ -2421,36 +2430,35 @@ void main() {
     });
 
     test(
-        'window answers now minus its duration when the stored watermark is '
-        'older', () async {
+        'window answers now minus its duration, which reaches back before '
+        'creation, when the stored watermark is older', () async {
       await start(const NotificationReplay.window(),
-          stored: clock.subtract(const Duration(hours: 2)));
+          stored: DateTime.now().subtract(const Duration(hours: 2)));
+      clockJustAfterCreation();
 
       expect(await service.getLastNotificationTime(),
-          clock.subtract(const Duration(hours: 1)).millisecondsSinceEpoch);
+          clock.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+          reason: 'not the creation time, which would make it a connect');
     });
 
     test('window answers the stored watermark when it is newer', () async {
-      final stored = clock.subtract(const Duration(minutes: 10));
+      final stored = DateTime.now().subtract(const Duration(minutes: 10));
       await start(const NotificationReplay.window(), stored: stored);
+      clockJustAfterCreation();
 
       expect(await service.getLastNotificationTime(),
-          stored.millisecondsSinceEpoch);
+          stored.millisecondsSinceEpoch,
+          reason: 'resume would answer the same watermark');
     });
 
     test(
-        'window with nothing stored seeds the store with the creation time, '
-        'and starts no earlier than it', () async {
+        'window with nothing stored answers now minus its duration and seeds '
+        'the store with the creation time', () async {
       await start(const NotificationReplay.window());
-      final now = createdAfter.add(const Duration(minutes: 1));
-      service.now = () => now;
+      clockJustAfterCreation();
 
-      expect(
-          await service.getLastNotificationTime(),
-          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
-              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)),
-          reason: 'now - 1h is before creation, so the start is creation, not '
-              'a moment whose notifications this service never saw');
+      expect(await service.getLastNotificationTime(),
+          clock.subtract(const Duration(hours: 1)).millisecondsSinceEpoch);
       final seeded = verify(() => mockAtClientImpl.put(any(), captureAny(),
               putRequestOptions: any(named: 'putRequestOptions')))
           .captured
@@ -2481,7 +2489,10 @@ void main() {
         'window answers the same start while nothing is received, as the '
         'clock advances', () async {
       await start(const NotificationReplay.window());
+      clockJustAfterCreation();
       final first = await service.getLastNotificationTime();
+      expect(first, isNot(atCreation()),
+          reason: 'the precondition: the window reaches back before creation');
 
       clock = clock.add(const Duration(minutes: 10));
 
@@ -2516,58 +2527,68 @@ void main() {
     });
 
     test(
-        'window starts no earlier than the creation time, so what arrived '
-        'between creation and the first connect is delivered', () async {
-      // The clock is two hours after the service was created, so a three-hour
-      // window reaches back before creation.
-      await start(const NotificationReplay.window(Duration(hours: 3)));
+        'a window shorter than the time to the first connect starts at '
+        'creation, not after it', () async {
+      await start(const NotificationReplay.window(Duration(seconds: 1)));
+      clockJustAfterCreation();
 
-      expect(
-          await service.getLastNotificationTime(),
-          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
-              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)),
-          reason: 'now - 3h is before creation, and everything received since '
-              'creation must still be delivered once');
+      expect(await service.getLastNotificationTime(), atCreation(),
+          reason: 'now - 1s is 4s after creation, and what arrived in those '
+              '4s must still be delivered once');
     });
 
-    test('a negative window is treated as zero, not a start in the future',
+    test('a negative window is treated as zero, so it starts at creation',
         () async {
       await start(const NotificationReplay.window(Duration(minutes: -5)));
+      clockJustAfterCreation();
 
-      final answered = await service.getLastNotificationTime();
-      expect(answered, lessThanOrEqualTo(clock.millisecondsSinceEpoch),
-          reason: 'a start after now would replay nothing that arrives');
-      expect(answered, clock.millisecondsSinceEpoch,
-          reason: 'window(0) starts now, which the test clock sets two hours '
-              'ahead of creation');
+      expect(await service.getLastNotificationTime(), atCreation(),
+          reason: 'window(0) starts now, capped at creation; a start after '
+              'now would replay nothing that arrives');
     });
 
-    test('a window longer than a DateTime can hold is clamped to creation',
+    test('a window longer than a DateTime can hold starts at the epoch',
         () async {
       await start(const NotificationReplay.window(Duration(days: 100000)));
+      clockJustAfterCreation();
 
-      expect(
-          await service.getLastNotificationTime(),
-          allOf(greaterThanOrEqualTo(createdBefore.millisecondsSinceEpoch),
-              lessThanOrEqualTo(createdAfter.millisecondsSinceEpoch)),
-          reason: 'the subtraction must not overflow a DateTime');
+      expect(await service.getLastNotificationTime(), 0,
+          reason: 'the subtraction must not overflow, nor go negative');
+    });
+
+    test('a stored watermark after creation is capped at creation', () async {
+      await start(const NotificationReplay.window(),
+          stored: DateTime.now().add(const Duration(minutes: 10)));
+      clockJustAfterCreation();
+
+      expect(await service.getLastNotificationTime(), atCreation());
     });
 
     test('a shorter window starts later than a longer one', () async {
-      final stored = clock.subtract(const Duration(hours: 3));
+      final stored = DateTime.now().subtract(const Duration(hours: 3));
       await start(const NotificationReplay.window(Duration(minutes: 90)),
           stored: stored);
+      clockJustAfterCreation();
+      final longerClock = clock;
       final longer = await service.getLastNotificationTime();
       service.stopAllSubscriptions();
 
       await start(const NotificationReplay.window(Duration(minutes: 30)),
           stored: stored);
+      clockJustAfterCreation();
+      final shorterClock = clock;
       final shorter = await service.getLastNotificationTime();
 
-      expect(longer,
-          clock.subtract(const Duration(minutes: 90)).millisecondsSinceEpoch);
-      expect(shorter,
-          clock.subtract(const Duration(minutes: 30)).millisecondsSinceEpoch);
+      expect(
+          longer,
+          longerClock
+              .subtract(const Duration(minutes: 90))
+              .millisecondsSinceEpoch);
+      expect(
+          shorter,
+          shorterClock
+              .subtract(const Duration(minutes: 30))
+              .millisecondsSinceEpoch);
       expect(shorter, greaterThan(longer!),
           reason: 'each window measures back from now by its own duration');
     });
