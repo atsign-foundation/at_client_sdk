@@ -416,6 +416,11 @@ interface class AtCollection<T> {
 
   final Duration defaultExpiration;
 
+  /// Type tag stamped on items this collection creates when no factory is
+  /// registered for their runtime type. Lets items carry a wire-format tag
+  /// without a `fromJson` factory.
+  final String? writeTypeTag;
+
   late final AtSignLogger _logger;
 
   // Internal event controller and derived streams.
@@ -498,6 +503,10 @@ interface class AtCollection<T> {
   /// [fromJson] and [typeTag] travel together: supplying one without the
   /// other throws [ArgumentError]. See [registerFactory] for why
   /// [typeTag] is required.
+  ///
+  /// [writeTypeTag] stamps created items with that tag when no factory is
+  /// registered for their type. It is independent of [fromJson]; when
+  /// [typeTag] is also set, the two must match.
   factory AtCollection(
     AtClient atClient,
     String namespace,
@@ -505,6 +514,7 @@ interface class AtCollection<T> {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -513,6 +523,7 @@ interface class AtCollection<T> {
         eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
 
   /// Test-only factory that bypasses `atClient.notificationService.subscribe`
@@ -526,6 +537,7 @@ interface class AtCollection<T> {
     required Stream<AtNotification> notifications,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -534,6 +546,7 @@ interface class AtCollection<T> {
         eventSource: EventSource.notifs,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
       );
 
@@ -549,6 +562,7 @@ interface class AtCollection<T> {
     required Stream<DataEvent> dataEvents,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -557,6 +571,7 @@ interface class AtCollection<T> {
         eventSource: EventSource.data,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         injectedDataEvents: dataEvents,
       );
 
@@ -573,6 +588,7 @@ interface class AtCollection<T> {
     required Stream<DataEvent> dataEvents,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -581,6 +597,7 @@ interface class AtCollection<T> {
         eventSource: EventSource.both,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
         injectedDataEvents: dataEvents,
       );
@@ -592,6 +609,7 @@ interface class AtCollection<T> {
     required EventSource eventSource,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    this.writeTypeTag,
     Stream<AtNotification>? notifications,
     Stream<DataEvent>? injectedDataEvents,
   }) : _eventSource = eventSource {
@@ -612,6 +630,15 @@ interface class AtCollection<T> {
         'typeTag was supplied without fromJson. Pass fromJson alongside '
         'it, or omit both and register the factory separately via '
         'AtCollection.registerFactory.',
+      );
+    }
+    if (writeTypeTag != null && writeTypeTag!.trim().isEmpty) {
+      throw ArgumentError('writeTypeTag must be non-blank when supplied.');
+    }
+    if (typeTag != null && writeTypeTag != null && writeTypeTag != typeTag) {
+      throw ArgumentError(
+        'writeTypeTag "$writeTypeTag" conflicts with typeTag "$typeTag". '
+        'Pass the same value or omit writeTypeTag.',
       );
     }
     if (fromJson != null) {
@@ -1691,6 +1718,10 @@ interface class AtCollection<T> {
   /// - `parent.id` contains a `.`;
   /// - the composed namespace would exceed 128 chars.
   ///
+  /// [writeTypeTag] stamps items this sub-collection creates with that tag
+  /// when no factory is registered for their type. It is not inherited from
+  /// the parent collection.
+  ///
   /// **Parent-delete behaviour.** When [parent] is deleted — locally,
   /// or via a remote-delete notification — the sub-collection
   /// automatically deletes this atSign's own items scoped to it. See
@@ -1701,6 +1732,7 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       _subCollectionInternal<U>(
         parent: parent,
@@ -1708,6 +1740,7 @@ interface class AtCollection<T> {
         defaultExpiration: defaultExpiration,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
 
   /// Walks a descendant chain in one call and returns the typed leaf
@@ -1869,6 +1902,7 @@ interface class AtCollection<T> {
     required Stream<AtNotification> notifications,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       _subCollectionInternal<U>(
         parent: parent,
@@ -1876,6 +1910,7 @@ interface class AtCollection<T> {
         defaultExpiration: defaultExpiration,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
       );
 
@@ -1885,6 +1920,7 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (subName == _rr) {
@@ -1901,6 +1937,7 @@ interface class AtCollection<T> {
       defaultExpiration: defaultExpiration,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
       notifications: notifications,
     );
   }
@@ -1913,6 +1950,7 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (subName.isEmpty || subName.contains('.')) {
@@ -1965,6 +2003,7 @@ interface class AtCollection<T> {
         notifications: notifications,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     } else if (_consumesData && _injectedDataEvents != null) {
       sub = AtCollection<U>._withInjectedDataEvents(
@@ -1974,6 +2013,7 @@ interface class AtCollection<T> {
         dataEvents: _injectedDataEvents!,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     } else {
       sub = AtCollection<U>(
@@ -1983,6 +2023,7 @@ interface class AtCollection<T> {
         eventSource: _eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     }
     sub._parentItem = parent;
@@ -3085,6 +3126,7 @@ interface class AtCollection<T> {
     if (obj is Uint8List) return 'binary';
     final entry = _factoriesByType[obj.runtimeType];
     if (entry != null) return entry.tag;
+    if (writeTypeTag != null) return writeTypeTag!;
     return 'n/a';
   }
 

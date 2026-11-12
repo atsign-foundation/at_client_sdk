@@ -581,6 +581,10 @@ abstract class AtClient {
   /// minifier / tree-shaker — see [AtCollection.registerFactory] for
   /// the full rationale.
   ///
+  /// [writeTypeTag] stamps items this collection creates with that tag when
+  /// no factory is registered for their type, without registering a
+  /// [fromJson]. When [typeTag] is also set, the two must match.
+  ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
   /// Idempotent: the sweep runs at most once per collection instance
@@ -610,6 +614,7 @@ abstract class AtClient {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     bool cleanupOrphansOnCreation = false,
   });
 }
