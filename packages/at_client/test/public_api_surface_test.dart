@@ -210,6 +210,8 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/listener/switch_at_sign_event.dart',
   'package:at_client/src/manager/at_client_manager.dart',
   'package:at_client/src/preference/at_client_preference.dart',
+  // AtClientPreference.notificationReplay's type: the policy an app names.
+  'package:at_client/src/preference/notification_replay.dart',
   'package:at_client/src/preference/pq_posture.dart',
   // show-narrowed to the key stores an app names (AtKeys, AtKeysIo,
   // WrittenAtKeysIo, InMemoryAtKeysIo), what reading a keyfile that is not a
