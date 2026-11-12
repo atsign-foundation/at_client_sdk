@@ -642,6 +642,7 @@ class AtClientImpl implements AtClient {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     bool cleanupOrphansOnCreation = false,
   }) async {
     _refuseIfStopped('hand out the collection $namespace');
@@ -663,6 +664,7 @@ class AtClientImpl implements AtClient {
         eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       ),
     ) as AtCollection<T>;
     if (cleanupOrphansOnCreation && !_collectionsSwept.contains(cacheKey)) {

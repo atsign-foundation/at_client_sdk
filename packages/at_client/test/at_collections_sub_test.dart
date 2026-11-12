@@ -31,7 +31,7 @@ void main() {
   const bobStr = '@bob';
   const parentNs = 'posts.blog.app';
 
-  _Collections buildParent() {
+  _Collections buildParent({String? writeTypeTag}) {
     final atClient = MockAtClient();
     final notifStream = StreamController<AtNotification>.broadcast();
     when(() => atClient.atSign).thenReturn(selfAtSign);
@@ -40,6 +40,7 @@ void main() {
       parentNs,
       const Duration(days: 7),
       notifications: notifStream.stream,
+      writeTypeTag: writeTypeTag,
     );
     return _Collections(parent, atClient, notifStream);
   }
@@ -53,6 +54,7 @@ void main() {
     String subName, {
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) {
     return subCollectionWithInjectedNotifications<dynamic, U>(
       c.parent,
@@ -61,6 +63,7 @@ void main() {
       defaultExpiration: const Duration(days: 30),
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
       notifications: c.notifStream.stream,
     );
   }
@@ -189,6 +192,115 @@ void main() {
         notifications: c.notifStream.stream,
       );
       expect(replies.namespace, 'replies.c1.comments.p1.$parentNs');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  group('writeTypeTag — sub-collections', () {
+    test(
+        'Given a sub-collection with writeTypeTag Comment, when an item is drafted, then its type is Comment',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final comments = subOn<String>(
+        c,
+        post,
+        'comments',
+        writeTypeTag: 'Comment',
+      );
+      expect(comments.draft(obj: 'great post', id: 'c1').type, 'Comment');
+    });
+
+    test(
+        'Given a parent with writeTypeTag Post and a sub-collection with none, when a sub-collection item is drafted, then its type is n/a',
+        () {
+      final c = buildParent(writeTypeTag: 'Post');
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      expect(post.type, 'Post');
+      final comments = subOn<String>(c, post, 'comments');
+      expect(comments.draft(obj: 'great post', id: 'c1').type, 'n/a');
+    });
+
+    test(
+        'Given a sub-collection with typeTag and no fromJson, when it is built, then ArgumentError is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      expect(
+        () => c.parent.subCollection<String>(
+          parent: post,
+          subName: 'comments',
+          defaultExpiration: const Duration(days: 1),
+          typeTag: 'Comment',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'Given a sub-collection with fromJson and no typeTag, when it is built, then ArgumentError is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      expect(
+        () => c.parent.subCollection<Map<String, dynamic>>(
+          parent: post,
+          subName: 'comments',
+          defaultExpiration: const Duration(days: 1),
+          fromJson: (m) => m,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'Given a sub-collection writeTypeTag that differs from typeTag, when it is built, then ArgumentError is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      expect(
+        () => c.parent.subCollection<Map<String, dynamic>>(
+          parent: post,
+          subName: 'comments',
+          defaultExpiration: const Duration(days: 1),
+          fromJson: (m) => m,
+          typeTag: 'A',
+          writeTypeTag: 'B',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'Given an empty sub-collection writeTypeTag, when it is built, then ArgumentError is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      expect(
+        () => c.parent.subCollection<String>(
+          parent: post,
+          subName: 'comments',
+          defaultExpiration: const Duration(days: 1),
+          writeTypeTag: '',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'Given a whitespace-only sub-collection writeTypeTag, when it is built, then ArgumentError is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      expect(
+        () => c.parent.subCollection<String>(
+          parent: post,
+          subName: 'comments',
+          defaultExpiration: const Duration(days: 1),
+          writeTypeTag: '  ',
+        ),
+        throwsArgumentError,
+      );
     });
   });
 
