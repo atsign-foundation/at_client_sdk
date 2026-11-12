@@ -19,6 +19,12 @@ import 'package:at_client/src/signing/envelope_verification.dart'
 import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
 import 'package:meta/meta.dart' show experimental;
 
+export 'package:at_client/src/collections/collections.dart'
+    show
+        collectionWithInjectedBoth,
+        collectionWithInjectedDataEvents,
+        collectionWithInjectedNotifications;
+
 /// Signs offline as [atSign]'s enrollment [enrollmentId] with a fresh key
 /// pair, for tests; needs no AtClient.
 @experimental

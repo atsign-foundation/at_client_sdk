@@ -1,6 +1,12 @@
 ## 4.1.0
 
 - feat: `AtClientPreference.notificationReplay` chooses where the monitor replays from — connect, resume, window (default 1h) or full; `fetchOfflineNotifications` is deprecated.
+- feat: `collection`/`subCollection` take an optional `writeTypeTag` for new
+  items without a factory; `AtClient` implementers must add it.
+  `AtCollection` (an interface class) gains a public `writeTypeTag` member, so
+  external implementers of `AtCollection` must add it. `lib/testing.dart`
+  exports `collectionWithInjectedBoth`, `collectionWithInjectedDataEvents`
+  and `collectionWithInjectedNotifications` for downstream tests.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
