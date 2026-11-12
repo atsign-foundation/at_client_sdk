@@ -1165,22 +1165,22 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 (`packages/at_client/lib/src/collections/collections.dart`) is now the sole facade target.
 
 - **J1 — Layer B, the collections-shaped facade.** `packages/at_client_wasm/lib/at_easy.dart`
-  (pure Dart, zero interop imports — `api-designing.md` §2.3): `AtEasy.collection<T>()`,
-  `AtEasyCollection<T>` (`create`/`update`/`share`/`remove`/`where`/`watch`), `AtEasyItem<T>`
-  (`data`, not `obj` — the ergonomic fix), `AtEasyQuery<T>`. `where(path, op, value)` builds
-  the `PathField`/`Predicate` AST internally — `Predicate` is not serializable upstream
-  (private `CmpPredicate._`, closure `PathField.extract`), so this bridge is Layer B's job,
-  never Layer C's. Namespace auto-qualification and `expiration` defaulting live here too.
-  → T6.3
-- **J1a — The declared-`typeTag` registry (D-11).** Layer B tracks `(name, type)` →
-  collection, enforcing the tag as mandatory at `collection()` call time. Ships with
-  write-compatibility documented as open (JS-7): every JS-written record stamps `'n/a'` on
-  the wire until route A (upstream `writeTypeTag`) or route B (a bounded carrier-class
-  shim, verified viable via `CItem.toJson()`/`jsonEncode`) lands. Do not silently attempt
-  route B without a decision recorded in `decisions.md` — it has a real ceiling.
-- **J1b — Verify `subCollection`'s `fromJson`/`typeTag` XOR check.** `js-api.md` §5.4
-  measured the omit-both escape (F1) only for the root `AtClient.collection()`; confirm
-  `subCollection` behaves identically before binding it.
+  (pure Dart, zero interop imports — `api-designing.md` §2.3): `AtEasy.collection()`,
+  `AtEasyCollection` (`create`/`update`/`share`/`remove`/`where`/`watch`), `AtEasyItem`
+  (`data`, not `obj` — the ergonomic fix), `AtEasyQuery`. `where(path, op, value)`
+  evaluates the 8 scalar ops itself through closure `where()` (upstream `wherePath` throws
+  on mixed types); `orderByPath` uses a total order with an id tie-break. Namespace
+  auto-qualification lives here; `expiration` is required. → T6.3 **Done 2026-11-12**
+  (`claude/3dr2-at-easy`).
+- **J1a — The declared-`typeTag` registry (D-11).** Layer B tracks the qualified
+  namespace → collection, enforcing the tag as mandatory at `collection()` call time.
+  **Done 2026-11-12: route A landed, JS-7 closed.** The facade passes
+  `writeTypeTag: type`, so JS writes carry the declared tag; reads keep the declared tag
+  or `'n/a'` (permanent). Route B is ruled out (`_factoriesByType` collides on
+  `Map<String, dynamic>`).
+- **J1b — Verify `subCollection`'s `fromJson`/`typeTag` XOR check.** **Done 2026-11-12:**
+  parity tests cover the XOR check and the `writeTypeTag`/`typeTag` conflict on
+  `subCollection`, matching the root.
 - **J2 — Error mapping.** Catch on the Dart side and rethrow a structured `AtError` with
   a stable `code`. The default boxed rejection must never reach a consumer.
   **`CollectionOpException`/`OpResult`/`OpFailure` fold into this same model** — a batch
@@ -1214,8 +1214,8 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 - **J8 — Resolve JS-1**: measure which implementation `cryptography` selects under
   dart2js and whether Web Crypto removes the deferred Argon2id work
   ([`design.md`](design.md) §2.10).
-- **J9 — Resolve JS-7**: raise the additive `writeTypeTag` change upstream; fall back to
-  J1a's carrier-class shim only if declined.
+- **J9 — Resolve JS-7**: **done 2026-11-12** via J1a (additive `writeTypeTag` on
+  `AtClient.collection`/`subCollection`).
 - **J10 — Resolve JS-8**: ship the `AtClientManager` singleton documented as one atSign
   per page/process, plus a Layer B `AtFailure.alreadyInitialised` on a second distinct
   atSign (~10 lines) — converts silent state corruption into a clear error.

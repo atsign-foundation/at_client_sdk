@@ -299,25 +299,56 @@ unregistered tag logs one warning and falls back to a raw cast — it does not t
 JS collection reading data written by a typed Dart peer degrades gracefully to a plain
 object, and `CItem.type` (`:4726`) surfaces the tag as a discriminator.
 
-**Write compatibility is the open gap.** `_resolveType` (`:2960-2965`) stamps the write
-tag from `obj.runtimeType` — a reified Dart `Type` with no JS equivalent. Every record a
-JS binding writes stamps `type: 'n/a'` unless the facade does something about it. A JS
-client and a Dart client therefore **cannot share a collection as equals** until one of:
+**Write compatibility: route A (`writeTypeTag`).** `_resolveType` stamps the write tag
+from `obj.runtimeType`, a reified Dart `Type` with no JS equivalent, so without help every
+record a JS binding writes stamps `type: 'n/a'`. `AtClient.collection` and
+`subCollection` take an optional `writeTypeTag`. `_resolveType` resolves in this order:
 
-| Route | Mechanism |
+1. `Uint8List` → `'binary'`;
+2. the registered factory's tag;
+3. `writeTypeTag`;
+4. `'n/a'`.
+
+The facade passes `writeTypeTag: type`, so JS writes carry the declared tag and JS and
+Dart peers share a collection as equals.
+
+| Rule | Behaviour |
 | --- | --- |
-| **A — upstream `writeTypeTag`** (preferred) | An additive, non-breaking override on `AtCollection` that lets a caller supply the write-side tag directly, bypassing the `Type`-keyed lookup. |
-| **B — carrier-class shim** (fallback) | The facade pre-declares N Dart wrapper classes, each holding a `Map` with `toJson()`, and binds a declared tag to each via `registerFactory`. Verified mechanically viable: `CItem.toJson()` (`:4803-4816`) emits `{'type', 'obj'}` and the caller `jsonEncode`s it (`:1088`), which invokes `toJson()` on a non-primitive payload. Bounded by a fixed ceiling of concurrent tags per isolate. |
+| Empty `writeTypeTag` | `ArgumentError` |
+| `typeTag` given and `writeTypeTag` differs | `ArgumentError`; an equal value is allowed |
+| Independence | `writeTypeTag` needs no `fromJson`; the facade passes neither `fromJson` nor `typeTag` |
+| Sub-collections | each takes its own `writeTypeTag`, default `null`; nothing is inherited |
 
-State this asymmetry to every consumer, prominently: **the JS surface is read-compatible
-with typed Dart peers, not yet write-compatible.**
+Route B (a carrier-class factory per tag) is **ruled out**: `_factoriesByType` is static
+and keyed by `Type`, and every JS collection is `Map<String, dynamic>`, so all tags would
+collide on one key.
+
+**The `'n/a'` read rule is permanent.** A facade collection keeps items whose `type` is its
+declared tag **or `'n/a'`**, and drops the rest. `'n/a'` covers records written before
+route A and records from untagged clients. The rule outlives J9. The cost is that two
+facade collections over one raw namespace with different tags see each other's `'n/a'`
+items.
 
 ### 5.3 The surface
 
 Facade method names below are the ergonomic (Layer B) names, not upstream's — see the
-mapping table in §5.4. `defineCollection`/`collection` auto-qualifies the namespace against
-the client's configured namespace and defaults `expiration`; neither is required upstream
-behaviour (`at_client_spec.dart:692-699`, `:735-742`), both are facade decisions.
+mapping table in §5.4. `collection` auto-qualifies the namespace against the client's
+configured namespace: a name with no `.` becomes `<name>.<app>`, and a name containing a
+`.` is taken raw. The facade's registry is keyed on the **qualified** namespace, so
+`todos` and `todos.<app>` are one handle. On a registry hit:
+
+| Hit | Result |
+| --- | --- |
+| Same `type`, `expiration` and `eventSource` | the cached handle |
+| Different `type` | `StateError` |
+| Different `expiration` or `eventSource` | `StateError` (never silently ignored) |
+
+`expiration` is **required** and has no facade default: upstream has no "never expires",
+and a silent default would hide data loss. `expiration` must be positive: zero or negative
+throws `ArgumentError`. The `AtEasy` constructor's `readTimeout` (default 30 s, caps each
+watch item read) must also be positive, or it throws `ArgumentError`. The Dart facade is
+`package:at_client_wasm/at_easy.dart` (`AtEasy`), pure Dart over `AtClient` and
+VM-testable; the JS binding wraps it.
 
 ```ts
 const at = await AtClient.create({
@@ -331,7 +362,7 @@ const at = await AtClient.create({
 // the sole data plane
 const todos = await at.collection<Todo>('todos', {
   type: 'Todo',                // the wire typeTag — mandatory (TS erases T)
-  expiration: 7 * 24 * 3600_000,  // ms; defaulted if omitted
+  expiration: 7 * 24 * 3600_000,  // ms; required
   eventSource: 'data',         // 'data' | 'notifs' | 'both', default 'data'
 });
 
@@ -369,8 +400,43 @@ await at.close();
 | --- | --- | --- |
 | 1 | `item.obj.title` — the Dart envelope escaping into JS | renamed to `item.data` |
 | 2 | `wherePath({path:['obj','done'], op:'eq', value:false})` — the AST spelled out longhand, re-leaking `obj` | `.where('done', '==', false)` — facade builds the AST |
-| 3 | `defaultExpiration` required, with no hint what to pass | defaulted; override via `expiration` |
+| 3 | `defaultExpiration` positional, with no hint what to pass | named `expiration`, still required |
 | 4 | fully-qualified reversed namespace (`'todos.myapp.wavi'`) when the client already knows the app namespace | auto-qualified; raw form still accepted as an override |
+
+**Query semantics.**
+
+`where(path, op, value)`:
+
+- **Ops.** The 8 ops are `==`, `!=`, `<`, `<=`, `>`, `>=`, `isNull` and `isNotNull`. Any other op throws `ArgumentError`. Chained `where`s combine with AND.
+- **Paths.** A path walks `data` by dot segments. A missing segment, or a step into a non-object, yields `null`.
+- **Values.** `value` must be a scalar: `null`, a number, a string or a boolean. A Map or List throws `ArgumentError` when the query is built.
+- **Equality.** `==` and `!=` compare scalars, so `1 == 1.0` holds.
+- **Ordering.** `<`, `<=`, `>` and `>=` match only when both sides are numbers, or both are strings. Anything else is **excluded and never throws**: a null, a boolean, mixed types, or an object or array on the item side. So `!(x < v)` is not `x >= v`.
+- **Why the facade evaluates `where` itself.** Upstream `wherePath` throws `TypeError` on mixed types. The facade evaluates through closure `where()` instead.
+
+`orderByPath(path, {descending})`:
+
+- **Facade invention.** Upstream orders only by closure.
+- **Total order.** Values rank `null` < boolean (`false` < `true`) < number < string < other (objects and arrays, all equal to each other). Values compare naturally within a rank, and equal keys are tie-broken by item `id`.
+- **Determinism.** Upstream's `List.sort` is not stable, and the id tie-break makes the order deterministic anyway.
+- **`descending`.** It reverses the whole key, the tie-break included.
+
+**Mutators.**
+
+| Method | Behaviour |
+| --- | --- |
+| `update(id, …)`, `share(id, …)` and `remove(id, …)` | Act only on the caller's own items. An id that is visible but owned by another atSign throws `StateError` naming the owner, and an unknown id throws `StateError('no item <id>')`. |
+| `update(id, data)` | Replaces `data` and keeps `sharedWith`, `expiresAt` and `availableAt`. A legacy `'n/a'` item is re-stamped with the declared type. |
+| `share(id, atSigns)` | A read-modify-write: it unions the new recipients with the existing `sharedWith`. Two concurrent `share`s (two tabs) can drop one recipient, because upstream has no add-only op. This is documented, not fixed. |
+| `remove(id, {cascade})` | Without `cascade`, upstream throws when the item has sub-items. |
+| `create(data, {id, sharedWith})` | `sharedWith` and `share`'s `atSigns` are atSign strings with or without the `@`. |
+
+**`watch` and the tag filter.**
+
+- **Lookup events.** `updated`, `available` and `expiringSoon` events are looked up, delivered with their item when its tag passes the read rule, and dropped when it fails.
+- **Id-only events.** Deletes (expired ones included), sub-item events and read receipts can't be tag-checked, because the item is gone or never fetched. The same applies to an `updated` event whose item can no longer be found. These are delivered with `item: null`, carrying only `id` and `owner`, so an id and an owner can cross tags but data never does.
+- **Kinds.** `event.kind` is one of `updated`, `deleted`, `available`, `expiringSoon`, `readReceipt`, `subItemUpdated`, `subItemDeleted` or `unknown`.
+- **Follow-up (out of scope).** Upstream logs a WARNING for each envelope whose tag has no registered factory, so every facade read logs one per item. Upstream should skip the warning when `writeTypeTag` matches the tag.
 
 **Two caveats that no amount of facade polish removes, and must ship in the same
 paragraph as the code above, not buried in §10:**
@@ -395,14 +461,14 @@ paragraph as the code above, not buried in §10:**
 | `AtCollection<T>` | `Collection<T>` handle from `at.collection()` | one instantiation per declared `(name, type)`; `T` is TS-side only |
 | `CItem<T>` | `{ id, owner, type, data, sharedWith, createdAt, expiresAt, availableAt }` | `type` is the wire tag; `data` replaces `obj` (§5.3's fixes) |
 | `CItem.ancestors` → `List<({Atsign owner, String id})>` | `{owner, id}[]` | Dart record — no natural JS shape, flattened |
-| `Duration defaultExpiration` (positional, required upstream) | `expiration?: number` (ms), defaulted by the facade | positional-required upstream; optional in the facade |
+| `Duration defaultExpiration` (positional, required upstream) | `expiration: number` (ms), required | no facade default; upstream has no "never expires" |
 | `EventSource` | `'data' \| 'notifs' \| 'both'` | default `'data'` in the facade (upstream defaults `'both'`, which double-fires) |
 | `CEvent` + 7 subclasses (`CItemUpdated`, `CItemDeleted`, `CItemAvailable`, `CItemExpiringSoon`, `CSubItemUpdated`, `CSubItemDeleted`, `CReadReceipt`) | discriminated union on `type` | **not sealed upstream** — the encoder and every consumer switch need a default branch |
 | `Atsign` (`extension type Atsign._(String)`, erased at runtime) | `string` | `toAtsign()` normalises (lowercase, prepend `@`, strip right-side dots) and validates — route through Dart, never replicate in JS |
-| `Predicate` AST (`PathField`, `CmpPredicate`, `AndPredicate`, `OrPredicate`, `NotPredicate`) | `.where(path, op, value)` chain | not serializable upstream (private `CmpPredicate._`, closure `PathField.extract`) — the facade builds the AST from primitives, JS never sees it |
+| `Predicate` AST (`PathField`, `CmpPredicate`, `AndPredicate`, `OrPredicate`, `NotPredicate`) | `.where(path, op, value)` chain | the facade evaluates the 8 ops itself through closure `where()`, not the `wherePath` AST (which throws on mixed types); JS never sees a predicate |
 | `PredicateOp` (13 members; `like`/`inSet`/`between`/`contains`/`startsWith` throw `UnimplementedError`) | 8 working ops only | the 5 reserved ops must never appear as functional in the `.d.ts` — see [§9](#9-deliberately-excluded) |
 | `CollectionOpException` / `OpResult` / `OpSuccess` / `OpFailure` | folded into the `AtError` throw model | [§6](#6-error-mapping) rules throw; a second result-union model must not leak onto the boundary |
-| `subCollection` / `getDescendant` | in scope, same declared-tag mechanism as the root | verify the `fromJson`/`typeTag` XOR check behaves identically to `AtClient.collection`'s (measured only for the root) |
+| `subCollection` / `getDescendant` | in scope, same declared-tag mechanism as the root | the `fromJson`/`typeTag` XOR check and the `writeTypeTag`/`typeTag` conflict check behave as at the root (J1b parity tests) |
 | `watchWithTree` / `SubSpec` | **excluded** | `SubSpec` has no exported opener (`collections_test_hooks.dart:168`, `@visibleForTesting`, not in the barrel) — blocked on an upstream export, not a design choice |
 
 ---
