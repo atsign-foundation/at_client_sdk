@@ -1,12 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart'
-    show
-        AtKeysPassphraseEnvelopeCodec,
-        AtKeysUnusableCause,
-        AtKeysUnusableException;
-import 'package:at_commons/at_commons.dart' show AtDecryptionException;
+import 'package:at_auth/at_auth.dart' show AtKeysPassphraseEnvelopeCodec;
+import 'package:at_client/at_client.dart'
+    show AtDecryptionException, AtKeysUnusableCause, AtKeysUnusableException;
 import 'package:chalkdart/chalk.dart';
 
 /// The line a command-line program ends every keys problem with.
