@@ -90,6 +90,14 @@ class AtOnboardingRequest extends AuthRequest {
   /// an encapsulation key at all.
   FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
 
+  /// An APKAM authentication keypair the caller holds already, used for this
+  /// activation's first enrollment in place of a freshly minted one.
+  ///
+  /// It must be a working pair under [signingAlgoType]: the private half signs
+  /// for the public half. A pair that is not is refused with
+  /// [AtSigningException] before anything is enrolled. Null mints one.
+  ({String publicKey, String privateKey})? apkamKeyPair;
+
   /// A signing keypair this atSign's first enrollment owns from birth.
   ///
   /// Becomes [EnrollmentRequest.advertisedSigningKey]: `_apsk` advertises it

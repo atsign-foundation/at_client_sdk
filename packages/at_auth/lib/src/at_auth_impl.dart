@@ -147,6 +147,7 @@ class AtAuthImpl implements AtAuth {
     }
     final OnboardingMint mint = await mintOnboardingKeys(
         signingAlgo: atOnboardingRequest.signingAlgoType,
+        apkamKeyPair: atOnboardingRequest.apkamKeyPair,
         // Null resolves to the release default, not to false: legacy
         // material is retained until the ecosystem is PQ, not until this
         // atSign is.

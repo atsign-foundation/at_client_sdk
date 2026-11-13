@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
-import 'package:at_chops/at_chops.dart' show SHA512HashingAlgo;
+import 'package:at_chops/at_chops.dart' show RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtCommandExecutor;
@@ -215,6 +215,78 @@ void main() {
     final request = server.sent.where((c) => c.startsWith('enroll:')).single;
     expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
         kid: advertisedKid(request));
+  });
+
+  group('a supplied APKAM keypair', () {
+    late ({String publicKey, String privateKey}) supplied;
+
+    setUpAll(() {
+      final pair = RsaKeyPair.generate();
+      supplied = (
+        publicKey: pair.atPublicKey.publicKey.toString(),
+        privateKey: pair.atPrivateKey.privateKey.toString(),
+      );
+    });
+
+    Future<AtClient> activateWith(
+      InMemoryAtKeysIo store,
+      ({MockAtLookupImpl lookUp, List<String> sent}) server, {
+      ({String publicKey, String privateKey})? apkamKeyPair,
+    }) async =>
+        Atsign(atSign).activate(
+          cramSecret: cramSecret,
+          keys: store,
+          preference: await preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory(),
+          apkamKeyPair: apkamKeyPair,
+          atLookUp: server.lookUp,
+          storage: hiveStoreFor(Atsign(atSign), await preference()),
+        );
+
+    test('is the one enrolled and the one kept', () async {
+      final store = InMemoryAtKeysIo();
+      final server = atServer();
+
+      await activateWith(store, server, apkamKeyPair: supplied);
+
+      final enroll = server.sent.singleWhere((c) => c.startsWith('enroll:'));
+      expect(enroll, contains('"apkamPublicKey":"${supplied.publicKey}"'));
+      final keys = await store.read(atSign);
+      // ignore: deprecated_member_use
+      expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
+    });
+
+    test('that does not match is refused before anything is enrolled',
+        () async {
+      final store = InMemoryAtKeysIo();
+      final server = atServer();
+      final other = RsaKeyPair.generate();
+
+      await expectLater(
+        activateWith(
+          store,
+          server,
+          apkamKeyPair: (
+            publicKey: supplied.publicKey,
+            privateKey: other.atPrivateKey.privateKey.toString(),
+          ),
+        ),
+        throwsA(isA<AtSigningException>()),
+      );
+      expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
+    });
+
+    test('omitted, a fresh pair is minted', () async {
+      final store = InMemoryAtKeysIo();
+      final server = atServer();
+
+      await activateWith(store, server);
+
+      final enroll = server.sent.singleWhere((c) => c.startsWith('enroll:'));
+      expect(enroll, isNot(contains(supplied.publicKey)));
+      expect(enroll, contains('"apkamPublicKey"'));
+    });
   });
 
   test('the provisioning wait ends when its budget is spent', () async {

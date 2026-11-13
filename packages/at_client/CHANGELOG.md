@@ -1,3 +1,10 @@
+## 4.2.0
+
+- feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
+  first activation in place of a minted one; a pair that does not sign under
+  the activation's algorithm is refused with `AtSigningException` before
+  anything is enrolled. Requires at_auth 4.2.0.
+
 ## 4.1.0
 
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
