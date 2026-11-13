@@ -2,7 +2,9 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:typed_data';
 
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
 import 'package:at_client_wasm/src/keys/passkey_port.dart';
@@ -74,6 +76,84 @@ class _Device {
   }
 }
 
+Future<JSAny?> _settled(IDBRequest request) {
+  final done = Completer<JSAny?>();
+  request.onsuccess = (Event _) {
+    done.complete(request.result);
+  }.toJS;
+  request.onerror = (Event _) {
+    done.completeError(StateError('IndexedDB request failed'));
+  }.toJS;
+  return done.future;
+}
+
+/// Every record of every object store of database [dbName], by store name then
+/// key; the value of a record is its bytes.
+Future<Map<String, Map<String, Uint8List>>> _dump(String dbName) async {
+  final db = await _settled(window.indexedDB.open(dbName)) as IDBDatabase;
+  try {
+    final dump = <String, Map<String, Uint8List>>{};
+    for (var i = 0; i < db.objectStoreNames.length; i++) {
+      final name = db.objectStoreNames.item(i)!;
+      final store = db.transaction(name.toJS, 'readonly').objectStore(name);
+      final keys = (await _settled(store.getAllKeys()) as JSArray<JSAny?>)
+          .toDart
+          .map((k) => (k! as JSString).toDart)
+          .toList();
+      final values = (await _settled(store.getAll()) as JSArray<JSAny?>).toDart;
+      dump[name] = {
+        for (var j = 0; j < keys.length; j++)
+          keys[j]: (values[j]! as JSUint8Array).toDart,
+      };
+    }
+    return dump;
+  } finally {
+    db.close();
+  }
+}
+
+/// The names of the databases of this origin that [prefix] starts.
+Future<List<String>> _databases(String prefix) async {
+  final all = (await window.indexedDB.databases().toDart).toDart;
+  return [
+    for (final info in all)
+      if (info.name.startsWith(prefix)) info.name,
+  ];
+}
+
+/// Asserts that [device] holds, for [session], only the hint: the passkey's
+/// credential id and the enrollment id under the atSign, in the one database,
+/// with nothing in the key-bytes store and no key material in any record.
+Future<void> _expectOnlyHint(_Device device, CustodySession session) async {
+  expect(await _databases('custody_'), [device.dbName]);
+  final dump = await _dump(device.dbName);
+  expect(
+      dump.keys,
+      unorderedEquals([
+        'at_client_wasm_keys',
+        'at_client_wasm_credentials',
+        'at_client_wasm_enrollments'
+      ]));
+  expect(dump['at_client_wasm_keys'], isEmpty);
+  expect(dump['at_client_wasm_credentials'], {_atSign: session.credentialId});
+  expect(dump['at_client_wasm_enrollments'],
+      {_atSign: utf8.encode(session.enrollmentId)});
+
+  final stored = [
+    for (final records in dump.values)
+      for (final bytes in records.values) latin1.decode(bytes),
+  ].join('\u0000');
+  final secrets = [
+    for (final value in session.atKeys.values) '$value',
+    base64.encode(session.authSeed),
+    base64Url.encode(session.authSeed),
+    session.lookupHex,
+  ];
+  for (final secret in secrets) {
+    expect(stored, isNot(contains(secret)));
+  }
+}
+
 String _dbName() => 'custody_${DateTime.now().microsecondsSinceEpoch}';
 
 void _recoveryTests(String label, PasskeyPort Function() newPort,
@@ -92,7 +172,7 @@ void _recoveryTests(String label, PasskeyPort Function() newPort,
     });
 
     test(
-        'X-K21: enroll, clear site data, recover with the passkey only: same '
+        'X-K9: enroll, clear site data, recover with the passkey only: same '
         'enrollment, same keys', () async {
       final enrolled =
           await (await device.custody()).onboard(atSign: _atSign, cram: _cram);
@@ -112,6 +192,17 @@ void _recoveryTests(String label, PasskeyPort Function() newPort,
           reason: 'recovery spends no CRAM');
       expect(server.pointerReads, 1);
       expect(await device.store.enrollmentId(_atSign), enrolled.enrollmentId);
+    });
+
+    test('X-K19: after onboarding and recovery IndexedDB holds only the hint',
+        () async {
+      final enrolled =
+          await (await device.custody()).onboard(atSign: _atSign, cram: _cram);
+      await _expectOnlyHint(device, enrolled);
+
+      await device.clearSiteData();
+      final recovered = await (await device.custody()).open(atSign: _atSign);
+      await _expectOnlyHint(device, recovered);
     });
 
     test(

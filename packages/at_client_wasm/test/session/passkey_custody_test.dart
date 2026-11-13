@@ -542,4 +542,40 @@ void main() {
           server.log, isNot(contains('delete-pointer:${oldKeys.lookupHex}')));
     });
   });
+
+  group('second passkey', () {
+    test(
+        'X-K18: a second passkey enrolls as its own enrollment with a '
+        'different derived key and cannot open the first one', () async {
+      final first = await custody().enroll(atSign: _atSign, otp: _otp);
+      final second = await custody(withHints: FakeHints())
+          .enroll(atSign: _atSign, otp: _otp);
+      final firstKeys = await keysOf(0);
+      final secondKeys = await keysOf(1);
+
+      expect(authenticator.prfByCredential, hasLength(2));
+      expect(second.enrollmentId, isNot(first.enrollmentId));
+      expect(gateway.enrolled, hasLength(2));
+      expect(gateway.enrolled[1].authSeed, isNot(gateway.enrolled[0].authSeed));
+      expect(secondKeys.authSeed, isNot(firstKeys.authSeed));
+      expect(secondKeys.lookupHex, isNot(firstKeys.lookupHex));
+      expect(server.pointers.keys,
+          unorderedEquals([firstKeys.lookupHex, secondKeys.lookupHex]));
+
+      await expectLater(
+          gateway.authenticate(
+              atSign: _atSign,
+              enrollmentId: first.enrollmentId,
+              authSeed: secondKeys.authSeed),
+          throwsA(isA<PkamRefusedException>()));
+      await expectLater(
+          PasskeyRecordCodec.open(secondKeys.kek, PasskeyRecordType.atkeys,
+              server.documents[first.enrollmentId]!),
+          throwsA(anything));
+      await expectLater(
+          PasskeyRecordCodec.open(secondKeys.kek, PasskeyRecordType.eid,
+              server.pointers[firstKeys.lookupHex]!),
+          throwsA(anything));
+    });
+  });
 }

@@ -166,7 +166,7 @@ void main() {
       expect(request.namespaces, {'atkeysv': 'rw', 'wavi': 'rw'});
     });
 
-    test('mints no key of its own (X-K13)', () async {
+    test('mints no key of its own (K-12)', () async {
       final session = await enroll();
 
       final keys = jsonEncode(await session.atKeys());
