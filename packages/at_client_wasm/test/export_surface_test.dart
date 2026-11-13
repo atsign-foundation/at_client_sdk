@@ -37,6 +37,15 @@ void main() {
     }
   });
 
+  test('exports the setup lock timeout', () {
+    final barrel = File('lib/at_client_wasm_web.dart').readAsStringSync();
+    expect(
+        barrel,
+        matches(RegExp(
+            r"^export '[^']*web_setup_lock\.dart' show[^;]*\bSetupLockTimeoutException\b",
+            multiLine: true)));
+  });
+
   test('no exported file carries a test seam', () {
     for (final MapEntry(:key, :value) in sources.entries) {
       expect(value, isNot(contains('visibleForTesting')), reason: key);

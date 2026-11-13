@@ -207,9 +207,9 @@ Future<AtKeys> readKeysThenStop(
   try {
     await stop();
   } on Object catch (e, st) {
-    // The keys are the only copy; a client that fails to stop is not an error.
+    // The keys are the only copy, so a failed stop is logged, not rethrown.
     AtSignLogger('enrollmentGateway')
-        .warning('stopping the activation client of $atSign failed', e, st);
+        .severe('stopping the activation client of $atSign failed', e, st);
   }
   return keys;
 }
