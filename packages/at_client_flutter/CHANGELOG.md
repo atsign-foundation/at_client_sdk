@@ -15,6 +15,10 @@
 - feat: `KeychainAtKeysIo.describeSource` returns "this device's keychain".
 - fix: `CramDialog` fails before sending anything when the keychain holds
   keys it cannot read.
+- fix: `PkamDialog`, `CramDialog`, `ApkamActivationDialog` and
+  `RegistrarCramDialog` say what failed: a keys problem, an atServer refusal
+  in plain words, a connection to check, or "Something went wrong with
+  <atSign>: <message>", never a stack trace.
 
 ## 2.0.0
 

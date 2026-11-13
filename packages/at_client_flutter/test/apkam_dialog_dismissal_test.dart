@@ -232,7 +232,7 @@ void main() {
       expect(find.byType(ApkamActivationDialog), findsNothing);
       expect(results, [null]);
       expect(
-        find.textContaining('Activation failed'),
+        find.textContaining('Something went wrong'),
         findsNothing,
         reason: 'abandoning is not a failure',
       );

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart' show RegistrarService;
+import 'package:at_client_flutter/src/widgets/shared/failure_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
@@ -120,9 +121,16 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
       setState(() {
         _isLoading = false;
       });
+      final message = failureMessage(
+        widget.atSign,
+        e,
+        network:
+            'The registrar could not be reached. Please check your connection '
+            'and try again.',
+      );
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error verifying OTP: $e')));
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
+import 'package:at_client_flutter/src/widgets/shared/failure_message.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
@@ -139,18 +140,25 @@ class _CramDialogState extends State<CramDialog> {
         _logger.info('Activated ${widget.atSign} as ${client.enrollmentId}');
       }
       if (mounted) Navigator.of(context).pop(client);
-    } catch (e) {
+    } catch (e, stackTrace) {
       // Activation failed or timed out. Without an error path the dialog would
       // stay on screen forever and CramDialog.show() would never complete
       // (issue #1905 / #1909).
       _logger.severe('Onboarding via CRAM failed: $e');
+      _logger.logger.fine('Onboarding via CRAM failed', e, stackTrace);
       if (!mounted) return;
       // A timeout during activation usually means the newly-registered atSign
       // is still provisioning, not a hard failure — say so and invite a retry.
       final message = e is AtTimeoutException
           ? 'Onboarding is taking longer than expected — your atSign may still '
                 'be provisioning. Please try again in a moment.'
-          : 'Onboarding failed. Please check your connection and try again.';
+          : failureMessage(
+              widget.atSign,
+              e,
+              network:
+                  'Onboarding failed. Please check your connection and try '
+                  'again.',
+            );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
