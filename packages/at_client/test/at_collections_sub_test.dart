@@ -370,6 +370,99 @@ void main() {
     });
   });
 
+  group('getDescendant — opens it makes do not record sub-collection tags', () {
+    late _Collections c;
+    const lvl1 = 'comments.p1.$parentNs';
+
+    setUp(() {
+      c = buildParent();
+      final notificationService = MockNotificationService();
+      when(() => notificationService.subscribe(
+              regex: any(named: 'regex'),
+              shouldDecrypt: any(named: 'shouldDecrypt')))
+          .thenAnswer((_) => const Stream<AtNotification>.empty());
+      when(() => c.atClient.notificationService)
+          .thenReturn(notificationService);
+      // Every key resolves to an item, so each level of the chain is found.
+      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
+          .thenAnswer((inv) async {
+        final regex = RegExp(inv.namedArguments[#regex] as String);
+        return [
+          for (final k in [
+            'p1.$parentNs$selfAtSignStr',
+            'c1.$lvl1$selfAtSignStr',
+            'x.replies.c1.$lvl1$selfAtSignStr',
+          ])
+            if (regex.hasMatch(k)) AtKey.fromString(k),
+        ];
+      });
+      when(() => c.atClient.get(any())).thenAnswer((inv) async {
+        final isLeaf =
+            (inv.positionalArguments.first as AtKey).key.startsWith('x.');
+        final v = AtValue();
+        v.value = jsonEncode({
+          'type': 'n/a',
+          'obj': isLeaf ? {'k': 'v'} : 'v',
+        });
+        v.metadata = Metadata()
+          ..createdAt = DateTime.now().toUtc()
+          ..expiresAt = DateTime.now().add(const Duration(days: 7));
+        return v;
+      });
+    });
+
+    tearDown(() => clearFactoriesForTest());
+
+    final ancestry = [
+      CAncestor(id: 'p1', subName: 'comments', owner: selfAtSign),
+      CAncestor(id: 'c1', subName: 'replies', owner: selfAtSign),
+    ];
+
+    Future<Object?> walk<U>(
+      U Function(Map<String, dynamic>)? fromJson, [
+      String? leafTypeTag,
+    ]) =>
+        c.parent
+            .getDescendant<U>(
+              ancestry: ancestry,
+              id: 'x',
+              owner: selfAtSign,
+              leafExpiration: const Duration(days: 1),
+              leafFromJson: fromJson,
+              leafTypeTag: leafTypeTag,
+            )
+            .then<Object?>((v) => v)
+            .catchError((Object e) => e);
+
+    AtCollection<dynamic> appOpen(String? writeTypeTag) => subOn<dynamic>(
+        c, c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>, 'comments',
+        writeTypeTag: writeTypeTag);
+
+    test(
+        'Given getDescendant opened a level untagged, when the app opens it '
+        'with writeTypeTag x, then no mismatch is raised', () async {
+      expect(await walk<dynamic>(null), isA<CItem>());
+      expect(appOpen('x').namespace, lvl1);
+    });
+
+    test(
+        'Given the app opened a level with writeTypeTag x, when getDescendant '
+        'opens it untagged, then no mismatch is raised', () async {
+      appOpen('x');
+      expect(await walk<dynamic>(null), isA<CItem>());
+    });
+
+    test(
+        'Given getDescendant with leaf typeTag A, when it runs again with leaf '
+        'typeTag B on the same chain, then neither raises a mismatch',
+        () async {
+      final a = await walk<Map<String, dynamic>>((m) => m, 'A');
+      final b = await walk<List<String>>((m) => m.keys.toList(), 'B');
+      expect([a, b],
+          everyElement(isNot(isA<CollectionTypeTagMismatchException>())));
+    });
+  });
+
   // ---------------------------------------------------------------------------
   group('CSubItem events via handleNotification', () {
     // Helper builds notifications with the `<to>:<bareKey>@<from>`
