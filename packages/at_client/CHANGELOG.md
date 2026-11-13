@@ -7,6 +7,9 @@
   external implementers of `AtCollection` must add it. `lib/testing.dart`
   exports `collectionWithInjectedBoth`, `collectionWithInjectedDataEvents`
   and `collectionWithInjectedNotifications` for downstream tests.
+- fix: `collection` throws `StateError` when an open namespace and
+  `eventSource` is reopened with a different `writeTypeTag`, instead of
+  silently returning the collection built with the first one.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
