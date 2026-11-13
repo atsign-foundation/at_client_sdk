@@ -72,6 +72,8 @@ void main() {
     return FakeHints();
   }
 
+  final closeFailure = StateError('custody close failed');
+
   setUp(() {
     wire = Wire();
     server = FakeServer()..keys = _documentKeys();
@@ -151,6 +153,15 @@ void main() {
       await onboard();
 
       expect(gateway.lastSession!.closed, isTrue);
+    });
+
+    test('a custody close failure stops the opened client and propagates',
+        () async {
+      gateway.onActivate = () => gateway.closeErrorForNext = closeFailure;
+
+      await expectLater(onboard(), throwsA(same(closeFailure)));
+
+      expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);
     });
   });
 
@@ -246,6 +257,33 @@ void main() {
 
       expect(gateway.lastSession!.closed, isTrue);
       expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);
+    });
+
+    test('a custody close failure stops the opened client and propagates',
+        () async {
+      final device = await enrolledElsewhere();
+      gateway.closeErrorForNext = closeFailure;
+
+      await expectLater(login(withHints: device), throwsA(same(closeFailure)));
+
+      expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);
+    });
+
+    test('a stop failure never replaces the custody close failure', () async {
+      final device = await enrolledElsewhere();
+      gateway.closeErrorForNext = closeFailure;
+      wire.stopThrows = true;
+      addTearDown(() => wire.stopThrows = false);
+
+      await expectLater(login(withHints: device), throwsA(same(closeFailure)));
+    });
+
+    test('closes the custody session exactly once on success', () async {
+      final device = await enrolledElsewhere();
+
+      await login(withHints: device);
+
+      expect(gateway.lastSession!.closeCalls, 1);
     });
   });
 }

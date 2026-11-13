@@ -62,6 +62,10 @@ class FakeSession implements EnrollmentSession {
   @override
   final String enrollmentId;
   var closed = false;
+  var closeCalls = 0;
+
+  /// Makes [close] throw this after marking the session closed.
+  Object? closeError;
 
   @override
   Future<Map<String, dynamic>> atKeys() async => server.keys;
@@ -83,7 +87,11 @@ class FakeSession implements EnrollmentSession {
   }
 
   @override
-  Future<void> close() async => closed = true;
+  Future<void> close() async {
+    closed = true;
+    closeCalls++;
+    if (closeError case final e?) throw e;
+  }
 }
 
 class _Documents implements EnrollmentDocumentStore {
@@ -168,8 +176,14 @@ class FakeGateway implements EnrollmentGateway {
   final seedBuffers = <Uint8List>[];
   FakeSession? lastSession;
 
+  /// The close error the next session this gateway hands out will throw.
+  Object? closeErrorForNext;
+
   /// When set, an enroll waits for it before answering.
   Completer<void>? gate;
+
+  FakeSession _session(String eid) =>
+      FakeSession(server, eid)..closeError = closeErrorForNext;
 
   @override
   Future<EnrollmentSession> enroll(
@@ -185,7 +199,7 @@ class FakeGateway implements EnrollmentGateway {
     }
     final eid = 'eid${++server.enrollments}';
     server.seedByEnrollment[eid] = authSeed.join(',');
-    return lastSession = FakeSession(server, eid);
+    return lastSession = _session(eid);
   }
 
   @override
@@ -198,7 +212,7 @@ class FakeGateway implements EnrollmentGateway {
         server.seedByEnrollment[enrollmentId] != authSeed.join(',')) {
       throw PkamRefusedException(enrollmentId);
     }
-    return lastSession = FakeSession(server, enrollmentId);
+    return lastSession = _session(enrollmentId);
   }
 
   /// Makes [activate] spend the CRAM, then fail its PKAM.
@@ -223,7 +237,7 @@ class FakeGateway implements EnrollmentGateway {
           atKeys: {...server.keys}..remove('aesPkamPrivateKey'),
           cause: StateError('pkam failed'));
     }
-    return lastSession = FakeSession(server, eid);
+    return lastSession = _session(eid);
   }
 }
 

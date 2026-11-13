@@ -34,23 +34,36 @@ Future<AtClient> loginSession(PasskeyCustody custody,
 
 /// A client on [custody]'s restored @keys plus the APKAM key its seed derives,
 /// opened without [portalSession]'s refusal of ML-DSA-65 material: these keys
-/// came from the passkey-held document, not from a caller. [custody] is
-/// closed once the client has its own connection, or the open failed.
+/// came from the passkey-held document, not from a caller.
+///
+/// [custody] is closed exactly once, after the client has its own connection
+/// or the open failed; a failed open rethrows its own error. If the open
+/// succeeded and the close throws, the client is stopped (a failed stop is
+/// logged) and the close error is rethrown.
 Future<AtClient> _clientOn(CustodySession custody,
     {required String app,
     required SessionTransport transport,
     required AtRootDomain root}) async {
+  final AtClient client;
   try {
     final pair = await apkamKeyPairFromSeed(custody.authSeed);
     final keys = withApkamKey(
         AtKeys.fromJson(custody.atKeys), custody.enrollmentId, pair);
-    return await openSession(
+    client = await openSession(
         atSign: custody.atSign,
         app: app,
         keys: keys,
         transport: transport,
         root: root);
-  } finally {
+  } catch (_) {
     await custody.close();
+    rethrow;
   }
+  try {
+    await custody.close();
+  } catch (_) {
+    await stopQuietly(client, custody.atSign);
+    rethrow;
+  }
+  return client;
 }

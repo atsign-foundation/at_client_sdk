@@ -72,13 +72,19 @@ Future<AtClient> _open(
     }
     return client;
   } catch (_) {
-    // The open's own error is the one the caller needs, not a teardown's.
-    try {
-      await client.stop();
-    } catch (e, st) {
-      AtSignLogger('portalSession')
-          .warning('stopping the client of $atSign failed', e, st);
-    }
+    await stopQuietly(client, atSign);
     rethrow;
+  }
+}
+
+/// Stops [client] of [atSign] on a path that already has an error to raise.
+/// A failed stop is logged, never thrown: the error in flight is the one the
+/// caller needs, not a teardown's.
+Future<void> stopQuietly(AtClient client, String atSign) async {
+  try {
+    await client.stop();
+  } catch (e, st) {
+    AtSignLogger('portalSession')
+        .warning('stopping the client of $atSign failed', e, st);
   }
 }
