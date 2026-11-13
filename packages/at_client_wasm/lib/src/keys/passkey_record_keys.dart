@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart' show HkdfSha256;
-import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:at_commons/atsign.dart';
 import 'package:cryptography/cryptography.dart';
 
 import 'passkey_port.dart';
+import 'prf_support.dart';
 import 'unlock_secret.dart';
+
+export 'prf_support.dart' show PrfUnavailableException;
 
 /// The PRF eval input for every passkey: SHA-256 of `atsign:keys:lookup:v1`.
 Future<Uint8List> recordPrfSalt() async {
@@ -48,21 +50,9 @@ class RecordKeys {
   }
 }
 
-/// Thrown when the authenticator does not support or return a valid PRF result.
-class PrfUnavailableException implements Exception {
-  /// Initializes the exception with an error [message].
-  PrfUnavailableException(this.message);
-
-  /// The error message.
-  final String message;
-
-  /// Returns a string representation of this exception.
-  @override
-  String toString() => 'PrfUnavailableException: $message';
-}
-
-PrfSecret _secretFrom(Uint8List? prfFirst) {
+PrfSecret _secretFrom(Uint8List? prfFirst, PrfSupport? support) {
   if (prfFirst == null) {
+    support?.recordMiss();
     throw PrfUnavailableException('Authenticator did not return a PRF result');
   }
   try {
@@ -75,49 +65,34 @@ PrfSecret _secretFrom(Uint8List? prfFirst) {
 /// A registered passkey and its PRF output.
 typedef PasskeyRegistration = ({Uint8List credentialId, PrfSecret secret});
 
-/// An asserted passkey, its PRF output, and the canonical atSign in its
-/// `userHandle`, or null when it carries none that is valid.
-typedef PasskeyUnlock = ({
-  Uint8List credentialId,
-  PrfSecret secret,
-  String? atSign,
-});
-
-String? _atSignFrom(Uint8List? userHandle) {
-  if (userHandle == null) return null;
-  try {
-    return utf8.decode(userHandle).toAtsign();
-  } on FormatException {
-    return null;
-  } on InvalidAtSignException {
-    return null;
-  }
-}
+/// An asserted passkey and its PRF output.
+typedef PasskeyUnlock = ({Uint8List credentialId, PrfSecret secret});
 
 /// A key encryption key (KEK) that leverages passkey PRF for secret derivation.
 class PasskeyKek {
-  /// Initializes the KEK with the given passkey [port].
-  PasskeyKek(this.port);
+  /// Initializes the KEK with the given passkey [port] and, optionally, the
+  /// [prfSupport] check that refuses setup before any ceremony.
+  PasskeyKek(this.port, {this.prfSupport});
 
   /// The passkey port used to perform ceremonies.
   final PasskeyPort port;
 
+  /// The PRF support check, or null to attempt every ceremony.
+  final PrfSupport? prfSupport;
+
   /// Registers a passkey whose user is the canonical [atSign]; returns its id
-  /// and PRF output.
+  /// and the PRF output of an assertion with it.
   ///
-  /// Throws [ArgumentError] when the canonical atSign exceeds the 64 UTF-8
-  /// bytes WebAuthn allows in `user.id`.
+  /// Throws [PrfUnavailableException] before any ceremony when PRF is known
+  /// to be unsupported.
   Future<PasskeyRegistration> register(String atSign) async {
-    final canonical = atSign.toAtsign();
-    if (utf8.encode(canonical).length > 64) {
-      throw ArgumentError.value(
-          atSign, 'atSign', 'longer than 64 UTF-8 bytes for a passkey user.id');
-    }
-    final result =
-        await port.create(atSign: canonical, evalInput: await recordPrfSalt());
+    await prfSupport?.require();
+    final credentialId = await port.create(atSign: atSign.toAtsign());
+    final assertion = await port.get(
+        evalInput: await recordPrfSalt(), allowCredential: credentialId);
     return (
-      credentialId: result.credentialId,
-      secret: _secretFrom(result.prfFirst)
+      credentialId: credentialId,
+      secret: _secretFrom(assertion.prfFirst, prfSupport)
     );
   }
 
@@ -127,8 +102,7 @@ class PasskeyKek {
         evalInput: await recordPrfSalt(), allowCredential: credentialId);
     return (
       credentialId: result.credentialId,
-      secret: _secretFrom(result.prfFirst),
-      atSign: _atSignFrom(result.userHandle),
+      secret: _secretFrom(result.prfFirst, prfSupport),
     );
   }
 }

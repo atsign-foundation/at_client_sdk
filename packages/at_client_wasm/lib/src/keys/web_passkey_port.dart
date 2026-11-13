@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
@@ -7,6 +6,7 @@ import 'package:web/web.dart';
 
 import 'aes_gcm.dart';
 import 'passkey_ceremony.dart';
+import 'passkey_creation_options.dart';
 import 'passkey_port.dart';
 
 Uint8List? _prfFirst(PublicKeyCredential credential) {
@@ -26,42 +26,15 @@ class WebPasskeyPort implements PasskeyPort {
   /// The relying party name.
   final String rpName;
 
-  /// Creates a discoverable passkey and evaluates the PRF extension.
+  /// Creates a discoverable passkey with the PRF extension enabled.
   @override
-  Future<({Uint8List credentialId, Uint8List? prfFirst})> create(
-      {required String atSign, required Uint8List evalInput}) async {
-    final challenge = randomBytes(32);
-
-    final options = {
-      'publicKey': {
-        'challenge': challenge,
-        'rp': {'id': rpId, 'name': rpName},
-        'user': {
-          'id': utf8.encode(atSign),
-          'name': atSign,
-          'displayName': atSign
-        },
-        'pubKeyCredParams': [
-          {'type': 'public-key', 'alg': -7},
-          {'type': 'public-key', 'alg': -257}
-        ],
-        'authenticatorSelection': {
-          'residentKey': 'required',
-          'userVerification': 'required'
-        },
-        'extensions': {
-          'prf': {
-            'eval': {'first': evalInput}
-          }
-        }
-      }
-    }.jsify() as CredentialCreationOptions;
-
+  Future<Uint8List> create({required String atSign}) async {
+    final options =
+        passkeyCreationOptions(rpId: rpId, rpName: rpName, atSign: atSign)
+            .jsify() as CredentialCreationOptions;
     final credential =
         await passkeyCeremony(window.navigator.credentials.create(options));
-    final credentialId = credential.rawId.toDart.asUint8List();
-
-    return (credentialId: credentialId, prfFirst: _prfFirst(credential));
+    return credential.rawId.toDart.asUint8List();
   }
 
   /// Gets a passkey assertion and evaluates the PRF extension.
@@ -95,12 +68,10 @@ class WebPasskeyPort implements PasskeyPort {
 
     final credential =
         await passkeyCeremony(window.navigator.credentials.get(options));
-    final response = credential.response as AuthenticatorAssertionResponse;
 
     return (
       credentialId: credential.rawId.toDart.asUint8List(),
       prfFirst: _prfFirst(credential),
-      userHandle: response.userHandle?.toDart.asUint8List(),
     );
   }
 }

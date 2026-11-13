@@ -3,10 +3,12 @@ import 'dart:typed_data';
 import 'package:at_commons/atsign.dart';
 
 import '../keys/key_bytes_store.dart';
+import '../keys/passkey_port.dart' show PasskeyCeremonyException;
 import '../keys/passkey_record.dart';
 import '../keys/passkey_record_keys.dart';
 import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
+import 'setup_lock.dart';
 
 /// Asks the browser not to evict this origin's storage.
 abstract interface class StoragePersistence {
@@ -29,15 +31,21 @@ class PkamRefusedException implements Exception {
       '$enrollmentId; an approver must delete it and approve a new enrollment';
 }
 
-/// Thrown on recovery when the passkey's enrollment pointer does not exist.
-class NoEnrollmentPointerException implements Exception {
-  NoEnrollmentPointerException(this.atSign);
+/// Thrown by [PasskeyCustody.open] when the passkey cannot open [atSign]'s
+/// @keys: the ceremony returned no credential, the passkey's enrollment
+/// pointer does not exist, or the atServer refused PKAM for the key derived
+/// from it. The caller decides the screen; re-enrolling takes an OTP.
+class PasskeyLostException implements Exception {
+  PasskeyLostException(this.atSign, this.reason, {this.cause});
 
   final String atSign;
+  final String reason;
+
+  /// The failure that made the passkey count as lost, when there is one.
+  final Object? cause;
 
   @override
-  String toString() =>
-      'NoEnrollmentPointerException: no enrollment pointer for $atSign';
+  String toString() => 'PasskeyLostException: $reason for $atSign';
 }
 
 /// Thrown when an authenticated enrollment has no @keys document.
@@ -56,25 +64,6 @@ class PublicKeyMismatchException implements Exception {
   @override
   String toString() => 'PublicKeyMismatchException: the restored keys do not '
       'match the published public keys';
-}
-
-/// Thrown when the passkey's `userHandle` carries no atSign to recover.
-class PasskeyHasNoAtSignException implements Exception {
-  @override
-  String toString() =>
-      'PasskeyHasNoAtSignException: the passkey names no atSign';
-}
-
-/// Thrown when the passkey names a different atSign than the one asked for.
-class PasskeyAtSignMismatchException implements Exception {
-  PasskeyAtSignMismatchException(this.expected, this.found);
-
-  final String expected;
-  final String found;
-
-  @override
-  String toString() => 'PasskeyAtSignMismatchException: asked for $expected, '
-      'the passkey names $found';
 }
 
 /// Thrown by [PasskeyCustody.rotate] when the new pointer does not read back;
@@ -163,6 +152,7 @@ class PasskeyCustody {
       required this.gateway,
       required this.credentials,
       required this.enrollmentIds,
+      required this.setupLock,
       this.persistence});
 
   final PasskeyKek kek;
@@ -170,61 +160,71 @@ class PasskeyCustody {
   final EnrollmentGateway gateway;
   final CredentialHintStore credentials;
   final EnrollmentIdStore enrollmentIds;
+  final SetupLock setupLock;
   final StoragePersistence? persistence;
 
   /// Enrolls a passkey for [atSign] with an approver-issued [otp], then writes
   /// its document and pointer. [existingPasskey] asserts the device's passkey instead of
   /// registering one.
+  ///
+  /// The whole flow holds [atSign]'s setup lock, so a second tab enrolling the
+  /// same atSign waits for the first.
   Future<CustodySession> enroll(
       {required String atSign,
       required String otp,
-      bool existingPasskey = false}) async {
+      bool existingPasskey = false}) {
     final canonical = atSign.toAtsign();
-    final PasskeyRegistration passkey;
-    if (existingPasskey) {
-      final unlocked = await kek.unlock(
-          credentialId: await credentials.credentialId(canonical));
-      passkey = (credentialId: unlocked.credentialId, secret: unlocked.secret);
-    } else {
-      passkey = await kek.register(canonical);
-    }
-    final keys = await RecordKeys.derive(passkey.secret, canonical);
-    final session = await gateway.enroll(
-        atSign: canonical, authSeed: keys.authSeed, otp: otp);
-    final published = await _publish(
-        canonical, passkey.credentialId, keys, session, await session.atKeys());
-    await _remember(canonical, passkey.credentialId, published.enrollmentId);
-    return published;
+    return setupLock.run(setupLockName(canonical), () async {
+      final PasskeyRegistration passkey;
+      if (existingPasskey) {
+        final unlocked = await kek.unlock(
+            credentialId: await credentials.credentialId(canonical));
+        passkey =
+            (credentialId: unlocked.credentialId, secret: unlocked.secret);
+      } else {
+        passkey = await kek.register(canonical);
+      }
+      final keys = await RecordKeys.derive(passkey.secret, canonical);
+      final session = await gateway.enroll(
+          atSign: canonical, authSeed: keys.authSeed, otp: otp);
+      final published = await _publish(canonical, passkey.credentialId, keys,
+          session, await session.atKeys());
+      await _remember(canonical, passkey.credentialId, published.enrollmentId);
+      return published;
+    });
   }
 
   /// Opens [atSign]'s @keys. A device that remembers [atSign]'s credential
-  /// and enrollment returns without reading the pointer; any other recovers
-  /// the atSign from the passkey's `userHandle` and finds the enrollment
-  /// through the pointer.
+  /// and enrollment returns without reading the pointer; any other asserts
+  /// any discoverable passkey and finds the enrollment through the pointer.
   ///
-  /// Throws [PasskeyAtSignMismatchException], [PkamRefusedException],
-  /// [NoEnrollmentPointerException], [MissingAtKeysDocumentException] or
+  /// Throws [PasskeyLostException], [MissingAtKeysDocumentException] or
   /// [PublicKeyMismatchException]; none leaves a session open or the device's
   /// hints rewritten.
-  Future<CustodySession> open({String? atSign}) async {
-    final asked = atSign?.toAtsign();
-    final hintedCredential =
-        asked == null ? null : await credentials.credentialId(asked);
-    final hintedEnrollment =
-        asked == null ? null : await enrollmentIds.enrollmentId(asked);
+  Future<CustodySession> open({required String atSign}) async {
+    final canonical = atSign.toAtsign();
+    final hintedCredential = await credentials.credentialId(canonical);
+    final hintedEnrollment = await enrollmentIds.enrollmentId(canonical);
 
-    final unlocked = await kek.unlock(credentialId: hintedCredential);
-    final named = unlocked.atSign;
-    if (asked != null && named != null && named != asked) {
-      throw PasskeyAtSignMismatchException(asked, named);
+    final PasskeyUnlock unlocked;
+    try {
+      unlocked = await kek.unlock(credentialId: hintedCredential);
+    } on PasskeyCeremonyException catch (e) {
+      throw PasskeyLostException(canonical, 'no passkey credential', cause: e);
     }
-    final canonical = asked ?? named ?? (throw PasskeyHasNoAtSignException());
     final keys = await RecordKeys.derive(unlocked.secret, canonical);
     final enrollmentId =
         hintedEnrollment ?? await _enrollmentIdFromPointer(canonical, keys);
 
-    final session = await gateway.authenticate(
-        atSign: canonical, enrollmentId: enrollmentId, authSeed: keys.authSeed);
+    final EnrollmentSession session;
+    try {
+      session = await gateway.authenticate(
+          atSign: canonical,
+          enrollmentId: enrollmentId,
+          authSeed: keys.authSeed);
+    } on PkamRefusedException catch (e) {
+      throw PasskeyLostException(canonical, 'PKAM refused', cause: e);
+    }
     final Map<String, dynamic> atKeys;
     try {
       atKeys = await _restore(canonical, enrollmentId, keys, session);
@@ -299,7 +299,7 @@ class PasskeyCustody {
   Future<String> _enrollmentIdFromPointer(
           String atSign, RecordKeys keys) async =>
       await _pointedEnrollmentId(atSign, keys) ??
-      (throw NoEnrollmentPointerException(atSign));
+      (throw PasskeyLostException(atSign, 'no enrollment pointer'));
 
   Future<String?> _pointedEnrollmentId(String atSign, RecordKeys keys) async {
     final record = await pointerReader.get(atSign, keys.lookupHex);

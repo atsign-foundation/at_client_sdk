@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_client_wasm/src/keys/key_bytes_store.dart';
@@ -8,6 +9,7 @@ import 'package:at_client_wasm/src/keys/unlock_secret.dart';
 import 'package:at_client_wasm/src/session/enrollment_document_store.dart';
 import 'package:at_client_wasm/src/session/enrollment_pointer_store.dart';
 import 'package:at_client_wasm/src/session/passkey_custody.dart';
+import 'package:at_client_wasm/src/session/setup_lock.dart';
 import 'package:test/test.dart';
 
 const _atSign = '@alice';
@@ -139,12 +141,16 @@ class FakeGateway implements EnrollmentGateway {
   final enrolled = <({String atSign, Uint8List authSeed, String otp})>[];
   FakeSession? lastSession;
 
+  /// When set, an enroll waits for it before answering.
+  Completer<void>? gate;
+
   @override
   Future<EnrollmentSession> enroll(
       {required String atSign,
       required Uint8List authSeed,
       required String otp}) async {
     enrolled.add((atSign: atSign, authSeed: authSeed, otp: otp));
+    await gate?.future;
     if (server.seedByEnrollment.containsValue(authSeed.join(','))) {
       throw KeyAlreadyEnrolledException();
     }
@@ -171,19 +177,21 @@ class FakeGateway implements EnrollmentGateway {
 class FakeAuthenticator implements PasskeyPort {
   final prfByCredential = <int, Uint8List>{};
   Uint8List? current;
-  var userHandleAtSign = _atSign;
   Uint8List? lastAllowCredential;
   var gets = 0;
+  var creates = 0;
+
+  /// Makes every assertion fail as a cancelled or unmatched ceremony.
+  var yieldsNoCredential = false;
 
   @override
-  Future<({Uint8List credentialId, Uint8List? prfFirst})> create(
-      {required String atSign, required Uint8List evalInput}) async {
+  Future<Uint8List> create({required String atSign}) async {
+    creates++;
     final n = prfByCredential.length;
     final id = Uint8List.fromList([n + 1]);
-    final prf = Uint8List.fromList(List.generate(32, (i) => i + n));
-    prfByCredential[id[0]] = prf;
-    current = id;
-    return (credentialId: id, prfFirst: prf);
+    prfByCredential[id[0]] =
+        Uint8List.fromList(List.generate(32, (i) => i + n));
+    return current = id;
   }
 
   @override
@@ -191,12 +199,24 @@ class FakeAuthenticator implements PasskeyPort {
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
     gets++;
     lastAllowCredential = allowCredential;
+    if (yieldsNoCredential) throw PasskeyCeremonyException('NotAllowedError');
     final id = allowCredential ?? current!;
-    return (
-      credentialId: id,
-      prfFirst: prfByCredential[id[0]],
-      userHandle: Uint8List.fromList(userHandleAtSign.codeUnits),
-    );
+    return (credentialId: id, prfFirst: prfByCredential[id[0]]);
+  }
+}
+
+/// navigator.locks: one holder per name at a time, in request order.
+class FakeSetupLock implements SetupLock {
+  final names = <String>[];
+  final _tails = <String, Future<void>>{};
+
+  @override
+  Future<T> run<T>(String name, Future<T> Function() body) {
+    names.add(name);
+    final previous = _tails[name] ?? Future<void>.value();
+    final result = previous.then((_) => body());
+    _tails[name] = result.then((_) {}, onError: (_) {});
+    return result;
   }
 }
 
@@ -237,6 +257,7 @@ void main() {
   late FakeAuthenticator authenticator;
   late FakeHints hints;
   late FakePersistence persistence;
+  late FakeSetupLock setupLock;
 
   PasskeyCustody custody({FakeHints? withHints}) => PasskeyCustody(
       kek: PasskeyKek(authenticator),
@@ -244,7 +265,8 @@ void main() {
       gateway: gateway,
       credentials: withHints ?? hints,
       enrollmentIds: withHints ?? hints,
-      persistence: persistence);
+      persistence: persistence,
+      setupLock: setupLock);
 
   Future<RecordKeys> keysOf(int credential) async {
     final prf = Uint8List.fromList(List.generate(32, (i) => i + credential));
@@ -257,6 +279,7 @@ void main() {
     authenticator = FakeAuthenticator();
     hints = FakeHints();
     persistence = FakePersistence();
+    setupLock = FakeSetupLock();
   });
 
   group('enroll', () {
@@ -317,6 +340,52 @@ void main() {
     });
   });
 
+  group('setup lock', () {
+    Future<void> pump() => Future<void>.delayed(Duration.zero);
+
+    test('enroll runs under the per-atSign setup lock', () async {
+      await custody().enroll(atSign: 'Alice', otp: _otp);
+      expect(setupLock.names, ['at_client_wasm:setup:@alice']);
+    });
+
+    test('a concurrent setup for the same atSign waits for the first',
+        () async {
+      gateway.gate = Completer<void>();
+      final first = custody().enroll(atSign: _atSign, otp: _otp);
+      await pump();
+      final second = custody().enroll(atSign: _atSign, otp: _otp);
+      await pump();
+      expect(authenticator.creates, 1);
+
+      gateway.gate!.complete();
+      await first;
+      await second;
+      expect(authenticator.creates, 2);
+    });
+
+    test('a setup for another atSign does not wait', () async {
+      gateway.gate = Completer<void>();
+      final first = custody().enroll(atSign: _atSign, otp: _otp);
+      await pump();
+      final second = custody().enroll(atSign: '@bob', otp: _otp);
+      await pump();
+      expect(authenticator.creates, 2);
+
+      gateway.gate!.complete();
+      await Future.wait([first, second]);
+    });
+
+    test('the lock is held until the pointer is written', () async {
+      gateway.gate = Completer<void>();
+      final first = custody().enroll(atSign: _atSign, otp: _otp);
+      await pump();
+      expect(server.log, isEmpty);
+      gateway.gate!.complete();
+      await first;
+      expect(server.log, hasLength(2));
+    });
+  });
+
   group('open', () {
     setUp(() async {
       await custody().enroll(atSign: _atSign, otp: _otp);
@@ -325,7 +394,8 @@ void main() {
 
     test('recovers from an empty device with one passkey prompt', () async {
       authenticator.gets = 0;
-      final session = await custody(withHints: FakeHints()).open();
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
       expect(authenticator.gets, 1);
       expect(session.atSign, _atSign);
       expect(session.enrollmentId, 'eid1');
@@ -335,7 +405,7 @@ void main() {
 
     test('recovery rewrites the hints and asks for persistence once', () async {
       final fresh = FakeHints();
-      await custody(withHints: fresh).open();
+      await custody(withHints: fresh).open(atSign: _atSign);
       expect(fresh.ids[_atSign], 'eid1');
       expect(fresh.credentials[_atSign], Uint8List.fromList([1]));
       expect(persistence.requests, 1);
@@ -358,25 +428,34 @@ void main() {
       expect(authenticator.lastAllowCredential, Uint8List.fromList([1]));
     });
 
-    test('refuses a passkey that names another atSign than the one asked for',
-        () async {
-      hints.credentials.clear();
-      hints.ids.clear();
-      authenticator.userHandleAtSign = '@bob';
-      await expectLater(custody().open(atSign: _atSign),
-          throwsA(isA<PasskeyAtSignMismatchException>()));
-      expect(server.pointerReads, 0);
-    });
-
     test('a failing persist request does not fail the open', () async {
       persistence.error = StateError('denied');
       expect((await custody().open(atSign: _atSign)).enrollmentId, 'eid1');
     });
 
-    test('recovery without a pointer throws', () async {
+    test('recovery without a pointer is a lost passkey', () async {
       server.pointers.clear();
-      expect(custody(withHints: FakeHints()).open(),
-          throwsA(isA<NoEnrollmentPointerException>()));
+      await expectLater(
+          custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.atSign, 'atSign', _atSign)));
+    });
+
+    test('a ceremony that returns no credential is a lost passkey', () async {
+      authenticator.yieldsNoCredential = true;
+      await expectLater(
+          custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.atSign, 'atSign', _atSign)));
+      expect(server.pointerReads, 0);
+    });
+
+    test('a non-canonical atSign is reported canonical', () async {
+      authenticator.yieldsNoCredential = true;
+      await expectLater(
+          custody(withHints: FakeHints()).open(atSign: 'Alice'),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.atSign, 'atSign', _atSign)));
     });
 
     test('a swapped pointer is refused by PKAM before any document read',
@@ -384,20 +463,22 @@ void main() {
       final keys = await keysOf(0);
       server.pointers[keys.lookupHex] = await PasskeyRecordCodec.seal(
           keys.kek, PasskeyRecordType.eid, {'enrollmentId': 'eid9'});
-      await expectLater(custody(withHints: FakeHints()).open(),
-          throwsA(isA<PkamRefusedException>()));
+      await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()));
       expect(server.documentReads, 0);
     });
 
-    test('a revoked enrollment ends in a refusal that needs an approver',
+    test('a revoked enrollment is a lost passkey whose cause needs an approver',
         () async {
       server.revoked.add('eid1');
       final fresh = FakeHints();
       await expectLater(
-          custody(withHints: fresh).open(),
-          throwsA(isA<PkamRefusedException>()
-              .having((e) => e.enrollmentId, 'enrollmentId', 'eid1')
-              .having((e) => e.toString(), 'message', contains('approver'))));
+          custody(withHints: fresh).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.atSign, 'atSign', _atSign)
+              .having((e) => e.cause, 'cause', isA<PkamRefusedException>())
+              .having((e) => e.cause.toString(), 'cause message',
+                  contains('approver'))));
       expect(fresh.ids, isEmpty);
     });
 
@@ -406,7 +487,7 @@ void main() {
       final pointers = {...server.pointers};
       final log = [...server.log];
       await expectLater(custody().open(atSign: _atSign),
-          throwsA(isA<PkamRefusedException>()));
+          throwsA(isA<PasskeyLostException>()));
       expect(gateway.enrolled, hasLength(1));
       expect(server.log, log);
       expect(server.pointers, pointers);
@@ -420,8 +501,8 @@ void main() {
           custody().enroll(atSign: _atSign, otp: _otp, existingPasskey: true),
           throwsA(isA<KeyAlreadyEnrolledException>()));
       expect(server.pointers, pointers);
-      await expectLater(custody(withHints: FakeHints()).open(),
-          throwsA(isA<PkamRefusedException>()));
+      await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()));
     });
 
     test('an approver deleting the revoked enrollment allows a new one',
@@ -429,7 +510,8 @@ void main() {
       server.revoked.add('eid1');
       server.approverDelete('eid1');
       await custody().enroll(atSign: _atSign, otp: _otp, existingPasskey: true);
-      final session = await custody(withHints: FakeHints()).open();
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
       expect(session.enrollmentId, 'eid2');
     });
 
@@ -437,7 +519,7 @@ void main() {
         () async {
       server.publishedTag = 'v2';
       final fresh = FakeHints();
-      await expectLater(custody(withHints: fresh).open(),
+      await expectLater(custody(withHints: fresh).open(atSign: _atSign),
           throwsA(isA<PublicKeyMismatchException>()));
       expect(gateway.lastSession!.closed, isTrue);
       expect(fresh.ids, isEmpty);
@@ -476,7 +558,8 @@ void main() {
 
     test('the rotated document opens under the new passkey', () async {
       await custody().rotate(current, otp: _otp);
-      final session = await custody(withHints: FakeHints()).open();
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
       expect(session.enrollmentId, 'eid2');
       expect(session.atKeys['aesEncryptPrivateKey'], 'enc-private');
     });

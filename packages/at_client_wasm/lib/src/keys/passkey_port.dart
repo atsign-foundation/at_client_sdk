@@ -11,23 +11,20 @@ class PasskeyCeremonyException implements Exception {
   String toString() => 'PasskeyCeremonyException: $message';
 }
 
-/// A passkey assertion: its credential id, the PRF `first` result when the
-/// authenticator returned one, and its `userHandle` when present.
-typedef PasskeyAssertion = ({
-  Uint8List credentialId,
-  Uint8List? prfFirst,
-  Uint8List? userHandle,
-});
+/// A passkey assertion: its credential id and the PRF `first` result when
+/// the authenticator returned one.
+typedef PasskeyAssertion = ({Uint8List credentialId, Uint8List? prfFirst});
 
-/// A WebAuthn ceremony that evaluates the `prf` extension with one input.
+/// A WebAuthn ceremony pair: registering a passkey and asserting with one,
+/// the assertion evaluating the `prf` extension with one input.
 ///
 /// Both ceremonies throw [PasskeyCeremonyException] when they yield no
 /// credential.
 abstract interface class PasskeyPort {
-  /// Registers a discoverable passkey for [atSign] and evaluates PRF with [evalInput].
-  /// [prfFirst] is null when the chosen authenticator returned no PRF result.
-  Future<({Uint8List credentialId, Uint8List? prfFirst})> create(
-      {required String atSign, required Uint8List evalInput});
+  /// Registers a discoverable passkey for [atSign] and returns its credential
+  /// id. No PRF result is taken from registration: not every authenticator
+  /// returns one there.
+  Future<Uint8List> create({required String atSign});
 
   /// Asserts with any discoverable passkey for this RP (or only
   /// [allowCredential] when given) and evaluates PRF with [evalInput].

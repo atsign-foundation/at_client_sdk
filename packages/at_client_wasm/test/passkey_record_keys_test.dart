@@ -1,43 +1,93 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 
 import 'package:at_client_wasm/src/keys/passkey_port.dart';
+import 'package:at_client_wasm/src/keys/prf_support.dart';
 import 'package:at_client_wasm/src/keys/passkey_record_keys.dart';
 import 'package:at_client_wasm/src/keys/unlock_secret.dart';
 import 'package:test/test.dart';
 
 class FakePasskeyPort implements PasskeyPort {
+  final calls = <String>[];
   String? lastCreateAtSign;
-  Uint8List? lastCreateEvalInput;
   Uint8List? lastGetEvalInput;
   Uint8List? lastGetAllowCredential;
 
   Uint8List? resultPrfFirst;
-  Uint8List? resultUserHandle;
   Uint8List resultCredentialId = Uint8List.fromList([1, 2, 3]);
 
   @override
-  Future<({Uint8List credentialId, Uint8List? prfFirst})> create(
-      {required String atSign, required Uint8List evalInput}) async {
+  Future<Uint8List> create({required String atSign}) async {
+    calls.add('create');
     lastCreateAtSign = atSign;
-    lastCreateEvalInput = evalInput;
-    return (credentialId: resultCredentialId, prfFirst: resultPrfFirst);
+    return resultCredentialId;
   }
 
   @override
   Future<PasskeyAssertion> get(
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
+    calls.add('get');
     lastGetEvalInput = evalInput;
     lastGetAllowCredential = allowCredential;
-    return (
-      credentialId: resultCredentialId,
-      prfFirst: resultPrfFirst,
-      userHandle: resultUserHandle,
-    );
+    return (credentialId: resultCredentialId, prfFirst: resultPrfFirst);
   }
 }
+
+/// A [PrfEnvironment] with a settable clock, capability answer and miss flag.
+class FakePrfEnvironment implements PrfEnvironment {
+  bool? capability;
+  DateTime? missAt;
+  var clock = DateTime.utc(2026, 11, 13);
+
+  @override
+  Future<bool?> clientCapabilityPrf() async => capability;
+
+  @override
+  DateTime? missRecordedAt() => missAt;
+
+  @override
+  void recordMiss(DateTime at) => missAt = at;
+
+  @override
+  DateTime now() => clock;
+}
+
+/// SHA-256 of `atsign:keys:lookup:v1`; changing it re-keys every passkey.
+final _pinnedPrfSalt = Uint8List.fromList(const [
+  0xe5,
+  0x83,
+  0x0b,
+  0x40,
+  0x9d,
+  0xb0,
+  0xe5,
+  0x03,
+  0xaf,
+  0x40,
+  0xc2,
+  0x54,
+  0x59,
+  0x8c,
+  0x41,
+  0xbf,
+  0x4e,
+  0x6a,
+  0xd6,
+  0x62,
+  0x7f,
+  0xf1,
+  0x85,
+  0xd3,
+  0x11,
+  0xa9,
+  0xf4,
+  0x46,
+  0x38,
+  0x3e,
+  0xa6,
+  0x20,
+]);
 
 void main() {
   final p = PrfSecret(Uint8List.fromList(List.generate(32, (i) => i)));
@@ -46,6 +96,10 @@ void main() {
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   group('recordPrfSalt', () {
+    test('the PRF eval input is the pinned literal', () async {
+      expect(await recordPrfSalt(), _pinnedPrfSalt);
+    });
+
     test('is SHA-256 of atsign:keys:lookup:v1', () async {
       expect(hex(await recordPrfSalt()),
           'e5830b409db0e503af40c254598c41bf4e6ad6627ff185d311a9f446383ea620');
@@ -122,109 +176,90 @@ void main() {
   });
 
   group('PasskeyKek', () {
-    test('register passes the constant salt and returns PrfSecret', () async {
-      final port = FakePasskeyPort();
-      port.resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
+    final prf = Uint8List.fromList(List.generate(32, (i) => i));
 
-      final kek = PasskeyKek(port);
-      final result = await kek.register('@alice');
+    test('register creates, then reads the PRF from a get with the salt',
+        () async {
+      final port = FakePasskeyPort()..resultPrfFirst = prf;
+      final result = await PasskeyKek(port).register('@alice');
 
+      expect(port.calls, ['create', 'get']);
       expect(port.lastCreateAtSign, '@alice');
-      expect(port.lastCreateEvalInput, await recordPrfSalt());
-
+      expect(port.lastGetEvalInput, await recordPrfSalt());
+      expect(port.lastGetAllowCredential, port.resultCredentialId);
       expect(result.credentialId, port.resultCredentialId);
-      expect(result.secret.output, port.resultPrfFirst);
+      expect(result.secret.output, prf);
     });
 
     test('register throws PrfUnavailableException on null prf', () async {
-      final port = FakePasskeyPort();
-      port.resultPrfFirst = null;
-
-      final kek = PasskeyKek(port);
-      expect(kek.register('@alice'), throwsA(isA<PrfUnavailableException>()));
+      final port = FakePasskeyPort()..resultPrfFirst = null;
+      expect(PasskeyKek(port).register('@alice'),
+          throwsA(isA<PrfUnavailableException>()));
     });
 
     test('register throws PrfUnavailableException on 31 bytes', () async {
-      final port = FakePasskeyPort();
-      port.resultPrfFirst = Uint8List.fromList(List.generate(31, (i) => i));
-
-      final kek = PasskeyKek(port);
-      expect(kek.register('@alice'), throwsA(isA<PrfUnavailableException>()));
+      final port = FakePasskeyPort()
+        ..resultPrfFirst = Uint8List.fromList(List.generate(31, (i) => i));
+      expect(PasskeyKek(port).register('@alice'),
+          throwsA(isA<PrfUnavailableException>()));
     });
 
     test('unlock passes the constant salt and returns PrfSecret', () async {
-      final port = FakePasskeyPort();
-      port.resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
-
-      final kek = PasskeyKek(port);
+      final port = FakePasskeyPort()..resultPrfFirst = prf;
       final credId = Uint8List.fromList([4, 5, 6]);
-      final result = await kek.unlock(credentialId: credId);
+      final result = await PasskeyKek(port).unlock(credentialId: credId);
 
-      expect(port.lastGetEvalInput, await recordPrfSalt());
+      expect(port.lastGetEvalInput, _pinnedPrfSalt);
       expect(port.lastGetAllowCredential, credId);
-
       expect(result.credentialId, port.resultCredentialId);
-      expect(result.secret.output, port.resultPrfFirst);
+      expect(result.secret.output, prf);
     });
 
     test('unlock throws PrfUnavailableException on null prf', () async {
-      final port = FakePasskeyPort();
-      port.resultPrfFirst = null;
+      final port = FakePasskeyPort()..resultPrfFirst = null;
+      expect(
+          PasskeyKek(port).unlock(), throwsA(isA<PrfUnavailableException>()));
+    });
 
-      final kek = PasskeyKek(port);
-      expect(kek.unlock(), throwsA(isA<PrfUnavailableException>()));
+    test('unlock throws PrfUnavailableException on 31 bytes', () async {
+      final port = FakePasskeyPort()
+        ..resultPrfFirst = Uint8List.fromList(List.generate(31, (i) => i));
+      expect(
+          PasskeyKek(port).unlock(), throwsA(isA<PrfUnavailableException>()));
     });
 
     test('register names the passkey user with the canonical atSign', () async {
-      final port = FakePasskeyPort()
-        ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
+      final port = FakePasskeyPort()..resultPrfFirst = prf;
       await PasskeyKek(port).register('Ali.ce');
       expect(port.lastCreateAtSign, '@alice');
     });
 
-    test('register refuses an atSign longer than 64 UTF-8 bytes', () async {
-      final port = FakePasskeyPort()
-        ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
-      expect(PasskeyKek(port).register('@${'🐱' * 16}'), throwsArgumentError);
-      expect(port.lastCreateAtSign, isNull);
-      await PasskeyKek(port).register('@${'a' * 55}');
-      expect(port.lastCreateAtSign, '@${'a' * 55}');
-    });
-
     test('unlock without a credentialId asks for any discoverable passkey',
         () async {
-      final port = FakePasskeyPort()
-        ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i));
+      final port = FakePasskeyPort()..resultPrfFirst = prf;
       await PasskeyKek(port).unlock();
       expect(port.lastGetAllowCredential, isNull);
     });
 
-    group('unlock reads the atSign from userHandle', () {
-      final cases = <String, (List<int>?, String?)>{
-        'a canonical handle': (utf8.encode('@alice'), '@alice'),
-        'a non-canonical handle': (utf8.encode('Alice'), '@alice'),
-        'no handle': (null, null),
-        'a handle that is not UTF-8': ([0xff, 0xfe], null),
-        'a handle that is not an atSign': (utf8.encode('@al ice'), null),
-      };
-      for (final MapEntry(key: name, value: (handle, atSign))
-          in cases.entries) {
-        test(name, () async {
-          final port = FakePasskeyPort()
-            ..resultPrfFirst = Uint8List.fromList(List.generate(32, (i) => i))
-            ..resultUserHandle =
-                handle == null ? null : Uint8List.fromList(handle);
-          expect((await PasskeyKek(port).unlock()).atSign, atSign);
-        });
-      }
+    test('a PRF miss on get records the miss for the capability fallback',
+        () async {
+      final env = FakePrfEnvironment();
+      final port = FakePasskeyPort()..resultPrfFirst = null;
+      await expectLater(
+          PasskeyKek(port, prfSupport: PrfSupport(env)).register('@alice'),
+          throwsA(isA<PrfUnavailableException>()));
+      expect(env.missAt, env.clock);
     });
 
-    test('unlock throws PrfUnavailableException on 31 bytes', () async {
-      final port = FakePasskeyPort();
-      port.resultPrfFirst = Uint8List.fromList(List.generate(31, (i) => i));
-
-      final kek = PasskeyKek(port);
-      expect(kek.unlock(), throwsA(isA<PrfUnavailableException>()));
+    test('register refuses before any ceremony when PRF is unsupported',
+        () async {
+      final env = FakePrfEnvironment()..capability = false;
+      final port = FakePasskeyPort()..resultPrfFirst = prf;
+      await expectLater(
+          PasskeyKek(port, prfSupport: PrfSupport(env)).register('@alice'),
+          throwsA(isA<PrfUnavailableException>().having(
+              (e) => e.message, 'message', contains('supported browser'))));
+      expect(port.calls, isEmpty);
     });
   });
 }
