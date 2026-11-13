@@ -602,6 +602,41 @@ interface class AtCollection<T> {
         injectedDataEvents: dataEvents,
       );
 
+  /// Throws [ArgumentError] when the tag arguments of a collection cannot be
+  /// used together: [typeTag] without a `fromJson` or the reverse, a blank
+  /// [writeTypeTag], or a [writeTypeTag] that differs from [typeTag].
+  static void _checkTagArgs<T>({
+    required bool hasFromJson,
+    required String? typeTag,
+    required String? writeTypeTag,
+  }) {
+    if (hasFromJson && typeTag == null) {
+      throw ArgumentError(
+        'typeTag is required when fromJson is supplied. '
+        "Pass typeTag: '$T' alongside fromJson, or call "
+        "AtCollection.registerFactory<$T>(fromJson, typeTag: '$T') "
+        'separately. The typeTag pins the wire-format identifier so it '
+        'survives Dart minifier / tree-shaker renames in release builds.',
+      );
+    }
+    if (!hasFromJson && typeTag != null) {
+      throw ArgumentError(
+        'typeTag was supplied without fromJson. Pass fromJson alongside '
+        'it, or omit both and register the factory separately via '
+        'AtCollection.registerFactory.',
+      );
+    }
+    if (writeTypeTag != null && writeTypeTag.trim().isEmpty) {
+      throw ArgumentError('writeTypeTag must be non-blank when supplied.');
+    }
+    if (typeTag != null && writeTypeTag != null && writeTypeTag != typeTag) {
+      throw ArgumentError(
+        'writeTypeTag "$writeTypeTag" conflicts with typeTag "$typeTag". '
+        'Pass the same value or omit writeTypeTag.',
+      );
+    }
+  }
+
   AtCollection._(
     this.atClient,
     this.namespace,
@@ -616,31 +651,11 @@ interface class AtCollection<T> {
     if (!namespace.contains('.')) {
       throw ArgumentError('namespace must be fully qualified');
     }
-    if (fromJson != null && typeTag == null) {
-      throw ArgumentError(
-        'typeTag is required when fromJson is supplied. '
-        "Pass typeTag: '$T' alongside fromJson, or call "
-        "AtCollection.registerFactory<$T>(fromJson, typeTag: '$T') "
-        'separately. The typeTag pins the wire-format identifier so it '
-        'survives Dart minifier / tree-shaker renames in release builds.',
-      );
-    }
-    if (fromJson == null && typeTag != null) {
-      throw ArgumentError(
-        'typeTag was supplied without fromJson. Pass fromJson alongside '
-        'it, or omit both and register the factory separately via '
-        'AtCollection.registerFactory.',
-      );
-    }
-    if (writeTypeTag != null && writeTypeTag!.trim().isEmpty) {
-      throw ArgumentError('writeTypeTag must be non-blank when supplied.');
-    }
-    if (typeTag != null && writeTypeTag != null && writeTypeTag != typeTag) {
-      throw ArgumentError(
-        'writeTypeTag "$writeTypeTag" conflicts with typeTag "$typeTag". '
-        'Pass the same value or omit writeTypeTag.',
-      );
-    }
+    _checkTagArgs<T>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
     if (fromJson != null) {
       registerFactory<T>(fromJson, typeTag: typeTag!);
     }
@@ -1722,6 +1737,16 @@ interface class AtCollection<T> {
   /// when no factory is registered for their type. It is not inherited from
   /// the parent collection.
   ///
+  /// Throws [CollectionTypeTagMismatchException] when this [AtClient] already
+  /// opened the composed namespace asking for another effective tag
+  /// ([writeTypeTag], else [typeTag]); asking for none counts as a tag. The
+  /// check holds on this client only. [AtClient] does not cache
+  /// sub-collections, so each client remembers the tags of its last 4096
+  /// sub-collection namespaces, forgetting the oldest first. After a
+  /// namespace is forgotten, a mismatched reopen of it is not caught. The cap
+  /// exists because sub-collection namespaces embed parent item ids, which
+  /// other atSigns can control.
+  ///
   /// **Parent-delete behaviour.** When [parent] is deleted — locally,
   /// or via a remote-delete notification — the sub-collection
   /// automatically deletes this atSign's own items scoped to it. See
@@ -1989,6 +2014,14 @@ interface class AtCollection<T> {
         'subName or a shallower nesting depth.',
       );
     }
+    // Checked before construction, which registers [fromJson] for good.
+    _checkTagArgs<U>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+    (_subCollectionTags[atClient] ??= CollectionTagLedger(_subTagCap))
+        .record(composedNs, writeTypeTag ?? typeTag);
     // Constructing the sub-collection directly (not via `atClient.collection`)
     // so that `notifications` can be threaded straight through to its
     // constructor for test wiring. Sub-collections inherit the parent's
@@ -5521,3 +5554,83 @@ class _FactoryEntry {
 
   _FactoryEntry(this.tag, this.fromJson);
 }
+
+// -----------------------------------------------------------------------------
+// Reopening a collection with another type tag
+
+/// Thrown by [AtClient.collection] and [AtCollection.subCollection] when the
+/// same [AtClient] already opened the namespace asking for another type tag.
+///
+/// An open asks for its `writeTypeTag`, or its `typeTag` when it gives no
+/// `writeTypeTag`; asking for no tag is a tag too. No collection is handed
+/// out.
+final class CollectionTypeTagMismatchException implements Exception {
+  /// The collection's namespace.
+  final String namespace;
+
+  /// The tag an earlier open of [namespace] on this client asked for.
+  final String? existingTag;
+
+  /// The tag this open asked for.
+  final String? requestedTag;
+
+  CollectionTypeTagMismatchException(
+    this.namespace,
+    this.existingTag,
+    this.requestedTag,
+  );
+
+  @override
+  String toString() => 'CollectionTypeTagMismatchException: the collection '
+      '$namespace is typed ${existingTag ?? 'with no tag'}, not '
+      '${requestedTag ?? 'with no tag'}';
+}
+
+/// [AtCollection]'s tag-argument check, for [AtClient.collection], which must
+/// refuse bad arguments even when it hands out a cached collection.
+@internal
+void checkCollectionTagArgs<T>({
+  required bool hasFromJson,
+  required String? typeTag,
+  required String? writeTypeTag,
+}) =>
+    AtCollection._checkTagArgs<T>(
+      hasFromJson: hasFromJson,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+
+/// The first effective tag each namespace was opened with, oldest first,
+/// holding at most [cap] namespaces when [cap] is not null.
+@internal
+final class CollectionTagLedger {
+  final int? cap;
+
+  // A null value is a recorded open that asked for no tag.
+  final Map<String, String?> _tags = {};
+
+  CollectionTagLedger([this.cap]);
+
+  /// Remembers that [namespace] was opened asking for [tag], or throws
+  /// [CollectionTypeTagMismatchException] when an earlier open asked for
+  /// another one. Past [cap] the oldest namespace is forgotten.
+  void record(String namespace, String? tag) {
+    if (_tags.containsKey(namespace)) {
+      final held = _tags[namespace];
+      if (held != tag) {
+        throw CollectionTypeTagMismatchException(namespace, held, tag);
+      }
+      return;
+    }
+    _tags[namespace] = tag;
+    if (cap != null && _tags.length > cap!) _tags.remove(_tags.keys.first);
+  }
+}
+
+/// The most sub-collection namespaces whose tag one [AtClient] remembers.
+const int _defaultSubTagCap = 4096;
+int _subTagCap = _defaultSubTagCap;
+
+/// For each [AtClient], the tags of the sub-collection namespaces opened by
+/// [AtCollection.subCollection].
+final Expando<CollectionTagLedger> _subCollectionTags = Expando();

@@ -69,4 +69,5 @@ export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';
 export 'package:at_commons/at_commons.dart';
 
-export 'package:at_client/src/collections/collections.dart';
+export 'package:at_client/src/collections/collections.dart'
+    hide CollectionTagLedger, checkCollectionTagArgs;

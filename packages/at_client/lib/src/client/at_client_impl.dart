@@ -632,6 +632,8 @@ class AtClientImpl implements AtClient {
   // buffer, so sharing one cache slot would conflate their event
   // streams.
   final Map<(String, EventSource), AtCollection> _collections = {};
+  // The first effective tag of each namespace, whatever its eventSource.
+  final CollectionTagLedger _collectionTags = CollectionTagLedger();
   final Set<(String, EventSource)> _collectionsSwept =
       <(String, EventSource)>{};
 
@@ -654,14 +656,13 @@ class AtClientImpl implements AtClient {
         'automatically.',
       );
     }
+    checkCollectionTagArgs<T>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+    _collectionTags.record(namespace, writeTypeTag ?? typeTag);
     final cacheKey = (namespace, eventSource);
-    final cached = _collections[cacheKey];
-    if (cached != null && cached.writeTypeTag != writeTypeTag) {
-      throw StateError(
-        'collection "$namespace" is already open with writeTypeTag '
-        '${cached.writeTypeTag}; reopening with $writeTypeTag is refused',
-      );
-    }
     final c = _collections.putIfAbsent(
       cacheKey,
       () => AtCollection<T>(
