@@ -18,7 +18,7 @@ class DevSessionOptions {
 
   /// Throws an [ArgumentError] naming the field for a [proxyHost] without a
   /// [proxyPort] or the reverse, an empty [proxyHost] and a [proxyPort]
-  /// below 1.
+  /// outside 1-65535.
   DevSessionOptions({
     required String atSign,
     required this.app,
@@ -40,8 +40,8 @@ class DevSessionOptions {
       throw ArgumentError.value(
           null, 'proxyPort', 'is required with a proxyHost');
     }
-    if (port < 1) {
-      throw ArgumentError.value(port, 'proxyPort', 'must be positive');
+    if (port < 1 || port > 65535) {
+      throw ArgumentError.value(port, 'proxyPort', 'must be 1-65535');
     }
     return (host: host, port: port);
   }

@@ -19,6 +19,9 @@ class Wire {
   /// Whether the connection itself fails: PKAM throws instead of answering.
   var connectFails = false;
 
+  /// Whether closing or stopping a lookUp throws, as a client's stop does.
+  var stopThrows = false;
+
   /// Called on each dial with its 1-based ordinal; a throw fails the dial.
   void Function(int dial)? onDial;
 
@@ -93,10 +96,14 @@ class WireLookUp implements AtLookupMuxable {
   Future<void> stopNotifications() async {}
 
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    if (_wire.stopThrows) throw StateError('close failed');
+  }
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async {
+    if (_wire.stopThrows) throw StateError('stop failed');
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) {}

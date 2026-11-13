@@ -41,4 +41,11 @@ void main() {
     expect(() => _options(proxyHost: 'proxy.example', proxyPort: 0),
         _namingField('proxyPort'));
   });
+
+  test('a proxyPort above 65535 throws naming proxyPort', () {
+    expect(() => _options(proxyHost: 'proxy.example', proxyPort: 65536),
+        _namingField('proxyPort'));
+    expect(_options(proxyHost: 'proxy.example', proxyPort: 65535).proxy?.port,
+        65535);
+  });
 }

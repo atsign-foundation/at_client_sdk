@@ -90,8 +90,9 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// authenticated to the atServer.
 ///
 /// [app] is the client's namespace. [prefs], when given, is used as it is;
-/// otherwise the preference names [app] and [root] and leaves the monitor
-/// off. Keys that carry ML-DSA-65 signing or namespace key material throw
+/// otherwise the preference names [app] and [root], routes reads and writes
+/// to the atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
+/// Keys that carry ML-DSA-65 signing or namespace key material throw
 /// [UnsupportedKeyMaterialException] before any connection is made. The
 /// storage is always fresh, so every open is a first open on the device, and
 /// `Atsign.open` throws:
@@ -128,6 +129,7 @@ Future<AtClient> portalSession({
         ..namespace = app
         ..rootDomain = root.rootDomain
         ..rootPort = root.rootPort
+        ..remoteLocalPref = RemoteLocalPref.remoteOnly
         ..monitorAutoStart = false);
   final client = await Atsign(normalized).open(
     keys: keysIo ?? SessionKeysIo(normalized, keys),
@@ -144,7 +146,10 @@ Future<AtClient> portalSession({
     }
     return client;
   } catch (_) {
-    await client.stop();
+    // The open's own error is the one the caller needs, not a teardown's.
+    try {
+      await client.stop();
+    } catch (_) {}
     rethrow;
   }
 }

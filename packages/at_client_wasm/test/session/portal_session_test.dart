@@ -17,12 +17,16 @@ void main() {
   SessionTransport transport() => (lookUps: wire.lookUps, finder: finder);
 
   Future<AtClient> open(
-          {String atSign = _atSign, AtKeys? keys, SessionTransport? over}) =>
+          {String atSign = _atSign,
+          AtKeys? keys,
+          SessionTransport? over,
+          AtClientPreference? prefs}) =>
       portalSession(
           atSign: atSign,
           app: _app,
           keys: keys ?? classicalAtKeys(),
-          transport: over ?? transport());
+          transport: over ?? transport(),
+          prefs: prefs);
 
   setUp(() => wire = Wire());
 
@@ -88,6 +92,36 @@ void main() {
         expect(AtClientImpl.holdsLiveClient(_atSign), isTrue);
       });
     }
+  });
+
+  group('open failure', () {
+    test('a stop that throws does not mask the open failure', () async {
+      wire
+        ..pkamAccepted = false
+        ..stopThrows = true;
+
+      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+    });
+  });
+
+  group('routing', () {
+    test('the default preference routes reads to the atServer', () async {
+      final client = await open();
+
+      expect(
+          client.getPreferences()!.remoteLocalPref, RemoteLocalPref.remoteOnly);
+    });
+
+    test('a passed prefs is kept as it is', () async {
+      final prefs = AtClientPreference()
+        ..namespace = _app
+        ..monitorAutoStart = false;
+
+      final client = await open(prefs: prefs);
+
+      expect(client.getPreferences(), same(prefs));
+      expect(prefs.remoteLocalPref, RemoteLocalPref.localOnly);
+    });
   });
 
   group('notifications', () {
