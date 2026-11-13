@@ -29,6 +29,9 @@ import 'package:at_utils/at_progress.dart';
 /// at_client's `AtClient.put` of a public value throws
 /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
 /// encryption private key.
+/// [apkamKeyPair] is an APKAM keypair to enrol in place of a minted one; a
+/// pair that does not sign under [signingAlgo] is refused with
+/// `AtSigningException`.
 /// [metadataBuilder] and [advertisedSigningKey] ride the first enrollment's
 /// request; a post-quantum activation supplies both, and they must name the
 /// same signing key.
@@ -49,6 +52,7 @@ Future<String> activateAtSign({
   String appName = 'firstApp',
   String deviceName = 'firstDevice',
   bool? mintLegacyMaterial,
+  ({String publicKey, String privateKey})? apkamKeyPair,
   FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder,
   ({
     SigningAlgoType algorithm,
@@ -69,6 +73,7 @@ Future<String> activateAtSign({
     ..appName = appName
     ..deviceName = deviceName
     ..mintLegacyMaterial = mintLegacyMaterial
+    ..apkamKeyPair = apkamKeyPair
     ..metadataBuilder = metadataBuilder
     ..advertisedSigningKey = advertisedSigningKey;
 

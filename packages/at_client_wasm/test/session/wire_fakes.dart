@@ -16,6 +16,12 @@ class Wire {
   /// What PKAM answers; false is a refusal.
   var pkamAccepted = true;
 
+  /// When set, PKAM throws it instead of answering.
+  Object? pkamThrows;
+
+  /// What a `lookup:` or `llookup:` command answers; null answers nothing.
+  String? lookupAnswer;
+
   /// Whether the connection itself fails: PKAM throws instead of answering.
   var connectFails = false;
 
@@ -56,6 +62,8 @@ class WireLookUp implements AtLookupMuxable {
 
   final inbound = StreamController<String>();
   var notificationStarts = 0;
+  var commandsSent = 0;
+  var closed = false;
 
   void also(void Function(WireLookUp) f) => f(this);
 
@@ -69,13 +77,20 @@ class WireLookUp implements AtLookupMuxable {
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
     if (_wire.connectFails) throw StateError('connection refused');
+    final thrown = _wire.pkamThrows;
+    if (thrown != null) throw thrown;
     return _wire.pkamAccepted;
   }
 
   @override
   Future<String?> executeCommand(String command, {bool auth = false}) async {
     _wire.commands.add(command);
-    return _wire.answer?.call(command);
+    commandsSent++;
+    final isLookup =
+        command.startsWith('lookup:') || command.startsWith('llookup:');
+    return isLookup && _wire.lookupAnswer != null
+        ? _wire.lookupAnswer
+        : _wire.answer?.call(command);
   }
 
   @override
@@ -101,6 +116,7 @@ class WireLookUp implements AtLookupMuxable {
 
   @override
   Future<void> close() async {
+    closed = true;
     if (_wire.stopThrows) throw StateError('close failed');
   }
 

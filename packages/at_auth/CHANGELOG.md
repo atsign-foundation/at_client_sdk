@@ -1,3 +1,11 @@
+## 4.2.0
+
+- feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
+  activation enrolls in place of a freshly minted APKAM keypair, as
+  `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
+  is not of `signingAlgoType`, is refused with `AtSigningException` before the
+  enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
+
 ## 4.1.0
 
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the

@@ -107,6 +107,7 @@ void main() {
   AtOnboardingRequest requestFor(
           {SigningAlgoType? signingAlgo,
           bool? mintLegacyMaterial,
+          ({String publicKey, String privateKey})? apkamKeyPair,
           ({
             SigningAlgoType algorithm,
             String publicKey,
@@ -118,6 +119,7 @@ void main() {
         ..appName = 'wavi'
         ..deviceName = 'iphone'
         ..mintLegacyMaterial = mintLegacyMaterial
+        ..apkamKeyPair = apkamKeyPair
         ..advertisedSigningKey = advertisedSigningKey;
 
   /// The request the onboard actually submitted.
@@ -225,6 +227,98 @@ void main() {
               'out of the box — decisions 37');
       expect(published.single.value.toString(),
           keys.defaultEncryptionPublicKey!.toString());
+    });
+  });
+
+  group('an activation with a caller-supplied APKAM keypair', () {
+    late ({String publicKey, String privateKey}) mldsa;
+    late ({String publicKey, String privateKey}) rsa;
+
+    setUpAll(() async {
+      final m = await MlDsa65KeyPair.generate();
+      mldsa = (
+        publicKey: m.atPublicKey.publicKey,
+        privateKey: m.atPrivateKey.privateKey,
+      );
+      final r = RsaKeyPair.generate();
+      rsa = (
+        publicKey: r.atPublicKey.publicKey.toString(),
+        privateKey: r.atPrivateKey.privateKey.toString(),
+      );
+    });
+
+    test('the supplied ML-DSA-65 pair is the one filed under the enrollment id',
+        () async {
+      await atAuth.onboard(
+          requestFor(signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: mldsa),
+          cramSecret);
+
+      final keys = await keysIo.read(atSign);
+      expect(
+          keys
+              .getKey(enrollmentId, 'auth:mldsa65:1',
+                  CryptographicMaterialRole.privateAuthentication)!
+              .bytes
+              .toString(),
+          mldsa.privateKey);
+      expect(
+          keys
+              .getKey(enrollmentId, 'auth:mldsa65:1',
+                  CryptographicMaterialRole.publicAuthentication)!
+              .bytes
+              .toString(),
+          mldsa.publicKey);
+    });
+
+    test('the supplied RSA pair is the one in the flat fields', () async {
+      await atAuth.onboard(requestFor(apkamKeyPair: rsa), cramSecret);
+
+      final keys = await keysIo.read(atSign);
+      expect(keys.apkamPrivateKey.toString(), rsa.privateKey);
+      expect(keys.apkamPublicKey.toString(), rsa.publicKey);
+    });
+
+    test('the public key sent equals the supplied one', () async {
+      await atAuth.onboard(
+          requestFor(signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: mldsa),
+          cramSecret);
+
+      expect(submittedRequest().apkamPublicKey, mldsa.publicKey);
+    });
+
+    test('a pair whose halves do not match is refused and nothing is sent',
+        () async {
+      final other = await MlDsa65KeyPair.generate();
+      await expectLater(
+          atAuth.onboard(
+              requestFor(signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: (
+                publicKey: mldsa.publicKey,
+                privateKey: other.atPrivateKey.privateKey,
+              )),
+              cramSecret),
+          throwsA(isA<AtSigningException>()));
+      verifyNever(() => mockAtEnrollment.submit(any(), any()));
+    });
+
+    test('a pair of the wrong algorithm is refused and nothing is sent',
+        () async {
+      await expectLater(
+          atAuth.onboard(
+              requestFor(
+                  signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: rsa),
+              cramSecret),
+          throwsA(isA<AtSigningException>()));
+      verifyNever(() => mockAtEnrollment.submit(any(), any()));
+    });
+
+    test('omitting it mints a fresh pair under the requested algorithm',
+        () async {
+      await atAuth.onboard(
+          requestFor(signingAlgo: SigningAlgoType.mldsa65), cramSecret);
+
+      final sent = submittedRequest().apkamPublicKey!;
+      expect(base64Decode(sent).length, 1952);
+      expect(sent, isNot(mldsa.publicKey));
     });
   });
 
