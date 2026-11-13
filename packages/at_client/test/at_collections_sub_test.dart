@@ -305,6 +305,153 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  group('writeTypeTag — reopening a sub-collection', () {
+    final throwsMismatch = throwsA(isA<CollectionTypeTagMismatchException>());
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment, when it is opened again with writeTypeTag Note, then CollectionTypeTagMismatchException is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+
+      expect(
+        () => subOn<String>(c, post, 'comments', writeTypeTag: 'Note'),
+        throwsA(isA<CollectionTypeTagMismatchException>()
+            .having((e) => e.namespace, 'namespace', 'comments.p1.$parentNs')
+            .having((e) => e.existingTag, 'existingTag', 'Comment')
+            .having((e) => e.requestedTag, 'requestedTag', 'Note')),
+      );
+    });
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment, when it is opened again with factory typeTag Note, then CollectionTypeTagMismatchException is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+
+      expect(
+        () => subOn<Map<String, dynamic>>(c, post, 'comments',
+            fromJson: (j) => j, typeTag: 'Note'),
+        throwsMismatch,
+      );
+    });
+
+    test(
+        'Given a sub-collection opened with factory typeTag Comment, when it is opened again with writeTypeTag Note, then CollectionTypeTagMismatchException is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<Map<String, dynamic>>(c, post, 'comments',
+          fromJson: (j) => j, typeTag: 'Comment');
+
+      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: 'Note'),
+          throwsMismatch);
+    });
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment, when it is opened again from another instance of the parent collection with Note, then CollectionTypeTagMismatchException is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+      final otherParent = collectionWithInjectedNotifications<String>(
+        c.atClient,
+        parentNs,
+        const Duration(days: 7),
+        notifications: c.notifStream.stream,
+      );
+
+      expect(
+        () => subOn<String>(
+            _Collections(otherParent, c.atClient, c.notifStream),
+            post,
+            'comments',
+            writeTypeTag: 'Note'),
+        throwsMismatch,
+      );
+    });
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment, when it is opened again with a blank writeTypeTag, then ArgumentError is thrown',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+
+      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: '  '),
+          throwsArgumentError);
+    });
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment, when it is opened again with no tag, then the new instance stamps Comment',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+
+      final again = subOn<String>(c, post, 'comments');
+
+      expect(again.writeTypeTag, 'Comment');
+      expect(again.draft(obj: 'great post', id: 'c1').type, 'Comment');
+    });
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment, when it is opened again with Comment, then it opens',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+
+      final again = subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+
+      expect(again.draft(obj: 'great post', id: 'c1').type, 'Comment');
+    });
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment, when the same subName is opened under another parent item with Note, then it opens with Note',
+        () {
+      final c = buildParent();
+      final p1 = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final p2 = c.parent.draft(obj: 'world', id: 'p2') as CItem<String>;
+      subOn<String>(c, p1, 'comments', writeTypeTag: 'Comment');
+
+      final other = subOn<String>(c, p2, 'comments', writeTypeTag: 'Note');
+
+      expect(other.draft(obj: 'great post', id: 'c1').type, 'Note');
+    });
+
+    test(
+        'Given 4097 tagged sub-collections on one client, when the first and the last are opened again with another tag, then the first opens and the last throws',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      for (var i = 0; i <= 4096; i++) {
+        subOn<String>(c, post, 's$i', writeTypeTag: 'Comment');
+      }
+
+      expect(subOn<String>(c, post, 's0', writeTypeTag: 'Note').writeTypeTag,
+          'Note');
+      expect(() => subOn<String>(c, post, 's4096', writeTypeTag: 'Note'),
+          throwsMismatch);
+    });
+
+    test(
+        'Given a sub-collection opened with writeTypeTag Comment on one client, when another client opens it with Note, then it opens with Note',
+        () {
+      final c = buildParent();
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      subOn<String>(c, post, 'comments', writeTypeTag: 'Comment');
+      final d = buildParent();
+
+      final other = subOn<String>(d, post, 'comments', writeTypeTag: 'Note');
+
+      expect(other.draft(obj: 'great post', id: 'c1').type, 'Note');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   group('CSubItem events via handleNotification', () {
     // Helper builds notifications with the `<to>:<bareKey>@<from>`
     // envelope shape that AtServer actually emits — production

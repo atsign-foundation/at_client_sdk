@@ -7,6 +7,16 @@
   external implementers of `AtCollection` must add it. `lib/testing.dart`
   exports `collectionWithInjectedBoth`, `collectionWithInjectedDataEvents`
   and `collectionWithInjectedNotifications` for downstream tests.
+- feat: an `AtClient` refuses to reopen a collection namespace with another
+  type tag. `collection` and `subCollection` throw
+  `CollectionTypeTagMismatchException` (`namespace`, `existingTag`,
+  `requestedTag`) when the namespace was first opened on that client with a
+  different `writeTypeTag`, or `typeTag` when no `writeTypeTag` was given; an
+  open with no tag stamps the first one. The check is in memory on that client
+  only, and for sub-collections it remembers the 4096 namespaces tagged most
+  recently. A blank or factory-conflicting tag is still an `ArgumentError`,
+  checked first. `AtCollection.writeTypeTag` is now a getter. `AtClient`
+  implementers should apply the same check in `collection`.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than

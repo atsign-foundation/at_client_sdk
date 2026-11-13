@@ -585,6 +585,13 @@ abstract class AtClient {
   /// no factory is registered for their type, without registering a
   /// [fromJson]. When [typeTag] is also set, the two must match.
   ///
+  /// This client remembers the tag a [namespace] was first opened with
+  /// ([writeTypeTag], else [typeTag]), for every [eventSource]. Opening it
+  /// again with another tag throws [CollectionTypeTagMismatchException]; opening
+  /// it with none returns a collection that stamps the remembered tag. The
+  /// check holds on this client only: another client, session or device of
+  /// the atSign does not see it. Implementers should refuse the same way.
+  ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
   /// Idempotent: the sweep runs at most once per collection instance
