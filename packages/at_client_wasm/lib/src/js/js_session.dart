@@ -42,6 +42,24 @@ class SessionClosedException implements Exception {
   String toString() => 'SessionClosedException: the session is closed';
 }
 
+/// An enrollment request awaiting a decision, as filed: its [id], the
+/// [appName] and [deviceName] it names, and the [namespaces] it asks for, each
+/// with its access (`r` or `rw`).
+typedef JsEnrollment = ({
+  String id,
+  String appName,
+  String deviceName,
+  Map<String, String> namespaces,
+});
+
+/// Thrown by the pairing calls of a session that holds no `__manage`, which
+/// only the atServer's roster-managing enrollments do.
+class ManageAccessException implements Exception {
+  @override
+  String toString() =>
+      'ManageAccessException: this session cannot manage enrollments';
+}
+
 /// What the JS bridge exposes of one open client.
 abstract interface class JsSession {
   /// Stores a [String] or [Uint8List] under [key].
@@ -66,6 +84,22 @@ abstract interface class JsSession {
   /// unsubscribes.
   void Function() subscribe(
       String regex, void Function(JsNotification) onEvent);
+
+  /// A one-time passcode a new device quotes to request enrollment.
+  /// Throws a [ManageAccessException] without `__manage`.
+  Future<String> otp();
+
+  /// The requests awaiting a decision. Throws a [ManageAccessException]
+  /// without `__manage`.
+  Future<List<JsEnrollment>> pendingEnrollments();
+
+  /// Approves the pending request [id] for the namespaces it asked for.
+  /// Throws a [ManageAccessException] without `__manage` and an
+  /// [AtEnrollmentException] when no request [id] is pending.
+  Future<void> approve(String id);
+
+  /// Denies the pending request [id]; same throws as [approve].
+  Future<void> deny(String id);
 
   /// Stops the client and every subscription; a second call does nothing.
   Future<void> close();
@@ -190,6 +224,71 @@ class AtClientJsSession implements JsSession {
         unawaited(subscription.cancel());
       }
     };
+  }
+
+  @override
+  Future<String> otp() async {
+    _open();
+    return (await _managed(() => _client.enrollments.otp())).value;
+  }
+
+  @override
+  Future<List<JsEnrollment>> pendingEnrollments() async {
+    _open();
+    return [
+      for (final e in await _pending())
+        (
+          id: e.enrollmentId!,
+          appName: e.appName ?? '',
+          deviceName: e.deviceName ?? '',
+          namespaces: {
+            for (final MapEntry(:key, :value)
+                in (e.namespace ?? const <String, dynamic>{}).entries)
+              key: '$value'
+          },
+        )
+    ];
+  }
+
+  @override
+  Future<void> approve(String id) async {
+    await _requirePending(id);
+    await _managed(() => _client.enrollments.approve(id));
+  }
+
+  @override
+  Future<void> deny(String id) async {
+    await _requirePending(id);
+    await _managed(() => _client.enrollments.deny(id));
+  }
+
+  /// The result of [call], with the atServer's refusal of a session that
+  /// holds no `__manage` as a [ManageAccessException].
+  Future<T> _managed<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on UnAuthorizedException {
+      throw ManageAccessException();
+    }
+  }
+
+  /// The pending requests. A session without `__manage` is answered only with
+  /// its own, approved record whatever the filter, so a record that is not
+  /// pending shows the filter was ignored.
+  Future<List<Enrollment>> _pending() async {
+    final listed = await _managed(() => _client.enrollments.pending());
+    if (listed.any((e) => e.enrollmentStatus != EnrollmentStatus.pending)) {
+      throw ManageAccessException();
+    }
+    return listed;
+  }
+
+  Future<void> _requirePending(String id) async {
+    _open();
+    if (!(await _pending()).any((e) => e.enrollmentId == id)) {
+      throw AtEnrollmentException(
+          '${_client.getCurrentAtSign()} has no pending enrollment $id');
+    }
   }
 
   @override

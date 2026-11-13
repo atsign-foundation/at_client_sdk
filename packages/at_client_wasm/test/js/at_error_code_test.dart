@@ -85,6 +85,7 @@ void main() {
       'unsupported'
     ),
     'UnsupportedError': (UnsupportedError('no locks'), 'unsupported'),
+    'ManageAccessException': (ManageAccessException(), 'unsupported'),
     'BadKeyException': (BadKeyException('sharedWith'), 'bad_key'),
     'an unknown Exception': (Exception('x'), 'internal'),
     'an unknown Error': (StateError('x'), 'internal'),

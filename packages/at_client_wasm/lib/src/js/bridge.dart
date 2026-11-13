@@ -172,6 +172,33 @@ class BridgeSession {
     return unsubscribe.toJS;
   }
 
+  /// A one-time passcode for a new device to enroll with.
+  JSPromise<JSString> otp() =>
+      _promise(() async => (await _session.otp()).toJS);
+
+  /// The requests awaiting a decision, each `{id, appName, deviceName,
+  /// namespaces}` with `namespaces` mapping a namespace to its access.
+  JSPromise<JSArray<JSObject>> pendingEnrollments() => _promise(() async => [
+        for (final e in await _session.pendingEnrollments())
+          {
+            'id': e.id,
+            'appName': e.appName,
+            'deviceName': e.deviceName,
+            'namespaces': e.namespaces,
+          }.jsify()! as JSObject
+      ].toJS);
+
+  /// Approves the request [id] for exactly what it asked for.
+  JSPromise<JSAny?> approve(JSAny? id) => _promise(() async {
+        await _session.approve(_string(id, 'id'));
+        return null;
+      });
+
+  JSPromise<JSAny?> deny(JSAny? id) => _promise(() async {
+        await _session.deny(_string(id, 'id'));
+        return null;
+      });
+
   JSPromise<JSAny?> close() => _promise(() async {
         await _session.close();
         return null;

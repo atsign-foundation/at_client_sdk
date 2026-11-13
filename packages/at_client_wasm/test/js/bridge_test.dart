@@ -27,6 +27,9 @@ class _FakeSession implements JsSession {
   List<String> keyList = [];
   String? keysRegex;
   String? subscribedRegex;
+  String passcode = 'Z9Y8X7';
+  List<JsEnrollment> pending = [];
+  final decided = <String>[];
 
   void _call(String name, [JsKey? key]) {
     if (closed) throw SessionClosedException();
@@ -78,6 +81,30 @@ class _FakeSession implements JsSession {
       unsubscribed++;
       listeners.remove(onEvent);
     };
+  }
+
+  @override
+  Future<String> otp() async {
+    _call('otp');
+    return passcode;
+  }
+
+  @override
+  Future<List<JsEnrollment>> pendingEnrollments() async {
+    _call('pendingEnrollments');
+    return pending;
+  }
+
+  @override
+  Future<void> approve(String id) async {
+    _call('approve');
+    decided.add('approve $id');
+  }
+
+  @override
+  Future<void> deny(String id) async {
+    _call('deny');
+    decided.add('deny $id');
   }
 
   @override
@@ -498,6 +525,93 @@ void main() {
         _obj({'key': 'k'})
       ]));
       expect(r.code, 'closed');
+    });
+
+    group('pairing', () {
+      test('otp resolves the passcode', () async {
+        expect((await _resolved(_call(s, 'otp'))).dartify(), 'Z9Y8X7');
+        expect(session.calls, ['otp']);
+      });
+
+      test('pendingEnrollments resolves one plain object per request',
+          () async {
+        session.pending = [
+          (
+            id: 'e1',
+            appName: 'tally',
+            deviceName: 'Phone',
+            namespaces: {'tally': 'rw', 'wavi': 'r'}
+          )
+        ];
+
+        final result = await _resolved(_call(s, 'pendingEnrollments'));
+
+        expect(result.dartify(), [
+          {
+            'id': 'e1',
+            'appName': 'tally',
+            'deviceName': 'Phone',
+            'namespaces': {'tally': 'rw', 'wavi': 'r'}
+          }
+        ]);
+      });
+
+      test('pendingEnrollments with none pending resolves an empty array',
+          () async {
+        expect((await _resolved(_call(s, 'pendingEnrollments'))).dartify(),
+            isEmpty);
+      });
+
+      test('approve and deny pass the id and resolve undefined', () async {
+        final approved = await _resolved(_call(s, 'approve', ['e1'.toJS]));
+        final denied = await _resolved(_call(s, 'deny', ['e2'.toJS]));
+
+        expect(session.decided, ['approve e1', 'deny e2']);
+        expect(approved, isNull);
+        expect(denied, isNull);
+      });
+
+      test('approve takes the id alone, whatever else is passed', () async {
+        await _resolved(_call(s, 'approve', [
+          'e1'.toJS,
+          _obj({
+            'namespaces': {'*': 'rw'}
+          })
+        ]));
+
+        expect(session.decided, ['approve e1']);
+      });
+
+      test('approve and deny reject a non-string id', () async {
+        for (final method in ['approve', 'deny']) {
+          expect(
+              (await _rejected(_call(s, method, [_obj({})]))).code, 'internal');
+          expect(
+              (await _rejected(_call(s, method, [5.toJS]))).code, 'internal');
+        }
+        expect(session.decided, isEmpty);
+      });
+
+      test('each call rejects with unsupported without __manage', () async {
+        session.failure = ManageAccessException();
+
+        for (final (method, args) in [
+          ('otp', <JSAny?>[]),
+          ('pendingEnrollments', <JSAny?>[]),
+          ('approve', <JSAny?>['e1'.toJS]),
+          ('deny', <JSAny?>['e1'.toJS]),
+        ]) {
+          expect((await _rejected(_call(s, method, args))).code, 'unsupported',
+              reason: method);
+        }
+      });
+
+      test('an unknown id rejects with enrollment_denied', () async {
+        session.failure = AtEnrollmentException('no enrollment e9');
+
+        expect((await _rejected(_call(s, 'approve', ['e9'.toJS]))).code,
+            'enrollment_denied');
+      });
     });
   });
 }

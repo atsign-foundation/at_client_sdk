@@ -30,7 +30,8 @@ String atErrorCode(Object error) => switch (error) {
       SessionClosedException() || StoppedException() => 'closed',
       UnsupportedKeyMaterialException() ||
       UnsupportedPasskeyRecordException() ||
-      UnsupportedError() =>
+      UnsupportedError() ||
+      ManageAccessException() =>
         'unsupported',
       BadKeyException() => 'bad_key',
       _ => 'internal',
