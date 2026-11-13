@@ -1,17 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_auth/src/keys/io/owner_only_mode_stub.dart'
     if (dart.library.ffi) 'package:at_auth/src/keys/io/owner_only_mode_ffi.dart';
-import 'package:at_auth/src/keys/serialization/base64_field.dart';
-import 'package:at_chops/at_chops.dart';
+import 'package:at_auth/src/keys/serialization/legacy_fields.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -32,7 +29,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     final file = File(filePath!(atsign));
     _refuseAbsent(file);
     final json = await _readAtRestDocument(file);
-    final plaintextJson = await _selfDecryptLegacyFields(json);
+    final plaintextJson = await selfDecryptLegacyFields(json);
     return AtKeys.fromJson(plaintextJson);
   }
 
@@ -91,7 +88,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
       _refuseAbsent(file);
       final asRead = await _readForWrite(file);
       final json = await _decodeAtRestDocument(utf8.decode(asRead.bytes), file);
-      final keys = AtKeys.fromJson(await _selfDecryptLegacyFields(json));
+      final keys = AtKeys.fromJson(await selfDecryptLegacyFields(json));
       if (await mutate(keys) == false) return;
       await _writeValidated(file, atsign, keys, requireExisting: true);
     });
@@ -151,7 +148,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   /// enrollment [atKeys] no longer holds.
   Future<List<int>> _backupOf(KeyfileRead previous,
       Map<String, dynamic> existing, AtKeys atKeys, String atsign) async {
-    final kept = AtKeys.fromJson(await _selfDecryptLegacyFields(existing));
+    final kept = AtKeys.fromJson(await selfDecryptLegacyFields(existing));
     final removed = kept.pendingEnrollmentIds
         .where((id) => !atKeys.enrollmentIds.contains(id))
         .toList();
@@ -227,7 +224,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
           'AtKeys belongs to ${atKeys.atsign} but is being persisted for $normalized');
     }
     atKeys.atsign ??= normalized;
-    return _selfEncryptLegacyFields(atKeys.toJson());
+    return selfEncryptLegacyFields(atKeys.toJson());
   }
 
   Future<Map<String, dynamic>> _readAtRestDocument(File file) async =>
@@ -314,67 +311,6 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
     return passphraseCodec.encode(plaintext, passPhrase!);
   }
-}
-
-const _selfEncryptedLegacyFields = [
-  auth_constants.apkamPublicKey,
-  auth_constants.apkamPrivateKey,
-  auth_constants.defaultEncryptionPublicKey,
-  auth_constants.defaultEncryptionPrivateKey,
-];
-
-Future<Map<String, dynamic>> _selfEncryptLegacyFields(
-    Map<String, dynamic> document) {
-  return _applyToLegacyFields(
-      document,
-      (algorithm, _, value) async => base64.encode(await algorithm.encrypt(
-          Uint8List.fromList(utf8.encode(value)),
-          iv: InitialisationVector.legacy())));
-}
-
-Future<Map<String, dynamic>> _selfDecryptLegacyFields(
-    Map<String, dynamic> document) {
-  return _applyToLegacyFields(
-      document,
-      (algorithm, field, value) async => utf8.decode(await algorithm.decrypt(
-          decodeBase64Field(value, field),
-          iv: InitialisationVector.legacy())));
-}
-
-/// Applies [transform] to whichever of the self-encrypted legacy fields the
-/// document holds, under the key it carries in the clear.
-///
-/// The all-zero initialisation vector both transforms pass makes this an
-/// at-rest format rather than a choice: every `.atKeys` file on disk was
-/// written that way, and `legacy_field_self_encryption_test.dart` pins the
-/// bytes against openssl.
-Future<Map<String, dynamic>> _applyToLegacyFields(
-  Map<String, dynamic> document,
-  Future<String> Function(
-          AESEncryptionAlgo algorithm, String field, String value)
-      transform,
-) async {
-  final present = _selfEncryptedLegacyFields
-      .where((field) => document[field] != null)
-      .toList();
-  if (present.isEmpty) {
-    return document;
-  }
-  final selfEncryptionKey =
-      document[auth_constants.defaultSelfEncryptionKey] as String?;
-  if (selfEncryptionKey == null) {
-    throw AtException(
-        'selfEncryptionKey is required to process the self-encrypted legacy atKeys fields');
-  }
-  // NOTE: a malformed key fails here, by field name, not inside the cipher.
-  decodeBase64Field(selfEncryptionKey, auth_constants.defaultSelfEncryptionKey);
-  final algorithm = AESEncryptionAlgo(AESKey(selfEncryptionKey));
-  final result = Map<String, dynamic>.from(document);
-  for (final field in present) {
-    result[field] =
-        await transform(algorithm, field, document[field] as String);
-  }
-  return result;
 }
 
 /// Removes whatever an interrupted write left at [path], without following
