@@ -126,7 +126,7 @@ jobs:
         run: dart test --concurrency=1
 
   # A bare `dart test` runs on the VM, so it skips the @TestOn('browser')
-  # files under test/js and test/web; at_client_wasm_browser runs those.
+  # files; at_client_wasm_browser runs the whole suite in Chrome.
   unit_at_client_wasm:
     runs-on: ubuntu-latest
     strategy:
@@ -166,7 +166,7 @@ jobs:
         working-directory: packages/at_client_wasm
         run: |
           dart pub get
-          dart test -p chrome --concurrency=1 test/js test/web
+          dart test -p chrome --concurrency=1
 
   unit_at_client_flutter:
     runs-on: ubuntu-latest
