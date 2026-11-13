@@ -35,6 +35,8 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 
 > ## ⚠️ Scope change, 2026-08-30 (amended 2026-09-06) — V1 ships remote-only
 >
+> **Narrowed 2026-11-13:** the remote-only storage classes were deleted from [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430); the V1 session runs on `InMemoryAtClientStorage` ([`decisions.md`](decisions.md) D-18, reversed). The task group named below is not built.
+>
 > The first browser release **ships** a remote-only storage bundle as its default: no
 > SQLite, no VFS, no `sqlite3.wasm`, no Hive in the shipped payload. It is a default, not a
 > prohibition — under D-12 storage is an injected bundle, so the SQLite, `:memory:` and Hive
@@ -1029,11 +1031,11 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 
 ## 5b. The browser-lane build, PB-3…PB-7 (2026-10-18)
 
-The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column was re-read with `gh` on 2026-11-05. **PB-4 A has landed on trunk** (`at_lookup` 4.0.0 with `at_lookup_web.dart`) and PB-3 has **partly** landed (the `hive.dart`, `memory.dart` and `sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate; `at_utils` 4.0.0 too). The 4.0.0 package set (`at_client`, `at_lookup`, `at_auth`, `at_utils`; `at_onboarding_cli` and `at_policy` 2.0.0) is on pub.dev since 2026-11-04. The remote-only pieces (`AtClientStorage.none()`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`) are **not** on trunk, and `packages/at_client_wasm` and `at_chops_web.dart` are not either; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
+The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column was re-read with `gh` on 2026-11-05. **PB-4 A has landed on trunk** (`at_lookup` 4.0.0 with `at_lookup_web.dart`) and PB-3 has **partly** landed (the `hive.dart`, `memory.dart` and `sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate; `at_utils` 4.0.0 too). The 4.0.0 package set (`at_client`, `at_lookup`, `at_auth`, `at_utils`; `at_onboarding_cli` and `at_policy` 2.0.0) is on pub.dev since 2026-11-04. The remote-only pieces (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) are **not** on trunk and were deleted from #2430 on 2026-11-13 (D-18 reversed), and `packages/at_client_wasm` and `at_chops_web.dart` are not either; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
 
 | Stack | Delivers | Nearest task ids | PRs | State |
 | --- | --- | --- | --- | --- |
-| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263) closed, superseded by #2415, which shipped the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open; the remote-only classes are in #2430. [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
+| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263) closed, superseded by #2415, which shipped the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open; the remote-only classes were deleted from #2430 (D-18 reversed, 2026-11-13), which runs on `InMemoryAtClientStorage`. [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md) (superseded) |
 | PB-4 A | `WebSocketTransport` + `at_lookup_web.dart`, `at_lookup` 4.0.0 | T1–T7 | #2399 | **landed on trunk** via #2415; at_lookup 4.0.0 on pub.dev (T8 done) |
 | PB-4 B | `at_client` web `defaultLookUps` branch | W1 (transport leg) | #2266 | closed 2026-11-02, not merged |
 | PB-4 C | `at_chops_web.dart`: WebCrypto AES-CTR, envelope-selectable Argon2id/PBKDF2 | C1–C4 | #2265 | open, draft |
@@ -1138,8 +1140,8 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 - **W1 — New package.** The three legs of the platform bundle
   ([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)): a WebSocket-backed `AtLookupMuxable` against
-  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, a remote-only `AtClientStorage` as the
-  V1 default ([`decisions.md`](decisions.md) D-18; a web SQLite one is V2, behind P1–P4),
+  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, `InMemoryAtClientStorage` for
+  the V1 session ([`decisions.md`](decisions.md) D-18, reversed 2026-11-13; a web SQLite one is V2, behind P1–P4),
   a web `WrittenAtKeysIo` subtype; plus web connectivity and console logging.
 - **W2 — Browser test harness** for the T3 and T4 gates: a page that loads the module
   and drives a virtualenv atServer. First run must confirm

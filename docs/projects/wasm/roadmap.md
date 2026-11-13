@@ -30,6 +30,8 @@ transport leg; phase table and document map refreshed 2026-10-18, browser at-key
 
 ## Scope note: V1 is remote-only
 
+**Narrowed 2026-11-13:** the remote-only storage classes were deleted from [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (D-18 reversed). The V1 session runs on `InMemoryAtClientStorage`; a local store as the default is still V2.
+
 **Added 2026-08-30, amended 2026-09-06.** The first browser release **ships** a
 remote-only storage bundle as its default: no SQLite, no VFS, no `sqlite3.wasm`, no Hive
 in the shipped payload. A local store becomes the default in V2, as a speed optimisation.
@@ -67,7 +69,7 @@ canonical home rather than duplicating it.
 | [`browser-onboarding.md`](browser-onboarding.md)   | How the browser holds the atSign's @keys: requirements R1–R7, one public pointer per passkey (K-10) + one private document per enrollment (K-11), enroll / return / recover flows, lifecycle, security properties and what does not hold. |
 | [`important-rulings.md`](important-rulings.md)     | Index of the load-bearing rulings (K-5, K-10..K-13, R-a, D-15, D-26): one line each, linked to the `decisions.md` row. |
 | [`atkeys-derivation.md`](atkeys-derivation.md)     | The derivation behind K-1..K-5 and the K-10/K-11 layout: constant PRF salt, one PRF call then HKDF, pointer and document format and AAD, test vector, cost of changing each choice later. |
-| [`pb3-storage-bundle.md`](pb3-storage-bundle.md)   | What PB-3 delivered in `at_client`, stage by stage (storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop), with PR state. |
+| [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md)   | *Superseded.* What PB-3 delivered in `at_client`, stage by stage (storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop), with PR state. |
 | [`vfs-lab-results.md`](vfs-lab-results.md) · [`spike-indexeddb-storage.md`](superseded/spike-indexeddb-storage.md) | The measurements behind D-26 (SimpleOPFS) and the earlier raw-IndexedDB spike it superseded. |
 | [`at-talk-demo.md`](at-talk-demo.md)               | The first real browser↔atServer sessions: a Chrome tab chatting end-to-end encrypted with an `at_talk` CLI — through `at_secondary_proxy` on a local virtualenv (2026-10-27), then direct on production atSigns in both directions (2026-11-03). |
 
@@ -183,8 +185,8 @@ A platform implementer supplies the three legs of the platform bundle
 at_client is not forked, and nothing below its doors names a platform type.
 
 - **`at_client_wasm`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
-  behind an `AtLookUpFactory`, a remote-only `AtClientStorage` as the V1 default
-  (**D-18**), IndexedDB-backed `WrittenAtKeysIo` (credential hint per the K-6 clarification, retained under K-10/K-11; independent of the storage bundle), `navigator.onLine` connectivity,
+  behind an `AtLookUpFactory`, `InMemoryAtClientStorage` for the V1 session
+  (**D-18**, reversed 2026-11-13), IndexedDB-backed `WrittenAtKeysIo` (credential hint per the K-6 clarification, retained under K-10/K-11; independent of the storage bundle), `navigator.onLine` connectivity,
   console logging.
   *(SQLite-wasm storage left this list 2026-09-02 as the **default**: **D-17** ships V1
   remote-only. It is not withdrawn. The **backend** ruling in [`design.md`](design.md) §5 —
@@ -300,7 +302,7 @@ ruling that a removed default is preferable to a conditional default.
 | **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               | **Landed** ([#2149], [#2183]); `at_client` is gated too (`.github/wasm_gates.yaml`)        |
 | **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       | **Landed** — S4–S6 ([#2162]); S1–S3 superseded by the transport work ([#2163], [#2164])  |
 | **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | **Landed** ([#2399], via #2415) — at_lookup 4.0.0 on trunk and on pub.dev; web transport `at_lookup_web.dart` |
-| **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-26).         | T2 for storage   | **V1 partly landed** — the `hive.dart`/`memory.dart`/`sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate are on trunk; `AtClientStorage.none()`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore` are not (open: #2258–#2261, #2273–#2276, #2336; consolidated with `at_client_wasm` in #2430) — PB-3 ([`pb3-storage-bundle.md`](pb3-storage-bundle.md)). V2 decided, not built |
+| **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-26).         | T2 for storage   | **V1 partly landed** — the `hive.dart`/`memory.dart`/`sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate are on trunk; the remote-only classes (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) were deleted from #2430 on 2026-11-13 (D-18 reversed): the V1 session runs on `InMemoryAtClientStorage` (open: #2258–#2261, #2273–#2276, #2336) — PB-3 ([`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md), superseded). V2 decided, not built |
 | **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | **Landed** — `at_utils` and `at_client` 4.0.0 |
 | **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-18 (K-6, K-8 superseded; K-10 pointer + K-11 document); first live sessions ran (proxy 2026-10-27, direct on production 2026-11-03, [`at-talk-demo.md`](at-talk-demo.md)) — see [`implementation-plan.md`](implementation-plan.md) §5b |
 | **6 — JS/TS facade**    | The `@JSExport` facade and its TypeScript entry point; the npm package. See [`js-api.md`](js-api.md).                              | T6               | Dev harness only; the `@atsign/at-client-web` facade is a draft plan, gated on OQ-16      |
