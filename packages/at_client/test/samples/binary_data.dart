@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 import 'test_util.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
-import '../test_utils/transport.dart';
+import 'sample_transport.dart';
 
 void main() async {
   try {

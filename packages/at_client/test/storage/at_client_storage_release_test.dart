@@ -73,7 +73,7 @@ void main() {
       'stop() releases it', () async {
     final first = await AtClientImpl.create('@releaseguard', 'wavi', pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@releaseguard'),
         storage: hiveStoreFor('@releaseguard', pref())) as AtClientImpl;
     final sameStore =
@@ -193,14 +193,14 @@ void main() {
       'storage', () async {
     final first = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@releasefresh'),
         storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     final firstStorage = first.storage;
     await first.stop();
     final again = await AtClientImpl.create('@releasefresh', 'wavi', pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@releasefresh'),
         storage: hiveStoreFor('@releasefresh', pref())) as AtClientImpl;
     expect(identical(again, first), isFalse,
@@ -217,7 +217,7 @@ void main() {
     await expectLater(
         AtClientImpl.create('@releasefail', 'wavi', bad,
             lookUps: secureSocketLookUps(),
-            secondaryAddressFinder: atDirectoryOf(bad),
+            secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor('@releasefail'),
             storage: hiveStoreFor('@releasefail', bad)),
         throwsA(isA<Exception>()),
@@ -225,7 +225,7 @@ void main() {
             'after the storage was attached');
     final ok = await AtClientImpl.create('@releasefail', 'wavi', pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@releasefail'),
         storage: hiveStoreFor('@releasefail', pref())) as AtClientImpl;
     expect(ok.storage, isNotNull,
@@ -242,7 +242,7 @@ void main() {
     final client = await AtClientImpl.create(
         '@injected', 'wavi', AtClientPreference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@injected'),
         storage: injected) as AtClientImpl;
 
@@ -267,7 +267,7 @@ void main() {
     final first = await AtClientImpl.create(
         '@cachedstore', 'wavi', AtClientPreference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@cachedstore'),
         storage: held) as AtClientImpl;
 
@@ -275,7 +275,7 @@ void main() {
     await expectLater(
         () => AtClientImpl.create('@cachedstore', 'wavi', AtClientPreference(),
             lookUps: secureSocketLookUps(),
-            secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+            secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor('@cachedstore'),
             storage: other),
         throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'storage')),
@@ -287,7 +287,7 @@ void main() {
     final again = await AtClientImpl.create(
         '@cachedstore', 'wavi', AtClientPreference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@cachedstore'),
         storage: held);
     expect(identical(again, first), isTrue,
@@ -302,7 +302,7 @@ void main() {
       () async {
     final client = await AtClientImpl.create('@ownsits', 'wavi', pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@ownsits'),
         storage: hiveStoreFor('@ownsits', pref())) as AtClientImpl;
     final own = client.storage!;
@@ -321,7 +321,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@closedbyclient'),
         storage: storage);
 
@@ -352,7 +352,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@borrowedopen'),
         storage: storage);
 

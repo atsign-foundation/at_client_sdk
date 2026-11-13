@@ -235,7 +235,7 @@ void main() {
       final storage = hiveStoreFor(atSign, signing());
       final first = await AtClientImpl.create(atSign, 'wavi', signing(),
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(signing()),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: storage);
 
@@ -255,7 +255,7 @@ void main() {
           identical(
               await AtClientImpl.create(atSign, 'wavi', signing(),
                   lookUps: secureSocketLookUps(),
-                  secondaryAddressFinder: atDirectoryOf(signing()),
+                  secondaryAddressFinder: defaultAtDirectory,
                   atKeysIo: noKeysFor(atSign),
                   storage: storage),
               first),
@@ -268,7 +268,7 @@ void main() {
       // never applied.
       final client = await AtClientImpl.create(atSign, 'wavi', preference(),
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference()),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference()));
 
@@ -287,7 +287,7 @@ void main() {
         () async {
       final client = await AtClientImpl.create(atSign, 'wavi', preference(),
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference()),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference()));
 

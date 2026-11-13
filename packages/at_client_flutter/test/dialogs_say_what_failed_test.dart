@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import 'fake_path_provider.dart';
+import 'loopback_flows.dart';
 
 class _MockAtsignFlows extends Mock implements AtsignFlows {}
 
@@ -137,7 +138,8 @@ void main() {
     final keys = keychainReading(() async => null);
     final result = await pumpOpener(
       tester,
-      (context) => pkamDialog(context, keys: keys, using: const AtsignFlows()),
+      (context) =>
+          pkamDialog(context, keys: keys, using: const LoopbackFlows()),
     );
 
     await tester.tap(find.text('open'));
@@ -215,6 +217,7 @@ void main() {
         cramKey: 'cram-secret-6d1f0b',
         preference: loopback(),
         keys: keys,
+        flows: const LoopbackFlows(),
       ),
     );
 
