@@ -459,11 +459,13 @@ where the WebCrypto key becomes a local cache or a fallback.
 
 ### 9a.2 Remote-only correctness *(new — D-17, D-18, D-24)*
 
+**Amended 2026-11-13 — D-18 reversed.** Remote-only is a client routing to its atServer (`RemoteLocalPref.remoteOnly`) on `InMemoryAtClientStorage`, not a storage bundle, so X-R1..X-R3 are stated against a `portalSession` client. None of them is built as a gate yet.
+
 | # | Gate | Proves |
 | --- | --- | --- |
-| X-R1 | A client built on the **remote-only bundle** constructs with **no Hive box and no SQLite** in the process — including on the **write** path | the bundle supplies a no-op sync queue, so `LocalSecondary`'s lazily-opened Hive path is never entered. This is the D-18 regression. The gate is on *this bundle*, not on the process: a consumer who injects a SQLite bundle is expected to open one |
-| X-R2 | A remote-only client **reads data written by a local-storage client** | unstamped keys route to the legacy provider on read; without this the client writes fine and fails on pre-existing data |
-| X-R3 | A write is not acknowledged until the atServer accepts it | write-through, not write-back — no reintroduced durability question |
+| X-R1 | A `portalSession` client constructs with **no Hive box and no SQLite** in the process — including on the **write** path — and its sync never contacts the atServer | `InMemoryAtClientStorage` holds the keystore and the sync queue, and a `remoteOnly` client runs a sync service that does nothing. The gate is on *this client*, not on the process: a consumer who passes a SQLite storage is expected to open one |
+| X-R2 | A `remoteOnly` client **reads data written by a local-storage client** | unstamped keys route to the legacy provider on read; without this the client writes fine and fails on pre-existing data |
+| X-R3 | A write from a `remoteOnly` client is not acknowledged until the atServer accepts it | the preference sends every write that is not `local:` to the atServer; nothing is queued for sync, so there is no durability question |
 | X-R4a | **connect** — across two sequential clients, the second is delivered nothing sent before its notification service was created | the policy is anchored at service creation, so nothing between creation and `monitor:` is lost either (D-24) |
 | X-R4b | **window(1h)** (the browser default until 2026-11-02, now *connect*; D-24 amended) — the second client is delivered only notifications newer than `max(checkpoint, now − 1h)`, and newer than `now − 1h` with no checkpoint store | under D-18 the watermark is a `local:` key held in memory, so a reload has no checkpoint and starts from the session's creation time (OQ-13, corrected 2026-11-02); the window recovers up to an hour that a reload would otherwise lose |
 | X-R4c | **resume** — the second client re-delivers nothing at or before the first client's last notification | the IndexedDB checkpoint record works; required only for a browser client that opts into resume |
