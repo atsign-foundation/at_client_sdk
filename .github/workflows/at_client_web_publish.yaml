@@ -1,0 +1,88 @@
+name: at_client_web_publish
+
+on:
+  push:
+    tags:
+      - 'at_client_web-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: packages/at_client_web
+    steps:
+      # Every later step runs only when this one finds the secret, so the
+      # workflow does nothing until NPM_TOKEN exists.
+      - name: Check for the npm token
+        id: token
+        working-directory: .
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "NPM_TOKEN is not set; nothing is published."
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.token.outputs.present == 'true'
+
+      - uses: ./actions/setup-flutter-and-dart
+        if: steps.token.outputs.present == 'true'
+
+      - name: Build the bridge bundle
+        if: steps.token.outputs.present == 'true'
+        working-directory: packages/at_client_wasm
+        run: |
+          dart pub get
+          WASM_REQUIRED=1 tool/build.sh
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: packages/at_client_web/package-lock.json
+
+      - name: Install dependencies
+        if: steps.token.outputs.present == 'true'
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.token.outputs.present == 'true'
+        run: npm run typecheck
+
+      - name: Lint
+        if: steps.token.outputs.present == 'true'
+        run: npm run lint
+
+      - name: Unit tests
+        if: steps.token.outputs.present == 'true'
+        run: npm test
+
+      - name: Build
+        if: steps.token.outputs.present == 'true'
+        run: npm run build
+
+      - name: Install Chromium
+        if: steps.token.outputs.present == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        if: steps.token.outputs.present == 'true'
+        run: npm run e2e
+
+      - name: Publish
+        if: steps.token.outputs.present == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public

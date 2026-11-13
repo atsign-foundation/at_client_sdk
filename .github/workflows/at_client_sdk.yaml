@@ -168,6 +168,58 @@ jobs:
           dart pub get
           dart test -p chrome --concurrency=1
 
+  # Builds the dart2js bridge, then checks, bundles and packs the npm package and
+  # drives the built bundle in headless Chromium. The live lane stays env-gated:
+  # the package supports only the default root, which the virtualenv jobs'
+  # atServer does not serve.
+  at_client_web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/at_client_web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Build the bridge bundle
+        working-directory: packages/at_client_wasm
+        run: |
+          dart pub get
+          WASM_REQUIRED=1 tool/build.sh
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: packages/at_client_web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: npm run e2e
+
+      - name: Check the package contents
+        run: npm pack --dry-run
+
   unit_at_client_flutter:
     runs-on: ubuntu-latest
     strategy:
