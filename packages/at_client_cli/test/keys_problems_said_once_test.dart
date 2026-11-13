@@ -78,8 +78,7 @@ void main() {
         await SecureServerSocket.bind(InternetAddress.loopbackIPv4, 0, context);
     atDirectory.listen((socket) {
       socket.write('@');
-      utf8.decoder.bind(socket).transform(const LineSplitter()).listen(
-          (line) {
+      utf8.decoder.bind(socket).transform(const LineSplitter()).listen((line) {
         if (line.startsWith('@exit')) return;
         socket.write(directoryAnswer == _AtDirectory.atServer
             ? '@127.0.0.1:$atServerPort\n@'
@@ -142,17 +141,17 @@ void main() {
 
   /// Matches stderr lines holding each of [lines] once, in order.
   Matcher holdsOnceInOrder(List<String> lines) => predicate<List<String>>((
-    written,
-  ) {
-    var from = 0;
-    for (final line in lines) {
-      if (written.where((w) => w == line).length != 1) return false;
-      final at = written.indexOf(line);
-      if (at < from) return false;
-      from = at;
-    }
-    return true;
-  }, 'holding each of $lines once, in that order');
+        written,
+      ) {
+        var from = 0;
+        for (final line in lines) {
+          if (written.where((w) => w == line).length != 1) return false;
+          final at = written.indexOf(line);
+          if (at < from) return false;
+          from = at;
+        }
+        return true;
+      }, 'holding each of $lines once, in that order');
 
   group('No keys and the atSign not yet activated', () {
     for (final command in ['otp', 'list', 'approve']) {
@@ -176,7 +175,8 @@ void main() {
   test('No keys and the atSign activated elsewhere', () async {
     publicKeyAnswer = _PublicKey.held;
 
-    final run = await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+    final run =
+        await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
 
     expect(
         run.stderr,
@@ -192,7 +192,8 @@ void main() {
   test('No keys and the atSign not in the atDirectory', () async {
     directoryAnswer = _AtDirectory.noEntry;
 
-    final run = await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+    final run =
+        await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
 
     expect(
         run.stderr,
@@ -206,8 +207,8 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('No keys and the atDirectory unreachable', () async {
-    final run =
-        await atActivate(['otp', '-a', atSign, '-r', '127.0.0.1:$unreachablePort']);
+    final run = await atActivate(
+        ['otp', '-a', atSign, '-r', '127.0.0.1:$unreachablePort']);
 
     expect(
         run.stderr,
@@ -226,7 +227,8 @@ void main() {
             filePath: (_) => defaultKeyfile(), passPhrase: 'passphrase-4e1b9a')
         .write(atSign, randomLegacyKeys());
 
-    final run = await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+    final run =
+        await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
 
     expect(
         run.stderr,
@@ -251,8 +253,8 @@ void main() {
               algorithm: CryptographicMaterialAlgorithm.rsa2048,
               publicKey: apkam.atPublicKey.publicKey,
               privateKey: apkam.atPrivateKey.privateKey));
-    expect((await FileAtKeysIo(filePath: (_) => path).read(atSign)).atsign,
-        '@bob',
+    expect(
+        (await FileAtKeysIo(filePath: (_) => path).read(atSign)).atsign, '@bob',
         reason: 'the precondition: the keyfile records @bob');
 
     final run = await atActivate(
@@ -267,9 +269,11 @@ void main() {
     expect(run.exitCode, 1);
   }, timeout: const Timeout(Duration(minutes: 2)));
 
-  test('A keys problem is said once, with no prefix, retry advice or stack '
+  test(
+      'A keys problem is said once, with no prefix, retry advice or stack '
       'trace', () async {
-    final run = await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+    final run =
+        await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
     final written = run.stderr.where((l) => l.trim().isNotEmpty).toList();
 
     expect(written, contains('No keys for $atSign at ${defaultKeyfile()}.'),
@@ -299,16 +303,15 @@ void main() {
                   '-r', '127.0.0.1:$unreachablePort',
                   '--max-connect-attempts', '1',
                   '--never-sync',
-                ],
-                    parser: CLIBase.createArgsParser(namespace: 'keys_test'),
+                ], parser: CLIBase.createArgsParser(namespace: 'keys_test'),
                     lookUps: (
                         {required String atSign,
                         required AtRootDomain rootDomain,
                         required AtAuthenticator? authenticator,
                         SecondaryAddressFinder? secondaryAddressFinder}) {
-                      built++;
-                      throw StateError('no connection was expected');
-                    }),
+                  built++;
+                  throw StateError('no connection was expected');
+                }),
             stderr: () => err),
         throwsA(isA<AtKeysUnusableException>()
             .having((e) => e.cause, 'cause', AtKeysUnusableCause.absent)

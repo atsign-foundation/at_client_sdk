@@ -98,11 +98,7 @@ void main() {
       find.textContaining('Waiting for approval of enrollment enroll-1'),
       findsOneWidget,
     );
-    expect(
-      find.byType(SnackBar),
-      findsNothing,
-      reason: 'no failure is shown',
-    );
+    expect(find.byType(SnackBar), findsNothing, reason: 'no failure is shown');
     await tester.tapAt(const Offset(4, 4));
     await frames(tester);
     verify(() => pending.stop()).called(1);

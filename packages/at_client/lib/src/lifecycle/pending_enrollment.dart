@@ -475,8 +475,7 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
 
   /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
   /// enrollments of [atSign] matching what it was given.
-  AtEnrollmentPendingException.several(
-      String atSign, this.pendingEnrollmentIds)
+  AtEnrollmentPendingException.several(String atSign, this.pendingEnrollmentIds)
       : super(
             '$atSign holds several pending enrollments that match: '
             '${pendingEnrollmentIds.join(', ')}. To resume one, name both the '

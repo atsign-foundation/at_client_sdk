@@ -6,8 +6,7 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart'
-    show AtAuthenticator, AtLookupMuxable;
+import 'package:at_lookup/at_lookup.dart' show AtAuthenticator, AtLookupMuxable;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -117,8 +116,8 @@ void main() {
             bytes: AtBytes.fromString(randomBase64(32)),
             createdAt: now);
     return AtKeys()
-      ..addKey(material('apkam:$enrollmentId:1', 'privateAuthentication',
-          'mldsa65',
+      ..addKey(material(
+          'apkam:$enrollmentId:1', 'privateAuthentication', 'mldsa65',
           enrollment: enrollmentId))
       ..addKey(material(
           'apkam:$enrollmentId:1', 'publicAuthentication', 'mldsa65',
@@ -129,7 +128,8 @@ void main() {
   }
 
   /// Opens [atSign] on [keys] with nothing for a connection to reach.
-  Future<AtClient> openUnconnected(AtKeysIo keys, {String atSign = atSign}) async {
+  Future<AtClient> openUnconnected(AtKeysIo keys,
+      {String atSign = atSign}) async {
     final pref = await preference();
     return Atsign(atSign).open(
         keys: keys,
@@ -216,13 +216,15 @@ void main() {
               .having(
                   (e) => e.message,
                   'message',
-                  allOf(startsWith(prefix), endsWith('.'),
+                  allOf(
+                      startsWith(prefix),
+                      endsWith('.'),
                       predicate<String>(
                           (m) => reason.matches(
                               m.substring(prefix.length, m.length - 1), {}),
                           'a reason that $reason')))
-              .having((e) => e.message, 'what was read',
-                  holdsNoRunOf(secret))));
+              .having(
+                  (e) => e.message, 'what was read', holdsNoRunOf(secret))));
       expectNoConnection();
     }
 
@@ -322,8 +324,8 @@ void main() {
   test('A keyfile naming another atSign is refused before connecting',
       () async {
     await FileAtKeysIo(filePath: (_) => path).write('@bob', liveKeys());
-    expect((await FileAtKeysIo(filePath: (_) => path).read(atSign)).atsign,
-        '@bob',
+    expect(
+        (await FileAtKeysIo(filePath: (_) => path).read(atSign)).atsign, '@bob',
         reason: 'the precondition: the keyfile records @bob');
 
     await expectLater(

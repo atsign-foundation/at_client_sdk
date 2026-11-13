@@ -9,18 +9,11 @@ import 'package:at_client/at_client.dart';
 /// went wrong, with the error's message.
 ///
 /// It holds no stack trace and no exception type.
-String failureMessage(
-  String atSign,
-  Object error, {
-  required String network,
-}) {
+String failureMessage(String atSign, Object error, {required String network}) {
   if (error is AtKeysUnusableException) return _firstLine(error.message);
   final refusal = switch (error) {
     AtOpenRefusedException(:final state) => _refusal(atSign, state.cause),
-    AtCredentialRefusedException(:final state) => _refusal(
-      atSign,
-      state.cause,
-    ),
+    AtCredentialRefusedException(:final state) => _refusal(atSign, state.cause),
     _ => null,
   };
   if (refusal != null) return refusal;
@@ -30,8 +23,8 @@ String failureMessage(
 
 /// [cause], an atServer's refusal of [atSign], in plain words.
 String? _refusal(String atSign, AtConnectionCause? cause) => switch (cause) {
-  AtConnectionCause.revoked => "This device's access to $atSign has been "
-      'revoked.',
+  AtConnectionCause.revoked =>
+    "This device's access to $atSign has been revoked.",
   AtConnectionCause.enrollmentNotApproved =>
     "This device's enrollment for $atSign has not been approved yet.",
   AtConnectionCause.enrollmentDenied =>
