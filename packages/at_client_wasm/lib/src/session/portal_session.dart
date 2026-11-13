@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/memory.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/preference/posture_floor.dart';
+
+import 'session_open.dart';
 
 /// How a session's connections reach atServers: [lookUps] builds each
 /// connection, [finder] resolves an atSign to its atServer.
@@ -131,64 +132,12 @@ Future<AtClient> portalSession({
   if (floorOfKeyMaterial(keys, keys.enrollmentToAuthenticateAs()) != null) {
     throw UnsupportedKeyMaterialException(normalized);
   }
-  // `buildAtClient` checks for a live client and registers its own across
-  // awaits, so two opens running together would both pass the check.
-  final previous = _opening[normalized];
-  final done = Completer<void>();
-  _opening[normalized] = done;
-  try {
-    if (previous != null) await previous.future;
-    return await _open(normalized, app, keys, transport, root, prefs, keysIo);
-  } finally {
-    done.complete();
-    if (identical(_opening[normalized], done)) {
-      _opening.remove(normalized);
-    }
-  }
-}
-
-/// Completed when the newest open running for each atSign ends, however it
-/// ends; it never completes with an error.
-final _opening = <String, Completer<void>>{};
-
-Future<AtClient> _open(
-  String atSign,
-  String app,
-  AtKeys keys,
-  SessionTransport transport,
-  AtRootDomain root,
-  AtClientPreference? prefs,
-  SessionKeysIo? keysIo,
-) async {
-  final preference = prefs ??
-      (AtClientPreference()
-        ..namespace = app
-        ..rootDomain = root.rootDomain
-        ..rootPort = root.rootPort
-        ..remoteLocalPref = RemoteLocalPref.remoteOnly
-        ..monitorAutoStart = false);
-  final client = await Atsign(atSign).open(
-    keys: keysIo ?? SessionKeysIo(atSign, keys),
-    preference: preference,
-    namespace: app,
-    storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
-    lookUps: transport.lookUps,
-    secondaryAddressFinder: transport.finder,
-  );
-  try {
-    final state = client.connection.current;
-    if (!state.isOnline) {
-      throw PortalSessionOfflineException(atSign, state);
-    }
-    return client;
-  } catch (_) {
-    // The open's own error is the one the caller needs, not a teardown's.
-    try {
-      await client.stop();
-    } catch (e, st) {
-      AtSignLogger('portalSession')
-          .warning('stopping the client of $atSign failed', e, st);
-    }
-    rethrow;
-  }
+  return openSession(
+      atSign: normalized,
+      app: app,
+      keys: keys,
+      transport: transport,
+      root: root,
+      prefs: prefs,
+      keysIo: keysIo);
 }

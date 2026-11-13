@@ -132,7 +132,8 @@ class CustodySession {
       required this.atKeys,
       required this.session,
       required this.lookupHex,
-      required this.credentialId});
+      required this.credentialId,
+      required this.authSeed});
 
   final String atSign;
   final String enrollmentId;
@@ -142,6 +143,10 @@ class CustodySession {
   /// The name of this passkey's enrollment pointer.
   final String lookupHex;
   final Uint8List credentialId;
+
+  /// The seed of this enrollment's APKAM key, for the caller that opens a
+  /// client with it; held in memory only.
+  final Uint8List authSeed;
 
   Future<void> close() => session.close();
 }
@@ -195,10 +200,28 @@ class PasskeyCustody {
       final keys = await RecordKeys.derive(passkey.secret, canonical);
       final session = await gateway.enroll(
           atSign: canonical, authSeed: keys.authSeed, otp: otp);
-      final published = await _publish(canonical, passkey.credentialId, keys,
-          session, await session.atKeys());
-      await _remember(canonical, passkey.credentialId, published.enrollmentId);
-      return published;
+      return _publishAndRemember(
+          canonical, passkey.credentialId, keys, session);
+    });
+  }
+
+  /// Onboards a fresh [atSign]: registers a passkey, activates the atSign
+  /// with [cram] and the APKAM key derived from the passkey, then writes the
+  /// document and pointer.
+  ///
+  /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
+  /// the same atSign waits for the first; the passkey is registered before
+  /// the CRAM is spent.
+  Future<CustodySession> onboard(
+      {required String atSign, required String cram}) {
+    final canonical = atSign.toAtsign();
+    return setupLock.run(setupLockName(canonical), () async {
+      final passkey = await kek.register(canonical);
+      final keys = await RecordKeys.derive(passkey.secret, canonical);
+      final session = await gateway.activate(
+          atSign: canonical, authSeed: keys.authSeed, cram: cram);
+      return _publishAndRemember(
+          canonical, passkey.credentialId, keys, session);
     });
   }
 
@@ -247,7 +270,8 @@ class PasskeyCustody {
         atKeys: atKeys,
         session: session,
         lookupHex: keys.lookupHex,
-        credentialId: unlocked.credentialId);
+        credentialId: unlocked.credentialId,
+        authSeed: keys.authSeed);
   }
 
   /// Moves [current]'s @keys to a newly registered passkey: enrolls it with
@@ -301,7 +325,26 @@ class PasskeyCustody {
         atKeys: held,
         session: session,
         lookupHex: keys.lookupHex,
-        credentialId: credentialId);
+        credentialId: credentialId,
+        authSeed: keys.authSeed);
+  }
+
+  /// Publishes [session]'s @keys, remembers the passkey and returns the open
+  /// session; a failure closes [session].
+  Future<CustodySession> _publishAndRemember(
+      String atSign,
+      Uint8List credentialId,
+      RecordKeys keys,
+      EnrollmentSession session) async {
+    try {
+      final published = await _publish(
+          atSign, credentialId, keys, session, await session.atKeys());
+      await _remember(atSign, credentialId, published.enrollmentId);
+      return published;
+    } on Object {
+      await session.close();
+      rethrow;
+    }
   }
 
   Future<String> _enrollmentIdFromPointer(

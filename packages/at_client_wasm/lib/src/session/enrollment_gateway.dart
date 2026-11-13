@@ -29,6 +29,14 @@ Future<ApkamKeyPair> apkamKeyPairFromSeed(Uint8List authSeed) async {
   );
 }
 
+/// [keys] with [pair] filed as the APKAM material of [enrollmentId].
+AtKeys withApkamKey(AtKeys keys, String enrollmentId, ApkamKeyPair pair) => keys
+  ..fileApkamMaterial(
+      enrollmentId: enrollmentId,
+      algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+      publicKey: pair.publicKey,
+      privateKey: pair.privateKey);
+
 /// Runs a first-time activation with [cram] and [apkamKeyPair] as the
 /// enrollment's APKAM key, and returns the keys it filed.
 typedef Activator = Future<AtKeys> Function(
@@ -139,12 +147,8 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
       {required AtKeys? keys}) async {
     final lookUp = _lookUp(atSign);
     try {
-      final signingKeys = AtKeys(atsign: Atsign(atSign))
-        ..fileApkamMaterial(
-            enrollmentId: enrollmentId,
-            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
-            publicKey: pair.publicKey,
-            privateKey: pair.privateKey);
+      final signingKeys =
+          withApkamKey(AtKeys(atsign: Atsign(atSign)), enrollmentId, pair);
       lookUp.authenticator = authenticatorFor(
           // NOTE: a fixed key set for this handshake, never a keyfile.
           // ignore: invalid_use_of_visible_for_testing_member
