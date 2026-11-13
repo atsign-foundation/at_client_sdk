@@ -155,7 +155,7 @@ class BridgeSession {
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);
 
   /// Calls [callback] with each notification matching [regex] as
-  /// `{id, from, key, value, epochMillis}`; returns the function that
+  /// `{id, from, key, value, epochMillis, operation}`; returns the function that
   /// unsubscribes.
   JSFunction subscribe(JSAny? regex, JSFunction callback) {
     final unsubscribe = _session.subscribe(
@@ -168,6 +168,7 @@ class BridgeSession {
               'key': n.key,
               'value': n.value,
               'epochMillis': n.epochMillis,
+              'operation': n.operation,
             }.jsify()));
     return unsubscribe.toJS;
   }

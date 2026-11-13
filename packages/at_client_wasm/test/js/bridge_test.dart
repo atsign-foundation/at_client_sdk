@@ -498,7 +498,8 @@ void main() {
         from: '@alice',
         key: 'rpc.req.1.tally',
         value: 'ping',
-        epochMillis: 42
+        epochMillis: 42,
+        operation: 'delete'
       ));
       expect(seen, [
         {
@@ -506,7 +507,8 @@ void main() {
           'from': '@alice',
           'key': 'rpc.req.1.tally',
           'value': 'ping',
-          'epochMillis': 42
+          'epochMillis': 42,
+          'operation': 'delete'
         }
       ]);
 

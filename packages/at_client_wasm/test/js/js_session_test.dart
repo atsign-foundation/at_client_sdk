@@ -126,9 +126,11 @@ class _FakeClient extends Fake implements AtClient {
   Future<void> stop() async => stops++;
 }
 
-AtNotification _event(String id, {String value = 'yo'}) => AtNotification(
-    id, '@alice:attalk.wavi@bob', '@bob', '@alice', 42, 'key', true,
-    value: value);
+AtNotification _event(String id,
+        {String value = 'yo', String? operation = 'update'}) =>
+    AtNotification(
+        id, '@alice:attalk.wavi@bob', '@bob', '@alice', 42, 'key', true,
+        value: value, operation: operation);
 
 void main() {
   late _FakeClient client;
@@ -309,7 +311,21 @@ void main() {
         key: '@alice:attalk.wavi@bob',
         value: 'yo',
         epochMillis: 42,
+        operation: 'update',
       ));
+    });
+
+    test('names a delete notification a delete, anything else an update',
+        () async {
+      final received = <JsNotification>[];
+      session.subscribe('.*', received.add);
+
+      service.events.add(_event('d1', operation: 'delete'));
+      service.events.add(_event('d2', operation: 'update'));
+      service.events.add(_event('d3', operation: null));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.operation), ['delete', 'update', 'update']);
     });
 
     test('unsubscribe stops delivery', () async {

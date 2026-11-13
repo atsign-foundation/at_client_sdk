@@ -16,13 +16,15 @@ class JsKey {
   final String? sharedBy;
 }
 
-/// A decrypted notification as a subscriber receives it.
+/// A decrypted notification as a subscriber receives it; [operation] is
+/// `update` or `delete`.
 typedef JsNotification = ({
   String id,
   String from,
   String key,
   String? value,
   int epochMillis,
+  String operation,
 });
 
 /// Thrown when a [JsKey] cannot do what was asked of it, such as a notify
@@ -216,6 +218,8 @@ class AtClientJsSession implements JsSession {
               key: n.key,
               value: n.value,
               epochMillis: n.epochMillis,
+              operation:
+                  n.operation?.endsWith('delete') == true ? 'delete' : 'update',
             )));
     _subscriptions.add(subscription);
     service.startListening();
