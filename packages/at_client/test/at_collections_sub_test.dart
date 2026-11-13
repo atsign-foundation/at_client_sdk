@@ -463,6 +463,34 @@ void main() {
     });
   });
 
+  group('subCollection — public entry point checks tags', () {
+    test(
+        'Given a level opened through subCollection with writeTypeTag x, when '
+        'it is reopened with y, then the mismatch names x and y', () {
+      final c = buildParent();
+      final notificationService = MockNotificationService();
+      when(() => notificationService.subscribe(
+              regex: any(named: 'regex'),
+              shouldDecrypt: any(named: 'shouldDecrypt')))
+          .thenAnswer((_) => const Stream<AtNotification>.empty());
+      when(() => c.atClient.notificationService)
+          .thenReturn(notificationService);
+      final parent = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      AtCollection<dynamic> open(String tag) => c.parent.subCollection<dynamic>(
+          parent: parent,
+          subName: 'comments',
+          defaultExpiration: const Duration(days: 30),
+          writeTypeTag: tag);
+
+      open('x');
+      expect(
+          () => open('y'),
+          throwsA(isA<CollectionTypeTagMismatchException>()
+              .having((e) => e.existingTag, 'existingTag', 'x')
+              .having((e) => e.requestedTag, 'requestedTag', 'y')));
+    });
+  });
+
   // ---------------------------------------------------------------------------
   group('CSubItem events via handleNotification', () {
     // Helper builds notifications with the `<to>:<bareKey>@<from>`
