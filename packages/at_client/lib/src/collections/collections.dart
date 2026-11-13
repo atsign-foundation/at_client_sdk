@@ -1740,7 +1740,8 @@ interface class AtCollection<T> {
   /// Throws [CollectionTypeTagMismatchException] when this [AtClient] already
   /// opened the composed namespace asking for another effective tag
   /// ([writeTypeTag], else [typeTag]); asking for none counts as a tag. The
-  /// check holds on this client only. [AtClient] does not cache
+  /// check holds on this client only, and opens made by [getDescendant] and
+  /// the watch methods are not checked. [AtClient] does not cache
   /// sub-collections, so each client remembers the tags of its last 4096
   /// sub-collection namespaces, forgetting the oldest first. After a
   /// namespace is forgotten, a mismatched reopen of it is not caught. The cap
@@ -1766,6 +1767,7 @@ interface class AtCollection<T> {
         fromJson: fromJson,
         typeTag: typeTag,
         writeTypeTag: writeTypeTag,
+        recordTag: true,
       );
 
   /// Walks a descendant chain in one call and returns the typed leaf
@@ -1886,7 +1888,7 @@ interface class AtCollection<T> {
 
       final AtCollection<dynamic> sub;
       if (isLast) {
-        sub = ctx.subCollection<U>(
+        sub = ctx._subCollectionInternal<U>(
           parent: parent,
           subName: ancestor.subName,
           defaultExpiration: leafExpiration,
@@ -1894,7 +1896,7 @@ interface class AtCollection<T> {
           typeTag: leafTypeTag,
         );
       } else {
-        sub = ctx.subCollection<dynamic>(
+        sub = ctx._subCollectionInternal<dynamic>(
           parent: parent,
           subName: ancestor.subName,
           defaultExpiration: intermediateExp,
@@ -1937,6 +1939,7 @@ interface class AtCollection<T> {
         typeTag: typeTag,
         writeTypeTag: writeTypeTag,
         notifications: notifications,
+        recordTag: true,
       );
 
   AtCollection<U> _subCollectionInternal<U>({
@@ -1947,6 +1950,7 @@ interface class AtCollection<T> {
     String? typeTag,
     String? writeTypeTag,
     Stream<AtNotification>? notifications,
+    bool recordTag = false,
   }) {
     if (subName == _rr) {
       throw ArgumentError(
@@ -1964,11 +1968,14 @@ interface class AtCollection<T> {
       typeTag: typeTag,
       writeTypeTag: writeTypeTag,
       notifications: notifications,
+      recordTag: recordTag,
     );
   }
 
   /// Internal sub-collection constructor without the reserved-name
   /// guard. Used by [readReceiptsFor] to build the `__rr` sub-collection.
+  /// Records the effective tag in the per-client ledger, and throws on a
+  /// mismatch, only when [recordTag] is true.
   AtCollection<U> _buildSubCollection<U>({
     required CItem<T> parent,
     required String subName,
@@ -1977,6 +1984,7 @@ interface class AtCollection<T> {
     String? typeTag,
     String? writeTypeTag,
     Stream<AtNotification>? notifications,
+    bool recordTag = false,
   }) {
     if (subName.isEmpty || subName.contains('.')) {
       throw ArgumentError('subName must be non-empty and dot-free: "$subName"');
@@ -2020,8 +2028,10 @@ interface class AtCollection<T> {
       typeTag: typeTag,
       writeTypeTag: writeTypeTag,
     );
-    (_subCollectionTags[atClient] ??= CollectionTagLedger(_subTagCap))
-        .record(composedNs, writeTypeTag ?? typeTag);
+    if (recordTag) {
+      (_subCollectionTags[atClient] ??= CollectionTagLedger(_subTagCap))
+          .record(composedNs, writeTypeTag ?? typeTag);
+    }
     // Constructing the sub-collection directly (not via `atClient.collection`)
     // so that `notifications` can be threaded straight through to its
     // constructor for test wiring. Sub-collections inherit the parent's

@@ -385,6 +385,40 @@ void main() {
       await sub.cancel();
     });
 
+    test(
+        'Given the app opened a level with another tag, when watchWithTree '
+        'opens that level for its children, then it raises no error and '
+        'yields the child', () async {
+      final posts = buildPosts();
+      seedPost('p1', 'first');
+      seedComment('p1', 'c1', 'hello');
+      final p1 = (await posts.getItems(id: 'p1')).single;
+      subCollectionWithInjectedNotifications<Post, Comment>(
+        posts,
+        parentItem: p1,
+        subName: 'comments',
+        defaultExpiration: const Duration(days: 7),
+        notifications: notifStream.stream,
+        writeTypeTag: 'x',
+      );
+
+      final snapshots = <List<TreeNode<Post>>>[];
+      final errors = <Object>[];
+      final sub = posts.query().watchWithTree([
+        SubSpec<Comment>(
+          subName: 'comments',
+          subDefaultExpiration: const Duration(days: 7),
+          subFromJson: Comment.fromJson,
+          subTypeTag: 'Comment',
+        ),
+      ]).listen(snapshots.add, onError: errors.add);
+      await pump();
+      expect(errors, isEmpty);
+      expect(
+          snapshots.last.single.branches['comments']!.single.parent.id, 'c1');
+      await sub.cancel();
+    });
+
     test('grandchild arrival re-emits with the new reply included', () async {
       final posts = buildPosts();
       seedPost('p1', 'first');
