@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysSourceAbsentException;
+import 'package:at_auth/at_auth.dart'
+    show AtKeys, AtKeysFormatException, AtKeysSourceAbsentException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -52,10 +53,23 @@ class KeychainStorage {
   Future<AtKeysData?> readAtKeysData() async {
     final data = await _readAtKeysDataRaw();
     if (data != null) {
-      final json = jsonDecode(data);
-      return AtKeysData.fromJson(json);
+      return _decodeAtKeysData(data);
     }
     return null;
+  }
+
+  /// [text], a stored atKeys entry, as [AtKeysData].
+  ///
+  /// Text that is not JSON throws [AtKeysFormatException], which holds none
+  /// of it.
+  static AtKeysData _decodeAtKeysData(String text) {
+    final dynamic json;
+    try {
+      json = jsonDecode(text);
+    } on FormatException catch (e) {
+      throw AtKeysFormatException.notJson('the keychain atKeys entry', e);
+    }
+    return AtKeysData.fromJson(json);
   }
 
   // Current behaviour:
@@ -107,7 +121,7 @@ class KeychainStorage {
       );
       await _write(
         biometricStoreName: currentName,
-        keychainData: AtKeysData.fromJson(jsonDecode(legacyData)),
+        keychainData: _decodeAtKeysData(legacyData),
       );
       return legacyData;
     });
@@ -257,7 +271,7 @@ class KeychainStorage {
       );
       return;
     }
-    final atKeysData = AtKeysData.fromJson(jsonDecode(existingData));
+    final atKeysData = _decodeAtKeysData(existingData);
     atKeysData.keys.add(keys);
     await _write(
       biometricStoreName: (await AtKeysStore.getName()),
@@ -275,7 +289,7 @@ class KeychainStorage {
     try {
       final data = await _readAtKeysDataRaw();
       if (data != null) {
-        final atKeysData = AtKeysData.fromJson(jsonDecode(data));
+        final atKeysData = _decodeAtKeysData(data);
         final wanted = _normalized(atSign);
         atKeysData.keys.removeWhere(
           (element) => _normalized(_atSignOf(element)) == wanted,
