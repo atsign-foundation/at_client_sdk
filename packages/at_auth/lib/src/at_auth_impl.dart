@@ -15,6 +15,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/at_keys_unusable.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
@@ -85,8 +86,8 @@ class AtAuthImpl implements AtAuth {
   /// Nothing is sent until the request's `atKeysIo` has been read and, for a
   /// [WrittenAtKeysIo], checked with [WrittenAtKeysIo.checkWritable]: keys
   /// already there are refused, and any read failure other than
-  /// [AtKeysSourceAbsentException] is rethrown with its type, naming the
-  /// source in its message where that type can carry it.
+  /// [AtKeysSourceAbsentException] throws [AtKeysUnusableException] with
+  /// cause [AtKeysUnusableCause.unreadable], naming the source.
   ///
   /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
@@ -108,7 +109,9 @@ class AtAuthImpl implements AtAuth {
       // No keys yet: this activation mints them.
     } catch (e, stackTrace) {
       Error.throwWithStackTrace(
-          _namingSource(e, keysIo!.describeSource(atOnboardingRequest.atSign)),
+          AtKeysUnusableException.unreadable(atOnboardingRequest.atSign,
+              source: keysIo!.describeSource(atOnboardingRequest.atSign),
+              error: e),
           stackTrace);
     }
 
@@ -497,34 +500,6 @@ class AtAuthImpl implements AtAuth {
           '${atRequest.atSign} atServer'
           '${lastError == null ? '' : ' : $lastError'}');
     }
-  }
-}
-
-/// [error], thrown reading keys from [source], with [source] named in its
-/// message where its type can carry one and the message does not already
-/// name it. A [FormatException] is rebuilt without its source text.
-Object _namingSource(Object error, String source) {
-  String named(String message) =>
-      message.contains(source) ? message : '$source cannot be read: $message';
-  switch (error) {
-    case AtException():
-      error.message = named(error.message);
-      return error;
-    case AtKeysFormatException():
-      if (error.message.contains(source)) return error;
-      final what = 'the atKeys in $source';
-      final position = error.position;
-      return error.reason == AtKeysFormatException.notAnObject('').reason &&
-              position == null
-          ? AtKeysFormatException.notAnObject(what)
-          : AtKeysFormatException.notJson(
-              what,
-              FormatException(
-                  error.reason, null, position == null ? null : position - 1));
-    case FormatException():
-      return FormatException(named(error.message), null, error.offset);
-    default:
-      return error;
   }
 }
 

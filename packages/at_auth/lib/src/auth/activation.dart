@@ -23,8 +23,8 @@ import 'package:at_utils/at_progress.dart';
 /// atServer. Returns the enrollment id.
 ///
 /// Nothing is sent before the read: keys already in [keys] are refused, and
-/// any failure to read them other than [AtKeysSourceAbsentException] is
-/// rethrown as it is.
+/// any failure to read them other than [AtKeysSourceAbsentException] throws
+/// [AtKeysUnusableException] with cause [AtKeysUnusableCause.unreadable].
 ///
 /// [signingAlgo] is the APKAM algorithm the atSign authenticates with from
 /// now on: `rsa2048` for a legacy activation, `mldsa65` for a post-quantum

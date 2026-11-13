@@ -19,3 +19,8 @@ Feature: Activation refuses a keyfile it cannot read or write before it uses the
     Given no atKeys file at the activation's path
     When the app activates the atSign with its CRAM secret
     Then activation completes and writes the keys
+
+  Scenario: Activation refuses unusable keys with AtKeysUnusableException
+    Given an atKeys store for @alice that exists but cannot be read, including a field of the wrong type or a keychain the platform refuses to read
+    When the app activates @alice with its CRAM secret
+    Then it throws AtKeysUnusableException with cause unreadable, naming the keys source and why, and sends nothing to the atServer

@@ -37,20 +37,30 @@ class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   }
 }
 
-/// A keys store with no path, whose read fails with [error].
+/// A keys store with no path, named [source], whose read fails with
+/// [error].
 class _UnreadableStore extends WrittenAtKeysIo {
-  _UnreadableStore(this.error);
+  _UnreadableStore(this.error, {this.source = 'the test keys store'});
 
   final Object error;
+  final String source;
 
   @override
   Future<AtKeys> read(String atsign) async => throw error;
 
   @override
-  String describeSource(String atsign) => 'the test keys store';
+  String describeSource(String atsign) => source;
 
   @override
   Future write(String atsign, AtKeys atKeys) async {}
+}
+
+/// A platform's refusal to read its keychain, as a plugin reports one.
+class _PlatformRefusal implements Exception {
+  @override
+  String toString() =>
+      'PlatformException(AuthError:UserCanceled, User canceled the '
+      'operation., null, null)';
 }
 
 /// Activation with a CRAM secret, against an atKeys file it cannot read or a
@@ -113,6 +123,16 @@ void main() {
           signingAlgoType: SigningAlgoType.rsa2048, atKeysIo: keys),
       cramSecret);
 
+  /// [AtKeysUnusableException] with cause unreadable for [source], whose
+  /// message is [message] and whose error matches [error].
+  Matcher unreadable(String source, Object message, Matcher error) =>
+      isA<AtKeysUnusableException>()
+          .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+          .having((e) => e.atSign, 'atSign', atSign)
+          .having((e) => e.source, 'source', source)
+          .having((e) => e.message, 'message', message)
+          .having((e) => e.error, 'error', error);
+
   void expectNothingSent() {
     verifyZeroInteractions(lookUp);
     verifyZeroInteractions(enrollment);
@@ -157,11 +177,18 @@ void main() {
 
       await expectLater(
           activate(FileAtKeysIo(filePath: (_) => path)),
-          throwsA(isA<FileSystemException>()
-              .having((e) => e.path, 'path', path)
-              .having((e) => e.osError?.errorCode, 'osError.errorCode', eacces)
-              .having((e) => '$e', 'text', contains(path))
-              .having((e) => e, 'key material', holdsNoneOf(privates[0]))));
+          throwsA(allOf(
+              unreadable(
+                  path,
+                  allOf(
+                      startsWith('The keys for $atSign at $path could not be '
+                          'read: '),
+                      contains('Permission denied')),
+                  isA<FileSystemException>()
+                      .having((e) => e.path, 'path', path)
+                      .having((e) => e.osError?.errorCode, 'osError.errorCode',
+                          eacces)),
+              holdsNoneOf(privates[0]))));
       expectNothingSent();
     }, skip: skipModes);
 
@@ -171,10 +198,13 @@ void main() {
 
       await expectLater(
           activate(FileAtKeysIo(filePath: (_) => path)),
-          throwsA(isA<AtKeysFormatException>()
-              .having((e) => e.message, 'message',
-                  startsWith('the atKeys file $path is not valid JSON'))
-              .having((e) => e, 'file contents', holdsNoneOf(text))));
+          throwsA(allOf(
+              unreadable(
+                  path,
+                  'The keys for $atSign at $path could not be read: it is not '
+                      'valid JSON: Unexpected character (at character 1).',
+                  isA<AtKeysFormatException>()),
+              holdsNoneOf(text))));
       expectNothingSent();
     });
 
@@ -185,20 +215,18 @@ void main() {
       await expectLater(
           activate(
               FileAtKeysIo(filePath: (_) => path, passPhrase: otherPassPhrase)),
-          throwsA(isA<AtDecryptionException>()
-              .having(
-                  (e) => e.message,
-                  'message',
+          throwsA(allOf(
+              unreadable(
+                  path,
                   allOf(
-                      contains(path), contains('passphrase may be incorrect')))
-              .having(
-                  (e) => e.message,
-                  'passphrases',
-                  allOf(isNot(contains(passPhrase)),
-                      isNot(contains(otherPassPhrase))))
-              .having(
-                  (e) => e.message, 'CRAM secret', isNot(contains(cramSecret)))
-              .having((e) => e, 'key material', holdsNoneOf(privates[1]))));
+                      startsWith('The keys for $atSign at $path could not be '
+                          'read: '),
+                      contains('passphrase may be incorrect'),
+                      isNot(contains(passPhrase)),
+                      isNot(contains(otherPassPhrase)),
+                      isNot(contains(cramSecret))),
+                  isA<AtDecryptionException>()),
+              holdsNoneOf(privates[1]))));
       expectNothingSent();
     });
 
@@ -207,10 +235,13 @@ void main() {
 
       await expectLater(
           activate(FileAtKeysIo(filePath: (_) => path)),
-          throwsA(isA<AtDecryptionException>()
-              .having((e) => e.message, 'message',
-                  allOf(contains(path), contains('Pass Phrase is required')))
-              .having((e) => e, 'key material', holdsNoneOf(privates[2]))));
+          throwsA(allOf(
+              unreadable(
+                  path,
+                  'The keys for $atSign at $path could not be read: Pass '
+                      'Phrase is required for password protected atKeys file.',
+                  isA<AtDecryptionException>()),
+              holdsNoneOf(privates[2]))));
       expectNothingSent();
     });
   });
@@ -279,78 +310,105 @@ void main() {
     });
   });
 
-  group('A refusal names a keys store that is not a file', () {
+  group('Activation refuses unusable keys with AtKeysUnusableException', () {
     const source = 'the test keys store';
 
-    test('an AtKeysFormatException that does not name it is rebuilt naming it',
-        () async {
+    test('a keyfile with a field of the wrong type', () async {
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      final selfEncryptionKey = randomBase64(32);
+      await File(path).writeAsString(jsonEncode(
+          {'selfEncryptionKey': selfEncryptionKey, 'aesPkamPublicKey': 5}));
+
+      await expectLater(
+          activate(FileAtKeysIo(filePath: (_) => path)),
+          throwsA(allOf(
+              unreadable(
+                  path,
+                  "The keys for $atSign at $path could not be read: type 'int' "
+                      "is not a subtype of type 'String' in type cast.",
+                  isA<TypeError>()),
+              holdsNoneOf(selfEncryptionKey))));
+      expectNothingSent();
+    });
+
+    test('a keychain the platform refuses to read', () async {
+      await expectLater(
+          activate(_UnreadableStore(_PlatformRefusal(),
+              source: "this device's keychain")),
+          throwsA(unreadable(
+              "this device's keychain",
+              "The keys for $atSign in this device's keychain could not be "
+                  'read: PlatformException(AuthError:UserCanceled, User '
+                  'canceled the operation., null, null).',
+              isA<_PlatformRefusal>())));
+      expectNothingSent();
+    });
+
+    test('a store whose entry is not JSON', () async {
       await expectLater(
           activate(_UnreadableStore(AtKeysFormatException.notJson('the entry',
               const FormatException('Unexpected character', null, 0)))),
-          throwsA(isA<AtKeysFormatException>()
-              .having((e) => e.message, 'message',
-                  'the atKeys in $source is not valid JSON: Unexpected character (at character 1)')
-              .having((e) => e.reason, 'reason', 'Unexpected character')
-              .having((e) => e.position, 'position', 1)));
+          throwsA(unreadable(
+              source,
+              'The keys for $atSign in $source could not be read: it is not '
+                  'valid JSON: Unexpected character (at character 1).',
+              isA<AtKeysFormatException>())));
       expectNothingSent();
     });
 
-    test('one that is not a JSON object still says so', () async {
+    test('a store whose entry is not a JSON object', () async {
       await expectLater(
           activate(
               _UnreadableStore(AtKeysFormatException.notAnObject('the entry'))),
-          throwsA(isA<AtKeysFormatException>()
-              .having((e) => e.message, 'message',
-                  'the atKeys in $source is not a JSON object')
-              .having((e) => e.position, 'position', isNull)));
+          throwsA(unreadable(
+              source,
+              'The keys for $atSign in $source could not be read: it is not a '
+                  'JSON object.',
+              isA<AtKeysFormatException>())));
       expectNothingSent();
     });
 
-    test('a FormatException names it and holds none of its text', () async {
+    test('a FormatException, whose text is not repeated', () async {
       final text = '{"aesPkamPrivateKey": "${randomBase64(32)}"';
-
-      await expectLater(
-          activate(_UnreadableStore(
-              FormatException('Unexpected end of input', text, text.length))),
-          throwsA(isA<FormatException>()
-              .having((e) => e.message, 'message',
-                  '$source cannot be read: Unexpected end of input')
-              .having((e) => e.source, 'source', isNull)
-              .having((e) => e.offset, 'offset', text.length)
-              .having((e) => e, 'text', holdsNoneOf(text))));
-      expectNothingSent();
-    });
-
-    test('an AtException keeps its type and names it', () async {
-      final error = AtKeysValidationException('Unsupported atKeys version: 2');
+      final error =
+          FormatException('Unexpected end of input', text, text.length);
 
       await expectLater(
           activate(_UnreadableStore(error)),
           throwsA(allOf(
-              same(error),
-              isA<AtKeysValidationException>().having(
-                  (e) => e.message,
-                  'message',
-                  '$source cannot be read: Unsupported atKeys version: 2'))));
+              unreadable(
+                  source,
+                  'The keys for $atSign in $source could not be read: '
+                      'Unexpected end of input.',
+                  same(error)),
+              isA<AtKeysUnusableException>().having(
+                  (e) => e.message, 'message', holdsNoneOf(text)))));
       expectNothingSent();
     });
 
-    test('a message that already names it is left as it is', () async {
-      final error =
-          AtKeysValidationException('$source holds a version 2 document');
+    test('an AtException, whose message is the reason', () async {
+      final error = AtKeysValidationException('Unsupported atKeys version: 2');
 
       await expectLater(
           activate(_UnreadableStore(error)),
-          throwsA(isA<AtKeysValidationException>().having((e) => e.message,
-              'message', '$source holds a version 2 document')));
+          throwsA(unreadable(
+              source,
+              'The keys for $atSign in $source could not be read: Unsupported '
+                  'atKeys version: 2.',
+              same(error))));
       expectNothingSent();
     });
 
-    test('an error with no message to carry it is rethrown as it is', () async {
-      final error = StateError('the store is closed');
+    test('an error whose text spans lines gives its first line', () async {
+      final error = StateError('the store is closed\n#0 main (file.dart:1)');
 
       await expectLater(
-          activate(_UnreadableStore(error)), throwsA(same(error)));
+          activate(_UnreadableStore(error)),
+          throwsA(unreadable(
+              source,
+              'The keys for $atSign in $source could not be read: Bad state: '
+                  'the store is closed.',
+              same(error))));
       expectNothingSent();
     });
   });

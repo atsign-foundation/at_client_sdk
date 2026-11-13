@@ -27,11 +27,14 @@
   `FileAtKeysIo`, the keyfile path), and `WrittenAtKeysIo.checkWritable`
   throws unless the store could take new keys now. A class that implements
   `WrittenAtKeysIo` rather than extending it must add both.
+- feat: `AtKeysUnusableException` says why an atSign's keys cannot be used
+  (`cause`) and where they were looked for (`source`).
 - fix: `activateAtSign` throws before sending anything when `keys` holds keys
-  it cannot read, as the read's exception type (`AtKeysFormatException`,
-  `AtDecryptionException`, `FileSystemException` and the like) naming the
-  store, or when a `FileAtKeysIo` keyfile cannot be written there
+  it cannot read (`AtKeysUnusableException`, naming the store and why) or
+  when a `FileAtKeysIo` keyfile cannot be written there
   (`FileSystemException` naming its path).
+- fix: a failed PKAM step during activation no longer puts a stack trace in
+  the exception's message.
 - fix: an atKeys document whose `createdAt` is not a date, or that repeats a
   `keyId`, is refused with a message naming the field and not its value.
 
