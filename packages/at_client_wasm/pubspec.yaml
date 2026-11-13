@@ -9,6 +9,7 @@ environment:
 
 dependencies:
   at_auth: ^4.2.0
+  at_base2e15: ^1.0.0
   at_chops: ^3.8.0
   at_client: ^4.2.0
   at_commons: ^5.23.0
