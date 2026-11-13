@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/util/keys_problem.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart'
     show approvalPollInterval;
 import 'package:at_utils/at_utils.dart';
@@ -303,8 +304,10 @@ class CLIBase {
   /// does, asking every [approvalRetryInterval], then opens on the keys the
   /// approval completes.
   ///
-  /// Throws [AtNoCredentialException] at once when the keyfile holds no
-  /// credential, as a denial, a cancel or an expiry leaves it,
+  /// Throws [AtKeysUnusableException] at once, saying why on stderr, when
+  /// the keys cannot be used: the keyfile is absent or cannot be read, names
+  /// another atSign, or holds no credential, as a denial, a cancel or an
+  /// expiry leaves it ([AtNoCredentialException]);
   /// [AtStorageInUseException] when another process holds the store open,
   /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentException] when the request is denied or expires,
@@ -330,17 +333,6 @@ class CLIBase {
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort;
 
-    if (!File(atKeysFilePathToUse).existsSync()) {
-      // no atKeys file
-      var msg = 'No atKeys file found at $atKeysFilePathToUse';
-      stderr.writeln(chalk.brightRed(msg));
-      stderr.writeln(''
-          '    => If you do not have an atKeys file,'
-          ' this package will help you get started:'
-          ' https://pub.dev/packages/at_client_cli');
-      throw ArgumentError(msg);
-    }
-
     const retryDuration = Duration(seconds: 3);
     stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
     final keys = CliKeys.fileFor(atSign,
@@ -358,8 +350,11 @@ class CLIBase {
             serviceFactory: atServiceFactory);
       } on AtOpenRefusedException catch (e) {
         throw _reported(_openFailure(e.state));
-      } on AtNoCredentialException catch (e) {
-        throw _reported(e);
+      } on AtEnrollmentPendingException {
+        rethrow;
+      } on AtKeysUnusableException catch (e) {
+        reportKeysProblem(e, absentHint: eitherKeysHint(atSign));
+        rethrow;
       }
     }
 
