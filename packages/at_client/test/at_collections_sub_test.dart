@@ -304,103 +304,69 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
   group('subCollection — reopening with another effective tag', () {
     late _Collections c;
-    late CItem<String> post;
     const subNs = 'comments.p1.$parentNs';
 
-    setUp(() {
-      c = buildParent();
-      post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
-    });
+    setUp(() => c = buildParent());
 
     tearDown(() {
       clearFactoriesForTest();
       setSubCollectionTagCapForTest(null);
     });
 
-    Matcher mismatch(String existing, String requested) =>
-        throwsA(isA<CollectionTypeTagMismatchException>()
+    /// [spec] is the writeTypeTag ('-' for none), then optional '+typeTag:<t>'.
+    AtCollection<Map<String, dynamic>> open(String spec, {String id = 'p1'}) {
+      final parts = spec.split('+typeTag:');
+      return subOn<Map<String, dynamic>>(
+          c, c.parent.draft(obj: 'hello', id: id) as CItem<String>, 'comments',
+          fromJson: parts.length > 1 ? (m) => m : null,
+          typeTag: parts.length > 1 ? parts[1] : null,
+          writeTypeTag: parts[0] == '-' ? null : parts[0]);
+    }
+
+    Matcher mismatch(String? existing, String? requested) =>
+        isA<CollectionTypeTagMismatchException>()
             .having((e) => e.namespace, 'namespace', subNs)
-            .having((e) => e.existingTag, 'existingTag', existing)
-            .having((e) => e.requestedTag, 'requestedTag', requested));
+            .having((e) => e.existingTag, 'existingTag', existing ?? anything)
+            .having(
+                (e) => e.requestedTag, 'requestedTag', requested ?? anything);
+
+    Matcher usable(String? tag) => isA<AtCollection>()
+        .having((c) => c.namespace, 'namespace', subNs)
+        .having((c) => c.writeTypeTag, 'writeTypeTag', tag ?? anything);
+
+    final cases = <(String, String, String, Matcher)>[
+      ('-', 'x', 'a mismatch', mismatch(null, 'x')),
+      ('x', '-', 'a mismatch', mismatch('x', null)),
+      ('x', 'y', 'a mismatch naming both', mismatch('x', 'y')),
+      ('x', 'x', 'a usable one stamping x', usable('x')),
+      ('-+typeTag:x', 'x', 'a usable one stamping x', usable('x')),
+      ('x', '-+typeTag:x', 'a usable one', usable(null)),
+      ('x', ' ', 'ArgumentError', isA<ArgumentError>()),
+      ('x', 'z+typeTag:y', 'ArgumentError', isA<ArgumentError>()),
+    ];
+
+    for (final (first, second, then, want) in cases) {
+      test(
+          'Given a sub-collection open as [$first], when it is reopened as '
+          '[$second], then the outcome is $then', () async {
+        open(first);
+        final got = await Future<Object>.sync(() => open(second))
+            .catchError((Object e) => e);
+        expect(got, want);
+      });
+    }
 
     test(
-        'Given a sub-collection open with x, when it is reopened with y, '
-        'then the exception names the namespace and both tags', () {
-      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
-      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: 'y'),
-          mismatch('x', 'y'));
-    });
-
-    test(
-        'Given a sub-collection open with none, when it is reopened with x, '
-        'then CollectionTypeTagMismatchException is thrown', () {
-      subOn<String>(c, post, 'comments');
-      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: 'x'),
-          throwsA(isA<CollectionTypeTagMismatchException>()));
-    });
-
-    test(
-        'Given a sub-collection open with x, when it is reopened with none, '
-        'then CollectionTypeTagMismatchException is thrown', () {
-      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
-      expect(() => subOn<String>(c, post, 'comments'),
-          throwsA(isA<CollectionTypeTagMismatchException>()));
-    });
-
-    test(
-        'Given a sub-collection open with typeTag x, when it is reopened '
-        'with writeTypeTag x, then a usable collection is returned', () {
-      subOn<Map<String, dynamic>>(c, post, 'comments',
-          fromJson: (m) => m, typeTag: 'x');
-      final again = subOn<String>(c, post, 'comments', writeTypeTag: 'x');
-      expect(again.draft(obj: 'hi', id: 'c1').type, 'x');
-    });
-
-    test(
-        'Given a sub-collection open with x, when it is reopened with x, '
-        'then a collection stamping x is returned', () {
-      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
-      final again = subOn<String>(c, post, 'comments', writeTypeTag: 'x');
-      expect(again.writeTypeTag, 'x');
-    });
-
-    test(
-        'Given a sub-collection open with x, when it is reopened with a blank '
-        'writeTypeTag, then ArgumentError is thrown, not a mismatch', () {
-      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
-      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: ' '),
-          throwsArgumentError);
-    });
-
-    test(
-        'Given a sub-collection open with x, when it is reopened with a '
-        'writeTypeTag that conflicts with typeTag, then ArgumentError is '
-        'thrown, not a mismatch', () {
-      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
-      expect(
-          () => subOn<Map<String, dynamic>>(c, post, 'comments',
-              fromJson: (m) => m, typeTag: 'y', writeTypeTag: 'z'),
-          throwsArgumentError);
-    });
-
-    test(
-        'Given the tag cap is 2 and three sub-collections are opened, when '
-        'the first is reopened with another tag, then it is not caught and '
-        'the newest still is', () {
+        'Given tag cap 2 and three sub-collections open with x, when the first '
+        'and the newest reopen with y, then only the newest is caught', () {
       setSubCollectionTagCapForTest(2);
-      final posts = [
-        for (final id in ['p1', 'p2', 'p3'])
-          c.parent.draft(obj: 'hello', id: id) as CItem<String>
-      ];
-      for (final p in posts) {
-        subOn<String>(c, p, 'comments', writeTypeTag: 'x');
+      for (final id in ['p1', 'p2', 'p3']) {
+        open('x', id: id);
       }
-      expect(() => subOn<String>(c, posts[0], 'comments', writeTypeTag: 'y'),
-          returnsNormally);
-      expect(() => subOn<String>(c, posts[2], 'comments', writeTypeTag: 'y'),
+      expect(() => open('y', id: 'p1'), returnsNormally);
+      expect(() => open('y', id: 'p3'),
           throwsA(isA<CollectionTypeTagMismatchException>()));
     });
   });
