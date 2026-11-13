@@ -585,6 +585,24 @@ abstract class AtClient {
   /// no factory is registered for their type, without registering a
   /// [fromJson]. When [typeTag] is also set, the two must match.
   ///
+  /// The collection's type tag is kept in its collection record, the self
+  /// key `__collection.<namespace>@<atSign>`, synced like the items, so every
+  /// app, session and device of this atSign opens it with the same tag. Its
+  /// value is JSON, `{"v": 1, "writeTypeTag": "Todo"}`; a reader ignores the
+  /// fields it does not know. Each call reads the record:
+  /// - a record holding a tag other than [writeTypeTag], or [typeTag] when
+  ///   [writeTypeTag] is null, throws [CollectionTypeTagMismatchException];
+  /// - otherwise the collection stamps the record's tag, even when this call
+  ///   asked for none, and so does every collection this client already
+  ///   handed out for [namespace];
+  /// - with no record, [writeTypeTag] is written as the record, after asking
+  ///   the atServer for one that has not synced here yet. A call without
+  ///   [writeTypeTag] writes nothing, so a collection with no record opens
+  ///   as before.
+  ///
+  /// A record that cannot be read as that JSON throws [FormatException].
+  /// The id `__collection` is reserved for the record.
+  ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
   /// Idempotent: the sweep runs at most once per collection instance

@@ -631,7 +631,7 @@ class AtClientImpl implements AtClient {
   // instances: each has its own listener wiring and pending-events
   // buffer, so sharing one cache slot would conflate their event
   // streams.
-  final Map<(String, EventSource), AtCollection> _collections = {};
+  final CollectionRegistry _collections = CollectionRegistry();
   final Set<(String, EventSource)> _collectionsSwept =
       <(String, EventSource)>{};
 
@@ -655,18 +655,23 @@ class AtClientImpl implements AtClient {
       );
     }
     final cacheKey = (namespace, eventSource);
-    final c = _collections.putIfAbsent(
-      cacheKey,
-      () => AtCollection<T>(
+    final c = await _collections.open<T>(
+      this,
+      namespace,
+      eventSource,
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+      build: (tag) => AtCollection<T>(
         this,
         namespace,
         defaultExpiration,
         eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
-        writeTypeTag: writeTypeTag,
+        writeTypeTag: tag,
       ),
-    ) as AtCollection<T>;
+    );
     if (cleanupOrphansOnCreation && !_collectionsSwept.contains(cacheKey)) {
       _collectionsSwept.add(cacheKey);
       try {

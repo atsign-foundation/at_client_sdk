@@ -13,6 +13,7 @@ import 'dart:typed_data';
 // API) can use `StringBuffer` with its standard Dart semantics.
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
@@ -24,6 +25,7 @@ import 'package:meta/meta.dart';
 import 'package:mutex/mutex.dart';
 import 'package:at_client/src/util/swallowed_error.dart';
 
+part 'collection_record.dart';
 part 'collections_test_hooks.dart';
 
 // -----------------------------------------------------------------------------
@@ -333,8 +335,13 @@ enum EventSource { data, notifs, both }
 ///     could not absorb the second `@self:` segment the way the
 ///     `[^.]+` wildcard on the unfiltered scan does — the defect
 ///     behind #2032.
-const String _atKeyScanPrefix =
-    r'^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}';
+///   - `(?!(?:[^:]*:){0,2}__collection\.)` rejects the collection
+///     record (see [CollectionTypeTagMismatchException]) and any
+///     shared-in key with its id, behind any of the same wrappers, so
+///     no record is ever read as an item. It sits before the wrapper
+///     group so the group cannot backtrack around it.
+const String _atKeyScanPrefix = r'^(?!local:)(?!(?:cached:)?public:)'
+    r'(?!(?:[^:]*:){0,2}__collection\.)(?:[^:]*:){0,2}';
 
 interface class AtCollection<T> {
   static const String _rr = '__rr';
@@ -419,7 +426,12 @@ interface class AtCollection<T> {
   /// Type tag stamped on items this collection creates when no factory is
   /// registered for their runtime type. Lets items carry a wire-format tag
   /// without a `fromJson` factory.
-  final String? writeTypeTag;
+  ///
+  /// A collection from [AtClient.collection] follows its collection record:
+  /// this is the record's tag once the record has one, even when the open
+  /// asked for none.
+  String? get writeTypeTag => _writeTypeTag;
+  String? _writeTypeTag;
 
   late final AtSignLogger _logger;
 
@@ -506,7 +518,8 @@ interface class AtCollection<T> {
   ///
   /// [writeTypeTag] stamps created items with that tag when no factory is
   /// registered for their type. It is independent of [fromJson]; when
-  /// [typeTag] is also set, the two must match.
+  /// [typeTag] is also set, the two must match. This constructor neither
+  /// reads nor writes the collection record; [AtClient.collection] does.
   factory AtCollection(
     AtClient atClient,
     String namespace,
@@ -602,21 +615,15 @@ interface class AtCollection<T> {
         injectedDataEvents: dataEvents,
       );
 
-  AtCollection._(
-    this.atClient,
-    this.namespace,
-    this.defaultExpiration, {
-    required EventSource eventSource,
-    T Function(Map<String, dynamic>)? fromJson,
-    String? typeTag,
-    this.writeTypeTag,
-    Stream<AtNotification>? notifications,
-    Stream<DataEvent>? injectedDataEvents,
-  }) : _eventSource = eventSource {
-    if (!namespace.contains('.')) {
-      throw ArgumentError('namespace must be fully qualified');
-    }
-    if (fromJson != null && typeTag == null) {
+  /// Throws [ArgumentError] when the tag arguments of a collection cannot be
+  /// used together: [typeTag] without a `fromJson` or the reverse, a blank
+  /// [writeTypeTag], or a [writeTypeTag] that differs from [typeTag].
+  static void _checkTagArgs<T>({
+    required bool hasFromJson,
+    required String? typeTag,
+    required String? writeTypeTag,
+  }) {
+    if (hasFromJson && typeTag == null) {
       throw ArgumentError(
         'typeTag is required when fromJson is supplied. '
         "Pass typeTag: '$T' alongside fromJson, or call "
@@ -625,14 +632,14 @@ interface class AtCollection<T> {
         'survives Dart minifier / tree-shaker renames in release builds.',
       );
     }
-    if (fromJson == null && typeTag != null) {
+    if (!hasFromJson && typeTag != null) {
       throw ArgumentError(
         'typeTag was supplied without fromJson. Pass fromJson alongside '
         'it, or omit both and register the factory separately via '
         'AtCollection.registerFactory.',
       );
     }
-    if (writeTypeTag != null && writeTypeTag!.trim().isEmpty) {
+    if (writeTypeTag != null && writeTypeTag.trim().isEmpty) {
       throw ArgumentError('writeTypeTag must be non-blank when supplied.');
     }
     if (typeTag != null && writeTypeTag != null && writeTypeTag != typeTag) {
@@ -641,6 +648,28 @@ interface class AtCollection<T> {
         'Pass the same value or omit writeTypeTag.',
       );
     }
+  }
+
+  AtCollection._(
+    this.atClient,
+    this.namespace,
+    this.defaultExpiration, {
+    required EventSource eventSource,
+    T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
+    String? writeTypeTag,
+    Stream<AtNotification>? notifications,
+    Stream<DataEvent>? injectedDataEvents,
+  })  : _eventSource = eventSource,
+        _writeTypeTag = writeTypeTag {
+    if (!namespace.contains('.')) {
+      throw ArgumentError('namespace must be fully qualified');
+    }
+    _checkTagArgs<T>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
     if (fromJson != null) {
       registerFactory<T>(fromJson, typeTag: typeTag!);
     }
@@ -884,6 +913,9 @@ interface class AtCollection<T> {
     // subCollection applies to `parent.id`.
     if (id.contains('.')) {
       throw ArgumentError('id must not contain dots: "$id"');
+    }
+    if (id == _recordId) {
+      throw ArgumentError('id "$id" is reserved for the collection record');
     }
     return CItem._(
       owner: atSign,

@@ -7,6 +7,17 @@
   external implementers of `AtCollection` must add it. `lib/testing.dart`
   exports `collectionWithInjectedBoth`, `collectionWithInjectedDataEvents`
   and `collectionWithInjectedNotifications` for downstream tests.
+- feat: `AtClient.collection` keeps a collection's type tag in a record,
+  `__collection.<namespace>@<self>`, holding `{"v":1,"writeTypeTag":"..."}`.
+  An open with `writeTypeTag` and no record writes it; an open asking another
+  tag (its `writeTypeTag`, else its `typeTag`) throws the new
+  `CollectionTypeTagMismatchException`; an open with no tag adopts the
+  recorded one, as does every collection already handed out for that
+  namespace. A malformed record throws `FormatException`. Readers ignore
+  unknown fields. A collection with no record and no `writeTypeTag` opens as
+  before. `__collection` is a reserved item id, refused by `draft`, and
+  `AtCollection.writeTypeTag` is now a getter. Tag arguments are checked on
+  every `collection` call, including one served from the cache.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
