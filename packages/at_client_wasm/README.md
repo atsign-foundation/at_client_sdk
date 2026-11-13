@@ -7,3 +7,15 @@ This is a pre-release and unpublished package intended for WebAssembly/browser t
 - Transport is direct by default: the browser reaches each atSign's own atServer over `wss://host:port/ws`. A dev proxy is used only when `proxyHost` and `proxyPort` are both given to `DevSessionOptions`. There is no fallback from one to the other. See [docs/direct-mode.md](docs/direct-mode.md).
 - Keys that carry ML-DSA-65 signing or namespace key material are refused for now (`UnsupportedKeyMaterialException`, before any connection). The passkey-onboarding work lifts this.
 - The atSign is normalized (`alice`, `@Alice` and ` @alice ` open the same session).
+
+## Browser entry points
+
+`package:at_client_wasm/at_client_wasm_web.dart` exports everything in `at_client_wasm.dart` plus the browser transports:
+
+- `sessionTransport(DevSessionOptions)` returns the `SessionTransport` (`lookUps` + `finder`) that `portalSession` takes: direct, or the dev proxy when `proxyHost` and `proxyPort` are set.
+- `proxyWebSocketLookUps(host:, port:, path: '/ws')` builds the lookup factory for the proxy, and `proxyPreamble(atSign)` is the first command each of its connections sends: `from:<atSign>`. A proxy that fronts many atServers reads it to learn which atServer the connection is for.
+
+## Building the browser entry
+
+`bash tool/build.sh` compiles `web/at_client_wasm_entry.dart` into `build/`: `at_client.js` (dart2js) and `at_client.wasm` plus `at_client.mjs` (dart2wasm), unminified so class names survive. If the dart2wasm compile fails the script warns and exits 0, leaving `at_client.js`; with `WASM_REQUIRED=1` that failure exits 1.
+
