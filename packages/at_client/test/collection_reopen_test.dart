@@ -9,22 +9,20 @@ import 'test_utils/transport.dart';
 /// Catalogue: features/at_client/collection_write_type_tag.feature
 void main() {
   const ns = 'notes.wavi';
-  const day = Duration(days: 1);
-
+  const at = '@reopen';
   late AtClient client;
 
   setUp(() async {
     client = await buildAtClient(
-        atSign: '@reopen',
+        atSign: at,
         namespace: 'wavi',
         preference: AtClientPreference()
           ..namespace = 'wavi'
           ..monitorAutoStart = false,
         secondaryAddressFinder: defaultAtDirectory,
-        atKeysIo: noKeysFor('@reopen'),
-        lookUps: FakeAtServer(atSign: '@reopen').lookUps,
-        storage:
-            InMemoryAtClientStorage(atSign: '@reopen', closedByClient: true));
+        atKeysIo: noKeysFor(at),
+        lookUps: FakeAtServer(atSign: at).lookUps,
+        storage: InMemoryAtClientStorage(atSign: at, closedByClient: true));
   });
 
   tearDown(() async {
@@ -32,115 +30,54 @@ void main() {
     await client.stop();
   });
 
-  Future<AtCollection<String>> open(String? tag,
-          {EventSource eventSource = EventSource.both, bool sweep = false}) =>
-      client.collection<String>(ns, day,
-          eventSource: eventSource,
-          writeTypeTag: tag,
-          cleanupOrphansOnCreation: sweep);
+  /// Opens the collection described by [spec]: the writeTypeTag ('-' for
+  /// none) followed by '+'-separated flags `data`, `sweep` and `typeTag:<t>`.
+  Future<AtCollection<_Todo>> open(String spec) {
+    final tag = spec.split('+').first;
+    final typeTag = RegExp(r'typeTag:(\w+)').firstMatch(spec)?.group(1);
+    return client.collection<_Todo>(ns, const Duration(days: 1),
+        eventSource:
+            spec.contains('+data') ? EventSource.data : EventSource.both,
+        fromJson: typeTag == null ? null : (m) => _Todo(),
+        typeTag: typeTag,
+        writeTypeTag: tag == '-' ? null : tag,
+        cleanupOrphansOnCreation: spec.contains('+sweep'));
+  }
 
-  Matcher mismatch(String existing, String requested) =>
-      throwsA(isA<CollectionTypeTagMismatchException>()
+  Matcher mismatch(String? existing, String? requested) =>
+      isA<CollectionTypeTagMismatchException>()
           .having((e) => e.namespace, 'namespace', ns)
-          .having((e) => e.existingTag, 'existingTag', existing)
-          .having((e) => e.requestedTag, 'requestedTag', requested));
+          .having((e) => e.existingTag, 'existingTag', existing ?? anything)
+          .having((e) => e.requestedTag, 'requestedTag', requested ?? anything);
 
-  group('reopening a collection with another effective tag', () {
-    test(
-        'Given a collection open with no writeTypeTag, when it is reopened '
-        'with x, then CollectionTypeTagMismatchException is thrown', () async {
-      await open(null);
-      await expectLater(
-          open('x'), throwsA(isA<CollectionTypeTagMismatchException>()));
-    });
+  Matcher stamping(String tag) => isA<AtCollection>()
+      .having((c) => c.draft(obj: _Todo(), id: 't1').type, 'draft type', tag);
 
-    test(
-        'Given a collection open with x, when it is reopened with none, '
-        'then CollectionTypeTagMismatchException is thrown', () async {
-      await open('x');
-      await expectLater(
-          open(null), throwsA(isA<CollectionTypeTagMismatchException>()));
-    });
+  final cases = <(String, String, String, Matcher Function(AtCollection))>[
+    ('-', 'x', 'a mismatch', (_) => mismatch(null, 'x')),
+    ('x', '-', 'a mismatch', (_) => mismatch('x', null)),
+    ('x', 'y', 'a mismatch naming both', (_) => mismatch('x', 'y')),
+    ('x', 'y+sweep', 'a mismatch', (_) => mismatch('x', 'y')),
+    ('x', 'y+data', 'a mismatch', (_) => mismatch('x', 'y')),
+    ('x', 'x+data', 'a separate instance', (a) => isNot(same(a))),
+    ('x', 'x', 'the same instance', (a) => same(a)),
+    ('-+typeTag:todo', 'todo', 'a stamping one', (_) => stamping('todo')),
+    ('todo', '-+typeTag:todo', 'a stamping one', (_) => stamping('todo')),
+    ('x', ' ', 'ArgumentError', (_) => isA<ArgumentError>()),
+    ('x', 'z+typeTag:y', 'ArgumentError', (_) => isA<ArgumentError>()),
+  ];
 
+  for (final (first, second, then, want) in cases) {
     test(
-        'Given a collection open with x, when it is reopened with y, '
-        'then the exception names the namespace and both tags', () async {
-      await open('x');
-      await expectLater(open('y'), mismatch('x', 'y'));
+        'Given a collection open as [$first], when it is reopened as [$second], '
+        'then the outcome is $then, and the first stays cached', () async {
+      final a = await open(first);
+      final got =
+          await Future<Object>.value(open(second)).catchError((Object e) => e);
+      expect(got, want(a));
+      expect(await open(first), same(a));
     });
-
-    test(
-        'Given a collection open with x, when it is reopened with x, '
-        'then the same instance is returned', () async {
-      final first = await open('x');
-      expect(await open('x'), same(first));
-    });
-
-    test(
-        'Given a collection open with x, when it is reopened with y and '
-        'cleanupOrphansOnCreation, then the exception is thrown and the first '
-        'instance stays cached', () async {
-      final first = await open('x');
-      await expectLater(open('y', sweep: true), mismatch('x', 'y'));
-      expect(await open('x'), same(first));
-    });
-
-    test(
-        'Given a collection open with x, when another eventSource is opened '
-        'with y, then CollectionTypeTagMismatchException is thrown', () async {
-      await open('x');
-      await expectLater(
-          open('y', eventSource: EventSource.data), mismatch('x', 'y'));
-    });
-
-    test(
-        'Given a collection open with x, when another eventSource is opened '
-        'with x, then it is a separate instance', () async {
-      final both = await open('x');
-      final data = await open('x', eventSource: EventSource.data);
-      expect(data, isNot(same(both)));
-      expect(data.writeTypeTag, 'x');
-    });
-
-    test(
-        'Given a collection open with typeTag todo, when it is reopened with '
-        'writeTypeTag todo, then a usable collection is returned', () async {
-      await client.collection<_Todo>(ns, day,
-          fromJson: (m) => _Todo(), typeTag: 'todo');
-      final again =
-          await client.collection<_Todo>(ns, day, writeTypeTag: 'todo');
-      expect(again.draft(obj: _Todo(), id: 't1').type, 'todo');
-    });
-
-    test(
-        'Given a collection open with writeTypeTag todo, when it is reopened '
-        'with typeTag todo, then a usable collection is returned', () async {
-      await open('todo');
-      final again = await client.collection<String>(ns, day,
-          fromJson: (m) => 'todo', typeTag: 'todo');
-      expect(again.namespace, ns);
-    });
-  });
-
-  group('refusing tag arguments before comparing tags', () {
-    test(
-        'Given a collection open with x, when it is reopened with a blank '
-        'writeTypeTag, then ArgumentError is thrown, not a mismatch', () async {
-      await open('x');
-      await expectLater(open(' '), throwsArgumentError);
-    });
-
-    test(
-        'Given a collection open with x, when it is reopened with a '
-        'writeTypeTag that conflicts with typeTag, then ArgumentError is '
-        'thrown, not a mismatch', () async {
-      await open('x');
-      await expectLater(
-          client.collection<_Todo>(ns, day,
-              fromJson: (m) => _Todo(), typeTag: 'y', writeTypeTag: 'z'),
-          throwsArgumentError);
-    });
-  });
+  }
 }
 
 class _Todo {}
