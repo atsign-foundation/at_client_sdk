@@ -180,6 +180,10 @@ extension AtsignLifecycle on Atsign {
   /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
   /// encryption private key. [onProgress] hears each step of the activation.
   ///
+  /// [apkamKeyPair] is an APKAM keypair the caller already holds, enrolled
+  /// instead of a minted one. It must sign under the activation's algorithm,
+  /// or the activation throws `AtSigningException` before enrolling.
+  ///
   /// A newly registered atSign can take minutes to be provisioned: the
   /// activation polls every [provisioningPollInterval] until the atServer
   /// answers or [provisioningBudget] is spent, five minutes with none, and
@@ -201,6 +205,7 @@ extension AtsignLifecycle on Atsign {
     String device = firstEnrollmentDeviceName,
     bool? mintLegacyMaterial,
     SigningAlgoType? signingAlgo,
+    ({String publicKey, String privateKey})? apkamKeyPair,
     Duration? provisioningBudget,
     Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
@@ -240,6 +245,7 @@ extension AtsignLifecycle on Atsign {
           cramSecret: cramSecret,
           keys: keys,
           signingAlgo: algo,
+          apkamKeyPair: apkamKeyPair,
           rootDomain: rootDomain,
           appName: app,
           deviceName: device,
