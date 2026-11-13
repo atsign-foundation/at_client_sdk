@@ -27,7 +27,7 @@ String atErrorCode(Object error) => switch (error) {
       AtEnrollmentPendingException() =>
         'onboarding_incomplete',
       AtEnrollmentException() => 'enrollment_denied',
-      SessionClosedException() => 'closed',
+      SessionClosedException() || StoppedException() => 'closed',
       UnsupportedKeyMaterialException() ||
       UnsupportedPasskeyRecordException() ||
       UnsupportedError() =>

@@ -198,6 +198,10 @@ class FakeGateway implements EnrollmentGateway {
   /// When set, an enroll waits for it before answering.
   Completer<void>? gate;
 
+  /// When set, an enroll throws this once [gate] opens, as a denied or
+  /// abandoned approval does.
+  Object? enrollError;
+
   FakeSession _session(String eid) =>
       FakeSession(server, eid)..closeError = closeErrorForNext;
 
@@ -215,6 +219,7 @@ class FakeGateway implements EnrollmentGateway {
       pointerNamespace: pointerNamespace
     ));
     await gate?.future;
+    if (enrollError case final error?) throw error;
     if (server.seedByEnrollment.containsValue(authSeed.join(','))) {
       throw KeyAlreadyEnrolledException();
     }

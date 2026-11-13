@@ -42,7 +42,7 @@ Future<AtClient> onboardNewAtSign(
         required String app,
         required String rpId,
         required String rpName,
-        String device = _defaultDevice,
+        String? device,
         String? proxyHost,
         int? proxyPort}) =>
     _withCustody(
@@ -50,7 +50,7 @@ Future<AtClient> onboardNewAtSign(
         app: app,
         rpId: rpId,
         rpName: rpName,
-        device: device,
+        device: device ?? _defaultDevice,
         proxyHost: proxyHost,
         proxyPort: proxyPort,
         run: (custody, options, transport) => onboardSession(custody,
@@ -89,6 +89,42 @@ Future<AtClient> passkeyLogin(
         proxyPort: proxyPort,
         run: (custody, options, transport) => loginSession(custody,
             atSign: options.atSign,
+            app: app,
+            transport: transport,
+            root: options.root));
+
+/// Enrolls this browser for [atSign] with an approver-issued [otp] and
+/// returns its client, PKAM'd before return.
+///
+/// Registers a passkey, asks the atServer for an enrollment named [device]
+/// under [app], and resolves once another device approves it, then files the
+/// sealed @keys document and a public pointer. [rpId], [rpName], [proxyHost]
+/// and [proxyPort] are as for [onboardNewAtSign].
+///
+/// Throws [AtEnrollmentException] when the approver denies the enrollment or
+/// it expires, [PrfUnavailableException] when the browser or authenticator
+/// has no passkey PRF, and the atServer's own errors when it refuses the
+/// request.
+Future<AtClient> passkeyEnroll(
+        {required String atSign,
+        required String otp,
+        required String app,
+        required String device,
+        required String rpId,
+        required String rpName,
+        String? proxyHost,
+        int? proxyPort}) =>
+    _withCustody(
+        atSign: atSign,
+        app: app,
+        rpId: rpId,
+        rpName: rpName,
+        device: device,
+        proxyHost: proxyHost,
+        proxyPort: proxyPort,
+        run: (custody, options, transport) => enrollSession(custody,
+            atSign: options.atSign,
+            otp: otp,
             app: app,
             transport: transport,
             root: options.root));

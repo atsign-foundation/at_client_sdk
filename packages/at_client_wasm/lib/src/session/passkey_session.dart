@@ -18,6 +18,22 @@ Future<AtClient> onboardSession(PasskeyCustody custody,
     _clientOn(await custody.onboard(atSign: atSign, cram: cram),
         app: app, transport: transport, root: root);
 
+/// Enrolls this device for [atSign] with an approver-issued [otp] through
+/// [custody], waits for the approval, and returns a client on the approved
+/// keys, PKAM'd before return.
+///
+/// Throws [AtEnrollmentException] when the approver denies the enrollment or
+/// it expires, and [StoppedException] when the wait is cancelled; neither
+/// leaves a session open.
+Future<AtClient> enrollSession(PasskeyCustody custody,
+        {required String atSign,
+        required String otp,
+        required String app,
+        required SessionTransport transport,
+        AtRootDomain root = AtRootDomain.atsignDomain}) async =>
+    _clientOn(await custody.enroll(atSign: atSign, otp: otp),
+        app: app, transport: transport, root: root);
+
 /// Opens [atSign]'s @keys through [custody] and returns a client on them,
 /// PKAM'd before return.
 ///

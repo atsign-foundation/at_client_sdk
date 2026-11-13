@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/at_client_wasm.dart';
+import 'package:at_client_wasm/src/js/at_error_code.dart';
 import 'package:at_client_wasm/src/keys/passkey_record.dart';
 import 'package:at_client_wasm/src/keys/passkey_record_keys.dart';
 import 'package:at_client_wasm/src/keys/unlock_secret.dart';
@@ -67,6 +68,10 @@ void main() {
       loginSession(custody(withHints: withHints ?? hints),
           atSign: atSign, app: _app, transport: transport());
 
+  Future<AtClient> enroll({FakeHints? withHints}) =>
+      enrollSession(custody(withHints: withHints ?? hints),
+          atSign: _atSign, otp: 'ABC123', app: _app, transport: transport());
+
   /// A device that has nothing but its passkey, after a first setup.
   Future<FakeHints> enrolledElsewhere() async {
     await custody().onboard(atSign: _atSign, cram: _cram);
@@ -92,6 +97,50 @@ void main() {
     }
     AtClientImpl.atClientInstanceMap.clear();
     AtClientManager.getInstance().reset();
+  });
+
+  group('enrollSession', () {
+    test('an approved enrollment opens a client that has run PKAM', () async {
+      final client = await enroll();
+
+      expect(gateway.enrolled.single.atSign, _atSign);
+      expect(gateway.enrolled.single.otp, 'ABC123');
+      expect(gateway.activated, isEmpty);
+      expect(wire.pkams, greaterThan(0));
+      expect(client.connection.current.isOnline, isTrue);
+      expect(gateway.lastSession!.closed, isTrue);
+    });
+
+    test('a denied enrollment throws and maps to enrollment_denied', () async {
+      gateway.enrollError =
+          AtEnrollmentException('The enrollment: eid1 is denied');
+
+      await expectLater(
+          enroll(),
+          throwsA(isA<AtEnrollmentException>()
+              .having(atErrorCode, 'code', 'enrollment_denied')));
+      expect(wire.pkams, 0);
+      expect(server.documents, isEmpty);
+    });
+
+    test('an approval that expired maps to enrollment_denied', () async {
+      gateway.enrollError = AtEnrollmentException(
+          'Enrollment eid1 has expired or does not exist');
+
+      await expectLater(
+          enroll(),
+          throwsA(isA<AtEnrollmentException>()
+              .having(atErrorCode, 'code', 'enrollment_denied')));
+    });
+
+    test('a cancelled approval wait maps to closed', () async {
+      gateway.enrollError = StoppedException('the wait was cancelled');
+
+      await expectLater(
+          enroll(),
+          throwsA(
+              isA<StoppedException>().having(atErrorCode, 'code', 'closed')));
+    });
   });
 
   group('onboardSession', () {

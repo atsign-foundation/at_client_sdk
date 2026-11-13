@@ -74,6 +74,7 @@ void main() {
       AtEnrollmentException('The enrollment: eid is denied'),
       'enrollment_denied'
     ),
+    'StoppedException': (StoppedException('wait cancelled'), 'closed'),
     'SessionClosedException': (SessionClosedException(), 'closed'),
     'UnsupportedKeyMaterialException': (
       UnsupportedKeyMaterialException('@alice'),

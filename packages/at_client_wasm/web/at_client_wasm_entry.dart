@@ -6,5 +6,5 @@ import 'package:at_client_wasm/at_client_wasm_web.dart';
 Future<void> main() async {
   final options = DevSessionOptions(atSign: '@alice', app: 'wavi');
   print(sessionTransport(options).finder);
-  print([onboardNewAtSign, passkeyLogin, prfSupported].length);
+  print([onboardNewAtSign, passkeyLogin, passkeyEnroll, prfSupported].length);
 }
