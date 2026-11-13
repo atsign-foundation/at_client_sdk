@@ -226,6 +226,8 @@ product; the compiler is a packaging decision.*
 packages/at_client_wasm/
   lib/at_client_wasm.dart        # Dart-facing platform impls — unchanged by this doc
   lib/src/js/                   # the @JSExport facade, marshalling, error mapping
+  lib/src/collections/          # js_collections_adapter.dart: Dart-side translation onto
+                                #   AtCollection, unexported, VM-tested (§5.5)
   web/at_client_js.dart         # main() that installs the facade  ← dart compile js
   npm/src/                      # index.ts + shim.ts — hand-written TypeScript, the ONLY
                                 #   hand-maintained facade source
@@ -414,6 +416,47 @@ paragraph as the code above, not buried in §10:**
 | `subCollection` / `getDescendant` | in scope, same declared-tag mechanism as the root | verify the `fromJson`/`typeTag` XOR check behaves identically to `AtClient.collection`'s (measured only for the root) |
 | `watchWithTree` / `SubSpec` | **excluded** | `SubSpec` has no exported opener (`collections_test_hooks.dart:168`, `@visibleForTesting`, not in the barrel) — blocked on an upstream export, not a design choice |
 
+### 5.5 The Dart-side collections adapter
+
+`packages/at_client_wasm/lib/src/collections/js_collections_adapter.dart` is the layer the
+`@JSExport` facade calls. No library directly under `lib/` exports it. It is plain Dart with no
+interop imports, so it runs under `dart test` on the VM, and `web/at_client_wasm_entry.dart`
+reaches every operation so both dart2js and dart2wasm compile it.
+
+It **only translates**: plain values in, `AtCollection` calls, plain values out. It adds no
+behaviour of its own. In particular it does **not** do the facade conveniences in §5.3:
+namespace auto-qualification, defaulting `expiration` or `eventSource`, `orderByPath` and
+`limit`, a type filter, or a `(name, type)` registry. Where §5.3 shows them, that layer
+does not exist yet.
+
+| Operation | `AtCollection` call | Rule |
+| --- | --- | --- |
+| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default |
+| `create(data, {id, sharedWith})` | `create` | |
+| `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent |
+| `list()` | `getItems()` | upstream order; never re-sorted |
+| `query([{path, op, value}])` | `query().wherePath(...)` per clause, then `get()` | clauses AND together; upstream order |
+| `update({id, owner}, data)` | re-read `get`, then `update(draft, unshareWithOthers: false)` | the draft keeps the re-read `sharedWith`, `expiresAt`, `availableAt` |
+| `share({id, owner}, atSigns)` | re-read `get`, then `updateSharedWith(item, reread ∪ atSigns, unshareWithOthers: false)` | add-only; never `update` with a stale `sharedWith` |
+| `remove({id, owner}, {cascade})` | re-read `get`, then `delete` | |
+| `watch(onEvent, {onError}) → cancel` | `watch().listen` | callbacks (D-9); `cancel()` returns a Future that completes once the subscription is cancelled |
+
+A write to an item whose owner is not the client's atSign rejects with `W8_NOT_OWNER` before
+any `AtCollection` call: `draft` always stamps the client's own atSign, so translating such a
+write would otherwise write the caller's own item under a peer's id.
+
+A `where` path is dotted (`'meta.prio'`) and reads `['obj', ...segments]`; a missing step
+reads as null. `==`/`!=` map to `eq`/`neq`, `isNull`/`isNotNull` to the nullable field, and
+`<`/`<=`/`>`/`>=` to `isNotNull.and(lt|lte|gt|gte)` with a number or string value. The five
+reserved `PredicateOp`s are not accepted.
+
+Events map to `{type, id, owner, ...}` with `type` one of `updated`, `deleted`
+(`wasExpired`), `available` (`availableAt`), `expiringSoon` (`expiresAt`, `leadTimeMs`),
+`readReceipt` (`from`, `readAt`), `subItemUpdated`/`subItemDeleted` (`ancestry`), and
+`unknown` for a subtype the adapter does not know (T6.8). The adapter reads no item for an
+event, so an unreadable item's event still arrives with its id and owner. Times are
+milliseconds since the epoch.
+
 ---
 
 ## 6. Error mapping
@@ -455,6 +498,29 @@ the boundary.** The facade catches `CollectionOpException`, and rethrows a singl
 equivalent structured field) carries the mapped `OpFailure.reason` entries. A JS consumer
 sees one `AtError` shape regardless of whether the underlying failure was a single
 exception or a batch of `OpFailure`s — never a tuple, never a second thrown type.
+
+### 6.1 W8 collection error codes
+
+Every collections adapter operation (§5.5) returns a Future that rejects with one
+`JsCollectionsError {code, message, id?, owner?, kind?, failures}`, which the facade turns
+into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` is
+the Dart type of the underlying error. A watch reports stream errors to `onError` in the
+same shape.
+
+| Code | Raised for | Upstream source |
+| --- | --- | --- |
+| `W8_INVALID_ARGUMENT` | unknown `eventSource` or operator, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign or id | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `W8_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
+| `W8_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
+| `W8_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
+| `W8_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
+| `W8_UNREADABLE` | a record this device cannot read, from get, list or query, or on the watch stream | `CItemReadException`. Never skipped. The message names the id and owner, not the cause |
+| `W8_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
+| `W8_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
+| `W8_FAILED` | anything else; `kind` names it | |
+
+Schema errors get a W8 code when the persisted collection record and its schema validation
+land. Until then no adapter operation validates data against a schema.
 
 ---
 
