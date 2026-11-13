@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/at_client_wasm.dart';
 import 'package:at_client_wasm/src/js/js_session.dart';
@@ -49,5 +52,32 @@ void main() {
 
     expect(await session.get(const JsKey('absent')), isNull);
     expect(wire.commands, contains(contains('absent')));
+  });
+
+  test('put of bytes then get returns equal bytes', () async {
+    final bytes = Uint8List.fromList([0, 1, 2, 250, 251, 255, 128, 7, 9]);
+    String? stored;
+    String? iv;
+    wire.answer = (command) {
+      if (command.startsWith('update')) {
+        iv = RegExp(r'ivNonce:([^:]+)').firstMatch(command)?.group(1);
+        stored = command.substring(command.lastIndexOf(' ') + 1).trim();
+        return 'data:1';
+      }
+      if (command.startsWith('llookup') || command.startsWith('lookup')) {
+        return 'data:${jsonEncode({
+              'key': '@alice:k.wavi@alice',
+              'data': stored,
+              'metaData': {'isBinary': true, 'isEncrypted': true, 'ivNonce': iv}
+            })}';
+      }
+      return null;
+    };
+
+    await session.put(const JsKey('k'), bytes);
+    final got = await session.get(const JsKey('k'));
+
+    expect(got, isA<Uint8List>());
+    expect(got, bytes);
   });
 }
