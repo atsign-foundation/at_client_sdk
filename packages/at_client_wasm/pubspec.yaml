@@ -1,7 +1,7 @@
 name: at_client_wasm
 publish_to: none
 version: 0.1.0
-description: Browser key custody for at_client
+description: Opens an at_client in the browser on caller-supplied AtKeys
 resolution: workspace
 
 environment:
