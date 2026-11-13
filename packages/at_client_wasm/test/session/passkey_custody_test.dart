@@ -11,6 +11,7 @@ import 'custody_fakes.dart';
 
 const _atSign = '@alice';
 const _otp = 'ABC123';
+final _enrolledAt = DateTime.utc(2026, 11, 6, 14, 5);
 
 void main() {
   late FakeServer server;
@@ -27,6 +28,7 @@ void main() {
       credentials: withHints ?? hints,
       enrollmentIds: withHints ?? hints,
       persistence: persistence,
+      now: () => _enrolledAt,
       retryDelay: Duration.zero,
       setupLock: setupLock);
 
@@ -99,6 +101,36 @@ void main() {
       await custody().enroll(atSign: _atSign, otp: _otp, existingPasskey: true);
       expect(authenticator.gets, 1);
       expect(authenticator.prfByCredential, hasLength(1));
+    });
+  });
+
+  group('passkey registration stamp', () {
+    void expectStamped() {
+      expect(authenticator.created.last, (
+        atSign: _atSign,
+        enrolledAt: _enrolledAt,
+        deviceName: gateway.device
+      ));
+    }
+
+    test('onboard registers with the gateway device name and the clock',
+        () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expectStamped();
+    });
+
+    test('enroll registers with the gateway device name and the clock',
+        () async {
+      await custody().enroll(atSign: _atSign, otp: _otp);
+      expectStamped();
+    });
+
+    test('rotate registers with the gateway device name and the clock',
+        () async {
+      final current = await custody().enroll(atSign: _atSign, otp: _otp);
+      authenticator.created.clear();
+      await custody().rotate(current, otp: _otp);
+      expectStamped();
     });
   });
 

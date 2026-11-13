@@ -206,6 +206,9 @@ abstract interface class EnrollmentSession {
 /// Enrolls and authenticates with the ML-DSA-65 APKAM key derived from an
 /// auth seed.
 abstract interface class EnrollmentGateway {
+  /// The device name every enrollment of this gateway carries.
+  String get device;
+
   /// Enrolls the key derived from [authSeed] with [otp] and returns the
   /// approved, authenticated session.
   Future<EnrollmentSession> enroll(
@@ -286,6 +289,7 @@ class PasskeyCustody {
       required this.enrollmentIds,
       required this.setupLock,
       this.persistence,
+      this.now = DateTime.now,
       this.retryDelay = const Duration(milliseconds: 250),
       this.deriveKeys = RecordKeys.derive});
 
@@ -296,6 +300,9 @@ class PasskeyCustody {
   final EnrollmentIdStore enrollmentIds;
   final SetupLock setupLock;
   final StoragePersistence? persistence;
+
+  /// The clock stamping each passkey registration.
+  final DateTime Function() now;
 
   /// The pause between attempts to write a document.
   final Duration retryDelay;
@@ -332,7 +339,8 @@ class PasskeyCustody {
         passkey =
             (credentialId: unlocked.credentialId, secret: unlocked.secret);
       } else {
-        passkey = await kek.register(canonical);
+        passkey = await kek.register(canonical,
+            enrolledAt: now(), deviceName: gateway.device);
       }
       final keys = await _deriveAndWipe(passkey.secret, canonical);
       try {
@@ -357,7 +365,8 @@ class PasskeyCustody {
       {required String atSign, required String cram}) {
     final canonical = atSign.toAtsign();
     return setupLock.run(setupLockName(canonical), () async {
-      final passkey = await kek.register(canonical);
+      final passkey = await kek.register(canonical,
+          enrolledAt: now(), deviceName: gateway.device);
       final keys = await _deriveAndWipe(passkey.secret, canonical);
       var handedOver = false;
       try {
@@ -452,7 +461,8 @@ class PasskeyCustody {
   /// back, leaving the old enrollment and pointer untouched.
   Future<CustodySession> rotate(CustodySession current,
       {required String otp}) async {
-    final passkey = await kek.register(current.atSign);
+    final passkey = await kek.register(current.atSign,
+        enrolledAt: now(), deviceName: gateway.device);
     final keys = await _deriveAndWipe(passkey.secret, current.atSign);
     try {
       final session = await gateway.enroll(

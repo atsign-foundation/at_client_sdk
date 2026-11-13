@@ -38,10 +38,17 @@ class WebPasskeyPort implements PasskeyPort {
 
   /// Creates a discoverable passkey with the PRF extension enabled.
   @override
-  Future<Uint8List> create({required String atSign}) async {
-    final options =
-        passkeyCreationOptions(rpId: rpId, rpName: rpName, atSign: atSign)
-            .jsify() as CredentialCreationOptions;
+  Future<Uint8List> create(
+      {required String atSign,
+      required DateTime enrolledAt,
+      required String deviceName}) async {
+    final options = passkeyCreationOptions(
+            rpId: rpId,
+            rpName: rpName,
+            atSign: atSign,
+            enrolledAt: enrolledAt,
+            deviceName: deviceName)
+        .jsify() as CredentialCreationOptions;
     final credential =
         await passkeyCeremony(window.navigator.credentials.create(options));
     return credential.rawId.toDart.asUint8List();

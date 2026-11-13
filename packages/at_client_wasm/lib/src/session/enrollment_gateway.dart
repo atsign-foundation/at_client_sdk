@@ -69,6 +69,7 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
   final SessionTransport transport;
   final AtRootDomain root;
   final String app;
+  @override
   final String device;
   final Map<String, String> namespaces;
   final AtEnrollment Function() _enrollment;

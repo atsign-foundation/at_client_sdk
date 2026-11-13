@@ -6,3 +6,4 @@
 - Setup-lock acquisition gives up after two minutes with `SetupLockTimeoutException`, and passkey create/get ceremonies carry a two-minute timeout.
 - An activation that fails after the keys are filed keeps them resumable: onboarding throws `OnboardingIncompleteException` with a handle whose `resume()` authenticates.
 - Secrets derived from the passkey are overwritten with zeroes once used and when the session closes.
+- A registered passkey's `user.displayName` is its enrollment time (UTC, to the minute) and the enrollment's device name, cut to 64 UTF-8 bytes at a code point; it no longer carries the atSign.

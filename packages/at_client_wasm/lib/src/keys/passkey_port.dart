@@ -24,7 +24,10 @@ abstract interface class PasskeyPort {
   /// Registers a discoverable passkey for [atSign] and returns its credential
   /// id. No PRF result is taken from registration: not every authenticator
   /// returns one there.
-  Future<Uint8List> create({required String atSign});
+  Future<Uint8List> create(
+      {required String atSign,
+      required DateTime enrolledAt,
+      required String deviceName});
 
   /// Asserts with any discoverable passkey for this RP (or only
   /// [allowCredential] when given) and evaluates PRF with [evalInput].

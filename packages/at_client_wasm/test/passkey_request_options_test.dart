@@ -7,7 +7,11 @@ import 'package:test/test.dart';
 void main() {
   test('creation options carry the ceremony timeout', () {
     final options = passkeyCreationOptions(
-        rpId: 'example.com', rpName: 'Example', atSign: '@alice');
+        rpId: 'example.com',
+        rpName: 'Example',
+        atSign: '@alice',
+        enrolledAt: DateTime.utc(2026),
+        deviceName: 'Mac');
     expect((options['publicKey'] as Map)['timeout'], passkeyCeremonyTimeoutMs);
   });
 

@@ -96,9 +96,13 @@ class PasskeyKek {
   ///
   /// Throws [PrfUnavailableException] before any ceremony when PRF is known
   /// to be unsupported.
-  Future<PasskeyRegistration> register(String atSign) async {
+  Future<PasskeyRegistration> register(String atSign,
+      {required DateTime enrolledAt, required String deviceName}) async {
     await prfSupport?.require();
-    final credentialId = await port.create(atSign: atSign.toAtsign());
+    final credentialId = await port.create(
+        atSign: atSign.toAtsign(),
+        enrolledAt: enrolledAt,
+        deviceName: deviceName);
     final assertion = await port.get(
         evalInput: await recordPrfSalt(), allowCredential: credentialId);
     return (

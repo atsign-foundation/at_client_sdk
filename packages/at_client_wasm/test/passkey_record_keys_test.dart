@@ -8,9 +8,14 @@ import 'package:at_client_wasm/src/keys/passkey_record_keys.dart';
 import 'package:at_client_wasm/src/keys/unlock_secret.dart';
 import 'package:test/test.dart';
 
+final _at = DateTime.utc(2026, 11, 6, 14, 5);
+const _device = 'Test Device';
+
 class FakePasskeyPort implements PasskeyPort {
   final calls = <String>[];
   String? lastCreateAtSign;
+  DateTime? lastCreateEnrolledAt;
+  String? lastCreateDeviceName;
   Uint8List? lastGetEvalInput;
   Uint8List? lastGetAllowCredential;
 
@@ -18,9 +23,14 @@ class FakePasskeyPort implements PasskeyPort {
   Uint8List resultCredentialId = Uint8List.fromList([1, 2, 3]);
 
   @override
-  Future<Uint8List> create({required String atSign}) async {
+  Future<Uint8List> create(
+      {required String atSign,
+      required DateTime enrolledAt,
+      required String deviceName}) async {
     calls.add('create');
     lastCreateAtSign = atSign;
+    lastCreateEnrolledAt = enrolledAt;
+    lastCreateDeviceName = deviceName;
     return resultCredentialId;
   }
 
@@ -181,7 +191,8 @@ void main() {
     test('register creates, then reads the PRF from a get with the salt',
         () async {
       final port = FakePasskeyPort()..resultPrfFirst = prf;
-      final result = await PasskeyKek(port).register('@alice');
+      final result = await PasskeyKek(port)
+          .register('@alice', enrolledAt: _at, deviceName: _device);
 
       expect(port.calls, ['create', 'get']);
       expect(port.lastCreateAtSign, '@alice');
@@ -193,14 +204,18 @@ void main() {
 
     test('register throws PrfUnavailableException on null prf', () async {
       final port = FakePasskeyPort()..resultPrfFirst = null;
-      expect(PasskeyKek(port).register('@alice'),
+      expect(
+          PasskeyKek(port)
+              .register('@alice', enrolledAt: _at, deviceName: _device),
           throwsA(isA<PrfUnavailableException>()));
     });
 
     test('register throws PrfUnavailableException on 31 bytes', () async {
       final port = FakePasskeyPort()
         ..resultPrfFirst = Uint8List.fromList(List.generate(31, (i) => i));
-      expect(PasskeyKek(port).register('@alice'),
+      expect(
+          PasskeyKek(port)
+              .register('@alice', enrolledAt: _at, deviceName: _device),
           throwsA(isA<PrfUnavailableException>()));
     });
 
@@ -230,8 +245,18 @@ void main() {
 
     test('register names the passkey user with the canonical atSign', () async {
       final port = FakePasskeyPort()..resultPrfFirst = prf;
-      await PasskeyKek(port).register('Ali.ce');
+      await PasskeyKek(port)
+          .register('Ali.ce', enrolledAt: _at, deviceName: _device);
       expect(port.lastCreateAtSign, '@alice');
+    });
+
+    test('register hands the enrollment time and device name to the port',
+        () async {
+      final port = FakePasskeyPort()..resultPrfFirst = prf;
+      await PasskeyKek(port)
+          .register('@alice', enrolledAt: _at, deviceName: _device);
+      expect(port.lastCreateEnrolledAt, _at);
+      expect(port.lastCreateDeviceName, _device);
     });
 
     test('unlock without a credentialId asks for any discoverable passkey',
@@ -246,7 +271,8 @@ void main() {
       final env = FakePrfEnvironment();
       final port = FakePasskeyPort()..resultPrfFirst = null;
       await expectLater(
-          PasskeyKek(port, prfSupport: PrfSupport(env)).register('@alice'),
+          PasskeyKek(port, prfSupport: PrfSupport(env))
+              .register('@alice', enrolledAt: _at, deviceName: _device),
           throwsA(isA<PrfUnavailableException>()));
       expect(env.missAt, env.clock);
     });
@@ -256,7 +282,8 @@ void main() {
       final env = FakePrfEnvironment()..capability = false;
       final port = FakePasskeyPort()..resultPrfFirst = prf;
       await expectLater(
-          PasskeyKek(port, prfSupport: PrfSupport(env)).register('@alice'),
+          PasskeyKek(port, prfSupport: PrfSupport(env))
+              .register('@alice', enrolledAt: _at, deviceName: _device),
           throwsA(isA<PrfUnavailableException>().having(
               (e) => e.message, 'message', contains('supported browser'))));
       expect(port.calls, isEmpty);

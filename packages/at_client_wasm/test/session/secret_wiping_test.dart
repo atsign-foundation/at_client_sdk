@@ -20,7 +20,11 @@ class _PrfPort implements PasskeyPort {
   final Uint8List prf;
 
   @override
-  Future<Uint8List> create({required String atSign}) async => Uint8List(1);
+  Future<Uint8List> create(
+          {required String atSign,
+          required DateTime enrolledAt,
+          required String deviceName}) async =>
+      Uint8List(1);
 
   @override
   Future<PasskeyAssertion> get(

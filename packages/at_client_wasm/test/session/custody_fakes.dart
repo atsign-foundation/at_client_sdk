@@ -156,6 +156,9 @@ class KeyAlreadyEnrolledException implements Exception {}
 class FakeGateway implements EnrollmentGateway {
   FakeGateway(this.server);
 
+  @override
+  final device = 'Test Device';
+
   final FakeServer server;
   final enrolled = <({String atSign, Uint8List authSeed, String otp})>[];
   final activated = <({String atSign, Uint8List authSeed, String cram})>[];
@@ -236,13 +239,19 @@ class FakeAuthenticator implements PasskeyPort {
   Uint8List? lastAllowCredential;
   var gets = 0;
   var creates = 0;
+  final created = <({String atSign, DateTime enrolledAt, String deviceName})>[];
 
   /// Makes every assertion fail as a cancelled or unmatched ceremony.
   var yieldsNoCredential = false;
 
   @override
-  Future<Uint8List> create({required String atSign}) async {
+  Future<Uint8List> create(
+      {required String atSign,
+      required DateTime enrolledAt,
+      required String deviceName}) async {
     creates++;
+    created
+        .add((atSign: atSign, enrolledAt: enrolledAt, deviceName: deviceName));
     final n = prfByCredential.length;
     final id = Uint8List.fromList([n + 1]);
     prfByCredential[id[0]] =
