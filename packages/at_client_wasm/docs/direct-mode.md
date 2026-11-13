@@ -25,6 +25,7 @@ The proxy is opt-in and for development. Use it only on a machine and network yo
 The connection to the proxy is the whole atProtocol session, so the proxy:
 - learns the atSign from the `from:<atSign>` preamble and which atServer each connection is for;
 - sees every command and response on the connection: key names, metadata, the authentication exchange, notification traffic and timing;
+- resolves and answers for every atSign the session talks to, since the single proxy stands in for each atServer: it is trusted for addressing as well as transport;
 - sees value ciphertext only: values are end-to-end encrypted by the client, and private keys never leave the page.
 
 Direct mode has no such intermediary: the only parties on the path are the root (an HTTPS lookup of the atSign's address) and the atServer.
