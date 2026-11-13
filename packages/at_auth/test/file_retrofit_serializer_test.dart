@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/at_auth_io.dart';
+import 'package:at_auth/src/enroll/file_retrofit_serializer.dart';
 import 'package:test/test.dart';
 
 /// [fileRetrofitSerializer] is what a `dart:io` caller assigns to
@@ -26,6 +27,24 @@ void main() {
     await Future.wait([body(0), body(1)]);
     return trace;
   }
+
+  test('the wait outlasts the staleness threshold and is wired into the lock',
+      () {
+    // AtKeysFileLock only breaks a lock once its mtime is past `staleAfter`,
+    // and only while the waiter is still waiting. A timeout that expires
+    // first means a process SIGKILLed inside a retrofit leaves a lock no
+    // waiter may break: every retrofit from that keyfile throws for the whole
+    // staleness window, though nobody holds the lock.
+    final lock = createFileRetrofitLock('/tmp/dummy');
+    expect(lock.timeout, fileRetrofitLockTimeout);
+    expect(lock.staleAfter, fileRetrofitLockStaleAfter);
+    expect(
+      lock.timeout,
+      greaterThan(lock.staleAfter),
+      reason: 'a waiter must outlast an abandoned lock so it can break it '
+          '(file_lock.dart documents this ordering as required)',
+    );
+  });
 
   test('a file-backed store runs retrofits one at a time', () async {
     final io = FileAtKeysIo(filePath: (a) => '${tmp.path}/$a.atKeys');

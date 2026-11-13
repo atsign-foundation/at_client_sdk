@@ -82,9 +82,9 @@ extension type const KeyEntryStatus._(String value) implements String {
   /// path. It is a live path for the key package, which is rebuilt from the
   /// keyfile on every reconcile.
   ///
-  /// A reader skips an entry whose `status` is present and is not a string,
-  /// as it skips one whose other fields are of the wrong kind, so this takes
-  /// a string or its absence only.
+  /// A reader skips an entry whose `status` is present, not null and not a
+  /// string, as it skips one whose other fields are of the wrong kind, so this
+  /// takes a string or its absence only.
   static KeyEntryStatus fromWire(String? value) =>
       value == null ? active : KeyEntryStatus._(value);
 

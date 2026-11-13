@@ -208,6 +208,25 @@ void main() {
           apskSigningKeys(advertisement).single.status, KeyEntryStatus.active);
     });
 
+    test('an explicit "status": null reads as active', () {
+      final advertisement = {
+        'keys': [
+          {
+            'kid': 'k1',
+            'use': 'sign',
+            'alg': 'mldsa65',
+            'pub': 'AAEC',
+            'status': null,
+          }
+        ]
+      };
+      expect(
+          apskSigningKeys(advertisement).single.status, KeyEntryStatus.active,
+          reason: 'an explicit null status reads as active, matching the '
+              'at_client lists-its-key-with-a-null-status contract');
+      expect(KeyEntryStatus.fromWire(null), KeyEntryStatus.active);
+    });
+
     test('several keys are several entries, in the order given', () {
       // The shape a signer publishes once it holds more than one algorithm:
       // one entry per key, listed strongest first, each with its own kid.
