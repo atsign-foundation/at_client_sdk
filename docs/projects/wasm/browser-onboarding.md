@@ -1,6 +1,6 @@
 # Browser onboarding — problem definition and solution flow
 
-**Status:** model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; K-5 re-ruled and K-12 (passkey-derived PKAM key) ruled 2026-10-27, its fallbacks ruled 2026-10-28 as K-13 · derivation in [atkeys-derivation.md](atkeys-derivation.md) · build not started (bd `5vf.1`–`5vf.7`); `user.id` ruled 2026-11-05 as K-18 · open: Q-4, Q-5, Q-10 (passphrase fallback hardening)
+**Status:** ruled, and built in Gate C (passkey login; see §7). Model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; K-5 re-ruled and K-12 (passkey-derived PKAM key) ruled 2026-10-27, its fallbacks ruled 2026-10-28 as K-13 · derivation in [atkeys-derivation.md](atkeys-derivation.md) · `user.id` ruled 2026-11-05 as K-18 · open: Q-4, Q-5, Q-10 (passphrase fallback hardening)
 **Supersedes:** the shared `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array (PB-5 H/J, live-tested in L step 0a)
 **Resolves:** OQ-19 (prf unlocks accumulate on the server copy)
 
@@ -14,7 +14,7 @@ An app client running in a browser must:
 |---|---|
 | R1 | Hold the atSign's @keys without them ever being stored in plaintext in the browser |
 | R2 | Reopen on the same browser with one biometric/PIN prompt and no passphrase |
-| R3 | Recover after browser storage is cleared, with the passkey alone — no passphrase. With the hint cleared, the user types the atSign once (K-18). Met on the primary path because the PKAM key is derived from the passkey (K-12); the no-PRF fallback is ruled by K-13 (passphrase-sealed server record); a lost passkey is not recoverable, by ruling |
+| R3 | Recover after browser storage is cleared, with the passkey alone — no passphrase. The atSign is always typed at login (K-18). Met on the primary path because the PKAM key is derived from the passkey (K-12); the no-PRF fallback is ruled by K-13 (passphrase-sealed server record); a lost passkey is not recoverable, by ruling |
 | R4 | Not let a compromised atServer decrypt the stored keys |
 | R5 | Not let an outside reader learn how many devices an atSign has, or link a record to a passkey |
 | R6 | Not accumulate records for passkeys that no longer exist (under K-10, bounded: at most one orphan pointer per passkey, §5) |
@@ -43,8 +43,8 @@ An app client running in a browser must:
 | Codec | `{ v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv, ct }`, AAD = canonical JSON of the record without `ct` — **no atSign, no credential ID**. `typ` is `"eid"` (pointer) or `"atkeys"` (document) |
 | Pointer (K-10, K-17) | `public:_<lookupHex>.<ns>@<atSign>`, where `<ns>` is the passkey's own namespace (`atkeys-ns`, K-17); plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by the enrollment holding `<ns>:rw`, the only one that can (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.<ns>@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
 | Document (K-11) | `atkeys.<enrollmentId>.a.__e@<atSign>`, private, plaintext = the @keys JSON **without the APKAM private key**. Read and written over PKAM (`llookup:` / `update:`) by that enrollment only; opening it needs the kek, no private key. CRAM can read it but not write it. Not `_`-prefixed, so own-enrollment and CRAM scans list it. Probed P9, 2026-10-20 |
-| Passkey `user.id` | 64 random bytes (WebAuthn L3 §14.6.1); `user.name` = atSign; `user.displayName` = `<enrollment time> · <deviceName>`, the time UTC to the minute, cut to 64 bytes (K-18). Not mapped back: the atSign comes from the hint or, with no hint, from the user. Re-enrolling an atSign adds a passkey; it does not replace one |
-| IndexedDB | hint only (K-13 c1, amended by K-18): `atSign`, `credentialId`, `enrollmentId` — nothing secret. The atSign is the output of at_commons' `toAtsign()` (lowercase, `@` included, dots removed after the `@`, so `@ali.ce` is `@alice`), as UTF-8 bytes. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
+| Passkey `user.id` | 64 random bytes (WebAuthn L3 §14.6.1); `user.name` = atSign; `user.displayName` = `<enrollment time> · <deviceName>`, the time UTC to the minute, cut to 64 bytes (K-18). The atSign is never in it and is not mapped back: the user types it at login, always. Re-enrolling an atSign adds a passkey; it does not replace one |
+| IndexedDB | hint only (K-13 c1, amended by K-18): `credentialId` and `enrollmentId`, keyed by the canonical atSign the user typed — nothing secret. The atSign is the output of at_commons' `toAtsign()` (lowercase, `@` included, dots removed after the `@`, so `@ali.ce` is `@alice`), as UTF-8 bytes. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
 | APKAM key for PKAM | not stored anywhere (K-11, K-12). **Derived from the passkey**: `authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1\|<atSign>")` seeds an ML-DSA-65 key — the primary path (K-12). With no PRF (K-13): the PKAM key is sealed under a passphrase-derived key in a server-held, public-readable record, no TTL (§3.5) |
 
 ### Bootstrap sources (how the first @keys arrive on a device)
@@ -93,7 +93,7 @@ sequenceDiagram
     participant B as Browser
     participant A as Authenticator
     participant S as atServer
-    B->>B: hint → atSign, credentialId
+    B->>B: typed atSign → hint credentialId, enrollmentId
     B->>A: get(allowCredentials = [credentialId], prf.eval.first = salt)
     A-->>B: P
     B->>S: lookup pointer (unauthenticated) → unseal enrollmentId
@@ -134,14 +134,14 @@ sequenceDiagram
 
 The picker in 3.3 can list several passkeys for one atSign, since re-enrollment adds one rather than replacing it (K-18). `user.displayName` (`<enrollment time> · <deviceName>`, UTC to the minute) tells them apart, even after a same-day revoke and re-enroll under one deviceName. The time leads because an authenticator may truncate `displayName` to 64 bytes, and `user.name` already shows the atSign; and both failure branches let the user pick again.
 
-Return and recovery differ only in the hint, and so in whether the user types the atSign: the server holds everything else and the passkey re-derives the PKAM key (K-12), so on the primary path a cleared browser loses nothing. The fallbacks are ruled by K-13 (§3.5, §3.6).
+Return and recovery differ only in the hint (the atSign is typed in both): the server holds everything else and the passkey re-derives the PKAM key (K-12), so on the primary path a cleared browser loses nothing. The fallbacks are ruled by K-13 (§3.5, §3.6).
 
 ### 3.4 Lifecycle
 
 | Event | Action |
 |---|---|
 | Rotation | **No rotation for now (2026-10-31).** Earlier proposal: enroll a new passkey (3.1) → confirm it opens → PKAM-authenticated delete of the old pointer → `PublicKeyCredential.signalUnknownCredential` for the old ID where supported (Chrome/Edge 132+, Safari 26; not Firefox) — a hint to the password manager; a page cannot delete passkeys. A new passkey derives a new APKAM key (K-12); the rotation flow itself is proposed, not ruled. The new enrollment needs a deviceName distinct from the old one while the old one is still approved (`AT0032`). `enroll:update` can rekey an approved enrollment in place (EVH:948-1010), so a new enrollment + approval is a policy choice, not a server constraint |
-| Browser storage eviction | loses only the hint; the recovery flow (3.3) needs none, costing the atSign typed once and a passkey tap. Holds on the K-12 primary path; on the no-PRF path the passphrase restores it (§3.5) |
+| Browser storage eviction | loses only the hint; the recovery flow (3.3) needs none, costing a passkey tap (the atSign is typed at every login). Holds on the K-12 primary path; on the no-PRF path the passphrase restores it (§3.5) |
 | Lost or wiped passkey | the enrollment is gone: no recovery path (K-13 b); enroll fresh and have an approver revoke the old enrollment (§3.6) |
 | Lost or wiped device | revoke its enrollment: its PKAM is refused (`AT0027`) and its document becomes unreadable (`.r.__e`). The pointer stays (the revoker cannot derive its name) — at most one orphan per passkey. Do not unrevoke it afterwards: unrevoke reinstates the stored public key, so whoever holds the device's private key could PKAM again (policy note, [`decisions.md`](decisions.md)) |
 | Revoked enrollment | revocation is final as approver policy ([`decisions.md`](decisions.md), 2026-10-21/27). To re-enroll, the approver **reinstates** it with `enroll:unrevoke`: same `enrollmentId`, same public key, original expiry (expired → `AT0028`); PKAM succeeds again and the document returns. Revoke also revokes every enrollment the revoked one approved; unrevoke does not reinstate those, and unrevoke of one of them is refused while its approver stays revoked, unless that approver was deleted. A new request with the same key is refused with `AT0032` (intended). Revoked with only the passkey is locked out by design |
@@ -156,8 +156,8 @@ Return and recovery differ only in the hint, and so in whether the user types th
 | # | Decision | Why |
 |---|---|---|
 | BO-1 | **One PRF evaluation, two HKDF derivations** (lookup, kek); **no stored salt** | a stored random salt is server-controlled: as a PRF input it lets the server make the blob key equal the lookup key it already knows (key substitution), and costs a second prompt; as an HKDF salt it adds nothing to a 256-bit PRF output. Labels carry the atSign |
-| BO-2 | **PRF salt is constant, not derived from the atSign** (changes Gary's model) | `get()` runs locally before any network call; the atSign, from the hint or typed (K-18), then drives root lookup, `lookup:` and `from:`. The salt must be in the request, so it can't depend on the atSign; PRF output is already unique per credential |
-| BO-3 | ~~**atSign in `user.id`**~~ **superseded 2026-11-05 by K-18** (`user.id` = 64 random bytes; the atSign lives in the hint). Was: the only per-passkey storage that survives a cleared browser and needs no extra ceremony | with the hint gone, R3 asks the user for the atSign once; the passkey alone still recovers the keys |
+| BO-2 | **PRF salt is constant, not derived from the atSign** (changes Gary's model) | `get()` runs locally before any network call; the atSign, typed at login (K-18), then drives root lookup, `lookup:` and `from:`. The salt must be in the request, so it can't depend on the atSign; PRF output is already unique per credential |
+| BO-3 | ~~**atSign in `user.id`**~~ **superseded 2026-11-05 by K-18** (`user.id` = 64 random bytes; the atSign is never in it and is typed at login). Was: the only per-passkey storage that survives a cleared browser and needs no extra ceremony | R3 asks the user for the atSign at every login; the passkey alone still recovers the keys |
 | BO-4 | ~~APKAM private key inside the blob~~ **superseded 2026-10-27 by K-11** (the document holds no APKAM private key). Was: for the session, imported non-extractable into WebCrypto when WebCrypto supports its algorithm, otherwise held in Dart memory | a non-extractable key persisted by the browser lives in IndexedDB and dies with it — R3 would require re-enrollment |
 | BO-5 | **Signing algorithm = first of `SigningAlgoType.strongestFirst` the browser lane can sign with and the atServer verifies**; recorded with the enrollment (`signingAlgo`) | crypto agility already exists in at_chops. The browser makes the choice at enrollment, among algorithms whose keygen finishes within a UI time budget. On the primary path K-12 fixes the APKAM key to ML-DSA-65, derived from the passkey; this choice applies to the fallbacks; the fallback algorithm stays open (U-2, not ruled by K-13). The APKAM key is a software key, so the authenticator's algorithm menu does not constrain it — at_chops' default barrel already exports a pure-Dart `mldsa65` signer (Q-4) |
 | BO-6 | ~~`ttl` refreshed on open prunes dead passkeys~~ **superseded 2026-10-27 by K-10**: the pointer has no TTL | — |
@@ -235,3 +235,39 @@ A second passkey on another device is its own enrollment the same way (3.1): PRF
 | Q-8 | **Credential-store record — open, input from the 2026-10-27 call.** Keep `enrollmentId` + `credentialId` in a durable credential store rather than browser storage? K-10 already holds the sealed `enrollmentId` server-side and the credential hint is recoverable (K-12); the question is whether a credential-store record is added beside the K-10 pointer or K-10 alone stands | me |
 | Q-9 | **List and revoke enrollments in the browser — open, input from the 2026-10-27 call.** The call asked that a user can list and revoke enrollments (Flutter widgets exist). Revocation is ruled; a list/revoke UI is not planned for the wasm lane. Scope call | me |
 | Q-10 | **Passphrase fallback hardening — open, from K-13.** A public blob can be attacked offline. Not ruled: the passphrase entropy floor, the Argon2id parameters, and how the record's lookup key is derived | me |
+
+---
+
+## 7. What is built (Gate C) and v1 limitations
+
+### Built
+
+| Item | Behaviour |
+|---|---|
+| `onboardNewAtSign` | Registers a passkey, activates the atSign with CRAM and the derived APKAM key, files the document, then the pointer. Returns a PKAM'd `AtClient` |
+| `passkeyLogin` | `atSign` required: the passkey proves it, a wrong one finds no pointer. A known device goes straight to PKAM; any other asserts a discoverable passkey and reads the pointer |
+| `prfSupported` | Whether the browser reports passkey PRF. `onboardNewAtSign` checks it and refuses before any ceremony |
+| Setup lock | Web Lock per canonical atSign, held on first setup (onboard, enroll) only. A second tab waits. Login takes no lock |
+| Write order | Document first, pointer second. A pointer never names a missing document |
+| APKAM key | Derived from the passkey seed (K-12). Never stored, not in the document, not in IndexedDB |
+| `user.id` | 64 random bytes. The atSign is never in it (K-18) |
+
+| Exception | Raised when |
+|---|---|
+| `PrfUnavailableException` | No passkey PRF; refused before any ceremony |
+| `PasskeyLostException` | No credential, no pointer, or PKAM refused |
+| `PublicKeyMismatchException` | Restored public keys differ from the published ones (K-5) |
+| `MissingAtKeysDocumentException` | The enrollment has no document |
+| `PkamRefusedException` | The atServer refused PKAM for the enrollment; surfaced to callers as `PasskeyLostException` |
+
+### v1 limitations
+
+| Limitation | Detail |
+|---|---|
+| Encryption keys | Enrollment uses RSA encryption keys |
+| K-5′ check | Compares the RSA public key only |
+| Pointer namespace | `atkeysv` |
+| Pointer integrity | Depends on the atServer's namespace permissions |
+| Root domain | Fixed to the default in the web entry points |
+| No PRF | Refused. v1 has no passphrase fallback (K-13 a is not built) |
+

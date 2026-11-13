@@ -1,6 +1,6 @@
 # at-keys derivation — decisions
 
-**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-13 (fallbacks) ruled 2026-10-28
+**Status:** ruled, and built in Gate C (see "What is built" below) · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-13 (fallbacks) ruled 2026-10-28
 **Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
 **Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2427, merged to gkc's branch `gkc-published-vip-verifies-mldsa`, not on trunk)
 
@@ -8,7 +8,7 @@
 
 | # | Decision | Departs from |
 |---|---|---|
-| A | **Constant PRF salt**: `SHA-256("atsign:keys:lookup:v1")`; `get()` needs no atSign (recovery types it once, K-18) | Gary's model (salt derived from the atSign); pb5 `prfEvalInput(atSign)` |
+| A | **Constant PRF salt**: `SHA-256("atsign:keys:lookup:v1")`; `get()` needs no atSign (the atSign is typed at login, K-18) | Gary's model (salt derived from the atSign); pb5 `prfEvalInput(atSign)` |
 | B | **One PRF call, then HKDF; no stored salt** | Gary's model (second PRF call with a random salt stored in the blob); browser-onboarding's `R` |
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
@@ -39,7 +39,7 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
 - **Supersedes K-6 and K-8 (2026-10-27).** K-6's single TTL'd record holding the @keys becomes the pointer (no TTL, in the passkey's own namespace per K-17) plus the document. K-8's APKAM private key in the record is gone: the document holds no APKAM private key. The PKAM key is derived from the passkey (D, K-12); its fallbacks are ruled by K-13 (browser-onboarding §3.5, §3.6).
 - `typ` in the AAD stops a pointer being opened as a document, or the reverse. Whether `v` changes with `typ` is open.
 
-- `<atSign>` comes from the IndexedDB hint or, with the hint cleared, the user (K-18), so it is known before any derivation. It is the output of at_commons' `toAtsign()` (lowercase, `@` included, dots removed after the `@`, so `@ali.ce` is `@alice`), as UTF-8 bytes.
+- `<atSign>` is typed by the user at login (K-18), so it is known before any derivation; the IndexedDB hint is keyed by it. It is the output of at_commons' `toAtsign()` (lowercase, `@` included, dots removed after the `@`, so `@ali.ce` is `@alice`), as UTF-8 bytes.
 - `<atSign>` in the labels is canonical, as at_commons `toAtsign()` produces it: lowercase, leading `@`, dots removed. `@Alice`, `alice` and `@ali.ce` all derive the same keys.
 - Test vector (`P` = bytes `00..1f`, atSign `@alice`):
   - salt `e5830b409db0e503af40c254598c41bf4e6ad6627ff185d311a9f446383ea620`
@@ -52,7 +52,7 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
 
 ### A — constant salt
 
-`get()` runs locally **before** any network call. The atSign, from the hint or typed by the user (K-18), then drives the root lookup, the unauthenticated `lookup:` (no `from:`), and finally `from:` + PKAM. The salt has to be in the `get()` request, so it can't depend on an atSign that isn't known yet. PRF output is already unique per credential.
+`get()` runs locally **before** any network call. The atSign, typed by the user at login (K-18), then drives the root lookup, the unauthenticated `lookup:` (no `from:`), and finally `from:` + PKAM. The salt has to be in the `get()` request, so it can't depend on an atSign that isn't known yet. PRF output is already unique per credential.
 
 ### B — no stored salt
 
@@ -84,3 +84,17 @@ A separate label keeps the APKAM key independent of the lookup key (which the se
 | D — auth-seed label | High. A new label derives a different APKAM key, so every enrollment must be redone. |
 | B, C1 — labels | Low. `P` comes back on every open: derive under the old labels, decrypt, rewrite, delete the old record. |
 | C2 — record format | Low. `v` migrates on the next open. |
+
+## What is built
+
+| Item | Behaviour |
+|---|---|
+| API | `onboardNewAtSign`, `passkeyLogin` (`atSign` required), `prfSupported` |
+| Exceptions | `PrfUnavailableException`, `PasskeyLostException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException` |
+| Setup lock | Per canonical atSign, first setup only; login takes none |
+| Write order | Document first, then the pointer |
+| APKAM key | `authSeed` seeds it on every open; never stored |
+| `user.id` | Random; the atSign is never in it (K-18) |
+
+v1 limits are listed in [`browser-onboarding.md`](browser-onboarding.md) §7.
+
