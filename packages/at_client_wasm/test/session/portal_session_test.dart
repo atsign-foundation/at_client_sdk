@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/at_client_wasm.dart';
+import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
 import '../test_utils.dart';
@@ -101,6 +102,22 @@ void main() {
         ..stopThrows = true;
 
       await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+    });
+
+    test('a stop that throws is logged as a warning', () async {
+      final records = <String>[];
+      final previous = AtSignLogger.defaultLoggingHandler;
+      AtSignLogger.defaultLoggingHandler = _Collect(records);
+      addTearDown(() => AtSignLogger.defaultLoggingHandler = previous);
+      wire
+        ..pkamAccepted = false
+        ..stopThrows = true;
+
+      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+
+      expect(records.where((r) => r.startsWith('WARNING|portalSession|')),
+          isNotEmpty);
+      expect(records.join('\n'), contains('stop failed'));
     });
   });
 
@@ -235,4 +252,15 @@ void main() {
       expect((keysIo.refusedWrites, keysIo.refusedFlushes), (1, 1));
     });
   });
+}
+
+/// A [LoggingHandler] that appends `LEVEL|logger|message|error` to [lines].
+class _Collect implements LoggingHandler {
+  final List<String> lines;
+
+  _Collect(this.lines);
+
+  @override
+  void call(record) => lines.add(
+      '${record.level.name}|${record.loggerName}|${record.message}|${record.error}');
 }

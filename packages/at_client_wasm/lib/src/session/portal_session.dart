@@ -149,7 +149,10 @@ Future<AtClient> portalSession({
     // The open's own error is the one the caller needs, not a teardown's.
     try {
       await client.stop();
-    } catch (_) {}
+    } catch (e, st) {
+      AtSignLogger('portalSession')
+          .warning('stopping the client of $normalized failed', e, st);
+    }
     rethrow;
   }
 }
