@@ -37,13 +37,18 @@ class PkamRefusedException implements Exception {
 /// pointer does not exist, or the atServer refused PKAM for the key derived
 /// from it. The caller decides the screen; re-enrolling takes an OTP.
 class PasskeyLostException implements Exception {
-  PasskeyLostException(this.atSign, this.reason, {this.cause});
+  PasskeyLostException(this.atSign, this.reason,
+      {this.cause, this.noPasskeyHere = false});
 
   final String atSign;
   final String reason;
 
   /// The failure that made the passkey count as lost, when there is one.
   final Object? cause;
+
+  /// Whether the device held no hint of [atSign]'s credential or enrollment
+  /// and found no passkey or pointer for it: the app should offer pairing.
+  final bool noPasskeyHere;
 
   @override
   String toString() => 'PasskeyLostException: $reason for $atSign';
@@ -412,12 +417,15 @@ class PasskeyCustody {
     try {
       unlocked = await kek.unlock(credentialId: hintedCredential);
     } on PasskeyCeremonyException catch (e) {
-      throw PasskeyLostException(canonical, 'no passkey credential', cause: e);
+      throw PasskeyLostException(canonical, 'no passkey credential',
+          cause: e,
+          noPasskeyHere: hintedCredential == null && hintedEnrollment == null);
     }
     final keys = await _deriveAndWipe(unlocked.secret, canonical);
     try {
-      final enrollmentId =
-          hintedEnrollment ?? await _enrollmentIdFromPointer(canonical, keys);
+      final enrollmentId = hintedEnrollment ??
+          await _enrollmentIdFromPointer(canonical, keys,
+              noHint: hintedCredential == null);
       try {
         checkEnrollmentId(enrollmentId);
       } on ArgumentError {
@@ -524,10 +532,11 @@ class PasskeyCustody {
     }
   }
 
-  Future<String> _enrollmentIdFromPointer(
-          String atSign, RecordKeys keys) async =>
+  Future<String> _enrollmentIdFromPointer(String atSign, RecordKeys keys,
+          {required bool noHint}) async =>
       await _pointedEnrollmentId(atSign, keys) ??
-      (throw PasskeyLostException(atSign, 'no enrollment pointer'));
+      (throw PasskeyLostException(atSign, 'no enrollment pointer',
+          noPasskeyHere: noHint));
 
   Future<String?> _pointedEnrollmentId(String atSign, RecordKeys keys) async {
     final record = await pointerReader.get(atSign, keys.lookupHex, ns: keys.ns);

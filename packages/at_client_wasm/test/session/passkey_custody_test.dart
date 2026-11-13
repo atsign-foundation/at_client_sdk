@@ -465,6 +465,37 @@ void main() {
       expect(server.pointerReads, 0);
     });
 
+    test('a lost passkey on a device with no hints says none is here',
+        () async {
+      server.pointers.clear();
+      await expectLater(
+          custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.noPasskeyHere, 'noPasskeyHere', isTrue)));
+
+      authenticator.yieldsNoCredential = true;
+      await expectLater(
+          custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.noPasskeyHere, 'noPasskeyHere', isTrue)));
+    });
+
+    test('a lost passkey the device remembered does not say none is here',
+        () async {
+      authenticator.yieldsNoCredential = true;
+      await expectLater(
+          custody().open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.noPasskeyHere, 'noPasskeyHere', isFalse)));
+
+      authenticator.yieldsNoCredential = false;
+      server.revoked.add('eid1');
+      await expectLater(
+          custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()
+              .having((e) => e.noPasskeyHere, 'noPasskeyHere', isFalse)));
+    });
+
     test('a non-canonical atSign is reported canonical', () async {
       authenticator.yieldsNoCredential = true;
       await expectLater(
