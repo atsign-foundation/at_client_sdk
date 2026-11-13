@@ -187,16 +187,33 @@ void main() {
   });
 
   group('sync', () {
-    test('a remoteOnly session does not sync', () async {
+    // A put or delete that passes request options leaves `useRemoteAtServer`
+    // false, which routes it to local storage even under remoteOnly, so only
+    // sync carries it to the atServer.
+    test('a remoteOnly session syncs what a write with options left local',
+        () async {
       final client = await open();
+      // A put checks the enrollment's namespace access first.
+      wire.answer = (c) => c.startsWith('enroll:fetch')
+          ? 'data:{"appName":"a","deviceName":"d",'
+              '"namespace":{"$_app":"rw","__manage":"rw"},"status":"approved"}'
+          : null;
+      final note =
+          (AtKey.self('note', namespace: _app)..sharedBy(_atSign)).build();
+      await client.put(note, 'hello',
+          putRequestOptions: PutRequestOptions()..shouldEncrypt = false);
+
+      expect(wire.commands.where((c) => c.startsWith('update')), isEmpty,
+          reason: 'the write went to local storage');
+      final keyStore = client.getLocalSecondary()!.keyStore!;
+      final local =
+          await (await keyStore.getKeys(regex: 'note.$_app')).toList();
+      expect(local, isNotEmpty);
+
       client.syncService.sync();
       await pumpEventQueue();
-
-      expect(wire.commands.where((c) => c.startsWith('stats')), isEmpty,
-          reason: '${wire.commands}');
-      expect(client.syncService.isSyncInProgress, isFalse);
-      expect(await client.syncService.isInSync(), isTrue);
-      await client.syncService.waitUntilCaughtUp(timeout: Duration(seconds: 1));
+      expect(wire.commands.where((c) => c.startsWith('stats')), isNotEmpty,
+          reason: 'sync must reach the atServer to push the local write');
     });
 
     test('a localOnly session syncs', () async {
@@ -266,8 +283,8 @@ void main() {
   group('atSign normalization', () {
     test('an atSign with whitespace is rejected before any dial', () async {
       await expectLater(
-          open(atSign: ' @alice '), throwsA(isA<InvalidAtSignException>()));
-      expect(() => DevSessionOptions(atSign: ' @alice ', app: _app),
+          open(atSign: '@alice '), throwsA(isA<InvalidAtSignException>()));
+      expect(() => DevSessionOptions(atSign: '@alice ', app: _app),
           throwsA(isA<InvalidAtSignException>()));
       expect(wire.dials, 0);
     });

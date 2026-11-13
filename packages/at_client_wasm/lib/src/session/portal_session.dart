@@ -6,8 +6,6 @@ import 'package:at_client/memory.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/preference/posture_floor.dart';
 
-import 'no_sync_service.dart';
-
 /// How a session's connections reach atServers: [lookUps] builds each
 /// connection, [finder] resolves an atSign to its atServer.
 typedef SessionTransport = ({
@@ -92,9 +90,10 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// [app] is the client's namespace. [prefs], when given, is used as it is;
 /// otherwise the preference names [app] and [root], routes reads and writes
 /// to the atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
-/// A client whose preference is [RemoteLocalPref.remoteOnly] keeps nothing on
-/// the device to sync, so it runs a [NoSyncService]; any other preference
-/// gets the default sync.
+/// Sync runs under every preference: a put or delete that passes request
+/// options leaves `useRemoteAtServer` false, which routes it to local storage
+/// even under [RemoteLocalPref.remoteOnly], and only sync carries it to the
+/// atServer.
 /// Keys that carry ML-DSA-65 signing or namespace key material throw
 /// [UnsupportedKeyMaterialException] before any connection is made. The
 /// storage is always fresh, so every open is a first open on the device, and
@@ -175,9 +174,6 @@ Future<AtClient> _open(
     storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
     lookUps: transport.lookUps,
     secondaryAddressFinder: transport.finder,
-    serviceFactory: preference.remoteLocalPref == RemoteLocalPref.remoteOnly
-        ? NoSyncServiceFactory()
-        : null,
   );
   try {
     final state = client.connection.current;

@@ -75,7 +75,7 @@ class WireLookUp implements AtLookupMuxable {
   @override
   Future<String?> executeCommand(String command, {bool auth = false}) async {
     _wire.commands.add(command);
-    return null;
+    return _wire.answer?.call(command);
   }
 
   @override
