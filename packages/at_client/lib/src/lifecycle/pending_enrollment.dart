@@ -442,13 +442,16 @@ class AtEnrollmentCancelledException extends AtEnrollmentException {
 /// `open` was asked to open a keyfile that holds no credential and no
 /// pending enrollment, as a denial, a cancel or an expiry leaves it, so there
 /// is nothing to authenticate with: the device has to enroll again.
-class AtNoCredentialException extends AtException {
-  final String atSign;
-
-  AtNoCredentialException(this.atSign)
-      : super('$atSign holds no credential in this keyfile: its enrollment '
+///
+/// Its cause is [AtKeysUnusableCause.noCredential].
+class AtNoCredentialException extends AtKeysUnusableException {
+  AtNoCredentialException(String atSign)
+      : super(
+            '$atSign holds no credential in this keyfile: its enrollment '
             'was denied, cancelled or expired, or never completed, so there '
-            'is nothing to authenticate with; enroll again');
+            'is nothing to authenticate with; enroll again',
+            atSign: atSign,
+            cause: AtKeysUnusableCause.noCredential);
 }
 
 /// `open` was asked to open a keyfile that holds nothing but an enrollment
@@ -456,20 +459,28 @@ class AtNoCredentialException extends AtException {
 /// `Atsign.resumeEnrollment` is the way to pick it up, and throws this too,
 /// from [AtEnrollmentPendingException.several], when more than one pending
 /// enrollment matches what it was given.
-class AtEnrollmentPendingException extends AtException {
-  final String atSign;
+///
+/// Its cause is [AtKeysUnusableCause.pendingEnrollment].
+class AtEnrollmentPendingException extends AtKeysUnusableException {
   final List<String> pendingEnrollmentIds;
 
-  AtEnrollmentPendingException(this.atSign, this.pendingEnrollmentIds)
-      : super('$atSign holds no live credential, only the pending enrollment'
+  AtEnrollmentPendingException(String atSign, this.pendingEnrollmentIds)
+      : super(
+            '$atSign holds no live credential, only the pending enrollment'
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
             '${pendingEnrollmentIds.join(', ')}: resume it with '
-            'resumeEnrollment rather than opening it');
+            'resumeEnrollment rather than opening it',
+            atSign: atSign,
+            cause: AtKeysUnusableCause.pendingEnrollment);
 
   /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
   /// enrollments of [atSign] matching what it was given.
-  AtEnrollmentPendingException.several(this.atSign, this.pendingEnrollmentIds)
-      : super('$atSign holds several pending enrollments that match: '
+  AtEnrollmentPendingException.several(
+      String atSign, this.pendingEnrollmentIds)
+      : super(
+            '$atSign holds several pending enrollments that match: '
             '${pendingEnrollmentIds.join(', ')}. To resume one, name both the '
-            'app and the device');
+            'app and the device',
+            atSign: atSign,
+            cause: AtKeysUnusableCause.pendingEnrollment);
 }

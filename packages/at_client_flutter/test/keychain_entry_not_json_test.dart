@@ -208,28 +208,53 @@ void main() {
     when(lookUp.stop).thenAnswer((_) async {});
     when(lookUp.isConnectionAvailable).thenReturn(false);
 
-    final client = await Atsign(atSign).open(
-      keys: KeychainAtKeysIo(
-        keychainStorage: keychainWith(holding: '@atsigns:test'),
-      ),
-      preference: AtClientPreference()
-        ..rootDomain = InternetAddress.loopbackIPv4.address
-        ..rootPort = closedPort
-        ..namespace = 'keychain',
-      storage: HiveAtClientStorage(
-        atSign: atSign.toAtsign(),
-        storagePath: dir.path,
-        closedByClient: true,
-      ),
-      atLookUp: lookUp,
-      lookUps: secureSocketLookUps(),
-      secondaryAddressFinder: CacheableSecondaryAddressFinder(
-        InternetAddress.loopbackIPv4.address,
-        closedPort,
-      ),
-    );
-    final state = client.connection.current;
+    Object? thrown;
+    try {
+      await Atsign(atSign).open(
+        keys: KeychainAtKeysIo(
+          keychainStorage: keychainWith(holding: '@atsigns:test'),
+        ),
+        preference: AtClientPreference()
+          ..rootDomain = InternetAddress.loopbackIPv4.address
+          ..rootPort = closedPort
+          ..namespace = 'keychain',
+        storage: HiveAtClientStorage(
+          atSign: atSign.toAtsign(),
+          storagePath: dir.path,
+          closedByClient: true,
+        ),
+        atLookUp: lookUp,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+          InternetAddress.loopbackIPv4.address,
+          closedPort,
+        ),
+      );
+    } catch (e) {
+      thrown = e;
+    }
 
+    expect(
+      thrown,
+      isA<AtKeysUnusableException>()
+          .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+          .having((e) => e.error, 'error', isA<AtKeysFormatException>()),
+    );
+    final unusable = thrown as AtKeysUnusableException;
+    for (final field in [
+      unusable,
+      unusable.message,
+      unusable.atSign,
+      unusable.cause,
+      unusable.source,
+      unusable.error,
+    ]) {
+      expect(
+        field,
+        _holdsNoneOf(keyMaterial),
+        reason: 'no field of the exception holds the entry\'s text',
+      );
+    }
     for (final record in logs.records) {
       expect(
         record,
@@ -237,30 +262,12 @@ void main() {
         reason: 'no log record holds the entry\'s text',
       );
     }
-    for (final field in [
-      state,
-      state.outcome,
-      state.cause,
-      state.error,
-      state.at,
-    ]) {
-      expect(
-        field,
-        _holdsNoneOf(keyMaterial),
-        reason: 'no field of connection.current holds the entry\'s text',
-      );
-    }
     expect(
       logs.records.where(
-        (r) => r.contains('Could not read the keys for $atSign'),
+        (r) => r.contains('The keys for $atSign in this device\'s keychain'),
       ),
       isNotEmpty,
-      reason: 'the recorder is bound, and heard the keychain read fail',
-    );
-    expect(
-      state.error,
-      isA<FormatException>(),
-      reason: 'the connection attempt failed on reading the keychain',
+      reason: 'the recorder is bound, and heard open refuse the keys',
     );
   });
 

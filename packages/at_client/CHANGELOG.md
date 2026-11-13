@@ -59,6 +59,13 @@
 - fix: `Atsign.activate` and `pqNativeOnboard` throw before sending anything
   when the keys store holds keys they cannot read, or its keyfile cannot be
   written; the exception names the store.
+- fix: `Atsign.open` now throws `AtKeysUnusableException` for keys it cannot
+  use (absent, unreadable, or for another atSign), before connecting, instead
+  of returning an offline client or throwing `AtOpenRefusedException`.
+  `AtNoCredentialException` and `AtEnrollmentPendingException` are
+  `AtKeysUnusableException`s too.
+- fix: `Atsign.enroll` refusing a keys store that holds live keys says to give
+  the new enrollment a keys store of its own, not to remove the keys.
 
 ## 4.0.0
 

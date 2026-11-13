@@ -20,7 +20,10 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
+
+final _logger = AtSignLogger('Atsign');
 
 /// The verbs an application reaches a working client through, on the atSign
 /// it holds keys for.
@@ -56,6 +59,16 @@ extension AtsignLifecycle on Atsign {
   /// `connection.current` saying how that went. The caller owns the client
   /// and ends it with `stop()`.
   ///
+  /// [keys] are read first, and keys that cannot be used throw
+  /// [AtKeysUnusableException] before anything is written or any connection
+  /// opened, on every device: keys that are absent, that cannot be read, or
+  /// that record another atSign (keys that record none are used as before).
+  /// Keys that hold nothing but an enrollment awaiting approval are refused
+  /// with [AtEnrollmentPendingException]: [resumeEnrollment] picks that up.
+  /// Keys that hold neither, as a denial, a cancel or an expiry leaves them,
+  /// are refused with [AtNoCredentialException]. Both are
+  /// [AtKeysUnusableException]s.
+  ///
   /// The client comes back whether the atServer was reached or not: offline
   /// it serves everything its local storage holds, and `connection.changes`
   /// reports when that changes. The one exception is the first open of a
@@ -66,12 +79,6 @@ extension AtsignLifecycle on Atsign {
   /// be nothing for the client to serve. Once a principal has been online on
   /// a device, a refusal comes back as a client in the `refused` state and
   /// the application decides.
-  ///
-  /// Keys that hold nothing but an enrollment awaiting approval are refused
-  /// with [AtEnrollmentPendingException]: [resumeEnrollment] picks that up.
-  /// Keys that hold neither, as a denial, a cancel or an expiry leaves them,
-  /// are refused with [AtNoCredentialException] before anything is written or
-  /// any connection opened.
   ///
   /// [namespace] defaults to the preference's. [storage] is the client's
   /// local storage, borrowed unless it was built with `closedByClient: true`.
@@ -103,7 +110,7 @@ extension AtsignLifecycle on Atsign {
     AtServiceFactory? serviceFactory,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
-    await _refuseKeysWithoutCredential(keys);
+    await _refuseUnusableKeys(keys);
     final client = await buildAtClient(
       atSign: this,
       namespace: namespace ?? preference.namespace,
@@ -464,18 +471,52 @@ extension AtsignLifecycle on Atsign {
     return null;
   }
 
-  Future<void> _refuseKeysWithoutCredential(AtKeysIo keys) async {
+  /// Throws [AtKeysUnusableException] unless [keys] hold a credential for
+  /// this atSign.
+  Future<void> _refuseUnusableKeys(AtKeysIo keys) async {
     final AtKeys stored;
     try {
       stored = await keys.read(this);
-    } on Exception {
-      // Absent or unreadable keys are the client's to report as it always has.
-      return;
+    } on AtKeysSourceAbsentException catch (e, stackTrace) {
+      _refuse(
+          AtKeysUnusableException.absent(this,
+              source: keys.describeSource(this), error: e),
+          stackTrace);
+    } catch (e, stackTrace) {
+      _refuse(
+          AtKeysUnusableException.unreadable(this,
+              source: keys.describeSource(this), error: e),
+          stackTrace);
     }
-    if (stored.holdsAuthenticationMaterial) return;
-    final pending = stored.pendingEnrollmentIds.toList();
-    if (pending.isNotEmpty) throw AtEnrollmentPendingException(this, pending);
-    throw AtNoCredentialException(this);
+    final recorded = stored.atsign;
+    if (recorded != null && recorded.toAtsign() != toAtsign()) {
+      throw AtKeysUnusableException.anotherAtsign(this, recorded,
+          source: keys.describeSource(this));
+    }
+    if (!stored.holdsAuthenticationMaterial) {
+      final pending = stored.pendingEnrollmentIds.toList();
+      if (pending.isNotEmpty) throw AtEnrollmentPendingException(this, pending);
+      throw AtNoCredentialException(this);
+    }
+    try {
+      // NOTE: the keypair the authenticator signs with, resolved as it
+      // resolves it, so keys it cannot sign with are refused here.
+      stored.authenticationKeyPairFor(stored.enrollmentToAuthenticateAs());
+    } catch (e, stackTrace) {
+      _refuse(
+          AtKeysUnusableException.unreadable(this,
+              source: keys.describeSource(this), error: e),
+          stackTrace);
+    }
+  }
+
+  /// Throws [unusable] with the [stackTrace] of what made the keys unusable,
+  /// logging both at fine.
+  Never _refuse(AtKeysUnusableException unusable, StackTrace stackTrace) {
+    // NOTE: the read's own error is not logged; its text can hold what was
+    // read.
+    _logger.logger.fine(unusable.message, null, stackTrace);
+    Error.throwWithStackTrace(unusable, stackTrace);
   }
 
   /// A store [enroll] may write into: one holding nothing live for this
@@ -493,7 +534,7 @@ extension AtsignLifecycle on Atsign {
     if (existing.holdsAuthenticationMaterial) {
       throw AtEnrollmentException('$this already holds live keys in this '
           'store, and enrolling again would overwrite the credential this '
-          'device has; remove them first if a fresh enrollment is meant');
+          'device has: give a new enrollment a keys store of its own');
     }
     for (final enrollmentId in existing.pendingEnrollmentIds) {
       final info = existing.enrollmentInfo(enrollmentId);

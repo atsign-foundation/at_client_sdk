@@ -13,7 +13,7 @@ Feature: A keychain entry that does not parse says why, and none of its text
   Scenario: Opening with that entry logs and keeps none of its text
     Given the same keychain entry
     When an app calls Atsign.open with KeychainAtKeysIo
-    Then no log record and no field of connection.current holds any of the entry's text
+    Then it throws AtKeysUnusableException, and no log record and no field of the exception holds any of the entry's text
 
   Scenario: Adding keys to a keychain whose entry does not parse says why, and none of its text
     Given a keychain atKeys entry whose text is not JSON
