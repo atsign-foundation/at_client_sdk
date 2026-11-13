@@ -285,5 +285,22 @@ void main() {
 
       expect(gateway.lastSession!.closeCalls, 1);
     });
+
+    test('two logins for one atSign started together give one client',
+        () async {
+      final device = await enrolledElsewhere();
+
+      final outcomes = await Future.wait([
+        for (var i = 0; i < 2; i++)
+          login(withHints: device)
+              .then<Object>((c) => c, onError: (Object e) => e),
+      ]);
+
+      final clients = outcomes.whereType<AtClient>().toList();
+      expect(clients, hasLength(1), reason: '$outcomes');
+      expect(outcomes.whereType<StateError>(), hasLength(1),
+          reason: 'the second open fails as it would after the first');
+      expect(AtClientImpl.liveClientsFor(_atSign), [same(clients.single)]);
+    });
   });
 }
