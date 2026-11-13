@@ -5,7 +5,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/preference/posture_floor.dart';
-import 'package:at_utils/at_utils.dart';
+
+import 'no_sync_service.dart';
 
 /// How a session's connections reach atServers: [lookUps] builds each
 /// connection, [finder] resolves an atSign to its atServer.
@@ -13,9 +14,6 @@ typedef SessionTransport = ({
   AtLookUpFactory lookUps,
   SecondaryAddressFinder finder,
 });
-
-/// [atSign] trimmed and in `@name` form.
-String normalizeAtSign(String atSign) => AtUtils.fixAtSign(atSign.trim());
 
 /// Thrown by [portalSession] when the client did not come online.
 class PortalSessionOfflineException implements Exception {
@@ -65,10 +63,10 @@ class SessionKeysIo extends WrittenAtKeysIo {
   var refusedWrites = 0;
   var refusedFlushes = 0;
 
-  SessionKeysIo(String atSign, this._keys) : _atSign = normalizeAtSign(atSign);
+  SessionKeysIo(String atSign, this._keys) : _atSign = atSign.toAtsign();
 
   @override
-  FutureOr<AtKeys> read(String atsign) => normalizeAtSign(atsign) == _atSign
+  FutureOr<AtKeys> read(String atsign) => atsign.toAtsign() == _atSign
       ? _keys
       : throw AtKeysNotInMemoryException('$atsign not found in memory');
 
@@ -89,9 +87,14 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// every connection over [transport], and returns it once it has
 /// authenticated to the atServer.
 ///
+/// [atSign] is put in `@name` form by `toAtsign()`, which throws an
+/// [InvalidAtSignException] for one it cannot take, whitespace included.
 /// [app] is the client's namespace. [prefs], when given, is used as it is;
 /// otherwise the preference names [app] and [root], routes reads and writes
 /// to the atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
+/// A client whose preference is [RemoteLocalPref.remoteOnly] keeps nothing on
+/// the device to sync, so it runs a [NoSyncService]; any other preference
+/// gets the default sync.
 /// Keys that carry ML-DSA-65 signing or namespace key material throw
 /// [UnsupportedKeyMaterialException] before any connection is made. The
 /// storage is always fresh, so every open is a first open on the device, and
@@ -109,6 +112,11 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// client is built stops it and is rethrown, so a retry for the same atSign
 /// builds afresh.
 ///
+/// Opens for one atSign run one at a time: an open started while another
+/// for the same atSign is running waits for it to end, then fails as it
+/// would after it (a [StateError] while that client is live) or builds
+/// afresh.
+///
 /// [keysIo] is the key store the client runs on, by default a [SessionKeysIo]
 /// over [keys].
 Future<AtClient> portalSession({
@@ -120,10 +128,39 @@ Future<AtClient> portalSession({
   AtClientPreference? prefs,
   SessionKeysIo? keysIo,
 }) async {
-  final normalized = normalizeAtSign(atSign);
+  final normalized = atSign.toAtsign();
   if (floorOfKeyMaterial(keys, keys.enrollmentToAuthenticateAs()) != null) {
     throw UnsupportedKeyMaterialException(normalized);
   }
+  // `buildAtClient` checks for a live client and registers its own across
+  // awaits, so two opens running together would both pass the check.
+  final previous = _opening[normalized];
+  final done = Completer<void>();
+  _opening[normalized] = done;
+  try {
+    if (previous != null) await previous.future;
+    return await _open(normalized, app, keys, transport, root, prefs, keysIo);
+  } finally {
+    done.complete();
+    if (identical(_opening[normalized], done)) {
+      _opening.remove(normalized);
+    }
+  }
+}
+
+/// Completed when the newest open running for each atSign ends, however it
+/// ends; it never completes with an error.
+final _opening = <String, Completer<void>>{};
+
+Future<AtClient> _open(
+  String atSign,
+  String app,
+  AtKeys keys,
+  SessionTransport transport,
+  AtRootDomain root,
+  AtClientPreference? prefs,
+  SessionKeysIo? keysIo,
+) async {
   final preference = prefs ??
       (AtClientPreference()
         ..namespace = app
@@ -131,18 +168,21 @@ Future<AtClient> portalSession({
         ..rootPort = root.rootPort
         ..remoteLocalPref = RemoteLocalPref.remoteOnly
         ..monitorAutoStart = false);
-  final client = await Atsign(normalized).open(
-    keys: keysIo ?? SessionKeysIo(normalized, keys),
+  final client = await Atsign(atSign).open(
+    keys: keysIo ?? SessionKeysIo(atSign, keys),
     preference: preference,
     namespace: app,
-    storage: InMemoryAtClientStorage(atSign: normalized, closedByClient: true),
+    storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
     lookUps: transport.lookUps,
     secondaryAddressFinder: transport.finder,
+    serviceFactory: preference.remoteLocalPref == RemoteLocalPref.remoteOnly
+        ? NoSyncServiceFactory()
+        : null,
   );
   try {
     final state = client.connection.current;
     if (!state.isOnline) {
-      throw PortalSessionOfflineException(normalized, state);
+      throw PortalSessionOfflineException(atSign, state);
     }
     return client;
   } catch (_) {
@@ -151,7 +191,7 @@ Future<AtClient> portalSession({
       await client.stop();
     } catch (e, st) {
       AtSignLogger('portalSession')
-          .warning('stopping the client of $normalized failed', e, st);
+          .warning('stopping the client of $atSign failed', e, st);
     }
     rethrow;
   }

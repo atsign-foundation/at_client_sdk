@@ -1,10 +1,8 @@
 import 'package:at_client/at_client.dart';
 
-import 'portal_session.dart';
-
 /// What a dev session needs to open besides its keys.
 class DevSessionOptions {
-  /// The session's atSign, normalized to `@name` form.
+  /// The session's atSign, in `@name` form.
   final String atSign;
   final String app;
 
@@ -16,16 +14,17 @@ class DevSessionOptions {
   /// The root server (atDirectory) atSigns are looked up at.
   final AtRootDomain root;
 
-  /// Throws an [ArgumentError] naming the field for a [proxyHost] without a
-  /// [proxyPort] or the reverse, an empty [proxyHost] and a [proxyPort]
-  /// outside 1-65535.
+  /// Throws an [InvalidAtSignException] for an [atSign] `toAtsign()` cannot
+  /// take, whitespace included, and an [ArgumentError] naming the field for
+  /// a [proxyHost] without a [proxyPort] or the reverse, an empty [proxyHost]
+  /// and a [proxyPort] outside 1-65535.
   DevSessionOptions({
     required String atSign,
     required this.app,
     String? proxyHost,
     int? proxyPort,
     this.root = AtRootDomain.atsignDomain,
-  })  : atSign = normalizeAtSign(atSign),
+  })  : atSign = atSign.toAtsign(),
         proxy = _proxy(proxyHost, proxyPort);
 
   static ({String host, int port})? _proxy(String? host, int? port) {

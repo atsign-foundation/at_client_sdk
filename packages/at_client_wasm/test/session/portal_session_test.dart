@@ -95,6 +95,43 @@ void main() {
     }
   });
 
+  group('concurrent opens', () {
+    test('two opens for one atSign started together give one client', () async {
+      final outcomes = await Future.wait([
+        for (final atSign in [_atSign, 'Alice'])
+          open(atSign: atSign).then<Object>((c) => c, onError: (Object e) => e),
+      ]);
+
+      final clients = outcomes.whereType<AtClient>().toList();
+      expect(clients, hasLength(1), reason: '$outcomes');
+      expect(outcomes.whereType<StateError>(), hasLength(1),
+          reason: 'the second open fails as it would after the first');
+      expect(AtClientImpl.liveClientsFor(_atSign), [same(clients.single)]);
+    });
+
+    test('an open started while a failing one runs builds afresh', () async {
+      wire.pkamAccepted = false;
+      // The atServer accepts again once the first open has failed.
+      final first = open().then<Object>((c) => c, onError: (Object e) {
+        wire.pkamAccepted = true;
+        return e;
+      });
+      final second = open();
+
+      expect(await first, isA<PortalSessionOfflineException>());
+      final client = await second;
+      expect(AtClientImpl.liveClientsFor(_atSign), [same(client)]);
+    });
+
+    test('opens for different atSigns are not held up by each other', () async {
+      final bob = open(atSign: '@bob', keys: classicalAtKeys());
+      final alice = open();
+
+      final clients = await Future.wait([alice, bob]);
+      expect(clients.map((c) => c.getCurrentAtSign()), [_atSign, '@bob']);
+    });
+  });
+
   group('open failure', () {
     test('a stop that throws does not mask the open failure', () async {
       wire
@@ -122,22 +159,55 @@ void main() {
   });
 
   group('routing', () {
-    test('the default preference routes reads to the atServer', () async {
-      final client = await open();
+    final greeting =
+        (AtKey.public('greeting', namespace: _app)..sharedBy(_atSign)).build();
+    const llookup = 'llookup:all:public:greeting.$_app$_atSign';
 
-      expect(
-          client.getPreferences()!.remoteLocalPref, RemoteLocalPref.remoteOnly);
+    test('with the default preference a read goes to the atServer', () async {
+      final client = await open();
+      wire.answer = (_) => 'data:null';
+
+      await client.get(greeting);
+
+      expect(wire.commands.map((c) => c.trim()), contains(llookup));
     });
 
-    test('a passed prefs is kept as it is', () async {
+    test('a passed localOnly prefs is kept and reads stay on the device',
+        () async {
       final prefs = AtClientPreference()
         ..namespace = _app
         ..monitorAutoStart = false;
 
       final client = await open(prefs: prefs);
+      await client.get(greeting).then((_) {}, onError: (_) {});
 
       expect(client.getPreferences(), same(prefs));
-      expect(prefs.remoteLocalPref, RemoteLocalPref.localOnly);
+      expect(wire.commands.map((c) => c.trim()), isNot(contains(llookup)));
+    });
+  });
+
+  group('sync', () {
+    test('a remoteOnly session does not sync', () async {
+      final client = await open();
+      client.syncService.sync();
+      await pumpEventQueue();
+
+      expect(wire.commands.where((c) => c.startsWith('stats')), isEmpty,
+          reason: '${wire.commands}');
+      expect(client.syncService.isSyncInProgress, isFalse);
+      expect(await client.syncService.isInSync(), isTrue);
+      await client.syncService.waitUntilCaughtUp(timeout: Duration(seconds: 1));
+    });
+
+    test('a localOnly session syncs', () async {
+      final client = await open(
+          prefs: AtClientPreference()
+            ..namespace = _app
+            ..monitorAutoStart = false);
+      client.syncService.sync();
+      await pumpEventQueue();
+
+      expect(wire.commands.where((c) => c.startsWith('stats')), isNotEmpty);
     });
   });
 
@@ -194,7 +264,15 @@ void main() {
   });
 
   group('atSign normalization', () {
-    for (final input in ['alice', '@Alice', ' @alice ']) {
+    test('an atSign with whitespace is rejected before any dial', () async {
+      await expectLater(
+          open(atSign: ' @alice '), throwsA(isA<InvalidAtSignException>()));
+      expect(() => DevSessionOptions(atSign: ' @alice ', app: _app),
+          throwsA(isA<InvalidAtSignException>()));
+      expect(wire.dials, 0);
+    });
+
+    for (final input in ['alice', '@Alice']) {
       test('portalSession opens "$input" as @alice', () async {
         final client = await open(atSign: input);
 

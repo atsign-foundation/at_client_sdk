@@ -22,6 +22,9 @@ class Wire {
   /// Whether closing or stopping a lookUp throws, as a client's stop does.
   var stopThrows = false;
 
+  /// What the atServer answers a command with; null answers nothing.
+  String? Function(String command)? answer;
+
   /// Called on each dial with its 1-based ordinal; a throw fails the dial.
   void Function(int dial)? onDial;
 
@@ -77,8 +80,9 @@ class WireLookUp implements AtLookupMuxable {
 
   @override
   Future<String?> executeVerb(VerbBuilder builder) async {
-    _wire.commands.add(builder.buildCommand());
-    return null;
+    final command = builder.buildCommand();
+    _wire.commands.add(command);
+    return _wire.answer?.call(command);
   }
 
   @override
