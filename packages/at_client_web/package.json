@@ -22,9 +22,11 @@
     "typecheck": "tsc -p tsconfig.build.json && tsc -p test/types/tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/copy-bundle.mjs"
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/copy-bundle.mjs",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
     "@types/node": "26.6.6",
     "typescript": "5.9.3",
     "vitest": "5.1.0"
