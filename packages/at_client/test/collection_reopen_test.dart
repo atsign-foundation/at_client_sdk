@@ -47,8 +47,8 @@ void main() {
   Matcher mismatch(String? existing, String? requested) =>
       isA<CollectionTypeTagMismatchException>()
           .having((e) => e.namespace, 'namespace', ns)
-          .having((e) => e.existingTag, 'existingTag', existing ?? anything)
-          .having((e) => e.requestedTag, 'requestedTag', requested ?? anything);
+          .having((e) => e.existingTag, 'existingTag', existing)
+          .having((e) => e.requestedTag, 'requestedTag', requested);
 
   Matcher stamping(String tag) => isA<AtCollection>()
       .having((c) => c.draft(obj: _Todo(), id: 't1').type, 'draft type', tag);

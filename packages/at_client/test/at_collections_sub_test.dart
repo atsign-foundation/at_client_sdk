@@ -328,9 +328,8 @@ void main() {
     Matcher mismatch(String? existing, String? requested) =>
         isA<CollectionTypeTagMismatchException>()
             .having((e) => e.namespace, 'namespace', subNs)
-            .having((e) => e.existingTag, 'existingTag', existing ?? anything)
-            .having(
-                (e) => e.requestedTag, 'requestedTag', requested ?? anything);
+            .having((e) => e.existingTag, 'existingTag', existing)
+            .having((e) => e.requestedTag, 'requestedTag', requested);
 
     Matcher usable(String? tag) => isA<AtCollection>()
         .having((c) => c.namespace, 'namespace', subNs)
