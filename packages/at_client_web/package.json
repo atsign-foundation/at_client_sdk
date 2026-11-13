@@ -20,15 +20,18 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.build.json && tsc -p test/types/tsconfig.json",
-    "lint": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit && tsc -p demo/tsconfig.json",
     "test": "vitest run",
     "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/copy-bundle.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "demo": "npm run build && vite --config demo/vite.config.ts",
+    "demo:build": "npm run build && vite build --config demo/vite.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
     "@types/node": "26.6.6",
     "typescript": "5.9.3",
+    "vite": "8.3.8",
     "vitest": "5.1.0"
   }
 }

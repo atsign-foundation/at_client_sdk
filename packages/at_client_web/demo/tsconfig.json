@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "paths": { "@atsign/at_client_web": ["../src/index.ts"] }
+  },
+  "include": ["."],
+  "exclude": ["dist", "node_modules"]
+}

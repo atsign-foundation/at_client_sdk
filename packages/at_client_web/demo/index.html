@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src https: wss:; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>at_client_web demo</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./main.ts"></script>
+</head>
+<body>
+  <main class="card">
+    <header>
+      <div class="brand">
+        <h1>at_client_web</h1>
+        <div class="sub">passkey-custodied atSign sessions &middot; <a href="./talk.html">at_talk</a></div>
+      </div>
+      <div class="actions">
+        <span id="prf" class="pill" data-state="checking">PRF checking</span>
+        <span id="status" class="pill" data-state="disconnected">Disconnected</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>Account</h2>
+      <fieldset id="account">
+        <label>atSign <input id="atSign" placeholder="@alice" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>Namespace <input id="namespace" value="demo" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>CRAM secret (onboarding only) <input id="cram" type="password" autocomplete="off" spellcheck="false"></label>
+      </fieldset>
+      <div class="row">
+        <button id="onboard" type="button">Onboard</button>
+        <button id="login" type="button" class="primary">Login</button>
+        <button id="logout" type="button" disabled>Close</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Key</h2>
+      <fieldset>
+        <label>Key <input id="keyName" value="greeting" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>Value <input id="keyValue" value="hello" autocomplete="off" spellcheck="false"></label>
+      </fieldset>
+      <div class="row">
+        <button id="put" type="button" disabled>Put</button>
+        <button id="get" type="button" disabled>Get</button>
+        <button id="keys" type="button" disabled>Keys</button>
+      </div>
+    </section>
+
+    <pre id="result" role="status" aria-live="polite" data-state="idle"></pre>
+  </main>
+</body>
+</html>

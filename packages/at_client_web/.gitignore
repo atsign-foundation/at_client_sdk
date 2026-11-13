@@ -3,3 +3,4 @@ dist/
 *.tgz
 test-results/
 playwright-report/
+demo/dist/

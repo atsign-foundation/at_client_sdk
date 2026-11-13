@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src https: wss:; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>at_talk</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./talk.ts"></script>
+</head>
+<body class="talk">
+  <main class="card">
+    <header>
+      <div class="brand">
+        <h1>at_talk</h1>
+        <div class="sub">end-to-end encrypted &middot; atProtocol &middot; <a href="./index.html">demo</a></div>
+      </div>
+      <div class="actions">
+        <span id="status" class="pill" data-state="disconnected">Disconnected</span>
+        <button id="open" type="button" class="primary">Open</button>
+        <button id="close" type="button" disabled>Close</button>
+      </div>
+    </header>
+
+    <section>
+      <fieldset id="fields">
+        <label>Me <input id="me" placeholder="@alice" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>Peer <input id="peer" placeholder="@bob" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>Namespace <input id="namespace" value="attalk" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      </fieldset>
+    </section>
+
+    <div id="log" role="log" aria-live="polite"></div>
+    <form id="send">
+      <input id="line" autocomplete="off" placeholder="Message" aria-label="Message" disabled>
+      <button class="primary" disabled>Send</button>
+    </form>
+  </main>
+</body>
+</html>
