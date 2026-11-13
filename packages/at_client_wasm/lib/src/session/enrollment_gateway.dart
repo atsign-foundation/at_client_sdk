@@ -135,7 +135,7 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
     try {
       return await _authenticated(atSign, enrollmentId, pair, keys: keys);
     } on Object catch (e) {
-      throw ActivationPkamFailedException(enrollmentId,
+      throw ActivationUnfinishedException(enrollmentId,
           atKeys: _atKeysDocument(keys, atSign), cause: e);
     }
   }
@@ -179,24 +179,53 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
       required ApkamKeyPair apkamKeyPair}) async {
     // ignore: invalid_use_of_visible_for_testing_member
     final keysIo = InMemoryAtKeysIo();
-    final client = await Atsign(atSign).activate(
-        cramSecret: cram,
-        keys: keysIo,
-        preference: AtClientPreference()
-          ..namespace = app
-          ..rootDomain = root.rootDomain
-          ..rootPort = root.rootPort,
-        namespace: app,
-        storage: InMemoryAtClientStorage(atSign: atSign),
-        app: app,
-        device: device,
-        mintLegacyMaterial: true,
-        signingAlgo: SigningAlgoType.mldsa65,
-        apkamKeyPair: apkamKeyPair,
-        lookUps: transport.lookUps,
-        secondaryAddressFinder: transport.finder);
-    return readKeysThenStop(keysIo, atSign, client.stop);
+    return activateKeepingKeys(
+        keysIo,
+        atSign,
+        () => Atsign(atSign).activate(
+            cramSecret: cram,
+            keys: keysIo,
+            preference: AtClientPreference()
+              ..namespace = app
+              ..rootDomain = root.rootDomain
+              ..rootPort = root.rootPort,
+            namespace: app,
+            storage: InMemoryAtClientStorage(atSign: atSign),
+            app: app,
+            device: device,
+            mintLegacyMaterial: true,
+            signingAlgo: SigningAlgoType.mldsa65,
+            apkamKeyPair: apkamKeyPair,
+            lookUps: transport.lookUps,
+            secondaryAddressFinder: transport.finder));
   }
+}
+
+/// Runs [activate] and returns the keys it filed in [keysIo], stopping the
+/// client it returns.
+///
+/// An [activate] that fails after filing keys with an enrollment to
+/// authenticate as throws [ActivationUnfinishedException] carrying them; one
+/// that filed none rethrows its own error.
+Future<AtKeys> activateKeepingKeys(AtKeysIo keysIo, String atSign,
+    Future<AtClient> Function() activate) async {
+  final AtClient client;
+  try {
+    client = await activate();
+  } on Object catch (error, stackTrace) {
+    final AtKeys keys;
+    final String? enrollmentId;
+    try {
+      keys = await keysIo.read(atSign);
+      enrollmentId = keys.resolveAuthenticatingEnrollment();
+    } on Object {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    if (enrollmentId == null) Error.throwWithStackTrace(error, stackTrace);
+    throw ActivationUnfinishedException(enrollmentId,
+        atKeys: _atKeysDocument(keys, atSign), cause: error);
+  }
+  return readKeysThenStop(keysIo, atSign, client.stop);
 }
 
 /// Reads [atSign]'s activated keys from [keysIo], then calls [stop]; a
@@ -207,7 +236,7 @@ Future<AtKeys> readKeysThenStop(
   try {
     await stop();
   } on Object catch (e, st) {
-    // The keys are the only copy, so a failed stop is logged, not rethrown.
+    // A failed stop is logged, not rethrown: the keys are already read.
     AtSignLogger('enrollmentGateway')
         .severe('stopping the activation client of $atSign failed', e, st);
   }

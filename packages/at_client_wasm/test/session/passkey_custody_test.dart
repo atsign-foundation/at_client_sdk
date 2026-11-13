@@ -190,8 +190,8 @@ void main() {
       expect(gateway.lastSession!.closed, isTrue);
     });
 
-    test('a PKAM failure after activation resumes on a new session', () async {
-      gateway.activatePkamFails = true;
+    test('an unfinished activation resumes on a new session', () async {
+      gateway.activationUnfinished = true;
       final incomplete = await failure();
       expect(incomplete.toString(), isNot(contains('enc-private')));
       final resumed = await incomplete.pending.resume();
@@ -256,7 +256,7 @@ void main() {
 
     test('a successful resume on a new session leaves it open after abandon',
         () async {
-      gateway.activatePkamFails = true;
+      gateway.activationUnfinished = true;
       PendingOnboarding handle;
       try {
         await custody().onboard(atSign: _atSign, cram: 'cram');

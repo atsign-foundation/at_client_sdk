@@ -74,12 +74,12 @@ class RotationAbortedException implements Exception {
       'did not read back';
 }
 
-/// Thrown by [EnrollmentGateway.activate] when PKAM fails after the CRAM was
-/// spent: the activation enrollment exists and [atKeys] is the only copy of
-/// the minted @keys (without the APKAM private key, which the passkey
-/// re-derives).
-class ActivationPkamFailedException implements Exception {
-  ActivationPkamFailedException(this.enrollmentId,
+/// Thrown by [EnrollmentGateway.activate] when it fails after the CRAM was
+/// spent and the activation enrollment's @keys were filed: [atKeys] holds the
+/// minted @keys (without the APKAM private key, which the
+/// passkey re-derives).
+class ActivationUnfinishedException implements Exception {
+  ActivationUnfinishedException(this.enrollmentId,
       {required this.atKeys, required this.cause});
 
   final String enrollmentId;
@@ -87,12 +87,13 @@ class ActivationPkamFailedException implements Exception {
   /// The activated @keys as a document.
   final Map<String, dynamic> atKeys;
 
-  /// The failure of the PKAM attempt.
+  /// The failure that ended the activation.
   final Object cause;
 
   @override
-  String toString() => 'ActivationPkamFailedException: PKAM failed for '
-      'enrollment $enrollmentId after activation';
+  String toString() =>
+      'ActivationUnfinishedException: enrollment $enrollmentId did not '
+      'finish activating';
 }
 
 /// Thrown by [PasskeyCustody.onboard] when the atSign is activated but its
@@ -328,7 +329,7 @@ class PasskeyCustody {
       try {
         session = await gateway.activate(
             atSign: canonical, authSeed: keys.authSeed, cram: cram);
-      } on ActivationPkamFailedException catch (e) {
+      } on ActivationUnfinishedException catch (e) {
         throw OnboardingIncompleteException(
             PendingOnboarding._(this, canonical, passkey.credentialId, keys,
                 null, e.atKeys, e.enrollmentId),

@@ -192,7 +192,7 @@ class FakeGateway implements EnrollmentGateway {
   }
 
   /// Makes [activate] spend the CRAM, then fail its PKAM.
-  var activatePkamFails = false;
+  var activationUnfinished = false;
 
   /// Runs inside [activate], once the CRAM is spent.
   FutureOr<void> Function()? onActivate;
@@ -206,8 +206,8 @@ class FakeGateway implements EnrollmentGateway {
     await onActivate?.call();
     final eid = 'eid${++server.enrollments}';
     server.seedByEnrollment[eid] = authSeed.join(',');
-    if (activatePkamFails) {
-      throw ActivationPkamFailedException(eid,
+    if (activationUnfinished) {
+      throw ActivationUnfinishedException(eid,
           atKeys: {...server.keys}..remove('aesPkamPrivateKey'),
           cause: StateError('pkam failed'));
     }

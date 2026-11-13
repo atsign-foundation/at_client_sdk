@@ -231,7 +231,7 @@ void main() {
 
       await expectLater(
           activate(),
-          throwsA(isA<ActivationPkamFailedException>()
+          throwsA(isA<ActivationUnfinishedException>()
               .having((e) => e.enrollmentId, 'enrollmentId', _eid)
               .having(
                   (e) => jsonEncode(e.atKeys),
@@ -240,6 +240,60 @@ void main() {
                       isNot(contains(derived.privateKey))))
               .having((e) => e.toString(), 'toString',
                   isNot(contains(_encPrivate)))));
+    });
+
+    test('an activation that fails after filing keys keeps them resumable',
+        () async {
+      final cause = StateError('open failed');
+      // ignore: invalid_use_of_visible_for_testing_member
+      final keysIo = InMemoryAtKeysIo();
+
+      await expectLater(
+          activateKeepingKeys(keysIo, _atSign, () async {
+            await keysIo.write(
+                _atSign,
+                withApkamKey(
+                    AtKeys(atsign: Atsign(_atSign))
+                      ..defaultEncryptionPrivateKey =
+                          AtBytes.fromString(_encPrivate),
+                    _eid,
+                    derived));
+            throw cause;
+          }),
+          throwsA(isA<ActivationUnfinishedException>()
+              .having((e) => e.enrollmentId, 'enrollmentId', _eid)
+              .having((e) => e.cause, 'cause', same(cause))
+              .having(
+                  (e) => jsonEncode(e.atKeys),
+                  'atKeys',
+                  allOf(contains(_encPrivate),
+                      isNot(contains(derived.privateKey))))));
+    });
+
+    test('an activation that fails before filing keys rethrows its error',
+        () async {
+      // ignore: invalid_use_of_visible_for_testing_member
+      final keysIo = InMemoryAtKeysIo();
+      final cause = StateError('cram refused');
+
+      await expectLater(
+          activateKeepingKeys(keysIo, _atSign, () async => throw cause),
+          throwsA(same(cause)));
+    });
+
+    test('a successful activation returns its keys and stops the client',
+        () async {
+      final held = AtKeys(atsign: Atsign(_atSign))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
+      // ignore: invalid_use_of_visible_for_testing_member
+      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
+      var stopped = false;
+
+      final keys = await activateKeepingKeys(
+          keysIo, _atSign, () async => _StoppableClient(() => stopped = true));
+
+      expect(stopped, isTrue);
+      expect(keys.defaultEncryptionPrivateKey, AtBytes.fromString(_encPrivate));
     });
 
     test('a stop that throws still returns the keys read before it', () async {
@@ -445,4 +499,17 @@ void main() {
       expect(await session.publicKeysMatch({}), isFalse);
     });
   });
+}
+
+/// An [AtClient] whose only working member is [stop].
+class _StoppableClient implements AtClient {
+  _StoppableClient(this._onStop);
+
+  final void Function() _onStop;
+
+  @override
+  Future<void> stop() async => _onStop();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
