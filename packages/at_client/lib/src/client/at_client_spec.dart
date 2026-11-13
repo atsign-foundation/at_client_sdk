@@ -603,6 +603,12 @@ abstract class AtClient {
   /// A record that cannot be read as that JSON throws [FormatException].
   /// The id `__collection` is reserved for the record.
   ///
+  /// This client also remembers the tag each [namespace] was first opened
+  /// with, record or not: a later call asking for another tag throws
+  /// [CollectionTypeTagMismatchException] even when the first asked only
+  /// for a factory [typeTag], which writes no record. A call asking for no
+  /// tag gets the collection typed as before.
+  ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
   /// Idempotent: the sweep runs at most once per collection instance

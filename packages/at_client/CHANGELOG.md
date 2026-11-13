@@ -18,6 +18,14 @@
   before. `__collection` is a reserved item id, refused by `draft`, and
   `AtCollection.writeTypeTag` is now a getter. Tag arguments are checked on
   every `collection` call, including one served from the cache.
+- feat: reopening a collection on the same `AtClient` with another tag throws
+  `CollectionTypeTagMismatchException` instead of silently handing back the
+  first, even when the first open asked only for a factory `typeTag` (which
+  writes no record). `subCollection` does the same for a composed namespace
+  this client has already opened with a tag; an open with no tag adopts the
+  earlier one. Sub-collections still keep no record, so this holds on one
+  client only. `AtClient` implementers: `collection` gains `writeTypeTag`
+  (see above) and should honour the same rule.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than

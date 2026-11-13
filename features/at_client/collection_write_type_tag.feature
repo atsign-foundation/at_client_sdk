@@ -111,6 +111,10 @@ Feature: A collection stamps new items with its writeTypeTag
   # copy from another atSign never sets this atSign's tag. AtCollection's own
   # constructor and subCollection keep no record.
   #
+  # A client also remembers the tag each namespace was first opened with,
+  # record or not, so an open with a factory typeTag (which writes no record)
+  # cannot be reopened on that client with another tag either.
+  #
   # Races: opens on one client run one at a time, so two opens asking for
   # different tags at once give one the collection and the other a mismatch.
   # Two clients of one atSign that both claim before either has synced each
@@ -173,6 +177,31 @@ Feature: A collection stamps new items with its writeTypeTag
     When it is opened again with writeTypeTag Note
     Then CollectionTypeTagMismatchException is thrown and the open instance keeps Todo
 
+  Scenario: Given an open collection with factory typeTag Todo and no record, when it is opened again with typeTag Note, then CollectionTypeTagMismatchException is thrown
+    Given the collection is open with fromJson and typeTag Todo, and has no record
+    When it is opened again with fromJson and typeTag Note
+    Then CollectionTypeTagMismatchException is thrown naming Todo and Note, and nothing is written
+
+  Scenario: Given an open collection with factory typeTag Todo and no record, when it is opened again with writeTypeTag Note, then CollectionTypeTagMismatchException is thrown and nothing is written
+    Given the collection is open with fromJson and typeTag Todo, and has no record
+    When it is opened again with writeTypeTag Note
+    Then CollectionTypeTagMismatchException is thrown and no record is written
+
+  Scenario: Given an open collection with factory typeTag Todo and no record, when it is opened again with typeTag Todo, then it gets the open collection
+    Given the collection is open with fromJson and typeTag Todo, and has no record
+    When it is opened again with fromJson and typeTag Todo
+    Then the same instance is handed out
+
+  Scenario: Given an open collection with factory typeTag Todo and no record, when it is opened again with no tag, then it gets the open collection
+    Given the collection is open with fromJson and typeTag Todo, and has no record
+    When it is opened again with no tag
+    Then the same instance is handed out and nothing is written
+
+  Scenario: Given an open collection with factory typeTag Todo and no record, when it is opened from another event source with no tag, then the new instance stamps Todo
+    Given the collection is open with fromJson and typeTag Todo, and has no record
+    When it is opened with another event source and no tag
+    Then the new instance stamps new items Todo
+
   Scenario: Given an untagged open collection with no record, when it is opened with writeTypeTag Todo, then the open instance adopts Todo
     Given the collection is open with no writeTypeTag and has no record
     When it is opened with writeTypeTag Todo
@@ -233,3 +262,69 @@ Feature: A collection stamps new items with its writeTypeTag
     Given the key __collection.<namespace>@<self> and a received copy cached:@self:__collection.<namespace>@<other>
     When the items are listed or a data event for the key arrives
     Then neither is read as an item
+
+  Scenario: Given AtClient.collection opened with factory typeTag Todo, when the same client opens it again with typeTag Note, then CollectionTypeTagMismatchException is thrown
+    Given a real AtClient that opened the collection with fromJson and typeTag Todo
+    When the same client opens it again with fromJson and typeTag Note
+    Then CollectionTypeTagMismatchException is thrown
+
+  # ---------------------------------------------------------------------------
+  # Reopening a sub-collection
+  #
+  # A sub-collection keeps no record. Its AtClient remembers the tag each
+  # composed namespace (<subName>.<parent.id>.<namespace>) was first opened
+  # with, across every instance of the parent collection, so a reopen on that
+  # client asking another tag throws, and a reopen asking none adopts it. It
+  # remembers 4096 namespaces and forgets the one tagged longest ago: a parent
+  # id can come from another atSign, so the map is bounded. Another client,
+  # session or device of the atSign does not see it.
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment, when it is opened again with writeTypeTag Note, then CollectionTypeTagMismatchException is thrown
+    Given the sub-collection comments of post p1 is open with writeTypeTag Comment
+    When it is opened again with writeTypeTag Note
+    Then CollectionTypeTagMismatchException is thrown naming comments.p1.<namespace>, Comment and Note
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment, when it is opened again with factory typeTag Note, then CollectionTypeTagMismatchException is thrown
+    Given the sub-collection is open with writeTypeTag Comment
+    When it is opened again with fromJson and typeTag Note
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a sub-collection opened with factory typeTag Comment, when it is opened again with writeTypeTag Note, then CollectionTypeTagMismatchException is thrown
+    Given the sub-collection is open with fromJson and typeTag Comment
+    When it is opened again with writeTypeTag Note
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment, when it is opened again from another instance of the parent collection with Note, then CollectionTypeTagMismatchException is thrown
+    Given the sub-collection is open with writeTypeTag Comment
+    When another instance of the parent collection on the same client opens it with Note
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment, when it is opened again with a blank writeTypeTag, then ArgumentError is thrown
+    Given the sub-collection is open with writeTypeTag Comment
+    When it is opened again with writeTypeTag "  "
+    Then ArgumentError is thrown, not CollectionTypeTagMismatchException
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment, when it is opened again with no tag, then the new instance stamps Comment
+    Given the sub-collection is open with writeTypeTag Comment
+    When it is opened again with no tag
+    Then the new instance stamps new items Comment
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment, when it is opened again with Comment, then it opens
+    Given the sub-collection is open with writeTypeTag Comment
+    When it is opened again with writeTypeTag Comment
+    Then it opens and stamps new items Comment
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment, when the same subName is opened under another parent item with Note, then it opens with Note
+    Given the sub-collection comments of post p1 is open with writeTypeTag Comment
+    When the sub-collection comments of post p2 is opened with writeTypeTag Note
+    Then it opens and stamps new items Note
+
+  Scenario: Given 4097 tagged sub-collections on one client, when the first and the last are opened again with another tag, then the first opens and the last throws
+    Given 4097 sub-collections opened with writeTypeTag Comment, one after another
+    When the first and the last are opened again with writeTypeTag Note
+    Then the first opens with Note and the last throws CollectionTypeTagMismatchException
+
+  Scenario: Given a sub-collection opened with writeTypeTag Comment on one client, when another client opens it with Note, then it opens with Note
+    Given the sub-collection is open with writeTypeTag Comment on one AtClient
+    When another AtClient opens it with writeTypeTag Note
+    Then it opens and stamps new items Note

@@ -1750,6 +1750,14 @@ interface class AtCollection<T> {
   /// - `parent.id` contains a `.`;
   /// - the composed namespace would exceed 128 chars.
   ///
+  /// Throws [CollectionTypeTagMismatchException] when this [AtClient] has
+  /// already opened the composed namespace asking for another tag: its
+  /// [writeTypeTag], or its [typeTag] when it gave no [writeTypeTag]. A call
+  /// asking for no tag adopts the earlier one. A sub-collection keeps no
+  /// collection record, so the check holds only on this client, and it
+  /// remembers 4096 tagged sub-collection namespaces, forgetting the one
+  /// first tagged longest ago.
+  ///
   /// [writeTypeTag] stamps items this sub-collection creates with that tag
   /// when no factory is registered for their type. It is not inherited from
   /// the parent collection.
@@ -2021,6 +2029,18 @@ interface class AtCollection<T> {
         'subName or a shallower nesting depth.',
       );
     }
+    // Checked before construction, which registers [fromJson] for good.
+    _checkTagArgs<U>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+    final stamp = _subCollectionStamp(
+      atClient,
+      composedNs,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
     // Constructing the sub-collection directly (not via `atClient.collection`)
     // so that `notifications` can be threaded straight through to its
     // constructor for test wiring. Sub-collections inherit the parent's
@@ -2035,7 +2055,7 @@ interface class AtCollection<T> {
         notifications: notifications,
         fromJson: fromJson,
         typeTag: typeTag,
-        writeTypeTag: writeTypeTag,
+        writeTypeTag: stamp,
       );
     } else if (_consumesData && _injectedDataEvents != null) {
       sub = AtCollection<U>._withInjectedDataEvents(
@@ -2045,7 +2065,7 @@ interface class AtCollection<T> {
         dataEvents: _injectedDataEvents!,
         fromJson: fromJson,
         typeTag: typeTag,
-        writeTypeTag: writeTypeTag,
+        writeTypeTag: stamp,
       );
     } else {
       sub = AtCollection<U>(
@@ -2055,9 +2075,10 @@ interface class AtCollection<T> {
         eventSource: _eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
-        writeTypeTag: writeTypeTag,
+        writeTypeTag: stamp,
       );
     }
+    _noteSubTag(atClient, composedNs, writeTypeTag ?? typeTag);
     sub._parentItem = parent;
     sub._parentCollection = this;
     sub._parentDeleteSub?.cancel();

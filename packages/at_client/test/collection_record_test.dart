@@ -225,6 +225,65 @@ void main() {
   });
 
   test(
+      'Given an open collection with factory typeTag Todo and no record, when it is opened again with typeTag Note, then CollectionTypeTagMismatchException is thrown',
+      () async {
+    await open<Map<String, dynamic>>(fromJson: (j) => j, typeTag: 'Todo');
+
+    await expectLater(
+      open<Map<String, dynamic>>(fromJson: (j) => j, typeTag: 'Note'),
+      throwsA(isA<CollectionTypeTagMismatchException>()
+          .having((e) => e.recordedTag, 'recordedTag', 'Todo')
+          .having((e) => e.requestedTag, 'requestedTag', 'Note')),
+    );
+    expect(puts, isEmpty);
+  });
+
+  test(
+      'Given an open collection with factory typeTag Todo and no record, when it is opened again with writeTypeTag Note, then CollectionTypeTagMismatchException is thrown and nothing is written',
+      () async {
+    await open<Map<String, dynamic>>(fromJson: (j) => j, typeTag: 'Todo');
+
+    await expectLater(
+        open<Map<String, dynamic>>(writeTypeTag: 'Note'), throwsMismatch);
+    expect(puts, isEmpty);
+  });
+
+  test(
+      'Given an open collection with factory typeTag Todo and no record, when it is opened again with typeTag Todo, then it gets the open collection',
+      () async {
+    final first =
+        await open<Map<String, dynamic>>(fromJson: (j) => j, typeTag: 'Todo');
+
+    final again =
+        await open<Map<String, dynamic>>(fromJson: (j) => j, typeTag: 'Todo');
+
+    expect(identical(first, again), isTrue);
+  });
+
+  test(
+      'Given an open collection with factory typeTag Todo and no record, when it is opened again with no tag, then it gets the open collection',
+      () async {
+    final first =
+        await open<Map<String, dynamic>>(fromJson: (j) => j, typeTag: 'Todo');
+
+    final again = await open<Map<String, dynamic>>();
+
+    expect(identical(first, again), isTrue);
+    expect(puts, isEmpty);
+  });
+
+  test(
+      'Given an open collection with factory typeTag Todo and no record, when it is opened from another event source with no tag, then the new instance stamps Todo',
+      () async {
+    await open<Map<String, dynamic>>(fromJson: (j) => j, typeTag: 'Todo');
+
+    final other = await open<String>(eventSource: EventSource.data);
+
+    expect(other.writeTypeTag, 'Todo');
+    expect(other.draft(obj: 'buy milk').type, 'Todo');
+  });
+
+  test(
       'Given an untagged open collection with no record, when it is opened with writeTypeTag Todo, then the open instance adopts Todo',
       () async {
     final untagged = await open<String>(eventSource: EventSource.data);
@@ -469,6 +528,33 @@ void main() {
       final c = await client.collection<String>(
           'things.wavi', const Duration(days: 1));
       expect(c.writeTypeTag, 'Todo');
+    });
+
+    Future<AtClient> unrecordedClient(String atSign) => buildAtClient(
+        atSign: atSign,
+        namespace: 'wavi',
+        preference: AtClientPreference()
+          ..hiveStoragePath = dir.path
+          ..namespace = 'wavi'
+          ..monitorAutoStart = false,
+        secondaryAddressFinder: defaultAtDirectory,
+        atKeysIo: noKeysFor(atSign),
+        lookUps: offline,
+        storage: hiveStoreAt(atSign, dir.path));
+
+    test(
+        'Given AtClient.collection opened with factory typeTag Todo, when the same client opens it again with typeTag Note, then CollectionTypeTagMismatchException is thrown',
+        () async {
+      final client = await unrecordedClient('@refactoried');
+      await client.collection<Map<String, dynamic>>(
+          'things.wavi', const Duration(days: 1),
+          fromJson: (j) => j, typeTag: 'Todo');
+
+      await expectLater(
+          client.collection<Map<String, dynamic>>(
+              'things.wavi', const Duration(days: 1),
+              fromJson: (j) => j, typeTag: 'Note'),
+          throwsMismatch);
     });
   });
 }
