@@ -92,10 +92,19 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// [app] is the client's namespace. [prefs], when given, is used as it is;
 /// otherwise the preference names [app] and [root] and leaves the monitor
 /// off. Keys that carry ML-DSA-65 signing or namespace key material throw
-/// [UnsupportedKeyMaterialException] before any connection is made. An open
-/// that does not come online, a PKAM the atServer refuses included, stops the
-/// client and throws [PortalSessionOfflineException]: `Atsign.open` returns an
-/// offline client rather than throwing. Anything else that throws once the
+/// [UnsupportedKeyMaterialException] before any connection is made. The
+/// storage is always fresh, so every open is a first open on the device, and
+/// `Atsign.open` throws:
+///
+/// - [AtOpenRefusedException] when the atServer refuses the open (a revoked
+///   or unauthenticated credential, an unapproved or expired enrollment) or
+///   there is no atServer for the atSign;
+/// - [AtEnrollmentPendingException] for keys that hold only a pending
+///   enrollment, with no credential to authenticate with.
+///
+/// Any other open that does not come online, such as a PKAM that fails
+/// without being classed as a refusal, stops the client and throws
+/// [PortalSessionOfflineException]. Anything else that throws once the
 /// client is built stops it and is rethrown, so a retry for the same atSign
 /// builds afresh.
 ///
