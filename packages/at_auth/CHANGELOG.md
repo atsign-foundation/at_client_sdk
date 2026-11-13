@@ -23,6 +23,10 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- fix: `activateAtSign` throws the read's own exception
+  (`AtKeysFormatException`, `AtDecryptionException`, `FileSystemException`
+  and the like) before sending anything when `keys` holds keys it cannot
+  read.
 
 ## 4.0.0
 

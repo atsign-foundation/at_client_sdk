@@ -82,6 +82,10 @@ class AtAuthImpl implements AtAuth {
   /// Onboard a new atSign using CRAM
   /// Requires an AtOnboardingRequest and a cramSecret
   ///
+  /// Nothing is sent until the request's `atKeysIo` has been read: keys
+  /// already there are refused, and any read failure other than
+  /// [AtKeysSourceAbsentException] is rethrown as it is.
+  ///
   /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
   Future<AtOnboardingResponse> onboard(
@@ -92,16 +96,15 @@ class AtAuthImpl implements AtAuth {
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
 
-    //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
+    // NOTE: activation reads the keys source before it sends the CRAM secret,
+    // and only an absent source lets it go on.
     AtKeys? existingKeys;
     try {
       existingKeys = await atOnboardingRequest.atKeysIo?.read(
         atOnboardingRequest.atSign,
       );
-    } catch (e) {
-      _logger.info(
-        'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
-      ); //swallow the error, we just want to know if keys exist or not
+    } on AtKeysSourceAbsentException {
+      // No keys yet: this activation mints them.
     }
 
     if (existingKeys != null) {
