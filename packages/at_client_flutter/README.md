@@ -149,6 +149,7 @@ What a Flutter app should do:
    either way. An offline client still serves what it holds locally and reports
    on `client.connection.changes` when the atServer is reached; a refused one
    (revoked, an unapproved enrollment) is the state an app asks the user about.
+   Keys it cannot use fail at once, and the dialog says why.
 
 > **Note:** the activation has no cancellation token, so the 5-minute poll runs
 > to completion or timeout even if the user navigates away — a "Cancel" button

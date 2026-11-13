@@ -82,8 +82,9 @@ connect attempt waits before the client comes back offline, 5 s by default).
 
 | Thrown                          | When                                                                                                     | Do                                                            |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `AtKeysUnusableException`       | The keys are absent, cannot be read, or record another atSign; thrown before connecting, on any device   | Show its message; `cause` says which                          |
 | `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
-| `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
+| `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval (an `AtKeysUnusableException`)                        | `resumeEnrollment`                                            |
 | `AtEnrollmentPendingException`  | `resumeEnrollment` found several pending enrollments matching what it was given                          | Name both `app` and `device`                                  |
 | `AtNoCredentialException`       | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                 | Enroll again                                                  |
 | `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |

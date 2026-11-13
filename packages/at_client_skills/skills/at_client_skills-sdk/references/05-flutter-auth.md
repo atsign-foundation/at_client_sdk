@@ -277,6 +277,9 @@ client.connection.changes.listen((s) => setState(() => _state = s));
   keys. Ask the user.
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
+- Keys `open` cannot use (absent, unreadable, or for another atSign) throw
+  `AtKeysUnusableException` before it connects, on any device, and
+  `PkamDialog` shows its message.
 
 See [15-client-lifecycle.md](15-client-lifecycle.md) for the full state model,
 the services and the shutdown checklist.
