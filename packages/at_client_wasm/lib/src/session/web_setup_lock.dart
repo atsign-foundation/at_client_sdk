@@ -6,19 +6,6 @@ import 'package:web/web.dart';
 
 import 'setup_lock.dart';
 
-/// Thrown when the lock named [lockName] is not granted within the
-/// acquisition timeout.
-class SetupLockTimeoutException implements Exception {
-  /// Creates the exception for [lockName].
-  const SetupLockTimeoutException(this.lockName);
-
-  /// The name of the lock that was not granted.
-  final String lockName;
-
-  @override
-  String toString() => 'SetupLockTimeoutException: $lockName was not granted';
-}
-
 /// A [SetupLock] over `navigator.locks`.
 ///
 /// [acquireTimeout] bounds only the wait for the lock; the section running

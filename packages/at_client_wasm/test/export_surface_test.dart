@@ -42,7 +42,7 @@ void main() {
     expect(
         barrel,
         matches(RegExp(
-            r"^export '[^']*web_setup_lock\.dart' show[^;]*\bSetupLockTimeoutException\b",
+            r"^export '[^']*session/setup_lock\.dart' show[^;]*\bSetupLockTimeoutException\b",
             multiLine: true)));
   });
 

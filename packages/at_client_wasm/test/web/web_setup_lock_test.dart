@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 
+import 'package:at_client_wasm/src/session/setup_lock.dart';
 import 'package:at_client_wasm/src/session/web_setup_lock.dart';
 import 'package:test/test.dart';
 
