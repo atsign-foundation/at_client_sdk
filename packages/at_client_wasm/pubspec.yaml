@@ -1,0 +1,19 @@
+name: at_client_wasm
+publish_to: none
+version: 0.1.0
+description: Opens an at_client in the browser on caller-supplied AtKeys
+resolution: workspace
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  at_auth: ^4.0.0
+  at_client: ^4.0.0
+  at_lookup: ^4.0.0
+
+dev_dependencies:
+  at_commons: ^5.23.0
+  at_utils: ^4.0.0
+  lints: ^6.0.0
+  test: ^1.25.0

@@ -125,6 +125,49 @@ jobs:
         working-directory: tests/released_envelope/4.0.0
         run: dart test --concurrency=1
 
+  # A bare `dart test` runs on the VM, so it skips the @TestOn('browser')
+  # files; at_client_wasm_browser runs the whole suite in Chrome.
+  unit_at_client_wasm:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dart-channel: [stable, beta]
+    defaults:
+      run:
+        working-directory: packages/at_client_wasm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          dart-channel: ${{ matrix.dart-channel}}
+
+      - name: Install dependencies in at_client_wasm
+        run: dart pub get
+
+      - name: Analyze project source in at_client_wasm
+        run: dart analyze
+
+      - name: Check that at_client_wasm is correctly formatted
+        run: dart format . -o none --set-exit-if-changed
+
+      - name: Run at_client_wasm VM tests
+        run: dart test --concurrency=1
+
+  at_client_wasm_browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Run at_client_wasm browser tests in Chrome
+        working-directory: packages/at_client_wasm
+        run: |
+          dart pub get
+          dart test -p chrome --concurrency=1
+
   unit_at_client_flutter:
     runs-on: ubuntu-latest
     strategy:
