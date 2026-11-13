@@ -584,6 +584,8 @@ abstract class AtClient {
   /// [writeTypeTag] stamps items this collection creates with that tag when
   /// no factory is registered for their type, without registering a
   /// [fromJson]. When [typeTag] is also set, the two must match.
+  /// Reopening an already open [namespace] and [eventSource] with a different
+  /// [writeTypeTag] (including null versus a value) throws [StateError].
   ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.

@@ -4,14 +4,17 @@ Feature: A collection stamps new items with its writeTypeTag
   is registered for the item's type, the item is stamped with that tag instead
   of n/a; a registered factory's tag wins. The tag is not inherited by a
   sub-collection. A blank tag, or one that differs from typeTag, is refused at
-  construction.
+  construction. Reopening an open namespace and eventSource with another
+  writeTypeTag is refused with StateError; with the same one it returns the
+  cached instance.
 
   Races: none new; the tag is resolved synchronously at write time from
-  constructor state, and no shared mutable state is added.
+  constructor state, and the reopen check runs synchronously with the cache
+  lookup, so two callers cannot both win a slot with different tags.
   Replay: none new; no wire message or nonce is added, and the tag is part of
   the existing record format.
   DoS: one optional string per collection, validated non-blank at
-  construction.
+  construction; a refused reopen allocates nothing and runs no orphan sweep.
   Forgery and impersonation: the type tag only labels the payload; signatures
   and ownership checks are unchanged, and a peer can already write any tag on
   its own items.
@@ -85,3 +88,13 @@ Feature: A collection stamps new items with its writeTypeTag
     Given a whitespace-only sub-collection writeTypeTag
     When it is built
     Then ArgumentError is thrown
+
+  Scenario: Given a collection open with one writeTypeTag, when the same namespace and eventSource is reopened with a different writeTypeTag, then StateError is thrown
+    Given a collection open with one writeTypeTag
+    When the same namespace and eventSource is reopened with a different writeTypeTag
+    Then StateError is thrown
+
+  Scenario: Given a collection open with one writeTypeTag, when the same namespace and eventSource is reopened with the same writeTypeTag, then the same instance is returned
+    Given a collection open with one writeTypeTag
+    When the same namespace and eventSource is reopened with the same writeTypeTag
+    Then the same instance is returned

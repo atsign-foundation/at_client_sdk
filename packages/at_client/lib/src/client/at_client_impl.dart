@@ -655,6 +655,13 @@ class AtClientImpl implements AtClient {
       );
     }
     final cacheKey = (namespace, eventSource);
+    final cached = _collections[cacheKey];
+    if (cached != null && cached.writeTypeTag != writeTypeTag) {
+      throw StateError(
+        'collection "$namespace" is already open with writeTypeTag '
+        '${cached.writeTypeTag}; reopening with $writeTypeTag is refused',
+      );
+    }
     final c = _collections.putIfAbsent(
       cacheKey,
       () => AtCollection<T>(
