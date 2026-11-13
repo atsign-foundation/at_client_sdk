@@ -38,8 +38,10 @@ Future<Uint8List?> gcmOpen(List<int> key, Sealed sealed, List<int> aad) async {
         secretKey: SecretKey(key),
         aad: aad));
   } on SecretBoxAuthenticationError {
+    // A failed tag check is reported as null, the documented not-opened result.
     return null;
   } on ArgumentError {
+    // Malformed cipher parameters are reported as null, like a failed tag.
     return null;
   }
 }

@@ -25,6 +25,7 @@ class WebPrfEnvironment implements PrfEnvironment {
       final prf = capabilities?.getProperty<JSAny?>('extension:prf'.toJS);
       return prf.isA<JSBoolean>() ? (prf as JSBoolean).toDart : null;
     } on Object {
+      // A probe that throws or rejects is reported as the API being absent; PrfSupport then falls back to the recorded miss.
       return null;
     }
   }
@@ -37,6 +38,7 @@ class WebPrfEnvironment implements PrfEnvironment {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true);
     } on Object {
+      // Unreadable storage reads as no recorded miss.
       return null;
     }
   }

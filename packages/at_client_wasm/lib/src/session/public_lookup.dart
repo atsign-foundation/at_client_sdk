@@ -24,6 +24,7 @@ Future<String?> publicLookup(
     final text = response.substring('data:'.length).trim();
     return text == 'null' ? null : text;
   } on AtLookUpException catch (e) {
+    // AT0015 is a key that does not exist; it is reported as null.
     if (e.errorCode == 'AT0015') return null;
     rethrow;
   } finally {

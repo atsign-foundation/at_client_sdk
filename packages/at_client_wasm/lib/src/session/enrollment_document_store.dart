@@ -44,6 +44,7 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
     try {
       response = await remote.executeCommand('llookup:$key\n', auth: true);
     } on KeyNotFoundException {
+      // A missing document is reported as null, not as an error.
       return null;
     }
     if (response == null || !response.startsWith('data:')) {

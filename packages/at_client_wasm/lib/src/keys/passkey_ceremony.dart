@@ -32,6 +32,7 @@ String? _errorName(Object error) {
     final name = (error as JSObject).getProperty<JSAny?>('name'.toJS);
     return name.isA<JSString>() ? (name as JSString).toDart : null;
   } on Object {
+    // A rejection without a readable name yields null; the caller rethrows it.
     return null;
   }
 }

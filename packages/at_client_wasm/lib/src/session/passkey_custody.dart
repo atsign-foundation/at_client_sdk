@@ -467,6 +467,7 @@ class PasskeyCustody {
             keys.kek, PasskeyRecordType.atkeys, stored);
         return;
       } on Object {
+        // A failed write or read-back is retried; the last attempt's error propagates.
         if (attempt == _documentAttempts) rethrow;
         await Future<void>.delayed(retryDelay);
       }
