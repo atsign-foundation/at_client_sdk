@@ -111,7 +111,7 @@ class AtKeysAssurance {
     try {
       return DateTime.parse(token);
     } on FormatException catch (e) {
-      throw AtKeysParseException('Malformed date at $fieldName: $e');
+      throw AtKeysParseException('Malformed date at $fieldName: ${e.message}');
     }
   }
 
