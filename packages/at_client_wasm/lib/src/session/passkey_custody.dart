@@ -113,6 +113,14 @@ abstract interface class EnrollmentGateway {
       {required String atSign,
       required String enrollmentId,
       required Uint8List authSeed});
+
+  /// Onboards a fresh atSign: CRAM with [cram], activation with the key
+  /// derived from [authSeed] as the APKAM key, then PKAM. Returns the
+  /// authenticated session.
+  Future<EnrollmentSession> activate(
+      {required String atSign,
+      required Uint8List authSeed,
+      required String cram});
 }
 
 /// An open custody session: the restored @keys and the authenticated

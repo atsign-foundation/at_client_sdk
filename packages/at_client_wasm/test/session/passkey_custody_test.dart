@@ -170,6 +170,13 @@ class FakeGateway implements EnrollmentGateway {
     }
     return lastSession = FakeSession(server, enrollmentId);
   }
+
+  @override
+  Future<EnrollmentSession> activate(
+          {required String atSign,
+          required Uint8List authSeed,
+          required String cram}) =>
+      throw UnimplementedError('first-time activation is not under test here');
 }
 
 /// A passkey authenticator holding several passkeys; [current] answers an
