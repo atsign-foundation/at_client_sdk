@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
@@ -16,6 +17,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 final _logger = AtSignLogger('FileAtKeysIo');
+final _random = Random.secure();
 
 /// File-backed `.atKeys` storage.
 class FileAtKeysIo extends WrittenAtKeysIo {
@@ -45,6 +47,45 @@ class FileAtKeysIo extends WrittenAtKeysIo {
           'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
   }
+
+  /// The keyfile's path.
+  @override
+  String describeSource(String atsign) => filePath!(atsign);
+
+  /// Throws [FileSystemException] naming the keyfile's path unless a new
+  /// file can be created beside it, creating its directory when missing.
+  ///
+  /// The file it creates to find out is deleted before it returns.
+  @override
+  Future<void> checkWritable(String atsign) async {
+    final path = filePath!(atsign);
+    final probe = File(
+        '$path.writable.$pid.${_random.nextInt(1 << 32).toRadixString(16)}');
+    var created = false;
+    try {
+      await probe.parent.create(recursive: true);
+      // NOTE: an exclusive create, so nothing already at the probe's path is
+      // opened or followed.
+      await probe.create(exclusive: true);
+      created = true;
+    } on FileSystemException catch (e) {
+      throw _notWritable(path, e);
+    } finally {
+      if (created) await _deleteProbe(probe, path);
+    }
+  }
+
+  Future<void> _deleteProbe(File probe, String path) async {
+    try {
+      await probe.delete();
+    } on FileSystemException catch (e) {
+      throw _notWritable(path, e);
+    }
+  }
+
+  FileSystemException _notWritable(String path, FileSystemException cause) =>
+      FileSystemException('Cannot write the atKeys file: ${cause.message}',
+          path, cause.osError);
 
   @override
   Future write(String atsign, AtKeys atKeys) async {

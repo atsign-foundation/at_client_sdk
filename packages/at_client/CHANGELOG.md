@@ -56,6 +56,9 @@
   `droppedEvents`.
 - feat: `buildAtClient` takes an optional `notificationLookUps` factory for the
   monitor's connection.
+- fix: `Atsign.activate` and `pqNativeOnboard` throw before sending anything
+  when the keys store holds keys they cannot read, or its keyfile cannot be
+  written; the exception names the store.
 
 ## 4.0.0
 

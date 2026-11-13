@@ -5,6 +5,9 @@
 - feat: `package:at_client_flutter/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - chore: requires at_client 4.1.0.
+- feat: `KeychainAtKeysIo.describeSource` returns "this device's keychain".
+- fix: `CramDialog` fails before sending anything when the keychain holds
+  keys it cannot read.
 
 ## 2.0.0
 

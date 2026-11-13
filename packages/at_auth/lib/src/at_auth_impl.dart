@@ -82,9 +82,11 @@ class AtAuthImpl implements AtAuth {
   /// Onboard a new atSign using CRAM
   /// Requires an AtOnboardingRequest and a cramSecret
   ///
-  /// Nothing is sent until the request's `atKeysIo` has been read: keys
+  /// Nothing is sent until the request's `atKeysIo` has been read and, for a
+  /// [WrittenAtKeysIo], checked with [WrittenAtKeysIo.checkWritable]: keys
   /// already there are refused, and any read failure other than
-  /// [AtKeysSourceAbsentException] is rethrown as it is.
+  /// [AtKeysSourceAbsentException] is rethrown with its type, naming the
+  /// source in its message where that type can carry it.
   ///
   /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
@@ -96,21 +98,27 @@ class AtAuthImpl implements AtAuth {
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
 
-    // NOTE: activation reads the keys source before it sends the CRAM secret,
-    // and only an absent source lets it go on.
+    // NOTE: activation reads the keys source, and checks it can write it,
+    // before it sends the CRAM secret; only an absent source lets it go on.
+    final keysIo = atOnboardingRequest.atKeysIo;
     AtKeys? existingKeys;
     try {
-      existingKeys = await atOnboardingRequest.atKeysIo?.read(
-        atOnboardingRequest.atSign,
-      );
+      existingKeys = await keysIo?.read(atOnboardingRequest.atSign);
     } on AtKeysSourceAbsentException {
       // No keys yet: this activation mints them.
+    } catch (e, stackTrace) {
+      Error.throwWithStackTrace(
+          _namingSource(e, keysIo!.describeSource(atOnboardingRequest.atSign)),
+          stackTrace);
     }
 
     if (existingKeys != null) {
       throw AtAuthenticationException(
         'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
       );
+    }
+    if (keysIo is WrittenAtKeysIo) {
+      await keysIo.checkWritable(atOnboardingRequest.atSign);
     }
 
     await validateAtServer(atOnboardingRequest);
@@ -489,6 +497,34 @@ class AtAuthImpl implements AtAuth {
           '${atRequest.atSign} atServer'
           '${lastError == null ? '' : ' : $lastError'}');
     }
+  }
+}
+
+/// [error], thrown reading keys from [source], with [source] named in its
+/// message where its type can carry one and the message does not already
+/// name it. A [FormatException] is rebuilt without its source text.
+Object _namingSource(Object error, String source) {
+  String named(String message) =>
+      message.contains(source) ? message : '$source cannot be read: $message';
+  switch (error) {
+    case AtException():
+      error.message = named(error.message);
+      return error;
+    case AtKeysFormatException():
+      if (error.message.contains(source)) return error;
+      final what = 'the atKeys in $source';
+      final position = error.position;
+      return error.reason == AtKeysFormatException.notAnObject('').reason &&
+              position == null
+          ? AtKeysFormatException.notAnObject(what)
+          : AtKeysFormatException.notJson(
+              what,
+              FormatException(
+                  error.reason, null, position == null ? null : position - 1));
+    case FormatException():
+      return FormatException(named(error.message), null, error.offset);
+    default:
+      return error;
   }
 }
 

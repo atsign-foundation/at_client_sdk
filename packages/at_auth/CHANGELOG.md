@@ -23,10 +23,15 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
-- fix: `activateAtSign` throws the read's own exception
-  (`AtKeysFormatException`, `AtDecryptionException`, `FileSystemException`
-  and the like) before sending anything when `keys` holds keys it cannot
-  read.
+- feat: `AtKeysIo.describeSource` says where an atSign's keys are kept (for
+  `FileAtKeysIo`, the keyfile path), and `WrittenAtKeysIo.checkWritable`
+  throws unless the store could take new keys now. A class that implements
+  `WrittenAtKeysIo` rather than extending it must add both.
+- fix: `activateAtSign` throws before sending anything when `keys` holds keys
+  it cannot read, as the read's exception type (`AtKeysFormatException`,
+  `AtDecryptionException`, `FileSystemException` and the like) naming the
+  store, or when a `FileAtKeysIo` keyfile cannot be written there
+  (`FileSystemException` naming its path).
 
 ## 4.0.0
 
