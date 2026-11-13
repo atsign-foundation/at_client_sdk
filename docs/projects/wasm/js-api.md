@@ -23,6 +23,7 @@ the Layer A/B/C design note §2.3–§2.4 for the Dart-side (Layer B/C) shape.
 - [3. What choosing dart2js changes upstream](#3-what-choosing-dart2js-changes-upstream)
 - [4. Where the facade lives](#4-where-the-facade-lives)
 - [5. The TypeScript surface](#5-the-typescript-surface)
+- [5a. The shipped npm API](#5a-the-shipped-npm-api)
 - [6. Error mapping](#6-error-mapping)
 - [7. TypeScript-supplied implementations, and Node](#7-typescript-supplied-implementations-and-node)
 - [8. npm packaging](#8-npm-packaging)
@@ -241,6 +242,13 @@ under `lib/src/js/`.
 
 ## 5. The TypeScript surface
 
+> **Shipped 2026-11-14: `@atsign/at_client_web` v0.1.** The npm package implements
+> Tally's pinned `at-client.d.ts` (flat `get`/`put`/`delete`/`keys`/`notify`/`subscribe`/`close`)
+> plus a recorded superset: `AtClient.onboard`, `AtClientOptions.app`/`rpId`/`rpName`,
+> and the pairing calls. §5.1-§5.4 below describe the collections design that D-10
+> ruled before that API was pinned; [§5a](#5a-the-shipped-npm-api) is what the package
+> exports today, and D-10's amendment in `decisions.md` records the change.
+
 **Revised 2026-08-18 — D-9 amended, D-10 and D-11 added.** The flat key/value plane
 (§5.2 as originally written: `put`/`get`/`delete`/`exists`/`getKeys`/`getMeta`/`putMeta`)
 is **removed**, not deprecated in place. `AtCollection<T>`
@@ -387,6 +395,48 @@ paragraph as the code above, not buried in §10:**
   (`at_client_impl.dart:256`) rather than constructing per JS object, which bounds but
   does not eliminate the leak — an SPA that changes routes still accumulates
   subscriptions per distinct collection it has ever opened.
+
+## 5a. The shipped npm API
+
+The package is `@atsign/at_client_web` (`packages/at_client_web/`). `src/index.ts` is the
+single source (D-23); `tsc` emits `dist/index.js` and `dist/index.d.ts`, and the dart2js
+bundle sits at `dist/dart/at_client.js`, outside `exports`. The generated API reference
+(`npm run docs:api`) and the package README carry the per-member detail; this section
+fixes the shape.
+
+```ts
+class AtClient implements AtClientLike {
+  static create(opts: AtClientOptions): Promise<AtClient>;
+  static onboard(opts: AtClientOptions, onboard: { cram: string; deviceName?: string }): Promise<AtClient>;
+  static enroll(opts: AtClientOptions, appName: string, deviceName: string, otp: string): Promise<AtClient>;
+  static prfSupported(): Promise<boolean>;
+
+  get(key: AtKey): Promise<string | Uint8Array | null>;
+  put(key: AtKey, value: string | Uint8Array): Promise<boolean>;
+  delete(key: AtKey): Promise<boolean>;
+  keys(filter?: string): Promise<AtKey[]>;
+  notify(key: AtKey, value: string): Promise<boolean>;
+  subscribe(regex?: string): AsyncIterable<AtEvent>;
+  close(): Promise<void>;
+
+  otp(): Promise<string>;                                  // needs __manage
+  pendingEnrollments(): Promise<PendingEnrollment[]>;      // needs __manage
+  approve(id: string): Promise<void>;                      // needs __manage
+  deny(id: string): Promise<void>;                         // needs __manage
+}
+```
+
+| Piece | As shipped |
+|---|---|
+| Pinned part | `AtClientLike`, `AtKey`, `AtEvent` and the flat methods are Tally's pinned d.ts, checked by a type test against a copy of it |
+| Superset | `onboard`, `AtClientOptions.app`/`rpId`/`rpName`, `enroll`, `prfSupported`, and the four pairing calls |
+| Keys | `AtKey` is `{ key, sharedBy?, sharedWith?, namespace? }`; the package turns it into the wire string at the bridge (D-9). `public:` and `cached:` prefixes are dropped when parsing, so public keys are not representable |
+| Events | The bridge delivers callbacks (D-9). `subscribe` adapts them to an `AsyncIterable`: it registers on call, buffers without a bound, and `break`/`return()`/`close()` unsubscribes |
+| Errors | One `AtError` with a closed `code` union (`AtErrorCode`); unknown bridge codes become `internal` (§6) |
+| Options | `namespace` is required; `rootDomain`, if set, must be `root.atsign.org`; `rpId` defaults to `location.hostname` and is one hostname |
+| Keys custody | Passkey-held (`create`/`onboard`/`enroll`); no key-file import and no `keys`/`storage` option, unlike the sketch in §5.3 |
+| Runtime | Browser, secure context, CSP with `'wasm-unsafe-eval'` (§8a); no Node shim |
+| Collections | No collections API is exported |
 
 ### 5.4 Mapping table — Dart to JS/TS
 

@@ -13,7 +13,9 @@ import { EventQueue } from './subscription.js';
 export { AtError };
 export type { AtErrorCode };
 
+/** What every entry point (`create`, `onboard`, `enroll`) takes to name the atSign and the passkey's scope. */
 export interface AtClientOptions {
+  /** The atSign to open, with its leading `@`. */
   atSign: string;
   /** Required: it scopes every key this client reads and writes. */
   namespace?: string;
@@ -27,16 +29,25 @@ export interface AtClientOptions {
   rpName?: string;
 }
 
+/** A key's parts; the client composes and parses the wire form (`@with:key.namespace@by`). */
 export interface AtKey {
+  /** The key's name, without namespace or atSigns. */
   key: string;
+  /** The atSign that owns the key; left out for the client's own atSign. */
   sharedBy?: string;
+  /** The atSign the key is shared with; left out for a key kept to oneself. */
   sharedWith?: string;
+  /** Defaults to the client's `namespace`. */
   namespace?: string;
 }
 
+/** One notification delivered to a `subscribe` iterator. */
 export interface AtEvent {
+  /** What happened to the key. */
   operation: 'update' | 'delete';
+  /** The key that changed. */
   key: AtKey;
+  /** The new value; absent when the notification carries none. */
   value?: string | Uint8Array;
 }
 
@@ -50,36 +61,43 @@ export interface OnboardOptions {
 
 /** An enrollment request awaiting `approve` or `deny`. */
 export interface PendingEnrollment {
+  /** The id to pass to `approve` or `deny`. */
   id: string;
+  /** The app the requesting device enrolls for. */
   appName: string;
+  /** The name the requesting device gave itself. */
   deviceName: string;
   /** Each requested namespace with its access, `r` or `rw`. */
   namespaces: Record<string, string>;
 }
 
+/** The data-plane surface of an open client: key/value access, notifications and subscriptions. */
 export interface AtClientLike {
-  /** Gets a string or Uint8Array value */
+  /** Gets a string or Uint8Array value; `null` when the key has none. */
   get(key: AtKey): Promise<string | Uint8Array | null>;
 
-  /** Puts a string or Uint8Array value */
+  /** Puts a string or Uint8Array value; resolves `true` once it is stored. */
   put(key: AtKey, value: string | Uint8Array): Promise<boolean>;
 
-  /** Deletes a key */
+  /** Deletes a key; resolves `true` once it is gone. */
   delete(key: AtKey): Promise<boolean>;
 
-  /** Scans for keys matching the regex/filter */
+  /** Lists the keys whose wire form matches the `filter` regex; every key when it is omitted. */
   keys(filter?: string): Promise<AtKey[]>;
 
-  /** Sends a notification */
+  /** Sends `value` to the key's `sharedWith` atSign as a notification. */
   notify(key: AtKey, value: string): Promise<boolean>;
 
   /**
    * Real-time event subscription via AsyncIterable.
-   * Enables clean wrapping in React hooks (e.g. `useAtNotifications`).
+   * Registers when called, buffers events without a bound, and unsubscribes
+   * when the loop ends (`break`/`return()`) or the client closes. Without
+   * `regex` it matches the client's namespace. Throws `AtError('closed')`
+   * after `close()`.
    */
   subscribe(regex?: string): AsyncIterable<AtEvent>;
 
-  /** Closes the connection and releases resources */
+  /** Closes the connection, ends every open `subscribe` iterator, and releases resources. */
   close(): Promise<void>;
 }
 
@@ -129,6 +147,10 @@ function bridgeOptions(opts: AtClientOptions): BridgeOptions {
   };
 }
 
+/**
+ * An open session on one atSign. Obtain one from `create`, `onboard` or
+ * `enroll`; every failure rejects with an `AtError`.
+ */
 export class AtClient implements AtClientLike {
   private readonly streams = new Set<EventQueue<AtEvent>>();
   private closed = false;
@@ -177,29 +199,35 @@ export class AtClient implements AtClientLike {
     return bridged(async () => (await loadBridge()).prfSupported());
   }
 
+  /** Gets a string or Uint8Array value; `null` when the key has none. */
   get(key: AtKey): Promise<string | Uint8Array | null> {
     return bridged(async () => (await this.session.get(toBridgeKey(key, this.namespace))) ?? null);
   }
 
+  /** Puts a string or Uint8Array value; resolves `true` once it is stored. */
   async put(key: AtKey, value: string | Uint8Array): Promise<boolean> {
     await bridged(() => this.session.put(toBridgeKey(key, this.namespace), value));
     return true;
   }
 
+  /** Deletes a key; resolves `true` once it is gone. */
   async delete(key: AtKey): Promise<boolean> {
     await bridged(() => this.session.delete(toBridgeKey(key, this.namespace)));
     return true;
   }
 
+  /** Lists the keys whose wire form matches the `filter` regex; every key when it is omitted. */
   async keys(filter?: string): Promise<AtKey[]> {
     const keys = await bridged(() => this.session.keys(filter));
     return keys.map((text) => parseKey(text, this.namespace));
   }
 
+  /** Sends `value` to the key's `sharedWith` atSign as a notification. */
   notify(key: AtKey, value: string): Promise<boolean> {
     return bridged(() => this.session.notify(toBridgeKey(key, this.namespace), value));
   }
 
+  /** Subscribes to notifications; see `AtClientLike.subscribe`. */
   subscribe(regex?: string): AsyncIterable<AtEvent> {
     if (this.closed) throw new AtError('the client is closed', 'closed');
     let unsubscribe: (() => void) | undefined;
@@ -241,6 +269,7 @@ export class AtClient implements AtClientLike {
     await bridged(() => this.session.deny(id));
   }
 
+  /** Closes the session and ends every open `subscribe` iterator; closing twice is a no-op. */
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;

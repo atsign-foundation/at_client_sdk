@@ -1,0 +1,12 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "plugin": ["typedoc-plugin-markdown"],
+  "entryPoints": ["src/index.ts"],
+  "tsconfig": "tsconfig.build.json",
+  "out": "docs/api",
+  "readme": "none",
+  "excludePrivate": true,
+  "hideBreadcrumbs": true,
+  "hidePageHeader": true,
+  "disableSources": true
+}

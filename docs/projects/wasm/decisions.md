@@ -129,6 +129,8 @@ not an API-compatibility commitment.
 
 **Amended 2026-10-18 — the package is `at_client_wasm`.** The Dart package is named `at_client_wasm`; every `at_client_web` in D-4, D-8, D-11, D-15, the open questions and the log below means it. The npm facade stays `@atsign/at-client-web`.
 
+**Amended 2026-11-14 — the npm name is `@atsign/at_client_web`.** The npm facade is `@atsign/at_client_web`, in `packages/at_client_web/`; every `@atsign/at-client-web` in this record means it.
+
 Flutter and CLI platform-implementer packages are named as the eventual shape and
 deferred. `at_client_flutter` is in scope as a breaking-change **consumer**;
 `at_onboarding_cli` and `at_cli_commons` likewise.
@@ -225,11 +227,15 @@ no longer "keys cross as strings because they have no codec," it is **"no raw ke
 exposed at all,"** codec or not. `AtKey`/`AtValue` remain excluded either way; the reason
 is now structural rather than a workaround for a missing codec.
 
+**Amended 2026-11-14 — callbacks stay inside the bridge, iterators outside it.** The Dart bridge still delivers events as `subscribe(cb) → unsubscribe`. The TypeScript layer adapts that to an `AsyncIterable<AtEvent>` (the shape the pinned d.ts specifies): it registers when called, buffers events without a bound, and leaving the loop or `close()` unsubscribes. Keys still cross the bridge as plain objects of strings, never as `AtKey`/`AtValue`.
+
 Separately, and unaffected by D-10/D-11: `Stream` has no JS bridge in any Dart SDK,
 official or community, so every event surface is `subscribe(cb) → unsubscribe` — including
 `AtCollection`'s eight stream-returning members (`js-api.md` §5.2 F-findings).
 
 ### D-10 — Collections are the sole JS/TS data plane; the flat plane is removed (2026-08-18)
+
+**Amended 2026-11-14 — the flat plane ships.** The npm package implements the flat `get`/`put`/`delete`/`keys`/`notify`/`subscribe`/`close` surface that the consumer's pinned d.ts specifies, plus `onboard` and the `app`/`rpId` options, and exports no collections API. The statement below that the flat plane is removed no longer holds for the shipped package; the collections design in `js-api.md` §5.1-§5.4 is not built. `js-api.md` §5a is the surface as shipped.
 
 The flat key/value plane specified in the original `js-api.md` §5.2
 (`put`/`get`/`putBinary`/`getBinary`/`delete`/`exists`/`getKeys`/`getMeta`/`putMeta`) is
@@ -1438,4 +1444,5 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-10 | D-24 brought current once [#2451](https://github.com/atsign-foundation/at_client_sdk/pull/2451) merged: the dedupe is on trunk, keyed by the pair (from, id) with the sender canonical, and the watermark stores `[from, id]` pairs capped at 1024. D-19's handover dedupes by the same pair. The browser preset was taken out of #2451 before it merged, and where browser presets live is still open. |
 | 2026-11-11 | D-24's policy is implemented in [#2476](https://github.com/atsign-foundation/at_client_sdk/pull/2476): `AtClientPreference.notificationReplay` takes `connect`, `resume` (the default), `window(d)` and `full`, and `fetchOfflineNotifications` is deprecated. The start resolves once per notification service and a failed read is retried on the next connect; a window start is never later than service creation and a negative duration is zero. A live test covers `full` sending `monitor:0` to an atServer. (implemented by srieteja) |
 | 2026-11-13 | **D-18 reversed** (review of [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430)). The remote-only storage path is deleted; the client runs on `InMemoryAtClientStorage`. Key custody follows K-16. [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md) moved to `superseded/`. D-12, D-15, D-17 and D-24 annotated and `acceptance.md` X-R1..X-R3 amended to match: remote-only is the routing preference, and sync still runs, since only an explicit `useRemoteAtServer = false` keeps a write local. |
+| 2026-11-14 | **D-9 and D-10 amended; npm name `@atsign/at_client_web`.** The shipped npm package keeps the flat key/value surface and adapts the bridge's callbacks to an `AsyncIterable`; no collections API is exported. The npm name is `@atsign/at_client_web`, superseding `@atsign/at-client-web` in D-4 and the log. |
 | 2026-11-15 | **K-17 clarified (ruling, with the Gate C build).** The onboarding enrollment, activated by CRAM, holds the root grant and is the CRAM exception K-17 already names: it can write and delete any pointer. Every enrollment made through `enroll:request` asks for `<ns>:rw` and the app's namespace, and nothing else. The pointer namespace is a per-enrollment argument of the enrollment gateway, derived with the lookup key from the same `P`. Rotation stays out (2026-10-31); `PasskeyCustody.rotate` is removed. (ruled by srieteja) |

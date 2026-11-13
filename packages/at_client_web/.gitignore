@@ -4,3 +4,4 @@ dist/
 test-results/
 playwright-report/
 demo/dist/
+docs/api/

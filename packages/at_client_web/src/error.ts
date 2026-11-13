@@ -1,17 +1,30 @@
 /** The reasons an `AtClient` call can fail; apps branch on these, never on message text. */
 export type AtErrorCode =
+  /** This browser holds no passkey for the atSign; enroll it with `AtClient.enroll`. */
   | 'no_passkey_here'
+  /** The passkey ceremony returned no credential, or the passkey's record did not authenticate. */
   | 'passkey_lost'
+  /** The browser or authenticator cannot evaluate passkey PRF. */
   | 'prf_unavailable'
+  /** The atServer refused this enrollment's PKAM login. */
   | 'pkam_refused'
+  /** The restored public keys differ from the ones the atServer holds. */
   | 'public_key_mismatch'
+  /** Another tab holds the atSign's first-setup lock and did not release it in time. */
   | 'setup_lock_timeout'
+  /** The client did not come online. */
   | 'offline'
+  /** Onboarding or enrollment started but did not finish. */
   | 'onboarding_incomplete'
+  /** The enrollment request was denied, or the pairing call was refused by the atServer. */
   | 'enrollment_denied'
+  /** The client is closed. */
   | 'closed'
+  /** This page, option or session cannot do what was asked. */
   | 'unsupported'
+  /** Any failure with no code of its own. */
   | 'internal'
+  /** A key is malformed, or `namespace` is missing. */
   | 'bad_key';
 
 const codes: ReadonlySet<string> = new Set<AtErrorCode>([
@@ -30,7 +43,9 @@ const codes: ReadonlySet<string> = new Set<AtErrorCode>([
   'bad_key',
 ]);
 
+/** The error every `AtClient` call rejects with; branch on `code`. */
 export class AtError extends Error {
+  /** Which failure this is; see `AtErrorCode`. */
   code: AtErrorCode;
 
   constructor(message: string, code: AtErrorCode) {
