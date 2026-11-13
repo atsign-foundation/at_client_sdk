@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysSourceAbsentException;
+import 'package:at_auth/at_auth.dart'
+    show AtKeys, AtKeysFormatException, AtKeysSourceAbsentException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -48,14 +49,28 @@ class KeychainStorage {
   /// Read all stored Atsign keys data from the keychain
   ///
   /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
-  /// if no key data has been stored yet
+  /// if no key data has been stored yet. A stored entry that is not valid
+  /// JSON throws [AtKeysFormatException].
   Future<AtKeysData?> readAtKeysData() async {
     final data = await _readAtKeysDataRaw();
     if (data != null) {
-      final json = jsonDecode(data);
-      return AtKeysData.fromJson(json);
+      return _decodeAtKeysData(data);
     }
     return null;
+  }
+
+  /// [text], a stored atKeys entry, as [AtKeysData].
+  ///
+  /// Text that is not JSON throws [AtKeysFormatException], which holds none
+  /// of it.
+  static AtKeysData _decodeAtKeysData(String text) {
+    final dynamic json;
+    try {
+      json = jsonDecode(text);
+    } on FormatException catch (e) {
+      throw AtKeysFormatException.notJson('the keychain atKeys entry', e);
+    }
+    return AtKeysData.fromJson(json);
   }
 
   // Current behaviour:
@@ -107,7 +122,7 @@ class KeychainStorage {
       );
       await _write(
         biometricStoreName: currentName,
-        keychainData: AtKeysData.fromJson(jsonDecode(legacyData)),
+        keychainData: _decodeAtKeysData(legacyData),
       );
       return legacyData;
     });
@@ -237,18 +252,15 @@ class KeychainStorage {
   ///   [keys] - [AtKeys] instance to persist
   ///
   /// Note: the Atsign must be included in the [AtKeys.metadata] field
+  ///
+  /// A failure to read or write the keychain is thrown, and a stored entry
+  /// that is not valid JSON throws [AtKeysFormatException] with nothing
+  /// written.
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) =>
       _writes.synchronized(() => _append(keys));
 
   Future<void> _append(AtKeys keys) async {
-    String? existingData;
-    try {
-      existingData = await _readAtKeysDataRaw();
-    } catch (e) {
-      _logger.info(
-        'No existing atKeysData found in keychain. A new one will be created.',
-      );
-    }
+    final existingData = await _readAtKeysDataRaw();
     if (existingData == null) {
       final atKeysData = AtKeysData(keys: [keys]);
       await _write(
@@ -257,7 +269,7 @@ class KeychainStorage {
       );
       return;
     }
-    final atKeysData = AtKeysData.fromJson(jsonDecode(existingData));
+    final atKeysData = _decodeAtKeysData(existingData);
     atKeysData.keys.add(keys);
     await _write(
       biometricStoreName: (await AtKeysStore.getName()),
@@ -268,29 +280,25 @@ class KeychainStorage {
   /// Remove a stored Atsign entry from the keychain
   ///
   ///   [atSign] - Atsign whose persisted keys should be removed
+  ///
+  /// A failure to read or write the keychain is thrown, and a stored entry
+  /// that is not valid JSON throws [AtKeysFormatException] with nothing
+  /// written. An empty keychain is left as it is.
   Future<void> removeAtsignFromKeychain(String atSign) =>
       _writes.synchronized(() => _remove(atSign));
 
   Future<void> _remove(String atSign) async {
-    try {
-      final data = await _readAtKeysDataRaw();
-      if (data != null) {
-        final atKeysData = AtKeysData.fromJson(jsonDecode(data));
-        final wanted = _normalized(atSign);
-        atKeysData.keys.removeWhere(
-          (element) => _normalized(_atSignOf(element)) == wanted,
-        );
-        await _write(
-          biometricStoreName: (await AtKeysStore.getName()),
-          keychainData: atKeysData,
-        );
-      } else {
-        throw Exception('Unexpected data type found in keychain');
-      }
-    } catch (e, s) {
-      _logger.info('_getAtClientData', e, s);
-      print(s);
-    }
+    final data = await _readAtKeysDataRaw();
+    if (data == null) return;
+    final atKeysData = _decodeAtKeysData(data);
+    final wanted = _normalized(atSign);
+    atKeysData.keys.removeWhere(
+      (element) => _normalized(_atSignOf(element)) == wanted,
+    );
+    await _write(
+      biometricStoreName: (await AtKeysStore.getName()),
+      keychainData: atKeysData,
+    );
   }
 
   /// Delete all persisted Atsign key data from the keychain, including any

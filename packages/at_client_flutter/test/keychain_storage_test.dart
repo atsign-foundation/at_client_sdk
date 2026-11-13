@@ -154,6 +154,7 @@ void main() {
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
+      when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
       when(() => mockBiometricStorageFile.write(any())).thenThrow(Exception());
 
       expect(

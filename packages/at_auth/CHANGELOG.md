@@ -32,6 +32,8 @@
   `AtDecryptionException`, `FileSystemException` and the like) naming the
   store, or when a `FileAtKeysIo` keyfile cannot be written there
   (`FileSystemException` naming its path).
+- fix: an atKeys document whose `createdAt` is not a date, or that repeats a
+  `keyId`, is refused with a message naming the field and not its value.
 
 ## 4.0.0
 
