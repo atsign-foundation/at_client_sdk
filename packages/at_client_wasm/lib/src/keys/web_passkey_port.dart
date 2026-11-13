@@ -4,10 +4,10 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart';
 
-import 'aes_gcm.dart';
 import 'passkey_ceremony.dart';
 import 'passkey_creation_options.dart';
 import 'passkey_port.dart';
+import 'passkey_request_options.dart';
 
 Uint8List? _prfFirst(PublicKeyCredential credential) {
   final extensions = credential.getClientExtensionResults() as JSObject;
@@ -41,30 +41,9 @@ class WebPasskeyPort implements PasskeyPort {
   @override
   Future<PasskeyAssertion> get(
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
-    final challenge = randomBytes(32);
-
-    final allowCredentialsList = allowCredential == null
-        ? []
-        : [
-            {
-              'type': 'public-key',
-              'id': allowCredential,
-            }
-          ];
-
-    final options = {
-      'publicKey': {
-        'challenge': challenge,
-        'rpId': rpId,
-        'userVerification': 'required',
-        'allowCredentials': allowCredentialsList,
-        'extensions': {
-          'prf': {
-            'eval': {'first': evalInput}
-          }
-        }
-      }
-    }.jsify() as CredentialRequestOptions;
+    final options = passkeyRequestOptions(
+            rpId: rpId, evalInput: evalInput, allowCredential: allowCredential)
+        .jsify() as CredentialRequestOptions;
 
     final credential =
         await passkeyCeremony(window.navigator.credentials.get(options));

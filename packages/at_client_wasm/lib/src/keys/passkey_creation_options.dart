@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'aes_gcm.dart';
 
+/// The WebAuthn ceremony timeout, in milliseconds, for create and get.
+const passkeyCeremonyTimeoutMs = 120000;
+
 /// The WebAuthn `publicKey` creation options for a discoverable passkey.
 ///
 /// `user.id` is 64 fresh random bytes, so a passkey names no atSign and each
@@ -17,6 +20,7 @@ Map<String, Object?> passkeyCreationOptions({
     {
       'publicKey': {
         'challenge': random(32),
+        'timeout': passkeyCeremonyTimeoutMs,
         'rp': {'id': rpId, 'name': rpName},
         'user': {'id': random(64), 'name': atSign, 'displayName': atSign},
         'pubKeyCredParams': [
