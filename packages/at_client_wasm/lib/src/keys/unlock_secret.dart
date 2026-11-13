@@ -14,6 +14,9 @@ final class PrfSecret extends UnlockSecret {
       throw ArgumentError('PRF output must be 32 bytes');
     }
   }
+
+  /// Overwrites [output] with zeroes.
+  void wipe() => output.fillRange(0, output.length, 0);
 }
 
 final class PassphraseSecret extends UnlockSecret {

@@ -159,6 +159,10 @@ class FakeGateway implements EnrollmentGateway {
   final FakeServer server;
   final enrolled = <({String atSign, Uint8List authSeed, String otp})>[];
   final activated = <({String atSign, Uint8List authSeed, String cram})>[];
+
+  /// Every auth seed buffer handed in, by reference, so a test can see
+  /// whether the caller wiped it.
+  final seedBuffers = <Uint8List>[];
   FakeSession? lastSession;
 
   /// When set, an enroll waits for it before answering.
@@ -169,7 +173,9 @@ class FakeGateway implements EnrollmentGateway {
       {required String atSign,
       required Uint8List authSeed,
       required String otp}) async {
-    enrolled.add((atSign: atSign, authSeed: authSeed, otp: otp));
+    seedBuffers.add(authSeed);
+    enrolled.add(
+        (atSign: atSign, authSeed: Uint8List.fromList(authSeed), otp: otp));
     await gate?.future;
     if (server.seedByEnrollment.containsValue(authSeed.join(','))) {
       throw KeyAlreadyEnrolledException();
@@ -184,6 +190,7 @@ class FakeGateway implements EnrollmentGateway {
       {required String atSign,
       required String enrollmentId,
       required Uint8List authSeed}) async {
+    seedBuffers.add(authSeed);
     if (server.revoked.contains(enrollmentId) ||
         server.seedByEnrollment[enrollmentId] != authSeed.join(',')) {
       throw PkamRefusedException(enrollmentId);
@@ -202,7 +209,9 @@ class FakeGateway implements EnrollmentGateway {
       {required String atSign,
       required Uint8List authSeed,
       required String cram}) async {
-    activated.add((atSign: atSign, authSeed: authSeed, cram: cram));
+    seedBuffers.add(authSeed);
+    activated.add(
+        (atSign: atSign, authSeed: Uint8List.fromList(authSeed), cram: cram));
     await onActivate?.call();
     final eid = 'eid${++server.enrollments}';
     server.seedByEnrollment[eid] = authSeed.join(',');
@@ -219,6 +228,10 @@ class FakeGateway implements EnrollmentGateway {
 /// assertion that names no credential.
 class FakeAuthenticator implements PasskeyPort {
   final prfByCredential = <int, Uint8List>{};
+
+  /// Every PRF buffer handed out, by reference: an authenticator returns
+  /// fresh bytes per assertion.
+  final issuedPrf = <Uint8List>[];
   Uint8List? current;
   Uint8List? lastAllowCredential;
   var gets = 0;
@@ -244,7 +257,10 @@ class FakeAuthenticator implements PasskeyPort {
     lastAllowCredential = allowCredential;
     if (yieldsNoCredential) throw PasskeyCeremonyException('NotAllowedError');
     final id = allowCredential ?? current!;
-    return (credentialId: id, prfFirst: prfByCredential[id[0]]);
+    final stored = prfByCredential[id[0]];
+    final prf = stored == null ? null : Uint8List.fromList(stored);
+    if (prf != null) issuedPrf.add(prf);
+    return (credentialId: id, prfFirst: prf);
   }
 }
 

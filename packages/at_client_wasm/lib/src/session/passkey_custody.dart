@@ -6,6 +6,7 @@ import '../keys/key_bytes_store.dart';
 import '../keys/passkey_port.dart' show PasskeyCeremonyException;
 import '../keys/passkey_record.dart';
 import '../keys/passkey_record_keys.dart';
+import '../keys/unlock_secret.dart' show PrfSecret;
 import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
 import 'setup_lock.dart';
@@ -116,8 +117,9 @@ class OnboardingIncompleteException implements Exception {
 
 /// An activated atSign whose custody records are not yet written.
 ///
-/// Owns the enrollment session, if it has one; only [resume] and [abandon]
-/// close it. Holds the @keys in memory and never prints them.
+/// Owns the enrollment session and the passkey-derived keys, if it has them;
+/// only [resume] and [abandon] close the session and wipe the keys. Holds the
+/// @keys in memory and never prints them.
 class PendingOnboarding {
   PendingOnboarding._(this._custody, this.atSign, this._credentialId,
       this._keys, this._session, this._atKeys, this._enrollmentId);
@@ -150,11 +152,13 @@ class PendingOnboarding {
     await _custody._remember(atSign, _credentialId, published.enrollmentId);
     _session = null;
     _atKeys = null;
+    _keys.wipe();
     _runRelease();
     return published;
   }
 
-  /// Closes the session and gives up the @keys.
+  /// Closes the session, gives up the @keys and overwrites the passkey-derived
+  /// keys with zeroes.
   Future<void> abandon() async {
     final session = _session;
     _session = null;
@@ -162,6 +166,7 @@ class PendingOnboarding {
     try {
       await session?.close();
     } finally {
+      _keys.wipe();
       _runRelease();
     }
   }
@@ -247,10 +252,21 @@ class CustodySession {
   final Uint8List credentialId;
 
   /// The seed of this enrollment's APKAM key, for the caller that opens a
-  /// client with it; held in memory only.
+  /// client with it; held in memory only, and overwritten with zeroes by
+  /// [close].
   final Uint8List authSeed;
 
-  Future<void> close() => session.close();
+  /// Closes [session] and overwrites [authSeed] with zeroes; safe to call
+  /// again.
+  Future<void> close() async {
+    try {
+      await session.close();
+    } finally {
+      _wipe();
+    }
+  }
+
+  void _wipe() => authSeed.fillRange(0, authSeed.length, 0);
 }
 
 const _apkamPrivateKey = 'aesPkamPrivateKey';
@@ -270,7 +286,8 @@ class PasskeyCustody {
       required this.enrollmentIds,
       required this.setupLock,
       this.persistence,
-      this.retryDelay = const Duration(milliseconds: 250)});
+      this.retryDelay = const Duration(milliseconds: 250),
+      this.deriveKeys = RecordKeys.derive});
 
   final PasskeyKek kek;
   final EnrollmentPointerReader pointerReader;
@@ -282,6 +299,19 @@ class PasskeyCustody {
 
   /// The pause between attempts to write a document.
   final Duration retryDelay;
+
+  /// Derives the record keys from a passkey's PRF output.
+  final Future<RecordKeys> Function(PrfSecret prf, String atSign) deriveKeys;
+
+  /// [deriveKeys] over [secret], which is overwritten with zeroes once the
+  /// keys are derived or the derivation fails.
+  Future<RecordKeys> _deriveAndWipe(PrfSecret secret, String atSign) async {
+    try {
+      return await deriveKeys(secret, atSign);
+    } finally {
+      secret.wipe();
+    }
+  }
 
   /// Enrolls a passkey for [atSign] with an approver-issued [otp], then writes
   /// its document and pointer. [existingPasskey] asserts the device's passkey instead of
@@ -304,11 +334,15 @@ class PasskeyCustody {
       } else {
         passkey = await kek.register(canonical);
       }
-      final keys = await RecordKeys.derive(passkey.secret, canonical);
-      final session = await gateway.enroll(
-          atSign: canonical, authSeed: keys.authSeed, otp: otp);
-      return _publishAndRemember(
-          canonical, passkey.credentialId, keys, session);
+      final keys = await _deriveAndWipe(passkey.secret, canonical);
+      try {
+        final session = await gateway.enroll(
+            atSign: canonical, authSeed: keys.authSeed, otp: otp);
+        return await _publishAndRemember(
+            canonical, passkey.credentialId, keys, session);
+      } finally {
+        keys.wipe();
+      }
     });
   }
 
@@ -324,23 +358,30 @@ class PasskeyCustody {
     final canonical = atSign.toAtsign();
     return setupLock.run(setupLockName(canonical), () async {
       final passkey = await kek.register(canonical);
-      final keys = await RecordKeys.derive(passkey.secret, canonical);
-      final EnrollmentSession session;
+      final keys = await _deriveAndWipe(passkey.secret, canonical);
+      var handedOver = false;
       try {
-        session = await gateway.activate(
-            atSign: canonical, authSeed: keys.authSeed, cram: cram);
-      } on ActivationUnfinishedException catch (e) {
-        throw OnboardingIncompleteException(
-            PendingOnboarding._(this, canonical, passkey.credentialId, keys,
-                null, e.atKeys, e.enrollmentId),
-            e.cause);
-      }
-      final pending = PendingOnboarding._(this, canonical, passkey.credentialId,
-          keys, session, null, session.enrollmentId);
-      try {
-        return await pending._resumeHoldingLock();
-      } on Object catch (e) {
-        throw OnboardingIncompleteException(pending, e);
+        final EnrollmentSession session;
+        try {
+          session = await gateway.activate(
+              atSign: canonical, authSeed: keys.authSeed, cram: cram);
+        } on ActivationUnfinishedException catch (e) {
+          handedOver = true;
+          throw OnboardingIncompleteException(
+              PendingOnboarding._(this, canonical, passkey.credentialId, keys,
+                  null, e.atKeys, e.enrollmentId),
+              e.cause);
+        }
+        final pending = PendingOnboarding._(this, canonical,
+            passkey.credentialId, keys, session, null, session.enrollmentId);
+        handedOver = true;
+        try {
+          return await pending._resumeHoldingLock();
+        } on Object catch (e) {
+          throw OnboardingIncompleteException(pending, e);
+        }
+      } finally {
+        if (!handedOver) keys.wipe();
       }
     });
   }
@@ -363,40 +404,44 @@ class PasskeyCustody {
     } on PasskeyCeremonyException catch (e) {
       throw PasskeyLostException(canonical, 'no passkey credential', cause: e);
     }
-    final keys = await RecordKeys.derive(unlocked.secret, canonical);
-    final enrollmentId =
-        hintedEnrollment ?? await _enrollmentIdFromPointer(canonical, keys);
-
-    final EnrollmentSession session;
+    final keys = await _deriveAndWipe(unlocked.secret, canonical);
     try {
-      session = await gateway.authenticate(
+      final enrollmentId =
+          hintedEnrollment ?? await _enrollmentIdFromPointer(canonical, keys);
+
+      final EnrollmentSession session;
+      try {
+        session = await gateway.authenticate(
+            atSign: canonical,
+            enrollmentId: enrollmentId,
+            authSeed: keys.authSeed);
+      } on PkamRefusedException catch (e) {
+        throw PasskeyLostException(canonical, 'PKAM refused', cause: e);
+      }
+      final Map<String, dynamic> atKeys;
+      try {
+        atKeys = await _restore(canonical, enrollmentId, keys, session);
+      } on Object {
+        await session.close();
+        rethrow;
+      }
+      try {
+        await _remember(canonical, unlocked.credentialId, enrollmentId);
+      } on Object {
+        await session.close();
+        rethrow;
+      }
+      return CustodySession._(
           atSign: canonical,
           enrollmentId: enrollmentId,
-          authSeed: keys.authSeed);
-    } on PkamRefusedException catch (e) {
-      throw PasskeyLostException(canonical, 'PKAM refused', cause: e);
+          atKeys: atKeys,
+          session: session,
+          lookupHex: keys.lookupHex,
+          credentialId: unlocked.credentialId,
+          authSeed: Uint8List.fromList(keys.authSeed));
+    } finally {
+      keys.wipe();
     }
-    final Map<String, dynamic> atKeys;
-    try {
-      atKeys = await _restore(canonical, enrollmentId, keys, session);
-    } on Object {
-      await session.close();
-      rethrow;
-    }
-    try {
-      await _remember(canonical, unlocked.credentialId, enrollmentId);
-    } on Object {
-      await session.close();
-      rethrow;
-    }
-    return CustodySession._(
-        atSign: canonical,
-        enrollmentId: enrollmentId,
-        atKeys: atKeys,
-        session: session,
-        lookupHex: keys.lookupHex,
-        credentialId: unlocked.credentialId,
-        authSeed: keys.authSeed);
   }
 
   /// Moves [current]'s @keys to a newly registered passkey: enrolls it with
@@ -408,26 +453,33 @@ class PasskeyCustody {
   Future<CustodySession> rotate(CustodySession current,
       {required String otp}) async {
     final passkey = await kek.register(current.atSign);
-    final keys = await RecordKeys.derive(passkey.secret, current.atSign);
-    final session = await gateway.enroll(
-        atSign: current.atSign, authSeed: keys.authSeed, otp: otp);
-    final CustodySession rotated;
+    final keys = await _deriveAndWipe(passkey.secret, current.atSign);
     try {
-      rotated = await _publish(
-          current.atSign, passkey.credentialId, keys, session, current.atKeys);
-      if (await _pointedEnrollmentId(current.atSign, keys) !=
-          rotated.enrollmentId) {
-        throw RotationAbortedException();
+      final session = await gateway.enroll(
+          atSign: current.atSign, authSeed: keys.authSeed, otp: otp);
+      CustodySession? published;
+      try {
+        published = await _publish(current.atSign, passkey.credentialId, keys,
+            session, current.atKeys);
+        if (await _pointedEnrollmentId(current.atSign, keys) !=
+            published.enrollmentId) {
+          throw RotationAbortedException();
+        }
+      } on Object {
+        published?._wipe();
+        await session.close();
+        rethrow;
       }
-    } on Object {
-      await session.close();
-      rethrow;
+      final rotated = published;
+      await session.pointers.delete(current.atSign, current.lookupHex);
+      await session.revoke(current.enrollmentId);
+      await _remember(
+          current.atSign, passkey.credentialId, rotated.enrollmentId);
+      await current.close();
+      return rotated;
+    } finally {
+      keys.wipe();
     }
-    await session.pointers.delete(current.atSign, current.lookupHex);
-    await session.revoke(current.enrollmentId);
-    await _remember(current.atSign, passkey.credentialId, rotated.enrollmentId);
-    await current.close();
-    return rotated;
   }
 
   Future<CustodySession> _publish(
@@ -451,7 +503,7 @@ class PasskeyCustody {
         session: session,
         lookupHex: keys.lookupHex,
         credentialId: credentialId,
-        authSeed: keys.authSeed);
+        authSeed: Uint8List.fromList(keys.authSeed));
   }
 
   /// Puts [document] and reads it back with [keys]; a failure of either is

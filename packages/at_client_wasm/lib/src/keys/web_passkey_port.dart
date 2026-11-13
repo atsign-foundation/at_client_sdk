@@ -9,10 +9,20 @@ import 'passkey_creation_options.dart';
 import 'passkey_port.dart';
 import 'passkey_request_options.dart';
 
-Uint8List? _prfFirst(PublicKeyCredential credential) {
+/// The PRF `first` result of [credential] as bytes of its own, or null when
+/// the authenticator returned none.
+///
+/// The browser's ArrayBuffer is overwritten with zeroes once copied.
+Uint8List? prfFirstOf(PublicKeyCredential credential) {
   final extensions = credential.getClientExtensionResults() as JSObject;
   final results = (extensions['prf'] as JSObject?)?['results'] as JSObject?;
-  return (results?['first'] as JSArrayBuffer?)?.toDart.asUint8List();
+  final first = results?['first'] as JSArrayBuffer?;
+  if (first == null) return null;
+  final copy = Uint8List.fromList(first.toDart.asUint8List());
+  (globalContext['Uint8Array'] as JSFunction)
+      .callAsConstructor<JSObject>(first)
+      .callMethod('fill'.toJS, 0.toJS);
+  return copy;
 }
 
 /// A port that executes WebAuthn ceremonies through `package:web`.
@@ -50,7 +60,7 @@ class WebPasskeyPort implements PasskeyPort {
 
     return (
       credentialId: credential.rawId.toDart.asUint8List(),
-      prfFirst: _prfFirst(credential),
+      prfFirst: prfFirstOf(credential),
     );
   }
 }

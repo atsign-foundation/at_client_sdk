@@ -32,6 +32,12 @@ class RecordKeys {
   /// The 32-byte seed of the enrollment's ML-DSA-65 APKAM signing key.
   final Uint8List authSeed;
 
+  /// Overwrites [kek] and [authSeed] with zeroes.
+  void wipe() {
+    kek.fillRange(0, kek.length, 0);
+    authSeed.fillRange(0, authSeed.length, 0);
+  }
+
   /// HKDF-SHA256 over [prf] with an empty salt and the labels
   /// `atkeys-record-id|<atSign>`, `atkeys-kek|<atSign>` and
   /// `at_auth/custody/auth-seed/v1|<atSign>`, where the atSign is canonical
@@ -43,9 +49,13 @@ class RecordKeys {
     Uint8List expand(String label) => HkdfSha256.deriveKey(prf.output,
         info: utf8.encode('$label|$canonical'), length: 32);
     final lookup = expand('atkeys-record-id');
-    return RecordKeys._(
-        lookup.map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
-        expand('atkeys-kek'),
+    final String lookupHex;
+    try {
+      lookupHex = lookup.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    } finally {
+      lookup.fillRange(0, lookup.length, 0);
+    }
+    return RecordKeys._(lookupHex, expand('atkeys-kek'),
         expand('at_auth/custody/auth-seed/v1'));
   }
 }
@@ -58,6 +68,7 @@ PrfSecret _secretFrom(Uint8List? prfFirst, PrfSupport? support) {
   try {
     return PrfSecret(prfFirst);
   } on ArgumentError catch (e) {
+    prfFirst.fillRange(0, prfFirst.length, 0);
     throw PrfUnavailableException(e.message);
   }
 }
