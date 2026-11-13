@@ -584,8 +584,14 @@ abstract class AtClient {
   /// [writeTypeTag] stamps items this collection creates with that tag when
   /// no factory is registered for their type, without registering a
   /// [fromJson]. When [typeTag] is also set, the two must match.
-  /// Reopening an already open [namespace] and [eventSource] with a different
-  /// [writeTypeTag] (including null versus a value) throws [StateError].
+  ///
+  /// This client remembers the first effective tag ([writeTypeTag], else
+  /// [typeTag]) each [namespace] was opened with, for every [eventSource].
+  /// Opening the namespace again with a different effective tag, including
+  /// none versus a tag, throws [CollectionTypeTagMismatchException]; an equal
+  /// tag is allowed. The check holds on this client only: another client,
+  /// session or device of the atSign does not see it. Implementers should
+  /// refuse the same way.
   ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.

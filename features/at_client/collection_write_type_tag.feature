@@ -4,12 +4,17 @@ Feature: A collection stamps new items with its writeTypeTag
   is registered for the item's type, the item is stamped with that tag instead
   of n/a; a registered factory's tag wins. The tag is not inherited by a
   sub-collection. A blank tag, or one that differs from typeTag, is refused at
-  construction. Reopening an open namespace and eventSource with another
-  writeTypeTag is refused with StateError; with the same one it returns the
-  cached instance.
+  construction. A client remembers the first effective tag (writeTypeTag, else
+  typeTag) of each namespace, whatever the eventSource; reopening it with a
+  different effective tag, including none versus a tag, is refused with
+  CollectionTypeTagMismatchException, on that client only. subCollection checks
+  the same way, remembering the last 4096 sub-collection namespaces per client
+  (their names embed parent item ids that other atSigns control), so a
+  mismatched reopen of a forgotten one is not caught. Equal tags pass; the same
+  namespace and eventSource returns the cached instance.
 
   Races: none new; the tag is resolved synchronously at write time from
-  constructor state, and the reopen check runs synchronously with the cache
+  constructor state, and the tag check runs synchronously with the cache
   lookup, so two callers cannot both win a slot with different tags.
   Replay: none new; no wire message or nonce is added, and the tag is part of
   the existing record format.
@@ -89,12 +94,57 @@ Feature: A collection stamps new items with its writeTypeTag
     When it is built
     Then ArgumentError is thrown
 
-  Scenario: Given a collection open with one writeTypeTag, when the same namespace and eventSource is reopened with a different writeTypeTag, then StateError is thrown
-    Given a collection open with one writeTypeTag
-    When the same namespace and eventSource is reopened with a different writeTypeTag
-    Then StateError is thrown
+  Scenario: Given a collection open with x, when it is reopened with y, then CollectionTypeTagMismatchException names the namespace and both tags
+    Given a collection open with x
+    When it is reopened with y
+    Then CollectionTypeTagMismatchException names the namespace and both tags
 
-  Scenario: Given a collection open with one writeTypeTag, when the same namespace and eventSource is reopened with the same writeTypeTag, then the same instance is returned
-    Given a collection open with one writeTypeTag
-    When the same namespace and eventSource is reopened with the same writeTypeTag
+  Scenario: Given a collection open with x, when another eventSource of the namespace is opened with y, then CollectionTypeTagMismatchException is thrown
+    Given a collection open with x
+    When another eventSource of the namespace is opened with y
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a collection open with x, when it is reopened with none, then CollectionTypeTagMismatchException is thrown
+    Given a collection open with x
+    When it is reopened with none
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a collection open with no tag, when it is reopened with x, then CollectionTypeTagMismatchException is thrown
+    Given a collection open with no tag
+    When it is reopened with x
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a collection open with typeTag x, when it is reopened with writeTypeTag x, then a usable collection is returned
+    Given a collection open with typeTag x
+    When it is reopened with writeTypeTag x
+    Then a usable collection is returned
+
+  Scenario: Given a collection open with x, when it is reopened with x, then the same instance is returned
+    Given a collection open with x
+    When it is reopened with x
     Then the same instance is returned
+
+  Scenario: Given a collection open with x, when it is reopened with a blank or conflicting tag, then ArgumentError is thrown, not a mismatch
+    Given a collection open with x
+    When it is reopened with a blank or conflicting tag
+    Then ArgumentError is thrown, not a mismatch
+
+  Scenario: Given a sub-collection open with x, when its namespace is reopened with y, then CollectionTypeTagMismatchException is thrown
+    Given a sub-collection open with x
+    When its namespace is reopened with y
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a sub-collection open with x, when its namespace is reopened with none, or one open with none with x, then CollectionTypeTagMismatchException is thrown
+    Given a sub-collection open with x
+    When its namespace is reopened with none, or one open with none with x
+    Then CollectionTypeTagMismatchException is thrown
+
+  Scenario: Given a sub-collection open with typeTag x, when its namespace is reopened with writeTypeTag x, then a usable collection is returned
+    Given a sub-collection open with typeTag x
+    When its namespace is reopened with writeTypeTag x
+    Then a usable collection is returned
+
+  Scenario: Given a sub-collection namespace evicted past the cap, when it is reopened with another tag, then no exception is thrown
+    Given a sub-collection namespace evicted past the cap
+    When it is reopened with another tag
+    Then no exception is thrown

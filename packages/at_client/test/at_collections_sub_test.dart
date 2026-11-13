@@ -305,6 +305,107 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  group('subCollection — reopening with another effective tag', () {
+    late _Collections c;
+    late CItem<String> post;
+    const subNs = 'comments.p1.$parentNs';
+
+    setUp(() {
+      c = buildParent();
+      post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+    });
+
+    tearDown(() {
+      clearFactoriesForTest();
+      setSubCollectionTagCapForTest(null);
+    });
+
+    Matcher mismatch(String existing, String requested) =>
+        throwsA(isA<CollectionTypeTagMismatchException>()
+            .having((e) => e.namespace, 'namespace', subNs)
+            .having((e) => e.existingTag, 'existingTag', existing)
+            .having((e) => e.requestedTag, 'requestedTag', requested));
+
+    test(
+        'Given a sub-collection open with x, when it is reopened with y, '
+        'then the exception names the namespace and both tags', () {
+      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
+      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: 'y'),
+          mismatch('x', 'y'));
+    });
+
+    test(
+        'Given a sub-collection open with none, when it is reopened with x, '
+        'then CollectionTypeTagMismatchException is thrown', () {
+      subOn<String>(c, post, 'comments');
+      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: 'x'),
+          throwsA(isA<CollectionTypeTagMismatchException>()));
+    });
+
+    test(
+        'Given a sub-collection open with x, when it is reopened with none, '
+        'then CollectionTypeTagMismatchException is thrown', () {
+      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
+      expect(() => subOn<String>(c, post, 'comments'),
+          throwsA(isA<CollectionTypeTagMismatchException>()));
+    });
+
+    test(
+        'Given a sub-collection open with typeTag x, when it is reopened '
+        'with writeTypeTag x, then a usable collection is returned', () {
+      subOn<Map<String, dynamic>>(c, post, 'comments',
+          fromJson: (m) => m, typeTag: 'x');
+      final again = subOn<String>(c, post, 'comments', writeTypeTag: 'x');
+      expect(again.draft(obj: 'hi', id: 'c1').type, 'x');
+    });
+
+    test(
+        'Given a sub-collection open with x, when it is reopened with x, '
+        'then a collection stamping x is returned', () {
+      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
+      final again = subOn<String>(c, post, 'comments', writeTypeTag: 'x');
+      expect(again.writeTypeTag, 'x');
+    });
+
+    test(
+        'Given a sub-collection open with x, when it is reopened with a blank '
+        'writeTypeTag, then ArgumentError is thrown, not a mismatch', () {
+      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
+      expect(() => subOn<String>(c, post, 'comments', writeTypeTag: ' '),
+          throwsArgumentError);
+    });
+
+    test(
+        'Given a sub-collection open with x, when it is reopened with a '
+        'writeTypeTag that conflicts with typeTag, then ArgumentError is '
+        'thrown, not a mismatch', () {
+      subOn<String>(c, post, 'comments', writeTypeTag: 'x');
+      expect(
+          () => subOn<Map<String, dynamic>>(c, post, 'comments',
+              fromJson: (m) => m, typeTag: 'y', writeTypeTag: 'z'),
+          throwsArgumentError);
+    });
+
+    test(
+        'Given the tag cap is 2 and three sub-collections are opened, when '
+        'the first is reopened with another tag, then it is not caught and '
+        'the newest still is', () {
+      setSubCollectionTagCapForTest(2);
+      final posts = [
+        for (final id in ['p1', 'p2', 'p3'])
+          c.parent.draft(obj: 'hello', id: id) as CItem<String>
+      ];
+      for (final p in posts) {
+        subOn<String>(c, p, 'comments', writeTypeTag: 'x');
+      }
+      expect(() => subOn<String>(c, posts[0], 'comments', writeTypeTag: 'y'),
+          returnsNormally);
+      expect(() => subOn<String>(c, posts[2], 'comments', writeTypeTag: 'y'),
+          throwsA(isA<CollectionTypeTagMismatchException>()));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   group('CSubItem events via handleNotification', () {
     // Helper builds notifications with the `<to>:<bareKey>@<from>`
     // envelope shape that AtServer actually emits — production

@@ -190,3 +190,10 @@ CmpPredicate cmpPredicateForTest(
   Object? value,
 ) =>
     CmpPredicate._(field, op, value);
+
+/// Sets how many sub-collection namespaces each [AtClient] remembers the tag
+/// of, for clients that open their first sub-collection afterwards; null
+/// restores the default.
+@visibleForTesting
+void setSubCollectionTagCapForTest(int? cap) =>
+    _subTagCap = cap ?? _defaultSubTagCap;
