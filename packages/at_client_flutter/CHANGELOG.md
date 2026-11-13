@@ -7,6 +7,10 @@
 - fix: a keychain entry that is not valid JSON is reported as
   `AtKeysFormatException`, as a keyfile is: its `reason` and `position`, and
   none of the entry's text.
+- fix: `KeychainStorage.removeAtsignFromKeychain` throws when the keychain
+  cannot be read or written, or its entry is not valid JSON, instead of
+  returning as if the atSign were removed; `appendAtKeysToKeychain` throws in
+  the same cases instead of starting a new entry holding only the added keys.
 - chore: requires at_client 4.1.0.
 
 ## 2.0.0

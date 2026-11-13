@@ -79,6 +79,9 @@ void main() {
   /// A keychain atKeys entry cut short partway through a private key.
   late String entry;
 
+  /// The keychain stores written to or deleted, by name.
+  final changed = <String>[];
+
   setUpAll(() {
     // NOTE: before anything logs; a logger binds the handler on first use.
     AtSignLogger.defaultLoggingHandler = logs;
@@ -88,14 +91,16 @@ void main() {
   setUp(() {
     KeychainStorage.isWindows = false;
     logs.records.clear();
+    changed.clear();
     keyMaterial = base64Url.encode(
       List.generate(33, (_) => random.nextInt(256)),
     );
     entry = '{"keys":[{"aesPkamPrivateKey":"$keyMaterial';
   });
 
-  /// A keychain whose store [holding] serves [entry], and whose every other
-  /// store is empty.
+  /// A keychain whose store [holding] serves [entry], whose every other store
+  /// is empty, and which records each store written to or deleted in
+  /// [changed].
   KeychainStorage keychainWith({required String holding}) {
     final biometricStorage = _MockBiometricStorage();
     when(
@@ -104,10 +109,35 @@ void main() {
       final file = _MockBiometricStorageFile();
       final name = invocation.positionalArguments.first as String;
       when(file.read).thenAnswer((_) async => name == holding ? entry : null);
-      when(() => file.write(any())).thenAnswer((_) async {});
+      when(() => file.write(any())).thenAnswer((_) async => changed.add(name));
+      when(file.delete).thenAnswer((_) async => changed.add(name));
       return file;
     });
     return KeychainStorage(biometricStorage: biometricStorage);
+  }
+
+  /// Expects [error] to be an [AtKeysFormatException] holding none of the
+  /// entry's text, and [store] to be unchanged.
+  void expectRefusedLeaving(String store, Object? error) {
+    expect(
+      '$error',
+      _holdsNoneOf(entry),
+      reason: 'the error with $store holding the entry holds none of its text',
+    );
+    expect(error, isA<AtKeysFormatException>(), reason: 'with $store');
+    final format = error as AtKeysFormatException;
+    for (final held in [format.message, format.reason]) {
+      expect(
+        held,
+        _holdsNoneOf(entry),
+        reason: 'no field of the error with $store holds the entry',
+      );
+    }
+    expect(
+      changed,
+      isEmpty,
+      reason: 'nothing is written or deleted with $store holding the entry',
+    );
   }
 
   FormatException parserErrorOf(String text) {
@@ -233,4 +263,44 @@ void main() {
       reason: 'the connection attempt failed on reading the keychain',
     );
   });
+
+  test(
+    'Adding keys to a keychain whose entry does not parse says why, and none of its text',
+    () async {
+      final bobKeys = AtKeys.legacy(
+        apkamPublicKey: base64Encode(utf8.encode('apkam')),
+        selfEncryptionKey: base64Encode(utf8.encode('self')),
+      )..atsign = '@bob'.toAtsign();
+      for (final store in ['@atsigns:test', '@atsigns_test']) {
+        changed.clear();
+        Object? error;
+        try {
+          await keychainWith(
+            holding: store,
+          ).appendAtKeysToKeychain(keys: bobKeys);
+        } catch (e) {
+          error = e;
+        }
+
+        expectRefusedLeaving(store, error);
+      }
+    },
+  );
+
+  test(
+    'Removing an atSign from a keychain whose entry does not parse says why, and none of its text',
+    () async {
+      for (final store in ['@atsigns:test', '@atsigns_test']) {
+        changed.clear();
+        Object? error;
+        try {
+          await keychainWith(holding: store).removeAtsignFromKeychain('@alice');
+        } catch (e) {
+          error = e;
+        }
+
+        expectRefusedLeaving(store, error);
+      }
+    },
+  );
 }
