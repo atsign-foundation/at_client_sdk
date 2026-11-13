@@ -9,13 +9,10 @@ environment:
 
 dependencies:
   at_auth: ^4.0.0
-  at_chops: ^3.8.0
   at_client: ^4.0.0
   at_commons: ^5.23.0
   at_lookup: ^4.0.0
   at_utils: ^4.0.0
-  cryptography: ^2.7.0
-  web: ^1.1.0
 
 dev_dependencies:
   args: ^2.6.0

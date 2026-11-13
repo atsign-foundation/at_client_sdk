@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Builds the dev harness into build/: at_client.js (dart2js) and
-# at_client.wasm + at_client.mjs (dart2wasm), plus every page in web/.
+# Builds the browser entry into build/: at_client.js (dart2js) and
+# at_client.wasm + at_client.mjs (dart2wasm).
 # Class names stay unminified so rejected Errors name their Dart type.
 # A dart2wasm failure warns and exits 0 unless WASM_REQUIRED=1.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 out=build
-entry=web/at_client_js.dart
+entry=web/at_client_wasm_entry.dart
 mkdir -p "$out"
 
 dart compile js -O2 --no-minify "$entry" -o "$out/at_client.js"
-cp web/*.html "$out/"
 
 if ! dart compile wasm -O2 --no-minify "$entry" -o "$out/at_client.wasm"; then
   if [[ "${WASM_REQUIRED:-0}" == 1 ]]; then
