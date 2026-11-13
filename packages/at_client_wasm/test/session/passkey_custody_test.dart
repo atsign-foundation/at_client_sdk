@@ -27,6 +27,7 @@ void main() {
       credentials: withHints ?? hints,
       enrollmentIds: withHints ?? hints,
       persistence: persistence,
+      retryDelay: Duration.zero,
       setupLock: setupLock);
 
   Future<RecordKeys> keysOf(int credential) async {
@@ -98,6 +99,211 @@ void main() {
       await custody().enroll(atSign: _atSign, otp: _otp, existingPasskey: true);
       expect(authenticator.gets, 1);
       expect(authenticator.prfByCredential, hasLength(1));
+    });
+  });
+
+  group('onboard retention', () {
+    Future<OnboardingIncompleteException> failure() async {
+      try {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+      } on OnboardingIncompleteException catch (e) {
+        return e;
+      }
+      fail('onboard completed');
+    }
+
+    test('a document put that fails once is retried on the same session',
+        () async {
+      server.documentPutFailures = 1;
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      final keys = await keysOf(0);
+      expect(server.log, [
+        'put-document:eid1',
+        'put-document:eid1',
+        'put-pointer:${keys.lookupHex}'
+      ]);
+      expect(server.documentReads, greaterThanOrEqualTo(1));
+      expect(gateway.lastSession!.closed, isFalse);
+    });
+
+    test('a document that does not read back never gets a pointer', () async {
+      server.dropDocumentWrites = true;
+      await failure();
+      expect(server.pointers, isEmpty);
+    });
+
+    test('a document put failing past the bound throws a resumable handle',
+        () async {
+      server.documentPutFailures = 99;
+      final incomplete = await failure();
+      expect(server.log, everyElement('put-document:eid1'));
+      expect(server.log, hasLength(3));
+      expect(gateway.lastSession!.closed, isFalse);
+      expect(incomplete.toString(), isNot(contains('enc-private')));
+      expect(hints.ids, isEmpty);
+    });
+
+    test('a failed pointer put throws a resumable handle with the session open',
+        () async {
+      server.pointerPutFailures = 1;
+      await failure();
+      expect(gateway.lastSession!.closed, isFalse);
+      expect(server.pointers, isEmpty);
+    });
+
+    test('a failed remember throws a resumable handle', () async {
+      hints.failWrites = true;
+      await failure();
+      expect(gateway.lastSession!.closed, isFalse);
+    });
+
+    test('resume writes document, pointer and remembers like a clean onboard',
+        () async {
+      server.documentPutFailures = 99;
+      final incomplete = await failure();
+      server.documentPutFailures = 0;
+      final resumed = await incomplete.pending.resume();
+
+      final clean = await (() async {
+        final other = FakeServer();
+        return PasskeyCustody(
+                kek: PasskeyKek(FakeAuthenticator()),
+                pointerReader: other,
+                gateway: FakeGateway(other),
+                credentials: FakeHints(),
+                enrollmentIds: FakeHints(),
+                setupLock: FakeSetupLock())
+            .onboard(atSign: _atSign, cram: 'cram');
+      })();
+      expect(resumed.atKeys, clean.atKeys);
+      expect(resumed.enrollmentId, clean.enrollmentId);
+      expect(resumed.lookupHex, clean.lookupHex);
+      expect(server.pointers, contains(resumed.lookupHex));
+      expect(hints.ids[_atSign], 'eid1');
+      expect(gateway.lastSession!.closed, isFalse);
+    });
+
+    test('abandon closes the session the handle owns', () async {
+      server.documentPutFailures = 99;
+      final incomplete = await failure();
+      await incomplete.pending.abandon();
+      expect(gateway.lastSession!.closed, isTrue);
+    });
+
+    test('a PKAM failure after activation resumes on a new session', () async {
+      gateway.activatePkamFails = true;
+      final incomplete = await failure();
+      expect(incomplete.toString(), isNot(contains('enc-private')));
+      final resumed = await incomplete.pending.resume();
+      expect(resumed.atKeys['aesEncryptPrivateKey'], 'enc-private');
+      expect(server.pointers, contains(resumed.lookupHex));
+      expect(server.documents, contains('eid1'));
+    });
+  });
+
+  group('resume', () {
+    Future<PendingOnboarding> pending() async {
+      server.documentPutFailures = 99;
+      try {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+      } on OnboardingIncompleteException catch (e) {
+        server.documentPutFailures = 0;
+        return e.pending;
+      }
+      fail('onboard completed');
+    }
+
+    test('runs under the per-atSign setup lock', () async {
+      final handle = await pending();
+      setupLock.names.clear();
+      await handle.resume();
+      expect(setupLock.names, ['at_client_wasm:setup:@alice']);
+    });
+
+    test('waits for another holder of the setup lock', () async {
+      final handle = await pending();
+      final release = Completer<void>();
+      final holder =
+          setupLock.run('at_client_wasm:setup:@alice', () => release.future);
+      var done = false;
+      final resumed = handle.resume().then((s) {
+        done = true;
+        return s;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(done, isFalse);
+      release.complete();
+      await holder;
+      await resumed;
+      expect(done, isTrue);
+    });
+
+    test('onboard takes the lock once, resume inside it does not re-enter',
+        () async {
+      setupLock.names.clear();
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(setupLock.names, hasLength(1));
+    });
+
+    test('a successful resume leaves abandon without a session to close',
+        () async {
+      final handle = await pending();
+      final resumed = await handle.resume();
+      await handle.abandon();
+      expect(gateway.lastSession!.closed, isFalse);
+      expect(resumed.session, same(gateway.lastSession));
+    });
+
+    test('a successful resume on a new session leaves it open after abandon',
+        () async {
+      gateway.activatePkamFails = true;
+      PendingOnboarding handle;
+      try {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+        fail('onboard completed');
+      } on OnboardingIncompleteException catch (e) {
+        handle = e.pending;
+      }
+      await handle.resume();
+      await handle.abandon();
+      expect(gateway.lastSession!.closed, isFalse);
+    });
+
+    test('releaseWith runs after a successful resume', () async {
+      final handle = await pending();
+      var released = 0;
+      handle.releaseWith(() => released++);
+      expect(released, 0);
+      await handle.resume();
+      expect(released, 1);
+    });
+
+    test('releaseWith does not run after a failed resume', () async {
+      final handle = await pending();
+      server.documentPutFailures = 99;
+      var released = 0;
+      handle.releaseWith(() => released++);
+      await expectLater(handle.resume(), throwsA(anything));
+      expect(released, 0);
+    });
+
+    test('releaseWith runs once after abandon', () async {
+      final handle = await pending();
+      var released = 0;
+      handle.releaseWith(() => released++);
+      await handle.abandon();
+      await handle.abandon();
+      expect(released, 1);
+    });
+  });
+
+  group('open', () {
+    test('closes the session when remembering the device fails', () async {
+      await custody().enroll(atSign: _atSign, otp: _otp);
+      final fresh = FakeHints()..failWrites = true;
+      await expectLater(
+          custody(withHints: fresh).open(atSign: _atSign), throwsStateError);
+      expect(gateway.lastSession!.closed, isTrue);
     });
   });
 
@@ -224,6 +430,7 @@ void main() {
       final keys = await keysOf(0);
       server.pointers[keys.lookupHex] = await PasskeyRecordCodec.seal(
           keys.kek, PasskeyRecordType.eid, {'enrollmentId': 'eid9'});
+      server.documentReads = 0;
       await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
           throwsA(isA<PasskeyLostException>()));
       expect(server.documentReads, 0);

@@ -20,6 +20,15 @@ class FakeServer implements EnrollmentPointerReader {
   var documentReads = 0;
   var publishedTag = 'v1';
   var dropPointerWrites = false;
+
+  /// Document puts that throw before one is accepted.
+  var documentPutFailures = 0;
+
+  /// Pointer puts that throw before one is accepted.
+  var pointerPutFailures = 0;
+
+  /// Accepts document puts without storing them.
+  var dropDocumentWrites = false;
   var enrollments = 0;
 
   /// The @keys a session of this server reports.
@@ -97,7 +106,13 @@ class _Documents implements EnrollmentDocumentStore {
   Future<void> put(String atSign, String eid, String document) async {
     _own(eid);
     session.server.log.add('put-document:$eid');
-    session.server.documents[eid] = document;
+    if (session.server.documentPutFailures > 0) {
+      session.server.documentPutFailures--;
+      throw StateError('document put failed');
+    }
+    if (!session.server.dropDocumentWrites) {
+      session.server.documents[eid] = document;
+    }
   }
 
   @override
@@ -119,6 +134,10 @@ class _Pointers implements EnrollmentPointerStore {
   @override
   Future<void> put(String atSign, String lookupHex, String record) async {
     session.server.log.add('put-pointer:$lookupHex');
+    if (session.server.pointerPutFailures > 0) {
+      session.server.pointerPutFailures--;
+      throw StateError('pointer put failed');
+    }
     if (!session.server.dropPointerWrites) {
       session.server.pointers[lookupHex] = record;
     }
@@ -172,6 +191,9 @@ class FakeGateway implements EnrollmentGateway {
     return lastSession = FakeSession(server, enrollmentId);
   }
 
+  /// Makes [activate] spend the CRAM, then fail its PKAM.
+  var activatePkamFails = false;
+
   /// Runs inside [activate], once the CRAM is spent.
   FutureOr<void> Function()? onActivate;
 
@@ -184,6 +206,11 @@ class FakeGateway implements EnrollmentGateway {
     await onActivate?.call();
     final eid = 'eid${++server.enrollments}';
     server.seedByEnrollment[eid] = authSeed.join(',');
+    if (activatePkamFails) {
+      throw ActivationPkamFailedException(eid,
+          atKeys: {...server.keys}..remove('aesPkamPrivateKey'),
+          cause: StateError('pkam failed'));
+    }
     return lastSession = FakeSession(server, eid);
   }
 }
@@ -247,6 +274,9 @@ class FakeSetupLock implements SetupLock {
 }
 
 class FakeHints implements CredentialHintStore, EnrollmentIdStore {
+  /// Makes every write fail.
+  var failWrites = false;
+
   final credentials = <String, Uint8List>{};
   final ids = <String, String>{};
 
@@ -254,8 +284,10 @@ class FakeHints implements CredentialHintStore, EnrollmentIdStore {
   Future<Uint8List?> credentialId(String atSign) async => credentials[atSign];
 
   @override
-  Future<void> putCredentialId(String atSign, Uint8List id) async =>
-      credentials[atSign] = id;
+  Future<void> putCredentialId(String atSign, Uint8List id) async {
+    if (failWrites) throw StateError('hint write failed');
+    credentials[atSign] = id;
+  }
 
   @override
   Future<String?> enrollmentId(String atSign) async => ids[atSign];

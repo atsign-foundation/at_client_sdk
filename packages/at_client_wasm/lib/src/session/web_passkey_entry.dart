@@ -96,7 +96,9 @@ Future<AtClient> passkeyLogin(
 const _defaultDevice = 'browser';
 
 /// Runs [run] on a [PasskeyCustody] over this browser's passkeys, IndexedDB,
-/// locks and atServer transport, and closes the IndexedDB store after.
+/// locks and atServer transport, and closes the IndexedDB store after. An
+/// [OnboardingIncompleteException] keeps the store open for its pending
+/// onboarding, which closes it once resumed or abandoned.
 Future<AtClient> _withCustody(
     {required String atSign,
     required String app,
@@ -112,6 +114,7 @@ Future<AtClient> _withCustody(
       atSign: atSign, app: app, proxyHost: proxyHost, proxyPort: proxyPort);
   final transport = sessionTransport(options);
   final store = await IndexedDbKeyBytesStore.open();
+  var handedOff = false;
   try {
     final custody = PasskeyCustody(
         kek: PasskeyKek(WebPasskeyPort(rpId: rpId, rpName: rpName),
@@ -131,7 +134,11 @@ Future<AtClient> _withCustody(
         setupLock: WebSetupLock(),
         persistence: WebStoragePersistence());
     return await run(custody, options, transport);
+  } on OnboardingIncompleteException catch (e) {
+    e.pending.releaseWith(store.close);
+    handedOff = true;
+    rethrow;
   } finally {
-    store.close();
+    if (!handedOff) store.close();
   }
 }

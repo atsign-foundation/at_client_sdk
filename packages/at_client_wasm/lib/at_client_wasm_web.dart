@@ -5,6 +5,8 @@ export 'src/keys/prf_support.dart' show PrfUnavailableException;
 export 'src/session/passkey_custody.dart'
     show
         MissingAtKeysDocumentException,
+        OnboardingIncompleteException,
+        PendingOnboarding,
         PasskeyLostException,
         PkamRefusedException,
         PublicKeyMismatchException;

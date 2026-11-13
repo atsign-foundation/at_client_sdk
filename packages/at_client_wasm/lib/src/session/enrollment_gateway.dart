@@ -131,8 +131,13 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
     final pair = await apkamKeyPairFromSeed(authSeed);
     final keys =
         await _activator(atSign: atSign, cram: cram, apkamKeyPair: pair);
-    return _authenticated(atSign, keys.enrollmentToAuthenticateAs(), pair,
-        keys: keys);
+    final enrollmentId = keys.enrollmentToAuthenticateAs();
+    try {
+      return await _authenticated(atSign, enrollmentId, pair, keys: keys);
+    } on Object catch (e) {
+      throw ActivationPkamFailedException(enrollmentId,
+          atKeys: _atKeysDocument(keys, atSign), cause: e);
+    }
   }
 
   AtLookupMuxable _lookUp(String atSign) => transport.lookUps(
@@ -190,16 +195,58 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
         apkamKeyPair: apkamKeyPair,
         lookUps: transport.lookUps,
         secondaryAddressFinder: transport.finder);
-    await client.stop();
-    return keysIo.read(atSign);
+    return readKeysThenStop(keysIo, atSign, client.stop);
   }
+}
+
+/// Reads [atSign]'s activated keys from [keysIo], then calls [stop]; a
+/// failing [stop] does not lose the keys.
+Future<AtKeys> readKeysThenStop(
+    AtKeysIo keysIo, String atSign, Future<void> Function() stop) async {
+  final keys = await keysIo.read(atSign);
+  try {
+    await stop();
+  } on Object catch (e, st) {
+    // The keys are the only copy; a client that fails to stop is not an error.
+    AtSignLogger('enrollmentGateway')
+        .warning('stopping the activation client of $atSign failed', e, st);
+  }
+  return keys;
+}
+
+/// [keys] as a document, without any APKAM private key: the flat field and
+/// every typed `privateAuthentication` material.
+Map<String, dynamic> _atKeysDocument(AtKeys keys, String atSign) {
+  keys.atsign ??= Atsign(atSign);
+  final json = Map<String, dynamic>.of(keys.toJson())..remove(apkamPrivateKey);
+  final enrollments = json['enrollments'];
+  if (enrollments is List) {
+    json['enrollments'] = [
+      for (final e in enrollments)
+        {
+          ...(e as Map<String, dynamic>),
+          'keys': [
+            for (final key in e['keys'] as List)
+              {
+                ...(key as Map<String, dynamic>),
+                'material': [
+                  for (final m in key['material'] as List)
+                    if ((m as Map)['role'] != _privateAuthenticationRole) m
+                ]
+              }
+          ]
+        }
+    ];
+  }
+  return json;
 }
 
 Future<void> _closeQuietly(AtLookupMuxable lookUp) async {
   try {
     await lookUp.close();
-  } catch (_) {
+  } catch (e, st) {
     // The refusal being reported is the error that matters.
+    AtSignLogger('enrollmentGateway').warning('closing a lookUp failed', e, st);
   }
 }
 
@@ -241,29 +288,7 @@ class _PkamSession implements EnrollmentSession {
       throw StateError('this session was authenticated, not enrolled: it '
           'holds no @keys');
     }
-    keys.atsign ??= Atsign(_atSign);
-    final json = Map<String, dynamic>.of(keys.toJson())
-      ..remove(apkamPrivateKey);
-    final enrollments = json['enrollments'];
-    if (enrollments is List) {
-      json['enrollments'] = [
-        for (final e in enrollments)
-          {
-            ...(e as Map<String, dynamic>),
-            'keys': [
-              for (final key in e['keys'] as List)
-                {
-                  ...(key as Map<String, dynamic>),
-                  'material': [
-                    for (final m in key['material'] as List)
-                      if ((m as Map)['role'] != _privateAuthenticationRole) m
-                  ]
-                }
-            ]
-          }
-      ];
-    }
-    return json;
+    return _atKeysDocument(keys, _atSign);
   }
 
   /// Whether the encryption public key in [atKeys] is the one published at

@@ -74,6 +74,107 @@ class RotationAbortedException implements Exception {
       'did not read back';
 }
 
+/// Thrown by [EnrollmentGateway.activate] when PKAM fails after the CRAM was
+/// spent: the activation enrollment exists and [atKeys] is the only copy of
+/// the minted @keys (without the APKAM private key, which the passkey
+/// re-derives).
+class ActivationPkamFailedException implements Exception {
+  ActivationPkamFailedException(this.enrollmentId,
+      {required this.atKeys, required this.cause});
+
+  final String enrollmentId;
+
+  /// The activated @keys as a document.
+  final Map<String, dynamic> atKeys;
+
+  /// The failure of the PKAM attempt.
+  final Object cause;
+
+  @override
+  String toString() => 'ActivationPkamFailedException: PKAM failed for '
+      'enrollment $enrollmentId after activation';
+}
+
+/// Thrown by [PasskeyCustody.onboard] when the atSign is activated but its
+/// sealed document, pointer or device hints were not all written.
+///
+/// [pending] holds the activated @keys and, when there is one, the open
+/// session; the caller either resumes it or abandons it.
+class OnboardingIncompleteException implements Exception {
+  OnboardingIncompleteException(this.pending, this.cause);
+
+  final PendingOnboarding pending;
+
+  /// The failure that interrupted onboarding.
+  final Object cause;
+
+  @override
+  String toString() => 'OnboardingIncompleteException: onboarding of '
+      '${pending.atSign} was interrupted after activation';
+}
+
+/// An activated atSign whose custody records are not yet written.
+///
+/// Owns the enrollment session, if it has one; only [resume] and [abandon]
+/// close it. Holds the @keys in memory and never prints them.
+class PendingOnboarding {
+  PendingOnboarding._(this._custody, this.atSign, this._credentialId,
+      this._keys, this._session, this._atKeys, this._enrollmentId);
+
+  final PasskeyCustody _custody;
+  final String atSign;
+  final Uint8List _credentialId;
+  final RecordKeys _keys;
+  final String _enrollmentId;
+  EnrollmentSession? _session;
+  Map<String, dynamic>? _atKeys;
+  void Function()? _release;
+
+  /// Runs [release] once, after [resume] succeeds or [abandon] completes: the
+  /// point at which nothing else will use what this handle's custody holds.
+  void releaseWith(void Function() release) => _release = release;
+
+  /// Writes the document, reads it back, writes the pointer and remembers the
+  /// passkey, under [atSign]'s setup lock. A failure leaves this handle
+  /// usable; success hands the session to the returned [CustodySession].
+  Future<CustodySession> resume() =>
+      _custody.setupLock.run(setupLockName(atSign), _resumeHoldingLock);
+
+  /// [resume] for a caller that already holds [atSign]'s setup lock.
+  Future<CustodySession> _resumeHoldingLock() async {
+    final session = _session ??= await _custody.gateway.authenticate(
+        atSign: atSign, enrollmentId: _enrollmentId, authSeed: _keys.authSeed);
+    final published = await _custody._publish(atSign, _credentialId, _keys,
+        session, _atKeys ?? await session.atKeys());
+    await _custody._remember(atSign, _credentialId, published.enrollmentId);
+    _session = null;
+    _atKeys = null;
+    _runRelease();
+    return published;
+  }
+
+  /// Closes the session and gives up the @keys.
+  Future<void> abandon() async {
+    final session = _session;
+    _session = null;
+    _atKeys = null;
+    try {
+      await session?.close();
+    } finally {
+      _runRelease();
+    }
+  }
+
+  void _runRelease() {
+    final release = _release;
+    _release = null;
+    release?.call();
+  }
+
+  @override
+  String toString() => 'PendingOnboarding($atSign)';
+}
+
 /// A PKAM-authenticated enrollment on the atServer.
 abstract interface class EnrollmentSession {
   String get enrollmentId;
@@ -152,6 +253,7 @@ class CustodySession {
 }
 
 const _apkamPrivateKey = 'aesPkamPrivateKey';
+const _documentAttempts = 3;
 
 /// Enrolls, opens and rotates the passkey-held @keys of an atSign.
 ///
@@ -166,7 +268,8 @@ class PasskeyCustody {
       required this.credentials,
       required this.enrollmentIds,
       required this.setupLock,
-      this.persistence});
+      this.persistence,
+      this.retryDelay = const Duration(milliseconds: 250)});
 
   final PasskeyKek kek;
   final EnrollmentPointerReader pointerReader;
@@ -175,6 +278,9 @@ class PasskeyCustody {
   final EnrollmentIdStore enrollmentIds;
   final SetupLock setupLock;
   final StoragePersistence? persistence;
+
+  /// The pause between attempts to write a document.
+  final Duration retryDelay;
 
   /// Enrolls a passkey for [atSign] with an approver-issued [otp], then writes
   /// its document and pointer. [existingPasskey] asserts the device's passkey instead of
@@ -218,10 +324,23 @@ class PasskeyCustody {
     return setupLock.run(setupLockName(canonical), () async {
       final passkey = await kek.register(canonical);
       final keys = await RecordKeys.derive(passkey.secret, canonical);
-      final session = await gateway.activate(
-          atSign: canonical, authSeed: keys.authSeed, cram: cram);
-      return _publishAndRemember(
-          canonical, passkey.credentialId, keys, session);
+      final EnrollmentSession session;
+      try {
+        session = await gateway.activate(
+            atSign: canonical, authSeed: keys.authSeed, cram: cram);
+      } on ActivationPkamFailedException catch (e) {
+        throw OnboardingIncompleteException(
+            PendingOnboarding._(this, canonical, passkey.credentialId, keys,
+                null, e.atKeys, e.enrollmentId),
+            e.cause);
+      }
+      final pending = PendingOnboarding._(this, canonical, passkey.credentialId,
+          keys, session, null, session.enrollmentId);
+      try {
+        return await pending._resumeHoldingLock();
+      } on Object catch (e) {
+        throw OnboardingIncompleteException(pending, e);
+      }
     });
   }
 
@@ -263,7 +382,12 @@ class PasskeyCustody {
       await session.close();
       rethrow;
     }
-    await _remember(canonical, unlocked.credentialId, enrollmentId);
+    try {
+      await _remember(canonical, unlocked.credentialId, enrollmentId);
+    } on Object {
+      await session.close();
+      rethrow;
+    }
     return CustodySession._(
         atSign: canonical,
         enrollmentId: enrollmentId,
@@ -315,7 +439,7 @@ class PasskeyCustody {
     final held = {...atKeys}..remove(_apkamPrivateKey);
     final document =
         await PasskeyRecordCodec.seal(keys.kek, PasskeyRecordType.atkeys, held);
-    await session.documents.put(atSign, session.enrollmentId, document);
+    await _putDocument(atSign, keys, session, document);
     final pointer = await PasskeyRecordCodec.seal(keys.kek,
         PasskeyRecordType.eid, {'enrollmentId': session.enrollmentId});
     await session.pointers.put(atSign, keys.lookupHex, pointer);
@@ -327,6 +451,26 @@ class PasskeyCustody {
         lookupHex: keys.lookupHex,
         credentialId: credentialId,
         authSeed: keys.authSeed);
+  }
+
+  /// Puts [document] and reads it back with [keys]; a failure of either is
+  /// retried on the same session, up to [_documentAttempts] times.
+  Future<void> _putDocument(String atSign, RecordKeys keys,
+      EnrollmentSession session, String document) async {
+    for (var attempt = 1;; attempt++) {
+      try {
+        await session.documents.put(atSign, session.enrollmentId, document);
+        final stored =
+            await session.documents.get(atSign, session.enrollmentId) ??
+                (throw MissingAtKeysDocumentException(session.enrollmentId));
+        await PasskeyRecordCodec.open(
+            keys.kek, PasskeyRecordType.atkeys, stored);
+        return;
+      } on Object {
+        if (attempt == _documentAttempts) rethrow;
+        await Future<void>.delayed(retryDelay);
+      }
+    }
   }
 
   /// Publishes [session]'s @keys, remembers the passkey and returns the open

@@ -9,6 +9,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/src/session/enrollment_gateway.dart';
 import 'package:at_client_wasm/src/session/passkey_custody.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 
 import 'wire_fakes.dart';
@@ -80,6 +81,29 @@ class FakeEnrollment implements AtEnrollment {
 
   @override
   dynamic noSuchMethod(Invocation invocation) {}
+}
+
+/// Logs of the given logger-level handler while [body] runs.
+Future<List<String>> _warnings(Future<void> Function() body) async {
+  final messages = <String>[];
+  final previous = AtSignLogger.defaultLoggingHandler;
+  AtSignLogger.defaultLoggingHandler = _Capture(messages);
+  try {
+    await body();
+  } finally {
+    AtSignLogger.defaultLoggingHandler = previous;
+  }
+  return messages;
+}
+
+class _Capture implements LoggingHandler {
+  _Capture(this.messages);
+
+  final List<String> messages;
+
+  @override
+  void call(dynamic record) =>
+      messages.add('${record.message} ${record.error}');
 }
 
 void main() {
@@ -168,10 +192,10 @@ void main() {
     });
   });
 
-  group('activate', () {
-    Future<EnrollmentSession> activate() => gateway()
-        .activate(atSign: _atSign, authSeed: _seed, cram: 'cram-secret');
+  Future<EnrollmentSession> activate() =>
+      gateway().activate(atSign: _atSign, authSeed: _seed, cram: 'cram-secret');
 
+  group('activate', () {
     test('activates with the derived key and the CRAM secret, minting none',
         () async {
       await activate();
@@ -197,6 +221,74 @@ void main() {
       final keys = jsonEncode(await session.atKeys());
       expect(keys, isNot(contains(derived.privateKey)));
       expect(keys, contains(_encPrivate));
+    });
+  });
+
+  group('activation key retention', () {
+    test('a PKAM refusal after activation carries the activated keys',
+        () async {
+      wire.pkamAccepted = false;
+
+      await expectLater(
+          activate(),
+          throwsA(isA<ActivationPkamFailedException>()
+              .having((e) => e.enrollmentId, 'enrollmentId', _eid)
+              .having(
+                  (e) => jsonEncode(e.atKeys),
+                  'atKeys',
+                  allOf(contains(_encPrivate),
+                      isNot(contains(derived.privateKey))))
+              .having((e) => e.toString(), 'toString',
+                  isNot(contains(_encPrivate)))));
+    });
+
+    test('a stop that throws still returns the keys read before it', () async {
+      final held = AtKeys(atsign: Atsign(_atSign))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
+      var stopped = false;
+      // ignore: invalid_use_of_visible_for_testing_member
+      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
+
+      final keys = await readKeysThenStop(keysIo, _atSign, () async {
+        stopped = true;
+        throw StateError('stop failed');
+      });
+
+      expect(stopped, isTrue);
+      expect(keys.defaultEncryptionPrivateKey, AtBytes.fromString(_encPrivate));
+    });
+
+    test('a stop that throws is logged with its error and no key material',
+        () async {
+      final held = AtKeys(atsign: Atsign(_atSign))
+        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
+      // ignore: invalid_use_of_visible_for_testing_member
+      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
+
+      final logs = await _warnings(() async {
+        await readKeysThenStop(
+            keysIo, _atSign, () async => throw StateError('stop failed'));
+      });
+
+      expect(logs, hasLength(1));
+      expect(logs.single, contains('stop failed'));
+      expect(logs.single, isNot(contains(_encPrivate)));
+    });
+
+    test('a lookUp that fails to close after a refusal is logged', () async {
+      wire
+        ..pkamAccepted = false
+        ..stopThrows = true;
+
+      final logs = await _warnings(() async {
+        await expectLater(
+            gateway().authenticate(
+                atSign: _atSign, enrollmentId: _eid, authSeed: _seed),
+            throwsA(isA<PkamRefusedException>()));
+      });
+
+      expect(logs, hasLength(1));
+      expect(logs.single, contains('close failed'));
     });
   });
 
