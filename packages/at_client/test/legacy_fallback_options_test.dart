@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show useRemoteAtServerIfSet;
 import 'package:test/test.dart';
 
 import 'test_utils/declared_fields.dart';
@@ -15,7 +17,7 @@ import 'test_utils/declared_fields.dart';
 /// or another.
 void main() {
   const carried = {
-    'useRemoteAtServer',
+    '_useRemoteAtServer',
     'shouldEncrypt',
     'alreadyEncrypted',
     'noCommit',
@@ -24,7 +26,7 @@ void main() {
   const ignored = <String>{};
 
   final fields = <String, Object? Function(PutRequestOptions)>{
-    'useRemoteAtServer': (o) => o.useRemoteAtServer,
+    '_useRemoteAtServer': useRemoteAtServerIfSet,
     'shouldEncrypt': (o) => o.shouldEncrypt,
     'alreadyEncrypted': (o) => o.alreadyEncrypted,
     'noCommit': (o) => o.noCommit,

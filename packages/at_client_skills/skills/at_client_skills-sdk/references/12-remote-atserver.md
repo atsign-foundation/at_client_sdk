@@ -108,9 +108,9 @@ collection layer. Typical use: a stateless agent instance that pairs
 `remoteOnly` with a no-op sync service
 (see [14-multi-agent.md](14-multi-agent.md)).
 
-One subtlety: passing a request-options object overrides the preference with
-that object's `useRemoteAtServer` value — which defaults to `false`. So on a
-`remoteOnly` client, supply options only when you actually set the flag.
+A request-options object overrides the preference only when it sets
+`useRemoteAtServer`. Left unset, the operation follows `remoteLocalPref`; set
+to `false`, it runs locally even on a `remoteOnly` client.
 
 ---
 

@@ -1579,7 +1579,7 @@ class AtClientImpl implements AtClient {
       ..noCommit = deleteRequestOptions?.noCommit ?? false;
 
     final prefForOp = SecondaryManager.getRemoteLocalPrefForOp(
-      deleteRequestOptions?.useRemoteAtServer,
+      useRemoteAtServerIfSet(deleteRequestOptions),
       preference?.remoteLocalPref,
     );
     _refuseNoCommitWithoutRemote(
@@ -1645,14 +1645,14 @@ class AtClientImpl implements AtClient {
       if (atKey.isLocal) {
         secondary = getLocalSecondary()!;
       } else {
-        if (getRequestOptions?.useRemoteAtServer == true) {
+        if (useRemoteAtServerIfSet(getRequestOptions) == true) {
           secondary = getRemoteSecondary()!;
         } else {
           secondary = SecondaryManager.getSecondary(
             this,
             verbBuilder,
             SecondaryManager.getRemoteLocalPrefForOp(
-              getRequestOptions?.useRemoteAtServer,
+              useRemoteAtServerIfSet(getRequestOptions),
               preference?.remoteLocalPref,
             ),
           );
@@ -1863,8 +1863,9 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
-    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
-        _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
+    final routing =
+        _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions));
+    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false, routing);
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -1910,9 +1911,7 @@ class AtClientImpl implements AtClient {
           sealToNamespace: options.sealToNamespace,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
-          useRemoteAtServer:
-              _routingFor(atKey, putRequestOptions?.useRemoteAtServer) ==
-                  RemoteLocalPref.remoteOnly,
+          useRemoteAtServer: routing == RemoteLocalPref.remoteOnly,
           // Not stamped here: the catch below may re-route this write to
           // legacy, and a key stamped with the provider that then declined
           // would claim a scheme its value was never sealed under.
@@ -1963,8 +1962,7 @@ class AtClientImpl implements AtClient {
       );
     }
 
-    var putResponse = await executeUpdateOrDelete(
-        putBuilder, _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
+    var putResponse = await executeUpdateOrDelete(putBuilder, routing);
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -2011,7 +2009,7 @@ class AtClientImpl implements AtClient {
     var updateMetaResult = await executeUpdateOrDelete(
       builder,
       SecondaryManager.getRemoteLocalPrefForOp(
-        putRequestOptions?.useRemoteAtServer,
+        useRemoteAtServerIfSet(putRequestOptions),
         preference?.remoteLocalPref,
       ),
     );
@@ -2341,13 +2339,16 @@ class AtClientImpl implements AtClient {
   /// fails until a field added to [PutRequestOptions] is placed.
   @visibleForTesting
   static PutRequestOptions copyOptionsForLegacyFallback(
-          PutRequestOptions options) =>
-      PutRequestOptions()
-        ..useRemoteAtServer = options.useRemoteAtServer
-        ..shouldEncrypt = options.shouldEncrypt
-        ..alreadyEncrypted = options.alreadyEncrypted
-        ..noCommit = options.noCommit
-        ..cryptoProviderId = legacyCryptoProviderId;
+      PutRequestOptions options) {
+    final copy = PutRequestOptions()
+      ..shouldEncrypt = options.shouldEncrypt
+      ..alreadyEncrypted = options.alreadyEncrypted
+      ..noCommit = options.noCommit
+      ..cryptoProviderId = legacyCryptoProviderId;
+    final useRemoteAtServer = useRemoteAtServerIfSet(options);
+    if (useRemoteAtServer != null) copy.useRemoteAtServer = useRemoteAtServer;
+    return copy;
+  }
 
   /// Fails fast at construction if the configured default provider id can't be
   /// resolved — neither among `AtClientPreference.crypto.providers` nor the
