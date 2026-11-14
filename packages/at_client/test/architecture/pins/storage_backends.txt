@@ -1,0 +1,7 @@
+# Every class in a package's lib/ that implements AtClientStorage, directly
+# or through another storage class. Rule A7 in docs/architecture/invariants.md.
+# A change to this list needs a code owner's review, in a PR of its own.
+AtClientStorageBase
+HiveAtClientStorage
+InMemoryAtClientStorage
+SqliteAtClientStorage
