@@ -33,10 +33,11 @@
   it cannot read (`AtKeysUnusableException`, naming the store and why) or
   when a `FileAtKeysIo` keyfile cannot be written there
   (`FileSystemException` naming its path).
-- fix: a failed PKAM step during activation no longer puts a stack trace in
-  the exception's message.
-- fix: an atKeys document whose `createdAt` is not a date, or that repeats a
-  `keyId`, is refused with a message naming the field and not its value.
+- fix: a failed PKAM step during activation throws a message that holds no
+  stack trace; the trace is logged at fine.
+- fix: a message about an atKeys document that does not parse, or about keys
+  this build cannot sign with, names the field by its path and holds none of
+  its value.
 
 ## 4.0.0
 

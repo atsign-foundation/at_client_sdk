@@ -7,18 +7,20 @@
 - fix: a keychain entry that is not valid JSON is reported as
   `AtKeysFormatException`, as a keyfile is: its `reason` and `position`, and
   none of the entry's text.
-- fix: `KeychainStorage.removeAtsignFromKeychain` throws when the keychain
-  cannot be read or written, or its entry is not valid JSON, instead of
-  returning as if the atSign were removed; `appendAtKeysToKeychain` throws in
-  the same cases instead of starting a new entry holding only the added keys.
+- fix: `KeychainStorage.removeAtsignFromKeychain` and
+  `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
+  legacy-named store cannot be read or written, or its entry is not a JSON
+  object; `deleteAllAtKeysData` clears a keychain whose entry does not parse.
+- fix: a keychain whose entry does not parse is refused saying every Atsign
+  stored there is affected.
 - chore: requires at_client 4.1.0.
 - feat: `KeychainAtKeysIo.describeSource` returns "this device's keychain".
 - fix: `CramDialog` fails before sending anything when the keychain holds
   keys it cannot read.
 - fix: `PkamDialog`, `CramDialog`, `ApkamActivationDialog` and
   `RegistrarCramDialog` say what failed: a keys problem, an atServer refusal
-  in plain words, a connection to check, or "Something went wrong with
-  <atSign>: <message>", never a stack trace.
+  in plain words, a server that could not be reached, or "Something went
+  wrong with <atSign>: <message>", never a stack trace.
 
 ## 2.0.0
 

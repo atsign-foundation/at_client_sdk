@@ -6,9 +6,9 @@
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
 - fix: at_activate and programs built on `CLIBase` report a keys problem
   once, naming the keyfile and the next step to take.
-- fix: `CLIBase` throws `AtKeysUnusableException` for a missing keyfile
-  instead of `ArgumentError`, and `createAtClient` throws it for keys it
-  cannot use instead of `UnAuthenticatedException`.
+- fix: `CLIBase` throws `AtKeysUnusableException` for a missing keyfile, and
+  `createAtClient` throws it for keys it cannot use; a program catching
+  `ArgumentError` or `UnAuthenticatedException` for those catches it.
 
 ## 1.0.0
 
