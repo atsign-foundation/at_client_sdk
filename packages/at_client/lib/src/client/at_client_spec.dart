@@ -379,7 +379,7 @@ abstract class AtClient {
 
   /// Deletes [key] from local storage, and sync later pushes the removal to
   /// the atServer; [DeleteRequestOptions.useRemoteAtServer] sends it to the
-  /// atServer directly.
+  /// atServer directly, as a `remoteOnly` preference does when it is unset.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.

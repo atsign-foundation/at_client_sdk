@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show useRemoteAtServerIfSet;
 import 'package:test/test.dart';
 
 import 'test_utils/declared_fields.dart';
@@ -15,7 +17,7 @@ import 'test_utils/declared_fields.dart';
 /// or another.
 void main() {
   const carried = {
-    'useRemoteAtServer',
+    '_useRemoteAtServer',
     'shouldEncrypt',
     'alreadyEncrypted',
     'noCommit',
@@ -24,7 +26,7 @@ void main() {
   const ignored = <String>{};
 
   final fields = <String, Object? Function(PutRequestOptions)>{
-    'useRemoteAtServer': (o) => o.useRemoteAtServer,
+    '_useRemoteAtServer': useRemoteAtServerIfSet,
     'shouldEncrypt': (o) => o.shouldEncrypt,
     'alreadyEncrypted': (o) => o.alreadyEncrypted,
     'noCommit': (o) => o.noCommit,
@@ -32,18 +34,21 @@ void main() {
     'sealToNamespace': (o) => o.sealToNamespace,
   };
 
-  /// The instance fields `class PutRequestOptions` declares, read from its
-  /// source.
+  /// The instance fields `class PutRequestOptions` declares or inherits from
+  /// `RequestOptions`, read from their source.
   Set<String> declaredOptionFields() {
     final source =
         File('lib/src/client/request_options.dart').readAsStringSync();
-    final body = RegExp(
-            r'^class PutRequestOptions extends RequestOptions \{\n(.*?)^\}',
-            multiLine: true,
-            dotAll: true)
-        .firstMatch(source)!
-        .group(1)!;
-    return fieldsDeclaredIn(body);
+    String bodyOf(String declaration) =>
+        RegExp('^${RegExp.escape(declaration)} \\{\\n(.*?)^\\}',
+                multiLine: true, dotAll: true)
+            .firstMatch(source)!
+            .group(1)!;
+    return {
+      ...fieldsDeclaredIn(bodyOf('abstract class RequestOptions')),
+      ...fieldsDeclaredIn(
+          bodyOf('class PutRequestOptions extends RequestOptions')),
+    };
   }
 
   test('every PutRequestOptions field is classified exactly once', () {
@@ -91,5 +96,19 @@ void main() {
     expect(given.cryptoProviderId, 'requested-provider',
         reason: 'the caller\'s object may be shared, and one write\'s '
             'fallback must not become every later write\'s default');
+  });
+
+  test(
+      'a legacy fallback of options that leave useRemoteAtServer unset leaves '
+      'it unset, so the copy still follows remoteLocalPref', () {
+    final given = PutRequestOptions();
+    expect(useRemoteAtServerIfSet(given), isNull,
+        reason: 'the control: it was never set');
+
+    final copy = AtClientImpl.copyOptionsForLegacyFallback(given);
+
+    expect(useRemoteAtServerIfSet(copy), isNull,
+        reason: 'copying the getter\'s false would pin the fallback write '
+            'local under remoteOnly');
   });
 }

@@ -1578,10 +1578,8 @@ class AtClientImpl implements AtClient {
       ..atKey = atKey
       ..noCommit = deleteRequestOptions?.noCommit ?? false;
 
-    final prefForOp = SecondaryManager.getRemoteLocalPrefForOp(
-      deleteRequestOptions?.useRemoteAtServer,
-      preference?.remoteLocalPref,
-    );
+    final prefForOp =
+        _routingFor(atKey, useRemoteAtServerIfSet(deleteRequestOptions));
     _refuseNoCommitWithoutRemote(
         deleteRequestOptions?.noCommit ?? false, prefForOp);
 
@@ -1590,8 +1588,8 @@ class AtClientImpl implements AtClient {
     return deleteResult != null;
   }
 
-  /// Where a put goes: a `local:` key never leaves the device, and everything
-  /// else is decided by the caller's preference.
+  /// Where an operation on [atKey] goes: a `local:` key never leaves the
+  /// device, and everything else is decided by the caller's preference.
   RemoteLocalPref _routingFor(
           AtKey atKey, bool? useRemoteAtServer) =>
       atKey.isLocal
@@ -1642,22 +1640,13 @@ class AtClientImpl implements AtClient {
         this,
       ).transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      if (atKey.isLocal) {
-        secondary = getLocalSecondary()!;
-      } else {
-        if (getRequestOptions?.useRemoteAtServer == true) {
-          secondary = getRemoteSecondary()!;
-        } else {
-          secondary = SecondaryManager.getSecondary(
-            this,
-            verbBuilder,
-            SecondaryManager.getRemoteLocalPrefForOp(
-              getRequestOptions?.useRemoteAtServer,
-              preference?.remoteLocalPref,
-            ),
-          );
-        }
-      }
+      final routing =
+          _routingFor(atKey, useRemoteAtServerIfSet(getRequestOptions));
+      // NOTE: getSecondary sends any lookup to the atServer, and a `local:` key
+      // is read from local storage whatever verb it builds.
+      secondary = atKey.isLocal
+          ? getLocalSecondary()!
+          : SecondaryManager.getSecondary(this, verbBuilder, routing);
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
       if (getResponse == null ||
@@ -1863,8 +1852,9 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
-    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
-        _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
+    final routing =
+        _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions));
+    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false, routing);
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -1910,9 +1900,7 @@ class AtClientImpl implements AtClient {
           sealToNamespace: options.sealToNamespace,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
-          useRemoteAtServer:
-              _routingFor(atKey, putRequestOptions?.useRemoteAtServer) ==
-                  RemoteLocalPref.remoteOnly,
+          useRemoteAtServer: routing == RemoteLocalPref.remoteOnly,
           // Not stamped here: the catch below may re-route this write to
           // legacy, and a key stamped with the provider that then declined
           // would claim a scheme its value was never sealed under.
@@ -1963,8 +1951,7 @@ class AtClientImpl implements AtClient {
       );
     }
 
-    var putResponse = await executeUpdateOrDelete(
-        putBuilder, _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
+    var putResponse = await executeUpdateOrDelete(putBuilder, routing);
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -2003,18 +1990,18 @@ class AtClientImpl implements AtClient {
     AtKey atKey, {
     PutRequestOptions? putRequestOptions,
   }) async {
+    final noCommit = putRequestOptions?.noCommit ?? false;
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = atKey
-      ..operation = AtConstants.updateMeta;
+      ..operation = AtConstants.updateMeta
+      ..noCommit = noCommit;
 
-    var updateMetaResult = await executeUpdateOrDelete(
-      builder,
-      SecondaryManager.getRemoteLocalPrefForOp(
-        putRequestOptions?.useRemoteAtServer,
-        preference?.remoteLocalPref,
-      ),
-    );
+    final prefForOp =
+        _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions));
+    _refuseNoCommitWithoutRemote(noCommit, prefForOp);
+
+    var updateMetaResult = await executeUpdateOrDelete(builder, prefForOp);
     return updateMetaResult != null;
   }
 
@@ -2341,13 +2328,16 @@ class AtClientImpl implements AtClient {
   /// fails until a field added to [PutRequestOptions] is placed.
   @visibleForTesting
   static PutRequestOptions copyOptionsForLegacyFallback(
-          PutRequestOptions options) =>
-      PutRequestOptions()
-        ..useRemoteAtServer = options.useRemoteAtServer
-        ..shouldEncrypt = options.shouldEncrypt
-        ..alreadyEncrypted = options.alreadyEncrypted
-        ..noCommit = options.noCommit
-        ..cryptoProviderId = legacyCryptoProviderId;
+      PutRequestOptions options) {
+    final copy = PutRequestOptions()
+      ..shouldEncrypt = options.shouldEncrypt
+      ..alreadyEncrypted = options.alreadyEncrypted
+      ..noCommit = options.noCommit
+      ..cryptoProviderId = legacyCryptoProviderId;
+    final useRemoteAtServer = useRemoteAtServerIfSet(options);
+    if (useRemoteAtServer != null) copy.useRemoteAtServer = useRemoteAtServer;
+    return copy;
+  }
 
   /// Fails fast at construction if the configured default provider id can't be
   /// resolved — neither among `AtClientPreference.crypto.providers` nor the
