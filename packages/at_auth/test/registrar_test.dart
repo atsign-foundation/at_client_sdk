@@ -393,6 +393,14 @@ void main() {
   });
 
   group('RegistrarAdminService.registerAtsign', () {
+    test('RegistrarException is an AtException', () async {
+      final service = _makeAdminService(_mockResponse({'status': 'success'}));
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<AtException>()),
+      );
+    });
+
     test('returns the registered and requested atsign and the cramkey',
         () async {
       final service = _makeAdminService(_mockResponse(
@@ -522,6 +530,30 @@ void main() {
       );
     });
 
+    final cramkeyLeakCases = <String, String>{
+      'no "@" prefix': 'SECRETMARKER:KEY',
+      'no ":" separator': '@SECRETMARKER',
+      'empty key after ":"': '@SECRETMARKER:',
+      'invalid Atsign': '@invalid!SECRETMARKER:KEY',
+    };
+    for (final entry in cramkeyLeakCases.entries) {
+      test('cramkey error for ${entry.key} never echoes the raw cramkey',
+          () async {
+        final service = _makeAdminService(
+            _mockResponse({'status': 'success', 'cramkey': entry.value}));
+        await expectLater(
+          service.registerAtsign(atsign: '@alice'.toAtsign()),
+          throwsA(
+            isA<RegistrarException>()
+                .having((e) => e.reason, 'reason',
+                    RegistrarFailure.malformedResponse)
+                .having((e) => e.toString().contains('SECRETMARKER'),
+                    'leaks the raw cramkey', isFalse),
+          ),
+        );
+      });
+    }
+
     test(
         'throws RegistrarException when the response body is not a JSON object',
         () async {
@@ -562,6 +594,32 @@ void main() {
                 !e.toString().contains('SHOULDNOTLEAK'),
           ),
         ),
+      );
+    });
+
+    test('throws RegistrarException(malformedResponse) when status is missing',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'cramkey': '@alice:KEY',
+      }));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when status is '
+        'unrecognized', () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'weird',
+        'cramkey': '@alice:KEY',
+      }));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
       );
     });
 
@@ -728,14 +786,12 @@ void main() {
     test('cancels the stream once many small chunks cross the response cap',
         () async {
       var cancelled = false;
-      var chunksSent = 0;
       final client = MockClient.streaming((request, bodyStream) async {
         final controller = StreamController<List<int>>(
           onCancel: () => cancelled = true,
         );
         unawaited(() async {
           for (var i = 0; i < 20 && !cancelled; i++) {
-            chunksSent++;
             controller.add(List<int>.filled(4 * 1024, 0));
             await Future<void>.delayed(Duration.zero);
           }
@@ -749,9 +805,19 @@ void main() {
         throwsA(isA<RegistrarException>().having(
             (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
       );
-      expect(chunksSent, lessThan(20),
+      expect(cancelled, isTrue,
           reason: 'the stream must be cancelled once the cap is crossed, '
               'not drained to completion');
+    });
+
+    test('accepts a response body of exactly the 64 KiB cap', () async {
+      final unpadded = jsonEncode({'status': 'success', 'cramkey': '@alice:K'});
+      final body = unpadded.padRight(64 * 1024, ' ');
+      expect(utf8.encode(body).length, equals(64 * 1024));
+      final client = MockClient((_) async => http.Response(body, 200));
+      final result = await _makeAdminService(client)
+          .registerAtsign(atsign: '@alice'.toAtsign());
+      expect(result.cramKey, equals('K'));
     });
 
     test(
@@ -871,6 +937,22 @@ void main() {
       expect(spyChunk.wasRead, isFalse,
           reason: 'a response that arrives after the timeout fired must not '
               'have its body read');
+    });
+
+    test('surfaces an error raised by the body stream after headers arrive',
+        () async {
+      final client = MockClient.streaming((request, bodyStream) async {
+        final controller = StreamController<List<int>>();
+        controller.add(utf8.encode('{"stat'));
+        controller.addError(Exception('stream broke'));
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.network)),
+      );
     });
 
     test('sets followRedirects to false on the request', () async {
@@ -1066,11 +1148,54 @@ void main() {
       );
     });
 
+    test(
+        'throws RegistrarException(malformedResponse) when the response '
+        'body is not valid JSON', () async {
+      final client = MockClient(
+          (_) async => http.Response('<html>502 Bad Gateway</html>', 200));
+      final service = _makeAdminService(client);
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when the response '
+        'body is not a JSON object', () async {
+      final client = MockClient((_) async => http.Response('[1, 2, 3]', 200));
+      final service = _makeAdminService(client);
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
     test('throws RegistrarException(malformedResponse) when data is not a Map',
         () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'success',
         'data': ['not', 'a', 'map'],
+      }));
+      expect(
+        () => service.generateAtSignDeleteToken(['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when skippedatSigns '
+        'is not a List', () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {
+          'token': 'the-token',
+          'atSigns': [],
+          'skippedatSigns': 'not-a-list',
+        },
       }));
       expect(
         () => service.generateAtSignDeleteToken(['@one']),
@@ -1207,8 +1332,14 @@ void main() {
       }));
       expect(
         () => service.deleteAtSigns(token: 'bad-token', atSigns: ['@one']),
-        throwsA(isA<RegistrarException>().having(
-            (e) => e.reason, 'reason', RegistrarFailure.registrarError)),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.registrarError)
+            .having((e) => e.statusCode, 'statusCode', 200)
+            .having(
+                (e) => e.toString().contains(
+                    'One or more Atsigns mentioned are not associated with this account.'),
+                'leaks the server message',
+                isFalse)),
       );
     });
 
@@ -1218,8 +1349,35 @@ void main() {
           _mockResponse({'message': 'Server Error'}, status: 500));
       expect(
         () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>()
+            .having(
+                (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
+            .having((e) => e.statusCode, 'statusCode', 500)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when the response '
+        'body is not valid JSON', () async {
+      final client = MockClient(
+          (_) async => http.Response('<html>502 Bad Gateway</html>', 200));
+      final service = _makeAdminService(client);
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
         throwsA(isA<RegistrarException>().having(
-            (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)),
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+      );
+    });
+
+    test(
+        'throws RegistrarException(malformedResponse) when the response '
+        'body is not a JSON object', () async {
+      final client = MockClient((_) async => http.Response('[1, 2, 3]', 200));
+      final service = _makeAdminService(client);
+      expect(
+        () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
       );
     });
 
