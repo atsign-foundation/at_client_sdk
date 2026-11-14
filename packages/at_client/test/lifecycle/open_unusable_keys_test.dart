@@ -278,7 +278,8 @@ void main() {
     });
 
     test('unsupported algorithm', () async {
-      final privateKey = randomBase64(32);
+      final algorithm =
+          'future-${List.generate(16, (_) => random.nextInt(16).toRadixString(16)).join()}';
       await refusedAfterOnline(
           unreadable: () async {
             File(path).deleteSync();
@@ -292,15 +293,34 @@ void main() {
                     selfEncryptionKey: randomBase64(32))
                   ..fileApkamMaterial(
                       enrollmentId: 'future-algorithm',
-                      algorithm: CryptographicMaterialAlgorithm.of(
-                          'sphincs-plus-256s'),
+                      algorithm: CryptographicMaterialAlgorithm.of(algorithm),
                       publicKey: randomBase64(32),
-                      privateKey: privateKey));
-            return privateKey;
+                      privateKey: randomBase64(32)));
+            return algorithm;
           },
           reader: FileAtKeysIo(filePath: (_) => path),
-          reason: contains(
-              '"sphincs-plus-256s", which this build cannot sign with'),
+          reason: contains('an algorithm this build cannot sign with'),
+          error: isA<AtKeyNotFoundException>());
+    });
+
+    test('no authentication keypair', () async {
+      final privateKey = randomBase64(64);
+      await refusedAfterOnline(
+          unreadable: () async {
+            File(path).deleteSync();
+            await FileAtKeysIo(filePath: (_) => path).write(
+                atSign,
+                AtKeys.legacy(
+                    apkamPrivateKey: privateKey,
+                    encryptionPublicKey: randomBase64(64),
+                    encryptionPrivateKey: randomBase64(64),
+                    selfEncryptionKey: randomBase64(32)));
+            return File(path).readAsStringSync();
+          },
+          reader: FileAtKeysIo(filePath: (_) => path),
+          reason: equals('AtKeys holds no authentication keypair for the '
+              'enrollment it authenticates as, so there is nothing to sign '
+              'with'),
           error: isA<AtKeyNotFoundException>());
     });
 

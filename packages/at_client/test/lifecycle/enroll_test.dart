@@ -1413,6 +1413,8 @@ void main() {
           throwsA(isA<AtEnrollmentPendingException>()
               .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
                   unorderedEquals(['e-one', 'e-two']))
+              .having((e) => e.cause, 'cause',
+                  AtKeysUnusableCause.pendingEnrollment)
               .having((e) => e.message, 'message', namesBothAndAsksForNames)));
     });
 

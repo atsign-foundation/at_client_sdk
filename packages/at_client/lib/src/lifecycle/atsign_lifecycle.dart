@@ -62,7 +62,8 @@ extension AtsignLifecycle on Atsign {
   /// [keys] are read first, and keys that cannot be used throw
   /// [AtKeysUnusableException] before anything is written or any connection
   /// opened, on every device: keys that are absent, that cannot be read, or
-  /// that record another atSign (keys that record none are used as before).
+  /// that record another atSign (keys that record none are used), or that
+  /// hold no keypair the authenticator could sign with.
   /// Keys that hold nothing but an enrollment awaiting approval are refused
   /// with [AtEnrollmentPendingException]: [resumeEnrollment] picks that up.
   /// Keys that hold neither, as a denial, a cancel or an expiry leaves them,
@@ -474,24 +475,22 @@ extension AtsignLifecycle on Atsign {
   /// Throws [AtKeysUnusableException] unless [keys] hold a credential for
   /// this atSign.
   Future<void> _refuseUnusableKeys(AtKeysIo keys) async {
+    final source = keys.describeSource(this);
     final AtKeys stored;
     try {
       stored = await keys.read(this);
     } on AtKeysSourceAbsentException catch (e, stackTrace) {
-      _refuse(
-          AtKeysUnusableException.absent(this,
-              source: keys.describeSource(this), error: e),
+      _refuse(AtKeysUnusableException.absent(this, source: source, error: e),
           stackTrace);
     } catch (e, stackTrace) {
       _refuse(
-          AtKeysUnusableException.unreadable(this,
-              source: keys.describeSource(this), error: e),
+          AtKeysUnusableException.unreadable(this, source: source, error: e),
           stackTrace);
     }
     final recorded = stored.atsign;
     if (recorded != null && recorded.toAtsign() != toAtsign()) {
       throw AtKeysUnusableException.anotherAtsign(this, recorded,
-          source: keys.describeSource(this));
+          source: source);
     }
     if (!stored.holdsAuthenticationMaterial) {
       final pending = stored.pendingEnrollmentIds.toList();
@@ -501,11 +500,16 @@ extension AtsignLifecycle on Atsign {
     try {
       // NOTE: the keypair the authenticator signs with, resolved as it
       // resolves it, so keys it cannot sign with are refused here.
-      stored.authenticationKeyPairFor(stored.enrollmentToAuthenticateAs());
+      final keyPair =
+          stored.authenticationKeyPairFor(stored.enrollmentToAuthenticateAs());
+      if (keyPair == null) {
+        throw AtKeyNotFoundException('AtKeys holds no authentication keypair '
+            'for the enrollment it authenticates as, so there is nothing to '
+            'sign with');
+      }
     } catch (e, stackTrace) {
       _refuse(
-          AtKeysUnusableException.unreadable(this,
-              source: keys.describeSource(this), error: e),
+          AtKeysUnusableException.unreadable(this, source: source, error: e),
           stackTrace);
     }
   }
