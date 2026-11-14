@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/printable_enrollment_id.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -129,8 +130,8 @@ Future<bool> _pkam(
   final keyPair = keys.authenticationKeyPairFor(enrollmentId);
   if (keyPair == null) {
     throw AtKeyNotFoundException('AtKeys holds no authentication keypair for '
-        '${enrollmentId ?? "the primary enrollment"}, so there is '
-        'nothing to sign the PKAM challenge with');
+        '${enrollmentId == null ? 'the primary enrollment' : printableEnrollmentId(enrollmentId)}, '
+        'so there is nothing to sign the PKAM challenge with');
   }
   final signingAlgo = keyPair.algorithm;
   const hashingAlgo = HashingAlgoType.sha256;

@@ -1,5 +1,6 @@
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/src/keys/printable_enrollment_id.dart';
 import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_chops/at_chops.dart' hide AtPublicKey, AtPrivateKey;
 import 'package:at_commons/at_commons.dart';
@@ -843,7 +844,8 @@ class AtKeys {
     if (candidates.length > 1) {
       throw AtKeysEnrollmentException(
           'This keyfile holds active authentication material for '
-          '${candidates.length} enrollments (${candidates.join(', ')}), so '
+          '${candidates.length} enrollments '
+          '(${candidates.map(printableEnrollmentId).join(', ')}), so '
           'which one it authenticates as is not derivable. The caller must '
           'name the enrollment it means.');
     }

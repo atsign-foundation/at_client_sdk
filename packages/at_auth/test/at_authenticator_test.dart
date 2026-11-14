@@ -186,6 +186,36 @@ void main() {
     });
   });
 
+  group(
+      'Given an enrollment id holding a line feed, or longer than 40 '
+      'characters', () {
+    for (final (label, enrollmentId, quoted) in [
+      ('a line feed', 'e-1\nsecond line', 'e-1?second line'),
+      ('over 40 characters', 'e-${'x' * 198}', 'e-${'x' * 38}...'),
+    ]) {
+      test(
+          'when keys holding no keypair for it are asked to sign, then the '
+          'refusal quotes it on one line, cut to 40 characters ($label)',
+          () async {
+        final io = InMemoryAtKeysIo();
+        await io.write(
+            atSign,
+            AtKeys()
+              ..defaultEncryptionPublicKey =
+                  AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!));
+
+        await expectLater(
+            () => authenticatorFor(io, atSign, enrollmentId: enrollmentId)(
+                RecordingExecutor(['data:$challenge', 'data:success'])),
+            throwsA(isA<AtKeyNotFoundException>().having(
+                (e) => e.message,
+                'message',
+                allOf(contains('keypair for $quoted, so'),
+                    isNot(contains('\n'))))));
+      });
+    }
+  });
+
   group('the legacy credential', () {
     // A caller holding nothing but a PKAM private key on a preference - which
     // is what at_lookup's ladder supported, and why deleting the ladder would
