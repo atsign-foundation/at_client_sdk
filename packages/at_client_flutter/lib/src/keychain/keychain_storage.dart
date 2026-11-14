@@ -447,7 +447,11 @@ class KeychainStorage {
       } else {
         // log('READ: _readDataFromStore called', true);
         String? storedData = await store.read();
-        log('  => READ: Fetched $storedData from $keychainStoreName', false);
+        log(
+          '  => READ: Fetched length ${storedData?.length}'
+          ' from $keychainStoreName',
+          false,
+        );
         if (storedData == null || storedData.isEmpty) {
           return null;
         }

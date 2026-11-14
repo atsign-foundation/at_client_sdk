@@ -188,7 +188,10 @@ void main() {
     },
   );
 
-  test('Opening with that entry logs and keeps none of its text', () async {
+  /// Opens `@alice` with a keychain whose current store serves [entry], and
+  /// expects [AtKeysUnusableException], with no log record and no field of the
+  /// exception holding the entry's text.
+  Future<void> expectOpeningLogsAndKeepsNone() async {
     const atSign = '@alice';
     final dir = Directory.systemTemp.createTempSync('keychain_not_json_');
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -271,6 +274,31 @@ void main() {
       isNotEmpty,
       reason: 'the recorder hears the logger open reads the keychain through',
     );
+  }
+
+  test(
+    'Opening with that entry logs and keeps none of its text',
+    expectOpeningLogsAndKeepsNone,
+  );
+
+  group('On Windows', () {
+    test('Opening with that entry logs and keeps none of its text', () async {
+      KeychainStorage.isWindows = true;
+      addTearDown(() => KeychainStorage.isWindows = false);
+
+      await expectOpeningLogsAndKeepsNone();
+
+      expect(
+        logs.records.where(
+          (r) =>
+              r.contains('KeychainStorage') &&
+              r.contains('READ: Fetched') &&
+              r.contains('from @atsigns:test'),
+        ),
+        isNotEmpty,
+        reason: 'the recorder hears the Windows read of the current store',
+      );
+    });
   });
 
   test(
