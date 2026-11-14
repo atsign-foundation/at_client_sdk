@@ -532,17 +532,12 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
     );
   }
   final found = await _publicKeyFrom(al, atSign);
-  await _close(al, atSign);
-  return found;
-}
-
-/// Closes [al], the public key lookup for [atSign], logging a failure.
-Future<void> _close(AtLookUp al, String atSign) async {
   try {
     await al.close();
   } catch (e) {
     logger.finer('closing the public key lookup for $atSign failed: $e');
   }
+  return found;
 }
 
 /// What [al] answers for [atSign]'s public key.
@@ -585,8 +580,7 @@ const Duration _absentKeysHintBudget = Duration(seconds: 5);
 /// The next step for [atSign], whose keys are not on this machine, from
 /// whether the atServer the atDirectory at [rootServer] names for it holds
 /// its public key, looked up as [status] looks it up, within
-/// [_absentKeysHintBudget]. When that runs out, the lookup is closed, none
-/// is opened after it, and both hints are given.
+/// [_absentKeysHintBudget].
 @visibleForTesting
 Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   final AtRootDomain rootDomain;
@@ -597,27 +591,20 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   }
   final atDirectory =
       CacheableSecondaryAddressFinder(rootDomain.rootDomain, rootDomain.rootPort);
-  AtLookUp? opened;
-  var timedOut = false;
-  final answered = await _lookUpPublicKey(atSign, atDirectory, () {
-    if (timedOut) {
-      throw TimeoutException(
-          'no answer within $_absentKeysHintBudget', _absentKeysHintBudget);
-    }
-    return opened = lookUpsFor(rootDomain.rootDomain)(
-        atSign: atSign,
-        rootDomain: rootDomain,
-        authenticator: null,
-        secondaryAddressFinder: atDirectory);
-  })
-      .then<({_PublicKey outcome, String detail})?>((found) => found)
-      .timeout(_absentKeysHintBudget, onTimeout: () async {
-    timedOut = true;
-    final al = opened;
-    if (al != null) await _close(al, atSign);
-    return null;
-  });
-  return switch (answered?.outcome) {
+  final found = await _lookUpPublicKey(
+          atSign,
+          atDirectory,
+          () => lookUpsFor(rootDomain.rootDomain)(
+              atSign: atSign,
+              rootDomain: rootDomain,
+              authenticator: null,
+              secondaryAddressFinder: atDirectory))
+      .timeout(_absentKeysHintBudget,
+          onTimeout: () => (
+                outcome: _PublicKey.atDirectoryUnreachable,
+                detail: 'no answer within $_absentKeysHintBudget'
+              ));
+  return switch (found.outcome) {
     _PublicKey.absent => [
         '$atSign has not been activated yet. To activate it: at_activate '
             'onboard -a $atSign'
@@ -631,8 +618,7 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
             'spelling, or -r.'
       ],
     _PublicKey.atServerUnreachable ||
-    _PublicKey.atDirectoryUnreachable ||
-    null =>
+    _PublicKey.atDirectoryUnreachable =>
       eitherKeysHint(atSign),
   };
 }
