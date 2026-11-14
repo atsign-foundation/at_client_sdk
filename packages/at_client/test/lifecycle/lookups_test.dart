@@ -96,7 +96,7 @@ void main() {
         atSign: '@lookups',
         namespace: 'wavi',
         preference: preference(),
-        secondaryAddressFinder: atDirectoryOf(preference()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@lookups'),
         lookUps: recording,
         storage: hiveStoreFor('@lookups', preference())) as AtClientImpl;
@@ -122,7 +122,7 @@ void main() {
         namespace: 'wavi',
         preference: preference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(preference()),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@nofactory'),
         storage: hiveStoreFor('@nofactory', preference())) as AtClientImpl;
 
@@ -142,7 +142,7 @@ void main() {
     final client = await Atsign('@opened').open(
         keys: await typedKeyfile('@opened', enrollmentId: 'primary'),
         preference: preference(),
-        secondaryAddressFinder: atDirectoryOf(preference()),
+        secondaryAddressFinder: defaultAtDirectory,
         lookUps: recording,
         storage: hiveStoreFor(Atsign('@opened'), preference()));
 
@@ -160,7 +160,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: InMemoryAtKeysIo(),
         preference: preference(),
-        secondaryAddressFinder: atDirectoryOf(preference()),
+        secondaryAddressFinder: defaultAtDirectory,
         lookUps: recording);
 
     expect(pending.enrollmentId, 'e1');
