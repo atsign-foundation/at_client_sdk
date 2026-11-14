@@ -1,6 +1,9 @@
 # decisions.md — Rulings, measured findings & open questions
 
-**Status:** decision record (binding).
+**Status:** decision record. A ruling here binds only once it has a row in
+[`docs/architecture/decisions.md`](../../architecture/decisions.md); until then it
+is a proposal, and [`docs/architecture/invariants.md`](../../architecture/invariants.md)
+outranks it.
 **Scope:** the rulings D-1..D-26 that govern the implementation-neutral `AtClient`
 work, the K-1..K-18 rulings on browser at-keys custody (K-6 and K-8 superseded; K-5 re-ruled and K-12 ruled 2026-10-27; K-13 ruled 2026-10-28; K-14..K-16 ruled 2026-10-30; K-17 amended K-10 2026-10-31; K-18 ruled 2026-11-05), the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
