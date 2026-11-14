@@ -2,22 +2,41 @@ import 'dart:async';
 import 'dart:io' show SocketException;
 
 import 'package:at_client/at_client.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 
 /// What a dialog shows when its operation on [atSign] failed with [error]: a
 /// keys problem's own message, an atServer refusal's cause in plain words,
-/// [network] for a failure to reach a server, and otherwise that something
-/// went wrong, with the error's message.
+/// [timedOut] for a wait that ran out, [unreachable] for any other failure to
+/// reach a server, as the client's connection classifies one, and otherwise
+/// that something went wrong, with the error's message.
 ///
-/// It holds no stack trace and no exception type.
-String failureMessage(String atSign, Object error, {required String network}) {
+/// [unreachable] defaults to saying the atServer for [atSign] could not be
+/// reached. It holds no stack trace and no exception type.
+String failureMessage(
+  String atSign,
+  Object error, {
+  required String timedOut,
+  String? unreachable,
+}) {
   if (error is AtKeysUnusableException) return _firstLine(error.message);
+  final classified = classifyConnectionFailure(error);
   final refusal = switch (error) {
     AtOpenRefusedException(:final state) => _refusal(atSign, state.cause),
     AtCredentialRefusedException(:final state) => _refusal(atSign, state.cause),
+    _ when classified?.cause == AtConnectionCause.noAtServer => _refusal(
+      atSign,
+      AtConnectionCause.noAtServer,
+    ),
     _ => null,
   };
   if (refusal != null) return refusal;
-  if (_isNetworkFailure(error)) return network;
+  if (_isTimeout(error)) return timedOut;
+  if (error is SocketException ||
+      classified?.cause == AtConnectionCause.unreachable) {
+    return unreachable ??
+        'The atServer for $atSign could not be reached. Please check your '
+            'connection and try again.';
+  }
   return 'Something went wrong with $atSign: ${_messageOf(error)}';
 }
 
@@ -39,25 +58,18 @@ String? _refusal(String atSign, AtConnectionCause? cause) => switch (cause) {
   _ => null,
 };
 
-bool _isNetworkFailure(Object error) =>
-    error is AtTimeoutException ||
-    error is SecondaryConnectException ||
-    error is RootServerConnectivityException ||
-    error is SecondaryServerConnectivityException ||
-    error is AtIOException ||
-    error is TimeoutException ||
-    error is SocketException;
+/// The code at_lookup gives a wait that ran out.
+const _timedOutCode = 'AT0023';
 
-/// [error]'s message, without the type its text starts with.
-String _messageOf(Object error) {
-  final text = switch (error) {
-    AtException(:final message) => message,
-    // NOTE: a FormatException's text carries its source; only its message
-    // is shown.
-    FormatException(:final message) => message,
-    _ => '$error'.replaceFirst(RegExp(r'^[A-Za-z_]\w*: '), ''),
-  };
-  return _firstLine(text);
-}
+bool _isTimeout(Object error) =>
+    error is AtTimeoutException ||
+    error is TimeoutException ||
+    (error is AtLookUpException && error.errorCode == _timedOutCode);
+
+/// The first line of [error]'s text, without the type it starts with.
+///
+/// A [FormatException]'s source, and any stack trace, start on a later line.
+String _messageOf(Object error) =>
+    _firstLine('$error'.replaceFirst(RegExp(r'^[A-Za-z_]\w*: '), ''));
 
 String _firstLine(String text) => text.split('\n').first.trim();

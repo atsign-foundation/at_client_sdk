@@ -149,16 +149,13 @@ class _CramDialogState extends State<CramDialog> {
       if (!mounted) return;
       // A timeout during activation usually means the newly-registered atSign
       // is still provisioning, not a hard failure — say so and invite a retry.
-      final message = e is AtTimeoutException
-          ? 'Onboarding is taking longer than expected — your atSign may still '
-                'be provisioning. Please try again in a moment.'
-          : failureMessage(
-              widget.atSign,
-              e,
-              network:
-                  'Onboarding failed. Please check your connection and try '
-                  'again.',
-            );
+      final message = failureMessage(
+        widget.atSign,
+        e,
+        timedOut:
+            'Onboarding is taking longer than expected — your atSign may '
+            'still be provisioning. Please try again in a moment.',
+      );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));

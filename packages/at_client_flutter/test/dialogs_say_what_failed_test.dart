@@ -130,6 +130,19 @@ void main() {
         flows: using ?? flows,
       );
 
+  /// Lets real time pass, frame by frame, until a snack bar is up: the real
+  /// verbs' own work runs on real time, and a dialog's progress indicator
+  /// never settles.
+  Future<void> letRealTimePass(WidgetTester tester) async {
+    for (var i = 0; i < 200 && find.byType(SnackBar).evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pump(const Duration(milliseconds: 750));
+  }
+
   /// What [snackBar] text shows; fails unless exactly one snack bar is up.
   String shown(WidgetTester tester) =>
       (tester.widget<SnackBar>(find.byType(SnackBar)).content as Text).data!;
@@ -188,6 +201,42 @@ void main() {
   testWidgets('A network failure still says to check the connection', (
     tester,
   ) async {
+    // NOTE: the real verbs, enrolling against an atDirectory on a loopback
+    // port nothing listens on.
+    await pumpOpener(
+      tester,
+      (context) => ApkamActivationDialog(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
+          InternetAddress.loopbackIPv4.address,
+          closedPort,
+        ),
+        appName: 'app',
+        deviceName: 'device',
+        namespaces: const {'*': 'rw'},
+        preference: loopback(),
+        keys: InMemoryAtKeysIo(),
+        themeData: ThemeData(),
+        flows: const LoopbackFlows(),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(find.byType(EditableText), '123456');
+    await letRealTimePass(tester);
+
+    expect(
+      shown(tester),
+      'The atServer for $atSign could not be reached. Please check your '
+      'connection and try again.',
+    );
+  });
+
+  testWidgets('PkamDialog shows its own advice for a wait that ran out', (
+    tester,
+  ) async {
     whenOpenFails(AtTimeoutException('the atServer did not answer'));
     await pumpOpener(tester, pkamDialog);
 
@@ -198,6 +247,40 @@ void main() {
       shown(tester),
       'Authentication timed out — the atServer could not be reached. Please '
       'check your connection and try again.',
+    );
+  });
+
+  testWidgets('CramDialog shows its provisioning advice for a wait that ran '
+      'out', (tester) async {
+    when(
+      () => flows.activate(
+        any(),
+        cramSecret: any(named: 'cramSecret'),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        storage: any(named: 'storage'),
+        lookUps: any(named: 'lookUps'),
+        onProgress: any(named: 'onProgress'),
+      ),
+    ).thenAnswer((_) => Future.error(AtTimeoutException('still provisioning')));
+    await pumpOpener(
+      tester,
+      (context) => CramDialog(
+        atSign: atSign,
+        cramKey: 'cram-secret-6d1f0b',
+        preference: loopback(),
+        keys: InMemoryAtKeysIo(),
+        flows: flows,
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      shown(tester),
+      'Onboarding is taking longer than expected — your atSign may still be '
+      'provisioning. Please try again in a moment.',
     );
   });
 
@@ -222,15 +305,7 @@ void main() {
     );
 
     await tester.tap(find.text('open'));
-    // NOTE: the activation's own work runs on real time, and its progress
-    // indicator never settles, so real time is let pass until it has failed.
-    for (var i = 0; i < 200 && find.byType(SnackBar).evaluate().isEmpty; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    await tester.pump(const Duration(milliseconds: 750));
+    await letRealTimePass(tester);
 
     expect(
       shown(tester),

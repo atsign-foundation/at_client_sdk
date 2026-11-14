@@ -143,7 +143,7 @@ class _PkamDialogState extends State<PkamDialog> {
       final message = failureMessage(
         widget.atSign,
         e,
-        network:
+        timedOut:
             'Authentication timed out — the atServer could not be reached. '
             'Please check your connection and try again.',
       );

@@ -32,9 +32,9 @@ Feature: The onboarding dialogs say what failed
       | noAtServer            | @alice is not in the atDirectory.                         |
 
   Scenario: A network failure still says to check the connection
-    Given readable keys for @alice and an atServer that cannot be reached within the dialog's wait
-    When PkamDialog opens @alice
-    Then it shows "Authentication timed out — the atServer could not be reached. Please check your connection and try again."
+    Given an activation whose atServer cannot be reached
+    When CramDialog or ApkamActivationDialog runs
+    Then it shows "… could not be reached. Please check your connection and try again."
 
   Scenario: Activation with a keychain it cannot read says so
     Given this device's keychain cannot be read

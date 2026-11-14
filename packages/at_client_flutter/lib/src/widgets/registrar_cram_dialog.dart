@@ -121,12 +121,14 @@ class _RegistrarCramDialogState extends State<RegistrarCramDialog> {
       setState(() {
         _isLoading = false;
       });
+      const unreachable =
+          'The registrar could not be reached. Please check your connection '
+          'and try again.';
       final message = failureMessage(
         widget.atSign,
         e,
-        network:
-            'The registrar could not be reached. Please check your connection '
-            'and try again.',
+        timedOut: unreachable,
+        unreachable: unreachable,
       );
       ScaffoldMessenger.of(
         context,

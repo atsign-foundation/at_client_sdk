@@ -234,7 +234,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   String _failureMessage(Object error) => failureMessage(
     widget.atSign,
     error,
-    network:
+    timedOut:
         'Activation timed out — the atServer could not be reached. '
         'Please check your connection and try again.',
   );
