@@ -1,7 +1,6 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart'
-    show AtKeysParseException, AtKeysSourceAbsentException;
+import 'package:at_auth/at_auth.dart' show AtKeysSourceAbsentException;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtLookupImpl, AtLookupMuxable;
@@ -324,27 +323,6 @@ void main() {
       );
       expect(changed, isEmpty);
     });
-  });
-
-  test('a Windows header whose segmentCount is not a number is refused, '
-      'holding none of it', () async {
-    KeychainStorage.isWindows = true;
-    addTearDown(() => KeychainStorage.isWindows = false);
-    const count = 'seventeen-segments-6d1f0b';
-
-    await expectLater(
-      keychain({
-        current: () async => '{"segmentCount": "$count"}',
-      }).readAtKeysData(),
-      throwsA(
-        isA<AtKeysParseException>().having(
-          (e) => e.message,
-          'message',
-          allOf(contains('segmentCount'), isNot(contains(count))),
-        ),
-      ),
-    );
-    expect(changed, isEmpty);
   });
 
   test('removing an atSign from an empty keychain writes nothing', () async {

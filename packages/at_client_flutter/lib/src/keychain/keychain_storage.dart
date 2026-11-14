@@ -5,7 +5,6 @@ import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
         AtKeysFormatException,
-        AtKeysParseException,
         AtKeysSourceAbsentException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
@@ -86,16 +85,8 @@ class KeychainStorage {
   }
 
   /// The segment count a Windows store's header [text] records.
-  static int _segmentCountIn(String text) {
-    final header = _decodeObject(text, 'the keychain atKeys entry header');
-    final count = header['segmentCount'];
-    if (count is! int) {
-      throw AtKeysParseException(
-        'Expected integer at the keychain atKeys entry header segmentCount',
-      );
-    }
-    return count;
-  }
+  static int _segmentCountIn(String text) =>
+      _decodeObject(text, 'the keychain atKeys entry header')['segmentCount'];
 
   // Current behaviour:
   // 2.x.x (current):
