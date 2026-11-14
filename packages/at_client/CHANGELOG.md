@@ -2,7 +2,10 @@
 
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
   putMeta or delete whose request options leave `useRemoteAtServer` unset
-  goes to the atServer; an explicit true or false is still enforced.
+  goes to the atServer; an explicit true or false is still enforced. A
+  `remoteOnly` app that passed options to keep a write local should set
+  `useRemoteAtServer = false` explicitly. A delete or putMeta of a `local:`
+  key stays on the device.
 - feat: `AtClientPreference.notificationReplay` chooses where the monitor replays from — connect, resume, window (default 1h) or full; `fetchOfflineNotifications` is deprecated.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including

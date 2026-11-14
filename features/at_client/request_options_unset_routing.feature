@@ -41,3 +41,28 @@ Feature: A request option left unset follows the client's routing preference
     Given PutRequestOptions, GetRequestOptions and DeleteRequestOptions on which useRemoteAtServer was never set
     When the app reads useRemoteAtServer on each
     Then each reads false
+
+  Scenario: Under remoteOnly, a putMeta whose options leave useRemoteAtServer unset reaches the atServer before it returns
+    Given a client whose remoteLocalPref is remoteOnly
+    When the app calls putMeta with PutRequestOptions that leave useRemoteAtServer unset
+    Then the metadata update reaches the atServer before putMeta returns
+
+  Scenario: Under remoteOnly, a delete or putMeta of a local: key stays on the device
+    Given a client whose remoteLocalPref is remoteOnly, and a local: key
+    When the app calls delete, and then putMeta, on that key with options that leave useRemoteAtServer unset
+    Then each runs on local storage and nothing is sent to the atServer
+
+  Scenario: Under remoteOnly, an encrypted put whose options leave useRemoteAtServer unset prepares and writes on the atServer
+    Given a client whose remoteLocalPref is remoteOnly
+    When the app calls put with PutRequestOptions that leave useRemoteAtServer unset and keep shouldEncrypt true
+    Then the put's preparation and its update both go to the atServer before put returns
+
+  Scenario: An explicit useRemoteAtServer false on a get still reads local under remoteOnly
+    Given a client whose remoteLocalPref is remoteOnly
+    When the app calls get with GetRequestOptions whose useRemoteAtServer is false
+    Then the value is read from local storage and nothing is sent to the atServer
+
+  Scenario: Under remoteOnly, a noCommit put whose options leave useRemoteAtServer unset reaches the atServer
+    Given a client whose remoteLocalPref is remoteOnly
+    When the app calls put with PutRequestOptions that set noCommit and leave useRemoteAtServer unset
+    Then the update reaches the atServer with noCommit before put returns

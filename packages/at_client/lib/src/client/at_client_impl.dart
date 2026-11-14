@@ -1578,10 +1578,8 @@ class AtClientImpl implements AtClient {
       ..atKey = atKey
       ..noCommit = deleteRequestOptions?.noCommit ?? false;
 
-    final prefForOp = SecondaryManager.getRemoteLocalPrefForOp(
-      useRemoteAtServerIfSet(deleteRequestOptions),
-      preference?.remoteLocalPref,
-    );
+    final prefForOp =
+        _routingFor(atKey, useRemoteAtServerIfSet(deleteRequestOptions));
     _refuseNoCommitWithoutRemote(
         deleteRequestOptions?.noCommit ?? false, prefForOp);
 
@@ -1590,8 +1588,8 @@ class AtClientImpl implements AtClient {
     return deleteResult != null;
   }
 
-  /// Where a put goes: a `local:` key never leaves the device, and everything
-  /// else is decided by the caller's preference.
+  /// Where an operation on [atKey] goes: a `local:` key never leaves the
+  /// device, and everything else is decided by the caller's preference.
   RemoteLocalPref _routingFor(
           AtKey atKey, bool? useRemoteAtServer) =>
       atKey.isLocal
@@ -1642,22 +1640,13 @@ class AtClientImpl implements AtClient {
         this,
       ).transform(atKey, requestOptions: getRequestOptions);
       // Execute the verb.
-      if (atKey.isLocal) {
-        secondary = getLocalSecondary()!;
-      } else {
-        if (useRemoteAtServerIfSet(getRequestOptions) == true) {
-          secondary = getRemoteSecondary()!;
-        } else {
-          secondary = SecondaryManager.getSecondary(
-            this,
-            verbBuilder,
-            SecondaryManager.getRemoteLocalPrefForOp(
-              useRemoteAtServerIfSet(getRequestOptions),
-              preference?.remoteLocalPref,
-            ),
-          );
-        }
-      }
+      final routing =
+          _routingFor(atKey, useRemoteAtServerIfSet(getRequestOptions));
+      // NOTE: getSecondary sends any lookup to the atServer, and a `local:` key
+      // is read from local storage whatever verb it builds.
+      secondary = atKey.isLocal
+          ? getLocalSecondary()!
+          : SecondaryManager.getSecondary(this, verbBuilder, routing);
       var getResponse = await secondary.executeVerb(verbBuilder);
       // Return empty value if getResponse is null.
       if (getResponse == null ||
@@ -2007,12 +1996,7 @@ class AtClientImpl implements AtClient {
       ..operation = AtConstants.updateMeta;
 
     var updateMetaResult = await executeUpdateOrDelete(
-      builder,
-      SecondaryManager.getRemoteLocalPrefForOp(
-        useRemoteAtServerIfSet(putRequestOptions),
-        preference?.remoteLocalPref,
-      ),
-    );
+        builder, _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions)));
     return updateMetaResult != null;
   }
 

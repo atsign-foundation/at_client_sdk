@@ -2,7 +2,9 @@ import 'package:meta/meta.dart' show internal;
 
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
-abstract class RequestOptions {}
+abstract class RequestOptions {
+  bool? _useRemoteAtServer;
+}
 
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.get`
@@ -14,12 +16,11 @@ class GetRequestOptions extends RequestOptions {
   /// it whatever this says.
   bool bypassCache = false;
 
-  bool? _useRemoteAtServer;
-
   /// Whether to send this get request directly to the remote atServer.
   ///
-  /// Left unset, it follows [AtClientPreference.remoteLocalPref]; once set, it
-  /// is enforced.
+  /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
+  /// is enforced. It reads false while unset, so copying it into another
+  /// options object sets the copy explicitly.
   ///
   /// A record this client wrote to local storage stays off the atServer until
   /// sync pushes it, so a remote read can fail to find what a local read would
@@ -33,12 +34,11 @@ class GetRequestOptions extends RequestOptions {
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.put`
 class PutRequestOptions extends RequestOptions {
-  bool? _useRemoteAtServer;
-
   /// Whether to send this update request directly to the remote atServer.
   ///
-  /// Left unset, it follows [AtClientPreference.remoteLocalPref]; once set, it
-  /// is enforced.
+  /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
+  /// is enforced. It reads false while unset, so copying it into another
+  /// options object sets the copy explicitly.
   ///
   /// A put routed to local storage reaches the atServer only when sync next
   /// pushes it, so a reader that is not this client's own store — another
@@ -108,12 +108,11 @@ class PutRequestOptions extends RequestOptions {
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.delete`
 class DeleteRequestOptions extends RequestOptions {
-  bool? _useRemoteAtServer;
-
   /// Whether to send this delete request directly to the remote atServer.
   ///
-  /// Left unset, it follows [AtClientPreference.remoteLocalPref]; once set, it
-  /// is enforced.
+  /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
+  /// is enforced. It reads false while unset, so copying it into another
+  /// options object sets the copy explicitly.
   ///
   /// A delete routed to local storage reaches the atServer only when sync next
   /// pushes it, so another client or a peer can still read the record after
@@ -136,12 +135,23 @@ class DeleteRequestOptions extends RequestOptions {
   bool noCommit = false;
 }
 
-/// The `useRemoteAtServer` [options] carry, or null where it was never set or
+/// The `useRemoteAtServer` [options] carry: null where it was never set or
 /// there are no options.
+///
+/// A subclass or another implementation of an options class may compute the
+/// value, so for one of those this is its getter's value.
 @internal
-bool? useRemoteAtServerIfSet(RequestOptions? options) => switch (options) {
-      GetRequestOptions o => o._useRemoteAtServer,
-      PutRequestOptions o => o._useRemoteAtServer,
-      DeleteRequestOptions o => o._useRemoteAtServer,
-      _ => null,
-    };
+bool? useRemoteAtServerIfSet(RequestOptions? options) {
+  final type = options?.runtimeType;
+  if (type == GetRequestOptions ||
+      type == PutRequestOptions ||
+      type == DeleteRequestOptions) {
+    return options!._useRemoteAtServer;
+  }
+  return switch (options) {
+    GetRequestOptions o => o.useRemoteAtServer,
+    PutRequestOptions o => o.useRemoteAtServer,
+    DeleteRequestOptions o => o.useRemoteAtServer,
+    _ => null,
+  };
+}

@@ -34,18 +34,21 @@ void main() {
     'sealToNamespace': (o) => o.sealToNamespace,
   };
 
-  /// The instance fields `class PutRequestOptions` declares, read from its
-  /// source.
+  /// The instance fields `class PutRequestOptions` declares or inherits from
+  /// `RequestOptions`, read from their source.
   Set<String> declaredOptionFields() {
     final source =
         File('lib/src/client/request_options.dart').readAsStringSync();
-    final body = RegExp(
-            r'^class PutRequestOptions extends RequestOptions \{\n(.*?)^\}',
-            multiLine: true,
-            dotAll: true)
-        .firstMatch(source)!
-        .group(1)!;
-    return fieldsDeclaredIn(body);
+    String bodyOf(String declaration) =>
+        RegExp('^${RegExp.escape(declaration)} \\{\\n(.*?)^\\}',
+                multiLine: true, dotAll: true)
+            .firstMatch(source)!
+            .group(1)!;
+    return {
+      ...fieldsDeclaredIn(bodyOf('abstract class RequestOptions')),
+      ...fieldsDeclaredIn(
+          bodyOf('class PutRequestOptions extends RequestOptions')),
+    };
   }
 
   test('every PutRequestOptions field is classified exactly once', () {

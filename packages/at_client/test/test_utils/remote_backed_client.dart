@@ -1,4 +1,6 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show useRemoteAtServerIfSet;
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart' show isA;
@@ -91,7 +93,7 @@ MockAtClient buildRemoteBackedMockClient({
     final atKey = inv.positionalArguments[0] as AtKey;
     final options =
         inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
-    final remote = options?.useRemoteAtServer ?? false;
+    final remote = useRemoteAtServerIfSet(options) ?? false;
     final values = remote ? remoteData : localValues;
     final meta = remote ? remoteMetadata : localMeta;
     final key = atKey.toString();
@@ -108,7 +110,7 @@ MockAtClient buildRemoteBackedMockClient({
     final keyString = inv.positionalArguments[0].toString();
     final options =
         inv.namedArguments[#deleteRequestOptions] as DeleteRequestOptions?;
-    final remote = options?.useRemoteAtServer ?? false;
+    final remote = useRemoteAtServerIfSet(options) ?? false;
     (remote ? remoteData : localValues).remove(keyString);
     (remote ? remoteMetadata : localMeta)?.remove(keyString);
     return Future.value(true);
@@ -135,7 +137,7 @@ MockAtClient buildRemoteBackedMockClient({
     final keyString = inv.positionalArguments[0].toString();
     final options =
         inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
-    final remote = options?.useRemoteAtServer ?? false;
+    final remote = useRemoteAtServerIfSet(options) ?? false;
     final values = remote ? remoteData : localValues;
     final meta = remote ? remoteMetadata : localMeta;
     final value = values[keyString];
