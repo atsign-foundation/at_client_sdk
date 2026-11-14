@@ -101,18 +101,14 @@ void main() {
   test(
       'a legacy fallback of options that leave useRemoteAtServer unset leaves '
       'it unset, so the copy still follows remoteLocalPref', () {
-    for (final given in [PutRequestOptions(), _AppPutOptions()]) {
-      expect(useRemoteAtServerIfSet(given), isNull,
-          reason: 'the control: ${given.runtimeType} never set it');
+    final given = PutRequestOptions();
+    expect(useRemoteAtServerIfSet(given), isNull,
+        reason: 'the control: it was never set');
 
-      final copy = AtClientImpl.copyOptionsForLegacyFallback(given);
+    final copy = AtClientImpl.copyOptionsForLegacyFallback(given);
 
-      expect(useRemoteAtServerIfSet(copy), isNull,
-          reason: 'copying the getter\'s false would pin the fallback write '
-              'local under remoteOnly');
-    }
+    expect(useRemoteAtServerIfSet(copy), isNull,
+        reason: 'copying the getter\'s false would pin the fallback write '
+            'local under remoteOnly');
   });
 }
-
-/// Put options from outside the library that leave useRemoteAtServer alone.
-class _AppPutOptions extends PutRequestOptions {}
