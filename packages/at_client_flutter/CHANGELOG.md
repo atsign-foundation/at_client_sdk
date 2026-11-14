@@ -11,8 +11,8 @@
   `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
   legacy-named store cannot be read or written, or its entry is not a JSON
   object; `deleteAllAtKeysData` clears a keychain whose entry does not parse.
-- fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry does
-  not parse, saying every Atsign stored there is affected.
+- fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry is not
+  JSON or not a JSON object, saying every Atsign stored there is affected.
 - chore: requires at_client 4.1.0.
 - feat: `KeychainAtKeysIo.describeSource` returns "this device's keychain".
 - fix: `CramDialog` fails before sending anything when the keychain holds
