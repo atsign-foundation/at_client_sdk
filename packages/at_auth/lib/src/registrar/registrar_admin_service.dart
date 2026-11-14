@@ -128,6 +128,7 @@ class RegistrarAdminService {
     if (!_hostPattern.hasMatch(host)) {
       throw ArgumentError(invalidMessage, 'registrarUrl');
     }
+    int explicitPort = 443;
     if (hostAndPort.length == 2) {
       final port = int.tryParse(hostAndPort[1]);
       if (port == null || port < 1 || port > 65535) {
@@ -135,10 +136,15 @@ class RegistrarAdminService {
             'registrarUrl port must be numeric and between 1 and 65535',
             'registrarUrl');
       }
+      explicitPort = port;
     }
+    // Compare the parsed host/port, not `uri.authority`: `Uri.https` drops a
+    // default `:443`, so an authority-string comparison refuses a
+    // registrarUrl that spells out the default port.
     final uri = Uri.https(registrarUrl, '/');
     if (uri.userInfo.isNotEmpty ||
-        uri.authority != registrarUrl.toLowerCase()) {
+        uri.host != host.toLowerCase() ||
+        uri.port != explicitPort) {
       throw ArgumentError(invalidMessage, 'registrarUrl');
     }
   }

@@ -142,6 +142,17 @@ void main() {
       );
     });
 
+    test('accepts a bare host with the default https port spelled out', () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: '$_registrarUrl:443',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        ),
+        returnsNormally,
+      );
+    });
+
     test('throws ArgumentError naming registrarUrl when it carries user info',
         () {
       expect(
@@ -198,23 +209,35 @@ void main() {
       );
     });
 
-    test('ArgumentError for registrarUrl never echoes the offending value', () {
-      expect(
-        () => RegistrarAdminService(
-          registrarUrl: 'user:secret@host',
-          superApiKey: _apiKey,
-          httpClient: _mockResponse({}),
-        ),
-        throwsA(
-          predicate(
-            (e) =>
-                e is ArgumentError &&
-                e.name == 'registrarUrl' &&
-                !e.toString().contains('secret'),
+    final hostShapeLeakCases = <String, String>{
+      'scheme': 'https://leaksecret.$_registrarUrl',
+      'path': '$_registrarUrl/leaksecret',
+      'userInfo': 'user:leaksecret@host',
+      'fragment': '$_registrarUrl#leaksecret',
+      'query': '$_registrarUrl?q=leaksecret',
+      'whitespace': '$_registrarUrl leaksecret',
+    };
+    for (final entry in hostShapeLeakCases.entries) {
+      test(
+          'ArgumentError for a ${entry.key} registrarUrl never echoes the '
+          'offending value', () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: entry.value,
+            superApiKey: _apiKey,
+            httpClient: _mockResponse({}),
           ),
-        ),
-      );
-    });
+          throwsA(
+            predicate(
+              (e) =>
+                  e is ArgumentError &&
+                  e.name == 'registrarUrl' &&
+                  !e.toString().contains('leaksecret'),
+            ),
+          ),
+        );
+      });
+    }
 
     for (final port in ['0', '-1', '65536', 'abc']) {
       test('throws ArgumentError naming registrarUrl when the port is $port',
@@ -552,7 +575,8 @@ void main() {
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(
           isA<RegistrarException>()
-              .having((e) => e.reason, 'reason', RegistrarFailure.registrarError)
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.registrarError)
               .having(
                   (e) => e.toString().contains('super-secret-server-detail'),
                   'leaks the server message',
@@ -908,7 +932,8 @@ void main() {
       expect(result.skippedAtSigns, equals(['@bogus']));
     });
 
-    test('throws RegistrarException(registrarError) when all atSigns are invalid',
+    test(
+        'throws RegistrarException(registrarError) when all atSigns are invalid',
         () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
@@ -1111,7 +1136,8 @@ void main() {
       expect(result.failed, equals([]));
     });
 
-    test('throws RegistrarException(registrarError) when status is not "success"',
+    test(
+        'throws RegistrarException(registrarError) when status is not "success"',
         () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
@@ -1123,8 +1149,8 @@ void main() {
       }));
       expect(
         () => service.deleteAtSigns(token: 'bad-token', atSigns: ['@one']),
-        throwsA(isA<RegistrarException>()
-            .having((e) => e.reason, 'reason', RegistrarFailure.registrarError)),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.registrarError)),
       );
     });
 
