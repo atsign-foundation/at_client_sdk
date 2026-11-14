@@ -67,6 +67,8 @@ registrar URL. Since the communications leg of the lifecycle work it also
 carries `lookUps`, the `AtLookUpFactory` the commands pass to every verb:
 `proxyLookUps()` when the root domain names a proxy, TLS otherwise.
 
+> Update 2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root; `proxyLookUps()` is deprecated and equals `secureSocketLookUps()`.
+
 ### What at_client_flutter is, for the mirror
 
 | at_client_flutter                                             | The CLI analogue                                                                              |
@@ -133,7 +135,7 @@ and friends, `printFullParserUsage`, `MySyncProgressListener` (a
 `AtClientPreference`'s, the keys-and-store conventions above, or `lookUps`,
 which stays a parameter of `CLIBase` and the commands, with
 `lookUpsFor(rootDomain)` choosing between `proxyLookUps()` and
-`secureSocketLookUps()` by the root domain, as `CLIBase` does.
+`secureSocketLookUps()` by the root domain, as `CLIBase` does. (2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root; `proxyLookUps()` is deprecated and equals `secureSocketLookUps()`.)
 
 ## 3. Getting there
 

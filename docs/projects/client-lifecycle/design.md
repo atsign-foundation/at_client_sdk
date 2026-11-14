@@ -299,7 +299,7 @@ and the `AtOnboardingService` adapter ends with it
 ([client-cli ruling 5](../client-cli/decisions.md#5-atonboardingservice-ends)).
 A command-line program picks its transport with at_client_cli's
 `lookUpsFor(rootDomain)`: `proxyLookUps()` when the root domain names a proxy,
-TLS otherwise. This section used to read:
+TLS otherwise. (Update 2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root; `proxyLookUps()` is deprecated and equals `secureSocketLookUps()`.) This section used to read:
 
 > Keeps `at_activate`, `at_register` and the `auth_cli` sub-commands, thin
 > over at_client and at_auth's registrar; keeps the three-member
@@ -307,6 +307,8 @@ TLS otherwise. This section used to read:
 > (ruling 5) and the eleven other service members.
 > `AtOnboardingPreference.lookUps` is `proxyLookUps()` when the root domain
 > names a proxy and TLS otherwise, and every command passes it to the verbs.
+
+_Note 2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root; `proxyLookUps()` is deprecated and equals `secureSocketLookUps()`._
 
 ### at_cli_commons
 

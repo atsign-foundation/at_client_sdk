@@ -198,10 +198,9 @@ puts the store at `~/.atsign/storage/<atSign>/<program>/<id>`, `single` when no
 `id` is given, where `CLIBase` keeps it for that namespace, or at `path`, and
 the client closes it when it stops. `lookUps` builds every connection the
 client opens, and
-`lookUpsFor(rootDomain)` is the one `CLIBase` uses: `proxyLookUps()` when the
-root domain names a proxy (`proxy:host:port`), which sends `from:<atSign>`
-first on every connection so the proxy can route it, and
-`secureSocketLookUps()`, TLS on TCP, otherwise.
+`lookUpsFor(rootDomain)` is the one `CLIBase` uses: `secureSocketLookUps()`,
+TLS on TCP. When the root domain names a proxy (`proxy:host:port`), at_lookup
+sends `from:<atSign>` first on every connection so the proxy can route it.
 
 `at_activate`'s `onboard` and `enroll` share one local store per atSign, under
 `~/.atsign/storage/<atSign>/at_activate/`, so running two of them at once for

@@ -110,6 +110,10 @@ abstract interface class AtLookUp {
   /// It talks only through the executor it is handed, since a call back into
   /// the lookup waits for it to finish, and a connection whose [onConnect]
   /// fails is closed.
+  ///
+  /// A [rootDomain] of `proxy:<host>` names a proxy fronting many atServers,
+  /// so the lookup sends `from:<atSign>` itself as the first thing on each
+  /// connection, before [onConnect], which a caller need not send for it.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
@@ -128,7 +132,7 @@ abstract interface class AtLookUp {
       );
 
   /// Build a lookup over [transport]; every parameter means what it means on
-  /// [withSecureSocket].
+  /// [withSecureSocket], a proxy [rootDomain] included.
   static AtLookupMuxable withTransport({
     required String atSign,
     required AtRootDomain rootDomain,
@@ -145,9 +149,21 @@ abstract interface class AtLookUp {
       transportFactory: transport.transportFactory,
       socketListenerFactory: transport.listenerFactory,
       outboundConnectionFactory: transport.connectionFactory,
-      onConnect: onConnect,
+      onConnect:
+          rootDomain.isProxyAddress ? _fromThen(atSign, onConnect) : onConnect,
     )..authenticator = authenticator;
   }
+
+  /// A preamble that sends `from:<atSign>`, which tells a proxy which atServer
+  /// the connection is for, and then runs [onConnect], if any.
+  static Future<void> Function(AtCommandExecutor connection) _fromThen(
+    String atSign,
+    Future<void> Function(AtCommandExecutor connection)? onConnect,
+  ) =>
+      (connection) async {
+        await connection.sendSync('from:$atSign\n');
+        await onConnect?.call(connection);
+      };
 
   /// Runs [builder]'s command on the atServer, authenticating the connection
   /// first when the verb needs it, and returns the atServer's response.

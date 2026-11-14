@@ -99,9 +99,9 @@ it provides:
   namespace), for a program that calls the `Atsign` verbs itself
 - `createAtClient(atSign:, atKeysFilePath:, ...)` — the client at_activate's
   commands open: from the keyfile, syncing nothing, on a store of its own
-- `lookUpsFor(rootDomain)` — the `lookUps:` `CLIBase` uses: `proxyLookUps()`
-  for a root domain of the form `proxy:host:port`, `secureSocketLookUps()`
-  otherwise
+- `lookUpsFor(rootDomain)` — the `lookUps:` `CLIBase` uses: `secureSocketLookUps()`
+  for every root (at_lookup 4.1.0 sends `from:<atSign>` itself for a
+  `proxy:host:port` root; `proxyLookUps()` is deprecated and equals it)
 - `ServiceFactoryWithNoOpSyncService` for stateless no-sync instances
 - the `at_activate` and `at_register` executables; `at_register`, and
   `at_activate onboard` without `-c`, send the registrar API key in

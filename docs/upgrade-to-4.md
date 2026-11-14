@@ -212,8 +212,10 @@ Every client, enrollment and lookup is handed its transport and the atDirectory
 it asks: `secureSocketLookUps()` and
 `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`,
 as above. A command-line program takes its transport from at_client_cli's
-`lookUpsFor(preference.rootDomain)`, as `CLIBase` does: `proxyLookUps()` for a
-root domain beginning `proxy:`, and `secureSocketLookUps()` otherwise.
+`lookUpsFor(preference.rootDomain)`, as `CLIBase` does. at_lookup 4.1.0 sends
+`from:<atSign>` itself on every connection for a root domain beginning
+`proxy:`, so `lookUpsFor` returns `secureSocketLookUps()` for every root;
+`proxyLookUps()` is deprecated and equals `secureSocketLookUps()`.
 
 ### `Undefined name 'FileAtKeysIo'`, `'CacheableSecondaryAddressFinder'`, `'HiveAtClientStorage'`
 

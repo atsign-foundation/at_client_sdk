@@ -1,29 +1,15 @@
-import 'package:at_commons/at_commons.dart' show AtRootDomain;
 import 'package:at_lookup/at_lookup_io.dart';
 
-/// Connections through a proxy that fronts many atServers: the proxy learns
-/// which one this connection is for from a `from:<atSign>` sent before
-/// anything else, on every connection, so that is what each one does first.
-/// TLS on TCP underneath, as the default factory.
-AtLookUpFactory proxyLookUps() {
-  return ({
-    required String atSign,
-    required AtRootDomain rootDomain,
-    required AtAuthenticator? authenticator,
-    SecondaryAddressFinder? secondaryAddressFinder,
-  }) =>
-      secureSocketLookUps(onConnect: (connection) async {
-        await connection.sendSync('from:$atSign\n');
-      })(
-        atSign: atSign,
-        rootDomain: rootDomain,
-        authenticator: authenticator,
-        secondaryAddressFinder: secondaryAddressFinder,
-      );
-}
+/// Connections through a proxy that fronts many atServers.
+///
+/// at_lookup itself sends the `from:<atSign>` such a proxy needs first on
+/// every connection made for a `proxy:<host>` root domain, so this is
+/// [secureSocketLookUps], TLS on TCP, and no more.
+@Deprecated('at_lookup sends from:<atSign> for a proxy: root domain; use '
+    'secureSocketLookUps()')
+AtLookUpFactory proxyLookUps() => secureSocketLookUps();
 
 /// The `lookUps` for a client whose atDirectory is [rootDomain]:
-/// [proxyLookUps] when it names a proxy (`proxy:<host>`), and
-/// [secureSocketLookUps] otherwise.
-AtLookUpFactory lookUpsFor(String rootDomain) =>
-    rootDomain.startsWith('proxy:') ? proxyLookUps() : secureSocketLookUps();
+/// [secureSocketLookUps], which at_lookup makes name the atSign first when
+/// [rootDomain] is a proxy (`proxy:<host>`).
+AtLookUpFactory lookUpsFor(String rootDomain) => secureSocketLookUps();

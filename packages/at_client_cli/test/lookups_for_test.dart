@@ -62,12 +62,13 @@ void main() {
     certs.deleteSync(recursive: true);
   });
 
-  /// The first line the server receives when a lookup [lookUps] builds for
-  /// `@alice` runs `scan`.
-  Future<String> firstLineFrom(AtLookUpFactory lookUps) async {
-    final lookUp = lookUps(
+  /// The first line the server receives when a lookup that [lookUpsFor]
+  /// [root] builds for `@alice`, on a client whose root is [root], runs
+  /// `scan`.
+  Future<String> firstLineFrom(String root) async {
+    final lookUp = lookUpsFor(root)(
         atSign: '@alice',
-        rootDomain: AtRootDomain.atsignDomain,
+        rootDomain: AtRootDomain(root, 64),
         authenticator: null,
         secondaryAddressFinder:
             FixedSecondaryAddressFinder('127.0.0.1', server.port));
@@ -81,7 +82,7 @@ void main() {
   }
 
   test('Through a proxy, each connection names its atSign first', () async {
-    expect(await firstLineFrom(lookUpsFor('proxy:127.0.0.1')), 'from:@alice',
+    expect(await firstLineFrom('proxy:127.0.0.1'), 'from:@alice',
         reason: 'a proxy routes a connection by the atSign it names first');
   });
 
@@ -118,7 +119,7 @@ void main() {
   });
 
   test('Straight to an atServer, the command goes first', () async {
-    expect(await firstLineFrom(lookUpsFor('root.atsign.org')), 'scan',
+    expect(await firstLineFrom('root.atsign.org'), 'scan',
         reason: 'an atServer reached directly is sent no from: unasked');
   });
 }

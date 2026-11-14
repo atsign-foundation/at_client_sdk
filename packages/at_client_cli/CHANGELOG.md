@@ -4,6 +4,9 @@
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - chore: requires at_client 4.1.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
+- fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
+  it itself; `lookUpsFor` is `secureSocketLookUps()` and `proxyLookUps()` is
+  deprecated for it. Requires at_lookup 4.1.0.
 
 ## 1.0.0
 
