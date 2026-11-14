@@ -33,6 +33,7 @@ AtCollection<T> collectionWithInjectedNotifications<T>(
   required Stream<AtNotification> notifications,
   T Function(Map<String, dynamic>)? fromJson,
   String? typeTag,
+  String? writeTypeTag,
 }) =>
     AtCollection<T>._withInjectedNotifications(
       atClient,
@@ -41,6 +42,7 @@ AtCollection<T> collectionWithInjectedNotifications<T>(
       notifications: notifications,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
     );
 
 /// Constructs a sub-collection of [parent] with an injected
@@ -55,6 +57,7 @@ AtCollection<U> subCollectionWithInjectedNotifications<T, U>(
   required Stream<AtNotification> notifications,
   U Function(Map<String, dynamic>)? fromJson,
   String? typeTag,
+  String? writeTypeTag,
 }) =>
     parent._subCollectionWithInjectedNotifications<U>(
       parent: parentItem,
@@ -63,6 +66,7 @@ AtCollection<U> subCollectionWithInjectedNotifications<T, U>(
       notifications: notifications,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
     );
 
 /// Constructs an [AtCollection<T>] with an injected [DataEvent]
@@ -78,6 +82,7 @@ AtCollection<T> collectionWithInjectedDataEvents<T>(
   required Stream<DataEvent> dataEvents,
   T Function(Map<String, dynamic>)? fromJson,
   String? typeTag,
+  String? writeTypeTag,
 }) =>
     AtCollection<T>._withInjectedDataEvents(
       atClient,
@@ -86,6 +91,7 @@ AtCollection<T> collectionWithInjectedDataEvents<T>(
       dataEvents: dataEvents,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
     );
 
 /// Constructs an [AtCollection<T>] on the [EventSource.both] path
@@ -100,6 +106,7 @@ AtCollection<T> collectionWithInjectedBoth<T>(
   required Stream<DataEvent> dataEvents,
   T Function(Map<String, dynamic>)? fromJson,
   String? typeTag,
+  String? writeTypeTag,
 }) =>
     AtCollection<T>._withInjectedBoth(
       atClient,
@@ -109,6 +116,7 @@ AtCollection<T> collectionWithInjectedBoth<T>(
       dataEvents: dataEvents,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
     );
 
 /// Routes [n] through [coll]'s top-level notification handler — the
@@ -182,3 +190,10 @@ CmpPredicate cmpPredicateForTest(
   Object? value,
 ) =>
     CmpPredicate._(field, op, value);
+
+/// Sets how many sub-collection namespaces each [AtClient] remembers the tag
+/// of, for clients that open their first sub-collection afterwards; null
+/// restores the default.
+@visibleForTesting
+void setSubCollectionTagCapForTest(int? cap) =>
+    _subTagCap = cap ?? _defaultSubTagCap;
