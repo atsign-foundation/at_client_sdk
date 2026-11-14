@@ -24,8 +24,7 @@ void main() {
       final store = CliKeys.storageFor('@alice', program: 'my_app');
       final AtLookUpFactory lookUps = secureSocketLookUps();
       final SecondaryAddressFinder atDirectory =
-          CacheableSecondaryAddressFinder(
-              preference.rootDomain, preference.rootPort);
+          CacheableSecondaryAddressFinder('127.0.0.1', preference.rootPort);
 
       expect(Atsign('@alice'), isNotNull);
       expect(keys, isA<WrittenAtKeysIo>());
