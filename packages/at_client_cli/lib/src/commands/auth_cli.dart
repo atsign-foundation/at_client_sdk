@@ -520,18 +520,35 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
     );
   }
 
-  String? pk;
+  final AtLookUp al;
   try {
     // NOTE: a public key lookup needs no authentication, and no credential is
     // held here.
-    final AtLookUp al = connect();
+    al = connect();
+  } catch (e) {
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'Caught unexpected ${e.runtimeType} : $e'
+    );
+  }
+  final found = await _publicKeyFrom(al, atSign);
+  try {
+    await al.close();
+  } catch (e) {
+    logger.finer('closing the public key lookup for $atSign failed: $e');
+  }
+  return found;
+}
+
+/// What [al] answers for [atSign]'s public key.
+Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
+    AtLookUp al, String atSign) async {
+  final String? pk;
+  try {
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
     } on AtLookUpException catch (e) {
-      final e1 = AtExceptionUtils.get(e.errorCode, e.errorMessage);
-      throw e1;
-    } finally {
-      await al.close();
+      throw AtExceptionUtils.get(e.errorCode, e.errorMessage);
     }
   } on SecondaryServerConnectivityException catch (e) {
     return (
@@ -556,9 +573,14 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
   );
 }
 
+/// How long at_activate waits for the absent keys' hint lookup before it
+/// gives both hints.
+const Duration _absentKeysHintBudget = Duration(seconds: 5);
+
 /// The next step for [atSign], whose keys are not on this machine, from
 /// whether the atServer the atDirectory at [rootServer] names for it holds
-/// its public key, looked up as [status] looks it up.
+/// its public key, looked up as [status] looks it up, within
+/// [_absentKeysHintBudget].
 @visibleForTesting
 Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   final AtRootDomain rootDomain;
@@ -570,13 +592,18 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   final atDirectory =
       CacheableSecondaryAddressFinder(rootDomain.rootDomain, rootDomain.rootPort);
   final found = await _lookUpPublicKey(
-      atSign,
-      atDirectory,
-      () => lookUpsFor(rootDomain.rootDomain)(
-          atSign: atSign,
-          rootDomain: rootDomain,
-          authenticator: null,
-          secondaryAddressFinder: atDirectory));
+          atSign,
+          atDirectory,
+          () => lookUpsFor(rootDomain.rootDomain)(
+              atSign: atSign,
+              rootDomain: rootDomain,
+              authenticator: null,
+              secondaryAddressFinder: atDirectory))
+      .timeout(_absentKeysHintBudget,
+          onTimeout: () => (
+                outcome: _PublicKey.atDirectoryUnreachable,
+                detail: 'no answer within $_absentKeysHintBudget'
+              ));
   return switch (found.outcome) {
     _PublicKey.absent => [
         '$atSign has not been activated yet. To activate it: at_activate '
@@ -644,8 +671,6 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
         maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
         atLookUp: atLookUp);
     return true;
-  } on AtKeysUnusableException {
-    rethrow;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     throw ('Onboarding failed : $e');

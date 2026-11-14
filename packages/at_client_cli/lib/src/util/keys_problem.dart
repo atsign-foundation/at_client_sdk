@@ -3,7 +3,11 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeysPassphraseEnvelopeCodec;
 import 'package:at_client/at_client.dart'
-    show AtDecryptionException, AtKeysUnusableCause, AtKeysUnusableException;
+    show
+        AtDecryptionException,
+        AtEnrollmentPendingException,
+        AtKeysUnusableCause,
+        AtKeysUnusableException;
 import 'package:chalkdart/chalk.dart';
 
 /// The line a command-line program ends every keys problem with.
@@ -38,6 +42,13 @@ void reportKeysProblem(AtKeysUnusableException e,
         '  If the keyfile has a passphrase, pass it with -P.',
       ],
     AtKeysUnusableCause.anotherAtsign => ['${e.message} Check -a and -k.'],
+    AtKeysUnusableCause.pendingEnrollment
+        when e is AtEnrollmentPendingException =>
+      [
+        'This keyfile holds only a pending enrollment request for '
+            '${e.atSign} (id ${e.pendingEnrollmentIds.join(', ')}). Wait for '
+            'it to be approved, then run this command again.',
+      ],
     _ => [e.message],
   };
   stderr.writeln();

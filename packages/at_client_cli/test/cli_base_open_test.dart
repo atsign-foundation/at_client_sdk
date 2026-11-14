@@ -104,7 +104,7 @@ void main() {
         atLookUp: lookUpAnswering(() async => true),
         lookUps: secureSocketLookUps(),
         secondaryAddressFinder:
-            CacheableSecondaryAddressFinder(preference.rootDomain, port));
+            CacheableSecondaryAddressFinder('127.0.0.1', port));
     expect(first.connection.current.isOnline, isTrue,
         reason: 'the precondition: this device has held the atSign online');
     await first.stop();
@@ -280,6 +280,12 @@ void main() {
 
       expect(stderrText.join(),
           contains('Waiting for approval of enrollment $approvedEnrollmentId'));
+      expect(
+          stderrText.join(),
+          allOf(isNot(contains('Need help?')),
+              isNot(contains('pending enrollment request'))),
+          reason: 'a request still pending is resumed, not reported as a '
+              'keys problem');
       expect(cli.atClient.enrollmentId, approvedEnrollmentId);
       expect(cli.atClient.connection.current.isOnline, isTrue);
       expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty,

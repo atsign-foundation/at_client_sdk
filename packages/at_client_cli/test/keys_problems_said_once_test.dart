@@ -2,9 +2,19 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
-import 'package:at_chops/at_chops.dart' show RsaKeyPair;
+import 'dart:typed_data';
+
+import 'package:at_auth/at_auth.dart'
+    show
+        AtKeysPassphraseEnvelopeCodec,
+        CryptographicMaterial,
+        CryptographicMaterialAlgorithm,
+        CryptographicMaterialRole,
+        CryptographicMaterialStatus;
+import 'package:at_chops/at_chops.dart'
+    show AESEncryptionAlgo, AESKey, InitialisationVector, RsaKeyPair;
 import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' show absentKeysHint;
 import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:test/test.dart';
 
@@ -15,8 +25,10 @@ import 'lifecycle_rig.dart';
 /// no entry.
 enum _AtDirectory { atServer, noEntry }
 
-/// How a fake atServer answers a lookup of `@alice`'s public key.
-enum _PublicKey { held, absent }
+/// How a fake atServer answers a lookup of `@alice`'s public key: with it,
+/// with the error for a key it does not hold, or with a line that is
+/// neither.
+enum _PublicKey { held, absent, garbled }
 
 /// at_activate, run as a program with a home directory of the test's, and a
 /// program built on CLIBase, report a keys problem once.
@@ -39,6 +51,10 @@ void main() {
   var publicKeyAnswer = _PublicKey.absent;
   late int unreachablePort;
   late Directory home;
+  late SecureServerSocket silentAtDirectory;
+  final silentSockets = <SecureSocket>[];
+  var directoryConnections = 0;
+  final atServerHangUps = StreamController<void>.broadcast();
 
   setUpAll(() async {
     certs = Directory.systemTemp.createTempSync('keys_problems_said_once_');
@@ -66,17 +82,21 @@ void main() {
           (command) {
         final answer = !command.startsWith('lookup:publickey')
             ? 'error:{"errorCode":"AT0003","errorDescription":"unexpected"}'
-            : publicKeyAnswer == _PublicKey.held
-                ? 'data:${base64Encode(List.filled(32, 7))}'
-                : 'error:{"errorCode":"AT0015","errorDescription":'
-                    '"public:publickey$atSign does not exist in keystore"}';
+            : switch (publicKeyAnswer) {
+                _PublicKey.held => 'data:${base64Encode(List.filled(32, 7))}',
+                _PublicKey.absent =>
+                  'error:{"errorCode":"AT0015","errorDescription":'
+                      '"public:publickey$atSign does not exist in keystore"}',
+                _PublicKey.garbled => '@unexpected@',
+              };
         socket.write('$answer\n@');
-      }, onError: (_) {});
+      }, onError: (_) {}, onDone: () => atServerHangUps.add(null));
     }, onError: (_) {});
 
     atDirectory =
         await SecureServerSocket.bind(InternetAddress.loopbackIPv4, 0, context);
     atDirectory.listen((socket) {
+      directoryConnections++;
       socket.write('@');
       utf8.decoder.bind(socket).transform(const LineSplitter()).listen((line) {
         if (line.startsWith('@exit')) return;
@@ -85,6 +105,15 @@ void main() {
             : '@null\n@');
       }, onError: (_) {});
     }, onError: (_) {});
+
+    silentAtDirectory =
+        await SecureServerSocket.bind(InternetAddress.loopbackIPv4, 0, context);
+    silentAtDirectory.listen(silentSockets.add, onError: (_) {});
+
+    // NOTE: for the hint lookups this process makes itself; at_activate runs
+    // trust it through the fixture.
+    SecurityContext.defaultContext
+        .setTrustedCertificates('${certs.path}/cert.pem');
 
     unreachablePort = await refusedPort();
     program = '${certs.path}/at_activate_trusting.dill';
@@ -97,6 +126,10 @@ void main() {
   });
 
   tearDownAll(() async {
+    for (final socket in silentSockets) {
+      socket.destroy();
+    }
+    await silentAtDirectory.close();
     await atDirectory.close();
     await atServer.close();
     certs.deleteSync(recursive: true);
@@ -107,6 +140,7 @@ void main() {
     directoryAnswer = _AtDirectory.atServer;
     atServerPort = atServer.port;
     publicKeyAnswer = _PublicKey.absent;
+    directoryConnections = 0;
   });
 
   tearDown(() => home.deleteSync(recursive: true));
@@ -239,6 +273,7 @@ void main() {
           footer,
         ]));
     expect(run.exitCode, 1);
+    expect(directoryConnections, 0, reason: 'only absent keys are looked up');
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('A keyfile for another atSign', () async {
@@ -267,6 +302,7 @@ void main() {
           footer,
         ]));
     expect(run.exitCode, 1);
+    expect(directoryConnections, 0, reason: 'only absent keys are looked up');
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(
@@ -286,6 +322,139 @@ void main() {
         isEmpty,
         reason: 'no stack trace');
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  group(
+      'the passphrase line is for a passphrase-protected keyfile that '
+      'cannot be decrypted, and nothing else', () {
+    test(
+        'a keyfile that is not passphrase-protected, with a field that '
+        'cannot be decrypted', () async {
+      final key = AESKey.generate(32).key;
+      // NOTE: one block whose plaintext ends in a zero byte, which is no
+      // valid padding.
+      final block = (await AESEncryptionAlgo(AESKey(key)).encrypt(
+              Uint8List.fromList([...List.filled(15, 65), 0]),
+              iv: InitialisationVector.legacy()))
+          .sublist(0, 16);
+      File(defaultKeyfile())
+        ..createSync(recursive: true)
+        ..writeAsStringSync(jsonEncode({
+          'selfEncryptionKey': key,
+          'aesPkamPrivateKey': base64Encode(block),
+        }));
+
+      final run =
+          await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+      final first = 'The keys for $atSign at ${defaultKeyfile()} could not be '
+          'read: ';
+
+      expect(run.stderr.where((l) => l.startsWith(first)), hasLength(1),
+          reason: 'the library message: ${run.stderr}');
+      expect(run.stderr.join('\n'), isNot(contains('passphrase')));
+      expect(run.exitCode, 1);
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test(
+        'a passphrase-protected keyfile, decrypted, with a field of the '
+        'wrong type', () async {
+      const passPhrase = 'passphrase-90c2d7';
+      File(defaultKeyfile())
+        ..createSync(recursive: true)
+        ..writeAsStringSync(await const AtKeysPassphraseEnvelopeCodec().encode(
+            jsonEncode({
+              'selfEncryptionKey': AESKey.generate(32).key,
+              'aesPkamPublicKey': 5,
+            }),
+            passPhrase));
+
+      final run = await atActivate(
+          ['otp', '-a', atSign, '-P', passPhrase, '-r', atDirectoryRoot()]);
+
+      expect(
+          run.stderr,
+          holdsOnceInOrder([
+            "The keys for $atSign at ${defaultKeyfile()} could not be read: "
+                "type 'int' is not a subtype of type 'String' in type cast.",
+            footer,
+          ]));
+      expect(run.stderr.join('\n'), isNot(contains('pass it with -P')));
+      expect(run.exitCode, 1);
+    }, timeout: const Timeout(Duration(minutes: 2)));
+  });
+
+  test(
+      'a keyfile holding only a pending enrollment request says to wait for '
+      'its approval', () async {
+    await FileAtKeysIo(filePath: (_) => defaultKeyfile()).write(
+        atSign,
+        AtKeys()
+          ..addKey(CryptographicMaterial(
+              keyId: 'apkam:e-1:1',
+              enrollmentId: 'e-1',
+              role: CryptographicMaterialRole.privateAuthentication,
+              algorithm: CryptographicMaterialAlgorithm.rsa2048,
+              bytes: AtBytes.fromString(base64Encode(List.filled(32, 3))),
+              createdAt: DateTime.now().toUtc(),
+              status: CryptographicMaterialStatus.pending)));
+
+    final run =
+        await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+
+    expect(
+        run.stderr,
+        holdsOnceInOrder([
+          'This keyfile holds only a pending enrollment request for $atSign '
+              '(id e-1). Wait for it to be approved, then run this command '
+              'again.',
+          footer,
+        ]));
+    expect(run.exitCode, 1);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test(
+      'the absent keys\' lookup gives both hints when the atDirectory does '
+      'not answer within 5 seconds', () async {
+    final elapsed = Stopwatch()..start();
+    final run = await atActivate(
+        ['otp', '-a', atSign, '-r', '127.0.0.1:${silentAtDirectory.port}']);
+    elapsed.stop();
+
+    expect(
+        run.stderr,
+        holdsOnceInOrder([
+          'No keys for $atSign at ${defaultKeyfile()}.',
+          '  Not activated yet?             at_activate onboard -a $atSign',
+          '  Activated on another machine?  Run this command there, or enroll '
+              'this machine first.',
+          footer,
+        ]));
+    expect(silentSockets, isNotEmpty,
+        reason: 'the control: the lookup reached the silent atDirectory');
+    expect(elapsed.elapsed, lessThan(const Duration(seconds: 20)),
+        reason: 'the lookup is given 5 seconds, not the network timeout');
+    expect(run.exitCode, 1);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  group('the hint lookup, made from this process', () {
+    test('closes its connection to the atServer', () async {
+      final hungUp = atServerHangUps.stream.first;
+
+      expect(await absentKeysHint(atSign, atDirectoryRoot()), [
+        '$atSign has not been activated yet. To activate it: at_activate '
+            'onboard -a $atSign'
+      ]);
+      await hungUp.timeout(const Duration(seconds: 5));
+    });
+
+    test('reads an answer that is not data as no public key', () async {
+      publicKeyAnswer = _PublicKey.garbled;
+
+      expect(await absentKeysHint(atSign, atDirectoryRoot()), [
+        '$atSign has not been activated yet. To activate it: at_activate '
+            'onboard -a $atSign'
+      ]);
+    });
+  });
 
   test('A program built on CLIBase says the same', () async {
     final dir = Directory.systemTemp.createTempSync('keys_problems_cli_base_');
