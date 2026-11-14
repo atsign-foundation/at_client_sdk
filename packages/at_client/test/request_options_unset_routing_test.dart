@@ -63,6 +63,12 @@ class _AlwaysRemotePutOptions extends PutRequestOptions {
   bool get useRemoteAtServer => true;
 }
 
+/// Put options from outside the library that leave useRemoteAtServer alone.
+class _AppPutOptions extends PutRequestOptions {}
+
+/// Delete options from outside the library that leave useRemoteAtServer alone.
+class _AppDeleteOptions extends DeleteRequestOptions {}
+
 void main() {
   AtSignLogger.root_level = 'shout';
 
@@ -346,6 +352,58 @@ void main() {
           .then((_) => List.of(events));
 
       expect(sentByReturn, contains('update:$key'));
+    });
+
+    test(
+        'under remoteOnly, a PutRequestOptions subclass that leaves '
+        'useRemoteAtServer unset reaches the atServer before it returns',
+        () async {
+      const atSign = '@subclassunsetput';
+      final client =
+          await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+      final key = selfKey(atSign);
+
+      final sentByReturn = await client
+          .put(key, 'a value',
+              putRequestOptions: _AppPutOptions()..shouldEncrypt = false)
+          .then((_) => List.of(events));
+
+      expect(sentByReturn, contains('update:$key'));
+    });
+
+    test(
+        'under remoteOnly, a noCommit DeleteRequestOptions subclass that leaves '
+        'useRemoteAtServer unset reaches the atServer', () async {
+      const atSign = '@subclassunsetdelete';
+      final client =
+          await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+      final key = selfKey(atSign);
+
+      final sentByReturn = await client
+          .delete(key,
+              deleteRequestOptions: _AppDeleteOptions()..noCommit = true)
+          .then((_) => List.of(events));
+
+      expect(sentByReturn, contains('delete:$key'));
+    });
+
+    test(
+        'a subclass that sets useRemoteAtServer false still routes local under '
+        'remoteOnly', () async {
+      const atSign = '@subclassexplicitlocal';
+      final client =
+          await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+      final key = selfKey(atSign);
+
+      final sentByReturn = await client
+          .put(key, 'a value',
+              putRequestOptions: _AppPutOptions()
+                ..useRemoteAtServer = false
+                ..shouldEncrypt = false)
+          .then((_) => List.of(events));
+
+      expect(sentByReturn, isEmpty);
+      expect(await storedLocally(client, key), 'a value');
     });
   });
 }

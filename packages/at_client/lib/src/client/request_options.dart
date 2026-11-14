@@ -4,7 +4,19 @@ import 'package:meta/meta.dart' show internal;
 /// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
 abstract class RequestOptions {
   bool? _useRemoteAtServer;
+
+  /// What the SDK's `useRemoteAtServer` getters read: false while unset, and
+  /// then marks this object as read unset for [useRemoteAtServerIfSet].
+  bool _readUseRemoteAtServer() {
+    final value = _useRemoteAtServer;
+    if (value == null) _readUnset = this;
+    return value ?? false;
+  }
 }
+
+/// The options object whose `useRemoteAtServer` getter last read the field
+/// unset; set and cleared within one synchronous [useRemoteAtServerIfSet].
+RequestOptions? _readUnset;
 
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.get`
@@ -26,7 +38,7 @@ class GetRequestOptions extends RequestOptions {
   /// sync pushes it, so a remote read can fail to find what a local read would
   /// return; an uncached key owned by another atSign is unaffected, because
   /// that read is a lookup and always goes to the atServer.
-  bool get useRemoteAtServer => _useRemoteAtServer ?? false;
+  bool get useRemoteAtServer => _readUseRemoteAtServer();
 
   set useRemoteAtServer(bool value) => _useRemoteAtServer = value;
 }
@@ -44,7 +56,7 @@ class PutRequestOptions extends RequestOptions {
   /// pushes it, so a reader that is not this client's own store — another
   /// client of this atSign, or a peer looking the key up — can miss a record
   /// this call has already reported written.
-  bool get useRemoteAtServer => _useRemoteAtServer ?? false;
+  bool get useRemoteAtServer => _readUseRemoteAtServer();
 
   set useRemoteAtServer(bool value) => _useRemoteAtServer = value;
 
@@ -117,7 +129,7 @@ class DeleteRequestOptions extends RequestOptions {
   /// A delete routed to local storage reaches the atServer only when sync next
   /// pushes it, so another client or a peer can still read the record after
   /// this call returns.
-  bool get useRemoteAtServer => _useRemoteAtServer ?? false;
+  bool get useRemoteAtServer => _readUseRemoteAtServer();
 
   set useRemoteAtServer(bool value) => _useRemoteAtServer = value;
 
@@ -139,19 +151,19 @@ class DeleteRequestOptions extends RequestOptions {
 /// there are no options.
 ///
 /// A subclass or another implementation of an options class may compute the
-/// value, so for one of those this is its getter's value.
+/// value, so this is its getter's value — except that a getter answering
+/// false from the SDK's own unset field, as a subclass that neither sets nor
+/// overrides it does, gives null.
 @internal
 bool? useRemoteAtServerIfSet(RequestOptions? options) {
-  final type = options?.runtimeType;
-  if (type == GetRequestOptions ||
-      type == PutRequestOptions ||
-      type == DeleteRequestOptions) {
-    return options!._useRemoteAtServer;
-  }
-  return switch (options) {
+  _readUnset = null;
+  final value = switch (options) {
     GetRequestOptions o => o.useRemoteAtServer,
     PutRequestOptions o => o.useRemoteAtServer,
     DeleteRequestOptions o => o.useRemoteAtServer,
     _ => null,
   };
+  final readUnset = identical(_readUnset, options);
+  _readUnset = null;
+  return readUnset && value == false ? null : value;
 }

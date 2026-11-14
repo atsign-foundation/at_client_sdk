@@ -66,3 +66,22 @@ Feature: A request option left unset follows the client's routing preference
     Given a client whose remoteLocalPref is remoteOnly
     When the app calls put with PutRequestOptions that set noCommit and leave useRemoteAtServer unset
     Then the update reaches the atServer with noCommit before put returns
+
+  Scenario Outline: Under remoteOnly, an options subclass that leaves useRemoteAtServer unset reaches the atServer
+    Given a client whose remoteLocalPref is remoteOnly
+    When the app calls <operation> with a subclass of <options> that neither sets nor overrides useRemoteAtServer, setting only <other field>
+    Then the <command> reaches the atServer before <operation> returns
+    Examples:
+      | operation | options              | other field   | command |
+      | put       | PutRequestOptions    | shouldEncrypt | update  |
+      | delete    | DeleteRequestOptions | noCommit      | delete  |
+
+  Scenario: An options subclass that sets useRemoteAtServer false still routes local under remoteOnly
+    Given a client whose remoteLocalPref is remoteOnly
+    When the app calls put with a PutRequestOptions subclass whose useRemoteAtServer is set false
+    Then the value is written to local storage and nothing is sent to the atServer before put returns
+
+  Scenario: A legacy fallback keeps an unset useRemoteAtServer unset
+    Given PutRequestOptions, or a subclass of it, on which useRemoteAtServer was never set
+    When a put falls back to legacy encryption and copies those options
+    Then useRemoteAtServer is still unset on the copy
