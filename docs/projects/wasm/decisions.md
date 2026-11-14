@@ -277,6 +277,15 @@ shim (fallback, verified mechanically viable via `CItem.toJson()`/`jsonEncode`),
 surface is read-compatible with typed Dart peers but not write-compatible.** See
 `js-api.md` §11 JS-7 and §5.2.
 
+**Status, 2026-11-14.** Route A is now implemented upstream: at_client 4.1.0
+(unreleased) adds an optional `writeTypeTag` to `AtClient.collection` and
+`AtCollection.subCollection`, which stamps items written without a registered factory
+instead of `n/a`. The same change adds a per-client reopen check: opening a namespace
+again on the same client with a different effective tag (`writeTypeTag`, else `typeTag`)
+throws `CollectionTypeTagMismatchException`. The JS binding has not yet adopted
+`writeTypeTag`, so JS writes still stamp `n/a` until it does; the read-only
+compatibility described above stands for JS consumers today.
+
 **Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
 outright: it would force every JS app into a Dart build step, destroying the
 `npm install` story this entire project exists to deliver.

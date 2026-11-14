@@ -36,9 +36,14 @@ Upgrading from 3.x: see
 The `AtClient` interface ([`lib/src/client/at_client_spec.dart`](lib/src/client/at_client_spec.dart))
 is the main entry point once authentication is complete.
 
-- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, eventSource, cleanupOrphansOnCreation})` —
+- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, writeTypeTag, eventSource, cleanupOrphansOnCreation})` —
   returns a `Future<AtCollection<T>>`. `fromJson` and `typeTag` travel
-  together; pass either both or neither. AtCollections hide the
+  together; pass either both or neither. `writeTypeTag` can be passed
+  without a factory to stamp the items an untyped collection writes; it must
+  be non-blank, and must equal `typeTag` when both are given (else
+  `ArgumentError`). Reopening the same namespace on the same client with a
+  different effective tag (`writeTypeTag ?? typeTag`, where none counts as a
+  tag) throws `CollectionTypeTagMismatchException`. AtCollections hide the
   low-level keystore plumbing and let you work directly with your own
   domain objects and types (see [Collections](#collections) below).
 - `notificationService` — fire-and-forget and pub/sub messaging

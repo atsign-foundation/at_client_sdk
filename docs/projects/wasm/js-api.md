@@ -312,6 +312,15 @@ client and a Dart client therefore **cannot share a collection as equals** until
 State this asymmetry to every consumer, prominently: **the JS surface is read-compatible
 with typed Dart peers, not yet write-compatible.**
 
+**Status, 2026-11-14.** Route A is implemented upstream in at_client 4.1.0 (unreleased):
+`AtClient.collection` and `AtCollection.subCollection` take an optional
+`writeTypeTag`, and `_resolveType` falls back to it before `n/a` when no factory is
+registered for the item's type. The same change adds a per-client reopen check: a
+namespace reopened on the same client with a different effective tag (`writeTypeTag`,
+else `typeTag`) throws `CollectionTypeTagMismatchException`. The JS binding still has to
+adopt `writeTypeTag` before JS writes stop stamping `n/a`; until then the gap above
+holds for JS consumers.
+
 ### 5.3 The surface
 
 Facade method names below are the ergonomic (Layer B) names, not upstream's — see the
@@ -728,7 +737,9 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   (upstream `writeTypeTag`) or route B (the carrier-class shim) ships, every record a JS
   binding writes stamps `type: 'n/a'` and cannot be rehydrated as a typed object by a
   Dart peer app. This is a real interop gap for a mixed JS+Dart fleet, not a documentation
-  nicety — see [§11](#11-open-questions) JS-7.
+  nicety — see [§11](#11-open-questions) JS-7. (Route A is implemented upstream in
+  at_client 4.1.0, unreleased; the JS binding has yet to adopt it — see the 2026-11-14
+  status note in §5.2.)
 
 ---
 
@@ -774,6 +785,11 @@ a JS binding writes stamps `type: 'n/a'` because `_resolveType` keys on a reifie
 project's preferred outcome; route B is bounded (a fixed ceiling of concurrent tags) and
 achievable unilaterally in the facade. **Resolve on upstream's answer to the additive
 change; document the gap and ship read-compatibility in the meantime.**
+
+*Status, 2026-11-14:* upstream has implemented route A as `writeTypeTag` in at_client
+4.1.0 (unreleased), together with a per-client reopen check that throws
+`CollectionTypeTagMismatchException`. The JS binding has yet to adopt it, so JS writes
+still stamp `n/a`; route B stays documented as the fallback.
 
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
 `packages/at_client/lib/src/manager/at_client_manager.dart` holds a
