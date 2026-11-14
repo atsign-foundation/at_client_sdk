@@ -40,8 +40,8 @@ void main() {
 
       transport.add(utf8.encode('@binary:from:@a\n'));
 
-      final event = await transport.inbound.first
-          .timeout(const Duration(seconds: 5));
+      final event =
+          await transport.inbound.first.timeout(const Duration(seconds: 5));
       expect(utf8.decode(event), 'data:from:@a\n',
           reason: 'a browser hands a binary frame over as a Blob unless the '
               'socket asks for an ArrayBuffer');

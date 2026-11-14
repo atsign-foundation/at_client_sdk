@@ -1,3 +1,15 @@
+## 4.1.0
+- feat: the tabs of one browser origin can share one monitor connection.
+  `at_lookup_web.dart`'s `tabSharedLookUps(inner, scope:)` wraps a lookup
+  factory so that one tab holds a Web Lock, runs notifications on its
+  connection and relays them to the others on a `BroadcastChannel`; the lock
+  passes when that tab closes and is taken from one the browser has frozen.
+  Pass it as `buildAtClient`'s `notificationLookUps`.
+- feat: `at_lookup.dart` carries the platform-neutral layer underneath:
+  `TabMuxable` and `sharedMonitorLookUps` over the `MonitorLock`,
+  `MonitorChannel` and `PageLifecycle` ports, with in-memory ports for tests
+  and for apps on one VM.
+
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `AtLookupImpl`'s constructor is internal to at_lookup; build a

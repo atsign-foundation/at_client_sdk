@@ -43,8 +43,8 @@ void main() {
         rootDomain: AtRootDomain('127.0.0.1', port),
         authenticator: null,
         transport: webSocketTransport(scheme: 'ws'),
-        secondaryAddressFinder:
-            HttpsSecondaryAddressFinder('127.0.0.1', port: port, scheme: 'http'));
+        secondaryAddressFinder: HttpsSecondaryAddressFinder('127.0.0.1',
+            port: port, scheme: 'http'));
 
     test(
         'A browser lookup finds its atServer through the atDirectory\'s '

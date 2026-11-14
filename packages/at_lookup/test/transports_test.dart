@@ -82,10 +82,9 @@ void main() {
         final socket = await WebSocketTransformer.upgrade(request);
         held.add(socket);
         socket.listen((message) {
-          final command = (message is String
-                  ? message
-                  : utf8.decode(message as List<int>))
-              .trim();
+          final command =
+              (message is String ? message : utf8.decode(message as List<int>))
+                  .trim();
           received['ws']!.add(command);
           socket.add('${answer(command)}\n@alice@');
         });
@@ -160,7 +159,8 @@ void main() {
         reason: 'the command is never sent');
 
     final control = lookUpWith((_) async => true);
-    final answered = control.executeCommand('llookup:phone@alice\n', auth: true);
+    final answered =
+        control.executeCommand('llookup:phone@alice\n', auth: true);
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await transports.last.settle();
     expect(transports.last.written, ['llookup:phone@alice\n'],
@@ -178,7 +178,8 @@ void main() {
         rootDomain: rootDomain,
         authenticator: null,
         transport: AtLookupTransport(
-            transportFactory: _FakeWebSocketFactory(ports,
+            transportFactory: _FakeWebSocketFactory(
+                ports,
                 (port) => WebSocketTransport(port, 'ws://fake',
                     maxInboundBytes: 64,
                     logger: AtSignLogger('WebSocketTransport',
@@ -194,7 +195,8 @@ void main() {
     addTearDown(notifications.cancel);
 
     for (var i = 0; i < 4; i++) {
-      ports.single.receive('notification: {"id":"n$i","value":"${'x' * 20}"}\n');
+      ports.single
+          .receive('notification: {"id":"n$i","value":"${'x' * 20}"}\n');
     }
     await pumpEventQueue();
 

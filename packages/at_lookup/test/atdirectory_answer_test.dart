@@ -25,7 +25,8 @@ void main() {
   group('checkAtDirectoryStatus', () {
     test('a 2xx is an answer', () {
       for (final status in [200, 204, 299]) {
-        expect(() => checkAtDirectoryStatus('root.atsign.org', '@alice', status),
+        expect(
+            () => checkAtDirectoryStatus('root.atsign.org', '@alice', status),
             returnsNormally,
             reason: '$status');
       }
@@ -110,8 +111,8 @@ void main() {
 
       expect(
           () => answer.add([0x61]),
-          throwsA(isA<AtException>().having((e) => e.message, 'message',
-              contains('longer than 512 bytes'))),
+          throwsA(isA<AtException>().having(
+              (e) => e.message, 'message', contains('longer than 512 bytes'))),
           reason: 'the 513th byte, wherever its chunk starts');
     });
   });

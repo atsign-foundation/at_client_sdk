@@ -13,12 +13,8 @@ const int maxAtDirectoryAnswerBytes = 512;
 /// the path is the atSign's canonical form.
 ///
 /// Throws [InvalidAtSignException] when [atSign] is not an atSign.
-Uri atDirectoryUri(String scheme, String host, int port, String atSign) =>
-    Uri(
-        scheme: scheme,
-        host: host,
-        port: port,
-        pathSegments: [atSign.toAtsign()]);
+Uri atDirectoryUri(String scheme, String host, int port, String atSign) => Uri(
+    scheme: scheme, host: host, port: port, pathSegments: [atSign.toAtsign()]);
 
 /// Throws when the atDirectory at [host], answering [status] for [atSign],
 /// gave no answer: [SecondaryNotFoundException] for a `404`, and

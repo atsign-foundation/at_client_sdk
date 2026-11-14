@@ -30,9 +30,9 @@ void main() {
   late _OpeningSocket socket;
   setUp(() => socket = _OpeningSocket());
 
-  Matcher refused(String cause) => throwsA(isA<SecondaryConnectException>()
-      .having((e) => e.message, 'message',
-          allOf(contains('atserver.example:443'), contains(cause))));
+  Matcher refused(String cause) =>
+      throwsA(isA<SecondaryConnectException>().having((e) => e.message,
+          'message', allOf(contains('atserver.example:443'), contains(cause))));
 
   test('completes once the socket opens, and leaves it open', () async {
     final opening = awaitOpen(socket, 'atserver.example', '443');
@@ -78,8 +78,8 @@ void main() {
 
   test('a close of the lookup it opens for ends the wait at once', () async {
     final abandonment = Abandonment();
-    final opening = abandonment
-        .run(() => awaitOpen(socket, 'atserver.example', '443'));
+    final opening =
+        abandonment.run(() => awaitOpen(socket, 'atserver.example', '443'));
     abandonment.abandon();
 
     await expectLater(opening, refused('abandoned'));

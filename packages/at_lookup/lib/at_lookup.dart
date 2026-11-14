@@ -7,3 +7,6 @@ export 'src/transport/at_transport.dart';
 export 'src/exception/at_lookup_exception.dart';
 export 'src/cache/secondary_address_finder.dart';
 export 'src/cache/fixed_secondary_address_finder.dart';
+export 'src/shared_monitor/in_memory_monitor_ports.dart';
+export 'src/shared_monitor/shared_monitor_ports.dart';
+export 'src/shared_monitor/tab_muxable.dart';

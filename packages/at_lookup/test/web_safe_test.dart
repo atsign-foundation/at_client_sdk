@@ -16,8 +16,7 @@ void main() {
       expect(reached.libraries.intersection({'dart:io', 'dart:ffi'}), isEmpty,
           reason: '$barrel reaches no dart:io, directly or through another '
               'package');
-      expect(reached.files.where((f) => !f.contains('/at_lookup/')),
-          isNotEmpty,
+      expect(reached.files.where((f) => !f.contains('/at_lookup/')), isNotEmpty,
           reason: 'the control: the walk left at_lookup for the packages '
               '$barrel imports');
     }
@@ -40,9 +39,8 @@ Future<({Set<String> libraries, Set<String> files})> _reach(
       multiLine: true);
   while (pending.isNotEmpty) {
     final uri = pending.removeLast();
-    final resolved = uri.scheme == 'package'
-        ? await Isolate.resolvePackageUri(uri)
-        : uri;
+    final resolved =
+        uri.scheme == 'package' ? await Isolate.resolvePackageUri(uri) : uri;
     if (resolved == null || !files.add(resolved.toFilePath())) continue;
     final source = File(resolved.toFilePath()).readAsStringSync();
     for (final match in directive.allMatches(source)) {
