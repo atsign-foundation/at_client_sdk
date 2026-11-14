@@ -1222,8 +1222,9 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 - **J9 — Resolve JS-7**: raise the additive `writeTypeTag` change upstream; fall back to
   J1a's carrier-class shim only if declined. *Status, 2026-11-14:* upstream
   `writeTypeTag` is implemented in at_client 4.1.0 (unreleased), with a
-  per-client reopen check (`CollectionTypeTagMismatchException`). Still open here: the JS
-  binding adopting it, so JS writes stop stamping `n/a`.
+  per-client reopen check (`CollectionTypeTagMismatchException`), and the J1 adapter
+  adopts it. Still open here: the facade exposing the adapter, so JS writes stop stamping
+  `n/a`.
 - **J10 — Resolve JS-8**: ship the `AtClientManager` singleton documented as one atSign
   per page/process, plus a Layer B `AtFailure.alreadyInitialised` on a second distinct
   atSign (~10 lines) — converts silent state corruption into a clear error.

@@ -282,9 +282,9 @@ surface is read-compatible with typed Dart peers but not write-compatible.** See
 `AtCollection.subCollection`, which stamps items written without a registered factory
 instead of `n/a`. The same change adds a per-client reopen check: opening a namespace
 again on the same client with a different effective tag (`writeTypeTag`, else `typeTag`)
-throws `CollectionTypeTagMismatchException`. The JS binding has not yet adopted
-`writeTypeTag`, so JS writes still stamp `n/a` until it does; the read-only
-compatibility described above stands for JS consumers today.
+throws `CollectionTypeTagMismatchException`. The Dart-side collections adapter passes
+the JS `type` as `writeTypeTag`, but JS writes still stamp `n/a` until the facade exposes
+the adapter; the read-only compatibility described above stands for JS consumers today.
 
 **Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
 outright: it would force every JS app into a Dart build step, destroying the

@@ -319,9 +319,10 @@ with typed Dart peers, not yet write-compatible.**
 `writeTypeTag`, and `_resolveType` falls back to it before `n/a` when no factory is
 registered for the item's type. The same change adds a per-client reopen check: a
 namespace reopened on the same client with a different effective tag (`writeTypeTag`,
-else `typeTag`) throws `CollectionTypeTagMismatchException`. The JS binding still has to
-adopt `writeTypeTag` before JS writes stop stamping `n/a`; until then the gap above
-holds for JS consumers.
+else `typeTag`) throws `CollectionTypeTagMismatchException`. The Dart-side adapter
+(§5.5) passes `type` straight through as `writeTypeTag`, so records it writes carry the
+declared tag (T6.9). JS consumers get this once the `@JSExport` facade exposes the
+adapter; until then the gap above holds for them.
 
 ### 5.3 The surface
 
@@ -804,8 +805,8 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   binding writes stamps `type: 'n/a'` and cannot be rehydrated as a typed object by a
   Dart peer app. This is a real interop gap for a mixed JS+Dart fleet, not a documentation
   nicety — see [§11](#11-open-questions) JS-7. (Route A is implemented upstream in
-  at_client 4.1.0, unreleased; the JS binding has yet to adopt it — see the 2026-11-14
-  status note in §5.2.)
+  at_client 4.1.0, unreleased, and the §5.5 adapter adopts it; JS consumers get it once
+  the facade exposes the adapter — see the 2026-11-14 status note in §5.2.)
 
 ---
 
@@ -854,8 +855,8 @@ change; document the gap and ship read-compatibility in the meantime.**
 
 *Status, 2026-11-14:* upstream has implemented route A as `writeTypeTag` in at_client
 4.1.0 (unreleased), together with a per-client reopen check that throws
-`CollectionTypeTagMismatchException`. The JS binding has yet to adopt it, so JS writes
-still stamp `n/a`; route B stays documented as the fallback.
+`CollectionTypeTagMismatchException`. The §5.5 adapter adopts it; JS writes still stamp
+`n/a` until the facade exposes the adapter. Route B stays documented as the fallback.
 
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
 `packages/at_client/lib/src/manager/at_client_manager.dart` holds a
