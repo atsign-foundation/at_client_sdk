@@ -140,9 +140,6 @@ class RegistrarAdminService {
       }
       explicitPort = port;
     }
-    // Compare the parsed host/port, not `uri.authority`: `Uri.https` drops a
-    // default `:443`, so an authority-string comparison refuses a
-    // registrarUrl that spells out the default port.
     final uri = Uri.https(registrarUrl, '/');
     if (uri.userInfo.isNotEmpty ||
         uri.host != host.toLowerCase() ||
@@ -208,10 +205,8 @@ class RegistrarAdminService {
 
     final streamed = await _http.send(request);
 
-    if (abortTrigger.isCompleted) {
-      // The outer `.timeout()` in `_adminRequest` has already failed this
-      // call. Stop here instead of reading a response nobody is waiting
-      // for, in case the client ignored `abortTrigger` and sent one anyway.
+    final requestAlreadyTimedOut = abortTrigger.isCompleted;
+    if (requestAlreadyTimedOut) {
       await _cancelQuietly(streamed.stream.listen(null));
       throw RegistrarException(
         'Registrar request to ${endpoint.path} timed out after the '

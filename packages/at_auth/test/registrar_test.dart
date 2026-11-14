@@ -932,8 +932,8 @@ void main() {
         throwsA(isA<RegistrarException>()
             .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
       );
-      // Let the delayed `send` resolve and the late-response guard run.
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      const lateResponseGuardDelay = Duration(milliseconds: 100);
+      await Future<void>.delayed(lateResponseGuardDelay);
       expect(spyChunk.wasRead, isFalse,
           reason: 'a response that arrives after the timeout fired must not '
               'have its body read');
