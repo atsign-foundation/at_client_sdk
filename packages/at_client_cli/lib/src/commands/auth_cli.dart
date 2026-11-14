@@ -685,6 +685,8 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
         maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
         atLookUp: atLookUp);
     return true;
+  } on AtKeysUnusableException {
+    rethrow;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     throw ('Onboarding failed : $e');
