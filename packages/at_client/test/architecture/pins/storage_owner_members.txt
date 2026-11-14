@@ -1,0 +1,6 @@
+# The members of AtClient a storage may use on the client it is attached to:
+# enough to know who holds it, nothing that reads, writes or routes.
+# Rule A7 in docs/architecture/invariants.md.
+# A change to this list needs a code owner's review, in a PR of its own.
+getCurrentAtSign
+enrollmentId
