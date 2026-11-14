@@ -20,10 +20,7 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
-
-final _logger = AtSignLogger('Atsign');
 
 /// The verbs an application reaches a working client through, on the atSign
 /// it holds keys for.
@@ -517,14 +514,9 @@ extension AtsignLifecycle on Atsign {
     }
   }
 
-  /// Throws [unusable] with the [stackTrace] of what made the keys unusable,
-  /// logging both at fine.
-  Never _refuse(AtKeysUnusableException unusable, StackTrace stackTrace) {
-    // NOTE: the read's own error is not logged; its text can hold what was
-    // read.
-    _logger.logger.fine(unusable.message, null, stackTrace);
-    Error.throwWithStackTrace(unusable, stackTrace);
-  }
+  /// Throws [unusable] with the [stackTrace] of what made the keys unusable.
+  Never _refuse(AtKeysUnusableException unusable, StackTrace stackTrace) =>
+      Error.throwWithStackTrace(unusable, stackTrace);
 
   /// A store [enroll] may write into: one holding nothing live for this
   /// atSign. Live keys are refused, since enrolling again would overwrite the
