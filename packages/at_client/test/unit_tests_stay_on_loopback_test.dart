@@ -14,21 +14,64 @@ const _loopbackArguments = {
   'InternetAddress.loopbackIPv4.address',
 };
 
-final _finderConstruction =
-    RegExp(r'CacheableSecondaryAddressFinder\(\s*([^,)]+)');
+/// The text of the argument list that opens just before [start] in
+/// [source], up to its closing parenthesis.
+String argumentsAt(String source, int start) {
+  var depth = 1;
+  for (var i = start; i < source.length; i++) {
+    final c = source[i];
+    if (c == '(') depth++;
+    if (c == ')' && --depth == 0) return source.substring(start, i);
+  }
+  return source.substring(start);
+}
 
-/// Each atDirectory finder built in [source], with the host argument it
-/// names, and whether that is on the loopback interface.
-Iterable<({String host, bool loopback})> findersIn(String source) =>
-    _finderConstruction.allMatches(source).map((m) {
-      final host = m.group(1)!.trim();
-      return (host: host, loopback: _loopbackArguments.contains(host));
-    });
+/// What in [source] could make a test reach an atDirectory off the loopback
+/// interface: a finder built for another host, or by a tear-off or a
+/// subclass, and a connection factory invoked with no finder, which builds
+/// one for whatever root it is given.
+List<String> offTheLoopbackIn(String source) => [
+      for (final m in RegExp(
+              r'\b(CacheableSecondaryAddressFinder|SecondaryUrlFinder)\s*\(\s*([^,)]+)')
+          .allMatches(source))
+        if (!_loopbackArguments.contains(m.group(2)!.trim()))
+          'a ${m.group(1)} for ${m.group(2)!.trim()}',
+      for (final m in RegExp(
+              r'\b(CacheableSecondaryAddressFinder|SecondaryUrlFinder)\.new\b')
+          .allMatches(source))
+        'a ${m.group(1)} torn off',
+      for (final m in RegExp(
+              r'extends\s+(CacheableSecondaryAddressFinder|SecondaryUrlFinder)\b')
+          .allMatches(source))
+        'a subclass of ${m.group(1)}',
+      for (final m
+          in RegExp(r'\b(secureSocketLookUps|lookUpsFor|proxyLookUps)\s*\(')
+              .allMatches(source))
+        if (_invokedWithoutFinder(source, m.end))
+          '${m.group(1)} invoked with no finder',
+      for (final m
+          in RegExp(r'AtLookUp\.withSecureSocket\s*\(').allMatches(source))
+        if (!argumentsAt(source, m.end).contains('secondaryAddressFinder:'))
+          'AtLookUp.withSecureSocket with no finder',
+    ];
+
+/// Whether the factory whose arguments open at [start] is invoked at once,
+/// with arguments naming no finder.
+bool _invokedWithoutFinder(String source, int start) {
+  final factoryArguments = argumentsAt(source, start);
+  final after = start + factoryArguments.length + 1;
+  final rest = source.substring(after);
+  if (!rest.trimLeft().startsWith('(')) return false;
+  final open = after + rest.indexOf('(') + 1;
+  return !argumentsAt(source, open).contains('secondaryAddressFinder:');
+}
 
 /// No unit test names an atDirectory off the loopback interface: the shared
-/// helpers refuse one before anything connects, and every finder a test
-/// builds for itself names a loopback host.
+/// helpers refuse one before anything connects, and nothing in a test
+/// reaches one another way.
 void main() {
+  final sep = Platform.pathSeparator;
+
   test('the shared helpers refuse an atDirectory off the loopback interface',
       () {
     expect(
@@ -43,41 +86,55 @@ void main() {
         reason: 'the control: a loopback atDirectory is handed back');
   });
 
-  test('every atDirectory finder a test builds names a loopback host', () {
+  test('the scan catches each way past the helpers, and passes loopback', () {
+    expect(
+        offTheLoopbackIn([
+          "CacheableSecondaryAddressFinder('root.atsign.org', 64)",
+          "SecondaryUrlFinder('root.atsign.org', 64)",
+          'final f = CacheableSecondaryAddressFinder.new;',
+          'class Mine extends CacheableSecondaryAddressFinder {}',
+          'secureSocketLookUps()(atSign: a, rootDomain: r, authenticator: null)',
+          'AtLookUp.withSecureSocket(atSign: a, rootDomain: r)',
+        ].join('\n')),
+        hasLength(6));
+    expect(
+        offTheLoopbackIn([
+          "CacheableSecondaryAddressFinder('127.0.0.1', port)",
+          'secureSocketLookUps()(atSign: a, rootDomain: r, authenticator: '
+              'null, secondaryAddressFinder: f)',
+          'lookUps: secureSocketLookUps(),',
+        ].join('\n')),
+        isEmpty);
+  });
+
+  test('nothing in a test reaches an atDirectory off the loopback interface',
+      () {
     final self = File('test/unit_tests_stay_on_loopback_test.dart').absolute;
     final helper = File('test/test_utils/transport.dart').absolute;
+    final samples = '${sep}test${sep}samples$sep';
     final files = Directory('test')
         .listSync(recursive: true)
         .whereType<File>()
-        .where((f) =>
-            f.path.endsWith('.dart') &&
-            // NOTE: samples are run by hand against the environment they
-            // name, never by dart test.
-            !f.path.contains('${Platform.pathSeparator}samples'
-                '${Platform.pathSeparator}') &&
-            f.absolute.path != self.path &&
-            f.absolute.path != helper.path)
+        .where((f) => f.path.endsWith('.dart') && f.absolute.path != self.path)
         .toList();
     expect(files.length, greaterThan(100),
         reason: 'the scan reads the test tree: ${files.length} files');
-    expect(
-        findersIn("CacheableSecondaryAddressFinder('root.atsign.org', 64)")
-            .single
-            .loopback,
-        isFalse,
-        reason: 'the control: a finder for the default root is caught');
 
-    final loopback = <String>[];
-    final offenders = <String>[];
-    for (final file in files) {
-      for (final finder in findersIn(file.readAsStringSync())) {
-        (finder.loopback ? loopback : offenders)
-            .add('${file.path}: ${finder.host}');
-      }
-    }
-    expect(loopback, isNotEmpty,
-        reason: 'the control: the scan finds the loopback finders tests '
-            'build: $loopback');
+    final offenders = <String>[
+      for (final file in files)
+        if (file.absolute.path.contains(samples)) ...[
+          // NOTE: samples are run by hand against the environment they name;
+          // dart test runs only *_test.dart files, so none may be one.
+          if (file.path.endsWith('_test.dart'))
+            '${file.path}: a test among the hand-run samples',
+        ] else ...[
+          if (file.readAsStringSync().contains('sample_transport.dart'))
+            '${file.path}: imports the hand-run samples\' finder',
+          if (file.absolute.path != helper.path)
+            for (final found in offTheLoopbackIn(file.readAsStringSync()))
+              '${file.path}: $found',
+        ],
+    ];
     expect(offenders, isEmpty);
   });
 }

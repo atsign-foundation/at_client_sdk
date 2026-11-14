@@ -16,7 +16,7 @@ void main() async {
           namespace: 'wavi',
           preference: preference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          secondaryAddressFinder: sampleAtDirectoryOf(preference),
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference)));
     var result = await atClientManager.atClient.syncService.isInSync();

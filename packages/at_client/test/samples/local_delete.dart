@@ -13,7 +13,7 @@ void main() async {
         namespace: 'wavi',
         preference: preference,
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(preference),
+        secondaryAddressFinder: sampleAtDirectoryOf(preference),
         atKeysIo: noKeysFor(atsign),
         storage: hiveStoreFor(atsign, preference)));
   var atClient = atClientManager.atClient;

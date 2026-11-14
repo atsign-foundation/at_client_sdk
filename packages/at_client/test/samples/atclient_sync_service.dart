@@ -16,7 +16,7 @@ void main() {
           namespace: 'wavi',
           preference: preference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          secondaryAddressFinder: sampleAtDirectoryOf(preference),
           atKeysIo: noKeysFor(atsign),
           storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
@@ -44,7 +44,7 @@ void main() {
           namespace: 'wavi',
           preference: preference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          secondaryAddressFinder: sampleAtDirectoryOf(preference),
           atKeysIo: noKeysFor(atsign),
           storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;

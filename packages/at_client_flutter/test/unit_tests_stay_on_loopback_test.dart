@@ -17,37 +17,9 @@ const _loopbackArguments = {
 /// The dialogs that run the lifecycle verbs, through `flows`.
 const _dialogs = ['PkamDialog', 'CramDialog', 'ApkamActivationDialog'];
 
-/// What in [source] could reach an atDirectory off the loopback interface:
-/// the real verbs built without [LoopbackFlows], a dialog built without its
-/// `flows`, and a finder built for a host that is not a loopback one.
-List<String> offTheLoopbackIn(String source) {
-  final found = <String>[];
-  for (final m in RegExp(r'\bAtsignFlows\(\)').allMatches(source)) {
-    found.add('the real verbs at offset ${m.start}');
-  }
-  for (final dialog in _dialogs) {
-    for (final m in RegExp('\\b$dialog(\\.show)?\\(').allMatches(source)) {
-      if (m.group(1) != null) {
-        found.add('$dialog.show at offset ${m.start}');
-        continue;
-      }
-      if (!_argumentsAt(source, m.end).contains('flows:')) {
-        found.add('$dialog with no flows at offset ${m.start}');
-      }
-    }
-  }
-  for (final m in RegExp(
-    r'CacheableSecondaryAddressFinder\(\s*([^,)]+)',
-  ).allMatches(source)) {
-    final host = m.group(1)!.trim();
-    if (!_loopbackArguments.contains(host)) found.add('a finder for $host');
-  }
-  return found;
-}
-
 /// The text of the argument list that opens just before [start] in
 /// [source], up to its closing parenthesis.
-String _argumentsAt(String source, int start) {
+String argumentsAt(String source, int start) {
   var depth = 1;
   for (var i = start; i < source.length; i++) {
     final c = source[i];
@@ -55,6 +27,85 @@ String _argumentsAt(String source, int start) {
     if (c == ')' && --depth == 0) return source.substring(start, i);
   }
   return source.substring(start);
+}
+
+/// [arguments] with everything inside a nested bracket taken out, leaving
+/// the top-level arguments' names.
+String topLevel(String arguments) {
+  final out = <String>[];
+  var depth = 0;
+  for (final c in arguments.split('')) {
+    if ('([{'.contains(c)) depth++;
+    if (depth == 0) out.add(c);
+    if (')]}'.contains(c)) depth--;
+  }
+  return out.join();
+}
+
+/// What in [source], the text of the file at [path], could make a test reach
+/// an atDirectory off the loopback interface: the real verbs without
+/// [LoopbackFlows], through `AtsignFlows` itself or a subclass of it; a
+/// dialog built without its own `flows`; a finder built for another host, or
+/// by a tear-off or a subclass; and a connection factory invoked with no
+/// finder.
+List<String> offTheLoopbackIn(String source, {String path = ''}) {
+  final found = <String>[];
+  for (final m in RegExp(r'\bAtsignFlows\(\)').allMatches(source)) {
+    found.add('the real verbs at offset ${m.start}');
+  }
+  if (!path.endsWith('loopback_flows.dart')) {
+    for (final m in RegExp(r'extends\s+AtsignFlows\b').allMatches(source)) {
+      found.add('a subclass of AtsignFlows at offset ${m.start}');
+    }
+  }
+  for (final m in RegExp(
+    r'class\s+\w+\s+(?:extends\s+(\w+)\s+)?implements\s+AtsignFlows\b',
+  ).allMatches(source)) {
+    if (m.group(1) != 'Mock') {
+      found.add('AtsignFlows implemented at offset ${m.start}');
+    }
+  }
+  for (final dialog in _dialogs) {
+    for (final m in RegExp('\\b$dialog(\\.show)?\\(').allMatches(source)) {
+      if (m.group(1) != null) {
+        found.add('$dialog.show at offset ${m.start}');
+        continue;
+      }
+      final names = topLevel(argumentsAt(source, m.end));
+      if (!RegExp(r'(^|[,\s])flows\s*:').hasMatch(names)) {
+        found.add('$dialog with no flows at offset ${m.start}');
+      }
+    }
+  }
+  for (final m in RegExp(
+    r'\b(CacheableSecondaryAddressFinder|SecondaryUrlFinder)\s*\(\s*([^,)]+)',
+  ).allMatches(source)) {
+    final host = m.group(2)!.trim();
+    if (!_loopbackArguments.contains(host)) {
+      found.add('a ${m.group(1)} for $host');
+    }
+  }
+  for (final m in RegExp(
+    r'\b(CacheableSecondaryAddressFinder|SecondaryUrlFinder)\.new\b|'
+    r'extends\s+(CacheableSecondaryAddressFinder|SecondaryUrlFinder)\b',
+  ).allMatches(source)) {
+    found.add('a finder torn off or subclassed at offset ${m.start}');
+  }
+  for (final m in RegExp(
+    r'\b(secureSocketLookUps|proxyLookUps)\s*\(',
+  ).allMatches(source)) {
+    final factoryArguments = argumentsAt(source, m.end);
+    final after = m.end + factoryArguments.length + 1;
+    final rest = source.substring(after);
+    if (rest.trimLeft().startsWith('(') &&
+        !argumentsAt(
+          source,
+          after + rest.indexOf('(') + 1,
+        ).contains('secondaryAddressFinder:')) {
+      found.add('${m.group(1)} invoked with no finder');
+    }
+  }
+  return found;
 }
 
 /// No unit test names an atDirectory off the loopback interface: the verbs
@@ -84,6 +135,36 @@ void main() {
     );
   });
 
+  test('the scan catches each way past LoopbackFlows, and passes the rest', () {
+    expect(
+      offTheLoopbackIn(
+        [
+          'const AtsignFlows();',
+          'class _Real extends AtsignFlows { const _Real(); }',
+          'class _Fake implements AtsignFlows {}',
+          'PkamDialog(atSign: a, keys: k, preference: p);',
+          'CramDialog(atSign: a, preference: f(flows: x));',
+          'PkamDialog.show(context, atSign: a);',
+          "CacheableSecondaryAddressFinder('root.atsign.org', 64)",
+          'final f = SecondaryUrlFinder.new;',
+          'secureSocketLookUps()(atSign: a, rootDomain: r, authenticator: '
+              'null)',
+        ].join('\n'),
+      ),
+      hasLength(9),
+    );
+    expect(
+      offTheLoopbackIn(
+        [
+          'PkamDialog(atSign: a, keys: k, flows: f(x))',
+          'class _Mock extends Mock implements AtsignFlows {}',
+          "CacheableSecondaryAddressFinder('127.0.0.1', port)",
+        ].join('\n'),
+      ),
+      isEmpty,
+    );
+  });
+
   test('nothing in a test reaches the verbs without LoopbackFlows', () {
     final self = File('test/unit_tests_stay_on_loopback_test.dart').absolute;
     final files = Directory('test')
@@ -96,23 +177,13 @@ void main() {
       greaterThan(10),
       reason: 'the scan reads the test tree: ${files.length} files',
     );
-    expect(
-      offTheLoopbackIn(
-        "const AtsignFlows(); PkamDialog(atSign: a, keys: k, preference: p); "
-        "CacheableSecondaryAddressFinder('root.atsign.org', 64)",
-      ),
-      hasLength(3),
-      reason: 'the control: each way past LoopbackFlows is caught',
-    );
-    expect(
-      offTheLoopbackIn('PkamDialog(atSign: a, keys: k, flows: f(x))'),
-      isEmpty,
-      reason: 'the control: a dialog given its flows passes',
-    );
 
     final offenders = <String>[
       for (final file in files)
-        for (final found in offTheLoopbackIn(file.readAsStringSync()))
+        for (final found in offTheLoopbackIn(
+          file.readAsStringSync(),
+          path: file.path,
+        ))
           '${file.path}: $found',
     ];
     expect(offenders, isEmpty);

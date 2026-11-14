@@ -15,7 +15,7 @@ void main() async {
           namespace: 'wavi',
           preference: preference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          secondaryAddressFinder: sampleAtDirectoryOf(preference),
           atKeysIo: noKeysFor(atsign),
           storage: InMemoryAtClientStorage(atSign: atsign)));
     var atClient = atClientManager.atClient;

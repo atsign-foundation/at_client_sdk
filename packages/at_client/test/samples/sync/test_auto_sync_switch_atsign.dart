@@ -16,7 +16,8 @@ void main() async {
         namespace: 'wavi',
         preference: TestUtil.getAlicePreference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(TestUtil.getAlicePreference()),
+        secondaryAddressFinder:
+            sampleAtDirectoryOf(TestUtil.getAlicePreference()),
         atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
   final atClient = atClientManager.atClient;
@@ -34,7 +35,8 @@ void main() async {
         namespace: 'wavi',
         preference: TestUtil.getBobPreference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(TestUtil.getBobPreference()),
+        secondaryAddressFinder:
+            sampleAtDirectoryOf(TestUtil.getBobPreference()),
         atKeysIo: noKeysFor('@bob🛠'),
         storage: hiveStoreFor('@bob🛠', TestUtil.getBobPreference())));
   // phone.me@alice🛠
