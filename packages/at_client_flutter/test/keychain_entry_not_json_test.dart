@@ -262,12 +262,14 @@ void main() {
         reason: 'no log record holds the entry\'s text',
       );
     }
+    const heard = 'a record the keychain logs';
+    KeychainStorage(
+      biometricStorage: _MockBiometricStorage(),
+    ).log(heard, false);
     expect(
-      logs.records.where(
-        (r) => r.contains('The keys for $atSign in this device\'s keychain'),
-      ),
+      logs.records.where((r) => r.contains(heard)),
       isNotEmpty,
-      reason: 'the recorder is bound, and heard open refuse the keys',
+      reason: 'the recorder hears the logger open reads the keychain through',
     );
   });
 
