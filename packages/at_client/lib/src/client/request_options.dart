@@ -3,15 +3,6 @@ import 'package:meta/meta.dart' show internal;
 /// Parameters that application code can optionally provide when calling
 /// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
 abstract class RequestOptions {
-  RequestOptions() {
-    _extendsRequestOptions[this] = true;
-  }
-
-  /// Marks every object built through this constructor, so it is known to
-  /// carry [_useRemoteAtServer]; an object that only implements an options
-  /// class has no such field.
-  static final Expando<bool> _extendsRequestOptions = Expando();
-
   bool? _useRemoteAtServer;
 }
 
@@ -147,22 +138,20 @@ class DeleteRequestOptions extends RequestOptions {
 /// The `useRemoteAtServer` [options] carry: null where it was never set or
 /// there are no options.
 ///
-/// The getter's value is used, since a subclass or another implementation of
-/// an options class may compute it. A false from an object that extends an
-/// options class and never set the value is taken as unset, because that is
-/// what the inherited getter reads while unset.
+/// A subclass or another implementation of an options class may compute the
+/// value, so for one of those this is its getter's value.
 @internal
 bool? useRemoteAtServerIfSet(RequestOptions? options) {
-  final value = switch (options) {
+  final type = options?.runtimeType;
+  if (type == GetRequestOptions ||
+      type == PutRequestOptions ||
+      type == DeleteRequestOptions) {
+    return options!._useRemoteAtServer;
+  }
+  return switch (options) {
     GetRequestOptions o => o.useRemoteAtServer,
     PutRequestOptions o => o.useRemoteAtServer,
     DeleteRequestOptions o => o.useRemoteAtServer,
     _ => null,
   };
-  if (value == false &&
-      RequestOptions._extendsRequestOptions[options!] == true &&
-      options._useRemoteAtServer == null) {
-    return null;
-  }
-  return value;
 }
