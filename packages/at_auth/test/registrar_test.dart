@@ -754,10 +754,19 @@ void main() {
               'not drained to completion');
     });
 
-    test('the deprecated superApiKey getter still returns the key', () {
+    test(
+        'the deprecated superApiKey getter throws instead of returning the '
+        'key', () {
       final service = _makeAdminService(_mockResponse({}));
-      // ignore: deprecated_member_use_from_same_package
-      expect(service.superApiKey, equals(_apiKey));
+      expect(
+        // ignore: deprecated_member_use_from_same_package
+        () => service.superApiKey,
+        throwsA(
+          predicate(
+            (e) => e is UnsupportedError && !e.toString().contains(_apiKey),
+          ),
+        ),
+      );
     });
 
     test(

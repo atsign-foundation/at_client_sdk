@@ -85,10 +85,11 @@ class RegistrarAdminService {
   final String registrarUrl;
   final String _superApiKey;
 
-  /// The super API key this service was constructed with.
-  @Deprecated(
-      'Will be removed in at_auth 5.0.0; nothing should read the super key back.')
-  String get superApiKey => _superApiKey;
+  /// Dead: always throws. Nothing should read the super key back.
+  @Deprecated('Will be removed in at_auth 5.0.0; already throws, does not '
+      'return the key.')
+  String get superApiKey => throw UnsupportedError(
+      'superApiKey is deprecated and no longer returns the key.');
 
   /// How long a single registrar request may take before it fails with
   /// [RegistrarFailure.timeout].
