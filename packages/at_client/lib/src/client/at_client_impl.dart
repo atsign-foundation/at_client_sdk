@@ -630,7 +630,7 @@ class AtClientImpl implements AtClient {
   // the same namespace with different event sources are independent
   // instances: each has its own listener wiring and pending-events
   // buffer, so sharing one cache slot would conflate their event
-  // streams.
+  // streams. The namespace is lower-cased, as atProtocol keys are.
   final Map<(String, EventSource), AtCollection> _collections = {};
   final Set<(String, EventSource)> _collectionsSwept =
       <(String, EventSource)>{};
@@ -642,6 +642,7 @@ class AtClientImpl implements AtClient {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     bool cleanupOrphansOnCreation = false,
   }) async {
     _refuseIfStopped('hand out the collection $namespace');
@@ -653,16 +654,31 @@ class AtClientImpl implements AtClient {
         'automatically.',
       );
     }
-    final cacheKey = (namespace, eventSource);
+    checkCollectionTagArgs<T>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+    final folded = namespace.toLowerCase();
+    // Every eventSource of a namespace writes the same items, so each must
+    // stamp them alike. A refused open caches nothing.
+    for (final MapEntry(key: (ns, _), value: open) in _collections.entries) {
+      if (ns == folded) {
+        refuseCollectionTagChange<T>(open,
+            typeTag: typeTag, writeTypeTag: writeTypeTag);
+      }
+    }
+    final cacheKey = (folded, eventSource);
     final c = _collections.putIfAbsent(
       cacheKey,
       () => AtCollection<T>(
         this,
-        namespace,
+        folded,
         defaultExpiration,
         eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       ),
     ) as AtCollection<T>;
     if (cleanupOrphansOnCreation && !_collectionsSwept.contains(cacheKey)) {
