@@ -165,6 +165,33 @@ void main() {
     );
   });
 
+  test('the scan catches each spelling of each way on its own', () {
+    for (final way in [
+      'const AtsignFlows();',
+      'class _Real extends AtsignFlows { const _Real(); }',
+      'class _Fake implements AtsignFlows {}',
+      'class _Fake extends Base implements AtsignFlows {}',
+      for (final dialog in [
+        'PkamDialog',
+        'CramDialog',
+        'ApkamActivationDialog',
+      ]) ...[
+        '$dialog(atSign: a, preference: p);',
+        '$dialog.show(context, atSign: a);',
+      ],
+      "CacheableSecondaryAddressFinder('example.com', 64)",
+      "SecondaryUrlFinder('example.com', 64)",
+      'final f = CacheableSecondaryAddressFinder.new;',
+      'final f = SecondaryUrlFinder.new;',
+      'class Mine extends CacheableSecondaryAddressFinder {}',
+      'class Mine extends SecondaryUrlFinder {}',
+      'secureSocketLookUps()(atSign: a, rootDomain: r, authenticator: null)',
+      'proxyLookUps(root)(atSign: a, rootDomain: r, authenticator: null)',
+    ]) {
+      expect(offTheLoopbackIn(way), hasLength(1), reason: way);
+    }
+  });
+
   test('nothing in a test reaches the verbs without LoopbackFlows', () {
     final self = File('test/unit_tests_stay_on_loopback_test.dart').absolute;
     final files = Directory('test')

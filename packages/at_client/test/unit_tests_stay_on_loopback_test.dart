@@ -107,6 +107,23 @@ void main() {
         isEmpty);
   });
 
+  test('the scan catches each spelling of each way on its own', () {
+    for (final way in [
+      "CacheableSecondaryAddressFinder('example.com', 64)",
+      "SecondaryUrlFinder('example.com', 64)",
+      'final f = CacheableSecondaryAddressFinder.new;',
+      'final f = SecondaryUrlFinder.new;',
+      'class Mine extends CacheableSecondaryAddressFinder {}',
+      'class Mine extends SecondaryUrlFinder {}',
+      'secureSocketLookUps()(atSign: a, rootDomain: r, authenticator: null)',
+      'lookUpsFor(root)(atSign: a, rootDomain: r, authenticator: null)',
+      'proxyLookUps(root)(atSign: a, rootDomain: r, authenticator: null)',
+      'AtLookUp.withSecureSocket(atSign: a, rootDomain: r)',
+    ]) {
+      expect(offTheLoopbackIn(way), hasLength(1), reason: way);
+    }
+  });
+
   test('nothing in a test reaches an atDirectory off the loopback interface',
       () {
     final self = File('test/unit_tests_stay_on_loopback_test.dart').absolute;
