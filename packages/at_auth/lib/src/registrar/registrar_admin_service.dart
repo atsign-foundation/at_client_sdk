@@ -74,11 +74,12 @@ class DeleteAtSignsResult {
   const DeleteAtSignsResult({required this.deleted, required this.failed});
 }
 
-/// The v4 `/manage-atsigns/` delete flow, which requires a Super API key.
+/// Registration and the v4 `/manage-atsigns/` delete flow, both of which
+/// require a Super API key.
 ///
 /// Kept apart from [RegistrarService] on purpose: [RegistrarService] ships in
 /// client apps (re-exported by `at_client_flutter`, WASM-safe), so putting
-/// delete methods on it would encourage compiling a super key into a mobile
+/// these methods on it would encourage compiling a super key into a mobile
 /// or web bundle, where it can be extracted. Build this service only in code
 /// that holds the super key already, such as an admin tool or backend.
 class RegistrarAdminService {
@@ -323,6 +324,10 @@ class RegistrarAdminService {
   /// before retrying with the same [atsign].
   ///
   /// ```dart
+  /// final admin = RegistrarAdminService(
+  ///   registrarUrl: 'my.registrar.example',
+  ///   superApiKey: superApiKey,
+  /// );
   /// final registered = await admin.registerAtsign(atsign: '@alice'.toAtsign());
   /// ```
   Future<RegisteredAtsign> registerAtsign({required Atsign atsign}) async {

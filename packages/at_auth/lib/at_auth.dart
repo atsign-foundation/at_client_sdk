@@ -62,6 +62,6 @@ export 'src/keys/io/memory_io.dart';
 export 'src/registrar/registrar.dart';
 export 'src/registrar/registrar_exceptions.dart';
 export 'src/registrar/registrar_service.dart';
-// The v4 delete flow, split out so a client app never builds a
-// `RegistrarService` with a Super API key.
+// Registration and the v4 delete flow, split out so a client app never
+// builds a `RegistrarService` with a Super API key.
 export 'src/registrar/registrar_admin_service.dart';
