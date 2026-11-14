@@ -111,10 +111,11 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// client is built stops it and is rethrown, so a retry for the same atSign
 /// builds afresh.
 ///
-/// Opens for one atSign run one at a time: an open started while another
-/// for the same atSign is running waits for it to end, then fails as it
-/// would after it (a [StateError] while that client is live) or builds
-/// afresh.
+/// Opens for one atSign as one enrollment run one at a time: an open started
+/// while another for the same atSign and enrollment is running waits for it
+/// to end, then fails as it would after it (a [StateError] while that client
+/// is live) or builds afresh. Opens for different enrollments of an atSign,
+/// which at_client allows side by side, do not wait on each other.
 ///
 /// [keysIo] is the key store the client runs on, by default a [SessionKeysIo]
 /// over [keys].
@@ -128,27 +129,30 @@ Future<AtClient> portalSession({
   SessionKeysIo? keysIo,
 }) async {
   final normalized = atSign.toAtsign();
-  if (floorOfKeyMaterial(keys, keys.enrollmentToAuthenticateAs()) != null) {
+  final enrollmentId = keys.enrollmentToAuthenticateAs();
+  if (floorOfKeyMaterial(keys, enrollmentId) != null) {
     throw UnsupportedKeyMaterialException(normalized);
   }
   // `buildAtClient` checks for a live client and registers its own across
-  // awaits, so two opens running together would both pass the check.
-  final previous = _opening[normalized];
+  // awaits, so two opens running together would both pass the check. It
+  // files clients by (atSign, enrollment), so that is what opens queue on.
+  final lock = '$normalized $enrollmentId';
+  final previous = _opening[lock];
   final done = Completer<void>();
-  _opening[normalized] = done;
+  _opening[lock] = done;
   try {
     if (previous != null) await previous.future;
     return await _open(normalized, app, keys, transport, root, prefs, keysIo);
   } finally {
     done.complete();
-    if (identical(_opening[normalized], done)) {
-      _opening.remove(normalized);
+    if (identical(_opening[lock], done)) {
+      _opening.remove(lock);
     }
   }
 }
 
-/// Completed when the newest open running for each atSign ends, however it
-/// ends; it never completes with an error.
+/// Completed when the newest open running for each (atSign, enrollment) ends,
+/// however it ends; it never completes with an error.
 final _opening = <String, Completer<void>>{};
 
 Future<AtClient> _open(

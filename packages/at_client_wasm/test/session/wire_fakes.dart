@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
@@ -15,6 +16,10 @@ class Wire {
 
   /// What PKAM answers; false is a refusal.
   var pkamAccepted = true;
+
+  /// One entry per PKAM, taken in order: that PKAM waits for it, then answers
+  /// its value. Once empty, PKAM answers [pkamAccepted] at once.
+  final pkamScript = Queue<Completer<bool>>();
 
   /// Whether the connection itself fails: PKAM throws instead of answering.
   var connectFails = false;
@@ -69,6 +74,9 @@ class WireLookUp implements AtLookupMuxable {
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
     if (_wire.connectFails) throw StateError('connection refused');
+    if (_wire.pkamScript.isNotEmpty) {
+      return _wire.pkamScript.removeFirst().future;
+    }
     return _wire.pkamAccepted;
   }
 

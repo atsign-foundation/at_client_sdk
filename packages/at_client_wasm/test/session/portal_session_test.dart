@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
@@ -121,6 +122,46 @@ void main() {
       expect(await first, isA<PortalSessionOfflineException>());
       final client = await second;
       expect(AtClientImpl.liveClientsFor(_atSign), [same(client)]);
+    });
+
+    test(
+        'opens for two enrollments of one atSign are not held up by each other',
+        () async {
+      final held = Completer<bool>();
+      wire.pkamScript.add(held);
+      final first = open();
+      await pumpEventQueue();
+      expect(wire.pkams, 1, reason: 'the first open waits on its PKAM');
+
+      final other = classicalAtKeys()..enrollmentId = 'second-enrollment';
+      final second = await open(keys: other).timeout(Duration(seconds: 2));
+
+      expect(second.connection.current.isOnline, isTrue);
+      held.complete(true);
+      await first;
+      expect(AtClientImpl.liveClientsFor(_atSign), hasLength(2));
+    });
+
+    test('opens that overlap one after another still run one at a time',
+        () async {
+      wire.pkamScript.add(Completer<bool>()..complete(false));
+
+      Future<Object> outcome(Future<AtClient> f) =>
+          f.then<Object>((c) => c, onError: (Object e) => e);
+      // The second and third queue behind the first. The fourth starts the
+      // moment the first ends, while the second is still on its way in.
+      final fourth = Completer<Object>();
+      final first = outcome(open())
+        ..whenComplete(() => fourth.complete(outcome(open())));
+      final second = outcome(open());
+      final third = outcome(open());
+
+      final outcomes = await Future.wait([first, second, third, fourth.future]);
+
+      expect(outcomes.first, isA<PortalSessionOfflineException>());
+      expect(outcomes.whereType<AtClient>(), hasLength(1), reason: '$outcomes');
+      expect(outcomes.whereType<StateError>(), hasLength(2));
+      expect(AtClientImpl.liveClientsFor(_atSign), hasLength(1));
     });
 
     test('opens for different atSigns are not held up by each other', () async {
