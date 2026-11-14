@@ -76,6 +76,9 @@ void main() {
   /// Key material no log line, message or field could hold by chance.
   late String keyMaterial;
 
+  /// The text of [entry] before its key material.
+  const opening = '{"keys":[{"aesPkamPrivateKey":"';
+
   /// A keychain atKeys entry cut short partway through a private key.
   late String entry;
 
@@ -95,7 +98,7 @@ void main() {
     keyMaterial = base64Url.encode(
       List.generate(33, (_) => random.nextInt(256)),
     );
-    entry = '{"keys":[{"aesPkamPrivateKey":"$keyMaterial';
+    entry = '$opening$keyMaterial';
   });
 
   /// A keychain whose store [holding] serves [entry], whose every other store
@@ -138,6 +141,13 @@ void main() {
       isEmpty,
       reason: 'nothing is written or deleted with $store holding the entry',
     );
+  }
+
+  /// Expects [actual] to hold none of [entry]: no 8-character run of its key
+  /// material, and no 5-character run of its [opening].
+  void expectHoldsNoneOfEntry(Object? actual, String reason) {
+    expect(actual, _holdsNoneOf(keyMaterial), reason: reason);
+    expect(actual, _holdsNoneOf(opening, window: 5), reason: reason);
   }
 
   FormatException parserErrorOf(String text) {
@@ -252,18 +262,13 @@ void main() {
       unusable.source,
       unusable.error,
     ]) {
-      expect(
+      expectHoldsNoneOfEntry(
         field,
-        _holdsNoneOf(keyMaterial),
-        reason: 'no field of the exception holds the entry\'s text',
+        'no field of the exception holds the entry\'s text',
       );
     }
     for (final record in logs.records) {
-      expect(
-        record,
-        _holdsNoneOf(keyMaterial),
-        reason: 'no log record holds the entry\'s text',
-      );
+      expectHoldsNoneOfEntry(record, 'no log record holds the entry\'s text');
     }
     const heard = 'a record the keychain logs';
     KeychainStorage(
