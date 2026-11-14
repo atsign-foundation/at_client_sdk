@@ -66,9 +66,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     var created = false;
     try {
       await probe.parent.create(recursive: true);
-      // NOTE: an exclusive create, so nothing already at the probe's path is
-      // opened or followed.
-      await probe.create(exclusive: true);
+      await probe.create();
       created = true;
     } on FileSystemException catch (e) {
       throw _notWritable(path, e);
