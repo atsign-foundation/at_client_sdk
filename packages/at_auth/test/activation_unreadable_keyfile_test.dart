@@ -288,6 +288,27 @@ void main() {
     }, skip: skipModes);
   });
 
+  group('Given a keyfile path in a directory this process can write', () {
+    test(
+        'when two checks that the keyfile can be written start together, then '
+        'both succeed and leave nothing behind', () async {
+      final io =
+          FileAtKeysIo(filePath: (_) => '${dir.path}/${atSign}_key.atKeys');
+
+      final outcomes = await Future.wait([
+        for (var i = 0; i < 2; i++)
+          io
+              .checkWritable(atSign)
+              .then<Object?>((_) => null, onError: (Object e) => e),
+      ]);
+
+      expect(outcomes, [null, null],
+          reason: 'two checks of one keyfile path at once each succeed');
+      expect(dir.listSync(), isEmpty,
+          reason: 'neither check leaves a file behind');
+    });
+  });
+
   group('An absent keyfile still activates', () {
     Future<void> activatesAt(String path) async {
       final response = await activate(FileAtKeysIo(filePath: (_) => path));
