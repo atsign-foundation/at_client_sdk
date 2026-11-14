@@ -6,7 +6,8 @@
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - fix: a keychain entry that is not valid JSON is reported as
   `AtKeysFormatException`, as a keyfile is: its `reason` and `position`, and
-  none of the entry's text; on Windows, a keychain read logs the length of
+  none of the entry's text.
+- fix: on Windows, a keychain read logs the store name and the length of
   what it read, never the text.
 - fix: `KeychainStorage.removeAtsignFromKeychain` and
   `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its

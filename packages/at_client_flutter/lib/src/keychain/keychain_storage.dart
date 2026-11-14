@@ -461,21 +461,11 @@ class KeychainStorage {
         if (storedData.startsWith('{')) {
           segmentCount = _segmentCountIn(storedData);
           segmentPrefix = '${keychainStoreName}_segment';
-          //log(
-          //  '  => READ: Got segmentCount $segmentCount'
-          //  ', and inferred RELATIVE segmentPrefix $segmentPrefix,'
-          //  ' from storedData $storedData',
-          //   false);
         } else {
           // legacy
           segmentCount = int.tryParse(storedData) ?? 0;
           String packageName = await getPackageName();
           segmentPrefix = '${packageName}_data';
-          //log(
-          //    '  => READ: Got segmentCount $segmentCount'
-          //     ', and inferred LEGACY, BUGGY segmentPrefix $segmentPrefix,'
-          //     ' from storedData $storedData',
-          //     false);
         }
         final results = <String>[];
         for (int i = 0; i < segmentCount; i++) {
@@ -488,7 +478,6 @@ class KeychainStorage {
             ' from $segmentPrefix',
             false,
           );
-          // log('  => READ: segmentValue was $segmentValue', false);
           results.add(segmentValue ?? '');
         }
         value = _combineString(results);
