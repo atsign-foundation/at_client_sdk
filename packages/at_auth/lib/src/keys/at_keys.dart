@@ -843,9 +843,8 @@ class AtKeys {
     if (candidates.length > 1) {
       throw AtKeysEnrollmentException(
           'This keyfile holds active authentication material for '
-          '${candidates.length} enrollments (${candidates.join(', ')}), so '
-          'which one it authenticates as is not derivable. The caller must '
-          'name the enrollment it means.');
+          '${candidates.length} enrollments, so which one it authenticates as '
+          'is not derivable. The caller must name the enrollment it means.');
     }
     return candidates.single;
   }
@@ -985,10 +984,13 @@ class AtKeys {
     if (value == null) return null;
     const assurance = AtKeysAssurance();
     final json = assurance.expectMap(value, '$prefix.namespaces');
+    // NOTE: a namespace is named by its position, not its name, so a message
+    // holds none of the stored value.
+    final entries = json.entries.toList();
     return {
-      for (final entry in json.entries)
+      for (final (i, entry) in entries.indexed)
         entry.key: assurance.expectNonEmptyString(
-            entry.value, '$prefix.namespaces.${entry.key}'),
+            entry.value, '$prefix.namespaces[$i]'),
     };
   }
 
@@ -1332,9 +1334,8 @@ class AtKeys {
     final material = _activeAuthenticationMaterial(enrollmentId);
     if (material != null) {
       throw AtKeyNotFoundException(
-          'Enrollment $enrollmentId authenticates with '
-          '"${material.algorithm}", which this build cannot sign '
-          'with. Its keypair is in this keyfile; the flat fields are a '
+          'The enrollment authenticates with an algorithm this build cannot '
+          'sign with. Its keypair is in this keyfile; the flat fields are a '
           'different enrollment\'s and are not a substitute for it.');
     }
     return null;
@@ -1397,8 +1398,8 @@ class AtKeys {
           public.status != CryptographicMaterialStatus.active ||
           public.algorithm != private.algorithm) {
         throw AtKeyNotFoundException(
-            'AtKeys holds no active authentication keypair for enrollment '
-            '$enrollmentId');
+            'AtKeys holds no active authentication keypair for the '
+            'enrollment');
       }
       return (
         algorithm: algorithm,

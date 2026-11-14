@@ -32,17 +32,20 @@ class AtKeysUnusableException extends AtException {
   /// null when whoever threw this named none.
   final String? source;
 
-  /// What reading the keys threw, when something did.
+  /// What reading the keys threw, when something did; a [FormatException]
+  /// is kept without its source, which was the text read.
   final Object? error;
 
   /// Keys unusable for [cause], said by [message].
   AtKeysUnusableException(super.message,
-      {required this.atSign, required this.cause, this.source, this.error});
+      {required this.atSign, required this.cause, this.source, Object? error})
+      : error = _withoutSource(error);
 
   /// [source] holds no keys for [atSign]; [error] is what the read threw.
   AtKeysUnusableException.absent(this.atSign,
-      {required String this.source, this.error})
+      {required String this.source, Object? error})
       : cause = AtKeysUnusableCause.absent,
+        error = _withoutSource(error),
         super('No keys for $atSign ${_where(source)}, so this device cannot '
             'authenticate as $atSign. Activate $atSign, enroll this device, '
             'or use the keyfile it already has.');
@@ -50,8 +53,9 @@ class AtKeysUnusableException extends AtException {
   /// [source] holds keys for [atSign] that reading them failed on with
   /// [error].
   AtKeysUnusableException.unreadable(this.atSign,
-      {required String this.source, required Object this.error})
+      {required String this.source, required Object error})
       : cause = AtKeysUnusableCause.unreadable,
+        error = _withoutSource(error),
         super('The keys for $atSign ${_where(source)} could not be read: '
             '${_reasonFor(error)}.');
 
@@ -62,6 +66,13 @@ class AtKeysUnusableException extends AtException {
         error = null,
         super('The keys ${_where(source)} are for $recorded, not $atSign.');
 }
+
+/// [error], or for a [FormatException] carrying the text it failed on, the
+/// same exception without that text.
+Object? _withoutSource(Object? error) =>
+    error is FormatException && error.source != null
+        ? FormatException(error.message, null, error.offset)
+        : error;
 
 /// [source] with the preposition a message puts before it: `in` before a
 /// name, which begins "the" or "this", and `at` before a path.

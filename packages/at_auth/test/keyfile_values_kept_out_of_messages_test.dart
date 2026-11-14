@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/holds_none_of.dart';
@@ -16,10 +17,13 @@ void main() {
   String distinctive() =>
       base64Url.encode(List.generate(33, (_) => random.nextInt(256)));
 
-  Map<String, dynamic> material({String createdAt = '2026-01-01T00:00:00Z'}) =>
+  Map<String, dynamic> material(
+          {String createdAt = '2026-01-01T00:00:00Z',
+          String role = 'publicEncryption',
+          String algorithm = 'rsa2048'}) =>
       {
-        'role': 'publicEncryption',
-        'algorithm': 'rsa2048',
+        'role': role,
+        'algorithm': algorithm,
         'bytes': base64Encode(utf8.encode('public')),
         'createdAt': createdAt,
       };
@@ -90,5 +94,122 @@ void main() {
         reason: 'the message holds none of the keyId');
     expect(message, contains('Duplicate atKeys keyId'),
         reason: 'it says a keyId repeats');
+  });
+
+  group('No other parse message quotes a stored value', () {
+    test('a role that repeats under one keyId', () {
+      final role = 'role${distinctive()}';
+      final keyId = distinctive();
+
+      final error = errorReading(document([
+        {
+          'keyId': keyId,
+          'material': [material(role: role), material(role: role)],
+        },
+      ]));
+
+      expect(error, isA<AtKeysValidationException>());
+      final message = (error as AtKeysValidationException).message;
+      expect(message, allOf(holdsNoneOf(role), holdsNoneOf(keyId)));
+      expect(message, 'Duplicate role at atsignKeys[0].material[1].role');
+    });
+
+    test('a value an enumeration does not hold', () {
+      final value = distinctive();
+
+      expect(
+          () => const AtKeysAssurance()
+              .expectEnum(value, EnrollmentKeyExchangeMode.values, 'mode'),
+          throwsA(isA<AtKeysValidationException>()
+              .having((e) => e.message, 'message', 'Unsupported value at mode')
+              .having((e) => e, 'text', holdsNoneOf(value))));
+    });
+
+    test('two active materials of one role and algorithm in an enrollment',
+        () {
+      final enrollmentId = distinctive();
+      final role = 'role${distinctive()}';
+      final algorithm = 'algo${distinctive()}';
+      CryptographicMaterial active(String keyId) => CryptographicMaterial(
+          keyId: keyId,
+          enrollmentId: enrollmentId,
+          role: CryptographicMaterialRole.of(role),
+          algorithm: CryptographicMaterialAlgorithm.of(algorithm),
+          bytes: AtBytes.fromString(base64Encode(utf8.encode('x'))),
+          createdAt: DateTime.utc(2026));
+
+      expect(
+          () => const AtKeysAssurance()
+              .validateKeyMaterials([active('k1'), active('k2')]),
+          throwsA(isA<AtKeysEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(holdsNoneOf(enrollmentId), holdsNoneOf(role),
+                  holdsNoneOf(algorithm)))));
+    });
+
+    test('a namespace whose value is not a string', () {
+      final namespace = distinctive();
+
+      final error = errorReading({
+        'version': AtKeys.supportedVersion,
+        'atsign': '@alice',
+        'enrollments': [
+          {
+            'enrollmentId': 'e-1',
+            'namespaces': {namespace: 5},
+            'keys': <Object>[],
+          },
+        ],
+      });
+
+      expect(error, isA<AtKeysParseException>());
+      final message = (error as AtKeysParseException).message;
+      expect(message, holdsNoneOf(namespace));
+      expect(message, contains('enrollments[0].namespaces[0]'),
+          reason: 'it names the namespace by its position');
+    });
+
+    test('an algorithm this build cannot sign with', () {
+      final algorithm = 'algo${distinctive()}';
+      final enrollmentId = distinctive();
+      final keys = AtKeys(atsign: '@alice'.toAtsign())
+        ..fileApkamMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.of(algorithm),
+            publicKey: base64Encode(utf8.encode('public')),
+            privateKey: base64Encode(utf8.encode('private')));
+
+      expect(
+          () => keys.authenticationKeyPairFor(enrollmentId),
+          throwsA(isA<AtKeyNotFoundException>().having((e) => e.message,
+              'message', allOf(holdsNoneOf(algorithm), holdsNoneOf(enrollmentId)))));
+    });
+
+    test('several enrollments that could authenticate', () {
+      final ids = [distinctive(), distinctive()];
+      Map<String, dynamic> enrollment(String id) => {
+            'enrollmentId': id,
+            'keys': [
+              {
+                'keyId': 'auth:rsa2048:1',
+                'material': [
+                  material(role: 'privateAuthentication'),
+                  material(role: 'publicAuthentication'),
+                ],
+              },
+            ],
+          };
+      final keys = AtKeys.fromJson({
+        'version': AtKeys.supportedVersion,
+        'atsign': '@alice',
+        'enrollments': [enrollment(ids[0]), enrollment(ids[1])],
+      });
+
+      expect(
+          () => keys.resolveAuthenticatingEnrollment(),
+          throwsA(isA<AtKeysEnrollmentException>().having((e) => e.message,
+              'message', allOf(holdsNoneOf(ids[0]), holdsNoneOf(ids[1])))));
+    });
   });
 }

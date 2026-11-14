@@ -53,9 +53,11 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   String describeSource(String atsign) => filePath!(atsign);
 
   /// Throws [FileSystemException] naming the keyfile's path unless a new
-  /// file can be created beside it, creating its directory when missing.
+  /// file can be created beside it.
   ///
-  /// The file it creates to find out is deleted before it returns.
+  /// It creates the keyfile's directory when missing, which the write needs
+  /// and which stays, and deletes the file it creates to find out before it
+  /// returns, leaving no file behind.
   @override
   Future<void> checkWritable(String atsign) async {
     final path = filePath!(atsign);

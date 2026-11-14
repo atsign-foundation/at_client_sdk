@@ -102,16 +102,16 @@ class AtAuthImpl implements AtAuth {
     // NOTE: activation reads the keys source, and checks it can write it,
     // before it sends the CRAM secret; only an absent source lets it go on.
     final keysIo = atOnboardingRequest.atKeysIo;
+    final source = keysIo?.describeSource(atOnboardingRequest.atSign);
     AtKeys? existingKeys;
     try {
       existingKeys = await keysIo?.read(atOnboardingRequest.atSign);
     } on AtKeysSourceAbsentException {
-      // No keys yet: this activation mints them.
+      existingKeys = null;
     } catch (e, stackTrace) {
       Error.throwWithStackTrace(
           AtKeysUnusableException.unreadable(atOnboardingRequest.atSign,
-              source: keysIo!.describeSource(atOnboardingRequest.atSign),
-              error: e),
+              source: source!, error: e),
           stackTrace);
     }
 

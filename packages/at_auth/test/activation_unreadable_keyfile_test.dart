@@ -172,7 +172,8 @@ void main() {
     setUp(() => path = '${dir.path}/${atSign}_key.atKeys');
 
     test('a keyfile this process cannot open', () async {
-      final privates = await writeKeyfile(path);
+      await writeKeyfile(path);
+      final text = File(path).readAsStringSync();
       expect(Process.runSync('chmod', ['000', path]).exitCode, 0);
 
       await expectLater(
@@ -188,7 +189,7 @@ void main() {
                       .having((e) => e.path, 'path', path)
                       .having((e) => e.osError?.errorCode, 'osError.errorCode',
                           eacces)),
-              holdsNoneOf(privates[0]))));
+              holdsNoneOf(text, window: 16))));
       expectNothingSent();
     }, skip: skipModes);
 
@@ -210,7 +211,8 @@ void main() {
 
     test('a passphrase-protected keyfile read with the wrong passphrase',
         () async {
-      final privates = await writeKeyfile(path, passPhrase: passPhrase);
+      await writeKeyfile(path, passPhrase: passPhrase);
+      final text = File(path).readAsStringSync();
 
       await expectLater(
           activate(
@@ -226,12 +228,13 @@ void main() {
                       isNot(contains(otherPassPhrase)),
                       isNot(contains(cramSecret))),
                   isA<AtDecryptionException>()),
-              holdsNoneOf(privates[1]))));
+              holdsNoneOf(text, window: 16))));
       expectNothingSent();
     });
 
     test('a passphrase-protected keyfile read with no passphrase', () async {
-      final privates = await writeKeyfile(path, passPhrase: passPhrase);
+      await writeKeyfile(path, passPhrase: passPhrase);
+      final text = File(path).readAsStringSync();
 
       await expectLater(
           activate(FileAtKeysIo(filePath: (_) => path)),
@@ -241,7 +244,7 @@ void main() {
                   'The keys for $atSign at $path could not be read: Pass '
                       'Phrase is required for password protected atKeys file.',
                   isA<AtDecryptionException>()),
-              holdsNoneOf(privates[2]))));
+              holdsNoneOf(text, window: 16))));
       expectNothingSent();
     });
   });
@@ -380,9 +383,14 @@ void main() {
                   source,
                   'The keys for $atSign in $source could not be read: '
                       'Unexpected end of input.',
-                  same(error)),
-              isA<AtKeysUnusableException>().having(
-                  (e) => e.message, 'message', holdsNoneOf(text)))));
+                  isA<FormatException>()
+                      .having((e) => e.message, 'message',
+                          'Unexpected end of input')
+                      .having((e) => e.source, 'source', isNull)
+                      .having((e) => e.offset, 'offset', text.length)),
+              isA<AtKeysUnusableException>()
+                  .having((e) => e.message, 'message', holdsNoneOf(text))
+                  .having((e) => '${e.error}', 'error', holdsNoneOf(text)))));
       expectNothingSent();
     });
 
@@ -396,6 +404,32 @@ void main() {
               'The keys for $atSign in $source could not be read: Unsupported '
                   'atKeys version: 2.',
               same(error))));
+      expectNothingSent();
+    });
+
+    test('a reason that ends in a full stop keeps one', () async {
+      final error = AtKeysValidationException('The store is closed.');
+
+      await expectLater(
+          activate(_UnreadableStore(error)),
+          throwsA(unreadable(
+              source,
+              'The keys for $atSign in $source could not be read: The store is '
+                  'closed.',
+              same(error))));
+      expectNothingSent();
+    });
+
+    test('a parser reason that reads like not an object, at a position',
+        () async {
+      await expectLater(
+          activate(_UnreadableStore(AtKeysFormatException.notJson('the entry',
+              const FormatException('not a JSON object', null, 3)))),
+          throwsA(unreadable(
+              source,
+              'The keys for $atSign in $source could not be read: it is not '
+                  'valid JSON: not a JSON object (at character 4).',
+              isA<AtKeysFormatException>())));
       expectNothingSent();
     });
 

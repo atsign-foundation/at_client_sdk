@@ -38,7 +38,8 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   /// Throws unless [write] could create [atsign]'s keys in this store now;
   /// the default checks nothing.
   ///
-  /// It leaves nothing behind in the store.
+  /// It may create what the write would need first, such as the keyfile's
+  /// directory, and leaves no keys or other file behind.
   Future<void> checkWritable(String atsign) async {}
 
   /// Persists [atKeys] as the complete new state for [atsign].
