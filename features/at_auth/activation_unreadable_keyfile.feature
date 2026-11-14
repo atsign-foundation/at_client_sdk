@@ -24,3 +24,10 @@ Feature: Activation refuses a keyfile it cannot read or write before it uses the
     Given an atKeys store for @alice that exists but cannot be read, including a field of the wrong type or a keychain the platform refuses to read
     When the app activates @alice with its CRAM secret
     Then it throws AtKeysUnusableException with cause unreadable, naming the keys source and why, and sends nothing to the atServer
+
+  @race
+  Scenario: Two checks that one keyfile path can be written, run at once, both succeed
+    Given a keyfile path in a directory this process can write
+    When two checks that the keyfile can be written start together
+    Then both succeed
+    And nothing is left behind in the directory

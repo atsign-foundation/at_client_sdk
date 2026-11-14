@@ -307,10 +307,10 @@ void main() {
     }, skip: skipModes);
   });
 
-  group('Given a keyfile path in a directory this process can write', () {
-    test(
-        'when two checks that the keyfile can be written start together, then '
-        'both succeed and leave nothing behind', () async {
+  group(
+      'Two checks that one keyfile path can be written, run at once, both '
+      'succeed', () {
+    test('and nothing is left behind', () async {
       final io =
           FileAtKeysIo(filePath: (_) => '${dir.path}/${atSign}_key.atKeys');
 
