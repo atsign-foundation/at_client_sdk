@@ -97,4 +97,18 @@ void main() {
         reason: 'the caller\'s object may be shared, and one write\'s '
             'fallback must not become every later write\'s default');
   });
+
+  test(
+      'a legacy fallback of options that leave useRemoteAtServer unset leaves '
+      'it unset, so the copy still follows remoteLocalPref', () {
+    final given = PutRequestOptions();
+    expect(useRemoteAtServerIfSet(given), isNull,
+        reason: 'the control: it was never set');
+
+    final copy = AtClientImpl.copyOptionsForLegacyFallback(given);
+
+    expect(useRemoteAtServerIfSet(copy), isNull,
+        reason: 'copying the getter\'s false would pin the fallback write '
+            'local under remoteOnly');
+  });
 }

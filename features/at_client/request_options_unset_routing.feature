@@ -66,3 +66,8 @@ Feature: A request option left unset follows the client's routing preference
     Given a client whose remoteLocalPref is remoteOnly
     When the app calls put with PutRequestOptions that set noCommit and leave useRemoteAtServer unset
     Then the update reaches the atServer with noCommit before put returns
+
+  Scenario: A legacy fallback keeps an unset useRemoteAtServer unset
+    Given PutRequestOptions on which useRemoteAtServer was never set
+    When a put falls back to legacy encryption and copies those options
+    Then useRemoteAtServer is still unset on the copy
