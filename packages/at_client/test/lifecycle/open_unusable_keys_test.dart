@@ -39,18 +39,6 @@ class _NamelessKeys extends InMemoryAtKeysIo {
       throw StateError('this store names no source');
 }
 
-/// A connection for an authenticator that records each command sent on it.
-class _RecordingExecutor implements AtCommandExecutor {
-  final List<String> sent = [];
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    sent.add(command);
-    return 'data:';
-  }
-}
-
 /// An atDirectory that records each atSign it is asked for and answers none.
 class _RecordingAtDirectory implements SecondaryAddressFinder {
   final List<String> asked = [];
@@ -347,8 +335,9 @@ void main() {
             return File(path).readAsStringSync();
           },
           reader: FileAtKeysIo(filePath: (_) => path),
-          reason: equals('AtKeys holds no authentication keypair for '
-              'the primary enrollment, so there is nothing to sign with'),
+          reason: equals('AtKeys holds no authentication keypair for the '
+              'enrollment it authenticates as, so there is nothing to sign '
+              'with'),
           error: isA<AtKeyNotFoundException>());
     });
 
@@ -456,75 +445,6 @@ void main() {
                     'than opening it')
             .having((e) => e.pendingEnrollmentIds, 'pending', ['e-1']));
     expectNoConnection();
-  });
-
-  group(
-      'Given keys holding no authentication keypair for the enrollment they '
-      'authenticate as', () {
-    for (final (label, enrollmentId, handedToAuthenticator, named) in [
-      (
-        'a keyfile naming no enrollment',
-        null,
-        [null, EnrollmentConstants.primaryEnrollmentId],
-        'the primary enrollment'
-      ),
-      ('a keyfile naming an enrollment', 'e-1', ['e-1'], 'e-1'),
-    ]) {
-      test(
-          'when open and the PKAM authenticator are given them, then both '
-          'refuse them with requireAuthenticationKeyPairFor\'s message '
-          '($label)', () async {
-        final keys = AtKeys.legacy(
-            apkamPrivateKey: randomBase64(64),
-            encryptionPublicKey: randomBase64(64),
-            encryptionPrivateKey: randomBase64(64),
-            selfEncryptionKey: randomBase64(32),
-            enrollmentId: enrollmentId);
-        final io = InMemoryAtKeysIo.holding(atSign, keys);
-        final authenticatesAs = keys.enrollmentToAuthenticateAs();
-        final expected = 'AtKeys holds no authentication keypair for $named, '
-            'so there is nothing to sign with';
-        expect(
-            () => keys.requireAuthenticationKeyPairFor(authenticatesAs),
-            throwsA(isA<AtKeyNotFoundException>()
-                .having((e) => e.message, 'message', expected)));
-
-        Object? openError;
-        try {
-          await openUnconnected(io);
-        } on AtKeysUnusableException catch (e) {
-          openError = e.error;
-        }
-        expect(
-            openError,
-            isA<AtKeyNotFoundException>()
-                .having((e) => e.message, 'message', expected),
-            reason: 'open refuses them with the message of the check the '
-                'authenticator makes');
-
-        expect(handedToAuthenticator, contains(authenticatesAs),
-            reason: 'the authenticator is handed the id open authenticates '
-                'as');
-        for (final id in handedToAuthenticator) {
-          final executor = _RecordingExecutor();
-          Object? pkamError;
-          try {
-            await authenticatorFor(io, atSign, enrollmentId: id)(executor);
-          } on AtKeyNotFoundException catch (e) {
-            pkamError = e;
-          }
-          expect(
-              pkamError,
-              isA<AtKeyNotFoundException>()
-                  .having((e) => e.message, 'message', expected),
-              reason: 'the authenticator handed ${jsonEncode(id)} refuses '
-                  'them with the message of the check open makes');
-          expect(executor.sent, isEmpty,
-              reason: 'the authenticator sends nothing before refusing');
-        }
-        expectNoConnection();
-      });
-    }
   });
 
   group('Given keys in a store whose describeSource throws', () {

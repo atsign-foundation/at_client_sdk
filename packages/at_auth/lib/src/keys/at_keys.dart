@@ -1420,24 +1420,6 @@ class AtKeys {
     );
   }
 
-  /// The authentication keypair [authenticationKeyPairFor] returns for
-  /// [enrollmentId], for a caller that has nothing to sign with without one.
-  ///
-  /// Throws [AtKeyNotFoundException] where that returns null, naming
-  /// [enrollmentId], or the primary enrollment when it is null or
-  /// [EnrollmentConstants.primaryEnrollmentId].
-  ({SigningAlgoType algorithm, String publicKey, String privateKey})
-      requireAuthenticationKeyPairFor(String? enrollmentId) {
-    final keyPair = authenticationKeyPairFor(enrollmentId);
-    if (keyPair != null) return keyPair;
-    final named = enrollmentId == null ||
-            enrollmentId == EnrollmentConstants.primaryEnrollmentId
-        ? 'the primary enrollment'
-        : enrollmentId;
-    throw AtKeyNotFoundException('AtKeys holds no authentication keypair for '
-        '$named, so there is nothing to sign with');
-  }
-
   /// The atSign's active material in [role], whatever algorithm it names.
   CryptographicMaterial? _activeAtSignMaterial(String role) => atSignKeys
       .where((m) =>

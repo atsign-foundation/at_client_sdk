@@ -126,7 +126,12 @@ Future<bool> _pkam(
 ) async {
   // NOTE: typed material this build cannot sign with is refused, never
   // signed for from the flat fields.
-  final keyPair = keys.requireAuthenticationKeyPairFor(enrollmentId);
+  final keyPair = keys.authenticationKeyPairFor(enrollmentId);
+  if (keyPair == null) {
+    throw AtKeyNotFoundException('AtKeys holds no authentication keypair for '
+        '${enrollmentId ?? "the primary enrollment"}, so there is '
+        'nothing to sign the PKAM challenge with');
+  }
   final signingAlgo = keyPair.algorithm;
   const hashingAlgo = HashingAlgoType.sha256;
 

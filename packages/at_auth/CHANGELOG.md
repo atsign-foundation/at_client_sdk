@@ -15,9 +15,6 @@
   algorithm from activating simultaneously.
 - fix: `AtKeys.authenticationKeyPairFor` ensures both halves come from the same
   keyId and share the same algorithm, and that the public half is active.
-- feat: `AtKeys.requireAuthenticationKeyPairFor` returns the keypair
-  `authenticationKeyPairFor` returns, or throws `AtKeyNotFoundException`
-  naming the enrollment where that returns null.
 - fix: an enrollment request advertising a signing key whose algorithm the keyfile
   cannot file is refused before `enroll:request` is sent.
 - fix: `AtKeysAssurance.validateKeyMaterials` indexes active materials by
