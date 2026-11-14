@@ -592,18 +592,17 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   final atDirectory =
       CacheableSecondaryAddressFinder(rootDomain.rootDomain, rootDomain.rootPort);
   final found = await _lookUpPublicKey(
-          atSign,
-          atDirectory,
-          () => lookUpsFor(rootDomain.rootDomain)(
-              atSign: atSign,
-              rootDomain: rootDomain,
-              authenticator: null,
-              secondaryAddressFinder: atDirectory))
-      .timeout(_absentKeysHintBudget,
-          onTimeout: () => (
-                outcome: _PublicKey.atDirectoryUnreachable,
-                detail: 'no answer within $_absentKeysHintBudget'
-              ));
+      atSign,
+      atDirectory,
+      () => lookUpsFor(rootDomain.rootDomain)(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: null,
+          secondaryAddressFinder: atDirectory)).timeout(_absentKeysHintBudget,
+      onTimeout: () => (
+            outcome: _PublicKey.atDirectoryUnreachable,
+            detail: 'no answer within $_absentKeysHintBudget'
+          ));
   return switch (found.outcome) {
     _PublicKey.absent => [
         '$atSign has not been activated yet. To activate it: at_activate '

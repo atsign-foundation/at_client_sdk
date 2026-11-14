@@ -2,10 +2,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:at_auth/at_auth.dart'
-    show
-        AtKeys,
-        AtKeysFormatException,
-        AtKeysSourceAbsentException;
+    show AtKeys, AtKeysFormatException, AtKeysSourceAbsentException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
