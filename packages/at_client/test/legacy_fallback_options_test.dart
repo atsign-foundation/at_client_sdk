@@ -98,9 +98,7 @@ void main() {
             'fallback must not become every later write\'s default');
   });
 
-  test(
-      'a legacy fallback of options that leave useRemoteAtServer unset leaves '
-      'it unset, so the copy still follows remoteLocalPref', () {
+  test('A legacy fallback keeps an unset useRemoteAtServer unset', () {
     final given = PutRequestOptions();
     expect(useRemoteAtServerIfSet(given), isNull,
         reason: 'the control: it was never set');
