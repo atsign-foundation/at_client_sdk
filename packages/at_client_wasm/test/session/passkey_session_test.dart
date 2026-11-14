@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 // The fixtures build legacy flat-field keyfiles on purpose.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -286,8 +287,9 @@ void main() {
       expect(gateway.lastSession!.closeCalls, 1);
     });
 
-    test('two logins for one atSign started together give one client',
-        () async {
+    test(
+        'two logins for one atSign and enrollment started together give one '
+        'client', () async {
       final device = await enrolledElsewhere();
 
       final outcomes = await Future.wait([
@@ -301,6 +303,31 @@ void main() {
       expect(outcomes.whereType<StateError>(), hasLength(1),
           reason: 'the second open fails as it would after the first');
       expect(AtClientImpl.liveClientsFor(_atSign), [same(clients.single)]);
+    });
+
+    test(
+        'a login for another enrollment of the atSign is not held up by one '
+        'in flight', () async {
+      final device = await enrolledElsewhere();
+      // The same passkey enrolled the atSign a second time on another device.
+      server.seedByEnrollment['eid2'] = server.seedByEnrollment['eid1']!;
+      server.documents['eid2'] = server.documents['eid1']!;
+      final other = FakeHints()
+        ..credentials.addAll(device.credentials)
+        ..ids[_atSign] = 'eid2';
+      final held = Completer<bool>();
+      wire.pkamScript.add(held);
+      final first = login(withHints: device);
+      await pumpEventQueue();
+      expect(wire.pkams, 1, reason: 'the first login waits on its PKAM');
+
+      final second =
+          await login(withHints: other).timeout(Duration(seconds: 2));
+
+      expect(second.connection.current.isOnline, isTrue);
+      held.complete(true);
+      await first;
+      expect(AtClientImpl.liveClientsFor(_atSign), hasLength(2));
     });
   });
 }
