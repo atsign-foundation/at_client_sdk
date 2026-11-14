@@ -55,6 +55,25 @@ class _UnreadableStore extends WrittenAtKeysIo {
   Future write(String atsign, AtKeys atKeys) async {}
 }
 
+/// The keyfile at [path], in a store that cannot say where it keeps keys.
+class _NamelessFileIo extends FileAtKeysIo {
+  _NamelessFileIo(String path) : super(filePath: (_) => path);
+
+  @override
+  String describeSource(String atsign) =>
+      throw StateError('this store names no source');
+}
+
+/// A store whose read fails with [error], and which cannot say where it
+/// keeps keys.
+class _NamelessUnreadableStore extends _UnreadableStore {
+  _NamelessUnreadableStore(super.error);
+
+  @override
+  String describeSource(String atsign) =>
+      throw StateError('this store names no source');
+}
+
 /// A platform's refusal to read its keychain, as a plugin reports one.
 class _PlatformRefusal implements Exception {
   @override
@@ -464,6 +483,33 @@ void main() {
               'The keys for $atSign in $source could not be read: Bad state: '
               'the store is closed.',
               same(error))));
+      expectNothingSent();
+    });
+  });
+
+  group('Given a keys store whose describeSource throws', () {
+    test(
+        'when the app activates the atSign with its CRAM secret and no keys '
+        'are there, then activation completes and writes the keys', () async {
+      final path = '${dir.path}/${atSign}_key.atKeys';
+
+      final response = await activate(_NamelessFileIo(path));
+
+      expect(response.isSuccessful, isTrue);
+      expect(
+          (await FileAtKeysIo(filePath: (_) => path).read(atSign)).enrollmentId,
+          'abc123');
+    });
+
+    test(
+        'when its keys cannot be read, then activation throws '
+        'AtKeysUnusableException naming the keys store, and sends nothing',
+        () async {
+      await expectLater(
+          activate(_NamelessUnreadableStore(const FormatException('no keys'))),
+          throwsA(isA<AtKeysUnusableException>()
+              .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+              .having((e) => e.source, 'source', 'the keys store')));
       expectNothingSent();
     });
   });

@@ -102,17 +102,17 @@ class AtAuthImpl implements AtAuth {
     // NOTE: activation reads the keys source, and checks it can write it,
     // before it sends the CRAM secret; only an absent source lets it go on.
     final keysIo = atOnboardingRequest.atKeysIo;
-    final source = keysIo?.describeSource(atOnboardingRequest.atSign);
     AtKeys? existingKeys;
     try {
       existingKeys = await keysIo?.read(atOnboardingRequest.atSign);
-    } on AtKeysSourceAbsentException {
-      existingKeys = null;
     } catch (e, stackTrace) {
-      Error.throwWithStackTrace(
-          AtKeysUnusableException.unreadable(atOnboardingRequest.atSign,
-              source: source!, error: e),
-          stackTrace);
+      if (e is! AtKeysSourceAbsentException) {
+        Error.throwWithStackTrace(
+            AtKeysUnusableException.unreadable(atOnboardingRequest.atSign,
+                source: _sourceOf(keysIo!, atOnboardingRequest.atSign),
+                error: e),
+            stackTrace);
+      }
     }
 
     if (existingKeys != null) {
@@ -500,6 +500,17 @@ class AtAuthImpl implements AtAuth {
           '${atRequest.atSign} atServer'
           '${lastError == null ? '' : ' : $lastError'}');
     }
+  }
+}
+
+/// Where [keysIo] keeps [atSign]'s keys, as its `describeSource` says, or
+/// the keys store when that throws, so the keys problem is still the one
+/// reported.
+String _sourceOf(AtKeysIo keysIo, String atSign) {
+  try {
+    return keysIo.describeSource(atSign);
+  } catch (_) {
+    return 'the keys store';
   }
 }
 

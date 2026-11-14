@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -21,6 +22,22 @@ Matcher holdsNoRunOf(String value, {int window = 16}) => predicate<String>(
     (text) => !Iterable.generate(value.length - window + 1)
         .any((i) => text.contains(value.substring(i, i + window))),
     'text holding no $window-character run of what was read');
+
+/// Keys in memory, in a store that cannot say where it keeps them; a read
+/// fails with [readError] when one is given.
+class _NamelessKeys extends InMemoryAtKeysIo {
+  _NamelessKeys({this.readError});
+
+  final Object? readError;
+
+  @override
+  FutureOr<AtKeys> read(String atsign) =>
+      readError == null ? super.read(atsign) : throw readError!;
+
+  @override
+  String describeSource(String atsign) =>
+      throw StateError('this store names no source');
+}
 
 /// An atDirectory that records each atSign it is asked for and answers none.
 class _RecordingAtDirectory implements SecondaryAddressFinder {
@@ -428,6 +445,38 @@ void main() {
                     'than opening it')
             .having((e) => e.pendingEnrollmentIds, 'pending', ['e-1']));
     expectNoConnection();
+  });
+
+  group('Given keys in a store whose describeSource throws', () {
+    test('when they hold a live credential, then open goes ahead', () async {
+      final keys = _NamelessKeys();
+      await keys.write(atSign, liveKeys());
+      final lookUp = lookUpAnswering(() async => true);
+      final pref = await preference();
+
+      final client = await Atsign(atSign).open(
+          keys: keys,
+          preference: pref,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref),
+          atLookUp: lookUp,
+          storage: hiveStoreFor(atSign, pref));
+
+      expect(client.connection.current.isOnline, isTrue);
+      verify(() => lookUp.pkamAuthenticate()).called(1);
+    });
+
+    test(
+        'when they cannot be read, then open refuses them naming the keys '
+        'store, before connecting', () async {
+      await expectLater(
+          openUnconnected(
+              _NamelessKeys(readError: const FormatException('no keys'))),
+          throwsA(isA<AtKeysUnusableException>()
+              .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+              .having((e) => e.source, 'source', 'the keys store')));
+      expectNoConnection();
+    });
   });
 
   test('An atServer refusal still says the atServer refused it', () async {

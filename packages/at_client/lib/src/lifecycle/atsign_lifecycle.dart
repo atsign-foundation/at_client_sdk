@@ -475,22 +475,24 @@ extension AtsignLifecycle on Atsign {
   /// Throws [AtKeysUnusableException] unless [keys] hold a credential for
   /// this atSign.
   Future<void> _refuseUnusableKeys(AtKeysIo keys) async {
-    final source = keys.describeSource(this);
     final AtKeys stored;
     try {
       stored = await keys.read(this);
     } on AtKeysSourceAbsentException catch (e, stackTrace) {
-      _refuse(AtKeysUnusableException.absent(this, source: source, error: e),
+      _refuse(
+          AtKeysUnusableException.absent(this,
+              source: _sourceOf(keys), error: e),
           stackTrace);
     } catch (e, stackTrace) {
       _refuse(
-          AtKeysUnusableException.unreadable(this, source: source, error: e),
+          AtKeysUnusableException.unreadable(this,
+              source: _sourceOf(keys), error: e),
           stackTrace);
     }
     final recorded = stored.atsign;
     if (recorded != null && recorded.toAtsign() != toAtsign()) {
       throw AtKeysUnusableException.anotherAtsign(this, recorded,
-          source: source);
+          source: _sourceOf(keys));
     }
     if (!stored.holdsAuthenticationMaterial) {
       final pending = stored.pendingEnrollmentIds.toList();
@@ -509,8 +511,20 @@ extension AtsignLifecycle on Atsign {
       }
     } catch (e, stackTrace) {
       _refuse(
-          AtKeysUnusableException.unreadable(this, source: source, error: e),
+          AtKeysUnusableException.unreadable(this,
+              source: _sourceOf(keys), error: e),
           stackTrace);
+    }
+  }
+
+  /// Where [keys] keeps this atSign's keys, as its `describeSource` says, or
+  /// the keys store when that throws, so the keys problem is still the one
+  /// reported.
+  String _sourceOf(AtKeysIo keys) {
+    try {
+      return keys.describeSource(this);
+    } catch (_) {
+      return 'the keys store';
     }
   }
 
