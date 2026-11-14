@@ -86,7 +86,7 @@ W="packages/at_auth/lib packages/at_chops/lib packages/at_cli_commons/lib packag
 - A1, imports of another package's `src/`, by the package imported: `git grep -nP "^\s*(import|export|part)\s+['\"]package:\w+/src/" -- $W | awk -F"['\"]" '{split($1,a,"/");split($2,b,"[:/]"); if(a[2]!=b[2]) print b[2]}' | sort | uniq -c` gives 4: `pqcrypto` 3, `hive` 1.
 - A2, `src/` files in `at_client` that import either barrel: `git grep -nP "^\s*(import|export)\s+['\"](package:at_client/|(\.\./)+)(at_client|at_client_mixins)\.dart['\"]" -- packages/at_client/lib/src | wc -l` gives 0.
 - A3, registrar libraries exported from `at_auth.dart`: `git grep -n "^export 'src/registrar/" -- packages/at_auth/lib/at_auth.dart | wc -l` gives 3.
-- A3, proxy preambles composed outside `at_lookup`: `git grep -nP "sendSync\('from:" -- $W` gives 1: `packages/at_client_cli/lib/src/util/proxy_lookups.dart:16`.
+- A3, proxy preambles composed outside `at_lookup`: `git grep -nP "sendSync\('from:" -- $W ':!packages/at_lookup'` gives 1: `packages/at_client_cli/lib/src/util/proxy_lookups.dart:16`.
 - A3, package pubspecs that depend on `at_telemetry`, of 26: `git grep -lP '^\s+at_telemetry\s*:' -- ':(glob)packages/*/pubspec.yaml' | wc -l` gives 0.
 - A4, wasm gates whose `allowed_offenders` is not empty, of 11: `git grep -n 'allowed_offenders:' -- .github/wasm_gates.yaml | grep -vF '[]' | wc -l` gives 0.
 - A5, factories and public static members of `AtClientPreference`: `git grep -nP '^\s*(factory|static)\b(?!.*\b_\w+\s*\()' -- packages/at_client/lib/src/preference/at_client_preference.dart | wc -l` gives 0.
