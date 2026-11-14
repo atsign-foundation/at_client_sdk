@@ -71,3 +71,18 @@ Feature: A request option left unset follows the client's routing preference
     Given PutRequestOptions on which useRemoteAtServer was never set
     When a put falls back to legacy encryption and copies those options
     Then useRemoteAtServer is still unset on the copy
+
+  Scenario: Under remoteOnly, a noCommit putMeta reaches the atServer with noCommit
+    Given a client whose remoteLocalPref is remoteOnly
+    When the app calls putMeta with PutRequestOptions that set noCommit and leave useRemoteAtServer unset
+    Then the metadata update reaches the atServer with noCommit before putMeta returns
+
+  Scenario: A noCommit putMeta that is not routed to the atServer is refused
+    Given a client with the default remoteLocalPref
+    When the app calls putMeta with PutRequestOptions that set noCommit and leave useRemoteAtServer unset
+    Then putMeta throws an IllegalArgumentException and nothing is written
+
+  Scenario: A noCommit putMeta with useRemoteAtServer set reaches the atServer with noCommit
+    Given a client with the default remoteLocalPref
+    When the app calls putMeta with PutRequestOptions that set noCommit and set useRemoteAtServer to true
+    Then the metadata update reaches the atServer with noCommit before putMeta returns

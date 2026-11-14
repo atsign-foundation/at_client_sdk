@@ -1990,13 +1990,18 @@ class AtClientImpl implements AtClient {
     AtKey atKey, {
     PutRequestOptions? putRequestOptions,
   }) async {
+    final noCommit = putRequestOptions?.noCommit ?? false;
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = atKey
-      ..operation = AtConstants.updateMeta;
+      ..operation = AtConstants.updateMeta
+      ..noCommit = noCommit;
 
-    var updateMetaResult = await executeUpdateOrDelete(
-        builder, _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions)));
+    final prefForOp =
+        _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions));
+    _refuseNoCommitWithoutRemote(noCommit, prefForOp);
+
+    var updateMetaResult = await executeUpdateOrDelete(builder, prefForOp);
     return updateMetaResult != null;
   }
 

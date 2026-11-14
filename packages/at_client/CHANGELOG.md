@@ -6,6 +6,9 @@
   `remoteOnly` app that passed options to keep a write local should set
   `useRemoteAtServer = false` explicitly. A delete or putMeta of a `local:`
   key stays on the device.
+- fix: `putMeta` sends `noCommit` to the atServer, and throws an
+  `IllegalArgumentException` without writing anything when `noCommit` is set
+  but the call is not routed to the atServer, as `put` and `delete` do.
 - feat: `AtClientPreference.notificationReplay` chooses where the monitor replays from — connect, resume, window (default 1h) or full; `fetchOfflineNotifications` is deprecated.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including

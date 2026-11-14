@@ -318,6 +318,60 @@ void main() {
         anyElement(allOf(startsWith('update:nc:'), contains('$key'))));
   });
 
+  test(
+      'Under remoteOnly, a noCommit putMeta reaches the atServer with noCommit',
+      () async {
+    const atSign = '@nocommitputmeta';
+    final client =
+        await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+    final key = selfKey(atSign)..metadata.ttr = 120000;
+
+    final sentByReturn = await client
+        .putMeta(key, putRequestOptions: PutRequestOptions()..noCommit = true)
+        .then((_) => List.of(commands));
+
+    expect(sentByReturn,
+        anyElement(allOf(startsWith('update:meta:nc:'), contains('$key'))));
+  });
+
+  test('A noCommit putMeta that is not routed to the atServer is refused',
+      () async {
+    const atSign = '@nocommitputmetalocal';
+    final client = await clientFor(atSign);
+    final key = selfKey(atSign);
+    await client.put(key, 'a value',
+        putRequestOptions: PutRequestOptions()..shouldEncrypt = false);
+    final store = client.getLocalSecondary()!.keyStore!;
+    events.clear();
+    key.metadata.ttr = 120000;
+
+    await expectLater(
+        client.putMeta(key,
+            putRequestOptions: PutRequestOptions()..noCommit = true),
+        throwsA(isA<IllegalArgumentException>()));
+
+    expect(events, isEmpty);
+    expect((await store.get(key.toString()))?.metaData?.ttr, isNot(120000));
+  });
+
+  test(
+      'A noCommit putMeta with useRemoteAtServer set reaches the atServer with '
+      'noCommit', () async {
+    const atSign = '@nocommitputmetaremote';
+    final client = await clientFor(atSign);
+    final key = selfKey(atSign)..metadata.ttr = 120000;
+
+    final sentByReturn = await client
+        .putMeta(key,
+            putRequestOptions: PutRequestOptions()
+              ..noCommit = true
+              ..useRemoteAtServer = true)
+        .then((_) => List.of(commands));
+
+    expect(sentByReturn,
+        anyElement(allOf(startsWith('update:meta:nc:'), contains('$key'))));
+  });
+
   group('options from outside the library', () {
     test('an object implementing PutRequestOptions is routed by its getter',
         () async {
