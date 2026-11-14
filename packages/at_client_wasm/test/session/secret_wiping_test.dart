@@ -264,28 +264,4 @@ void main() {
       expectWiped();
     });
   });
-
-  group('rotate', () {
-    test('wipes the new passkey material and the closed session seed',
-        () async {
-      final current = await custody().enroll(atSign: _atSign, otp: _otp);
-      forgetCaptured();
-      final rotated = await custody().rotate(current, otp: _otp);
-      expectWiped();
-      expect(_zeroed(current.authSeed), isTrue);
-      expect(_zeroed(rotated.authSeed), isFalse);
-      await rotated.close();
-      expect(_zeroed(rotated.authSeed), isTrue);
-    });
-
-    test('wipes everything when the new pointer does not read back', () async {
-      final current = await custody().enroll(atSign: _atSign, otp: _otp);
-      forgetCaptured();
-      server.dropPointerWrites = true;
-      await expectLater(custody().rotate(current, otp: _otp),
-          throwsA(isA<RotationAbortedException>()));
-      expectWiped();
-      expect(_zeroed(current.authSeed), isFalse);
-    });
-  });
 }

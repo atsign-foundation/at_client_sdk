@@ -16,6 +16,7 @@ import 'wire_fakes.dart';
 
 const _atSign = '@alice';
 const _eid = 'eid-1';
+final _ns = 'cd' * 32;
 
 String _b64(String text) => base64Encode(utf8.encode(text));
 
@@ -131,7 +132,6 @@ void main() {
       root: AtRootDomain.atsignDomain,
       app: 'wavi',
       device: 'browser',
-      namespaces: {'atkeysv': 'rw', 'wavi': 'rw'},
       enrollment: () => enrollment,
       activator: (
           {required atSign, required cram, required apkamKeyPair}) async {
@@ -150,8 +150,8 @@ void main() {
               privateKey: apkamKeyPair.privateKey);
       });
 
-  Future<EnrollmentSession> enroll() =>
-      gateway().enroll(atSign: _atSign, authSeed: _seed, otp: 'ABC123');
+  Future<EnrollmentSession> enroll() => gateway().enroll(
+      atSign: _atSign, authSeed: _seed, otp: 'ABC123', pointerNamespace: _ns);
 
   group('enroll', () {
     test('sends the key derived from the seed as an ML-DSA-65 APKAM key',
@@ -163,7 +163,8 @@ void main() {
       expect(request.apkamKeyPair?.publicKey, derived.publicKey);
       expect(request.apkamKeyPair?.privateKey, derived.privateKey);
       expect(request.otp, 'ABC123');
-      expect(request.namespaces, {'atkeysv': 'rw', 'wavi': 'rw'});
+      expect(request.namespaces, {_ns: 'rw', 'wavi': 'rw'});
+      expect(request.namespaces, isNot(contains('atkeysv')));
     });
 
     test('mints no key of its own (K-12)', () async {
@@ -416,16 +417,16 @@ void main() {
 
     test('pointer writes go over the PKAM connection', () async {
       final hex = '0' * 64;
-      await session.pointers.put(_atSign, hex, '{"p":1}');
+      await session.pointers.put(_atSign, hex, '{"p":1}', ns: _ns);
 
       expect(wire.dials, 1);
-      expect(wire.commands.single,
-          startsWith('update:public:_$hex.atkeysv$_atSign'));
+      expect(
+          wire.commands.single, startsWith('update:public:_$hex.$_ns$_atSign'));
     });
 
     test('pointer reads are anonymous lookups on a connection of their own',
         () async {
-      await session.pointers.get(_atSign, '0' * 64);
+      await session.pointers.get(_atSign, '0' * 64, ns: _ns);
 
       expect(wire.dials, 2);
       expect(wire.lookUpsBuilt.last.authenticator, isNull);

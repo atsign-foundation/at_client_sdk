@@ -55,6 +55,30 @@ void main() {
       expect(gateway.enrolled.single.authSeed, keys.authSeed);
     });
 
+    test('asks the gateway for the passkey-derived pointer namespace (K-17)',
+        () async {
+      await custody().enroll(atSign: _atSign, otp: _otp);
+      final keys = await keysOf(0);
+      expect(gateway.enrolled.single.pointerNamespace, keys.ns);
+      expect(gateway.enrolled.single.pointerNamespace, isNot('atkeysv'));
+    });
+
+    test('writes the pointer in that namespace, where only open can read it',
+        () async {
+      await custody().enroll(atSign: _atSign, otp: _otp);
+      final keys = await keysOf(0);
+      expect(server.pointerNamespaces[keys.lookupHex], keys.ns);
+      expect(await server.get(_atSign, keys.lookupHex, ns: keys.ns), isNotNull);
+      expect(await server.get(_atSign, keys.lookupHex, ns: 'atkeysv'), isNull);
+    });
+
+    test('onboarding writes the pointer in the passkey-derived namespace',
+        () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      final keys = await keysOf(0);
+      expect(server.pointerNamespaces[keys.lookupHex], keys.ns);
+    });
+
     test('writes the document, then the pointer', () async {
       final keys = await keysOf(0);
       await custody().enroll(atSign: _atSign, otp: _otp);
@@ -122,14 +146,6 @@ void main() {
     test('enroll registers with the gateway device name and the clock',
         () async {
       await custody().enroll(atSign: _atSign, otp: _otp);
-      expectStamped();
-    });
-
-    test('rotate registers with the gateway device name and the clock',
-        () async {
-      final current = await custody().enroll(atSign: _atSign, otp: _otp);
-      authenticator.created.clear();
-      await custody().rotate(current, otp: _otp);
       expectStamped();
     });
   });
@@ -524,54 +540,6 @@ void main() {
       expect(gateway.lastSession!.closed, isTrue);
       expect(fresh.ids, isEmpty);
       expect(persistence.requests, 0);
-    });
-  });
-
-  group('rotate', () {
-    late CustodySession current;
-    late RecordKeys oldKeys;
-
-    setUp(() async {
-      current = await custody().enroll(atSign: _atSign, otp: _otp);
-      oldKeys = await keysOf(0);
-    });
-
-    test('enrolls the new passkey, then moves the pointer and revokes',
-        () async {
-      final rotated = await custody().rotate(current, otp: _otp);
-      final newKeys = await keysOf(1);
-      expect(rotated.enrollmentId, 'eid2');
-      expect(server.pointers.keys, [newKeys.lookupHex]);
-      expect(server.log.skip(2), [
-        'put-document:eid2',
-        'put-pointer:${newKeys.lookupHex}',
-        'delete-pointer:${oldKeys.lookupHex}',
-        'revoke:eid1',
-      ]);
-      expect(hints.ids[_atSign], 'eid2');
-    });
-
-    test('the rotated session exposes no APKAM private key', () async {
-      final rotated = await custody().rotate(current, otp: _otp);
-      expect(rotated.atKeys, isNot(contains('aesPkamPrivateKey')));
-    });
-
-    test('the rotated document opens under the new passkey', () async {
-      await custody().rotate(current, otp: _otp);
-      final session =
-          await custody(withHints: FakeHints()).open(atSign: _atSign);
-      expect(session.enrollmentId, 'eid2');
-      expect(session.atKeys['aesEncryptPrivateKey'], 'enc-private');
-    });
-
-    test('keeps the old enrollment when the new pointer does not read back',
-        () async {
-      server.dropPointerWrites = true;
-      await expectLater(custody().rotate(current, otp: _otp),
-          throwsA(isA<RotationAbortedException>()));
-      expect(server.revoked, isEmpty);
-      expect(
-          server.log, isNot(contains('delete-pointer:${oldKeys.lookupHex}')));
     });
   });
 

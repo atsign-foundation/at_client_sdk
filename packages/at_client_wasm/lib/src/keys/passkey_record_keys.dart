@@ -17,14 +17,20 @@ Future<Uint8List> recordPrfSalt() async {
   return Uint8List.fromList(hash.bytes);
 }
 
-/// The record id, key encryption key and auth seed derived from one passkey
-/// PRF output.
+/// The record id, pointer namespace, key encryption key and auth seed derived
+/// from one passkey PRF output.
 class RecordKeys {
-  RecordKeys._(this.lookupHex, this.kek, this.authSeed);
+  RecordKeys._(this.lookupHex, this.ns, this.kek, this.authSeed);
 
   /// 64 lowercase hex characters naming the record
-  /// `public:_<lookupHex>.atkeysv@<atSign>`.
+  /// `public:_<lookupHex>.<ns>@<atSign>`.
   final String lookupHex;
+
+  /// 64 lowercase hex characters naming the namespace of this passkey's
+  /// pointer, which only this passkey's enrollment is granted (K-17).
+  ///
+  /// Public on the wire, like [lookupHex]: neither is overwritten by [wipe].
+  final String ns;
 
   /// The 32-byte AES-256-GCM key that seals the record.
   final Uint8List kek;
@@ -39,7 +45,7 @@ class RecordKeys {
   }
 
   /// HKDF-SHA256 over [prf] with an empty salt and the labels
-  /// `atkeys-record-id|<atSign>`, `atkeys-kek|<atSign>` and
+  /// `atkeys-record-id|<atSign>`, `atkeys-ns|<atSign>`, `atkeys-kek|<atSign>` and
   /// `at_auth/custody/auth-seed/v1|<atSign>`, where the atSign is canonical
   /// (lowercase, leading `@`).
   ///
@@ -48,15 +54,17 @@ class RecordKeys {
     final canonical = atSign.toAtsign();
     Uint8List expand(String label) => HkdfSha256.deriveKey(prf.output,
         info: utf8.encode('$label|$canonical'), length: 32);
-    final lookup = expand('atkeys-record-id');
-    final String lookupHex;
-    try {
-      lookupHex = lookup.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    } finally {
-      lookup.fillRange(0, lookup.length, 0);
+    String hexOf(String label) {
+      final bytes = expand(label);
+      try {
+        return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      } finally {
+        bytes.fillRange(0, bytes.length, 0);
+      }
     }
-    return RecordKeys._(lookupHex, expand('atkeys-kek'),
-        expand('at_auth/custody/auth-seed/v1'));
+
+    return RecordKeys._(hexOf('atkeys-record-id'), hexOf('atkeys-ns'),
+        expand('atkeys-kek'), expand('at_auth/custody/auth-seed/v1'));
   }
 }
 

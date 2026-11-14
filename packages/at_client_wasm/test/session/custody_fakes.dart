@@ -12,6 +12,9 @@ import 'package:at_client_wasm/src/session/setup_lock.dart';
 /// enrollment's own document, and an ordered log of every write.
 class FakeServer implements EnrollmentPointerReader {
   final pointers = <String, String>{};
+
+  /// The namespace each pointer was written in, by lookup id.
+  final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
   final seedByEnrollment = <String, String>{};
   final revoked = <String>{};
@@ -49,9 +52,10 @@ class FakeServer implements EnrollmentPointerReader {
   }
 
   @override
-  Future<String?> get(String atSign, String lookupHex) async {
+  Future<String?> get(String atSign, String lookupHex,
+      {required String ns}) async {
     pointerReads++;
-    return pointers[lookupHex];
+    return pointerNamespaces[lookupHex] == ns ? pointers[lookupHex] : null;
   }
 }
 
@@ -136,11 +140,12 @@ class _Pointers implements EnrollmentPointerStore {
   final FakeSession session;
 
   @override
-  Future<String?> get(String atSign, String lookupHex) =>
-      session.server.get(atSign, lookupHex);
+  Future<String?> get(String atSign, String lookupHex, {required String ns}) =>
+      session.server.get(atSign, lookupHex, ns: ns);
 
   @override
-  Future<void> put(String atSign, String lookupHex, String record) async {
+  Future<void> put(String atSign, String lookupHex, String record,
+      {required String ns}) async {
     session.server.log.add('put-pointer:$lookupHex');
     if (session.server.pointerPutFailures > 0) {
       session.server.pointerPutFailures--;
@@ -148,13 +153,16 @@ class _Pointers implements EnrollmentPointerStore {
     }
     if (!session.server.dropPointerWrites) {
       session.server.pointers[lookupHex] = record;
+      session.server.pointerNamespaces[lookupHex] = ns;
     }
   }
 
   @override
-  Future<void> delete(String atSign, String lookupHex) async {
+  Future<void> delete(String atSign, String lookupHex,
+      {required String ns}) async {
     session.server.log.add('delete-pointer:$lookupHex');
     session.server.pointers.remove(lookupHex);
+    session.server.pointerNamespaces.remove(lookupHex);
   }
 }
 
@@ -168,7 +176,12 @@ class FakeGateway implements EnrollmentGateway {
   final device = 'Test Device';
 
   final FakeServer server;
-  final enrolled = <({String atSign, Uint8List authSeed, String otp})>[];
+  final enrolled = <({
+    String atSign,
+    Uint8List authSeed,
+    String otp,
+    String pointerNamespace
+  })>[];
   final activated = <({String atSign, Uint8List authSeed, String cram})>[];
 
   /// Every auth seed buffer handed in, by reference, so a test can see
@@ -189,10 +202,15 @@ class FakeGateway implements EnrollmentGateway {
   Future<EnrollmentSession> enroll(
       {required String atSign,
       required Uint8List authSeed,
-      required String otp}) async {
+      required String otp,
+      required String pointerNamespace}) async {
     seedBuffers.add(authSeed);
-    enrolled.add(
-        (atSign: atSign, authSeed: Uint8List.fromList(authSeed), otp: otp));
+    enrolled.add((
+      atSign: atSign,
+      authSeed: Uint8List.fromList(authSeed),
+      otp: otp,
+      pointerNamespace: pointerNamespace
+    ));
     await gate?.future;
     if (server.seedByEnrollment.containsValue(authSeed.join(','))) {
       throw KeyAlreadyEnrolledException();

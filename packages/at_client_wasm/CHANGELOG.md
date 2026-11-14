@@ -5,5 +5,6 @@
 - Passkey custody (Gate C): `onboardNewAtSign`, `passkeyLogin` (`atSign` required) and `prfSupported`, with typed exceptions (`PrfUnavailableException`, `PasskeyLostException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException`). Onboarding keeps the activated keys until the sealed document is written: a write failure throws `OnboardingIncompleteException` with a handle that resumes or abandons. v1 limits: [`browser-onboarding.md`](../../docs/projects/wasm/browser-onboarding.md) §7.
 - Setup-lock acquisition gives up after two minutes with `SetupLockTimeoutException`, and passkey create/get ceremonies carry a two-minute timeout.
 - An activation that fails after the keys are filed keeps them resumable: onboarding throws `OnboardingIncompleteException` with a handle whose `resume()` authenticates.
+- The passkey pointer is stored in a namespace derived from the passkey; an enrollment asks for that namespace and the app's, and no longer for `atkeysv`.
 - Secrets derived from the passkey are overwritten with zeroes once used and when the session closes.
 - A registered passkey's `user.displayName` is its enrollment time (UTC, to the minute) and the enrollment's device name, cut to 64 UTF-8 bytes at a code point; it no longer carries the atSign.

@@ -67,14 +67,6 @@ class PublicKeyMismatchException implements Exception {
       'match the published public keys';
 }
 
-/// Thrown by [PasskeyCustody.rotate] when the new pointer does not read back;
-/// the old enrollment and pointer are untouched.
-class RotationAbortedException implements Exception {
-  @override
-  String toString() => 'RotationAbortedException: the new enrollment pointer '
-      'did not read back';
-}
-
 /// Thrown by [EnrollmentGateway.activate] when it fails after the CRAM was
 /// spent and the activation enrollment's @keys were filed: [atKeys] holds the
 /// minted @keys (without the APKAM private key, which the
@@ -210,11 +202,14 @@ abstract interface class EnrollmentGateway {
   String get device;
 
   /// Enrolls the key derived from [authSeed] with [otp] and returns the
-  /// approved, authenticated session.
+  /// approved, authenticated session. The enrollment asks for read-write
+  /// access to [pointerNamespace], the passkey's own pointer namespace, beside
+  /// the app's.
   Future<EnrollmentSession> enroll(
       {required String atSign,
       required Uint8List authSeed,
-      required String otp});
+      required String otp,
+      required String pointerNamespace});
 
   /// Authenticates [enrollmentId] with the key derived from [authSeed].
   ///
@@ -275,7 +270,7 @@ class CustodySession {
 const _apkamPrivateKey = 'aesPkamPrivateKey';
 const _documentAttempts = 3;
 
-/// Enrolls, opens and rotates the passkey-held @keys of an atSign.
+/// Enrolls and opens the passkey-held @keys of an atSign.
 ///
 /// The enrollment's APKAM key is derived from the passkey, so the document
 /// holds no APKAM private key; the pointer names the enrollment for a device
@@ -345,7 +340,10 @@ class PasskeyCustody {
       final keys = await _deriveAndWipe(passkey.secret, canonical);
       try {
         final session = await gateway.enroll(
-            atSign: canonical, authSeed: keys.authSeed, otp: otp);
+            atSign: canonical,
+            authSeed: keys.authSeed,
+            otp: otp,
+            pointerNamespace: keys.ns);
         return await _publishAndRemember(
             canonical, passkey.credentialId, keys, session);
       } finally {
@@ -453,45 +451,6 @@ class PasskeyCustody {
     }
   }
 
-  /// Moves [current]'s @keys to a newly registered passkey: enrolls it with
-  /// [otp], writes its document and pointer, and only once the pointer reads
-  /// back deletes the old pointer and revokes the old enrollment.
-  ///
-  /// Throws [RotationAbortedException] when the new pointer does not read
-  /// back, leaving the old enrollment and pointer untouched.
-  Future<CustodySession> rotate(CustodySession current,
-      {required String otp}) async {
-    final passkey = await kek.register(current.atSign,
-        enrolledAt: now(), deviceName: gateway.device);
-    final keys = await _deriveAndWipe(passkey.secret, current.atSign);
-    try {
-      final session = await gateway.enroll(
-          atSign: current.atSign, authSeed: keys.authSeed, otp: otp);
-      CustodySession? published;
-      try {
-        published = await _publish(current.atSign, passkey.credentialId, keys,
-            session, current.atKeys);
-        if (await _pointedEnrollmentId(current.atSign, keys) !=
-            published.enrollmentId) {
-          throw RotationAbortedException();
-        }
-      } on Object {
-        published?._wipe();
-        await session.close();
-        rethrow;
-      }
-      final rotated = published;
-      await session.pointers.delete(current.atSign, current.lookupHex);
-      await session.revoke(current.enrollmentId);
-      await _remember(
-          current.atSign, passkey.credentialId, rotated.enrollmentId);
-      await current.close();
-      return rotated;
-    } finally {
-      keys.wipe();
-    }
-  }
-
   Future<CustodySession> _publish(
     String atSign,
     Uint8List credentialId,
@@ -505,7 +464,7 @@ class PasskeyCustody {
     await _putDocument(atSign, keys, session, document);
     final pointer = await PasskeyRecordCodec.seal(keys.kek,
         PasskeyRecordType.eid, {'enrollmentId': session.enrollmentId});
-    await session.pointers.put(atSign, keys.lookupHex, pointer);
+    await session.pointers.put(atSign, keys.lookupHex, pointer, ns: keys.ns);
     return CustodySession._(
         atSign: atSign,
         enrollmentId: session.enrollmentId,
@@ -561,7 +520,7 @@ class PasskeyCustody {
       (throw PasskeyLostException(atSign, 'no enrollment pointer'));
 
   Future<String?> _pointedEnrollmentId(String atSign, RecordKeys keys) async {
-    final record = await pointerReader.get(atSign, keys.lookupHex);
+    final record = await pointerReader.get(atSign, keys.lookupHex, ns: keys.ns);
     if (record == null) return null;
     final pointer =
         await PasskeyRecordCodec.open(keys.kek, PasskeyRecordType.eid, record);

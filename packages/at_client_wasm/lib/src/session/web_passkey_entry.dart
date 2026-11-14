@@ -124,11 +124,7 @@ Future<AtClient> _withCustody(
             rootDomain: options.root,
             secondaryAddressFinder: transport.finder),
         gateway: AtAuthEnrollmentGateway(
-            transport: transport,
-            root: options.root,
-            app: app,
-            device: device,
-            namespaces: {'atkeysv': 'rw', app: 'rw'}),
+            transport: transport, root: options.root, app: app, device: device),
         credentials: store,
         enrollmentIds: store,
         setupLock: WebSetupLock(),

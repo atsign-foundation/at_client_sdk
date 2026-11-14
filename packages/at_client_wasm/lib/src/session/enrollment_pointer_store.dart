@@ -4,34 +4,39 @@ import 'package:at_client/src/client/remote_secondary.dart';
 
 import 'public_lookup.dart';
 
-/// Reads a passkey's enrollment pointer by its lookup id.
+/// Reads a passkey's enrollment pointer by its lookup id and namespace.
 abstract interface class EnrollmentPointerReader {
   /// The pointer's JSON text, or null when there is none.
-  Future<String?> get(String atSign, String lookupHex);
+  Future<String?> get(String atSign, String lookupHex, {required String ns});
 }
 
 /// Reads, writes and deletes enrollment pointers.
 abstract interface class EnrollmentPointerStore
     implements EnrollmentPointerReader {
   /// Writes [record], replacing any pointer of that name; it never expires.
-  Future<void> put(String atSign, String lookupHex, String record);
+  Future<void> put(String atSign, String lookupHex, String record,
+      {required String ns});
 
   /// Deletes the pointer.
-  Future<void> delete(String atSign, String lookupHex);
+  Future<void> delete(String atSign, String lookupHex, {required String ns});
 }
 
-final _lookupHex = RegExp(r'^[0-9a-f]{64}$');
+final _hex64 = RegExp(r'^[0-9a-f]{64}$');
 
 /// The atProtocol key of an enrollment pointer, without the `public:` scope:
-/// `_<lookupHex>.atkeysv@<atsign>` with the atSign canonical.
+/// `_<lookupHex>.<ns>@<atsign>` with the atSign canonical.
 ///
-/// Throws [ArgumentError] when [lookupHex] is not 64 lowercase hex characters.
-String enrollmentPointerKey(String atSign, String lookupHex) {
-  if (!_lookupHex.hasMatch(lookupHex)) {
-    throw ArgumentError.value(
-        lookupHex, 'lookupHex', 'must be 64 lowercase hex characters');
+/// Throws [ArgumentError] when [lookupHex] or [ns] is not 64 lowercase hex
+/// characters.
+String enrollmentPointerKey(String atSign, String lookupHex,
+    {required String ns}) {
+  for (final (name, value) in [('lookupHex', lookupHex), ('ns', ns)]) {
+    if (!_hex64.hasMatch(value)) {
+      throw ArgumentError.value(
+          value, name, 'must be 64 lowercase hex characters');
+    }
   }
-  return '_$lookupHex.atkeysv${atSign.toAtsign()}';
+  return '_$lookupHex.$ns${atSign.toAtsign()}';
 }
 
 /// Reads pointers with an unauthenticated `lookup:` on a connection of its own
@@ -47,12 +52,13 @@ class LookupEnrollmentPointerReader implements EnrollmentPointerReader {
   final SecondaryAddressFinder? secondaryAddressFinder;
 
   @override
-  Future<String?> get(String atSign, String lookupHex) => publicLookup(
-      lookUps: lookUps,
-      rootDomain: rootDomain,
-      secondaryAddressFinder: secondaryAddressFinder,
-      atSign: atSign,
-      key: enrollmentPointerKey(atSign, lookupHex));
+  Future<String?> get(String atSign, String lookupHex, {required String ns}) =>
+      publicLookup(
+          lookUps: lookUps,
+          rootDomain: rootDomain,
+          secondaryAddressFinder: secondaryAddressFinder,
+          atSign: atSign,
+          key: enrollmentPointerKey(atSign, lookupHex, ns: ns));
 }
 
 /// Reads through [reader]; writes and deletes on [remote], the client's own
@@ -64,22 +70,24 @@ class RemoteEnrollmentPointerStore implements EnrollmentPointerStore {
   final RemoteSecondary remote;
 
   @override
-  Future<String?> get(String atSign, String lookupHex) =>
-      reader.get(atSign, lookupHex);
+  Future<String?> get(String atSign, String lookupHex, {required String ns}) =>
+      reader.get(atSign, lookupHex, ns: ns);
 
   @override
-  Future<void> put(String atSign, String lookupHex, String record) async {
+  Future<void> put(String atSign, String lookupHex, String record,
+      {required String ns}) async {
     if (record.contains('\n')) {
       throw ArgumentError.value(record, 'record', 'must not contain newlines');
     }
-    final key = enrollmentPointerKey(atSign, lookupHex);
+    final key = enrollmentPointerKey(atSign, lookupHex, ns: ns);
     await remote.executeCommand('update:public:$key $record\n', auth: true);
   }
 
   @override
-  Future<void> delete(String atSign, String lookupHex) async {
+  Future<void> delete(String atSign, String lookupHex,
+      {required String ns}) async {
     await remote.executeCommand(
-        'delete:public:${enrollmentPointerKey(atSign, lookupHex)}\n',
+        'delete:public:${enrollmentPointerKey(atSign, lookupHex, ns: ns)}\n',
         auth: true);
   }
 }

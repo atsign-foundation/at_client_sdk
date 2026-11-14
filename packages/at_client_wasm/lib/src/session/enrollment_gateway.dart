@@ -52,14 +52,12 @@ const _enrollmentWait = Duration(seconds: 1);
 /// The private key exists only in memory for the call that derives it; the
 /// sessions it returns hold no copy.
 class AtAuthEnrollmentGateway implements EnrollmentGateway {
-  /// [namespaces] is what an enrollment asks for, including the pointer's.
   /// [enrollment] and [activator] are the at_auth and at_client seams.
   AtAuthEnrollmentGateway(
       {required this.transport,
       required this.root,
       required this.app,
       required this.device,
-      required this.namespaces,
       AtEnrollment Function()? enrollment,
       Activator? activator})
       : _enrollment = enrollment ?? AtEnrollment.create {
@@ -71,7 +69,6 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
   final String app;
   @override
   final String device;
-  final Map<String, String> namespaces;
   final AtEnrollment Function() _enrollment;
   late final Activator _activator;
 
@@ -79,7 +76,8 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
   Future<EnrollmentSession> enroll(
       {required String atSign,
       required Uint8List authSeed,
-      required String otp}) async {
+      required String otp,
+      required String pointerNamespace}) async {
     final pair = await apkamKeyPairFromSeed(authSeed);
     final lookUp = _lookUp(atSign);
     var enrollmentId = '';
@@ -97,7 +95,7 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
               appName: app,
               deviceName: device,
               otp: otp,
-              namespaces: namespaces,
+              namespaces: {pointerNamespace: 'rw', app: 'rw'},
               signingAlgo: SigningAlgoType.mldsa65,
               apkamKeyPair: pair),
           lookUp);

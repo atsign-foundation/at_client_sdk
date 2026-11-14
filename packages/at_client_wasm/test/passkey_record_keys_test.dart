@@ -133,6 +133,35 @@ void main() {
           '77b8149219d7e3daf54e13a5deeced55f0f09b99ba470d2fabc9e93c1c953de3');
     });
 
+    test('derives the pointer namespace for @alice and @bob (K-17)', () async {
+      expect((await RecordKeys.derive(p, '@alice')).ns,
+          'eb6d5cd3fa73833e051373ef059c79c8f4f2883fc86c0ce643b8e4bdfaa8fad9');
+      expect((await RecordKeys.derive(p, '@bob')).ns,
+          'ddd43581962657b612b2ec95b2b5cb9c58a6224d941cc25ade7fcb692c8add51');
+    });
+
+    test('ns is 64 lowercase hex and is not the lookup id', () async {
+      final keys = await RecordKeys.derive(p, '@alice');
+      expect(keys.ns, matches(RegExp(r'^[0-9a-f]{64}$')));
+      expect(keys.ns, isNot(keys.lookupHex));
+    });
+
+    test('ns is the same for every spelling of the atSign', () async {
+      final canonical = await RecordKeys.derive(p, '@alice');
+      for (final variant in ['@Alice', 'alice', '@ali.ce']) {
+        expect((await RecordKeys.derive(p, variant)).ns, canonical.ns,
+            reason: variant);
+      }
+    });
+
+    test('ns differs across atSigns and across passkeys', () async {
+      final alice = await RecordKeys.derive(p, '@alice');
+      final other =
+          PrfSecret(Uint8List.fromList(List.generate(32, (i) => i + 1)));
+      expect((await RecordKeys.derive(p, '@alicf')).ns, isNot(alice.ns));
+      expect((await RecordKeys.derive(other, '@alice')).ns, isNot(alice.ns));
+    });
+
     test('lookupHex is 64 lowercase hex and kek is 32 bytes', () async {
       final keys = await RecordKeys.derive(p, '@alice');
       expect(keys.lookupHex, matches(RegExp(r'^[0-9a-f]{64}$')));
