@@ -99,7 +99,7 @@ void main() {
     'monitorSilenceTimeout': (p) => p.monitorSilenceTimeout,
     'monitorAutoStart': (p) => p.monitorAutoStart,
     'expiryCheckTimeInterval': (p) => p.expiryCheckTimeInterval,
-    'fetchOfflineNotifications': (p) => p.fetchOfflineNotifications,
+    'notificationReplay': (p) => p.notificationReplay,
     'atClientParticulars': (p) => p.atClientParticulars,
     'remoteLocalPref': (p) => p.remoteLocalPref,
     '_crypto': (p) => p.crypto,

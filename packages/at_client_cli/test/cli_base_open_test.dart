@@ -138,6 +138,46 @@ void main() {
                 endsWith('; the enrollment awaits approval'))));
   });
 
+  group('The notification replay policy', () {
+    Future<CLIBase> openWith(String atSign, AtClientPreference? preference) {
+      return CLIBase.fromCommandLineArgs([
+        '-a', atSign, //
+        '-k', keysPath,
+        '-s', storageDir,
+        '-r', '127.0.0.1:$port',
+        '--max-connect-attempts', '1',
+        '--never-sync',
+      ],
+          parser: CLIBase.createArgsParser(namespace: namespace),
+          preference: preference,
+          lookUps: answering(() async => true));
+    }
+
+    test('is the one the caller asked for, and the caller\'s object is not '
+        'rewritten', () async {
+      const atSign = '@clireplaykept';
+      await writeKeys(atSign);
+      final preference = AtClientPreference()
+        ..notificationReplay = const NotificationReplay.window();
+
+      final cli = await openWith(atSign, preference);
+
+      expect(cli.atClient.getPreferences()!.notificationReplay,
+          const NotificationReplay.window());
+      expect(preference.notificationReplay, const NotificationReplay.window());
+    });
+
+    test('is resume when the caller passed no preference', () async {
+      const atSign = '@clireplaydefault';
+      await writeKeys(atSign);
+
+      final cli = await openWith(atSign, null);
+
+      expect(cli.atClient.getPreferences()!.notificationReplay,
+          const NotificationReplay.resume());
+    });
+  });
+
   test('An atServer not reached is an outage, not a refusal', () async {
     const atSign = '@clioutage';
     await writeKeys(atSign);

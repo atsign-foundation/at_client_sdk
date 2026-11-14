@@ -280,7 +280,7 @@ class TestUtils {
         sealsToKeyAlgorithms: sealsToKeyAlgorithms);
     preference.rootDomain = 'vip.ve.atsign.zone';
     preference.rootPort = rootServerPort;
-    preference.fetchOfflineNotifications = true;
+    preference.notificationReplay = const NotificationReplay.resume();
     return preference;
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show max, min;
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/at_server_features.dart'
@@ -18,6 +19,7 @@ import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/notification_replay.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -63,6 +65,15 @@ class NotificationServiceImpl extends NotificationService {
   /// When this service was created: the watermark a first monitor connect
   /// resumes from when the store holds none.
   final DateTime _createdAt = DateTime.now();
+
+  /// The clock a window replay measures back from.
+  @visibleForTesting
+  DateTime Function() now = DateTime.now;
+
+  /// The replay start, resolved from the policy on the first connect and then
+  /// kept for the life of this service. Cleared when a resolution fails, so a
+  /// store that was not ready yet is read again on the next connect.
+  Future<int>? _replayFrom;
 
   /// The epoch millis of the latest notification this service received.
   int? _lastReceivedMillis;
@@ -609,22 +620,62 @@ class NotificationServiceImpl extends NotificationService {
   }
 
   /// The epochMillis a monitor connect asks the atServer to deliver
-  /// notifications from.
+  /// notifications from: the later of the replay start that
+  /// [AtClientPreference.notificationReplay] resolves to, and the latest
+  /// notification this service received.
   ///
-  /// The last received notification's time when
-  /// [AtClientPreference.fetchOfflineNotifications] is true and the store holds
-  /// one, else the time this service was created, seeded into the store. When
-  /// it is false, the latest notification this service received, else its
-  /// creation time, and the store is neither read nor seeded.
-  /// Never null: a monitor started with no time is delivered nothing
-  /// sent before `monitor:` went out, and by then the app may already have
-  /// sent notifications whose replies have arrived.
+  /// The replay start is resolved once per service, so a reconnect does not
+  /// move it forward. Never null: a monitor started with no time is delivered
+  /// nothing sent before `monitor:` went out, and by then the app may already
+  /// have sent notifications whose replies have arrived.
   @visibleForTesting
   Future<int?> getLastNotificationTime() async {
-    if (atClient.getPreferences()!.fetchOfflineNotifications == false) {
-      return _lastReceivedMillis ?? _createdAt.millisecondsSinceEpoch;
+    final pending = _replayFrom ??=
+        _resolveReplayFrom(atClient.getPreferences()!.notificationReplay);
+    try {
+      final replayFrom = await pending;
+      return max(replayFrom, _lastReceivedMillis ?? 0);
+    } catch (_) {
+      // A failed resolution is not a start: keep it for nobody, so the next
+      // connect reads the store again rather than rethrow this error forever.
+      // A concurrent caller may already have replaced it, so only clear the
+      // one that failed.
+      if (identical(_replayFrom, pending)) _replayFrom = null;
+      rethrow;
     }
+  }
 
+  /// The replay start [policy] resolves to. Reads and seeds the store only
+  /// under the policies that use it.
+  Future<int> _resolveReplayFrom(NotificationReplay policy) => policy.when(
+        connect: () async => _createdAt.millisecondsSinceEpoch,
+        resume: () async =>
+            (await _storedOrSeededWatermark()) ??
+            _createdAt.millisecondsSinceEpoch,
+        window: (within) async {
+          final createdAtMillis = _createdAt.millisecondsSinceEpoch;
+          // A negative duration would put the start after now, so it is
+          // treated as zero: the window starts when it is resolved. Computed
+          // in millis so even a duration as long as a `Duration` can hold
+          // cannot overflow a `DateTime`.
+          final withinMillis = within.inMilliseconds;
+          final requestedMillis = max(
+              0,
+              now().millisecondsSinceEpoch -
+                  (withinMillis < 0 ? 0 : withinMillis));
+          // The later of the checkpoint and the window's reach, but never
+          // later than creation: what arrived between creation and this
+          // connect is delivered once under every policy.
+          final checkpoint = await _storedOrSeededWatermark();
+          return min(createdAtMillis,
+              max(checkpoint ?? requestedMillis, requestedMillis));
+        },
+        full: () async => 0,
+      );
+
+  /// The stored watermark's epochMillis, or null when the store held none. In
+  /// that case the store is seeded with the creation time.
+  Future<int?> _storedOrSeededWatermark() async {
     // Migration runs first and returns the canonical key's value
     // (either the pre-existing value or one freshly seeded from a
     // legacy form). Use that directly instead of re-reading the
@@ -690,9 +741,8 @@ class NotificationServiceImpl extends NotificationService {
     }
 
     // First-call branch: no last-received-notification record exists.
-    // Seeded with the creation time and answered with it, so a restart or a
-    // reconnect before any notification arrives resumes from the same point.
-    // Nothing sent before this service existed is replayed.
+    // Seeded with the creation time, so a restart or a reconnect before any
+    // notification arrives resumes from the same point.
     final createdAtMillis = _createdAt.millisecondsSinceEpoch;
     AtNotification n = AtNotification(
       'abcd-123456-wxyz',
@@ -720,7 +770,7 @@ class NotificationServiceImpl extends NotificationService {
           'watermark; the next monitor connect will seed it again: $e');
     }
 
-    return createdAtMillis;
+    return null;
   }
 
   @visibleForTesting
