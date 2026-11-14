@@ -2,7 +2,7 @@
 
 This page outranks every plan, design doc and project decision record in this repo, and a decision binds only when it has a row in [decisions.md](decisions.md).
 
-This page, `decisions.md`, the tests and pins under `packages/at_client/test/architecture/`, `.github/wasm_gates.yaml` and the agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`) have code owners, listed in [CODEOWNERS](../../.github/CODEOWNERS). A change to any of them needs a code owner's approval. A pin move, which is a change to a guard's allow-list or golden, goes in a small PR of its own, ahead of the change that needs it.
+This page, `decisions.md`, the tests and pins under `packages/at_client/test/architecture/`, `.github/wasm_gates.yaml`, the agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`) and every other guard a row names as its check have code owners, listed in [CODEOWNERS](../../.github/CODEOWNERS). A change to any of them needs a code owner's approval. A pin move, which is a change to a guard's allow-list or golden, goes in a small PR of its own, ahead of the change that needs it.
 
 Each row gives the rule, the mechanism to use instead, what a breach looks like in a diff, the check that holds it, and **Exceptions**: the number of places in the workspace packages that break the rule, made by the command listed under [How the counts were made](#how-the-counts-were-made). That number may only fall. "Not counted" means nobody has counted. A rule with a check is held by the check; a rule without one is held by review. Rules in [docs/sdk-shape.md](../sdk-shape.md) are cited by number and not repeated here.
 
