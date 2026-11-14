@@ -109,7 +109,7 @@ class AtAuthImpl implements AtAuth {
       if (e is! AtKeysSourceAbsentException) {
         Error.throwWithStackTrace(
             AtKeysUnusableException.unreadable(atOnboardingRequest.atSign,
-                source: _sourceOf(keysIo!, atOnboardingRequest.atSign),
+                source: keysIo!.describeSource(atOnboardingRequest.atSign),
                 error: e),
             stackTrace);
       }
@@ -500,17 +500,6 @@ class AtAuthImpl implements AtAuth {
           '${atRequest.atSign} atServer'
           '${lastError == null ? '' : ' : $lastError'}');
     }
-  }
-}
-
-/// Where [keysIo] keeps [atSign]'s keys, as its `describeSource` says, or
-/// the keys store when that throws, so the keys problem is still the one
-/// reported.
-String _sourceOf(AtKeysIo keysIo, String atSign) {
-  try {
-    return keysIo.describeSource(atSign);
-  } catch (_) {
-    return 'the keys store';
   }
 }
 
