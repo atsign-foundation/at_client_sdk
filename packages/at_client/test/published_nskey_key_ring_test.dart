@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show useRemoteAtServerIfSet;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, EnvelopeType, envelopeVersion, signEnvelope;
@@ -382,7 +384,7 @@ void main() {
         }
         final options =
             invocation.namedArguments[#getRequestOptions] as GetRequestOptions?;
-        final remote = options?.useRemoteAtServer ?? false;
+        final remote = useRemoteAtServerIfSet(options) ?? false;
         askedRemote.add(remote);
         if (!remote) throw AtKeyNotFoundException('$key');
         return AtValue()
