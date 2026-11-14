@@ -12,7 +12,8 @@ export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
 export 'package:at_client/src/client/at_reachability.dart';
 export 'package:at_client/src/client/data_event.dart';
-export 'package:at_client/src/client/request_options.dart';
+export 'package:at_client/src/client/request_options.dart'
+    hide useRemoteAtServerIfSet;
 export 'package:at_client/src/client/server_mutex.dart'
     hide checkedServerMutexTtl;
 export 'package:at_client/src/storage/at_client_storage.dart';

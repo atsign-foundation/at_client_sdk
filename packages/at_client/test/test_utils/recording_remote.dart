@@ -13,6 +13,10 @@ import 'mocks.dart';
 ///   `update:<key>` · `delete:<key>` · `scan:<regex>` · `get:<key>` ·
 ///   `enroll:link:<enrollmentId>[:rootlink|:chainlink]` · `cmd:<head>`
 ///
+/// With [commands], each verb's command as at_lookup builds it is recorded
+/// there too, in the same order. A metadata-only update leaves the stored
+/// value as it was.
+///
 /// An `enroll:link` is answered by [answerEnrollLink] for [atSign], with no key
 /// treated as an authentication key. `enroll:list` answers [enrollments],
 /// keyed as the atServer keys its records, and `enroll:listns:<ns>` answers
@@ -26,6 +30,7 @@ MockRemoteSecondary buildRecordingRemote({
   required List<String> events,
   required Map<String, String> remoteData,
   required Map<String, Metadata> remoteMeta,
+  List<String>? commands,
   Map<String, Object?> enrollments = const {},
   String? atSign,
   Future<List<Object?>> Function(String namespace)? listns,
@@ -50,10 +55,18 @@ MockRemoteSecondary buildRecordingRemote({
 
   when(() => remote.executeVerb(any())).thenAnswer((inv) async {
     final builder = inv.positionalArguments[0];
+    if (builder is VerbBuilder) {
+      commands?.add(builder is UpdateVerbBuilder &&
+              builder.operation == AtConstants.updateMeta
+          ? builder.buildCommandForMeta()
+          : builder.buildCommand());
+    }
     if (builder is UpdateVerbBuilder) {
       final key = builder.atKey.toString();
       events.add('update:$key');
-      remoteData[key] = builder.value;
+      if (builder.operation != AtConstants.updateMeta) {
+        remoteData[key] = builder.value;
+      }
       remoteMeta[key] = builder.atKey.metadata;
       return 'data:1';
     }
