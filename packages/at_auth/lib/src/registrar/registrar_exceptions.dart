@@ -6,7 +6,7 @@ enum RegistrarFailure {
   authentication,
 
   /// The registrar reported `{"status": "error"}`.
-  unavailable,
+  registrarError,
 
   /// The registrar returned a non-200 status this call did not expect.
   unexpectedStatus,

@@ -347,7 +347,7 @@ class RegistrarAdminService {
         'Failed to register an Atsign: the registrar reported an error.',
         endpoint: endpointPath,
         statusCode: res.statusCode,
-        reason: RegistrarFailure.unavailable,
+        reason: RegistrarFailure.registrarError,
       );
     }
     if (status != 'success') {
@@ -419,7 +419,7 @@ class RegistrarAdminService {
         'Failed to generate delete token: the registrar reported an error.',
         endpoint: endpointPath,
         statusCode: res.statusCode,
-        reason: RegistrarFailure.unavailable,
+        reason: RegistrarFailure.registrarError,
       );
     }
     if (status != 'success' || payload['data'] is! Map) {
@@ -494,7 +494,7 @@ class RegistrarAdminService {
         'Failed to delete atSigns: the registrar reported an error.',
         endpoint: endpointPath,
         statusCode: res.statusCode,
-        reason: RegistrarFailure.unavailable,
+        reason: RegistrarFailure.registrarError,
       );
     }
     if (status != 'success' || payload['data'] is! Map) {

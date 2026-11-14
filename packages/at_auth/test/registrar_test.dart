@@ -542,7 +542,7 @@ void main() {
       );
     });
 
-    test('throws RegistrarException(unavailable) when status is "error"',
+    test('throws RegistrarException(registrarError) when status is "error"',
         () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
@@ -552,7 +552,7 @@ void main() {
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(
           isA<RegistrarException>()
-              .having((e) => e.reason, 'reason', RegistrarFailure.unavailable)
+              .having((e) => e.reason, 'reason', RegistrarFailure.registrarError)
               .having(
                   (e) => e.toString().contains('super-secret-server-detail'),
                   'leaks the server message',
@@ -908,7 +908,7 @@ void main() {
       expect(result.skippedAtSigns, equals(['@bogus']));
     });
 
-    test('throws RegistrarException(unavailable) when all atSigns are invalid',
+    test('throws RegistrarException(registrarError) when all atSigns are invalid',
         () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
@@ -921,7 +921,7 @@ void main() {
       expect(
         () => service.generateAtSignDeleteToken(['@bogus']),
         throwsA(isA<RegistrarException>()
-            .having((e) => e.reason, 'reason', RegistrarFailure.unavailable)
+            .having((e) => e.reason, 'reason', RegistrarFailure.registrarError)
             .having(
                 (e) => e.toString().contains(
                     'One or more Atsigns mentioned are not associated with this account.'),
@@ -1111,7 +1111,7 @@ void main() {
       expect(result.failed, equals([]));
     });
 
-    test('throws RegistrarException(unavailable) when status is not "success"',
+    test('throws RegistrarException(registrarError) when status is not "success"',
         () async {
       final service = _makeAdminService(_mockResponse({
         'status': 'error',
@@ -1124,7 +1124,7 @@ void main() {
       expect(
         () => service.deleteAtSigns(token: 'bad-token', atSigns: ['@one']),
         throwsA(isA<RegistrarException>()
-            .having((e) => e.reason, 'reason', RegistrarFailure.unavailable)),
+            .having((e) => e.reason, 'reason', RegistrarFailure.registrarError)),
       );
     });
 
