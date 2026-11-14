@@ -266,8 +266,8 @@ A second passkey on another device is its own enrollment the same way (3.1): PRF
 |---|---|
 | Encryption keys | Enrollment uses RSA encryption keys |
 | K-5′ check | Compares the RSA public key only |
-| Pointer namespace | `atkeysv` |
-| Pointer integrity | Depends on the atServer's namespace permissions |
+| Pointer namespace | A per-passkey namespace `<ns>`, derived from the passkey (K-17); the enrollment requests `<ns>:rw` beside the app's namespace |
+| Pointer integrity | Only that passkey's enrollment holds `<ns>:rw`; the onboarding enrollment, activated by CRAM, holds the root grant and can also write it (K-17) |
 | Root domain | Fixed to the default in the web entry points |
 | No PRF | Refused. v1 has no passphrase fallback (K-13 a is not built) |
 

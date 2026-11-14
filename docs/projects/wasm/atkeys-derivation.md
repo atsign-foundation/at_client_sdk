@@ -44,6 +44,7 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
 - Test vector (`P` = bytes `00..1f`, atSign `@alice`):
   - salt `e5830b409db0e503af40c254598c41bf4e6ad6627ff185d311a9f446383ea620`
   - lookup `7086a5038ed92fcd20309c479df67581a64cf9f8caf802ef81e7ecec8e4272fe`
+  - ns `eb6d5cd3fa73833e051373ef059c79c8f4f2883fc86c0ce643b8e4bdfaa8fad9`
   - kek `338114674b5a98898fe30e20b4e29e96907ac6ec58b615bc0a298e759cd520b0`
   - authSeed `b0e85850ef5407a914408bc6ccdc6a32baeb6446127275414199179a2cf79fc6`
 - These label strings are canonical. They replace `atkeys/lookup` and `atkeys/blob`.
