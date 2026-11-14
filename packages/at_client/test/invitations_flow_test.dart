@@ -83,6 +83,7 @@ class _Client extends Fake implements AtClient {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     bool cleanupOrphansOnCreation = false,
   }) async =>
       _collections.putIfAbsent(
@@ -94,6 +95,7 @@ class _Client extends Fake implements AtClient {
           notifications: const Stream.empty(),
           fromJson: fromJson,
           typeTag: typeTag,
+          writeTypeTag: writeTypeTag,
         ),
       ) as AtCollection<T>;
 
