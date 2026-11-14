@@ -1,0 +1,8 @@
+# Architecture guards: a change to any of these paths needs a code owner's review.
+/.github/CODEOWNERS                       @gkc @cconstab
+/.github/wasm_gates.yaml                  @gkc @cconstab
+/.github/copilot-instructions.md          @gkc @cconstab
+/docs/architecture/                       @gkc @cconstab
+/packages/at_client/test/architecture/    @gkc @cconstab
+AGENTS.md                                 @gkc @cconstab
+CLAUDE.md                                 @gkc @cconstab
