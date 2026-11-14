@@ -40,7 +40,8 @@
   stack trace; the trace is logged at fine.
 - fix: a message about an atKeys document that does not parse, or about keys
   this build cannot sign with, names the field by its path and holds none of
-  its value.
+  its value. An enrollment id it quotes has each control or bidirectional
+  formatting character replaced with `?` and is cut to 40 characters.
 
 ## 4.0.0
 
