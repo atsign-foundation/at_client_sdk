@@ -5,7 +5,9 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart';
 
-AtKeys classicalAtKeys({Atsign? atsign}) {
+AtKeys classicalAtKeys(
+    {Atsign? atsign,
+    String enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44'}) {
   return AtKeys(atsign: atsign)
     ..apkamPublicKey =
         AtBytes.fromString(base64Encode(utf8.encode('testApkamPublicKey')))
@@ -19,7 +21,7 @@ AtKeys classicalAtKeys({Atsign? atsign}) {
         base64Encode(utf8.encode('defaultSelfEncryptionKey')))
     ..apkamSymmetricKey =
         AtBytes.fromString(base64Encode(utf8.encode('apkamSymmetricKey')))
-    ..enrollmentId = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
+    ..enrollmentId = enrollmentId;
 }
 
 /// [classicalAtKeys] plus an ML-DSA-65 data signing key under the enrollment

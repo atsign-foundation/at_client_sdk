@@ -133,7 +133,7 @@ void main() {
       await pumpEventQueue();
       expect(wire.pkams, 1, reason: 'the first open waits on its PKAM');
 
-      final other = classicalAtKeys()..enrollmentId = 'second-enrollment';
+      final other = classicalAtKeys(enrollmentId: 'second-enrollment');
       final second = await open(keys: other).timeout(Duration(seconds: 2));
 
       expect(second.connection.current.isOnline, isTrue);
@@ -151,8 +151,8 @@ void main() {
       // The second and third queue behind the first. The fourth starts the
       // moment the first ends, while the second is still on its way in.
       final fourth = Completer<Object>();
-      final first = outcome(open())
-        ..whenComplete(() => fourth.complete(outcome(open())));
+      final first = outcome(open());
+      unawaited(first.whenComplete(() => fourth.complete(outcome(open()))));
       final second = outcome(open());
       final third = outcome(open());
 
@@ -235,10 +235,17 @@ void main() {
         () async {
       final client = await open();
       // A put checks the enrollment's namespace access first.
-      wire.answer = (c) => c.startsWith('enroll:fetch')
-          ? 'data:{"appName":"a","deviceName":"d",'
-              '"namespace":{"$_app":"rw","__manage":"rw"},"status":"approved"}'
-          : null;
+      wire.answer = (c) {
+        if (c.startsWith('enroll:fetch')) {
+          return 'data:{"appName":"a","deviceName":"d",'
+              '"namespace":{"$_app":"rw","__manage":"rw"},"status":"approved"}';
+        }
+        // An atServer with nothing committed yet.
+        if (c.startsWith('stats')) {
+          return 'data:[{"id":"3","name":"lastCommitID","value":"-1"}]';
+        }
+        return null;
+      };
       final note =
           (AtKey.self('note', namespace: _app)..sharedBy(_atSign)).build();
       await client.put(note, 'hello',
@@ -250,11 +257,16 @@ void main() {
       final local =
           await (await keyStore.getKeys(regex: 'note.$_app')).toList();
       expect(local, isNotEmpty);
+      expect(wire.commands.where((c) => c.startsWith('batch:')), isEmpty,
+          reason: 'nothing is pushed before sync runs');
 
       client.syncService.sync();
       await pumpEventQueue();
-      expect(wire.commands.where((c) => c.startsWith('stats')), isNotEmpty,
-          reason: 'sync must reach the atServer to push the local write');
+      expect(
+          wire.commands.where((c) =>
+              c.startsWith('batch:') && c.contains('note.$_app$_atSign')),
+          isNotEmpty,
+          reason: 'sync must push the local write: ${wire.commands}');
     });
 
     test('a localOnly session syncs', () async {
