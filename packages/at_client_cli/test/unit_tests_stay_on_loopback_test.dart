@@ -220,6 +220,52 @@ void main() {
         isEmpty);
   });
 
+  test('the scan keeps each exemption, and the at_activate rules, to its tree',
+      () {
+    for (final atActivate in [
+      "AtRootDomain('example.com')",
+      "['otp', '-a', '@alice']",
+    ]) {
+      expect(
+          offTheLoopbackIn(atActivate, path: 'test/a_test.dart'), hasLength(1),
+          reason: atActivate);
+      expect(offTheLoopbackIn(atActivate, path: '../at_auth/test/a_test.dart'),
+          isEmpty,
+          reason: atActivate);
+    }
+
+    const subclass = 'class _Real extends AtsignFlows { const _Real(); }';
+    expect(offTheLoopbackIn(subclass, path: _loopbackFlows), isEmpty);
+    expect(offTheLoopbackIn(subclass, path: 'test/loopback_flows.dart'),
+        hasLength(1));
+
+    const finder = "CacheableSecondaryAddressFinder('example.com', 64)";
+    expect(offencesIn(_atClientTransport, finder), isEmpty);
+    expect(offencesIn('${_atClientSamples}lookup.dart', finder), isEmpty);
+    for (final path in [
+      'test/test_utils/transport.dart',
+      '../at_auth/test/test_utils/transport.dart',
+      '../at_client/test/test_utils/mocks.dart',
+      '../at_client_flutter/test/samples/lookup.dart',
+    ]) {
+      expect(offencesIn(path, finder), hasLength(1), reason: path);
+    }
+  });
+
+  test('the scan keeps the hand-run samples to themselves', () {
+    expect(
+        samplesOffencesIn('${_atClientSamples}a_test.dart', ''), hasLength(1));
+    expect(samplesOffencesIn('${_atClientSamples}a.dart', ''), isEmpty);
+    expect(
+        samplesOffencesIn('../at_client/test/a_test.dart',
+            "import 'samples/sample_transport.dart';"),
+        hasLength(1));
+    expect(
+        samplesOffencesIn('../at_client/test/a_test.dart',
+            "import 'test_utils/transport.dart';"),
+        isEmpty);
+  });
+
   test(
       'nothing in a test in any of the four packages reaches an atDirectory '
       'off the loopback interface', () {
