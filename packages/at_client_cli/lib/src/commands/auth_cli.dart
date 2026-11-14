@@ -463,53 +463,106 @@ Future<int> status(ArgResults ar) async {
     exit(1);
   }
 
-  SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
-      rootDomain.rootDomain, rootDomain.rootPort);
-  try {
-    await saf.findSecondary(atSign);
-  } on SecondaryNotFoundException {
-    stderr.writeln('returning 3: atDirectory has no record for $atSign');
-    return 3;
-  } catch (e) {
-    stderr.writeln('returning 4: Caught ${e.runtimeType} : $e');
-    return 4;
-  }
-
-  String? pk;
-  try {
-    // NOTE: a public key lookup needs no authentication, and no credential is
-    // held here.
+  final found = await _lookUpPublicKey(
+      atSign,
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort), () {
     final settings = enrollerSettingsFrom(ar);
-    final AtLookUp al = settings.lookUps(
+    return settings.lookUps(
       atSign: atSign,
       rootDomain: rootDomain,
       authenticator: null,
       secondaryAddressFinder: settings.secondaryAddressFinder,
     );
+  });
+  stderr.writeln('returning ${found.outcome.exitCode}: ${found.detail}');
+  return found.outcome.exitCode;
+}
+
+/// What looking up an atSign's public key found, with the exit code
+/// [status] returns for it.
+enum _PublicKey {
+  found(0),
+  absent(1),
+  atServerUnreachable(2),
+  notInAtDirectory(3),
+  atDirectoryUnreachable(4);
+
+  const _PublicKey(this.exitCode);
+
+  final int exitCode;
+}
+
+/// Asks [atDirectory] for [atSign]'s atServer and that atServer, over the
+/// connection [connect] builds, for its public key, unauthenticated; [detail]
+/// says what was found.
+Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
+    SecondaryAddressFinder atDirectory, AtLookUp Function() connect) async {
+  try {
+    await atDirectory.findSecondary(atSign);
+  } on SecondaryNotFoundException {
+    return (
+      outcome: _PublicKey.notInAtDirectory,
+      detail: 'atDirectory has no record for $atSign'
+    );
+  } catch (e) {
+    return (
+      outcome: _PublicKey.atDirectoryUnreachable,
+      detail: 'Caught ${e.runtimeType} : $e'
+    );
+  }
+
+  final AtLookUp al;
+  try {
+    // NOTE: a public key lookup needs no authentication, and no credential is
+    // held here.
+    al = connect();
+  } catch (e) {
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'Caught unexpected ${e.runtimeType} : $e'
+    );
+  }
+  final found = await _publicKeyFrom(al, atSign);
+  try {
+    await al.close();
+  } catch (e) {
+    logger.finer('closing the public key lookup for $atSign failed: $e');
+  }
+  return found;
+}
+
+/// What [al] answers for [atSign]'s public key.
+Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
+    AtLookUp al, String atSign) async {
+  final String? pk;
+  try {
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
     } on AtLookUpException catch (e) {
-      final e1 = AtExceptionUtils.get(e.errorCode, e.errorMessage);
-      throw e1;
+      throw AtExceptionUtils.get(e.errorCode, e.errorMessage);
     }
   } on SecondaryServerConnectivityException catch (e) {
-    stderr.writeln('returning 2: atServer cannot be reached $atSign ($e)');
-    return 2;
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'atServer cannot be reached $atSign ($e)'
+    );
   } on KeyNotFoundException catch (e) {
-    stderr.writeln('returning 1: $e');
-    return 1;
+    return (outcome: _PublicKey.absent, detail: '$e');
   } catch (e) {
-    stderr.writeln('returning 2: Caught unexpected ${e.runtimeType} : $e');
-    return 2;
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'Caught unexpected ${e.runtimeType} : $e'
+    );
   }
 
   if (pk == null || !pk.startsWith("data:")) {
-    stderr.writeln('returning 1: response was $pk');
-    return 1;
+    return (outcome: _PublicKey.absent, detail: 'response was $pk');
   }
-
-  stderr.writeln('returning 0: found public:publickey$atSign OK');
-  return 0;
+  return (
+    outcome: _PublicKey.found,
+    detail: 'found public:publickey$atSign OK'
+  );
 }
 
 /// How often a client waiting for its enrollment to be approved asks again,
