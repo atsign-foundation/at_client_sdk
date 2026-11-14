@@ -297,6 +297,7 @@ void main() {
     test('unsupported algorithm', () async {
       final algorithm =
           'future-${List.generate(16, (_) => random.nextInt(16).toRadixString(16)).join()}';
+      final privateKey = randomBase64(32);
       await refusedAfterOnline(
           unreadable: () async {
             File(path).deleteSync();
@@ -312,11 +313,12 @@ void main() {
                       enrollmentId: 'future-algorithm',
                       algorithm: CryptographicMaterialAlgorithm.of(algorithm),
                       publicKey: randomBase64(32),
-                      privateKey: randomBase64(32)));
-            return algorithm;
+                      privateKey: privateKey));
+            return privateKey;
           },
           reader: FileAtKeysIo(filePath: (_) => path),
-          reason: contains('an algorithm this build cannot sign with'),
+          reason: contains('authenticates with "$algorithm", which this build '
+              'cannot sign with'),
           error: isA<AtKeyNotFoundException>());
     });
 

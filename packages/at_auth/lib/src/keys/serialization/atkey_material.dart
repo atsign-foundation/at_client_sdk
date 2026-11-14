@@ -381,8 +381,7 @@ List<CryptographicMaterial> parseAtKeysDocument(
     final keyId = assurance.expectNonEmptyString(
         entryJson['keyId'], '$entryPrefix.keyId');
     if (!seenKeyIds.add(keyId)) {
-      throw AtKeysValidationException(
-          'Duplicate atKeys keyId at $entryPrefix.keyId');
+      throw AtKeysValidationException('Duplicate atKeys keyId "$keyId"');
     }
     if (entryJson.containsKey('enrollmentId')) {
       throw AtKeysValidationException(
@@ -396,15 +395,16 @@ List<CryptographicMaterial> parseAtKeysDocument(
 
     final seenRoles = <String>{};
     for (final part in materialJson.asMap().entries) {
-      final partPrefix = '$entryPrefix.material[${part.key}]';
-      final partJson = assurance.expectMap(part.value, partPrefix);
+      final partJson =
+          assurance.expectMap(part.value, '$fieldPrefix.material[${part.key}]');
       final material = CryptographicMaterial.fromJson(
         partJson,
         keyId: keyId,
         enrollmentId: enrollmentId,
       );
       if (!seenRoles.add(material.role)) {
-        throw AtKeysValidationException('Duplicate role at $partPrefix.role');
+        throw AtKeysValidationException(
+            'Duplicate role "${material.role}" for keyId "$keyId"');
       }
       materials.add(material);
     }
@@ -431,12 +431,11 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
       final first = group.first;
       if (material.enrollmentId != first.enrollmentId) {
         throw AtKeysValidationException(
-            'A material does not match the enrollmentId of the others under '
-            'its keyId');
+            'Material for keyId "${material.keyId}" does not match the enrollmentId of its group');
       }
       if (group.any((existing) => existing.role == material.role)) {
         throw AtKeysValidationException(
-            'Two materials under one keyId have the same role');
+            'Duplicate role "${material.role}" for keyId "${material.keyId}"');
       }
     }
     group.add(material);

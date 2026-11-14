@@ -103,7 +103,7 @@ class AtKeysAssurance {
         return candidate;
       }
     }
-    throw AtKeysValidationException('Unsupported value at $fieldName');
+    throw AtKeysValidationException('Unsupported value "$token" at $fieldName');
   }
 
   DateTime expectDateTime(Object? value, String fieldName) {
@@ -172,8 +172,9 @@ class AtKeysAssurance {
       // aliases `x/y` + `z` with `x` + `y/z`.
       if (!types.add((material.role, material.algorithm))) {
         throw AtKeysEnrollmentException(
-            'An enrollment has more than one active key material of the same '
-            'role and algorithm');
+            'Enrollment "$enrollmentId" has more than one active '
+            '${material.role} key material for '
+            '${material.algorithm}');
       }
     }
   }

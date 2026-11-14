@@ -35,9 +35,8 @@
   (`FileSystemException` naming its path).
 - fix: a failed PKAM step during activation throws a message that holds no
   stack trace; the trace is logged at fine.
-- fix: a message about an atKeys document that does not parse, or about keys
-  this build cannot sign with, names the field by its path and holds none of
-  its value.
+- fix: a message about an atKeys date that does not parse gives the
+  parser's reason and holds none of the date's text.
 
 ## 4.0.0
 

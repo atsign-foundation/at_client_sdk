@@ -985,13 +985,10 @@ class AtKeys {
     if (value == null) return null;
     const assurance = AtKeysAssurance();
     final json = assurance.expectMap(value, '$prefix.namespaces');
-    // NOTE: a namespace is named by its position, not its name, so a message
-    // holds none of the stored value.
-    final entries = json.entries.toList();
     return {
-      for (final (i, entry) in entries.indexed)
+      for (final entry in json.entries)
         entry.key: assurance.expectNonEmptyString(
-            entry.value, '$prefix.namespaces[$i]'),
+            entry.value, '$prefix.namespaces.${entry.key}'),
     };
   }
 
@@ -1335,8 +1332,9 @@ class AtKeys {
     final material = _activeAuthenticationMaterial(enrollmentId);
     if (material != null) {
       throw AtKeyNotFoundException(
-          'The enrollment authenticates with an algorithm this build cannot '
-          'sign with. Its keypair is in this keyfile; the flat fields are a '
+          'Enrollment $enrollmentId authenticates with '
+          '"${material.algorithm}", which this build cannot sign '
+          'with. Its keypair is in this keyfile; the flat fields are a '
           'different enrollment\'s and are not a substitute for it.');
     }
     return null;
@@ -1399,8 +1397,8 @@ class AtKeys {
           public.status != CryptographicMaterialStatus.active ||
           public.algorithm != private.algorithm) {
         throw AtKeyNotFoundException(
-            'AtKeys holds no active authentication keypair for the '
-            'enrollment');
+            'AtKeys holds no active authentication keypair for enrollment '
+            '$enrollmentId');
       }
       return (
         algorithm: algorithm,
