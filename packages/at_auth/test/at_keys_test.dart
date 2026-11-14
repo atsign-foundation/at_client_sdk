@@ -586,6 +586,37 @@ void main() {
     });
 
     test(
+        'requireAuthenticationKeyPairFor returns the keypair '
+        'authenticationKeyPairFor returns', () {
+      expect(createKeys().requireAuthenticationKeyPairFor(null),
+          createKeys().authenticationKeyPairFor(null)!);
+      expect(retrofitted().requireAuthenticationKeyPairFor(typedEnrollmentId),
+          retrofitted().authenticationKeyPairFor(typedEnrollmentId)!);
+    });
+
+    for (final (label, enrollmentId, named) in [
+      ('no enrollment id', null, 'the primary enrollment'),
+      ('an id holding a line feed', 'e-1\nsecond line', 'e-1?second line'),
+      ('an id holding a right-to-left override', 'e-1\u202Eeno', 'e-1?eno'),
+    ]) {
+      test(
+          'requireAuthenticationKeyPairFor throws AtKeyNotFoundException '
+          'naming the enrollment where authenticationKeyPairFor returns null '
+          '($label)', () {
+        final keys = createKeys()..apkamPublicKey = null;
+        expect(keys.authenticationKeyPairFor(enrollmentId), isNull);
+
+        expect(
+            () => keys.requireAuthenticationKeyPairFor(enrollmentId),
+            throwsA(isA<AtKeyNotFoundException>().having(
+                (e) => e.message,
+                'message',
+                'AtKeys holds no authentication keypair for $named, so there '
+                    'is nothing to sign with')));
+      });
+    }
+
+    test(
         'authenticationAlgorithmFor answers for the enrollment that owns typed '
         'material, whatever the flat fields hold', () {
       // Only typed material, so a null enrollment resolves a null algorithm,

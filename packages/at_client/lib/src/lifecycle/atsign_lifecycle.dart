@@ -502,13 +502,8 @@ extension AtsignLifecycle on Atsign {
     try {
       // NOTE: the keypair the authenticator signs with, resolved as it
       // resolves it, so keys it cannot sign with are refused here.
-      final keyPair =
-          stored.authenticationKeyPairFor(stored.enrollmentToAuthenticateAs());
-      if (keyPair == null) {
-        throw AtKeyNotFoundException('AtKeys holds no authentication keypair '
-            'for the enrollment it authenticates as, so there is nothing to '
-            'sign with');
-      }
+      stored
+          .requireAuthenticationKeyPairFor(stored.enrollmentToAuthenticateAs());
     } catch (e, stackTrace) {
       _refuse(
           AtKeysUnusableException.unreadable(this,
