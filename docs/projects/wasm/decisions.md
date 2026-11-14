@@ -847,8 +847,8 @@ The client chooses where its monitor replays from, when its notification service
 | **full** | everything the atServer still holds | no |
 
 **Defaults.** Native keeps **resume**, today's `fetchOfflineNotifications = true`. The
-**browser bundle sets `window(1h)`** when it builds the client's preferences; per D-17/D-18
-the bundle owns lane behaviour, so at_client's shared default does not move.
+**browser lane sets `window(1h)`** when it builds the client's preferences; per D-17
+the lane owns its own behaviour, so at_client's shared default does not move.
 
 **Why a window on the web.** It is the one replay policy that is correct with no
 checkpoint store: a reload replays a bounded hour rather than everything the server
@@ -1344,8 +1344,9 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 ### OQ-13 — Where does the monitor resume checkpoint live in remote-only? **RESOLVED 2026-09-15 by D-24**
 
 `notification_service_impl.dart:434` (`_migrateLegacyLastReceivedNotificationKeys`) reads
-`lastReceivedNotificationAtKey` from `getLocalSecondary()!.keyStore!`. Under D-18 that call
-**silently succeeds and returns nothing** after every reload, replaying all notifications
+`lastReceivedNotificationAtKey` from `getLocalSecondary()!.keyStore!`. Under D-18 (reversed
+2026-11-13; the browser client now holds that key in `InMemoryAtClientStorage` for the session)
+that call **silently succeeded and returned nothing** after every reload, replaying all notifications
 with no error — a correctness bug rather than a crash, which is worse.
 
 Options: accept the replay (in-memory), or give it a small IndexedDB record beside the key
