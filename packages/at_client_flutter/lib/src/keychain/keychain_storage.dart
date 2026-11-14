@@ -2,7 +2,11 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysFormatException, AtKeysSourceAbsentException;
+    show
+        AtKeys,
+        AtKeysFormatException,
+        AtKeysParseException,
+        AtKeysSourceAbsentException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -49,8 +53,9 @@ class KeychainStorage {
   /// Read all stored Atsign keys data from the keychain
   ///
   /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
-  /// if no key data has been stored yet. A stored entry that is not valid
-  /// JSON throws [AtKeysFormatException].
+  /// if no key data has been stored yet. A stored entry that is not a JSON
+  /// object throws [AtKeysFormatException], and a store the platform refuses
+  /// to read throws the platform's error.
   Future<AtKeysData?> readAtKeysData() async {
     final data = await _readAtKeysDataRaw();
     if (data != null) {
@@ -60,17 +65,36 @@ class KeychainStorage {
   }
 
   /// [text], a stored atKeys entry, as [AtKeysData].
+  static AtKeysData _decodeAtKeysData(String text) =>
+      AtKeysData.fromJson(_decodeObject(text, 'the keychain atKeys entry'));
+
+  /// [text], a stored [what], as the JSON object it must be.
   ///
-  /// Text that is not JSON throws [AtKeysFormatException], which holds none
-  /// of it.
-  static AtKeysData _decodeAtKeysData(String text) {
-    final dynamic json;
+  /// Text that is not a JSON object throws [AtKeysFormatException], which
+  /// holds none of it.
+  static Map<String, dynamic> _decodeObject(String text, String what) {
+    final Object? json;
     try {
       json = jsonDecode(text);
     } on FormatException catch (e) {
-      throw AtKeysFormatException.notJson('the keychain atKeys entry', e);
+      throw AtKeysFormatException.notJson(what, e);
     }
-    return AtKeysData.fromJson(json);
+    if (json is! Map<String, dynamic>) {
+      throw AtKeysFormatException.notAnObject(what);
+    }
+    return json;
+  }
+
+  /// The segment count a Windows store's header [text] records.
+  static int _segmentCountIn(String text) {
+    final header = _decodeObject(text, 'the keychain atKeys entry header');
+    final count = header['segmentCount'];
+    if (count is! int) {
+      throw AtKeysParseException(
+        'Expected integer at the keychain atKeys entry header segmentCount',
+      );
+    }
+    return count;
   }
 
   // Current behaviour:
@@ -93,16 +117,12 @@ class KeychainStorage {
     // See migration sequencing comment above.
     // 2.x.x: only copy `_` to `:`, leave `_` in place.
 
+    // NOTE: a refused read of the legacy store is thrown, as one of the
+    // current store is; it is not a keychain holding nothing.
     final keychainStorageImproperName = await _getImproperAtKeysStoreName();
-    String? improperDataString;
-    try {
-      improperDataString = await _read(
-        keychainStoreName: keychainStorageImproperName,
-      );
-    } catch (e, s) {
-      _logger.info('No legacy atKeysData found in keychain.', e, s);
-      return null;
-    }
+    final improperDataString = await _read(
+      keychainStoreName: keychainStorageImproperName,
+    );
     if (improperDataString == null) {
       return null;
     }
@@ -253,9 +273,9 @@ class KeychainStorage {
   ///
   /// Note: the Atsign must be included in the [AtKeys.metadata] field
   ///
-  /// A failure to read or write the keychain is thrown, and a stored entry
-  /// that is not valid JSON throws [AtKeysFormatException] with nothing
-  /// written.
+  /// A failure to read or write the keychain, its legacy-named store
+  /// included, is thrown, and a stored entry that is not a JSON object throws
+  /// [AtKeysFormatException], with nothing written.
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) =>
       _writes.synchronized(() => _append(keys));
 
@@ -281,9 +301,11 @@ class KeychainStorage {
   ///
   ///   [atSign] - Atsign whose persisted keys should be removed
   ///
-  /// A failure to read or write the keychain is thrown, and a stored entry
-  /// that is not valid JSON throws [AtKeysFormatException] with nothing
-  /// written. An empty keychain is left as it is.
+  /// A failure to read or write the keychain, its legacy-named store
+  /// included, is thrown, and a stored entry that is not a JSON object throws
+  /// [AtKeysFormatException], with nothing written. An empty keychain is left
+  /// as it is. [deleteAllAtKeysData] is how a keychain whose entry does not
+  /// parse is cleared, removing every Atsign stored there.
   Future<void> removeAtsignFromKeychain(String atSign) =>
       _writes.synchronized(() => _remove(atSign));
 
@@ -445,8 +467,7 @@ class KeychainStorage {
         final int segmentCount;
         final String segmentPrefix;
         if (storedData.startsWith('{')) {
-          final Map m = jsonDecode(storedData);
-          segmentCount = m['segmentCount'];
+          segmentCount = _segmentCountIn(storedData);
           segmentPrefix = '${keychainStoreName}_segment';
           //log(
           //  '  => READ: Got segmentCount $segmentCount'
@@ -506,8 +527,7 @@ class KeychainStorage {
         final int segmentCount;
         final String segmentPrefix;
         if (storedData.startsWith('{')) {
-          final Map metadata = jsonDecode(storedData);
-          segmentCount = metadata['segmentCount'];
+          segmentCount = _segmentCountIn(storedData);
           segmentPrefix = '${keychainStoreName}_segment';
         } else {
           segmentCount = int.tryParse(storedData) ?? 0;
