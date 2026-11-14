@@ -197,9 +197,7 @@ class AtsignFlows {
       return await verb();
     } on AtKeysUnusableException catch (e, stackTrace) {
       final error = e.error;
-      if (keys is! KeychainAtKeysIo ||
-          e.cause != AtKeysUnusableCause.unreadable ||
-          error is! AtKeysFormatException) {
+      if (keys is! KeychainAtKeysIo || error is! AtKeysFormatException) {
         rethrow;
       }
       Error.throwWithStackTrace(

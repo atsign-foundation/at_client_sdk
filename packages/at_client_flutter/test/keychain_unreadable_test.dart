@@ -256,6 +256,35 @@ void main() {
     });
   });
 
+  group('Given a keyfile, not the keychain, whose text is not JSON', () {
+    test('when it is opened through AtsignFlows, then the refusal says '
+        'nothing of every Atsign', () async {
+      final path = '${support.path}/${atSign}_key.atKeys';
+      File(path).writeAsStringSync('{"keys":[');
+
+      await expectLater(
+        const LoopbackFlows().open(
+          atSign,
+          keys: FileAtKeysIo(filePath: (_) => path),
+          preference: await loopbackPreference(),
+          lookUps: recordingLookUps,
+        ),
+        throwsA(
+          isA<AtKeysUnusableException>()
+              .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+              .having((e) => e.source, 'source', path)
+              .having((e) => e.error, 'error', isA<AtKeysFormatException>())
+              .having(
+                (e) => e.message,
+                'message',
+                isNot(contains('Every Atsign')),
+              ),
+        ),
+      );
+      expect(built, isEmpty, reason: 'no connection is built');
+    });
+  });
+
   group('JSON that is not an object is refused on every keychain path', () {
     test('reading', () {
       expect(
