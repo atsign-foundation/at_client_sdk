@@ -55,6 +55,11 @@ void main() {
   final silentSockets = <SecureSocket>[];
   var directoryConnections = 0;
   final atServerHangUps = StreamController<void>.broadcast();
+  var atServerConnections = 0;
+  late SecureServerSocket silentAtServer;
+  final silentAtServerHangUps = StreamController<void>.broadcast();
+  late SecureServerSocket slowAtDirectory;
+  final slowAnswers = StreamController<void>.broadcast();
 
   setUpAll(() async {
     certs = Directory.systemTemp.createTempSync('keys_problems_said_once_');
@@ -78,6 +83,7 @@ void main() {
     atServer =
         await SecureServerSocket.bind(InternetAddress.loopbackIPv4, 0, context);
     atServer.listen((socket) {
+      atServerConnections++;
       utf8.decoder.bind(socket).transform(const LineSplitter()).listen(
           (command) {
         final answer = !command.startsWith('lookup:publickey')
@@ -110,6 +116,29 @@ void main() {
         await SecureServerSocket.bind(InternetAddress.loopbackIPv4, 0, context);
     silentAtDirectory.listen(silentSockets.add, onError: (_) {});
 
+    silentAtServer =
+        await SecureServerSocket.bind(InternetAddress.loopbackIPv4, 0, context);
+    silentAtServer.listen((socket) {
+      silentSockets.add(socket);
+      socket.listen((_) {},
+          onError: (_) {}, onDone: () => silentAtServerHangUps.add(null));
+    }, onError: (_) {});
+
+    // NOTE: answers with the atServer's address a second after the hint
+    // lookup's 5 seconds have run out.
+    slowAtDirectory =
+        await SecureServerSocket.bind(InternetAddress.loopbackIPv4, 0, context);
+    slowAtDirectory.listen((socket) {
+      socket.write('@');
+      utf8.decoder.bind(socket).transform(const LineSplitter()).listen((line) {
+        if (line.startsWith('@exit')) return;
+        Timer(const Duration(seconds: 6), () {
+          socket.write('@127.0.0.1:${atServer.port}\n@');
+          slowAnswers.add(null);
+        });
+      }, onError: (_) {});
+    }, onError: (_) {});
+
     // NOTE: for the hint lookups this process makes itself; at_activate runs
     // trust it through the fixture.
     SecurityContext.defaultContext
@@ -130,6 +159,8 @@ void main() {
       socket.destroy();
     }
     await silentAtDirectory.close();
+    await silentAtServer.close();
+    await slowAtDirectory.close();
     await atDirectory.close();
     await atServer.close();
     certs.deleteSync(recursive: true);
@@ -141,6 +172,7 @@ void main() {
     atServerPort = atServer.port;
     publicKeyAnswer = _PublicKey.absent;
     directoryConnections = 0;
+    atServerConnections = 0;
   });
 
   tearDown(() => home.deleteSync(recursive: true));
@@ -444,7 +476,43 @@ void main() {
             'onboard -a $atSign'
       ]);
       await hungUp.timeout(const Duration(seconds: 5));
+      expect(atServerConnections, 1,
+          reason: 'the control: an atDirectory that answers in time sends '
+              'the lookup to the atServer');
     });
+
+    test(
+        'closes its connection when the atServer does not answer within 5 '
+        'seconds', () async {
+      atServerPort = silentAtServer.port;
+      final hungUp = silentAtServerHangUps.stream.first;
+
+      expect(await absentKeysHint(atSign, atDirectoryRoot()), [
+        '  Not activated yet?             at_activate onboard -a $atSign',
+        '  Activated on another machine?  Run this command there, or enroll '
+            'this machine first.',
+      ]);
+      final closed = await hungUp
+          .then((_) => true)
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      expect(closed, isTrue,
+          reason: 'the lookup is closed when its 5 seconds run out');
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test(
+        'opens no connection to the atServer after its 5 seconds have run '
+        'out', () async {
+      final answered = slowAnswers.stream.first;
+
+      expect(await absentKeysHint(atSign, '127.0.0.1:${slowAtDirectory.port}'),
+          hasLength(2));
+      await answered;
+      for (var i = 0; i < 20 && atServerConnections == 0; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      expect(atServerConnections, 0,
+          reason: 'the atDirectory answered after the hint was given');
+    }, timeout: const Timeout(Duration(seconds: 30)));
 
     test('reads an answer that is not data as no public key', () async {
       publicKeyAnswer = _PublicKey.garbled;
