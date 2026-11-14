@@ -228,10 +228,10 @@ void main() {
   });
 
   group('sync', () {
-    // A put or delete that passes request options leaves `useRemoteAtServer`
-    // false, which routes it to local storage even under remoteOnly, so only
-    // sync carries it to the atServer.
-    test('a remoteOnly session syncs what a write with options left local',
+    // Under remoteOnly only an explicit `useRemoteAtServer = false` keeps a
+    // write local, so only then does sync carry it to the atServer.
+    test(
+        'a remoteOnly session syncs what a write with explicit false left local',
         () async {
       final client = await open();
       // A put checks the enrollment's namespace access first.
@@ -249,7 +249,9 @@ void main() {
       final note =
           (AtKey.self('note', namespace: _app)..sharedBy(_atSign)).build();
       await client.put(note, 'hello',
-          putRequestOptions: PutRequestOptions()..shouldEncrypt = false);
+          putRequestOptions: PutRequestOptions()
+            ..shouldEncrypt = false
+            ..useRemoteAtServer = false);
 
       expect(wire.commands.where((c) => c.startsWith('update')), isEmpty,
           reason: 'the write went to local storage');

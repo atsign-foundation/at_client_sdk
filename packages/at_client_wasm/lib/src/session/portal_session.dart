@@ -92,9 +92,10 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// to the atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
 /// Sync runs under every preference and starts at every open, pulling the
 /// atServer's records into the in-memory store without the caller asking. A
-/// put or delete that passes request options leaves `useRemoteAtServer`
-/// false, which routes it to local storage even under
-/// [RemoteLocalPref.remoteOnly], and only sync carries it to the atServer.
+/// put or delete goes to the atServer under [RemoteLocalPref.remoteOnly]
+/// unless its request options set `useRemoteAtServer = false` explicitly.
+/// Only that keeps a write local, queued for sync; options that leave it
+/// unset do not.
 /// Keys that carry ML-DSA-65 signing or namespace key material throw
 /// [UnsupportedKeyMaterialException] before any connection is made. The
 /// storage is always fresh, so every open is a first open on the device, and
