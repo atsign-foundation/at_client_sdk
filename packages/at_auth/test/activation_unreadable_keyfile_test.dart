@@ -203,7 +203,7 @@ void main() {
               unreadable(
                   path,
                   'The keys for $atSign at $path could not be read: it is not '
-                      'valid JSON: Unexpected character (at character 1).',
+                  'valid JSON: Unexpected character (at character 1).',
                   isA<AtKeysFormatException>()),
               holdsNoneOf(text))));
       expectNothingSent();
@@ -242,7 +242,7 @@ void main() {
               unreadable(
                   path,
                   'The keys for $atSign at $path could not be read: Pass '
-                      'Phrase is required for password protected atKeys file.',
+                  'Phrase is required for password protected atKeys file.',
                   isA<AtDecryptionException>()),
               holdsNoneOf(text, window: 16))));
       expectNothingSent();
@@ -328,7 +328,7 @@ void main() {
               unreadable(
                   path,
                   "The keys for $atSign at $path could not be read: type 'int' "
-                      "is not a subtype of type 'String' in type cast.",
+                  "is not a subtype of type 'String' in type cast.",
                   isA<TypeError>()),
               holdsNoneOf(selfEncryptionKey))));
       expectNothingSent();
@@ -354,7 +354,7 @@ void main() {
           throwsA(unreadable(
               source,
               'The keys for $atSign in $source could not be read: it is not '
-                  'valid JSON: Unexpected character (at character 1).',
+              'valid JSON: Unexpected character (at character 1).',
               isA<AtKeysFormatException>())));
       expectNothingSent();
     });
@@ -366,7 +366,7 @@ void main() {
           throwsA(unreadable(
               source,
               'The keys for $atSign in $source could not be read: it is not a '
-                  'JSON object.',
+              'JSON object.',
               isA<AtKeysFormatException>())));
       expectNothingSent();
     });
@@ -382,7 +382,7 @@ void main() {
               unreadable(
                   source,
                   'The keys for $atSign in $source could not be read: '
-                      'Unexpected end of input.',
+                  'Unexpected end of input.',
                   isA<FormatException>()
                       .having((e) => e.message, 'message',
                           'Unexpected end of input')
@@ -402,7 +402,7 @@ void main() {
           throwsA(unreadable(
               source,
               'The keys for $atSign in $source could not be read: Unsupported '
-                  'atKeys version: 2.',
+              'atKeys version: 2.',
               same(error))));
       expectNothingSent();
     });
@@ -415,7 +415,7 @@ void main() {
           throwsA(unreadable(
               source,
               'The keys for $atSign in $source could not be read: The store is '
-                  'closed.',
+              'closed.',
               same(error))));
       expectNothingSent();
     });
@@ -428,7 +428,7 @@ void main() {
           throwsA(unreadable(
               source,
               'The keys for $atSign in $source could not be read: it is not '
-                  'valid JSON: not a JSON object (at character 4).',
+              'valid JSON: not a JSON object (at character 4).',
               isA<AtKeysFormatException>())));
       expectNothingSent();
     });
@@ -441,7 +441,7 @@ void main() {
           throwsA(unreadable(
               source,
               'The keys for $atSign in $source could not be read: Bad state: '
-                  'the store is closed.',
+              'the store is closed.',
               same(error))));
       expectNothingSent();
     });

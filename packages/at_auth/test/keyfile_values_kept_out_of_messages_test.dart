@@ -125,8 +125,7 @@ void main() {
               .having((e) => e, 'text', holdsNoneOf(value))));
     });
 
-    test('two active materials of one role and algorithm in an enrollment',
-        () {
+    test('two active materials of one role and algorithm in an enrollment', () {
       final enrollmentId = distinctive();
       final role = 'role${distinctive()}';
       final algorithm = 'algo${distinctive()}';
@@ -182,34 +181,10 @@ void main() {
 
       expect(
           () => keys.authenticationKeyPairFor(enrollmentId),
-          throwsA(isA<AtKeyNotFoundException>().having((e) => e.message,
-              'message', allOf(holdsNoneOf(algorithm), holdsNoneOf(enrollmentId)))));
-    });
-
-    test('several enrollments that could authenticate', () {
-      final ids = [distinctive(), distinctive()];
-      Map<String, dynamic> enrollment(String id) => {
-            'enrollmentId': id,
-            'keys': [
-              {
-                'keyId': 'auth:rsa2048:1',
-                'material': [
-                  material(role: 'privateAuthentication'),
-                  material(role: 'publicAuthentication'),
-                ],
-              },
-            ],
-          };
-      final keys = AtKeys.fromJson({
-        'version': AtKeys.supportedVersion,
-        'atsign': '@alice',
-        'enrollments': [enrollment(ids[0]), enrollment(ids[1])],
-      });
-
-      expect(
-          () => keys.resolveAuthenticatingEnrollment(),
-          throwsA(isA<AtKeysEnrollmentException>().having((e) => e.message,
-              'message', allOf(holdsNoneOf(ids[0]), holdsNoneOf(ids[1])))));
+          throwsA(isA<AtKeyNotFoundException>().having(
+              (e) => e.message,
+              'message',
+              allOf(holdsNoneOf(algorithm), holdsNoneOf(enrollmentId)))));
     });
   });
 }

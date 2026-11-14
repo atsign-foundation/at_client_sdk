@@ -843,8 +843,9 @@ class AtKeys {
     if (candidates.length > 1) {
       throw AtKeysEnrollmentException(
           'This keyfile holds active authentication material for '
-          '${candidates.length} enrollments, so which one it authenticates as '
-          'is not derivable. The caller must name the enrollment it means.');
+          '${candidates.length} enrollments (${candidates.join(', ')}), so '
+          'which one it authenticates as is not derivable. The caller must '
+          'name the enrollment it means.');
     }
     return candidates.single;
   }
