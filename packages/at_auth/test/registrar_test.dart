@@ -837,6 +837,55 @@ void main() {
       await expectLater((captured as http.Abortable).abortTrigger, completes);
     });
 
+    test('does not read a late response once the abort trigger already fired',
+        () async {
+      final spyChunk = _SpyBytes(List<int>.filled(10, 0));
+      final client = MockClient.streaming((request, bodyStream) async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        final controller = StreamController<List<int>>();
+        controller.add(spyChunk);
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(milliseconds: 50),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      );
+      // Let the delayed `send` resolve and the late-response guard run.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(spyChunk.wasRead, isFalse,
+          reason: 'a response that arrives after the timeout fired must not '
+              'have its body read');
+    });
+
+    test('sets followRedirects to false on the request', () async {
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response(
+            jsonEncode({'status': 'success', 'cramkey': '@alice:KEY'}), 200);
+      });
+      final service = _makeAdminService(client);
+      await service.registerAtsign(atsign: '@alice'.toAtsign());
+      expect(captured.followRedirects, isFalse);
+    });
+
+    test('throws RegistrarException(unexpectedStatus) on a 3xx status',
+        () async {
+      final service = _makeAdminService(_mockResponse({}, status: 302));
+      expect(
+        () => service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)),
+      );
+    });
+
     test(
         'cancelling the body subscription on timeout does not surface an '
         'unhandled error when onCancel throws', () async {

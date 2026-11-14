@@ -197,6 +197,7 @@ class RegistrarAdminService {
       url,
       abortTrigger: abortTrigger.future,
     )
+      ..followRedirects = false
       ..headers['Content-Type'] = 'application/json'
       ..headers['Authorization'] = _superApiKey
       ..contentLength = requestBody.length
@@ -204,6 +205,19 @@ class RegistrarAdminService {
     unawaited(request.sink.close());
 
     final streamed = await _http.send(request);
+
+    if (abortTrigger.isCompleted) {
+      // The outer `.timeout()` in `_adminRequest` has already failed this
+      // call. Stop here instead of reading a response nobody is waiting
+      // for, in case the client ignored `abortTrigger` and sent one anyway.
+      await _cancelQuietly(streamed.stream.listen(null));
+      throw RegistrarException(
+        'Registrar request to ${endpoint.path} timed out after the '
+        'response arrived.',
+        endpoint: endpoint.path,
+        reason: RegistrarFailure.timeout,
+      );
+    }
 
     if (streamed.statusCode == 401 || streamed.statusCode == 403) {
       await _cancelQuietly(streamed.stream.listen(null));
