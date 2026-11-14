@@ -459,38 +459,6 @@ void main() {
   });
 
   group(
-      'Given keys holding only a pending enrollment whose id holds a line '
-      'feed and a right-to-left override', () {
-    test(
-        'when open refuses them, then the message quotes the id on one line '
-        'with each of those replaced by ?', () async {
-      const enrollmentId = 'e-1\nsecond line\u202E';
-      final pending = AtKeys()
-        ..addKey(CryptographicMaterial(
-            keyId: 'apkam:e-1:1',
-            enrollmentId: enrollmentId,
-            role: CryptographicMaterialRole.privateAuthentication,
-            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
-            bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 3))),
-            createdAt: DateTime.now().toUtc(),
-            status: CryptographicMaterialStatus.pending));
-
-      await expectLater(
-          openUnconnected(InMemoryAtKeysIo.holding(atSign, pending)),
-          throwsA(isA<AtEnrollmentPendingException>()
-              .having(
-                  (e) => e.message,
-                  'message',
-                  '$atSign holds no live credential, only the pending '
-                      'enrollment e-1?second line?: resume it with '
-                      'resumeEnrollment rather than opening it')
-              .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
-                  [enrollmentId])));
-      expectNoConnection();
-    });
-  });
-
-  group(
       'Given keys holding no authentication keypair for the enrollment they '
       'authenticate as', () {
     for (final (label, enrollmentId, handedToAuthenticator, named) in [
@@ -500,12 +468,7 @@ void main() {
         [null, EnrollmentConstants.primaryEnrollmentId],
         'the primary enrollment'
       ),
-      (
-        'an enrollment id holding a line feed and a right-to-left override',
-        'e-1\nsecond line\u202E',
-        ['e-1\nsecond line\u202E'],
-        'e-1?second line?'
-      ),
+      ('a keyfile naming an enrollment', 'e-1', ['e-1'], 'e-1'),
     ]) {
       test(
           'when open and the PKAM authenticator are given them, then both '

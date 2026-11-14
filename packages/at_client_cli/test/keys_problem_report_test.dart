@@ -55,22 +55,6 @@ void main() {
     });
 
     test(
-        'when one whose id holds a line feed and a right-to-left override is '
-        'reported, then the report quotes the id on one line with each of '
-        'those replaced by ?', () {
-      final lines = stderrOf(() => reportKeysProblem(
-          AtEnrollmentPendingException(atSign, ['e-1\nsecond line\u202E']),
-          absentHint: const []));
-
-      expect(lines, [
-        'This keyfile holds only a pending enrollment request for $atSign '
-            '(id e-1?second line?). Wait for it to be approved, then run this '
-            'command again.',
-        keysProblemFooter,
-      ]);
-    });
-
-    test(
         'when two are reported, then the report names both ids in the plural '
         'and says to wait for them', () {
       final lines = stderrOf(() => reportKeysProblem(

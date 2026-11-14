@@ -164,28 +164,4 @@ void main() {
         throwsA(isA<AtKeysEnrollmentException>().having(
             (e) => '$e', 'message', allOf(contains('e1'), contains('e2')))));
   });
-
-  group(
-      'Given two live enrollments, one whose id holds a line feed and one '
-      'whose id is longer than 40 characters', () {
-    test(
-        'when the enrollment to authenticate as is asked for, then the '
-        'refusal quotes each id on one line, cut to 40 characters', () {
-      final long = 'e2${'x' * 198}';
-      final json = twoLiveEnrollments();
-      final enrollments = json['enrollments'] as List;
-      (enrollments[0] as Map)['enrollmentId'] = 'e1\nsecond line';
-      (enrollments[1] as Map)['enrollmentId'] = long;
-
-      expect(
-          () => AtKeys.fromJson(json).enrollmentToAuthenticateAs(),
-          throwsA(isA<AtKeysEnrollmentException>().having(
-              (e) => e.message,
-              'message',
-              allOf(
-                  contains('(e1?second line, ${long.substring(0, 40)}...)'),
-                  isNot(contains('\n')),
-                  isNot(contains(long.substring(0, 41)))))));
-    });
-  });
 }

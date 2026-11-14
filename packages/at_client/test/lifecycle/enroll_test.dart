@@ -1326,11 +1326,11 @@ void main() {
     });
 
     /// A store holding two pending requests for app `wavi`, from devices named
-    /// after their enrollment [ids], `e-one` and `e-two` unless given.
-    AtKeys twoPending({List<String> ids = const ['e-one', 'e-two']}) {
+    /// after their enrollment ids, `e-one` and `e-two`.
+    AtKeys twoPending() {
       final keys = AtKeys(atsign: Atsign(atSign));
       final keyPair = RsaKeyPair.generate();
-      for (final id in ids) {
+      for (final id in ['e-one', 'e-two']) {
         for (final (role, key) in [
           (
             CryptographicMaterialRole.privateAuthentication,
@@ -1416,27 +1416,6 @@ void main() {
               .having((e) => e.cause, 'cause',
                   AtKeysUnusableCause.pendingEnrollment)
               .having((e) => e.message, 'message', namesBothAndAsksForNames)));
-    });
-
-    test(
-        'Given a store holding two pending enrollments, one whose id holds a '
-        'line feed and a right-to-left override, when resumeEnrollment is '
-        'given no names, then the message quotes that id on one line with '
-        'each of those replaced by ?', () async {
-      final pref = await preference();
-
-      await expectLater(
-          Atsign(atSign).resumeEnrollment(
-              keys: InMemoryAtKeysIo.holding(
-                  atSign, twoPending(ids: ['e-1\nsecond line\u202E', 'e-two'])),
-              preference: pref,
-              lookUps: secureSocketLookUps(),
-              secondaryAddressFinder: atDirectoryOf(pref)),
-          throwsA(isA<AtEnrollmentPendingException>().having(
-              (e) => e.message,
-              'message',
-              allOf(contains('e-1?second line?'), contains('e-two'),
-                  isNot(contains('\n')), isNot(contains('\u202E'))))));
     });
 
     test('A connection the app supplied is left open', () async {

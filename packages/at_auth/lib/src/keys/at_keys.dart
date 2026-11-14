@@ -1,6 +1,5 @@
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
-import 'package:at_auth/src/keys/printable_enrollment_id.dart';
 import 'package:at_auth/src/keys/serialization/base64_field.dart';
 import 'package:at_chops/at_chops.dart' hide AtPublicKey, AtPrivateKey;
 import 'package:at_commons/at_commons.dart';
@@ -844,8 +843,7 @@ class AtKeys {
     if (candidates.length > 1) {
       throw AtKeysEnrollmentException(
           'This keyfile holds active authentication material for '
-          '${candidates.length} enrollments '
-          '(${candidates.map(printableEnrollmentId).join(', ')}), so '
+          '${candidates.length} enrollments (${candidates.join(', ')}), so '
           'which one it authenticates as is not derivable. The caller must '
           'name the enrollment it means.');
     }
@@ -1426,8 +1424,8 @@ class AtKeys {
   /// [enrollmentId], for a caller that has nothing to sign with without one.
   ///
   /// Throws [AtKeyNotFoundException] where that returns null, naming
-  /// [enrollmentId] as [printableEnrollmentId] prints it, or the primary
-  /// enrollment when it is null or [EnrollmentConstants.primaryEnrollmentId].
+  /// [enrollmentId], or the primary enrollment when it is null or
+  /// [EnrollmentConstants.primaryEnrollmentId].
   ({SigningAlgoType algorithm, String publicKey, String privateKey})
       requireAuthenticationKeyPairFor(String? enrollmentId) {
     final keyPair = authenticationKeyPairFor(enrollmentId);
@@ -1435,7 +1433,7 @@ class AtKeys {
     final named = enrollmentId == null ||
             enrollmentId == EnrollmentConstants.primaryEnrollmentId
         ? 'the primary enrollment'
-        : printableEnrollmentId(enrollmentId);
+        : enrollmentId;
     throw AtKeyNotFoundException('AtKeys holds no authentication keypair for '
         '$named, so there is nothing to sign with');
   }

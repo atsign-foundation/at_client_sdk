@@ -6,9 +6,6 @@
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
 - fix: at_activate and programs built on `CLIBase` report a keys problem
   once, naming the keyfile and the next step to take.
-- fix: the report of a keyfile holding only pending enrollment requests
-  quotes each id with each control or bidirectional formatting character
-  replaced with `?`, cut to 40 characters.
 - fix: `CLIBase` (for a missing keyfile) and `createAtClient` (for keys it
   cannot use) throw `AtKeysUnusableException`, which is neither an
   `ArgumentError` nor an `UnAuthenticatedException`; catch it for those cases.
