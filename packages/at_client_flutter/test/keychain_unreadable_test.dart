@@ -210,8 +210,8 @@ void main() {
         throwsA(
           unreadable(
             message: equals(
-              "The keys in this device's keychain could not be read: "
-              '$reason. Every Atsign stored there is affected.',
+              "The keys for $atSign in this device's keychain could not be "
+              'read: $reason. Every Atsign stored there is affected.',
             ),
             error: isA<AtKeysFormatException>(),
           ),
@@ -245,8 +245,9 @@ void main() {
         throwsA(
           unreadable(
             message: equals(
-              "The keys in this device's keychain could not be read: it is "
-              'not a JSON object. Every Atsign stored there is affected.',
+              "The keys for $atSign in this device's keychain could not be "
+              'read: it is not a JSON object. Every Atsign stored there is '
+              'affected.',
             ),
           ),
         ),

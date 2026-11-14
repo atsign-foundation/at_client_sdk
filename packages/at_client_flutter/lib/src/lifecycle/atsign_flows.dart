@@ -204,8 +204,7 @@ class AtsignFlows {
       }
       Error.throwWithStackTrace(
         AtKeysUnusableException(
-          'The keys in ${e.source} could not be read: ${_reasonOf(error)}. '
-          'Every Atsign stored there is affected.',
+          '${e.message} Every Atsign stored there is affected.',
           atSign: e.atSign,
           cause: AtKeysUnusableCause.unreadable,
           source: e.source,
@@ -214,16 +213,6 @@ class AtsignFlows {
         stackTrace,
       );
     }
-  }
-
-  static String _reasonOf(AtKeysFormatException error) {
-    final position = error.position;
-    if (position == null &&
-        error.reason == AtKeysFormatException.notAnObject('').reason) {
-      return 'it is not a JSON object';
-    }
-    return 'it is not valid JSON: ${error.reason}'
-        '${position == null ? '' : ' (at character $position)'}';
   }
 
   SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
