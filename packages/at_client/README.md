@@ -41,9 +41,10 @@ is the main entry point once authentication is complete.
   together; pass either both or neither. `writeTypeTag` can be passed
   without a factory to stamp the items an untyped collection writes; it must
   be non-blank, and must equal `typeTag` when both are given (else
-  `ArgumentError`). Reopening the same namespace on the same client with a
-  different effective tag (`writeTypeTag ?? typeTag`, where none counts as a
-  tag) throws `CollectionTypeTagMismatchException`. AtCollections hide the
+  `ArgumentError`). Reopening an open namespace on the same client so that a
+  new `T` would be stamped with another tag (`typeTag`, else the factory tag
+  registered for `T`, else `writeTypeTag`, else `n/a`) throws
+  `ArgumentError`. The namespace is folded to lower case. AtCollections hide the
   low-level keystore plumbing and let you work directly with your own
   domain objects and types (see [Collections](#collections) below).
 - `notificationService` — fire-and-forget and pub/sub messaging

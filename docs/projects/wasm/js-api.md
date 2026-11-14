@@ -316,8 +316,8 @@ with typed Dart peers, not yet write-compatible.**
 `AtClient.collection` and `AtCollection.subCollection` take an optional
 `writeTypeTag`, and `_resolveType` falls back to it before `n/a` when no factory is
 registered for the item's type. The same change adds a per-client reopen check: a
-namespace reopened on the same client with a different effective tag (`writeTypeTag`,
-else `typeTag`) throws `CollectionTypeTagMismatchException`. The JS binding still has to
+namespace reopened on the same client so that a new item would be stamped with another
+tag throws `ArgumentError`. The JS binding still has to
 adopt `writeTypeTag` before JS writes stop stamping `n/a`; until then the gap above
 holds for JS consumers.
 
@@ -787,8 +787,8 @@ achievable unilaterally in the facade. **Resolve on upstream's answer to the add
 change; document the gap and ship read-compatibility in the meantime.**
 
 *Status, 2026-11-14:* upstream has implemented route A as `writeTypeTag` in at_client
-4.1.0 (unreleased), together with a per-client reopen check that throws
-`CollectionTypeTagMismatchException`. The JS binding has yet to adopt it, so JS writes
+4.1.0 (unreleased), together with a per-client reopen check in `AtClient.collection`
+that throws `ArgumentError`. The JS binding has yet to adopt it, so JS writes
 still stamp `n/a`; route B stays documented as the fallback.
 
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**

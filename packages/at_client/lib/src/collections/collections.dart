@@ -416,10 +416,10 @@ interface class AtCollection<T> {
 
   final Duration defaultExpiration;
 
-  /// Type tag stamped on items this collection creates when no factory is
-  /// registered for their runtime type. Lets items carry a wire-format tag
-  /// without a `fromJson` factory.
-  final String? writeTypeTag;
+  // Type tag stamped on items this collection creates when no factory is
+  // registered for their runtime type. Lets items carry a wire-format tag
+  // without a `fromJson` factory.
+  final String? _writeTypeTag;
 
   late final AtSignLogger _logger;
 
@@ -644,10 +644,11 @@ interface class AtCollection<T> {
     required EventSource eventSource,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
-    this.writeTypeTag,
+    String? writeTypeTag,
     Stream<AtNotification>? notifications,
     Stream<DataEvent>? injectedDataEvents,
-  }) : _eventSource = eventSource {
+  })  : _eventSource = eventSource,
+        _writeTypeTag = writeTypeTag {
     if (!namespace.contains('.')) {
       throw ArgumentError('namespace must be fully qualified');
     }
@@ -1735,18 +1736,8 @@ interface class AtCollection<T> {
   ///
   /// [writeTypeTag] stamps items this sub-collection creates with that tag
   /// when no factory is registered for their type. It is not inherited from
-  /// the parent collection.
-  ///
-  /// Throws [CollectionTypeTagMismatchException] when this [AtClient] already
-  /// opened the composed namespace asking for another effective tag
-  /// ([writeTypeTag], else [typeTag]); asking for none counts as a tag. The
-  /// check holds on this client only, and opens made by [getDescendant] and
-  /// the watch methods are not checked. [AtClient] does not cache
-  /// sub-collections, so each client remembers the tags of its last 4096
-  /// sub-collection namespaces, forgetting the oldest first. After a
-  /// namespace is forgotten, a mismatched reopen of it is not caught. The cap
-  /// exists because sub-collection namespaces embed parent item ids, which
-  /// other atSigns can control.
+  /// the parent collection. Opening the same composed namespace again with
+  /// another tag is not refused: sub-collections are not cached.
   ///
   /// **Parent-delete behaviour.** When [parent] is deleted — locally,
   /// or via a remote-delete notification — the sub-collection
@@ -1767,7 +1758,6 @@ interface class AtCollection<T> {
         fromJson: fromJson,
         typeTag: typeTag,
         writeTypeTag: writeTypeTag,
-        recordTag: true,
       );
 
   /// Walks a descendant chain in one call and returns the typed leaf
@@ -1888,7 +1878,7 @@ interface class AtCollection<T> {
 
       final AtCollection<dynamic> sub;
       if (isLast) {
-        sub = ctx._subCollectionInternal<U>(
+        sub = ctx.subCollection<U>(
           parent: parent,
           subName: ancestor.subName,
           defaultExpiration: leafExpiration,
@@ -1896,7 +1886,7 @@ interface class AtCollection<T> {
           typeTag: leafTypeTag,
         );
       } else {
-        sub = ctx._subCollectionInternal<dynamic>(
+        sub = ctx.subCollection<dynamic>(
           parent: parent,
           subName: ancestor.subName,
           defaultExpiration: intermediateExp,
@@ -1939,7 +1929,6 @@ interface class AtCollection<T> {
         typeTag: typeTag,
         writeTypeTag: writeTypeTag,
         notifications: notifications,
-        recordTag: true,
       );
 
   AtCollection<U> _subCollectionInternal<U>({
@@ -1950,7 +1939,6 @@ interface class AtCollection<T> {
     String? typeTag,
     String? writeTypeTag,
     Stream<AtNotification>? notifications,
-    bool recordTag = false,
   }) {
     if (subName == _rr) {
       throw ArgumentError(
@@ -1968,14 +1956,11 @@ interface class AtCollection<T> {
       typeTag: typeTag,
       writeTypeTag: writeTypeTag,
       notifications: notifications,
-      recordTag: recordTag,
     );
   }
 
   /// Internal sub-collection constructor without the reserved-name
   /// guard. Used by [readReceiptsFor] to build the `__rr` sub-collection.
-  /// Records the effective tag in the per-client ledger, and throws on a
-  /// mismatch, only when [recordTag] is true.
   AtCollection<U> _buildSubCollection<U>({
     required CItem<T> parent,
     required String subName,
@@ -1984,7 +1969,6 @@ interface class AtCollection<T> {
     String? typeTag,
     String? writeTypeTag,
     Stream<AtNotification>? notifications,
-    bool recordTag = false,
   }) {
     if (subName.isEmpty || subName.contains('.')) {
       throw ArgumentError('subName must be non-empty and dot-free: "$subName"');
@@ -2021,16 +2005,6 @@ interface class AtCollection<T> {
         'chars reserved for an 8-char item id + separator). Use a shorter '
         'subName or a shallower nesting depth.',
       );
-    }
-    // Checked before construction, which registers [fromJson] for good.
-    _checkTagArgs<U>(
-      hasFromJson: fromJson != null,
-      typeTag: typeTag,
-      writeTypeTag: writeTypeTag,
-    );
-    if (recordTag) {
-      (_subCollectionTags[atClient] ??= CollectionTagLedger(_subTagCap))
-          .record(composedNs, writeTypeTag ?? typeTag);
     }
     // Constructing the sub-collection directly (not via `atClient.collection`)
     // so that `notifications` can be threaded straight through to its
@@ -3167,11 +3141,13 @@ interface class AtCollection<T> {
 
   String _resolveType(Object? obj) {
     if (obj is Uint8List) return 'binary';
-    final entry = _factoriesByType[obj.runtimeType];
-    if (entry != null) return entry.tag;
-    if (writeTypeTag != null) return writeTypeTag!;
-    return 'n/a';
+    return _tagFor(obj.runtimeType, _writeTypeTag);
   }
+
+  /// The tag stamped on a new item of [type], other than a byte array, by a
+  /// collection whose writeTypeTag is [writeTypeTag].
+  static String _tagFor(Type type, String? writeTypeTag) =>
+      _factoriesByType[type]?.tag ?? writeTypeTag ?? 'n/a';
 
   // Drops a past [availableAt] so rehydrated CItems don't carry a stale
   // schedule. The Atsign Protocol metadata wire format is additive — a past
@@ -5568,34 +5544,6 @@ class _FactoryEntry {
 // -----------------------------------------------------------------------------
 // Reopening a collection with another type tag
 
-/// Thrown by [AtClient.collection] and [AtCollection.subCollection] when the
-/// same [AtClient] already opened the namespace asking for another type tag.
-///
-/// An open asks for its `writeTypeTag`, or its `typeTag` when it gives no
-/// `writeTypeTag`; asking for no tag is a tag too. No collection is handed
-/// out.
-final class CollectionTypeTagMismatchException implements Exception {
-  /// The collection's namespace.
-  final String namespace;
-
-  /// The tag an earlier open of [namespace] on this client asked for.
-  final String? existingTag;
-
-  /// The tag this open asked for.
-  final String? requestedTag;
-
-  CollectionTypeTagMismatchException(
-    this.namespace,
-    this.existingTag,
-    this.requestedTag,
-  );
-
-  @override
-  String toString() => 'CollectionTypeTagMismatchException: the collection '
-      '$namespace is typed ${existingTag ?? 'with no tag'}, not '
-      '${requestedTag ?? 'with no tag'}';
-}
-
 /// [AtCollection]'s tag-argument check, for [AtClient.collection], which must
 /// refuse bad arguments even when it hands out a cached collection.
 @internal
@@ -5610,37 +5558,32 @@ void checkCollectionTagArgs<T>({
       writeTypeTag: writeTypeTag,
     );
 
-/// The first effective tag each namespace was opened with, oldest first,
-/// holding at most [cap] namespaces when [cap] is not null.
+/// Throws [ArgumentError] when [open], a collection [AtClient.collection]
+/// already handed out, would stamp a new [T] with another tag than a new
+/// collection opened with [typeTag] and [writeTypeTag] would.
+///
+/// A new collection stamps [typeTag], else the tag of the factory registered
+/// for [T], else [writeTypeTag], else `n/a`; [open] stamps the registered
+/// tag, else its own writeTypeTag, else `n/a`. A [T] of [Uint8List] is always
+/// stamped `binary`, so it never differs. Call [checkCollectionTagArgs]
+/// first.
 @internal
-final class CollectionTagLedger {
-  final int? cap;
-
-  // A null value is a recorded open that asked for no tag.
-  final Map<String, String?> _tags = {};
-
-  CollectionTagLedger([this.cap]);
-
-  /// Remembers that [namespace] was opened asking for [tag], or throws
-  /// [CollectionTypeTagMismatchException] when an earlier open asked for
-  /// another one. Past [cap] the oldest namespace is forgotten.
-  void record(String namespace, String? tag) {
-    if (_tags.containsKey(namespace)) {
-      final held = _tags[namespace];
-      if (held != tag) {
-        throw CollectionTypeTagMismatchException(namespace, held, tag);
-      }
-      return;
-    }
-    _tags[namespace] = tag;
-    if (cap != null && _tags.length > cap!) _tags.remove(_tags.keys.first);
-  }
+void refuseCollectionTagChange<T>(
+  AtCollection<dynamic> open, {
+  required String? typeTag,
+  required String? writeTypeTag,
+}) {
+  if (T == Uint8List) return;
+  final held = AtCollection._tagFor(T, open._writeTypeTag);
+  final asked = typeTag ?? AtCollection._tagFor(T, writeTypeTag);
+  if (held == asked) return;
+  throw ArgumentError.value(
+      writeTypeTag ?? typeTag,
+      typeTag != null && writeTypeTag == null ? 'typeTag' : 'writeTypeTag',
+      'the collection ${open.namespace} is already open on this client '
+      'stamping "$held" on a new $T, not "$asked", and a collection\'s '
+      'tag is final at construction — it cannot adopt this one. Open it with '
+      'the tag it was first opened with, or use another namespace. '
+      'Handing it out would leave this caller writing items under a tag '
+      'it did not ask for');
 }
-
-/// The most sub-collection namespaces whose tag one [AtClient] remembers.
-const int _defaultSubTagCap = 4096;
-int _subTagCap = _defaultSubTagCap;
-
-/// For each [AtClient], the tags of the sub-collection namespaces opened by
-/// [AtCollection.subCollection].
-final Expando<CollectionTagLedger> _subCollectionTags = Expando();

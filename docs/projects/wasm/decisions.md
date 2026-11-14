@@ -280,9 +280,9 @@ surface is read-compatible with typed Dart peers but not write-compatible.** See
 **Status, 2026-11-14.** Route A is now implemented upstream: at_client 4.1.0
 (unreleased) adds an optional `writeTypeTag` to `AtClient.collection` and
 `AtCollection.subCollection`, which stamps items written without a registered factory
-instead of `n/a`. The same change adds a per-client reopen check: opening a namespace
-again on the same client with a different effective tag (`writeTypeTag`, else `typeTag`)
-throws `CollectionTypeTagMismatchException`. The JS binding has not yet adopted
+instead of `n/a`. The same change adds a per-client reopen check: `AtClient.collection`
+throws `ArgumentError` when a namespace already open on the client would stamp a new item
+with another tag than the new open asks for. The JS binding has not yet adopted
 `writeTypeTag`, so JS writes still stamp `n/a` until it does; the read-only
 compatibility described above stands for JS consumers today.
 

@@ -585,13 +585,14 @@ abstract class AtClient {
   /// no factory is registered for their type, without registering a
   /// [fromJson]. When [typeTag] is also set, the two must match.
   ///
-  /// This client remembers the first effective tag ([writeTypeTag], else
-  /// [typeTag]) each [namespace] was opened with, for every [eventSource].
-  /// Opening the namespace again with a different effective tag, including
-  /// none versus a tag, throws [CollectionTypeTagMismatchException]; an equal
-  /// tag is allowed. The check holds on this client only: another client,
-  /// session or device of the atSign does not see it. Implementers should
-  /// refuse the same way.
+  /// [namespace] is folded to lower case, as atProtocol keys are, and a
+  /// client hands back the collection it already built for the same folded
+  /// [namespace] and [eventSource]. While any collection of [namespace] is
+  /// open, an open that would stamp a new [T] with another tag throws
+  /// [ArgumentError] and caches nothing. An open stamps [typeTag], else the
+  /// tag of the factory registered for [T], else [writeTypeTag], else `n/a`.
+  /// The check holds on this client only: another client, session or device
+  /// of the atSign does not see it. Implementers should refuse the same way.
   ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.

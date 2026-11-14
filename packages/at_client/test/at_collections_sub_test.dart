@@ -302,171 +302,11 @@ void main() {
         throwsArgumentError,
       );
     });
-  });
-
-  group('subCollection — reopening with another effective tag', () {
-    late _Collections c;
-    const subNs = 'comments.p1.$parentNs';
-
-    setUp(() => c = buildParent());
-
-    tearDown(() {
-      clearFactoriesForTest();
-      setSubCollectionTagCapForTest(null);
-    });
-
-    /// [spec] is the writeTypeTag ('-' for none), then optional '+typeTag:<t>'.
-    AtCollection<Map<String, dynamic>> open(String spec, {String id = 'p1'}) {
-      final parts = spec.split('+typeTag:');
-      return subOn<Map<String, dynamic>>(
-          c, c.parent.draft(obj: 'hello', id: id) as CItem<String>, 'comments',
-          fromJson: parts.length > 1 ? (m) => m : null,
-          typeTag: parts.length > 1 ? parts[1] : null,
-          writeTypeTag: parts[0] == '-' ? null : parts[0]);
-    }
-
-    Matcher mismatch(String? existing, String? requested) =>
-        isA<CollectionTypeTagMismatchException>()
-            .having((e) => e.namespace, 'namespace', subNs)
-            .having((e) => e.existingTag, 'existingTag', existing)
-            .having((e) => e.requestedTag, 'requestedTag', requested);
-
-    Matcher usable(String? tag) => isA<AtCollection>()
-        .having((c) => c.namespace, 'namespace', subNs)
-        .having((c) => c.writeTypeTag, 'writeTypeTag', tag ?? anything);
-
-    final cases = <(String, String, String, Matcher)>[
-      ('-', 'x', 'a mismatch', mismatch(null, 'x')),
-      ('x', '-', 'a mismatch', mismatch('x', null)),
-      ('x', 'y', 'a mismatch naming both', mismatch('x', 'y')),
-      ('x', 'x', 'a usable one stamping x', usable('x')),
-      ('-+typeTag:x', 'x', 'a usable one stamping x', usable('x')),
-      ('x', '-+typeTag:x', 'a usable one', usable(null)),
-      ('x', ' ', 'ArgumentError', isA<ArgumentError>()),
-      ('x', 'z+typeTag:y', 'ArgumentError', isA<ArgumentError>()),
-    ];
-
-    for (final (first, second, then, want) in cases) {
-      test(
-          'Given a sub-collection open as [$first], when it is reopened as '
-          '[$second], then the outcome is $then', () async {
-        open(first);
-        final got = await Future<Object>.sync(() => open(second))
-            .catchError((Object e) => e);
-        expect(got, want);
-      });
-    }
 
     test(
-        'Given tag cap 2 and three sub-collections open with x, when the first '
-        'and the newest reopen with y, then only the newest is caught', () {
-      setSubCollectionTagCapForTest(2);
-      for (final id in ['p1', 'p2', 'p3']) {
-        open('x', id: id);
-      }
-      expect(() => open('y', id: 'p1'), returnsNormally);
-      expect(() => open('y', id: 'p3'),
-          throwsA(isA<CollectionTypeTagMismatchException>()));
-    });
-  });
-
-  group('getDescendant — opens it makes do not record sub-collection tags', () {
-    late _Collections c;
-    const lvl1 = 'comments.p1.$parentNs';
-
-    setUp(() {
-      c = buildParent();
-      final notificationService = MockNotificationService();
-      when(() => notificationService.subscribe(
-              regex: any(named: 'regex'),
-              shouldDecrypt: any(named: 'shouldDecrypt')))
-          .thenAnswer((_) => const Stream<AtNotification>.empty());
-      when(() => c.atClient.notificationService)
-          .thenReturn(notificationService);
-      // Every key resolves to an item, so each level of the chain is found.
-      when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
-          .thenAnswer((inv) async {
-        final regex = RegExp(inv.namedArguments[#regex] as String);
-        return [
-          for (final k in [
-            'p1.$parentNs$selfAtSignStr',
-            'c1.$lvl1$selfAtSignStr',
-            'x.replies.c1.$lvl1$selfAtSignStr',
-          ])
-            if (regex.hasMatch(k)) AtKey.fromString(k),
-        ];
-      });
-      when(() => c.atClient.get(any())).thenAnswer((inv) async {
-        final isLeaf =
-            (inv.positionalArguments.first as AtKey).key.startsWith('x.');
-        final v = AtValue();
-        v.value = jsonEncode({
-          'type': 'n/a',
-          'obj': isLeaf ? {'k': 'v'} : 'v',
-        });
-        v.metadata = Metadata()
-          ..createdAt = DateTime.now().toUtc()
-          ..expiresAt = DateTime.now().add(const Duration(days: 7));
-        return v;
-      });
-    });
-
-    tearDown(() => clearFactoriesForTest());
-
-    final ancestry = [
-      CAncestor(id: 'p1', subName: 'comments', owner: selfAtSign),
-      CAncestor(id: 'c1', subName: 'replies', owner: selfAtSign),
-    ];
-
-    Future<Object?> walk<U>(
-      U Function(Map<String, dynamic>)? fromJson, [
-      String? leafTypeTag,
-    ]) =>
-        c.parent
-            .getDescendant<U>(
-              ancestry: ancestry,
-              id: 'x',
-              owner: selfAtSign,
-              leafExpiration: const Duration(days: 1),
-              leafFromJson: fromJson,
-              leafTypeTag: leafTypeTag,
-            )
-            .then<Object?>((v) => v)
-            .catchError((Object e) => e);
-
-    AtCollection<dynamic> appOpen(String? writeTypeTag) => subOn<dynamic>(
-        c, c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>, 'comments',
-        writeTypeTag: writeTypeTag);
-
-    test(
-        'Given getDescendant opened a level untagged, when the app opens it '
-        'with writeTypeTag x, then no mismatch is raised', () async {
-      expect(await walk<dynamic>(null), isA<CItem>());
-      expect(appOpen('x').namespace, lvl1);
-    });
-
-    test(
-        'Given the app opened a level with writeTypeTag x, when getDescendant '
-        'opens it untagged, then no mismatch is raised', () async {
-      appOpen('x');
-      expect(await walk<dynamic>(null), isA<CItem>());
-    });
-
-    test(
-        'Given getDescendant with leaf typeTag A, when it runs again with leaf '
-        'typeTag B on the same chain, then neither raises a mismatch',
-        () async {
-      final a = await walk<Map<String, dynamic>>((m) => m, 'A');
-      final b = await walk<List<String>>((m) => m.keys.toList(), 'B');
-      expect([a, b],
-          everyElement(isNot(isA<CollectionTypeTagMismatchException>())));
-    });
-  });
-
-  group('subCollection — public entry point checks tags', () {
-    test(
-        'Given a level opened through subCollection with writeTypeTag x, when '
-        'it is reopened with y, then the mismatch names x and y', () {
+        'Given a sub-collection opened through subCollection with '
+        'writeTypeTag Comment, when an item is drafted, then its type is '
+        'Comment', () {
       final c = buildParent();
       final notificationService = MockNotificationService();
       when(() => notificationService.subscribe(
@@ -475,19 +315,14 @@ void main() {
           .thenAnswer((_) => const Stream<AtNotification>.empty());
       when(() => c.atClient.notificationService)
           .thenReturn(notificationService);
-      final parent = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
-      AtCollection<dynamic> open(String tag) => c.parent.subCollection<dynamic>(
-          parent: parent,
-          subName: 'comments',
-          defaultExpiration: const Duration(days: 30),
-          writeTypeTag: tag);
-
-      open('x');
-      expect(
-          () => open('y'),
-          throwsA(isA<CollectionTypeTagMismatchException>()
-              .having((e) => e.existingTag, 'existingTag', 'x')
-              .having((e) => e.requestedTag, 'requestedTag', 'y')));
+      final post = c.parent.draft(obj: 'hello', id: 'p1') as CItem<String>;
+      final comments = c.parent.subCollection<String>(
+        parent: post,
+        subName: 'comments',
+        defaultExpiration: const Duration(days: 30),
+        writeTypeTag: 'Comment',
+      );
+      expect(comments.draft(obj: 'great post', id: 'c1').type, 'Comment');
     });
   });
 
