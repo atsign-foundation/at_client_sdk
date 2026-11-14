@@ -283,11 +283,11 @@ surface is read-compatible with typed Dart peers but not write-compatible.** See
 **Status, 2026-11-14.** Route A is now implemented upstream: at_client 4.1.0
 (unreleased) adds an optional `writeTypeTag` to `AtClient.collection` and
 `AtCollection.subCollection`, which stamps items written without a registered factory
-instead of `n/a`. The same change adds a per-client reopen check: `AtClient.collection`
-throws `ArgumentError` when a namespace already open on the client would stamp a new item
-with another tag than the new open asks for. The JS binding has not yet adopted
-`writeTypeTag`, so JS writes still stamp `n/a` until it does; the read-only
-compatibility described above stands for JS consumers today.
+instead of `n/a`. The same change adds a per-client reopen check: opening a namespace
+again on the same client so that a new item would be stamped with another tag throws
+`ArgumentError`. The Dart-side collections adapter passes
+the JS `type` as `writeTypeTag`, but JS writes still stamp `n/a` until the facade exposes
+the adapter; the read-only compatibility described above stands for JS consumers today.
 
 **Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
 outright: it would force every JS app into a Dart build step, destroying the
