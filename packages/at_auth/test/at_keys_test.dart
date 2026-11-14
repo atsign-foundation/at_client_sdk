@@ -596,6 +596,11 @@ void main() {
 
     for (final (label, enrollmentId, named) in [
       ('no enrollment id', null, 'the primary enrollment'),
+      (
+        'the primary enrollment id',
+        EnrollmentConstants.primaryEnrollmentId,
+        'the primary enrollment'
+      ),
       ('an id holding a line feed', 'e-1\nsecond line', 'e-1?second line'),
       ('an id holding a right-to-left override', 'e-1\u202Eeno', 'e-1?eno'),
     ]) {

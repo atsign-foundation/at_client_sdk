@@ -1427,14 +1427,17 @@ class AtKeys {
   ///
   /// Throws [AtKeyNotFoundException] where that returns null, naming
   /// [enrollmentId] as [printableEnrollmentId] prints it, or the primary
-  /// enrollment when it is null.
+  /// enrollment when it is null or [EnrollmentConstants.primaryEnrollmentId].
   ({SigningAlgoType algorithm, String publicKey, String privateKey})
       requireAuthenticationKeyPairFor(String? enrollmentId) {
     final keyPair = authenticationKeyPairFor(enrollmentId);
     if (keyPair != null) return keyPair;
+    final named = enrollmentId == null ||
+            enrollmentId == EnrollmentConstants.primaryEnrollmentId
+        ? 'the primary enrollment'
+        : printableEnrollmentId(enrollmentId);
     throw AtKeyNotFoundException('AtKeys holds no authentication keypair for '
-        '${enrollmentId == null ? 'the primary enrollment' : printableEnrollmentId(enrollmentId)}, '
-        'so there is nothing to sign with');
+        '$named, so there is nothing to sign with');
   }
 
   /// The atSign's active material in [role], whatever algorithm it names.

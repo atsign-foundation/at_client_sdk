@@ -348,7 +348,7 @@ void main() {
           },
           reader: FileAtKeysIo(filePath: (_) => path),
           reason: equals('AtKeys holds no authentication keypair for '
-              'primary, so there is nothing to sign with'),
+              'the primary enrollment, so there is nothing to sign with'),
           error: isA<AtKeyNotFoundException>());
     });
 
@@ -493,11 +493,17 @@ void main() {
   group(
       'Given keys holding no authentication keypair for the enrollment they '
       'authenticate as', () {
-    for (final (label, enrollmentId, named) in [
-      ('a keyfile naming no enrollment', null, 'primary'),
+    for (final (label, enrollmentId, handedToAuthenticator, named) in [
+      (
+        'a keyfile naming no enrollment',
+        null,
+        [null, EnrollmentConstants.primaryEnrollmentId],
+        'the primary enrollment'
+      ),
       (
         'an enrollment id holding a line feed and a right-to-left override',
         'e-1\nsecond line\u202E',
+        ['e-1\nsecond line\u202E'],
         'e-1?second line?'
       ),
     ]) {
@@ -526,29 +532,33 @@ void main() {
         } on AtKeysUnusableException catch (e) {
           openError = e.error;
         }
-        final executor = _RecordingExecutor();
-        Object? pkamError;
-        try {
-          await authenticatorFor(io, atSign, enrollmentId: authenticatesAs)(
-              executor);
-        } on AtKeyNotFoundException catch (e) {
-          pkamError = e;
-        }
-
         expect(
             openError,
             isA<AtKeyNotFoundException>()
                 .having((e) => e.message, 'message', expected),
             reason: 'open refuses them with the message of the check the '
                 'authenticator makes');
-        expect(
-            pkamError,
-            isA<AtKeyNotFoundException>()
-                .having((e) => e.message, 'message', expected),
-            reason: 'the authenticator refuses them with the message of the '
-                'check open makes');
-        expect(executor.sent, isEmpty,
-            reason: 'the authenticator sends nothing before refusing');
+
+        expect(handedToAuthenticator, contains(authenticatesAs),
+            reason: 'the authenticator is handed the id open authenticates '
+                'as');
+        for (final id in handedToAuthenticator) {
+          final executor = _RecordingExecutor();
+          Object? pkamError;
+          try {
+            await authenticatorFor(io, atSign, enrollmentId: id)(executor);
+          } on AtKeyNotFoundException catch (e) {
+            pkamError = e;
+          }
+          expect(
+              pkamError,
+              isA<AtKeyNotFoundException>()
+                  .having((e) => e.message, 'message', expected),
+              reason: 'the authenticator handed ${jsonEncode(id)} refuses '
+                  'them with the message of the check open makes');
+          expect(executor.sent, isEmpty,
+              reason: 'the authenticator sends nothing before refusing');
+        }
         expectNoConnection();
       });
     }
