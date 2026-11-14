@@ -42,6 +42,9 @@
   this build cannot sign with, names the field by its path and holds none of
   its value. An enrollment id it quotes has each control or bidirectional
   formatting character replaced with `?` and is cut to 40 characters.
+- feat: `printableEnrollmentId` returns an enrollment id for a message to
+  quote, with each control or bidirectional formatting character replaced
+  with `?` and cut to 40 characters.
 
 ## 4.0.0
 

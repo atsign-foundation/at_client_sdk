@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysPassphraseEnvelopeCodec;
+import 'package:at_auth/at_auth.dart'
+    show AtKeysPassphraseEnvelopeCodec, printableEnrollmentId;
 import 'package:at_client/at_client.dart'
     show
         AtDecryptionException,
@@ -69,7 +70,8 @@ String _waitForApproval(AtEnrollmentPendingException e) {
   final one = ids.length == 1;
   return 'This keyfile holds only '
       '${one ? 'a pending enrollment request' : 'pending enrollment requests'} '
-      'for ${e.atSign} (${one ? 'id' : 'ids'} ${ids.join(', ')}). Wait for '
+      'for ${e.atSign} (${one ? 'id' : 'ids'} '
+      '${ids.map(printableEnrollmentId).join(', ')}). Wait for '
       '${one ? 'it' : 'them'} to be approved, then run this command again.';
 }
 

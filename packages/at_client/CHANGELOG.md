@@ -63,6 +63,9 @@
   every device, for keys it cannot use: absent, unreadable, holding no
   keypair it can sign with, or for another atSign. `AtNoCredentialException`
   and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
+- fix: `AtEnrollmentPendingException`'s messages quote each pending
+  enrollment id with each control or bidirectional formatting character
+  replaced with `?`, cut to 40 characters.
 - fix: `Atsign.enroll` refusing a keys store that holds live keys says to give
   the new enrollment a keys store of its own.
 
