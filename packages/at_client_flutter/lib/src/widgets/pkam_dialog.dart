@@ -133,12 +133,11 @@ class _PkamDialogState extends State<PkamDialog> {
         );
       }
       if (mounted) Navigator.of(context).pop(client);
-    } catch (e, stackTrace) {
+    } catch (e) {
       // Login failed or timed out. Without an error path the dialog
       // would hang forever and PkamDialog.show() would never complete
       // (issue #1909).
       _logger.severe('Authentication via PKAM failed: $e');
-      _logger.logger.fine('Authentication via PKAM failed', e, stackTrace);
       if (!mounted) return;
       final message = failureMessage(
         widget.atSign,

@@ -140,12 +140,11 @@ class _CramDialogState extends State<CramDialog> {
         _logger.info('Activated ${widget.atSign} as ${client.enrollmentId}');
       }
       if (mounted) Navigator.of(context).pop(client);
-    } catch (e, stackTrace) {
+    } catch (e) {
       // Activation failed or timed out. Without an error path the dialog would
       // stay on screen forever and CramDialog.show() would never complete
       // (issue #1905 / #1909).
       _logger.severe('Onboarding via CRAM failed: $e');
-      _logger.logger.fine('Onboarding via CRAM failed', e, stackTrace);
       if (!mounted) return;
       // A timeout during activation usually means the newly-registered atSign
       // is still provisioning, not a hard failure — say so and invite a retry.
