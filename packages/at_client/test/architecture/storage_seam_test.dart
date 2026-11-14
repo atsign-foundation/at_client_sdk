@@ -38,11 +38,18 @@ const _remoteSide = {
   'AtLookupImpl',
   'AtLookUpFactory',
   'executeVerb',
-  'Socket',
-  'SecureSocket',
-  'WebSocket',
-  'HttpClient',
 };
+
+/// The shape of a `dart:io` name that opens a connection or starts a process:
+/// every socket kind (`Socket`, `RawSocket`, `RawDatagramSocket`,
+/// `ServerSocket`, `WebSocket`, ...), every `Http` class, `Process` and the
+/// address lookups. `dart:io` stays importable for files, so the names are
+/// what keeps a storage off the network.
+final _remoteShape = RegExp(r'^(?:\w*Socket\w*|Http[A-Z]\w*|'
+    r'Process(?:[A-Z]\w*)?|InternetAddress\w*|NetworkInterface)$');
+
+bool _isRemoteName(String name) =>
+    _remoteSide.contains(name) || _remoteShape.hasMatch(name);
 
 /// Rule A7 in docs/architecture/invariants.md: an `AtClientStorage` is storage
 /// on the device. It holds no connection, sends nothing to an atServer and
@@ -112,6 +119,12 @@ void main() {
             importsUnderStorage, _pin(pins, 'storage_imports.txt')),
         isEmpty,
         reason: _importsReason);
+    expect(
+        _importOffenders({
+          'src/storage/x.dart': ['dart:html', 'dart:js_interop'],
+        }, _pin(pins, 'storage_imports.txt')),
+        hasLength(2),
+        reason: 'the pin names each dart: library a storage uses, not all');
   });
 
   test('the class check follows subclasses and skips comments', () {
@@ -157,6 +170,23 @@ void main() {
               '/// An AtLookUp named in a doc comment.\n',
         }),
         ['src/storage/x.dart names RemoteSecondary']);
+    expect(
+        _remoteNames({
+          'src/storage/y.dart':
+              "final s = await RawSocket.connect('example.invalid', 64);\n"
+                  'RawSecureSocket? secure; RawDatagramSocket? udp;\n'
+                  'HttpServer? server; Process? process;\n'
+                  "final f = File('x'); final d = Directory('y');\n",
+        }),
+        unorderedEquals([
+          'src/storage/y.dart names RawSocket',
+          'src/storage/y.dart names RawSecureSocket',
+          'src/storage/y.dart names RawDatagramSocket',
+          'src/storage/y.dart names HttpServer',
+          'src/storage/y.dart names Process',
+        ]),
+        reason: 'dart:io is importable for files, so every socket, Http and '
+            'Process name must be refused by name');
   });
 
   test('no storage file names the remote side of a client', () {
@@ -258,15 +288,15 @@ List<String> _constructorsAndStatics(String className, String source) {
   return found;
 }
 
-/// Each name from [_remoteSide] that a file in [sources] uses outside a
-/// whole-line comment.
+/// Each name from [_remoteSide], or of [_remoteShape], that a file in
+/// [sources] uses outside a whole-line comment.
 List<String> _remoteNames(Map<String, String> sources) {
   final identifier = RegExp(r'[A-Za-z_$][\w$]*');
   return [
     for (final MapEntry(key: file, value: source) in sources.entries)
       for (final name in {
         for (final m in identifier.allMatches(_code(source))) m.group(0)!
-      }.where(_remoteSide.contains))
+      }.where(_isRemoteName))
         '$file names $name',
   ];
 }

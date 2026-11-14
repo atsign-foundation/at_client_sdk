@@ -2,7 +2,10 @@
 # An entry ending in ':' or '/' admits every URI that starts with it; any other
 # entry admits that URI alone. Rule A7 in docs/architecture/invariants.md.
 # A change to this list needs a code owner's review, in a PR of its own.
-dart:
+dart:async
+dart:collection
+dart:convert
+dart:io
 package:meta/
 package:path/
 package:hive/
