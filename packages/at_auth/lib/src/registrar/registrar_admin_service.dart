@@ -1,10 +1,57 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/src/registrar/registrar.dart';
+import 'package:at_auth/src/registrar/registrar_exceptions.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:http/http.dart' as http;
 
 const _apiBase = '/api/app/v4';
+
+/// Cancels [subscription], swallowing any error its `onCancel` raises.
+Future<void> _cancelQuietly<T>(StreamSubscription<T>? subscription) async {
+  try {
+    await subscription?.cancel();
+  } catch (_) {}
+}
+
+/// Lets an outer timeout cancel a request's active body-read subscription.
+class _ReadCancelToken {
+  StreamSubscription<List<int>>? _subscription;
+
+  void attach(StreamSubscription<List<int>> subscription) {
+    _subscription = subscription;
+  }
+
+  /// Cancels the attached subscription, if any.
+  Future<void> cancel() => _cancelQuietly(_subscription);
+}
+
+/// The most bytes a registrar response body may hold before
+/// [RegistrarFailure.responseTooLarge] is thrown.
+const _maxResponseBytes = 64 * 1024;
+
+/// The result of [RegistrarAdminService.registerAtsign].
+///
+/// [registeredAtsign] may differ from [requestedAtsign]; activate as
+/// [registeredAtsign].
+class RegisteredAtsign {
+  /// The Atsign that was asked for.
+  final Atsign requestedAtsign;
+
+  /// The Atsign the registrar actually registered, read from the cramkey it
+  /// returned.
+  final Atsign registeredAtsign;
+
+  /// The bare key, with the registrar's `@registeredAtsign:` prefix removed.
+  final String cramKey;
+
+  const RegisteredAtsign({
+    required this.requestedAtsign,
+    required this.registeredAtsign,
+    required this.cramKey,
+  });
+}
 
 /// The result of [RegistrarAdminService.generateAtSignDeleteToken].
 class DeleteTokenResult {
@@ -36,61 +83,372 @@ class DeleteAtSignsResult {
 /// that holds the super key already, such as an admin tool or backend.
 class RegistrarAdminService {
   final String registrarUrl;
-  final String superApiKey;
+  final String _superApiKey;
+
+  /// The super API key this service was constructed with.
+  @Deprecated(
+      'Will be removed in at_auth 5.0.0; nothing should read the super key back.')
+  String get superApiKey => _superApiKey;
+
+  /// How long a single registrar request may take before it fails with
+  /// [RegistrarFailure.timeout].
+  final Duration requestTimeout;
+
   late final http.Client _http;
 
   RegistrarAdminService({
     required this.registrarUrl,
-    required this.superApiKey,
+    required String superApiKey,
+    this.requestTimeout = const Duration(seconds: 30),
     http.Client? httpClient,
-  }) {
-    if (superApiKey.trim().isEmpty) {
+  }) : _superApiKey = superApiKey {
+    if (_superApiKey.trim().isEmpty) {
       throw AtException(
           'Registrar super API key is required and cannot be empty.');
     }
+    _validateRegistrarUrl(registrarUrl);
     _http = httpClient ?? http.Client();
   }
 
-  Future<http.Response> _manageAtsignsRequest(Map<String, dynamic> data) async {
-    final url = Uri.https(
-        registrarUrl, "$_apiBase${RegistrarApiEndpoint.manageAtsigns.path}");
-    final response = await _http.post(
-      url,
-      body: jsonEncode(data),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': superApiKey,
-      },
-    );
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      throw AtException(
-        'Registrar super-API-key authentication failed: the key is either '
-        'invalid, missing, or lacks the privilege manage-atsigns requires. '
-        'status=${response.statusCode}',
+  static final _hostPattern = RegExp(r'^[a-zA-Z0-9.-]+$');
+
+  static void _validateRegistrarUrl(String registrarUrl) {
+    const invalidMessage =
+        'registrarUrl must be a bare host of letters, digits, "." and "-", '
+        'optionally followed by ":<port>", with no scheme, path or user '
+        'info';
+    if (registrarUrl.trim().isEmpty) {
+      throw ArgumentError('registrarUrl must not be empty', 'registrarUrl');
+    }
+    final hostAndPort = registrarUrl.split(':');
+    if (hostAndPort.length > 2) {
+      throw ArgumentError(invalidMessage, 'registrarUrl');
+    }
+    final host = hostAndPort.first;
+    if (!_hostPattern.hasMatch(host)) {
+      throw ArgumentError(invalidMessage, 'registrarUrl');
+    }
+    if (hostAndPort.length == 2) {
+      final port = int.tryParse(hostAndPort[1]);
+      if (port == null || port < 1 || port > 65535) {
+        throw ArgumentError(
+            'registrarUrl port must be numeric and between 1 and 65535',
+            'registrarUrl');
+      }
+    }
+    final uri = Uri.https(registrarUrl, '/');
+    if (uri.userInfo.isNotEmpty ||
+        uri.authority != registrarUrl.toLowerCase()) {
+      throw ArgumentError(invalidMessage, 'registrarUrl');
+    }
+  }
+
+  Future<http.Response> _manageAtsignsRequest(Map<String, dynamic> data) =>
+      _adminRequest(RegistrarApiEndpoint.manageAtsigns, data);
+
+  /// Sends [data] to [endpoint] and reads its response, bounded together by
+  /// [requestTimeout].
+  Future<http.Response> _adminRequest(
+    RegistrarApiEndpoint endpoint,
+    Map<String, dynamic> data,
+  ) async {
+    final cancelToken = _ReadCancelToken();
+    final abortTrigger = Completer<void>();
+    try {
+      return await _sendAndReadResponse(
+              endpoint, data, cancelToken, abortTrigger)
+          .timeout(requestTimeout);
+    } on TimeoutException {
+      if (!abortTrigger.isCompleted) abortTrigger.complete();
+      await cancelToken.cancel();
+      throw RegistrarException(
+        'Registrar request timed out after $requestTimeout.',
+        endpoint: endpoint.path,
+        reason: RegistrarFailure.timeout,
+      );
+    } on RegistrarException {
+      rethrow;
+    } on Exception {
+      throw RegistrarException(
+        'Registrar request to ${endpoint.path} failed: the connection could '
+        'not be completed.',
+        endpoint: endpoint.path,
+        reason: RegistrarFailure.network,
       );
     }
-    return response;
+  }
+
+  Future<http.Response> _sendAndReadResponse(
+    RegistrarApiEndpoint endpoint,
+    Map<String, dynamic> data,
+    _ReadCancelToken cancelToken,
+    Completer<void> abortTrigger,
+  ) async {
+    final url = Uri.https(registrarUrl, "$_apiBase${endpoint.path}");
+    final requestBody = utf8.encode(jsonEncode(data));
+    final request = http.AbortableStreamedRequest(
+      'POST',
+      url,
+      abortTrigger: abortTrigger.future,
+    )
+      ..headers['Content-Type'] = 'application/json'
+      ..headers['Authorization'] = _superApiKey
+      ..contentLength = requestBody.length
+      ..sink.add(requestBody);
+    unawaited(request.sink.close());
+
+    final streamed = await _http.send(request);
+
+    if (streamed.statusCode == 401 || streamed.statusCode == 403) {
+      await _cancelQuietly(streamed.stream.listen(null));
+      throw RegistrarException(
+        'Registrar super-API-key authentication failed on ${endpoint.path}: '
+        'the key is either invalid, missing, or lacks the privilege the '
+        'endpoint requires. status=${streamed.statusCode}',
+        endpoint: endpoint.path,
+        statusCode: streamed.statusCode,
+        reason: RegistrarFailure.authentication,
+      );
+    }
+
+    final bodyBytes = <int>[];
+    final bodyRead = Completer<void>();
+    late final StreamSubscription<List<int>> subscription;
+    subscription = streamed.stream.listen(
+      (chunk) async {
+        if (bodyBytes.length + chunk.length > _maxResponseBytes) {
+          await _cancelQuietly(subscription);
+          if (!bodyRead.isCompleted) {
+            bodyRead.completeError(RegistrarException(
+              'Registrar response exceeded $_maxResponseBytes bytes.',
+              endpoint: endpoint.path,
+              statusCode: streamed.statusCode,
+              reason: RegistrarFailure.responseTooLarge,
+            ));
+          }
+          return;
+        }
+        bodyBytes.addAll(chunk);
+      },
+      onDone: () {
+        if (!bodyRead.isCompleted) bodyRead.complete();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!bodyRead.isCompleted) bodyRead.completeError(error, stackTrace);
+      },
+      cancelOnError: true,
+    );
+    cancelToken.attach(subscription);
+    await bodyRead.future;
+
+    return http.Response.bytes(bodyBytes, streamed.statusCode,
+        headers: streamed.headers, reasonPhrase: streamed.reasonPhrase);
+  }
+
+  /// Parses a raw cramkey (`@registeredAtsign:key`) into the registered
+  /// [Atsign] and the bare key, splitting at the first `:`.
+  (Atsign, String) _parseCramKey(
+    String rawCramkey, {
+    required String endpoint,
+    required int statusCode,
+  }) {
+    if (!rawCramkey.startsWith('@')) {
+      throw RegistrarException(
+        'Failed to register an Atsign: cramkey does not start with "@".',
+        endpoint: endpoint,
+        statusCode: statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final colonIndex = rawCramkey.indexOf(':');
+    if (colonIndex < 0) {
+      throw RegistrarException(
+        'Failed to register an Atsign: cramkey has no ":" separator.',
+        endpoint: endpoint,
+        statusCode: statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final atsignPart = rawCramkey.substring(0, colonIndex);
+    final keyPart = rawCramkey.substring(colonIndex + 1);
+    if (keyPart.isEmpty) {
+      throw RegistrarException(
+        'Failed to register an Atsign: cramkey has no key after its ":".',
+        endpoint: endpoint,
+        statusCode: statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final Atsign registeredAtsign;
+    try {
+      registeredAtsign = Atsign(atsignPart);
+    } on InvalidAtSignException {
+      throw RegistrarException(
+        'Failed to register an Atsign: cramkey names an invalid Atsign.',
+        endpoint: endpoint,
+        statusCode: statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    return (registeredAtsign, keyPart);
+  }
+
+  /// Registers [atsign] with the super API key and returns its CRAM key.
+  ///
+  /// Not idempotent: a [RegistrarFailure.timeout], [RegistrarFailure.network]
+  /// or [RegistrarFailure.malformedResponse] failure may still have
+  /// committed the registration, leaving [atsign] registered under a CRAM
+  /// secret nobody holds. Reconcile — look it up, or run the delete flow —
+  /// before retrying with the same [atsign].
+  ///
+  /// ```dart
+  /// final registered = await admin.registerAtsign(atsign: '@alice'.toAtsign());
+  /// ```
+  Future<RegisteredAtsign> registerAtsign({required Atsign atsign}) async {
+    final endpointPath = RegistrarApiEndpoint.registerAtsign.path;
+    final res = await _adminRequest(
+      RegistrarApiEndpoint.registerAtsign,
+      {
+        'operation': RegisterOperation.register.wireValue,
+        'atSign': atsign,
+        'startatServer': 'true',
+      },
+    );
+    if (res.statusCode != 200) {
+      throw RegistrarException(
+        'Failed to register an Atsign: unexpected status.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.unexpectedStatus,
+      );
+    }
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(res.body);
+    } on FormatException {
+      throw RegistrarException(
+        'Failed to register an Atsign: response body is not valid JSON.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    if (decoded is! Map) {
+      throw RegistrarException(
+        'Failed to register an Atsign: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final status = decoded['status'];
+    if (status == 'error') {
+      throw RegistrarException(
+        'Failed to register an Atsign: the registrar reported an error.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.unavailable,
+      );
+    }
+    if (status != 'success') {
+      throw RegistrarException(
+        'Failed to register an Atsign: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final rawCramkey = decoded['cramkey'];
+    if (rawCramkey is! String) {
+      throw RegistrarException(
+        'Failed to register an Atsign: the registrar did not return a cramkey.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.noCramKey,
+      );
+    }
+    final (registeredAtsign, cramKey) = _parseCramKey(
+      rawCramkey,
+      endpoint: endpointPath,
+      statusCode: res.statusCode,
+    );
+    return RegisteredAtsign(
+      requestedAtsign: atsign,
+      registeredAtsign: registeredAtsign,
+      cramKey: cramKey,
+    );
   }
 
   /// Generates a one-time delete token for [atSigns].
   Future<DeleteTokenResult> generateAtSignDeleteToken(
       List<String> atSigns) async {
-    var res = await _manageAtsignsRequest(
+    final endpointPath = RegistrarApiEndpoint.manageAtsigns.path;
+    final res = await _manageAtsignsRequest(
       {'atSigns': atSigns, 'operation': 'deletetoken'},
     );
     if (res.statusCode != 200) {
-      throw Exception(
-          'Failed to generate delete token: ${res.reasonPhrase} - ${res.body}');
+      throw RegistrarException(
+        'Failed to generate delete token: unexpected status.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.unexpectedStatus,
+      );
     }
-    var payload = jsonDecode(res.body);
-    if (payload["status"] != "success" || payload["data"] == null) {
-      throw Exception(
-          'Failed to generate delete token: ${payload["message"] ?? "Unknown error"}');
+    final dynamic payload;
+    try {
+      payload = jsonDecode(res.body);
+    } on FormatException {
+      throw RegistrarException(
+        'Failed to generate delete token: response body is not valid JSON.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    if (payload is! Map) {
+      throw RegistrarException(
+        'Failed to generate delete token: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final status = payload['status'];
+    if (status == 'error') {
+      throw RegistrarException(
+        'Failed to generate delete token: the registrar reported an error.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.unavailable,
+      );
+    }
+    if (status != 'success' || payload['data'] is! Map) {
+      throw RegistrarException(
+        'Failed to generate delete token: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final data = payload['data'];
+    final token = data is Map ? data['token'] : null;
+    final resultAtSigns = data is Map ? data['atSigns'] ?? [] : null;
+    final skippedAtSigns = data is Map ? data['skippedatSigns'] ?? [] : null;
+    if (data is! Map ||
+        token is! String ||
+        resultAtSigns is! List ||
+        skippedAtSigns is! List) {
+      throw RegistrarException(
+        'Failed to generate delete token: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
     }
     return DeleteTokenResult(
-      token: payload["data"]["token"],
-      atSigns: payload["data"]["atSigns"] ?? [],
-      skippedAtSigns: payload["data"]["skippedatSigns"] ?? [],
+      token: token,
+      atSigns: resultAtSigns,
+      skippedAtSigns: skippedAtSigns,
     );
   }
 
@@ -99,21 +457,65 @@ class RegistrarAdminService {
     required String token,
     required List<String> atSigns,
   }) async {
-    var res = await _manageAtsignsRequest(
+    final endpointPath = RegistrarApiEndpoint.manageAtsigns.path;
+    final res = await _manageAtsignsRequest(
       {'token': token, 'atSigns': atSigns, 'operation': 'delete'},
     );
     if (res.statusCode != 200) {
-      throw Exception(
-          'Failed to delete atSigns: ${res.reasonPhrase} - ${res.body}');
+      throw RegistrarException(
+        'Failed to delete atSigns: unexpected status.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.unexpectedStatus,
+      );
     }
-    var payload = jsonDecode(res.body);
-    if (payload["status"] != "success" || payload["data"] == null) {
-      throw Exception(
-          'Failed to delete atSigns: ${payload["message"] ?? "Unknown error"}');
+    final dynamic payload;
+    try {
+      payload = jsonDecode(res.body);
+    } on FormatException {
+      throw RegistrarException(
+        'Failed to delete atSigns: response body is not valid JSON.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
     }
-    return DeleteAtSignsResult(
-      deleted: payload["data"]["deleted"] ?? [],
-      failed: payload["data"]["failed"] ?? [],
-    );
+    if (payload is! Map) {
+      throw RegistrarException(
+        'Failed to delete atSigns: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final status = payload['status'];
+    if (status == 'error') {
+      throw RegistrarException(
+        'Failed to delete atSigns: the registrar reported an error.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.unavailable,
+      );
+    }
+    if (status != 'success' || payload['data'] is! Map) {
+      throw RegistrarException(
+        'Failed to delete atSigns: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    final data = payload['data'];
+    final deleted = data is Map ? data['deleted'] ?? [] : null;
+    final failed = data is Map ? data['failed'] ?? [] : null;
+    if (data is! Map || deleted is! List || failed is! List) {
+      throw RegistrarException(
+        'Failed to delete atSigns: unexpected response shape.',
+        endpoint: endpointPath,
+        statusCode: res.statusCode,
+        reason: RegistrarFailure.malformedResponse,
+      );
+    }
+    return DeleteAtSignsResult(deleted: deleted, failed: failed);
   }
 }

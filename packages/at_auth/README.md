@@ -28,6 +28,7 @@ on those, rather than consuming `at_auth` directly.
 | APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                                   |
 | The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file and in-memory implementations (keychain: at_client_flutter) |
 | Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                                                |
+| Atsign registration/deletion under a super API key | `RegistrarAdminService` (admin/backend use only, never a client app) |
 
 Logging in is at_client's: `Atsign('@alice').open(keys: ..., preference: ...)`
 builds the client and authenticates on the client's own connection, and

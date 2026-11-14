@@ -23,6 +23,50 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- feat: `RegistrarAdminService.registerAtsign`, registering an Atsign under
+  the super API key alongside the existing `/manage-atsigns/` delete flow.
+  Returns a `RegisteredAtsign`, whose `registeredAtsign` is the Atsign the
+  registrar actually registered (read from its cramkey; a super key may add
+  a prefix or postfix to the `requestedAtsign`) and must be the one a caller
+  activates.
+- feat: `RegistrarAdminService` takes a `requestTimeout` (default 30s) and
+  caps the registrar's response body at 64 KiB; both apply to
+  `registerAtsign` and the `/manage-atsigns/` delete methods.
+- feat: `RegistrarException` carries `endpoint`, `statusCode` and a `reason`
+  (`RegistrarFailure`), and is now thrown by `RegistrarAdminService`'s delete
+  methods too, including on a rejected super API key. Exception text never
+  carries the registrar's `message`, the cramkey or the super key.
+- deprecated: `RegistrarAdminService.superApiKey` will be removed in
+  at_auth 5.0.0; nothing should read the super key back.
+- fix: a connection failure (refused, DNS, or dropped mid-request) on a
+  `RegistrarAdminService` call now throws `RegistrarException` with the new
+  `RegistrarFailure.network`, instead of an unwrapped `http.ClientException`.
+- fix: `generateAtSignDeleteToken` and `deleteAtSigns` now throw
+  `RegistrarFailure.malformedResponse` for a missing or unrecognized
+  `status`, or a `"success"` status whose `data` is null or not a map,
+  matching `registerAtsign`'s decoding.
+- fix: a 401/403 on a `RegistrarAdminService` call is now checked before the
+  response body is read, and the body stream is cancelled rather than
+  drained; the same cancellation now applies when a request times out.
+- fix: `RegistrarAdminService` requests the registrar over an abortable
+  `http` request, so a timed-out request's underlying connection is now
+  torn down instead of left open (requires `http: ^1.5.0`).
+- fix: a timed-out or dropped `.cancel()` on the response-body subscription
+  no longer surfaces as an unhandled async error if the stream's
+  `onCancel` throws.
+- fix: `RegistrarAdminService`'s `registrarUrl` validation no longer echoes
+  the offending value into `ArgumentError`, so a URL that embeds user info
+  cannot leak it through the exception text.
+- fix: any `Exception` escaping `RegistrarAdminService`'s request/response
+  handling that is not already a `RegistrarException` is now wrapped as
+  `RegistrarFailure.network`, dropping its inner message.
+- docs: `RegistrarAdminService.registerAtsign`'s doc comment now states that
+  a `timeout`, `network` or `malformedResponse` failure may mean the
+  registrar already committed the registration, and that a caller must
+  reconcile (or delete) before retrying.
+- fix: `RegistrarAdminService`'s 64 KiB response cap is now enforced before a
+  chunk is buffered, so a single oversized chunk is never copied into
+  memory before being rejected.
 
 ## 4.0.0
 
