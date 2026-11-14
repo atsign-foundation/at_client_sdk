@@ -51,6 +51,7 @@ Future<AtClient> _clientOn(CustodySession custody,
         AtKeys.fromJson(custody.atKeys), custody.enrollmentId, pair);
     client = await openSession(
         atSign: custody.atSign,
+        enrollmentId: custody.enrollmentId,
         app: app,
         keys: keys,
         transport: transport,

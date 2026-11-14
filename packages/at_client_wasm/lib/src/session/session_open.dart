@@ -9,13 +9,16 @@ import 'portal_session.dart';
 /// [portalSession] does, without its refusal of ML-DSA-65 and namespace key
 /// material: the caller vouches that [keys] came from its own login path.
 ///
-/// Opens for one atSign run one at a time, whichever path they come from:
-/// `buildAtClient` checks for a live client and registers its own across
-/// awaits, so two opens running together would both pass the check. An open
-/// started while another for the same atSign is running waits for it to end,
-/// then fails as it would after it or builds afresh.
+/// Opens for one (atSign, [enrollmentId]) run one at a time, whichever path
+/// they come from: `buildAtClient` checks for a live client and registers its
+/// own across awaits, so two opens running together would both pass the check.
+/// It files clients by (atSign, enrollment), so that is what opens queue on.
+/// An open started while another for the same pair is running waits for it to
+/// end, then fails as it would after it or builds afresh; another enrollment
+/// of the same atSign is not held up by it.
 Future<AtClient> openSession({
   required String atSign,
+  required String enrollmentId,
   required String app,
   required AtKeys keys,
   required SessionTransport transport,
@@ -23,22 +26,23 @@ Future<AtClient> openSession({
   AtClientPreference? prefs,
   SessionKeysIo? keysIo,
 }) async {
-  final previous = _opening[atSign];
+  final lock = '$atSign $enrollmentId';
+  final previous = _opening[lock];
   final done = Completer<void>();
-  _opening[atSign] = done;
+  _opening[lock] = done;
   try {
     if (previous != null) await previous.future;
     return await _open(atSign, app, keys, transport, root, prefs, keysIo);
   } finally {
     done.complete();
-    if (identical(_opening[atSign], done)) {
-      _opening.remove(atSign);
+    if (identical(_opening[lock], done)) {
+      _opening.remove(lock);
     }
   }
 }
 
-/// Completed when the newest open running for each atSign ends, however it
-/// ends; it never completes with an error.
+/// Completed when the newest open running for each (atSign, enrollment) ends,
+/// however it ends; it never completes with an error.
 final _opening = <String, Completer<void>>{};
 
 Future<AtClient> _open(

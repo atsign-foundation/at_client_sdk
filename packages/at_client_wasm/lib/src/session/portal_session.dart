@@ -91,10 +91,12 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// [app] is the client's namespace. [prefs], when given, is used as it is;
 /// otherwise the preference names [app] and [root], routes reads and writes
 /// to the atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
-/// Sync runs under every preference: a put or delete that passes request
-/// options leaves `useRemoteAtServer` false, which routes it to local storage
-/// even under [RemoteLocalPref.remoteOnly], and only sync carries it to the
-/// atServer.
+/// Sync runs under every preference and starts at every open, pulling the
+/// atServer's records into the in-memory store without the caller asking. A
+/// put or delete goes to the atServer under [RemoteLocalPref.remoteOnly]
+/// unless its request options set `useRemoteAtServer = false` explicitly.
+/// Only that keeps a write local, queued for sync; options that leave it
+/// unset do not.
 /// Keys that carry ML-DSA-65 signing or namespace key material throw
 /// [UnsupportedKeyMaterialException] before any connection is made. The
 /// storage is always fresh, so every open is a first open on the device, and
@@ -112,10 +114,11 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// client is built stops it and is rethrown, so a retry for the same atSign
 /// builds afresh.
 ///
-/// Opens for one atSign run one at a time: an open started while another
-/// for the same atSign is running waits for it to end, then fails as it
-/// would after it (a [StateError] while that client is live) or builds
-/// afresh.
+/// Opens for one atSign as one enrollment run one at a time: an open started
+/// while another for the same atSign and enrollment is running waits for it
+/// to end, then fails as it would after it (a [StateError] while that client
+/// is live) or builds afresh. Opens for different enrollments of an atSign,
+/// which at_client allows side by side, do not wait on each other.
 ///
 /// [keysIo] is the key store the client runs on, by default a [SessionKeysIo]
 /// over [keys].
@@ -129,11 +132,13 @@ Future<AtClient> portalSession({
   SessionKeysIo? keysIo,
 }) async {
   final normalized = atSign.toAtsign();
-  if (floorOfKeyMaterial(keys, keys.enrollmentToAuthenticateAs()) != null) {
+  final enrollmentId = keys.enrollmentToAuthenticateAs();
+  if (floorOfKeyMaterial(keys, enrollmentId) != null) {
     throw UnsupportedKeyMaterialException(normalized);
   }
   return openSession(
       atSign: normalized,
+      enrollmentId: enrollmentId,
       app: app,
       keys: keys,
       transport: transport,
