@@ -3,6 +3,8 @@ library;
 
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show useRemoteAtServerIfSet;
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -61,6 +63,12 @@ class _ImplementedPutOptions implements PutRequestOptions {
 class _AlwaysRemotePutOptions extends PutRequestOptions {
   @override
   bool get useRemoteAtServer => true;
+}
+
+/// Put options from outside the library that add a field and keep the
+/// inherited useRemoteAtServer.
+class _PlainSubclassPutOptions extends PutRequestOptions {
+  String? appTag;
 }
 
 void main() {
@@ -318,7 +326,65 @@ void main() {
         anyElement(allOf(startsWith('update:nc:'), contains('$key'))));
   });
 
+  test(
+      'Under remoteOnly, a noCommit putMeta reaches the atServer with noCommit',
+      () async {
+    const atSign = '@nocommitputmeta';
+    final client =
+        await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+    final key = selfKey(atSign)..metadata.ttr = 120000;
+
+    final sentByReturn = await client
+        .putMeta(key, putRequestOptions: PutRequestOptions()..noCommit = true)
+        .then((_) => List.of(commands));
+
+    expect(sentByReturn,
+        anyElement(allOf(startsWith('update:meta:nc:'), contains('$key'))));
+  });
+
+  test('A noCommit putMeta that is not routed to the atServer is refused',
+      () async {
+    const atSign = '@nocommitputmetalocal';
+    final client = await clientFor(atSign);
+    final key = selfKey(atSign);
+    await client.put(key, 'a value',
+        putRequestOptions: PutRequestOptions()..shouldEncrypt = false);
+    final store = client.getLocalSecondary()!.keyStore!;
+    events.clear();
+    key.metadata.ttr = 120000;
+
+    await expectLater(
+        client.putMeta(key,
+            putRequestOptions: PutRequestOptions()..noCommit = true),
+        throwsA(isA<IllegalArgumentException>()));
+
+    expect(events, isEmpty);
+    expect((await store.get(key.toString()))?.metaData?.ttr, isNot(120000));
+  });
+
   group('options from outside the library', () {
+    test(
+        'Under remoteOnly, a put whose options subclass PutRequestOptions and '
+        'leave useRemoteAtServer unset reaches the atServer', () async {
+      const atSign = '@plainsubclass';
+      final client =
+          await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+      final key = selfKey(atSign);
+
+      final sentByReturn = await client
+          .put(key, 'a value',
+              putRequestOptions: _PlainSubclassPutOptions()
+                ..shouldEncrypt = false)
+          .then((_) => List.of(events));
+
+      expect(sentByReturn, contains('update:$key'));
+      expect(useRemoteAtServerIfSet(_PlainSubclassPutOptions()), isNull);
+      expect(
+          useRemoteAtServerIfSet(
+              _PlainSubclassPutOptions()..useRemoteAtServer = false),
+          isFalse);
+    });
+
     test('an object implementing PutRequestOptions is routed by its getter',
         () async {
       const atSign = '@implementedoptions';
