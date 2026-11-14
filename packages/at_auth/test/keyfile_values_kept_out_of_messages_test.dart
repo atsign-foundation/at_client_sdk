@@ -186,5 +186,70 @@ void main() {
               'message',
               allOf(holdsNoneOf(algorithm), holdsNoneOf(enrollmentId)))));
     });
+
+    test('an authentication key whose public half is missing', () {
+      final enrollmentId = distinctive();
+      final keys = AtKeys(atsign: '@alice'.toAtsign())
+        ..addKey(CryptographicMaterial(
+            keyId: 'auth:rsa2048:1',
+            enrollmentId: enrollmentId,
+            role: CryptographicMaterialRole.privateAuthentication,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString(base64Encode(utf8.encode('private'))),
+            createdAt: DateTime.utc(2026)));
+
+      expect(
+          () => keys.authenticationKeyPairFor(enrollmentId),
+          throwsA(isA<AtKeyNotFoundException>()
+              .having((e) => e.message, 'message', holdsNoneOf(enrollmentId))));
+    });
+
+    group('a document the encoder refuses', () {
+      CryptographicMaterial under(String keyId,
+              {required String enrollmentId,
+              required CryptographicMaterialRole role}) =>
+          CryptographicMaterial(
+              keyId: keyId,
+              enrollmentId: enrollmentId,
+              role: role,
+              algorithm: CryptographicMaterialAlgorithm.rsa2048,
+              bytes: AtBytes.fromString(base64Encode(utf8.encode('public'))),
+              createdAt: DateTime.utc(2026));
+
+      test('materials of two enrollments under one keyId', () {
+        final keyId = distinctive();
+        final enrollments = [distinctive(), distinctive()];
+
+        expect(
+            () => encodeAtKeysDocument([
+                  under(keyId,
+                      enrollmentId: enrollments[0],
+                      role: CryptographicMaterialRole.publicEncryption),
+                  under(keyId,
+                      enrollmentId: enrollments[1],
+                      role: CryptographicMaterialRole.publicAuthentication),
+                ]),
+            throwsA(isA<AtKeysValidationException>().having(
+                (e) => e.message,
+                'message',
+                allOf(holdsNoneOf(keyId), holdsNoneOf(enrollments[0]),
+                    holdsNoneOf(enrollments[1])))));
+      });
+
+      test('one role twice under one keyId', () {
+        final keyId = distinctive();
+        final enrollmentId = distinctive();
+        final material = under(keyId,
+            enrollmentId: enrollmentId,
+            role: CryptographicMaterialRole.publicEncryption);
+
+        expect(
+            () => encodeAtKeysDocument([material, material]),
+            throwsA(isA<AtKeysValidationException>().having(
+                (e) => e.message,
+                'message',
+                allOf(holdsNoneOf(keyId), holdsNoneOf(enrollmentId)))));
+      });
+    });
   });
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client_flutter/at_client_flutter.dart';
@@ -315,6 +316,110 @@ void main() {
         isNot(contains('Please check your connection')),
       ),
     );
+  });
+
+  testWidgets('ApkamActivationDialog shows its own advice for a wait that ran '
+      'out', (tester) async {
+    when(
+      () => flows.resumeEnrollment(
+        any(),
+        app: any(named: 'app'),
+        device: any(named: 'device'),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        lookUps: any(named: 'lookUps'),
+      ),
+    ).thenAnswer((_) async => null);
+    when(
+      () => flows.enroll(
+        any(),
+        otp: any(named: 'otp'),
+        app: any(named: 'app'),
+        device: any(named: 'device'),
+        namespaces: any(named: 'namespaces'),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        signingAlgo: any(named: 'signingAlgo'),
+        keyExchangeMode: any(named: 'keyExchangeMode'),
+        lookUps: any(named: 'lookUps'),
+      ),
+    ).thenAnswer(
+      (_) => Future.error(AtTimeoutException('the atServer did not answer')),
+    );
+    await pumpOpener(
+      tester,
+      (context) => ApkamActivationDialog(
+        atSign: atSign,
+        rootDomain: AtRootDomain(
+          InternetAddress.loopbackIPv4.address,
+          closedPort,
+        ),
+        appName: 'app',
+        deviceName: 'device',
+        namespaces: const {'*': 'rw'},
+        preference: loopback(),
+        keys: InMemoryAtKeysIo(),
+        themeData: ThemeData(),
+        flows: flows,
+      ),
+    );
+
+    // NOTE: the autofocused Pinput animates its cursor for ever, so fixed
+    // frames are pumped rather than settling.
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(find.byType(EditableText), '123456');
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 750));
+
+    expect(
+      shown(tester),
+      'Activation timed out — the atServer could not be reached. Please '
+      'check your connection and try again.',
+    );
+  });
+
+  group('RegistrarCramDialog says the registrar could not be reached', () {
+    for (final (name, error) in [
+      ('for a connection that failed', const SocketException('refused')),
+      ('for a wait that ran out', TimeoutException('no answer')),
+    ]) {
+      testWidgets(name, (tester) async {
+        final registrar = _MockRegistrarService();
+        when(
+          () => registrar.verifyActivation(
+            atSign: any(named: 'atSign'),
+            otp: any(named: 'otp'),
+          ),
+        ).thenAnswer((_) => Future.error(error));
+        await pumpOpener(
+          tester,
+          (context) => RegistrarCramDialog(
+            atSign: atSign,
+            registrar: registrar,
+            themeData: ThemeData(),
+          ),
+        );
+
+        await tester.tap(find.text('open'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.enterText(find.byType(EditableText), 'ABCD');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+
+        expect(
+          shown(tester),
+          'The registrar could not be reached. Please check your connection '
+          'and try again.',
+        );
+        // NOTE: the resend countdown runs until it has finished.
+        await tester.pump(const Duration(seconds: 31));
+      });
+    }
   });
 
   group("Anything else shows the exception's message and no stack trace", () {

@@ -177,8 +177,9 @@ void main() {
         'ApkamActivationDialog',
       ]) ...[
         '$dialog(atSign: a, preference: p);',
-        '$dialog.show(context, atSign: a);',
+        '$dialog.show(context, atSign: a, flows: f);',
       ],
+      'CramDialog(atSign: a, preference: f(a, flows: x));',
       "CacheableSecondaryAddressFinder('example.com', 64)",
       "SecondaryUrlFinder('example.com', 64)",
       'final f = CacheableSecondaryAddressFinder.new;',

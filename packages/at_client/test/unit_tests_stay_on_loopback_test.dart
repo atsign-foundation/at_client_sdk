@@ -66,6 +66,24 @@ bool _invokedWithoutFinder(String source, int start) {
   return !argumentsAt(source, open).contains('secondaryAddressFinder:');
 }
 
+/// What is wrong with the test file at [path], whose text is [source], as to
+/// the hand-run samples: a test among them, or a file outside them that
+/// imports their finder.
+List<String> samplesOffencesIn(String path, String source) {
+  final sep = Platform.pathSeparator;
+  if (path.contains('${sep}test${sep}samples$sep')) {
+    // NOTE: samples are run by hand against the environment they name;
+    // dart test runs only *_test.dart files, so none may be one.
+    return [
+      if (path.endsWith('_test.dart')) 'a test among the hand-run samples'
+    ];
+  }
+  return [
+    if (source.contains('sample_transport.dart'))
+      "imports the hand-run samples' finder"
+  ];
+}
+
 /// No unit test names an atDirectory off the loopback interface: the shared
 /// helpers refuse one before anything connects, and nothing in a test
 /// reaches one another way.
@@ -124,6 +142,21 @@ void main() {
     }
   });
 
+  test('the scan keeps the hand-run samples to themselves', () {
+    final samples = ['', 'repo', 'test', 'samples', ''].join(sep);
+    final tests = ['', 'repo', 'test', ''].join(sep);
+    expect(samplesOffencesIn('${samples}a_test.dart', ''), hasLength(1));
+    expect(samplesOffencesIn('${samples}a.dart', ''), isEmpty);
+    expect(
+        samplesOffencesIn(
+            '${tests}a_test.dart', "import 'samples/sample_transport.dart';"),
+        hasLength(1));
+    expect(
+        samplesOffencesIn(
+            '${tests}a_test.dart', "import 'test_utils/transport.dart';"),
+        isEmpty);
+  });
+
   test('nothing in a test reaches an atDirectory off the loopback interface',
       () {
     final self = File('test/unit_tests_stay_on_loopback_test.dart').absolute;
@@ -138,19 +171,15 @@ void main() {
         reason: 'the scan reads the test tree: ${files.length} files');
 
     final offenders = <String>[
-      for (final file in files)
-        if (file.absolute.path.contains(samples)) ...[
-          // NOTE: samples are run by hand against the environment they name;
-          // dart test runs only *_test.dart files, so none may be one.
-          if (file.path.endsWith('_test.dart'))
-            '${file.path}: a test among the hand-run samples',
-        ] else ...[
-          if (file.readAsStringSync().contains('sample_transport.dart'))
-            '${file.path}: imports the hand-run samples\' finder',
-          if (file.absolute.path != helper.path)
-            for (final found in offTheLoopbackIn(file.readAsStringSync()))
-              '${file.path}: $found',
-        ],
+      for (final file in files) ...[
+        for (final found
+            in samplesOffencesIn(file.absolute.path, file.readAsStringSync()))
+          '${file.path}: $found',
+        if (!file.absolute.path.contains(samples) &&
+            file.absolute.path != helper.path)
+          for (final found in offTheLoopbackIn(file.readAsStringSync()))
+            '${file.path}: $found',
+      ],
     ];
     expect(offenders, isEmpty);
   });
