@@ -63,6 +63,13 @@ class _AlwaysRemotePutOptions extends PutRequestOptions {
   bool get useRemoteAtServer => true;
 }
 
+/// Options from outside the library that add nothing to the routing.
+class _PlainPutOptions extends PutRequestOptions {}
+
+class _PlainGetOptions extends GetRequestOptions {}
+
+class _PlainDeleteOptions extends DeleteRequestOptions {}
+
 void main() {
   AtSignLogger.root_level = 'shout';
 
@@ -400,6 +407,77 @@ void main() {
           .then((_) => List.of(events));
 
       expect(sentByReturn, contains('update:$key'));
+    });
+
+    test(
+        'under remoteOnly, a subclass that leaves useRemoteAtServer unset '
+        'writes, reads and deletes on the atServer', () async {
+      const atSign = '@unsetsubclass';
+      final client =
+          await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+      final key = selfKey(atSign);
+      final name = 'routed.testing$atSign';
+
+      final sentByPut = await client
+          .put(key, 'a value',
+              putRequestOptions: _PlainPutOptions()..shouldEncrypt = false)
+          .then((_) => List.of(events));
+      expect(sentByPut, contains('update:$key'));
+      await expectLater(storedLocally(client, key),
+          throwsA(isA<KeyNotFoundException>()),
+          reason: 'the write went to the atServer, not the device');
+
+      remoteData[name] = 'a value';
+      remoteMeta[name] = Metadata()..isEncrypted = false;
+      events.clear();
+      final value =
+          await client.get(key, getRequestOptions: _PlainGetOptions());
+      expect(events, contains('get:$name'));
+      expect(value.value, 'a value');
+
+      events.clear();
+      final sentByDelete = await client
+          .delete(key, deleteRequestOptions: _PlainDeleteOptions())
+          .then((_) => List.of(events));
+      expect(sentByDelete, contains('delete:$key'));
+    });
+
+    test(
+        'under remoteOnly, a noCommit put on a subclass that leaves '
+        'useRemoteAtServer unset reaches the atServer', () async {
+      const atSign = '@unsetsubclassnocommit';
+      final client =
+          await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+      final key = selfKey(atSign);
+
+      final sentByReturn = await client
+          .put(key, 'a value',
+              putRequestOptions: _PlainPutOptions()
+                ..noCommit = true
+                ..shouldEncrypt = false)
+          .then((_) => List.of(commands));
+
+      expect(sentByReturn,
+          anyElement(allOf(startsWith('update:nc:'), contains('$key'))));
+    });
+
+    test(
+        'under remoteOnly, a subclass set to useRemoteAtServer false still '
+        'writes local', () async {
+      const atSign = '@explicitlocalsubclass';
+      final client =
+          await clientFor(atSign, remoteLocalPref: RemoteLocalPref.remoteOnly);
+      final key = selfKey(atSign);
+
+      final sentByReturn = await client
+          .put(key, 'a value',
+              putRequestOptions: _PlainPutOptions()
+                ..useRemoteAtServer = false
+                ..shouldEncrypt = false)
+          .then((_) => List.of(events));
+
+      expect(sentByReturn, isEmpty);
+      expect(await storedLocally(client, key), 'a value');
     });
   });
 }
