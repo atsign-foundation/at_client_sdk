@@ -8,7 +8,8 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
 
   Races: an echo that arrives before notify resolves is still dropped; a
   subscribe registers at call time, not at the first next().
-  Replay: the session drops the echo of each of its last 1024 sent ids; any
+  Replay: the session drops its own atSign's echo of each of its last 1024 sent
+  ids, so a peer cannot suppress delivery by reusing an id; any
   other notification is delivered as often as the atServer sends it.
   DoS: an app that stops reading is bounded at 4096 buffered events and then
   unsubscribed; the sent-id memory is bounded at 1024.
@@ -34,6 +35,13 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     When the atServer delivers that notification back
     Then the subscription does not deliver it
     And a notification from the key owner that this session did not send is delivered
+
+  @forgery
+  Scenario: delivers a peer notification that reuses an id this session sent
+    Given a subscription on every key and a notification this session has sent
+    When another atSign's notification arrives carrying that same id
+    Then the subscription delivers it with that atSign as from
+    And this session's own echo of the id is still dropped
 
   Scenario: drops an echo that arrives before notify resolves
     Given a subscription and a notify still waiting for the atServer

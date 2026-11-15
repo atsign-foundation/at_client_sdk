@@ -13,5 +13,7 @@
 - Keys passed to the bridge keep their `public:`, `cached:` and no-namespace forms; a malformed key fails with `bad_key`.
 - Pairing calls `otp`, `pendingEnrollments`, `approve` and `deny` for a session that holds `__manage`; other sessions get `unsupported`, and approving or denying an id that is not pending gives `enrollment_denied`.
 - Exceptions reach JS as `{code, message}` with a stable `AtError` code; argument errors name the parameter and expected type, never the value received.
+- A failure the bridge has no code for reaches JS as `internal` with the fixed message `internal error`; mapped codes and argument errors keep their text.
+- `subscribe` drops a notification only when its id was sent by this session and it comes from this session's own atSign; a peer reusing an id is delivered.
 - `tool/serve.dart`: a development static server for the built bundles.
 - New dependency `at_base2e15`: `get` decodes binary values to bytes.

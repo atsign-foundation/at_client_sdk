@@ -93,8 +93,8 @@ abstract interface class JsSession {
   Future<bool> notify(JsKey key, String value);
 
   /// Calls [onEvent] with each decrypted notification whose key matches
-  /// [regex], except those this session sent; the returned function
-  /// unsubscribes.
+  /// [regex], except the echoes of those this session sent (a sent id coming
+  /// from this session's own atSign); the returned function unsubscribes.
   void Function() subscribe(
       String regex, void Function(JsNotification) onEvent);
 
@@ -244,11 +244,11 @@ class AtClientJsSession implements JsSession {
       String regex, void Function(JsNotification) onEvent) {
     _open();
     final service = _client.notificationService;
+    final own = _canonical(_client.getCurrentAtSign()!);
     final subscription = service
         .subscribe(regex: regex, shouldDecrypt: true)
-        .where((n) => !_sent.contains(n.id))
         .map((n) => (n, _sender(n)))
-        .where((e) => e.$2 != null)
+        .where((e) => e.$2 != null && !(e.$2 == own && _sent.contains(e.$1.id)))
         .listen((e) {
       final (n, from) = e;
       onEvent((

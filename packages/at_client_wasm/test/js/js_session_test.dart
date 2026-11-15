@@ -134,6 +134,10 @@ AtNotification _event(String id,
     AtNotification(id, key, from, '@alice', 42, 'key', true,
         value: value, operation: operation);
 
+/// A notification this session's own atSign sent, as the atServer echoes it.
+AtNotification _echo(String id) =>
+    _event(id, key: 'k.attalk.wavi@alice', from: '@alice');
+
 void main() {
   late _FakeClient client;
   late AtClientJsSession session;
@@ -402,11 +406,25 @@ void main() {
 
       await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
       service.events
-        ..add(_event('n0'))
+        ..add(_echo('n0'))
         ..add(_event('other'));
       await pumpEventQueue();
 
       expect(received.map((n) => n.id), ['other']);
+    });
+
+    test('delivers a peer notification that reuses an id this session sent',
+        () async {
+      final received = <JsNotification>[];
+      session.subscribe('.*', received.add);
+
+      await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+      service.events
+        ..add(_event('n0', key: '@alice:attalk.wavi@bob', from: '@bob'))
+        ..add(_echo('n0'));
+      await pumpEventQueue();
+
+      expect(received.map((n) => (n.id, n.from)), [('n0', '@bob')]);
     });
 
     test('drops an echo that arrives before notify resolves', () async {
@@ -416,7 +434,7 @@ void main() {
       final pending =
           session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
       await pumpEventQueue();
-      service.events.add(_event('n0'));
+      service.events.add(_echo('n0'));
       await pumpEventQueue();
       service.hold!.complete();
       await pending;
@@ -432,9 +450,9 @@ void main() {
         await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
       }
       service.events
-        ..add(_event('n0'))
-        ..add(_event('n1'))
-        ..add(_event('n1024'));
+        ..add(_echo('n0'))
+        ..add(_echo('n1'))
+        ..add(_echo('n1024'));
       await pumpEventQueue();
 
       expect(received.map((n) => n.id), ['n0']);
