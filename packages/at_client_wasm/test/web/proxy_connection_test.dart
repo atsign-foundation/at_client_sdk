@@ -6,9 +6,9 @@ import 'dart:async';
 import 'package:at_client_wasm/at_client_wasm_web.dart';
 import 'package:test/test.dart';
 
-/// Opens a real connection over TLS to `vip.ve.atsign.zone`, which
-/// `dart_test.yaml` sends to 127.0.0.1. To run it locally, set
-/// `AT_VE_CERTS_DIR` to an at_server checkout's
+/// Opens a real connection over TLS to `vip.ve.atsign.zone`. To run it
+/// locally, map vip.ve.atsign.zone to 127.0.0.1 in /etc/hosts, as the virtual
+/// environment needs, and set `AT_VE_CERTS_DIR` to an at_server checkout's
 /// `tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs`.
 void main() {
   test(

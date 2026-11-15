@@ -172,6 +172,9 @@ jobs:
 
       - uses: ./actions/setup-flutter-and-dart
 
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
       - name: Run at_client_wasm browser tests in Chrome
         working-directory: packages/at_client_wasm
         env:

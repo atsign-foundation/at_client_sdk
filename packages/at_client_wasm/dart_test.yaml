@@ -1,7 +1,0 @@
-# NOTE: with this override, package:test does not read CHROME_EXECUTABLE; name
-# another Chrome as override_platforms.chrome.settings.executable in
-# ~/.dart_test.yaml.
-override_platforms:
-  chrome:
-    settings:
-      arguments: --host-resolver-rules="MAP vip.ve.atsign.zone 127.0.0.1"
