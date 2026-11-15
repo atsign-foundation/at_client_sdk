@@ -67,8 +67,17 @@ String topLevel(String arguments) {
   return out.join();
 }
 
-bool _loopbackRoot(String root) =>
-    root.contains('127.0.0.1') || root.contains('localhost');
+/// The hosts a test may name its atDirectory on.
+const _loopbackHosts = {'127.0.0.1', 'localhost', '::1'};
+
+/// Whether [root], an atDirectory named as `host`, `host:port` or
+/// `[host]:port`, any of them after `proxy:`, is on a loopback host.
+bool _loopbackRoot(String root) {
+  final address = root.startsWith('proxy:') ? root.substring(6) : root;
+  final host = RegExp(r'^\[([^\]]*)\](?::|$)').firstMatch(address)?.group(1) ??
+      (address == '::1' ? address : address.split(':').first);
+  return _loopbackHosts.contains(host);
+}
 
 /// Whether [path] is in at_client_cli's own tree, or names no file.
 bool _atActivateTree(String path) => !path.startsWith('../');
@@ -104,7 +113,7 @@ List<String> offTheLoopbackIn(String source, {String path = ''}) => [
           'AtLookUp.withSecureSocket with no finder',
       if (_atActivateTree(path)) ...[
         for (final m in RegExp(
-                r'''(?:'-r'|"-r"|'--root-server'|"--root-server"|rootDomain:|AtRootDomain\()\s*,?\s*(['"])(.*?)\1''')
+                r'''(?:'-r'|"-r"|'--root-server'|"--root-server"|rootDomain:|\.rootDomain\s*=|AtRootDomain\()\s*,?\s*(['"])(.*?)\1''')
             .allMatches(source))
           if (!_loopbackRoot(m.group(2)!)) 'the root ${m.group(2)}',
         for (final m in RegExp('''\\[\\s*['"]($_connectingCommands)['"]''')
@@ -113,7 +122,8 @@ List<String> offTheLoopbackIn(String source, {String path = ''}) => [
               bracketedAt(source, m.start + 1, open: '[', close: ']')))
             'at_activate ${m.group(1)} with no root',
       ],
-      for (final m in RegExp(r'\bAtsignFlows\(\)').allMatches(source))
+      for (final m
+          in RegExp(r'\bAtsignFlows\s*(?:\(|\.new\b)').allMatches(source))
         'the real verbs at offset ${m.start}',
       if (path != _loopbackFlows)
         for (final m in RegExp(r'extends\s+AtsignFlows\b').allMatches(source))
@@ -218,6 +228,43 @@ void main() {
           'isA<CacheableSecondaryAddressFinder>()',
         ].join('\n')),
         isEmpty);
+  });
+
+  test(
+      'the scan judges a root by its whole host, reads a root set by '
+      'assignment, and catches each spelling of the real verbs', () {
+    for (final (example, reason) in [
+      (
+        "CLIBase(atSign: a, rootDomain: 'localhost.example.com')",
+        'a host that begins with localhost is not localhost'
+      ),
+      (
+        "['-a', '@alice', '-r', '127.0.0.1.nip.io:64']",
+        'a host that begins with 127.0.0.1 is not 127.0.0.1'
+      ),
+      (
+        "AtClientPreference()..rootDomain = 'root.atsign.org'",
+        'a root assigned in a cascade is judged by its host'
+      ),
+      ('final f = AtsignFlows.new;', 'a tear-off constructs the real verbs'),
+      ('const AtsignFlows ( );', 'whitespace before the arguments'),
+      ('flows: AtsignFlows(\n),', 'a constructor call split across lines'),
+    ]) {
+      expect(offTheLoopbackIn(example), hasLength(1), reason: reason);
+    }
+    for (final (example, reason) in [
+      ("..rootDomain = '127.0.0.1'", 'a loopback root assigned in a cascade'),
+      (
+        '..rootDomain = InternetAddress.loopbackIPv4.address',
+        'a root that is no literal is not judged'
+      ),
+      ("rootDomain: 'localhost:64'", 'localhost with a port'),
+      ("rootDomain: '[::1]:\$port'", 'a bracketed IPv6 loopback with a port'),
+      ('final flows = MockAtsignFlows();', 'a mock of the real verbs'),
+      ('flows: const LoopbackFlows(),', 'the verbs that refuse off loopback'),
+    ]) {
+      expect(offTheLoopbackIn(example), isEmpty, reason: reason);
+    }
   });
 
   test('the scan keeps each exemption, and the at_activate rules, to its tree',
