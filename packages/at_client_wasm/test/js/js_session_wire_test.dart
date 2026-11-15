@@ -196,7 +196,7 @@ void main() {
             contains('e1'));
       });
 
-      test('an id that is not pending is not unsupported', () async {
+      test('deny of an id that is not pending is enrollment_denied', () async {
         wire.answer = (command) => 'data:{${record('e1', 'pending')}}';
 
         final error = await thrownBy(() => session.deny('gone'));
@@ -287,7 +287,8 @@ void main() {
         expect(sent.single, isNot(contains('namespace')));
       });
 
-      test('an id that is not pending is not unsupported', () async {
+      test('approve of an id that is not pending is enrollment_denied',
+          () async {
         wire.answer = (command) => pendingList();
 
         final error = await thrownBy(() => session.approve('gone'));

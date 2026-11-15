@@ -247,7 +247,7 @@ void main() {
           session.get(const JsKey('error')), throwsA(isA<StateError>()));
     });
 
-    test('delete removes the key', () async {
+    test('delete then get of the same key is null', () async {
       await session.put(const JsKey('k'), 'v');
       await session.delete(const JsKey('k'));
 

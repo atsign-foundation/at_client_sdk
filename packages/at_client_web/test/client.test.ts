@@ -296,7 +296,7 @@ describe('subscribe', () => {
     ...over,
   });
 
-  it('throws the AtError of a {code, message} the bridge answers with', async () => {
+  it('a failed subscribe surfaces its code as an AtError', async () => {
     const client = await AtClient.create(opts);
     fake.session.subscribe.mockReturnValueOnce({ code: 'closed', message: 'the session is closed' } as never);
     expect(() => client.subscribe()).toThrow(expect.objectContaining({ name: 'AtError', code: 'closed' }));

@@ -152,7 +152,9 @@ void main() {
   });
 
   group('onboard without PRF', () {
-    test('refuses before any passkey prompt, CRAM or setup write', () async {
+    test(
+        'onboard without PRF refuses before any passkey prompt, CRAM or setup write',
+        () async {
       final unsupported = PasskeyCustody(
           kek: PasskeyKek(authenticator,
               prfSupport: PrfSupport(_NoPrfEnvironment())),
