@@ -25,7 +25,7 @@ void main() {
           required AtClientStorage storage}) =>
       AtClientImpl.create(atSign, 'wavi', prefs(),
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(prefs()),
           remoteSecondary: remote,
           atKeysIo: noKeysFor(atSign),
           storage: storage);

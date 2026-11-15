@@ -32,7 +32,7 @@ void main() {
       final cli = CLIBase(
           atSign: atSign,
           nameSpace: 'my_app',
-          rootDomain: '127.0.0.1:1',
+          rootDomain: 'root.atsign.org',
           homeDir: home);
       final store =
           CliKeys.storageFor(atSign, program: 'my_app') as HiveAtClientStorage;

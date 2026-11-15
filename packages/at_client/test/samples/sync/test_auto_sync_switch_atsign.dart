@@ -5,7 +5,7 @@ import 'package:at_client/at_client_io.dart';
 import '../test_util.dart';
 import '../../test_utils/hive_store.dart';
 import '../../test_utils/no_keys.dart';
-import '../sample_transport.dart';
+import '../../test_utils/transport.dart';
 
 void main() async {
   AtSignLogger.root_level = 'finer';
@@ -16,8 +16,7 @@ void main() async {
         namespace: 'wavi',
         preference: TestUtil.getAlicePreference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder:
-            sampleAtDirectoryOf(TestUtil.getAlicePreference()),
+        secondaryAddressFinder: atDirectoryOf(TestUtil.getAlicePreference()),
         atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, TestUtil.getAlicePreference())));
   final atClient = atClientManager.atClient;
@@ -35,8 +34,7 @@ void main() async {
         namespace: 'wavi',
         preference: TestUtil.getBobPreference(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder:
-            sampleAtDirectoryOf(TestUtil.getBobPreference()),
+        secondaryAddressFinder: atDirectoryOf(TestUtil.getBobPreference()),
         atKeysIo: noKeysFor('@bob🛠'),
         storage: hiveStoreFor('@bob🛠', TestUtil.getBobPreference())));
   // phone.me@alice🛠

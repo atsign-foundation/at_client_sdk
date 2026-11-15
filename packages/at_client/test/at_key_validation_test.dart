@@ -46,7 +46,7 @@ void main() {
             namespace: namespace,
             preference: preference,
             lookUps: secureSocketLookUps(),
-            secondaryAddressFinder: defaultAtDirectory,
+            secondaryAddressFinder: atDirectoryOf(preference),
             atKeysIo: keys,
             storage: storage),
         throwsA(predicate((dynamic e) => e is InvalidAtSignException)));

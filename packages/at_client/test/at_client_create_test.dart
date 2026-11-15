@@ -74,7 +74,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factoryheld'),
         storage: storage);
 
@@ -94,7 +94,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factoryaddr'),
         storage: hiveStoreFor('@factoryaddr', pref()));
 
@@ -147,7 +147,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factorysolo'),
         storage: hiveStoreFor('@factorysolo', pref()));
 
@@ -171,7 +171,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factorywired'),
         storage: hiveStoreFor('@factorywired', pref()));
 
@@ -189,7 +189,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factorybuilder'),
         syncServiceBuilder: (_) => noOp,
         storage: hiveStoreFor('@factorybuilder', pref()));
@@ -208,7 +208,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factorytwice'),
         storage: hiveStoreFor('@factorytwice', pref()));
 
@@ -218,7 +218,7 @@ void main() {
             namespace: 'wavi',
             preference: pref(),
             lookUps: secureSocketLookUps(),
-            secondaryAddressFinder: defaultAtDirectory,
+            secondaryAddressFinder: atDirectoryOf(pref()),
             atKeysIo: noKeysFor('@factorytwice'),
             storage: hiveStoreFor('@factorytwice', pref())),
         throwsA(isA<StateError>()
@@ -232,7 +232,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factorytwice'),
         storage: hiveStoreFor('@factorytwice', pref()));
     expect(second, isNot(same(first)),
@@ -333,7 +333,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         enrollmentId: enrollmentId,
         atKeysIo: InMemoryAtKeysIo.holding(
             '@buildsecondary', _demoKeys(enrollmentId)),
@@ -395,7 +395,7 @@ void main() {
             namespace: 'wavi',
             preference: pref(),
             lookUps: secureSocketLookUps(),
-            secondaryAddressFinder: defaultAtDirectory,
+            secondaryAddressFinder: atDirectoryOf(pref()),
             atKeysIo: noKeysFor('@factoryhalfbuilt'),
             storage: first,
             syncServiceBuilder: (_) => throw StateError('builder exploded')),
@@ -422,7 +422,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(pref()),
         atKeysIo: noKeysFor('@factoryhalfbuilt'),
         storage: second);
 

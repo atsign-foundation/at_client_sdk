@@ -75,7 +75,7 @@ void main() {
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:
@@ -112,7 +112,7 @@ void main() {
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:

@@ -30,7 +30,7 @@ void main() {
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
         lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: defaultAtDirectory,
+        secondaryAddressFinder: atDirectoryOf(atClientPreference),
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,

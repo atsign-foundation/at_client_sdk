@@ -30,7 +30,7 @@ void main() {
           namespace: 'wavi',
           preference: alicePreference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(alicePreference),
           atKeysIo: noKeysFor(aliceAtSign),
           atLookUp: mockAtLookUp,
           storage: hiveStoreFor(aliceAtSign, alicePreference));
@@ -49,7 +49,7 @@ void main() {
           namespace: 'wavi',
           preference: alicePreference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(alicePreference),
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
@@ -60,7 +60,7 @@ void main() {
           namespace: 'buzz',
           preference: bobPreference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(bobPreference),
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
@@ -78,7 +78,7 @@ void main() {
           namespace: 'wavi',
           preference: alicePreference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(alicePreference),
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference));
       atClientManager.use(alice);
@@ -91,7 +91,7 @@ void main() {
           namespace: 'buzz',
           preference: bobPreference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: defaultAtDirectory,
+          secondaryAddressFinder: atDirectoryOf(bobPreference),
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference));
       atClientManager.use(bob);

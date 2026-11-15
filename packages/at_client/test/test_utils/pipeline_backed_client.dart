@@ -84,7 +84,7 @@ Future<AtClient> buildPipelineBackedClient({
     namespace,
     preference,
     lookUps: secureSocketLookUps(),
-    secondaryAddressFinder: defaultAtDirectory,
+    secondaryAddressFinder: atDirectoryOf(preference),
     atKeysIo: noKeysFor(atSign),
     remoteSecondary: remoteSecondary,
     enrollmentId: enrollmentId,

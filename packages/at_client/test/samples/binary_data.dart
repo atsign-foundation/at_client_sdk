@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 import 'test_util.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
-import 'sample_transport.dart';
+import '../test_utils/transport.dart';
 
 void main() async {
   try {
@@ -17,8 +17,7 @@ void main() async {
           namespace: 'wavi',
           preference: TestUtil.getAlicePreference(),
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder:
-              sampleAtDirectoryOf(TestUtil.getAlicePreference()),
+          secondaryAddressFinder: atDirectoryOf(TestUtil.getAlicePreference()),
           atKeysIo: noKeysFor(atsign),
           storage: hiveStoreFor(atsign, TestUtil.getAlicePreference())));
     var atClient = atClientManager.atClient;
