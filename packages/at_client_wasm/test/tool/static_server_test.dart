@@ -78,16 +78,40 @@ void main() {
     }
   });
 
-  test('refuses a path that climbs out of the root', () async {
+  /// The status line and body of [target] sent verbatim. `HttpClient` and
+  /// `Uri` normalize `%2e%2e` away before the request leaves, so only a raw
+  /// request line reaches the server's own check.
+  Future<(String, String)> raw(String target) async {
+    final socket = await Socket.connect('localhost', server.port);
+    socket.write(
+        'GET $target HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n');
+    final reply = await utf8.decodeStream(socket);
+    socket.destroy();
+    return (reply.split('\r\n').first, reply);
+  }
+
+  test('refuses an encoded separator that would climb out of the root',
+      () async {
     for (final path in [
-      '/%2e%2e/secret.txt',
       '/..%2fsecret.txt',
-      '/a/%2e%2e/%2e%2e/secret.txt',
+      '/%2e%2e%2fsecret.txt',
+      '/a%2f..%2f..%2fsecret.txt',
+      '/..%5csecret.txt',
     ]) {
-      final response = await get(path);
-      expect(response.statusCode, isIn([403, 404]), reason: path);
-      expect(await utf8.decodeStream(response), isNot(contains('outside')),
-          reason: path);
+      final (status, reply) = await raw(path);
+      expect(status, 'HTTP/1.1 403 Forbidden', reason: path);
+      expect(reply, isNot(contains('outside')), reason: path);
+    }
+  });
+
+  test('never serves a file above the root for encoded dot segments', () async {
+    // `HttpServer` folds these into `/secret.txt` before the handler sees
+    // them, so the answer is 403 or 404 depending on that folding; what must
+    // hold is that the file outside the root is not served.
+    for (final path in ['/%2e%2e/secret.txt', '/a/%2e%2e/%2e%2e/secret.txt']) {
+      final (status, reply) = await raw(path);
+      expect(status, anyOf(contains('403'), contains('404')), reason: path);
+      expect(reply, isNot(contains('outside')), reason: path);
     }
   });
 
