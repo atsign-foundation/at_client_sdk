@@ -5,7 +5,8 @@
 - chore: requires at_client 4.1.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
 - fix: `at_activate status` asks the atDirectory once, prints no posture
-  notice, and reports a refused atServer connection as unreachable.
+  notice, and says a refused atServer connection is unreachable rather than
+  an unexpected failure (it still returns 2).
 
 ## 1.0.0
 
