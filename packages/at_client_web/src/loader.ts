@@ -84,15 +84,18 @@ function injectBundle(): Promise<Bridge> {
     const script = document.createElement('script');
     script.src = new URL('./dart/at_client.js', import.meta.url).href;
     script.async = true;
-    script.onerror = () => reject(new AtError(`could not load ${script.src}`, 'internal'));
+    const fail = (message: string) => {
+      script.remove();
+      reject(new AtError(message, 'internal'));
+    };
+    script.onerror = () => fail(`could not load ${script.src}`);
     script.onload = () => {
       const deadline = Date.now() + installTimeoutMs;
       const poll = () => {
         const bridge = installed();
         if (bridge) resolve(bridge);
-        else if (Date.now() >= deadline) {
-          reject(new AtError(`${script.src} did not install the bridge`, 'internal'));
-        } else setTimeout(poll, installPollMs);
+        else if (Date.now() >= deadline) fail(`${script.src} did not install the bridge`);
+        else setTimeout(poll, installPollMs);
       };
       poll();
     };
@@ -105,11 +108,14 @@ let loading: Promise<Bridge> | undefined;
 
 /** The bridge, loaded on the first call and shared by every later one. */
 export function loadBridge(): Promise<Bridge> {
-  loading ??= loader().catch((error: unknown) => {
-    loading = undefined;
+  if (loading) return loading;
+  const attempt: Promise<Bridge> = loader().catch((error: unknown) => {
+    // A loader set meanwhile owns `loading` now; only forget our own failure.
+    if (loading === attempt) loading = undefined;
     throw error;
   });
-  return loading;
+  loading = attempt;
+  return attempt;
 }
 
 /** Replaces how the bridge loads, or restores the default; forgets any loaded bridge. */

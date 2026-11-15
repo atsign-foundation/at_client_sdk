@@ -34,14 +34,42 @@ describe('loadBridge with an injected loader', () => {
     expect(await loadBridge()).toBe(fakeBridge);
     expect(loader).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps a loader installed while an earlier load was failing', async () => {
+    let failEarlier!: (error: Error) => void;
+    setBridgeLoader(() => new Promise<Bridge>((_, reject) => (failEarlier = reject)));
+    const earlier = loadBridge();
+    const settled = expect(earlier).rejects.toThrow('late');
+
+    const replacement = vi.fn(async () => fakeBridge);
+    setBridgeLoader(replacement);
+    expect(await loadBridge()).toBe(fakeBridge);
+
+    failEarlier(new Error('late'));
+    await settled;
+    expect(await loadBridge()).toBe(fakeBridge);
+    expect(replacement).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('the default loader', () => {
   function stubDocument() {
-    const scripts: Array<{ src: string; onload?: () => void; onerror?: () => void }> = [];
+    const scripts: Array<{
+      src: string;
+      onload?: () => void;
+      onerror?: () => void;
+      removed: boolean;
+      remove: () => void;
+    }> = [];
     vi.stubGlobal('document', {
       createElement: () => {
-        const script: (typeof scripts)[number] = { src: '' };
+        const script: (typeof scripts)[number] = {
+          src: '',
+          removed: false,
+          remove() {
+            script.removed = true;
+          },
+        };
         scripts.push(script);
         return script;
       },
@@ -75,6 +103,20 @@ describe('the default loader', () => {
     const loading = loadBridge();
     scripts[0]!.onerror!();
     await expect(loading).rejects.toMatchObject({ name: 'AtError', code: 'internal' });
+    expect(scripts[0]!.removed).toBe(true);
+  });
+
+  it('injects a fresh script on the retry after a failed load', async () => {
+    const scripts = stubDocument();
+    const first = loadBridge();
+    scripts[0]!.onerror!();
+    await expect(first).rejects.toMatchObject({ code: 'internal' });
+    const second = loadBridge();
+    expect(scripts).toHaveLength(2);
+    vi.stubGlobal('__atsignAtClientWeb', fakeBridge);
+    scripts[1]!.onload!();
+    expect(await second).toBe(fakeBridge);
+    expect(scripts[1]!.removed).toBe(false);
   });
 
   it('rejects with an internal AtError when the script installs nothing', async () => {
@@ -86,6 +128,7 @@ describe('the default loader', () => {
       scripts[0]!.onload!();
       await vi.advanceTimersByTimeAsync(10_000);
       await settled;
+      expect(scripts[0]!.removed).toBe(true);
     } finally {
       vi.useRealTimers();
     }
