@@ -354,6 +354,8 @@ reaches a cached client; X1 pins that guard before X4 changes `stop()`, since th
 what a released client's safety then rests on. (Amended 2026-09-05: first written as "two
 paths hand back a stopped client" — one was already guarded, the other has no caller.)
 
+> **Superseded 2026-11-13** with D-18's reversal: there is no remote-only bundle, so the four items below are not needed for the browser lane. `portalSession` runs an ordinary client on `InMemoryAtClientStorage`, and remote-only is the client's routing preference (`AtClientPreference.remoteLocalPref = RemoteLocalPref.remoteOnly`), not a storage. Sync still runs under that preference: a put or delete goes to the atServer unless its request options set `useRemoteAtServer = false` explicitly; only that keeps a write local, queued for sync, and sync is what carries it to the atServer. Item 3 was built for its own sake (D-25) and stands.
+
 **Amended 2026-09-06 — the gateway must admit a remote-only bundle.** D-17 ships the
 browser lane on a bundle that keeps no durable records, and D-18 makes that bundle the
 *only* injection route rather than a second one alongside it. Four things this interface
@@ -570,6 +572,8 @@ to the doors and no fork of at_client: a WebSocket-backed `AtLookupMuxable` behi
 factory implements `AtLookupMuxable` itself; the factory returns the interface, so
 nothing about the shape waits on T4.
 
+> **Amended 2026-11-13** with D-18's reversal: the storage leg V1 hands the doors is `InMemoryAtClientStorage`, not a remote-only `AtClientStorage`. `portalSession` runs an ordinary client on `InMemoryAtClientStorage`, and remote-only is the client's routing preference (`AtClientPreference.remoteLocalPref = RemoteLocalPref.remoteOnly`), not a storage. Sync still runs under that preference: a put or delete goes to the atServer unless its request options set `useRemoteAtServer = false` explicitly; only that keeps a write local, queued for sync, and sync is what carries it to the atServer. The transport text is unchanged.
+
 **Amended 2026-09-14 — which storage leg V1 hands the doors.** Under
 [D-17](#d-17--v1-ships-remote-only-the-local-store-is-a-bundle-choice-not-a-removed-capability-2026-08-30-amended-2026-09-06)
 and
@@ -640,6 +644,8 @@ built.
 
 ### D-17 — V1 **ships** remote-only; the local store is a bundle choice, not a removed capability (2026-08-30, amended 2026-09-06)
 
+> **Narrowed 2026-11-13** with D-18's reversal: the V1 session runs on `InMemoryAtClientStorage`, not a remote-only bundle. `portalSession` runs an ordinary client on `InMemoryAtClientStorage`, and remote-only is the client's routing preference (`AtClientPreference.remoteLocalPref = RemoteLocalPref.remoteOnly`), not a storage. Sync still runs under that preference: a put or delete goes to the atServer unless its request options set `useRemoteAtServer = false` explicitly; only that keeps a write local, queued for sync, and sync is what carries it to the atServer. Where the text below says "remote-only storage bundle" or "inject a different bundle", read "the remote-only routing preference" and "pass a different storage or preference". The payload and cost statements stand: no SQLite, VFS or Hive is shipped, and every `get` is a round-trip.
+
 The first browser release ships a **remote-only storage bundle** as its default: no
 SQLite, no VFS, no `sqlite3.wasm`, no Hive in the shipped browser payload. A local store
 becomes the default in V2, as a speed optimisation.
@@ -676,6 +682,8 @@ accept it injects a different bundle, which is the point of D-12.
 ---
 
 ### D-18 — Remote-only is delivered as an **`AtClientStorage` implementation**, not by making `localSecondary` nullable (2026-08-30, amended 2026-09-06)
+
+> **Reversed 2026-11-13.** The remote-only storage path is gone from [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430). `AtClientStorage.none()`, `NoStorageAtClientStorage`, `RemoteWriteThroughKeyStore` and `NoopSyncQueueStore` were deleted, and `at_client` carries no web-only storage. `portalSession` opens an ordinary client on `InMemoryAtClientStorage` (`package:at_client/memory.dart`) routed to the atServer. The reasoning below is kept as the record of the position. The key-custody side of the lane is governed by K-16: the first release is PRF-only and onboarding moves to the passkey work.
 
 `at_client` does not learn about a "no local store" mode. It receives a bundle whose
 keystore is a write-through cache — misses and writes go to the atServer — and whose sync
@@ -839,6 +847,8 @@ This pairs with D-20: the async-only surface is what the generated `.d.ts` must 
 
 ### D-24 — Where notification replay starts is a **policy**, not a side effect of storage (2026-09-15)
 
+> **Amended 2026-11-13** with D-18's reversal: there is no browser storage bundle to set the replay policy. `portalSession` builds the preference when the caller passes none, and the client's storage is `InMemoryAtClientStorage`, so the watermark is still a `local:` key held in memory for the session. Where the preset lives is still open (2026-11-10 log row).
+
 The client chooses where its monitor replays from, when its notification service starts:
 
 | Policy | Replays from | Reads the checkpoint |
@@ -849,8 +859,8 @@ The client chooses where its monitor replays from, when its notification service
 | **full** | everything the atServer still holds | no |
 
 **Defaults.** Native keeps **resume**, today's `fetchOfflineNotifications = true`. The
-**browser bundle sets `window(1h)`** when it builds the client's preferences; per D-17/D-18
-the bundle owns lane behaviour, so at_client's shared default does not move.
+**browser lane sets `window(1h)`** when it builds the client's preferences; per D-17
+the lane owns its own behaviour, so at_client's shared default does not move.
 
 **Why a window on the web.** It is the one replay policy that is correct with no
 checkpoint store: a reload replays a bounded hour rather than everything the server
@@ -1346,8 +1356,9 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 ### OQ-13 — Where does the monitor resume checkpoint live in remote-only? **RESOLVED 2026-09-15 by D-24**
 
 `notification_service_impl.dart:434` (`_migrateLegacyLastReceivedNotificationKeys`) reads
-`lastReceivedNotificationAtKey` from `getLocalSecondary()!.keyStore!`. Under D-18 that call
-**silently succeeds and returns nothing** after every reload, replaying all notifications
+`lastReceivedNotificationAtKey` from `getLocalSecondary()!.keyStore!`. Under D-18 (reversed
+2026-11-13; the browser client now holds that key in `InMemoryAtClientStorage` for the session)
+that call **silently succeeded and returned nothing** after every reload, replaying all notifications
 with no error — a correctness bug rather than a crash, which is worse.
 
 Options: accept the replay (in-memory), or give it a small IndexedDB record beside the key
@@ -1358,7 +1369,7 @@ already builds. Must be decided before the browser lane ships notifications.
 defaults to *window(1h)*, which bounds the replay with no checkpoint store at all. The
 IndexedDB record stands, but only for a browser client that opts into *resume*.
 
-> **Corrected 2026-11-02, revised 2026-11-05** (the 11-02 text said `exists` still throws; #2430 implements it; [rulings](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840)). The premise above is wrong. The method is `notification_service_impl.dart:428`, and the read never silently succeeds. As first built, `RemoteWriteThroughKeyStore.exists` **threw** `UnsupportedError`, the watermark read failed, and the monitor reconnected with no epoch, so a reconnect **lost the gap** (seen live: [`at-talk-demo.md`](at-talk-demo.md), `at_client_sdk-336`). In [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) `exists` is `get`-or-`KeyNotFoundException`, and the watermark is a `local:` key held in memory, so reconnects within a session resume from it and a page reload starts from the new session's creation time. The failure is a lost gap, not an unbounded replay. The browser default is now *connect* with a reconnect supervisor (D-24, amended 2026-11-02).
+> **Corrected 2026-11-02, revised 2026-11-05** (the 11-02 text said `exists` still throws; #2430 implements it; [rulings](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840)). The premise above is wrong. The method is `notification_service_impl.dart:428`, and the read never silently succeeds. As first built, `RemoteWriteThroughKeyStore.exists` **threw** `UnsupportedError`, the watermark read failed, and the monitor reconnected with no epoch, so a reconnect **lost the gap** (seen live: [`at-talk-demo.md`](at-talk-demo.md), `at_client_sdk-336`). In [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) `exists` is `get`-or-`KeyNotFoundException`, and the watermark is a `local:` key held in memory, so reconnects within a session resume from it and a page reload starts from the new session's creation time. The failure is a lost gap, not an unbounded replay. (Since 2026-11-13 `RemoteWriteThroughKeyStore` is gone: the client runs on `InMemoryAtClientStorage`, whose `exists` is the stock one, and the watermark behaviour above is unchanged.) The browser default is now *connect* with a reconnect supervisor (D-24, amended 2026-11-02).
 
 ### OQ-14 — Do the registrar asks land?
 
@@ -1422,7 +1433,7 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-10-13 | **D-26 ruled; W4 resolved.** Live lab ([`vfs-lab-results.md`](vfs-lab-results.md)): `sqlite3.wasm` +386 KB gz accepted; P1 = `SimpleOpfsFileSystem`, one directory per (atSign, enrollmentId), in a dedicated worker. D-21's table amended (SimpleOPFS is multi-atSign; IndexedDB loses unflushed writes and corrupts under two tabs). Chromium, Firefox 157, WebKit and Safari 27.0.1 agree on E3/E4; Chromium, Firefox and Safari agree on E7. Scope limits in D-26. |
 | 2026-10-13 | **K-8 ruled; OQ-19 raised.** Live test L step 0a showed the shared `unlocks[]` copy leaks device count and accumulates dead entries; [`browser-onboarding.md`](browser-onboarding.md) proposes one record per passkey. PCAM private key moves inside the blob. |
 | 2026-10-15 | **K-1..K-6, K-9 ruled** ([`atkeys-derivation.md`](atkeys-derivation.md)): constant salt, one PRF call then HKDF, atSign in labels, AAD = clear header, public-key match before PKAM, no per-write data key; record grammar probed on trunk with no server change. OQ-19 resolved. Departs from the architect's model on K-1 and K-2. |
-| 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](pb3-storage-bundle.md). |
+| 2026-10-18 | Wasm doc set brought current: K-ledger, OQ-16/OQ-19, superseded `unlocks[]`/atSign-salt positions, roadmap and implementation-plan status, PB-3 stages merged into [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md). |
 | 2026-10-18 | **Dart package named `at_client_wasm`.** Amends D-4; the npm facade stays `@atsign/at-client-web`. Closes the W1 name question in `implementation-plan.md` §5b. |
 | 2026-10-21 | **Revocation is final.** A revoked enrollment's PKAM stays refused; re-enroll after revoke needs explicit approver action; same-key re-enroll refused with `AT0032` is intended; no per-re-enroll seed salt; revoked with only the passkey is locked out by design. Mechanism (reinstate vs duplicate key) open. K-1..K-9 unchanged. |
 | 2026-10-27 | **K-10, K-11 ruled; K-6, K-8 superseded; R-a closed; R-b dissolved.** K-10: TTL-less public pointer `public:_<lookupHex>.atkeysv@<atSign>` sealing the `enrollmentId` (`typ:"eid"`), written once at enroll, hidden from every scan, read unauthenticated. K-11: private document `atkeys.<eid>.a.__e@<atSign>`, read over PKAM by that enrollment only, no private key needed to open; CRAM reads but cannot write it; revoke, delete and unrevoke move it. K-6 survives as K-10's name and read grammar; K-8's signing-algorithm choice survives. Re-enroll after revoke = approver `enroll:unrevoke` (same `enrollmentId`, same public key, original expiry; no server change). "Revocation is final" restated as approver policy. Evidence: at_server trunk `acd5a4ba`. K-5 and K-12 were ruled later the same day (rows below); the K-12 fallbacks and rotation stay open. |
@@ -1438,3 +1449,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-06 | From the #2428 review: **K-18 amended**: a random `user.id` makes re-enrollment add a passkey; `user.displayName` = `<enrollment time> · <deviceName>`, the time UTC to the minute and the deviceName cut to fit 64 bytes (the atSign is in `user.name`; a same-day revoke and re-enroll keeps the deviceName); recovery offers another passkey or atSign on no pointer and on a refused PKAM (`AT0027` or `AT0028`). D-24's inclusive-filter amendment carries #2451's detail (the server change, handover replay, `_isDuplicate`) so #2451 no longer edits this file. Later: the dedupe is seeded from every id the stored watermark keeps at its millisecond, at_server#2922 waits for a release carrying it, follower tabs dedupe forwarded lines, and K-18's canonical atSign also covers K-3 and K-17. (ruled by srieteja) |
 | 2026-11-10 | D-24 brought current once [#2451](https://github.com/atsign-foundation/at_client_sdk/pull/2451) merged: the dedupe is on trunk, keyed by the pair (from, id) with the sender canonical, and the watermark stores `[from, id]` pairs capped at 1024. D-19's handover dedupes by the same pair. The browser preset was taken out of #2451 before it merged, and where browser presets live is still open. |
 | 2026-11-11 | D-24's policy is implemented in [#2476](https://github.com/atsign-foundation/at_client_sdk/pull/2476): `AtClientPreference.notificationReplay` takes `connect`, `resume` (the default), `window(d)` and `full`, and `fetchOfflineNotifications` is deprecated. The start resolves once per notification service and a failed read is retried on the next connect; a window start is never later than service creation and a negative duration is zero. A live test covers `full` sending `monitor:0` to an atServer. (implemented by srieteja) |
+| 2026-11-13 | **D-18 reversed** (review of [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430)). The remote-only storage path is deleted; the client runs on `InMemoryAtClientStorage`. Key custody follows K-16. [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md) moved to `superseded/`. D-12, D-15, D-17 and D-24 annotated and `acceptance.md` X-R1..X-R3 amended to match: remote-only is the routing preference, and sync still runs, since only an explicit `useRemoteAtServer = false` keeps a write local. |

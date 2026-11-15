@@ -1,0 +1,8 @@
+import 'package:at_client_wasm/at_client_wasm_web.dart';
+
+/// The compile target `test/web/compile_test.dart` builds with dart2js and
+/// dart2wasm: it pulls in the whole slim client, `InMemoryAtClientStorage`
+/// among it.
+Future<void> main() async {
+  print(sessionTransport(SessionTransportOptions()).finder);
+}
