@@ -123,6 +123,7 @@ Every call rejects with an `AtError`. Branch on `error.code`, never on the messa
   ```
 
   `script-src 'self'` serves the bundle from your origin. `connect-src` is broad because the atServer's host comes from a root lookup at run time; narrow it if you know the host.
+- **One bridge per page.** The package installs a single bridge on the page's global object and reuses it for every client, so any script running in the same origin can reach it. Do not run untrusted script from the origin that uses this package.
 - **The bundle loads relative to the module URL.** `dist/dart/at_client.js` is injected by a `<script>` whose URL is resolved from `import.meta.url`, so it must stay beside `dist/index.js` on the origin that serves your app. Vite pre-bundles dependencies and would move the module away from it; exclude the package:
 
   ```ts
