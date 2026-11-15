@@ -9,11 +9,12 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+    outputs:
+      present: ${{ steps.token.outputs.present }}
     defaults:
       run:
         working-directory: packages/at_client_web
@@ -81,8 +82,41 @@ jobs:
         if: steps.token.outputs.present == 'true'
         run: npm run e2e
 
-      - name: Publish
+      - name: Pack
+        id: pack
         if: steps.token.outputs.present == 'true'
+        run: echo "file=$(npm pack --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.token.outputs.present == 'true'
+        with:
+          name: package
+          path: packages/at_client_web/${{ steps.pack.outputs.file }}
+          if-no-files-found: error
+
+  # Holds the OIDC permission and the npm token but runs none of the build
+  # tooling and restores no cache; it only publishes the tarball built above.
+  # Provenance takes the repository and commit from the OIDC token, so nothing
+  # is checked out.
+  publish:
+    needs: build
+    if: needs.build.outputs.present == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+          path: package
+
+      - name: Publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance --access public
+        run: npm publish package/*.tgz --provenance --access public
