@@ -19,7 +19,7 @@ void main() {
     final made = await Process.run('openssl', [
       'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', //
       '-subj', '/CN=127.0.0.1',
-      '-addext', 'subjectAltName=IP:127.0.0.1',
+      '-addext', 'subjectAltName=IP:127.0.0.1,IP:::1',
       // NOTE: macOS verifies through the system, which refuses a self-signed
       // certificate that names no server use.
       '-addext', 'extendedKeyUsage=serverAuth',
@@ -157,6 +157,22 @@ void main() {
           reason: 'and each write after it, which the closed socket refuses '
               'with a StateError');
     });
+  });
+
+  test(
+      'a bracketed IPv6 literal, as a URL writes it, reaches the server at '
+      'that address', () async {
+    final server = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv6, 0, serverContext);
+    addTearDown(server.close);
+    final accepted = server.first;
+
+    final client = await connectTls('[::1]', server.port,
+        context: clientContext, timeout: const Duration(seconds: 10));
+    addTearDown(client.destroy);
+
+    expect((await accepted).remoteAddress, InternetAddress.loopbackIPv6,
+        reason: 'the brackets are URL syntax, not part of the address');
   });
 
   group('against a server that never answers the handshake', () {
