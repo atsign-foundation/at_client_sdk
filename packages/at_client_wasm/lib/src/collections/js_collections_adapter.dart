@@ -14,6 +14,15 @@ typedef JsWhereClause = ({String path, String op, Object? value});
 /// milliseconds since the epoch (`availableAt` may be null).
 typedef JsItem = Map<String, Object?>;
 
+/// A record this device cannot read: its id, its owner and the code
+/// [W8.unreadable].
+typedef JsUnreadable = ({String id, String owner, String code});
+
+/// What [JsCollectionsAdapter.list] and [JsCollectionsAdapter.query]
+/// resolve with: the readable items in upstream order, and one entry per
+/// record that could not be read.
+typedef JsListing = ({List<JsItem> items, List<JsUnreadable> unreadable});
+
 /// An event as plain values: `type`, `id`, `owner` and the fields of that
 /// event type. See [JsCollectionsAdapter.watch].
 typedef JsEvent = Map<String, Object?>;
@@ -170,31 +179,16 @@ final class JsCollectionsAdapter {
         return item == null ? null : _item(item);
       });
 
-  /// Every item, in the order AtCollection returns them.
-  Future<List<JsItem>> list() => _guard(
-      () async => [for (final i in await _collection.getItems()) _item(i)]);
+  /// Every readable item, in the order AtCollection returns them, and the
+  /// records that could not be read. An unreadable record does not fail the
+  /// listing.
+  Future<JsListing> list() => _guard(() => _read(const []));
 
-  /// The items matching every clause, in the order AtCollection returns
-  /// them. Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `isNull`,
-  /// `isNotNull`.
-  Future<List<JsItem>> query(List<JsWhereClause> clauses) => _guard(() async {
-        var query = _collection.query();
-        for (final clause in clauses) {
-          query = query.wherePath(_predicate(clause));
-        }
-        final List<CItem<Map<String, dynamic>>> items;
-        try {
-          items = await query.get();
-        } on Error catch (e) {
-          // An ordering clause compared values of different types: a
-          // TypeError on the VM and dart2wasm, an ArgumentError from
-          // compareTo under dart2js.
-          if (e is! TypeError && e is! ArgumentError) rethrow;
-          throw JsCollectionsError(W8.typeMismatch,
-              'a where clause compared values of different types');
-        }
-        return [for (final item in items) _item(item)];
-      });
+  /// The readable items matching every clause, in the order AtCollection
+  /// returns them, and the records that could not be read. Operators: `==`,
+  /// `!=`, `<`, `<=`, `>`, `>=`, `isNull`, `isNotNull`.
+  Future<JsListing> query(List<JsWhereClause> clauses) =>
+      _guard(() => _read([for (final clause in clauses) _predicate(clause)]));
 
   /// Replaces the data of the item at [address], keeping its recipients,
   /// expiresAt and availableAt as just re-read.
@@ -274,6 +268,57 @@ final class JsCollectionsAdapter {
         id: address.id,
         owner: address.owner,
         stateError: stateError,
+      );
+
+  /// Reads every item through [AtCollection.getItemsAsStream], collecting a
+  /// [CItemReadException] per unreadable record instead of stopping at it,
+  /// and keeps the items that satisfy every one of [predicates].
+  Future<JsListing> _read(List<Predicate> predicates) async {
+    final readable = <CItem<Map<String, dynamic>>>[];
+    final unreadable = <JsUnreadable>[];
+    final done = Completer<void>();
+    final subscription = _collection.getItemsAsStream().listen(
+      readable.add,
+      onError: (Object error, StackTrace stack) {
+        if (error is CItemReadException) {
+          unreadable.add(_unreadable(error));
+        } else if (!done.isCompleted) {
+          done.completeError(error, stack);
+        }
+      },
+      onDone: () {
+        if (!done.isCompleted) done.complete();
+      },
+    );
+    try {
+      await done.future;
+    } finally {
+      await subscription.cancel();
+    }
+    final List<CItem<Map<String, dynamic>>> matching;
+    try {
+      matching = [
+        for (final item in readable)
+          if (predicates.every((p) => p.evaluate(item))) item
+      ];
+    } on Error catch (e) {
+      // An ordering clause compared values of different types: a
+      // TypeError on the VM and dart2wasm, an ArgumentError from
+      // compareTo under dart2js.
+      if (e is! TypeError && e is! ArgumentError) rethrow;
+      throw JsCollectionsError(
+          W8.typeMismatch, 'a where clause compared values of different types');
+    }
+    return (
+      items: [for (final i in matching) _item(i)],
+      unreadable: unreadable
+    );
+  }
+
+  static JsUnreadable _unreadable(CItemReadException error) => (
+        id: error.key.key.split('.').first,
+        owner: error.key.sharedBy ?? '',
+        code: W8.unreadable,
       );
 
   static void _checkId(String id) {
@@ -409,12 +454,12 @@ final class JsCollectionsAdapter {
     switch (error) {
       case JsCollectionsError():
         return error;
-      case CItemReadException(:final key):
+      case CItemReadException():
         // The cause can carry record content; it stays on the Dart side.
-        final keyId = key.key.split('.').first;
-        return JsCollectionsError(W8.unreadable,
-            'item $keyId owned by ${key.sharedBy} could not be read',
-            id: keyId, owner: key.sharedBy, kind: 'CItemReadException');
+        final (:id, :owner, code: _) = _unreadable(error);
+        return JsCollectionsError(
+            W8.unreadable, 'item $id owned by $owner could not be read',
+            id: id, owner: owner, kind: 'CItemReadException');
       case CollectionOpException(:final failures):
         return JsCollectionsError(
             W8.partialFailure, '${failures.length} key-level write(s) failed',

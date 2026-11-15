@@ -52,16 +52,11 @@ void main() {
   List<String> ids(List<JsItem> items) =>
       [for (final item in items) item['id'] as String];
 
-  // list() and query() resolve to `{items, unreadable}`.
-  Future<List<JsItem>> itemsOf(Future<dynamic> listing) async =>
-      [for (final i in (await listing).items as List) i as JsItem];
+  Future<List<JsItem>> itemsOf(Future<JsListing> listing) async =>
+      (await listing).items;
 
-  Future<List<Map<String, Object?>>> unreadableOf(
-          Future<dynamic> listing) async =>
-      [
-        for (final u in (await listing).unreadable as List)
-          {'id': u.id, 'owner': u.owner, 'code': u.code}
-      ];
+  Future<List<JsUnreadable>> unreadableOf(Future<JsListing> listing) async =>
+      (await listing).unreadable;
 
   /// @bob writes [id], shared with @alice, and makes @alice's copy of it
   /// unreadable.
@@ -295,9 +290,8 @@ void main() {
       await bobSharesUnreadable('b1');
 
       expect(ids(await itemsOf(todos.list())), ['a1']);
-      expect(await unreadableOf(todos.list()), [
-        {'id': 'b1', 'owner': '@bob', 'code': W8.unreadable}
-      ]);
+      expect(await unreadableOf(todos.list()),
+          [(id: 'b1', owner: '@bob', code: W8.unreadable)]);
       await expectLater(
         todos.get(bobs('b1')),
         _rejectsWith(W8.unreadable, id: 'b1', owner: '@bob'),
@@ -632,9 +626,8 @@ void main() {
       final clause = [(path: 'done', op: '==', value: false)];
 
       expect(ids(await itemsOf(todos.query(clause))).toSet(), {'a', 'c'});
-      expect(await unreadableOf(todos.query(clause)), [
-        {'id': 'b1', 'owner': '@bob', 'code': W8.unreadable}
-      ]);
+      expect(await unreadableOf(todos.query(clause)),
+          [(id: 'b1', owner: '@bob', code: W8.unreadable)]);
     });
 
     test(
@@ -660,7 +653,7 @@ void main() {
 
       expect(ids(await itemsOf(todos.query(clauses))), upstream);
       expect(
-        [for (final u in await unreadableOf(todos.query(clauses))) u['id']],
+        [for (final u in await unreadableOf(todos.query(clauses))) u.id],
         unorderedEquals(['a-bb', 'zz']),
       );
     });
