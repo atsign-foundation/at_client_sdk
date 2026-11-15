@@ -436,7 +436,8 @@ extension AtsignLifecycle on Atsign {
           enrollmentId
     ];
     if (matching.length > 1) {
-      throw AtEnrollmentPendingException.several(this, matching);
+      throw AtEnrollmentPendingException.several(this, matching,
+          source: keys.describeSource(this));
     }
     for (final enrollmentId in matching) {
       final info = stored.enrollmentInfo(enrollmentId);
@@ -493,8 +494,11 @@ extension AtsignLifecycle on Atsign {
     }
     if (!stored.holdsAuthenticationMaterial) {
       final pending = stored.pendingEnrollmentIds.toList();
-      if (pending.isNotEmpty) throw AtEnrollmentPendingException(this, pending);
-      throw AtNoCredentialException(this);
+      if (pending.isNotEmpty) {
+        throw AtEnrollmentPendingException(this, pending,
+            source: keys.describeSource(this));
+      }
+      throw AtNoCredentialException(this, source: keys.describeSource(this));
     }
     try {
       // NOTE: the keypair the authenticator signs with, resolved as it

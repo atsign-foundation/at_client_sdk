@@ -427,12 +427,31 @@ void main() {
     expect(
         run.stderr,
         holdsOnceInOrder([
-          'This keyfile holds only a pending enrollment request for $atSign '
-              '(id e-1). Once it is approved, run the same at_activate enroll '
-              'command again to finish it.',
+          'The keyfile at ${defaultKeyfile()} holds only a pending enrollment '
+              'request for $atSign (id e-1). Once it is approved, run the same '
+              'at_activate enroll command again to finish it.',
           footer,
         ]));
     expect(run.exitCode, 1);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('A keyfile left with no credential', () async {
+    await FileAtKeysIo(filePath: (_) => defaultKeyfile())
+        .write(atSign, AtKeys());
+
+    final run =
+        await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+
+    expect(
+        run.stderr,
+        holdsOnceInOrder([
+          'The keyfile at ${defaultKeyfile()} holds no credential for '
+              '$atSign: its enrollment was denied, cancelled or expired, or '
+              'never completed. Enroll this machine again.',
+          footer,
+        ]));
+    expect(run.exitCode, 1);
+    expect(directoryConnections, 0, reason: 'only absent keys are looked up');
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(

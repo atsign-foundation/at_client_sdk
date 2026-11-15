@@ -1417,6 +1417,7 @@ void main() {
                   unorderedEquals(['e-one', 'e-two']))
               .having((e) => e.cause, 'cause',
                   AtKeysUnusableCause.pendingEnrollment)
+              .having((e) => e.source, 'source', 'the keys store')
               .having((e) => e.severalMatched, 'severalMatched', isTrue)
               .having((e) => e.message, 'message', namesBothAndAsksForNames)));
     });

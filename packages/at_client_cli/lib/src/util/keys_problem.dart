@@ -45,6 +45,11 @@ void reportKeysProblem(AtKeysUnusableException e,
     AtKeysUnusableCause.pendingEnrollment
         when e is AtEnrollmentPendingException && !e.severalMatched =>
       [_waitForApproval(e)],
+    AtKeysUnusableCause.noCredential when e.source != null => [
+        'The keyfile at ${e.source} holds no credential for ${e.atSign}: its '
+            'enrollment was denied, cancelled or expired, or never completed. '
+            'Enroll this machine again.',
+      ],
     _ => [e.message],
   };
   stderr.writeln();
@@ -59,11 +64,13 @@ void reportKeysProblem(AtKeysUnusableException e,
 /// once one is approved, the enroll command that made it finishes it.
 String _waitForApproval(AtEnrollmentPendingException e) {
   final ids = e.pendingEnrollmentIds;
+  final keyfile =
+      e.source == null ? 'This keyfile' : 'The keyfile at ${e.source}';
   return ids.length == 1
-      ? 'This keyfile holds only a pending enrollment request for '
+      ? '$keyfile holds only a pending enrollment request for '
           '${e.atSign} (id ${ids.single}). Once it is approved, run the same '
           'at_activate enroll command again to finish it.'
-      : 'This keyfile holds only pending enrollment requests for '
+      : '$keyfile holds only pending enrollment requests for '
           '${e.atSign} (ids ${ids.join(', ')}). Once one is approved, run the '
           'at_activate enroll command that made it again to finish it.';
 }

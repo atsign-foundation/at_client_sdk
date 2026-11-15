@@ -433,16 +433,19 @@ void main() {
           bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 3))),
           createdAt: DateTime.now().toUtc(),
           status: CryptographicMaterialStatus.pending));
+    final pendingPath = '${dir.path}/keys/pending_key.atKeys';
+    await FileAtKeysIo(filePath: (_) => path).write(atSign, AtKeys());
+    await FileAtKeysIo(filePath: (_) => pendingPath).write(atSign, pending);
 
     AtNoCredentialException? noCredential;
     try {
-      await openUnconnected(InMemoryAtKeysIo.holding(atSign, AtKeys()));
+      await openUnconnected(FileAtKeysIo(filePath: (_) => path));
     } on AtNoCredentialException catch (e) {
       noCredential = e;
     }
     AtEnrollmentPendingException? onlyPending;
     try {
-      await openUnconnected(InMemoryAtKeysIo.holding(atSign, pending));
+      await openUnconnected(FileAtKeysIo(filePath: (_) => pendingPath));
     } on AtEnrollmentPendingException catch (e) {
       onlyPending = e;
     }
@@ -451,6 +454,7 @@ void main() {
         noCredential,
         isA<AtKeysUnusableException>()
             .having((e) => e.cause, 'cause', AtKeysUnusableCause.noCredential)
+            .having((e) => e.source, 'source', path)
             .having(
                 (e) => e.message,
                 'message',
@@ -462,6 +466,7 @@ void main() {
         isA<AtEnrollmentPendingException>()
             .having(
                 (e) => e.cause, 'cause', AtKeysUnusableCause.pendingEnrollment)
+            .having((e) => e.source, 'source', pendingPath)
             .having(
                 (e) => e.message,
                 'message',

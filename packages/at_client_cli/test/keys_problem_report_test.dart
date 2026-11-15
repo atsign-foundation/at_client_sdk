@@ -5,7 +5,7 @@ import 'package:at_client_cli/src/util/keys_problem.dart';
 import 'package:test/test.dart';
 
 /// The one message `reportKeysProblem` writes for keys holding pending
-/// enrollment requests.
+/// enrollment requests or no credential.
 void main() {
   const atSign = '@alice';
 
@@ -69,6 +69,46 @@ void main() {
             'command that made it again to finish it.',
         keysProblemFooter,
       ]);
+    });
+
+    test('when two are reported with their keyfile, then the report names it',
+        () {
+      final lines = stderrOf(() => reportKeysProblem(
+          AtEnrollmentPendingException(atSign, ['e-1', 'e-2'],
+              source: '/keys/alice.atKeys'),
+          absentHint: const []));
+
+      expect(lines, [
+        'The keyfile at /keys/alice.atKeys holds only pending enrollment '
+            'requests for $atSign (ids e-1, e-2). Once one is approved, run '
+            'the at_activate enroll command that made it again to finish it.',
+        keysProblemFooter,
+      ]);
+    });
+  });
+
+  group('Given keys holding no credential', () {
+    test('when reported with their keyfile, then the report names it', () {
+      final lines = stderrOf(() => reportKeysProblem(
+          AtNoCredentialException(atSign, source: '/keys/alice.atKeys'),
+          absentHint: const []));
+
+      expect(lines, [
+        'The keyfile at /keys/alice.atKeys holds no credential for $atSign: '
+            'its enrollment was denied, cancelled or expired, or never '
+            'completed. Enroll this machine again.',
+        keysProblemFooter,
+      ]);
+    });
+
+    test('when reported with no keyfile, then the report gives its message',
+        () {
+      final noCredential = AtNoCredentialException(atSign);
+
+      final lines =
+          stderrOf(() => reportKeysProblem(noCredential, absentHint: const []));
+
+      expect(lines, [noCredential.message, keysProblemFooter]);
     });
   });
 }

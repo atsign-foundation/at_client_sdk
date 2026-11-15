@@ -445,7 +445,7 @@ class AtEnrollmentCancelledException extends AtEnrollmentException {
 ///
 /// Its cause is [AtKeysUnusableCause.noCredential].
 class AtNoCredentialException extends AtKeysUnusableException {
-  AtNoCredentialException(String atSign)
+  AtNoCredentialException(String atSign, {super.source})
       : super(
             '$atSign holds no credential in this keyfile: its enrollment '
             'was denied, cancelled or expired, or never completed, so there '
@@ -468,7 +468,8 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
   /// enrollments that match what it was given, which waiting cannot resolve.
   final bool severalMatched;
 
-  AtEnrollmentPendingException(String atSign, this.pendingEnrollmentIds)
+  AtEnrollmentPendingException(String atSign, this.pendingEnrollmentIds,
+      {super.source})
       : severalMatched = false,
         super(
             '$atSign holds no live credential, only the pending enrollment'
@@ -480,7 +481,8 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
 
   /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
   /// enrollments of [atSign] matching what it was given.
-  AtEnrollmentPendingException.several(String atSign, this.pendingEnrollmentIds)
+  AtEnrollmentPendingException.several(String atSign, this.pendingEnrollmentIds,
+      {super.source})
       : severalMatched = true,
         super(
             '$atSign holds several pending enrollments that match: '
