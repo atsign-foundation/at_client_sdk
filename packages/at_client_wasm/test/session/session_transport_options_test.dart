@@ -84,12 +84,16 @@ void main() {
     });
 
     test(
-        'when its host holds whitespace, a colon or a slash, then it throws '
-        'naming root', () {
+        'when its host holds whitespace, a colon, a slash, a backslash, ?, # '
+        'or @, then it throws naming root', () {
       for (final domain in [
         'proxy:proxy example',
         'proxy:proxy.example:443',
         'proxy:proxy.example/ws',
+        r'proxy:proxy.example\evil',
+        'proxy:proxy.example?x',
+        'proxy:proxy.example#x',
+        'proxy:user@other.host',
       ]) {
         expect(() => SessionTransportOptions(root: AtRootDomain(domain, 443)),
             _namingField('root'),
@@ -118,13 +122,17 @@ void main() {
 
   group('Given a proxyHost', () {
     test(
-        'when it holds whitespace, a colon or a slash, then it throws naming '
-        'proxyHost', () {
+        'when it holds whitespace, a colon, a slash, a backslash, ?, # or @, '
+        'then it throws naming proxyHost', () {
       for (final host in [
         'proxy example',
         'proxy.example:443',
         'proxy.example/ws',
         'https://proxy.example',
+        r'proxy.example\evil',
+        'proxy.example?x',
+        'proxy.example#x',
+        'user@other.host',
         '[::1]:443',
         '[not:an:address]',
       ]) {
@@ -142,14 +150,18 @@ void main() {
 
   group('Given a direct root', () {
     test(
-        'when its host is empty or holds whitespace, a colon or a slash, then '
-        'it throws naming root', () {
+        'when its host is empty or holds whitespace, a colon, a slash, a '
+        'backslash, ?, # or @, then it throws naming root', () {
       for (final domain in [
         '',
         ' ',
         'root example',
         'root.example:64',
         'root.example/x',
+        r'root.example\x',
+        'root.example?x',
+        'root.example#x',
+        'user@root.example',
       ]) {
         expect(() => SessionTransportOptions(root: AtRootDomain(domain, 64)),
             _namingField('root'),
