@@ -118,11 +118,10 @@ void main() {
     test(
         'when a prefs differs from it only in the case of its host, then the '
         'open goes ahead', () async {
-      await expectLater(
-          open(
-              over: transport(root: root),
-              prefs: prefsOn('Root.Example', 6464)),
-          completion(isA<AtClient>()),
+      final opened = await open(
+              over: transport(root: root), prefs: prefsOn('Root.Example', 6464))
+          .then<Object>((c) => c, onError: (Object e) => e);
+      expect(opened, isA<AtClient>(),
           reason: 'host names are compared ignoring case');
     });
 
