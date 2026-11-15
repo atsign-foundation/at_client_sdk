@@ -7,23 +7,42 @@
 AGENTS.md                                 @gkc @cconstab
 CLAUDE.md                                 @gkc @cconstab
 
-# The guards invariants.md names as a rule's check, outside test/architecture/.
-/.github/pull_request_template.md                          @gkc @cconstab
-/.github/workflows/at_libraries.yaml                       @gkc @cconstab
-/docs/sdk-shape.md                                         @gkc @cconstab
-/tools/check_architecture.sh                               @gkc @cconstab
-/tools/wasm_shakedown/                                     @gkc @cconstab
-/tests/released_envelope/                                  @gkc @cconstab
-/tests/upgrade/released/                                   @gkc @cconstab
-/packages/at_auth/test/at_keys_golden_test.dart            @gkc @cconstab
-/packages/at_auth/test/wire_literal_pins_test.dart         @gkc @cconstab
-/packages/at_chops/test/wire_literal_pins_test.dart        @gkc @cconstab
+# The tests, gates and CI workflows invariants.md names as a rule's check,
+# outside test/architecture/, with the fixtures and vectors they read.
+/.github/pull_request_template.md                                @gkc @cconstab
+/.github/workflows/at_client_sdk.yaml                            @gkc @cconstab
+/.github/workflows/at_libraries.yaml                             @gkc @cconstab
+/docs/sdk-shape.md                                               @gkc @cconstab
+/tools/check_architecture.sh                                     @gkc @cconstab
+/tools/wasm_shakedown/                                           @gkc @cconstab
+/tests/released_envelope/                                        @gkc @cconstab
+/tests/upgrade/                                                  @gkc @cconstab
+/tests/at_functional_test/test/upgrade_test.dart                 @gkc @cconstab
+/packages/at_auth/test/at_keys_golden_test.dart                  @gkc @cconstab
+/packages/at_auth/test/wire_literal_pins_test.dart               @gkc @cconstab
+/packages/at_chops/test/wire_literal_pins_test.dart              @gkc @cconstab
 /packages/at_client/test/acceptance/architecture_guard_test.dart @gkc @cconstab
-/packages/at_client/test/import_topology_test.dart         @gkc @cconstab
-/packages/at_client/test/public_api_surface_test.dart      @gkc @cconstab
-/packages/at_client/test/storage/import_boundary_test.dart @gkc @cconstab
-/packages/at_client/test/storage/storage_contract.dart     @gkc @cconstab
-/packages/at_client/test/web_safe_test.dart                @gkc @cconstab
-/packages/at_client/test/wire_literal_pins_test.dart       @gkc @cconstab
-/packages/at_lookup/test/web_safe_test.dart                @gkc @cconstab
-/packages/at_utils/test/web_safe_test.dart                 @gkc @cconstab
+/packages/at_client/test/import_topology_test.dart               @gkc @cconstab
+/packages/at_client/test/public_api_surface_test.dart            @gkc @cconstab
+/packages/at_client/test/rollout_axis_pinning_test.dart          @gkc @cconstab
+/packages/at_client/test/storage/                                @gkc @cconstab
+/packages/at_client/test/vectors/jws_envelope.json               @gkc @cconstab
+/packages/at_client/test/web_safe_test.dart                      @gkc @cconstab
+/packages/at_client/test/wire_literal_pins_test.dart             @gkc @cconstab
+/packages/at_lookup/test/web_safe_test.dart                      @gkc @cconstab
+/packages/at_utils/test/web_safe_test.dart                       @gkc @cconstab
+
+# The lint settings A1 is held by, in each workspace package.
+/packages/at_auth/analysis_options.yaml                          @gkc @cconstab
+/packages/at_chops/analysis_options.yaml                         @gkc @cconstab
+/packages/at_cli_commons/analysis_options.yaml                   @gkc @cconstab
+/packages/at_client/analysis_options.yaml                        @gkc @cconstab
+/packages/at_client_cli/analysis_options.yaml                    @gkc @cconstab
+/packages/at_client_flutter/analysis_options.yaml                @gkc @cconstab
+/packages/at_commons/analysis_options.yaml                       @gkc @cconstab
+/packages/at_contact/analysis_options.yaml                       @gkc @cconstab
+/packages/at_lookup/analysis_options.yaml                        @gkc @cconstab
+/packages/at_onboarding_cli/analysis_options.yaml                @gkc @cconstab
+/packages/at_policy/analysis_options.yaml                        @gkc @cconstab
+/packages/at_telemetry/analysis_options.yaml                     @gkc @cconstab
+/packages/at_utils/analysis_options.yaml                         @gkc @cconstab
