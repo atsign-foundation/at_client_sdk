@@ -21,8 +21,9 @@ typedef JsEvent = Map<String, Object?>;
 /// The W8 error codes a [JsCollectionsError] carries (js-api.md §6.1).
 abstract final class W8 {
   /// A malformed argument: an unknown eventSource or operator, a
-  /// non-positive expirationMs, an empty type or path segment, a value an operator cannot compare, or an
-  /// invalid atSign or id.
+  /// non-positive expirationMs, an empty type or path segment, a value an
+  /// operator cannot compare, an invalid atSign, or an item id outside
+  /// [JsCollectionsAdapter.idPattern].
   static const invalidArgument = 'W8_INVALID_ARGUMENT';
 
   /// No item with that id and owner.
@@ -97,6 +98,9 @@ final class JsCollectionsAdapter {
 
   final AtCollection<Map<String, dynamic>> _collection;
 
+  /// The ids the adapter accepts on every address.
+  static final idPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
+
   static const _eventSources = {
     'data': EventSource.data,
     'notifs': EventSource.notifs,
@@ -145,11 +149,14 @@ final class JsCollectionsAdapter {
     List<String> sharedWith = const [],
   }) =>
       _guard(
-        () async => _item(await _collection.create(
-          obj: data,
-          id: id,
-          sharedWith: {for (final a in sharedWith) a.toAtsign()},
-        )),
+        () async {
+          if (id != null) _checkId(id);
+          return _item(await _collection.create(
+            obj: data,
+            id: id,
+            sharedWith: {for (final a in sharedWith) a.toAtsign()},
+          ));
+        },
         id: id,
         owner: _collection.atSign,
         stateError: id == null ? null : W8.alreadyExists,
@@ -157,6 +164,7 @@ final class JsCollectionsAdapter {
 
   /// The item at [address], or null when there is none.
   Future<JsItem?> get(JsItemAddress address) => _guard(() async {
+        _checkId(address.id);
         final item =
             await _collection.getOrNull(address.id, address.owner.toAtsign());
         return item == null ? null : _item(item);
@@ -253,6 +261,7 @@ final class JsCollectionsAdapter {
   }) =>
       _guard(
         () async {
+          _checkId(address.id);
           final owner = address.owner.toAtsign();
           if (owner != _collection.atSign) {
             throw JsCollectionsError(W8.notOwner,
@@ -266,6 +275,13 @@ final class JsCollectionsAdapter {
         owner: address.owner,
         stateError: stateError,
       );
+
+  static void _checkId(String id) {
+    if (!idPattern.hasMatch(id)) {
+      throw JsCollectionsError(
+          W8.invalidArgument, 'an item id must match ${idPattern.pattern}');
+    }
+  }
 
   static Predicate _predicate(JsWhereClause clause) {
     final segments = clause.path.split('.');
