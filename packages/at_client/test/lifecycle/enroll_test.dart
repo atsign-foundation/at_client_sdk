@@ -17,6 +17,7 @@ import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/recorded_logs.dart';
@@ -1568,7 +1569,7 @@ void main() {
           .toList();
       expect(installed, hasLength(1),
           reason: 'the control: the handshake installs one authenticator');
-      final recorder = _FromRecorder();
+      final recorder = FromRecorder();
       await installed.single(recorder);
       const prefix = 'from:$atSign:clientConfig:';
       expect(recorder.from, startsWith(prefix));
@@ -1580,11 +1581,7 @@ void main() {
       expect(config['appName'], 'acme_chat');
       expect(config['appVersion'], '2.3.1');
       expect(config['sdkName'], 'atsign.dart.at_client');
-      expect(
-          config['sdkVersion'],
-          RegExp(r'^version:\s*(\S+)', multiLine: true)
-              .firstMatch(File('pubspec.yaml').readAsStringSync())!
-              .group(1));
+      expect(config['sdkVersion'], pubspecVersion());
     }
 
     test(
@@ -1631,7 +1628,37 @@ void main() {
     });
 
     test(
-        'Given a PendingEnrollment built with no clientConfig, when it waits '
+        'Given a PendingEnrollment built with particulars, when it waits for '
+        'approval, then the handshake\'s from: names the app and at_client',
+        () async {
+      final store = InMemoryAtKeysIo();
+      final server = atServer(decide: (_) async => true);
+      final submitted = await submit(store, server);
+      final built = PendingEnrollment(
+          atSign: submitted.atSign,
+          enrollmentId: submitted.enrollmentId,
+          app: submitted.app,
+          device: submitted.device,
+          namespaces: submitted.namespaces,
+          keys: store,
+          rootDomain: submitted.rootDomain,
+          signingAlgo: submitted.signingAlgo,
+          keyExchangeMode: submitted.keyExchangeMode,
+          atLookUp: server,
+          particulars: AtClientParticulars()
+            ..appName = 'acme_chat'
+            ..appVersion = '2.3.1',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory());
+
+      await built.awaitApproval(
+          retryInterval: const Duration(milliseconds: 10));
+
+      expectNamesAcmeChatAndAtClient(await handshakeConfig(server));
+    });
+
+    test(
+        'Given a PendingEnrollment built with no particulars, when it waits '
         'for approval, then the handshake\'s from: names at_client', () async {
       final store = InMemoryAtKeysIo();
       final server = atServer(decide: (_) async => true);
@@ -1658,19 +1685,6 @@ void main() {
       expect(config['appVersion'], 'unknown');
     });
   });
-}
-
-/// Keeps the `from:` an authenticator sends, answering it with nothing so the
-/// authenticator stops there.
-class _FromRecorder implements AtCommandExecutor {
-  String? from;
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    from ??= command;
-    return '';
-  }
 }
 
 /// An in-memory store whose updates take turns, each taking a moment to land,

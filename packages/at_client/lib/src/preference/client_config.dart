@@ -1,4 +1,4 @@
-import 'package:at_auth/at_auth.dart' show clientConfigFor;
+import 'package:at_auth/at_auth.dart' show AtEnrollment, clientConfigFor;
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/version.dart';
 
@@ -16,3 +16,9 @@ Map<String, String> clientConfigOf(AtClientParticulars? particulars) =>
         appVersion: particulars?.appVersion,
         sdkName: atClientSdkName,
         sdkVersion: packageVersion);
+
+/// An enrollment whose approval handshake's `from:` carries
+/// [clientConfigOf] [particulars]: the one way at_client builds an
+/// [AtEnrollment].
+AtEnrollment enrollmentFor(AtClientParticulars? particulars) =>
+    AtEnrollment.create(clientConfig: clientConfigOf(particulars));

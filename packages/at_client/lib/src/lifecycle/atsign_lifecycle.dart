@@ -372,7 +372,8 @@ extension AtsignLifecycle on Atsign {
             secondaryAddressFinder: secondaryAddressFinder);
     final AtEnrollmentResponse response;
     try {
-      response = await AtEnrollment.create().submit(request, lookUp);
+      response = await enrollmentFor(preference.atClientParticulars)
+          .submit(request, lookUp);
     } finally {
       if (atLookUp == null) await lookUp.close();
     }
@@ -397,7 +398,7 @@ extension AtsignLifecycle on Atsign {
         signingAlgo: algo,
         keyExchangeMode: mode,
         atLookUp: atLookUp,
-        clientConfig: clientConfigOf(preference.atClientParticulars),
+        particulars: preference.atClientParticulars,
         lookUps: lookUps,
         secondaryAddressFinder: secondaryAddressFinder);
   }
@@ -467,7 +468,7 @@ extension AtsignLifecycle on Atsign {
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
           atLookUp: atLookUp,
-          clientConfig: clientConfigOf(preference.atClientParticulars),
+          particulars: preference.atClientParticulars,
           lookUps: lookUps,
           secondaryAddressFinder: secondaryAddressFinder);
     }

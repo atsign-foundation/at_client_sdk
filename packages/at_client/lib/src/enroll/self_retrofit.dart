@@ -144,7 +144,8 @@ Future<AtClient> selfRetrofit({
       connectBudget: connectBudget);
 
   try {
-    final granted = (await EnrollmentServiceImpl(client, AtEnrollment.create())
+    final granted = (await EnrollmentServiceImpl(
+                client, enrollmentFor(preference.atClientParticulars))
             .fetchEnrollmentRequests())
         .where((e) => e.enrollmentId == newSession.enrollmentId)
         .firstOrNull
@@ -227,7 +228,7 @@ Future<AtAuthSession> retrofitIdentity({
 
   final AtEnrollmentResponse response;
   try {
-    response = await AtEnrollment.create().submit(
+    response = await enrollmentFor(preference.atClientParticulars).submit(
         AtSelfEnrollmentRequest(
             session: session,
             appName: appName,

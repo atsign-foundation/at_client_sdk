@@ -5,6 +5,7 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
@@ -69,8 +70,9 @@ class PendingEnrollment {
   /// ones the client opened on the completed keys uses, each to the atServer
   /// [secondaryAddressFinder] finds; [atLookUp] is a connection for the
   /// handshake instead, for a caller that already holds one, and is left
-  /// open. The handshake's `from:` carries [clientConfig], at_client's alone
-  /// when it is null.
+  /// open. The handshake's `from:` names the app [particulars] name, as a
+  /// client's `AtClientPreference.atClientParticulars` do, and at_client as
+  /// the SDK; with no [particulars] the app is named after its program file.
   PendingEnrollment({
     required this.atSign,
     required this.enrollmentId,
@@ -82,14 +84,13 @@ class PendingEnrollment {
     required this.signingAlgo,
     required this.keyExchangeMode,
     AtLookupMuxable? atLookUp,
-    Map<String, dynamic>? clientConfig,
+    AtClientParticulars? particulars,
     required AtLookUpFactory lookUps,
     required SecondaryAddressFinder secondaryAddressFinder,
   })  : _atLookUp = atLookUp,
         _lookUps = lookUps,
         _secondaryAddressFinder = secondaryAddressFinder,
-        _enrollment = AtEnrollment.create(
-            clientConfig: clientConfig ?? clientConfigOf(null)),
+        _enrollment = enrollmentFor(particulars),
         _logger = AtSignLogger('PendingEnrollment ($atSign)');
 
   /// Waits for the manager's decision, and on approval completes the keys in

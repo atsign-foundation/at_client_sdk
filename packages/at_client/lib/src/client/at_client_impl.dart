@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart'
-    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
+import 'package:at_auth/at_auth.dart' show AtAuthSession, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_client/src/enroll/first_enrollment.dart'
@@ -29,6 +28,7 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeedOutcome, NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/preference/posture_floor.dart';
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
@@ -1053,11 +1053,12 @@ class AtClientImpl implements AtClient {
       createsSigningRoot:
           _configuredPreference?.posture.configuresPqProviders ?? true,
       privilege: EnrollmentRecordPrivilegeResolver(this,
-          listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
+          listEnrollments: EnrollmentServiceImpl(
+                  this, enrollmentFor(_preference?.atClientParticulars))
               .fetchEnrollmentRequests),
-      sweepUnanchoredEnrollments: () =>
-          EnrollmentServiceImpl(this, AtEnrollment.create())
-              .sweepUnanchoredEnrollments(),
+      sweepUnanchoredEnrollments: () => EnrollmentServiceImpl(
+              this, enrollmentFor(_preference?.atClientParticulars))
+          .sweepUnanchoredEnrollments(),
     );
 
     _adoptEraCryptoDefault();
