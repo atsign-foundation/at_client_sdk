@@ -10,13 +10,16 @@ const certsDirVariable = 'AT_VE_CERTS_DIR';
 /// A proxy's `/ws` over TLS on a loopback port, serving the virtual
 /// environment's certificate. Sends its port, answers every frame with
 /// `data:ok`, and answers any message on [channel] with the frames received
-/// so far. Throws, naming [certsDirVariable], when that is not set.
+/// so far. When [certsDirVariable] is not set it binds nothing and sends,
+/// instead of a port, the reason to skip, naming the variable.
 void hybridMain(StreamChannel channel) async {
   final certs = Platform.environment[certsDirVariable];
   if (certs == null || certs.isEmpty) {
-    throw StateError('$certsDirVariable is not set: point it at an at_server '
-        "checkout's tools/build_virtual_environment/ve_base/contents/atsign/"
-        'secondary/base/certs');
+    channel.sink.add('$certsDirVariable is not set: point it at an at_server '
+        "checkout's tools/build_virtual_environment/ve_base/contents/"
+        'atsign/secondary/base/certs');
+    await channel.sink.close();
+    return;
   }
   final context = SecurityContext()
     ..useCertificateChain('$certs/fullchain.pem')

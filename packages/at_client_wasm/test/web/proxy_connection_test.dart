@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 /// locally, map vip.ve.atsign.zone to 127.0.0.1 in /etc/hosts, as the virtual
 /// environment needs, and set `AT_VE_CERTS_DIR` to an at_server checkout's
 /// `tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs`.
+/// Without it the test is skipped, and the skip reason names the variable.
 void main() {
   test(
       "a connection from a proxy transport's own lookups sends from:@alice "
@@ -18,6 +19,10 @@ void main() {
     addTearDown(proxy.sink.close);
     final replies = StreamIterator(proxy.stream);
     await replies.moveNext();
+    if (replies.current is String) {
+      markTestSkipped(replies.current as String);
+      return;
+    }
     final transport = sessionTransport(SessionTransportOptions(
         proxyHost: 'vip.ve.atsign.zone',
         proxyPort: (replies.current as num).toInt()));
