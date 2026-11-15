@@ -83,11 +83,14 @@ JSPromise<T> _promise<T extends JSAny?>(FutureOr<T> Function() body) =>
               _Rejection(code: atErrorCode(error), message: error.toString())));
     }.toJS);
 
+/// An argument error that names the parameter and the type it expects, never
+/// the value received.
+ArgumentError _expected(String name, String type) =>
+    ArgumentError('$name must be $type');
+
 String? _optionalString(JSAny? value, String name) {
   if (value == null || value.isUndefinedOrNull) return null;
-  if (!value.isA<JSString>()) {
-    throw ArgumentError.value(value.dartify(), name, 'must be a string');
-  }
+  if (!value.isA<JSString>()) throw _expected(name, 'a string');
   return (value as JSString).toDart;
 }
 
@@ -99,7 +102,7 @@ String? _field(JSObject object, String name) =>
 
 JsKey _jsKey(JSAny? value) {
   if (value == null || !value.isA<JSObject>()) {
-    throw ArgumentError.value(value.dartify(), 'key', 'must be an object');
+    throw _expected('key', 'an object');
   }
   final object = value as JSObject;
   return JsKey(_string(object['key'], 'key'),
@@ -114,8 +117,7 @@ Object _storable(JSAny? value) {
   if (value != null && value.isA<JSUint8Array>()) {
     return Uint8List.fromList((value as JSUint8Array).toDart);
   }
-  throw ArgumentError.value(
-      value.dartify(), 'value', 'must be a string or Uint8Array');
+  throw _expected('value', 'a string or Uint8Array');
 }
 
 JSAny? _readable(Object? value) => switch (value) {
@@ -273,7 +275,7 @@ class AtClientWebBridge {
 
   BridgeOptions _options(JSAny? opts) {
     if (opts == null || !opts.isA<JSObject>()) {
-      throw ArgumentError.value(opts.dartify(), 'opts', 'must be an object');
+      throw _expected('opts', 'an object');
     }
     final object = opts as JSObject;
     final namespace = _string(object['namespace'], 'namespace');

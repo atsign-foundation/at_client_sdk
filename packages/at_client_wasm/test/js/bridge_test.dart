@@ -378,6 +378,73 @@ void main() {
     });
   });
 
+  group('argument errors', () {
+    const sentinel = 'sentinel-value-7f3a';
+    JSObject wrapped() => _obj({
+          'inner': sentinel,
+          'list': [sentinel]
+        })
+          ..['toString'] = (() => sentinel.toJS).toJS;
+    final options =
+        _obj({'atSign': '@alice', 'namespace': 'tally', 'rpName': 'Tally'});
+
+    Future<void> expectNamed(JSAny? promise, String parameter) async {
+      final r = await _rejected(promise);
+      expect(r.code, 'internal');
+      expect(r.message, contains(parameter));
+      expect(r.message, isNot(contains(sentinel)));
+    }
+
+    test('onboard names cram and deviceName without their values', () async {
+      await expectNamed(_call(api, 'onboard', [options, wrapped()]), 'cram');
+      await expectNamed(
+          _call(api, 'onboard', [options, 'c'.toJS, wrapped()]), 'deviceName');
+    });
+
+    test('enroll names appName, deviceName and otp without their values',
+        () async {
+      JSAny? enroll(List<JSAny?> rest) =>
+          _call(api, 'enroll', [options, ...rest]);
+      await expectNamed(enroll([wrapped(), 'd'.toJS, 'o'.toJS]), 'appName');
+      await expectNamed(enroll(['a'.toJS, wrapped(), 'o'.toJS]), 'deviceName');
+      await expectNamed(enroll(['a'.toJS, 'd'.toJS, wrapped()]), 'otp');
+    });
+
+    test('options name the parameter without its value', () async {
+      await expectNamed(_call(api, 'create', [wrapped()]), 'namespace');
+      await expectNamed(_call(api, 'create', [sentinel.toJS]), 'opts');
+      await expectNamed(
+          _call(api, 'create', [
+            _obj({'atSign': wrapped(), 'namespace': 'n', 'rpName': 'r'})
+          ]),
+          'atSign');
+    });
+
+    test('session calls name the parameter without its value', () async {
+      final s = await create();
+      await expectNamed(
+          _call(s, 'put', [
+            _obj({'key': 'k'}),
+            wrapped()
+          ]),
+          'value');
+      await expectNamed(_call(s, 'put', [sentinel.toJS, 'v'.toJS]), 'key');
+      await expectNamed(
+          _call(s, 'get', [
+            _obj({'key': wrapped()})
+          ]),
+          'key');
+      await expectNamed(_call(s, 'keys', [wrapped()]), 'regex');
+      await expectNamed(
+          _call(s, 'notify', [
+            _obj({'key': 'k'}),
+            wrapped()
+          ]),
+          'value');
+      await expectNamed(_call(s, 'approve', [wrapped()]), 'id');
+    });
+  });
+
   group('session', () {
     late JSObject s;
 
