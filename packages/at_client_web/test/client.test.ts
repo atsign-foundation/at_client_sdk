@@ -296,6 +296,20 @@ describe('subscribe', () => {
     ...over,
   });
 
+  it('throws the AtError of a {code, message} the bridge answers with', async () => {
+    const client = await AtClient.create(opts);
+    fake.session.subscribe.mockReturnValueOnce({ code: 'closed', message: 'the session is closed' } as never);
+    expect(() => client.subscribe()).toThrow(expect.objectContaining({ name: 'AtError', code: 'closed' }));
+  });
+
+  it('throws the AtError of a {code, message} the bridge throws', async () => {
+    const client = await AtClient.create(opts);
+    fake.session.subscribe.mockImplementationOnce(() => {
+      throw { code: 'closed', message: 'the session is closed' };
+    });
+    expect(() => client.subscribe()).toThrow(expect.objectContaining({ code: 'closed' }));
+  });
+
   it('registers on the bridge at call time, not at the first next()', async () => {
     const client = await AtClient.create(opts);
     client.subscribe('rpc');

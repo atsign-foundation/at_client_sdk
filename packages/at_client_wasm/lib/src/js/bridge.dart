@@ -174,21 +174,27 @@ class BridgeSession {
 
   /// Calls [callback] with each notification matching [regex] as
   /// `{id, from, key, value, epochMillis, operation}`; returns the function that
-  /// unsubscribes.
-  JSFunction subscribe(JSAny? regex, JSFunction callback) {
-    final unsubscribe = _session.subscribe(
-        _string(regex, 'regex'),
-        (n) => callback.callAsFunction(
-            null,
-            {
-              'id': n.id,
-              'from': n.from,
-              'key': n.key,
-              'value': n.value,
-              'epochMillis': n.epochMillis,
-              'operation': n.operation,
-            }.jsify()));
-    return unsubscribe.toJS;
+  /// unsubscribes, or, when it cannot subscribe, the `{code, message}` object
+  /// the promises reject with. It does not throw: a Dart `throw` reaches JS
+  /// wrapped, with no `code` for the caller to read.
+  JSAny subscribe(JSAny? regex, JSFunction callback) {
+    try {
+      final unsubscribe = _session.subscribe(
+          _string(regex, 'regex'),
+          (n) => callback.callAsFunction(
+              null,
+              {
+                'id': n.id,
+                'from': n.from,
+                'key': n.key,
+                'value': n.value,
+                'epochMillis': n.epochMillis,
+                'operation': n.operation,
+              }.jsify()));
+      return unsubscribe.toJS;
+    } on Object catch (error) {
+      return _Rejection(code: atErrorCode(error), message: error.toString());
+    }
   }
 
   /// A one-time passcode for a new device to enroll with.

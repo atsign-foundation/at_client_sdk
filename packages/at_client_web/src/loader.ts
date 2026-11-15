@@ -34,7 +34,15 @@ export interface BridgeSession {
   delete(key: BridgeKey): Promise<unknown>;
   keys(regex?: string): Promise<string[]>;
   notify(key: BridgeKey, value: string): Promise<boolean>;
-  subscribe(regex: string, listener: (notification: BridgeNotification) => void): () => void;
+  /**
+   * The function that unsubscribes. A subscription the bridge cannot make is
+   * answered with its `{code, message}` failure instead of a throw, which
+   * would reach this side without a code.
+   */
+  subscribe(
+    regex: string,
+    listener: (notification: BridgeNotification) => void,
+  ): (() => void) | { code: string; message: string };
   otp(): Promise<string>;
   pendingEnrollments(): Promise<BridgeEnrollment[]>;
   approve(id: string): Promise<unknown>;

@@ -618,6 +618,32 @@ void main() {
       expect(session.listeners, isEmpty);
     });
 
+    group('subscribe failures', () {
+      // The `{code, message}` a failed subscribe answers with, in place of
+      // the unsubscribe function.
+      JSObject failed(JSAny? regex) {
+        final result = _call(s, 'subscribe', [regex, (() {}).toJS]);
+        expect(result.isA<JSFunction>(), isFalse);
+        return result! as JSObject;
+      }
+
+      test('after close it answers {code: closed, message}', () async {
+        await _resolved(_call(s, 'close'));
+
+        final e = failed('x'.toJS);
+
+        expect(e['code'].dartify(), 'closed');
+        expect(e['message'].dartify(), isA<String>());
+      });
+
+      test('a bad argument answers {code: internal, message} naming it', () {
+        final e = failed(5.toJS);
+
+        expect(e['code'].dartify(), 'internal');
+        expect(e['message'].dartify() as String, contains('regex'));
+      });
+    });
+
     test('close stops the session and later calls reject with closed',
         () async {
       await _resolved(_call(s, 'close'));

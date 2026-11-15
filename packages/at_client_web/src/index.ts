@@ -246,10 +246,12 @@ export class AtClient implements AtClientLike {
       unsubscribe?.();
     });
     try {
-      unsubscribe = this.session.subscribe(
+      const subscribed = this.session.subscribe(
         regex ?? `\\.${this.namespace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}@`,
         (notification) => queue.push(this.event(notification)),
       );
+      if (typeof subscribed !== 'function') throw subscribed;
+      unsubscribe = subscribed;
     } catch (error) {
       throw toAtError(error);
     }
