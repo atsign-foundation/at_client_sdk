@@ -9,6 +9,7 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:test/test.dart';
 
 import 'test_utils/fake_at_server.dart';
+import 'test_utils/from_recorder.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/recorded_logs.dart';
 import 'test_utils/test_keypairs.dart';
@@ -17,9 +18,7 @@ import 'test_utils/test_keypairs.dart';
 void main() {
   const atSign = '@alice';
   const prefix = 'from:$atSign:clientConfig:';
-  final atClientVersion = RegExp(r'^version:\s*(\S+)', multiLine: true)
-      .firstMatch(File('pubspec.yaml').readAsStringSync())!
-      .group(1)!;
+  final atClientVersion = pubspecVersion();
   final keys = keysHoldingApkam(atSign, null, pkamKeyPairFor(atSign, null));
 
   tearDown(() async {
@@ -54,11 +53,13 @@ void main() {
             'declares');
   }
 
-  /// A client for [atSign] whose particulars name [appName] at [appVersion],
-  /// opened over a fake atServer that runs the client's own authenticator.
+  /// A client for [atSign] whose particulars name [appName] at [appVersion]
+  /// on [platform], opened over a fake atServer that runs the client's own
+  /// authenticator.
   Future<(AtClient, FakeAtServer)> openClient(
       {String? appName = 'acme_chat',
       String? appVersion = '2.3.1',
+      String? platform,
       String rootDomain = '127.0.0.1'}) async {
     final server = FakeAtServer(atSign: atSign, runsClientAuthenticator: true);
     final client = await Atsign(atSign).open(
@@ -67,7 +68,8 @@ void main() {
           ..namespace = 'wavi'
           ..rootDomain = rootDomain
           ..atClientParticulars.appName = appName
-          ..atClientParticulars.appVersion = appVersion,
+          ..atClientParticulars.appVersion = appVersion
+          ..atClientParticulars.platform = platform,
         storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
         lookUps: server.lookUps,
         secondaryAddressFinder: server.addressFinder);
@@ -194,6 +196,33 @@ void main() {
         name.substring(0, 64));
   });
 
+  test(
+      'Given particulars that name a platform, when the verb connection '
+      'authenticates, then its from: carries the client\'s id and platform',
+      () async {
+    final (client, server) = await openClient(platform: 'macos');
+    await client.getRemoteSecondary()!.executeCommand('scan\n', auth: true);
+
+    final config = configOf(server.fromsOn(verbLookUp(client)));
+    expect(config['clientId'],
+        client.getPreferences()!.atClientParticulars.clientId,
+        reason: 'the atServer tells this client\'s log lines apart by it');
+    expect(config['platform'], 'macos');
+  });
+
+  test(
+      'Given particulars that name no platform, when the verb connection '
+      'authenticates, then its from: carries the client\'s id and no platform',
+      () async {
+    final (client, server) = await openClient();
+    await client.getRemoteSecondary()!.executeCommand('scan\n', auth: true);
+
+    final config = configOf(server.fromsOn(verbLookUp(client)));
+    expect(config['clientId'],
+        client.getPreferences()!.atClientParticulars.clientId);
+    expect(config.containsKey('platform'), isFalse, reason: '$config');
+  });
+
   test('a connection that sent no version still sends none', () async {
     final (client, server) = await openClient();
     client.notificationService.subscribe(regex: '.*');
@@ -235,7 +264,7 @@ void main() {
 
     final programFile = Platform.script.pathSegments.last;
     expect(configOf(server.froms), {
-      'appName': programFile.substring(0, programFile.indexOf('.')),
+      'appName': programFile.split('.').first,
       'appVersion': 'unknown',
       'sdkName': 'atsign.dart.at_client',
       'sdkVersion': atClientVersion,
@@ -260,4 +289,23 @@ void main() {
         reason: 'the control: the recorder hears the warning an unnamed app '
             'is given');
   });
+
+  for (final blank in ['', ' \t']) {
+    test(
+        'Given an appName of ${jsonEncode(blank)}, when the client starts, '
+        'then it logs the warning an unnamed app is given', () async {
+      final logs = RecordedLogs()..installOn(level: 'warning');
+
+      await openClient(appName: blank);
+
+      final warnings =
+          logs.at('WARNING').where((w) => w.contains('atClientParticulars'));
+      expect(warnings, hasLength(1),
+          reason: 'an appName with nothing but whitespace names nothing, so '
+              'the client is named after its program file');
+      expect(warnings.single, contains('"unknown" where there is none'),
+          reason: 'web and wasm run no program file, so the warning says '
+              'what such a client is named');
+    });
+  }
 }
