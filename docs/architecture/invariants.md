@@ -2,9 +2,9 @@
 
 This page outranks every plan, design doc and project decision record in this repo, and a decision binds only when it has a row in [decisions.md](decisions.md).
 
-This page, `decisions.md`, the tests and pins under `packages/at_client/test/architecture/`, `.github/wasm_gates.yaml` and the agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`) have code owners, listed in [CODEOWNERS](../../.github/CODEOWNERS). A change to any of them needs a code owner's approval. A pin move, which is a change to a guard's allow-list or golden, goes in a small PR of its own, ahead of the change that needs it.
+This page, `decisions.md`, the tests and pins under `packages/at_client/test/architecture/`, `.github/wasm_gates.yaml`, the agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`) and every other guard a row names as its check have code owners, listed in [CODEOWNERS](../../.github/CODEOWNERS). A change to any of them needs a code owner's approval. A pin move, which is a change to a guard's allow-list or golden, goes in a small PR of its own, ahead of the change that needs it.
 
-Each row gives the rule, the mechanism to use instead, what a breach looks like in a diff, the check that holds it, and **Exceptions**: the number of places in the workspace packages that break the rule, made by the command listed under [How the counts were made](#how-the-counts-were-made). That number may only fall. "Not counted" means nobody has counted. A rule with a check is held by the check; a rule without one is held by review. Rules in [docs/sdk-shape.md](../sdk-shape.md) are cited by number and not repeated here.
+Each row gives the rule, the mechanism to use instead, what a breach looks like in a diff, the check that holds it, and **Exceptions**: the number of places in the workspace packages that break the rule, made by the command listed under [How the counts were made](#how-the-counts-were-made). That number may only fall, and `test/architecture/counts_test.dart` fails when one rises. "Not counted" means nobody has counted. A rule with a check is held by the check; a rule without one is held by review. Rules in [docs/sdk-shape.md](../sdk-shape.md) are cited by number and not repeated here. An Id is permanent and never reused: a gap in the numbering is not free for a new rule.
 
 ## Packages and platforms
 
@@ -76,7 +76,7 @@ These rules hold wherever the Atsign Protocol is spoken, not only in this repo. 
 
 ## How the counts were made
 
-Each command runs from the repository root, over the tracked files, at the commit that last changed this page; its result is quoted beside it. The workspace packages are the 13 library packages in the root `pubspec.yaml`'s `workspace:` block, and most commands search their `lib/` trees:
+Each command runs from the repository root, over the tracked files, at the commit that last changed this page; its result is quoted beside it. `test/architecture/counts_test.dart` runs every command below and fails when a result exceeds the number quoted; when a result falls, lower the number here. The workspace packages are the 13 library packages in the root `pubspec.yaml`'s `workspace:` block, and most commands search their `lib/` trees:
 
 ```sh
 W="packages/at_auth/lib packages/at_chops/lib packages/at_cli_commons/lib packages/at_client/lib packages/at_client_cli/lib packages/at_client_flutter/lib packages/at_commons/lib packages/at_contact/lib packages/at_lookup/lib packages/at_onboarding_cli/lib packages/at_policy/lib packages/at_telemetry/lib packages/at_utils/lib"
@@ -86,7 +86,7 @@ W="packages/at_auth/lib packages/at_chops/lib packages/at_cli_commons/lib packag
 - A1, imports of another package's `src/`, by the package imported: `git grep -nP "^\s*(import|export|part)\s+['\"]package:\w+/src/" -- $W | awk -F"['\"]" '{split($1,a,"/");split($2,b,"[:/]"); if(a[2]!=b[2]) print b[2]}' | sort | uniq -c` gives 4: `pqcrypto` 3, `hive` 1.
 - A2, `src/` files in `at_client` that import either barrel: `git grep -nP "^\s*(import|export)\s+['\"](package:at_client/|(\.\./)+)(at_client|at_client_mixins)\.dart['\"]" -- packages/at_client/lib/src | wc -l` gives 0.
 - A3, registrar libraries exported from `at_auth.dart`: `git grep -n "^export 'src/registrar/" -- packages/at_auth/lib/at_auth.dart | wc -l` gives 3.
-- A3, proxy preambles composed outside `at_lookup`: `git grep -nP "sendSync\('from:" -- $W` gives 1: `packages/at_client_cli/lib/src/util/proxy_lookups.dart:16`.
+- A3, proxy preambles composed outside `at_lookup`: `git grep -nP "sendSync\('from:" -- $W ':!packages/at_lookup'` gives 1: `packages/at_client_cli/lib/src/util/proxy_lookups.dart:16`.
 - A3, package pubspecs that depend on `at_telemetry`, of 26: `git grep -lP '^\s+at_telemetry\s*:' -- ':(glob)packages/*/pubspec.yaml' | wc -l` gives 0.
 - A4, wasm gates whose `allowed_offenders` is not empty, of 11: `git grep -n 'allowed_offenders:' -- .github/wasm_gates.yaml | grep -vF '[]' | wc -l` gives 0.
 - A5, factories and public static members of `AtClientPreference`: `git grep -nP '^\s*(factory|static)\b(?!.*\b_\w+\s*\()' -- packages/at_client/lib/src/preference/at_client_preference.dart | wc -l` gives 0.

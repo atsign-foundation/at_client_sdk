@@ -37,8 +37,7 @@ row first, naming the existing mechanism you could not use and why.
 
 ## Before you open a PR
 
-    cd packages/at_client && dart test test/architecture test/import_topology_test.dart test/public_api_surface_test.dart test/storage/import_boundary_test.dart test/acceptance/architecture_guard_test.dart test/wire_literal_pins_test.dart
-    dart run wasm_shakedown --config .github/wasm_gates.yaml   # from the repo root
+    tools/check_architecture.sh   # from the repo root
 
 A failure names the rule. Change the code, not the guard.
 
