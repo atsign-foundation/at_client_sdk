@@ -89,7 +89,7 @@ W="packages/at_auth/lib packages/at_chops/lib packages/at_cli_commons/lib packag
 - A3, proxy preambles composed outside `at_lookup`: `git grep -nP "sendSync\('from:" -- $W ':!packages/at_lookup'` gives 0.
 - A3, package pubspecs that depend on `at_telemetry`, of 26: `git grep -lP '^\s+at_telemetry\s*:' -- ':(glob)packages/*/pubspec.yaml' | wc -l` gives 0.
 - A4, wasm gates whose `allowed_offenders` is not empty, of 11: `git grep -n 'allowed_offenders:' -- .github/wasm_gates.yaml | grep -vF '[]' | wc -l` gives 0.
-- A5, factories and public static members of `AtClientPreference`: `git grep -nP '^\s*(factory|static)\b(?!.*\b_\w+\s*\()' -- packages/at_client/lib/src/preference/at_client_preference.dart | wc -l` gives 0.
+- A5, factories and public static members of `AtClientPreference`, a static member being public when the name before its first `(`, `=` or `;` does not start with `_`: `git grep -nP '^\s*(factory\b|static\b[^(=;]*\b(?!_)\w+\s*[(=;])' -- packages/at_client/lib/src/preference/at_client_preference.dart | wc -l` gives 0.
 - A6, connections built in `at_client`'s `lib/`, comment lines aside: `git grep -nP 'AtLookupImpl\(|withSecureSocket|withTransport\(|SecureSocket\.|WebSocket\(|Socket\.connect|secureSocketLookUps\(|webSocketLookUps\(' -- packages/at_client/lib | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | wc -l` gives 0.
 - A6, A8, second transport factories on `buildAtClient`: `git grep -nF 'AtLookUpFactory? notificationLookUps' -- packages/at_client/lib | wc -l` gives 0.
 - A7, files under `at_client/lib/src/storage/`: `git ls-files packages/at_client/lib/src/storage | wc -l` gives 9.

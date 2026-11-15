@@ -32,6 +32,13 @@ void main() {
         {'A': 'one', 'B': 'two\n### C\nthree'});
   });
 
+  test('a heading that appears twice is refused', () {
+    expect(
+        () => _sections('## A\none\n## B\ntwo\n## A\nuno\n'),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('"A" is a heading'))));
+  });
+
   test('Copilot carries the architecture rules and the review questions', () {
     expect(
         copilot.keys,
@@ -66,15 +73,21 @@ List<String> _drift(Map<String, String> agents, Map<String, String> copilot) {
   ];
 }
 
-/// The body under each `## ` heading in [markdown], trimmed.
+/// The body under each `## ` heading in [markdown], trimmed. A heading that
+/// appears twice throws, so that no copy of a section goes unchecked.
 Map<String, String> _sections(String markdown) {
   final heading = RegExp(r'^## (.+)$', multiLine: true);
   final matches = heading.allMatches(markdown).toList();
-  return {
-    for (var i = 0; i < matches.length; i++)
-      matches[i].group(1)!.trim(): markdown
-          .substring(matches[i].end,
-              i + 1 < matches.length ? matches[i + 1].start : markdown.length)
-          .trim(),
-  };
+  final sections = <String, String>{};
+  for (var i = 0; i < matches.length; i++) {
+    final title = matches[i].group(1)!.trim();
+    if (sections.containsKey(title)) {
+      throw StateError('"$title" is a heading more than once');
+    }
+    sections[title] = markdown
+        .substring(matches[i].end,
+            i + 1 < matches.length ? matches[i + 1].start : markdown.length)
+        .trim();
+  }
+  return sections;
 }
