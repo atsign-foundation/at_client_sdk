@@ -97,6 +97,44 @@ void main() {
     expect(_tally('a.dart\nb.dart\n'), 2);
   });
 
+  test('the A5 search finds a platform preset and skips private statics', () {
+    final a5 = counts.singleWhere((c) => c.label.startsWith('A5,'));
+    final pattern =
+        RegExp(r"git grep -nP '([^']+)' --").firstMatch(a5.command)!.group(1)!;
+    final dir = Directory.systemTemp.createTempSync('a5_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File(p.join(dir.path, 'preference.dart'))
+      ..writeAsStringSync([
+        '  factory AtClientPreference.browser() => AtClientPreference._web();',
+        '  static final AtClientPreference web = _makeWeb();',
+        '  static const int x = 1;',
+        '  static String get y => _y;',
+        '  static void z() {}',
+        '  static List<String> _sealableOrRefuse(List<String> algorithms) {',
+        '  static Set<SigningAlgoType> _signableOrRefuse(',
+        '  static const _p = 1;',
+        '  static String get _q => _y;',
+        '  static Map<String, int> _m = {};',
+        '  static T gen<T>(T a) => a;',
+        '  static T _gen<T>(T a) => a;',
+        '  static Map<String, List<int>> _n = {};',
+        '',
+      ].join('\n'));
+    final result = Process.runSync(
+        'git', ['grep', '--no-index', '-hnP', pattern, '--', 'preference.dart'],
+        workingDirectory: dir.path);
+    expect(result.stderr, isEmpty);
+    expect(
+        (result.stdout as String)
+            .trim()
+            .split('\n')
+            .map((l) => int.parse(l.split(':').first)),
+        [1, 2, 3, 4, 5, 11],
+        reason: 'A5 in docs/architecture/invariants.md must count every '
+            'factory and public static member of AtClientPreference, and no '
+            'private static.');
+  });
+
   test('every count on the page reproduces', () {
     final risen = <String>[];
     for (final count in counts) {
