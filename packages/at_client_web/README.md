@@ -32,7 +32,7 @@ await client.close();
 
 `namespace` is required and scopes every key. `app` defaults to `namespace`, `rpId` to `location.hostname` and `rpName` to `app`. Values are strings or `Uint8Array`; `get` returns `null` for a missing key. Send another atSign a notification with `client.notify({ key: 'greeting', sharedWith: '@bob' }, 'hi')`.
 
-`subscribe(regex?)` registers when called, buffers events without a bound, and ends when you leave the loop or call `close()`. Without `regex` it matches the client's namespace.
+`subscribe(regex?)` registers when called, buffers up to 4096 events (see `overflow`), and ends when you leave the loop or call `close()`. Without `regex` it matches the client's namespace.
 
 ### Onboard a new atSign
 
@@ -102,6 +102,7 @@ Every call rejects with an `AtError`. Branch on `error.code`, never on the messa
 | `closed` | The client is closed | Open a new client |
 | `unsupported` | The page, option or session cannot do this: not a browser, not a secure context, a `rootDomain` other than `root.atsign.org`, or a pairing call without `__manage` | Fix the environment or options |
 | `bad_key` | A key is malformed, or `namespace` is missing | Fix the key or options |
+| `overflow` | A subscription buffered more than 4096 events the app did not consume | Subscribe again |
 | `internal` | Anything else, including a bundle that failed to load or an argument the bridge rejected | Report it |
 
 `subscribe` after `close` throws `AtError('closed')` synchronously rather than rejecting.

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AtClient, AtError } from '../src/index.js';
+import { MAX_BUFFERED_EVENTS } from '../src/subscription.js';
 import { setBridgeLoader, type Bridge, type BridgeOptions, type BridgeSession } from '../src/loader.js';
 
 type Listener = (payload: unknown) => void;
@@ -317,6 +318,7 @@ describe('subscribe', () => {
       done: false,
       value: {
         operation: 'update',
+        from: '@alice',
         key: { key: 'rpc.req.1', namespace: 'tally', sharedWith: '@alice', sharedBy: '@alice' },
         value: 'ping',
       },
@@ -324,9 +326,26 @@ describe('subscribe', () => {
     const second = await events.next();
     expect(second.value).toEqual({
       operation: 'delete',
+      from: '@alice',
       key: { key: 'note', namespace: 'tally', sharedBy: '@bob' },
     });
     expect('value' in second.value).toBe(false);
+  });
+
+  it('carries the sending atSign from the bridge', async () => {
+    const client = await AtClient.create(opts);
+    const events = client.subscribe()[Symbol.asyncIterator]();
+    fake.listeners[0]!(payload({ from: '@bob', key: 'note.tally@bob' }));
+    expect((await events.next()).value.from).toBe('@bob');
+  });
+
+  it('a subscription that buffers past the cap unsubscribes and rejects with overflow', async () => {
+    const client = await AtClient.create(opts);
+    const events = client.subscribe()[Symbol.asyncIterator]();
+    for (let i = 0; i <= MAX_BUFFERED_EVENTS; i++) fake.listeners[0]!(payload());
+    expect(fake.unsubscribe).toHaveBeenCalledTimes(1);
+    await expect(events.next()).rejects.toMatchObject({ code: 'overflow' });
+    expect(await events.next()).toEqual({ done: true, value: undefined });
   });
 
   it('break unsubscribes once', async () => {

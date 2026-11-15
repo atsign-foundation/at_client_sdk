@@ -1,4 +1,5 @@
 import { AtClient } from '@atsign/at_client_web';
+import { canonicalAtSign } from './atsign.js';
 import { appendLine, byId, describeError } from './common.js';
 
 const messageKey = 'attalk';
@@ -55,10 +56,9 @@ async function receive(opened: AtClient, own: string): Promise<void> {
   stream = events;
   try {
     for (let next = await events.next(); !next.done; next = await events.next()) {
-      const { operation, key, value } = next.value;
+      const { operation, key, value, from } = next.value;
       if (operation !== 'update' || key.key !== messageKey || typeof value !== 'string') continue;
-      const sender = key.sharedBy ?? 'unknown';
-      if (sender !== own) bubble(sender, value, false);
+      if (canonicalAtSign(from) !== canonicalAtSign(own)) bubble(from, value, false);
     }
   } catch (error) {
     note(`receive: ${describeError(error)}`, true);

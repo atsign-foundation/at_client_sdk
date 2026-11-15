@@ -45,6 +45,8 @@ export interface AtKey {
 export interface AtEvent {
   /** What happened to the key. */
   operation: 'update' | 'delete';
+  /** The atSign that sent the notification, in `@name` form; it is the key's owner. */
+  from: string;
   /** The key that changed. */
   key: AtKey;
   /** The new value; absent when the notification carries none. */
@@ -90,8 +92,10 @@ export interface AtClientLike {
 
   /**
    * Real-time event subscription via AsyncIterable.
-   * Registers when called, buffers events without a bound, and unsubscribes
-   * when the loop ends (`break`/`return()`) or the client closes. Without
+   * Registers when called, buffers up to 4096 events and unsubscribes when
+   * the loop ends (`break`/`return()`) or the client closes. A subscription
+   * that buffers more rejects its next read with `AtError('overflow')` and
+   * ends; subscribe again. Without
    * `regex` it matches the client's namespace. Throws `AtError('closed')`
    * after `close()`.
    */
@@ -280,6 +284,7 @@ export class AtClient implements AtClientLike {
   private event(notification: BridgeNotification): AtEvent {
     const event: AtEvent = {
       operation: notification.operation,
+      from: notification.from,
       key: parseKey(notification.key, this.namespace),
     };
     if (notification.value !== null && notification.value !== undefined) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EventQueue } from '../src/subscription.js';
+import { AtError } from '../src/error.js';
+import { EventQueue, MAX_BUFFERED_EVENTS } from '../src/subscription.js';
 
 describe('EventQueue', () => {
   it('buffers pushes made before anyone iterates', async () => {
@@ -17,12 +18,32 @@ describe('EventQueue', () => {
     expect(await pending).toEqual({ value: 'a', done: false });
   });
 
-  it('buffers without a bound', async () => {
-    const queue = new EventQueue<number>(() => {});
-    for (let i = 0; i < 10_000; i++) queue.push(i);
+  it('buffers up to the cap', async () => {
+    expect(MAX_BUFFERED_EVENTS).toBe(4096);
+    const onDone = vi.fn();
+    const queue = new EventQueue<number>(onDone);
+    for (let i = 0; i < MAX_BUFFERED_EVENTS; i++) queue.push(i);
+    expect(onDone).not.toHaveBeenCalled();
     let last = -1;
-    for (let i = 0; i < 10_000; i++) last = (await queue.next()).value as number;
-    expect(last).toBe(9_999);
+    for (let i = 0; i < MAX_BUFFERED_EVENTS; i++) last = (await queue.next()).value as number;
+    expect(last).toBe(MAX_BUFFERED_EVENTS - 1);
+  });
+
+  it('overflows on the push past the cap: ends once, drops the buffer, next() rejects once', async () => {
+    const onDone = vi.fn();
+    const queue = new EventQueue<number>(onDone);
+    for (let i = 0; i <= MAX_BUFFERED_EVENTS; i++) queue.push(i);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    queue.push(1);
+    const error = await queue.next().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(AtError);
+    expect((error as AtError).code).toBe('overflow');
+    expect(await queue.next()).toEqual({ value: undefined, done: true });
+    await queue.return();
+    expect(onDone).toHaveBeenCalledTimes(1);
   });
 
   it('return() ends the queue once, runs onDone once and settles waiters', async () => {

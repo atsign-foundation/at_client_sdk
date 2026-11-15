@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { canonicalAtSign } from '../demo/atsign.js';
 
 const demo = resolve(import.meta.dirname, '../demo');
 const pages = ['index.html', 'talk.html'];
@@ -51,5 +52,20 @@ describe('demo sources', () => {
   it('takes the CRAM secret in a password input', () => {
     const html = readFileSync(join(demo, 'index.html'), 'utf8');
     expect(html).toMatch(/<input[^>]*id="cram"[^>]*type="password"|<input[^>]*type="password"[^>]*id="cram"/);
+  });
+});
+
+describe('demo atSign comparison', () => {
+  it('puts atSigns in one form: trimmed, lower-case, leading @', () => {
+    expect(canonicalAtSign(' Alice ')).toBe('@alice');
+    expect(canonicalAtSign('@ALICE')).toBe('@alice');
+    expect(canonicalAtSign('@alice')).toBe(canonicalAtSign('alice'));
+    expect(canonicalAtSign('@alice')).not.toBe(canonicalAtSign('@bob'));
+  });
+
+  it('talk.ts labels a message with the event sender and compares canonical atSigns', () => {
+    const source = readFileSync(join(demo, 'talk.ts'), 'utf8');
+    expect(source).toMatch(/bubble\(from,/);
+    expect(source).toMatch(/canonicalAtSign\(from\) !== canonicalAtSign\(own\)/);
   });
 });

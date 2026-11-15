@@ -25,7 +25,9 @@ export type AtErrorCode =
   /** Any failure with no code of its own. */
   | 'internal'
   /** A key is malformed, or `namespace` is missing. */
-  | 'bad_key';
+  | 'bad_key'
+  /** A subscription buffered more than 4096 events the app did not consume. */
+  | 'overflow';
 
 const codes: ReadonlySet<string> = new Set<AtErrorCode>([
   'no_passkey_here',
@@ -41,6 +43,7 @@ const codes: ReadonlySet<string> = new Set<AtErrorCode>([
   'unsupported',
   'internal',
   'bad_key',
+  'overflow',
 ]);
 
 /** The error every `AtClient` call rejects with; branch on `code`. */
