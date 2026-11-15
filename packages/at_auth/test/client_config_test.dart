@@ -13,24 +13,21 @@ import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 
-/// Records every command an authenticator sends, answering each with an empty
-/// response so the authenticator stops after `from:`.
-class _RecordingExecutor implements AtCommandExecutor {
-  final List<String> sent = [];
+import 'test_utils/from_recorder.dart';
+
+/// A value of a clientConfig key that is not a string.
+class _Spelt {
+  _Spelt(this.text);
+
+  final String text;
 
   @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    sent.add(command);
-    return '';
-  }
+  String toString() => text;
 }
 
 void main() {
   const atSign = '@alice🛠';
-  final pubspecVersion = RegExp(r'^version:\s*(\S+)', multiLine: true)
-      .firstMatch(File('pubspec.yaml').readAsStringSync())!
-      .group(1)!;
+  final atAuthVersion = pubspecVersion();
 
   group('clientConfigFor', () {
     test('an absent app version, SDK name and SDK version take at_auth\'s', () {
@@ -39,7 +36,7 @@ void main() {
       expect(config['appName'], 'acme_chat');
       expect(config['appVersion'], 'unknown');
       expect(config['sdkName'], 'atsign.dart.at_auth');
-      expect(config['sdkVersion'], pubspecVersion,
+      expect(config['sdkVersion'], atAuthVersion,
           reason: 'at_auth names its own version, the one its pubspec '
               'declares');
     });
@@ -47,8 +44,7 @@ void main() {
     test('an absent app name is the name of the program file', () {
       final programFile = Platform.script.pathSegments.last;
 
-      expect(clientConfigFor()['appName'],
-          programFile.substring(0, programFile.indexOf('.')),
+      expect(clientConfigFor()['appName'], programFile.split('.').first,
           reason: 'the program file is $programFile; its name is what comes '
               'before the first dot');
     });
@@ -60,7 +56,18 @@ void main() {
       expect(config['appName'], isNotEmpty);
       expect(config['appVersion'], 'unknown');
       expect(config['sdkName'], 'atsign.dart.at_auth');
-      expect(config['sdkVersion'], pubspecVersion);
+      expect(config['sdkVersion'], atAuthVersion);
+    });
+
+    test('a value that is only whitespace counts as absent', () {
+      final config = clientConfigFor(
+          appName: ' \t', appVersion: '\u2028', sdkName: '\n', sdkVersion: ' ');
+
+      expect(config['appName'], clientConfigFor()['appName'],
+          reason: 'an app named in whitespace is named after its program file');
+      expect(config['appVersion'], 'unknown');
+      expect(config['sdkName'], 'atsign.dart.at_auth');
+      expect(config['sdkVersion'], atAuthVersion);
     });
 
     test('given values are sent as given, under these four keys', () {
@@ -102,6 +109,29 @@ void main() {
       expect(config['appName'], 'a' * 63,
           reason: 'a lone high surrogate is not text; the atServer would '
               'decode and log a malformed name');
+    });
+
+    test(
+        'a cut keeps out the high surrogate of U+10000, the lowest pair, when '
+        'it is the 64th code unit', () {
+      expect(clientConfigFor(appName: '${'a' * 63}\u{10000}b')['appName'],
+          'a' * 63,
+          reason: 'U+D800, the lowest high surrogate, would be left alone');
+    });
+
+    test(
+        'a cut keeps out the high surrogate of U+10FFFF, the highest pair, '
+        'when it is the 64th code unit', () {
+      expect(clientConfigFor(appName: '${'a' * 63}\u{10FFFF}b')['appName'],
+          'a' * 63,
+          reason: 'U+DBFF, the highest high surrogate, would be left alone');
+    });
+
+    test('a pair that ends at the 64th code unit is kept whole', () {
+      expect(clientConfigFor(appName: '${'a' * 62}\u{10000}b')['appName'],
+          '${'a' * 62}\u{10000}',
+          reason: 'U+DC00, the lowest low surrogate, ends the pair; it is not '
+              'half of one');
     });
 
     test(
@@ -198,12 +228,12 @@ void main() {
     };
 
     Future<Map<String, dynamic>> sentBy(AtAuthenticator authenticator) async {
-      final executor = _RecordingExecutor();
-      await authenticator(executor);
+      final recorder = FromRecorder();
+      await authenticator(recorder);
       const prefix = 'from:$atSign:clientConfig:';
-      expect(executor.sent.first, startsWith(prefix),
+      expect(recorder.from, startsWith(prefix),
           reason: 'the authenticator sent from: without a clientConfig');
-      return jsonDecode(executor.sent.first.substring(prefix.length).trim())
+      return jsonDecode(recorder.from!.substring(prefix.length).trim())
           as Map<String, dynamic>;
     }
 
@@ -225,7 +255,7 @@ void main() {
             'platform': 'macos',
             'appVersion': 'unknown',
             'sdkName': 'atsign.dart.at_auth',
-            'sdkVersion': pubspecVersion,
+            'sdkVersion': atAuthVersion,
           });
         });
 
@@ -244,6 +274,45 @@ void main() {
           final config = await sentBy(build({'appName': 'a' * 80}));
 
           expect(config['appName'], 'a' * 64);
+        });
+
+        test(
+            'every string the caller passes, under any key, is one line and '
+            'cut to 64 characters', () async {
+          final long = 'mac\u2028os\u2029${'x' * 80}';
+          final sendable = 'mac os ${'x' * 57}';
+
+          final config = await sentBy(build({
+            'platform': long,
+            'clientId': long,
+            'version': long,
+            'extra': long,
+            'retries': 3,
+          }));
+
+          expect(config['platform'], sendable);
+          expect(config['clientId'], sendable);
+          expect(config['version'], sendable);
+          expect(config['extra'], sendable);
+          expect(config['retries'], 3,
+              reason: 'a value that is not a string, of a key other than the '
+                  'four, is passed through');
+        });
+
+        test(
+            'one of the four that is not a string is sent as its text, made '
+            'sendable', () async {
+          final config = await sentBy(build({
+            'appName': _Spelt('acme\u2028chat${'x' * 80}'),
+            'appVersion': 2,
+            'sdkName': _Spelt(' '),
+          }));
+
+          expect(config['appName'], 'acme chat${'x' * 55}');
+          expect(config['appVersion'], '2',
+              reason: 'the caller\'s value, not at_auth\'s "unknown"');
+          expect(config['sdkName'], 'atsign.dart.at_auth',
+              reason: 'a value whose text is only whitespace counts as absent');
         });
       });
     });

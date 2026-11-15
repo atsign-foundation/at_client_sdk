@@ -1,9 +1,10 @@
 ## 4.1.0
 
 - feat: every `from:` at_auth sends names the program and the SDK in its
-  clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`, each cut
-  to 64 characters. A caller's values win; absent ones are the program file's
-  name, `unknown`, `atsign.dart.at_auth` and at_auth's version.
+  clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
+  caller's values win; absent or blank ones are the program file's name,
+  `unknown`, `atsign.dart.at_auth` and at_auth's version. Each string value is
+  sent on one line and cut to 64 UTF-16 code units.
 - feat: `clientConfigFor` builds that clientConfig, and `activateAtSign` and
   `AtEnrollment.create` take a `clientConfig` for their `from:`.
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
