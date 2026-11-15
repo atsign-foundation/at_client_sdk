@@ -7,10 +7,12 @@ import 'package:at_client/memory.dart';
 import 'package:at_client/src/preference/posture_floor.dart';
 
 /// How a session's connections reach atServers: [lookUps] builds each
-/// connection, [finder] resolves an atSign to its atServer.
+/// connection, [finder] resolves an atSign to its atServer, and [root] is the
+/// root domain every connection is built for.
 typedef SessionTransport = ({
   AtLookUpFactory lookUps,
   SecondaryAddressFinder finder,
+  AtRootDomain root,
 });
 
 /// Thrown by [portalSession] when the client did not come online.
@@ -87,9 +89,11 @@ class SessionKeysIo extends WrittenAtKeysIo {
 ///
 /// [atSign] is put in `@name` form by `toAtsign()`, which throws an
 /// [InvalidAtSignException] for one it cannot take, whitespace included.
-/// [app] is the client's namespace. [prefs], when given, is used as it is;
-/// otherwise the preference names [app] and [root], routes reads and writes
-/// to the atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
+/// [app] is the client's namespace. [prefs], when given, is used as it is,
+/// and one that names a root other than [transport]'s throws an
+/// [ArgumentError] before any connection is made. Otherwise the preference
+/// names [app] and [transport]'s root, routes reads and writes to the
+/// atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
 /// Sync runs under every preference and starts at every open, pulling the
 /// atServer's records into the in-memory store without the caller asking. A
 /// put or delete goes to the atServer under [RemoteLocalPref.remoteOnly]
@@ -126,11 +130,20 @@ Future<AtClient> portalSession({
   required String app,
   required AtKeys keys,
   required SessionTransport transport,
-  AtRootDomain root = AtRootDomain.atsignDomain,
   AtClientPreference? prefs,
   SessionKeysIo? keysIo,
 }) async {
   final normalized = atSign.toAtsign();
+  final root = transport.root;
+  if (prefs != null &&
+      (prefs.rootDomain != root.rootDomain ||
+          prefs.rootPort != root.rootPort)) {
+    throw ArgumentError.value(
+        '${prefs.rootDomain}:${prefs.rootPort}',
+        'prefs',
+        "names a root other than the transport's "
+            '(${root.rootDomain}:${root.rootPort})');
+  }
   final enrollmentId = keys.enrollmentToAuthenticateAs();
   if (floorOfKeyMaterial(keys, enrollmentId) != null) {
     throw UnsupportedKeyMaterialException(normalized);
@@ -144,7 +157,7 @@ Future<AtClient> portalSession({
   _opening[lock] = done;
   try {
     if (previous != null) await previous.future;
-    return await _open(normalized, app, keys, transport, root, prefs, keysIo);
+    return await _open(normalized, app, keys, transport, prefs, keysIo);
   } finally {
     done.complete();
     if (identical(_opening[lock], done)) {
@@ -162,15 +175,14 @@ Future<AtClient> _open(
   String app,
   AtKeys keys,
   SessionTransport transport,
-  AtRootDomain root,
   AtClientPreference? prefs,
   SessionKeysIo? keysIo,
 ) async {
   final preference = prefs ??
       (AtClientPreference()
         ..namespace = app
-        ..rootDomain = root.rootDomain
-        ..rootPort = root.rootPort
+        ..rootDomain = transport.root.rootDomain
+        ..rootPort = transport.root.rootPort
         ..remoteLocalPref = RemoteLocalPref.remoteOnly
         ..monitorAutoStart = false);
   final client = await Atsign(atSign).open(

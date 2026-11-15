@@ -9,7 +9,7 @@ import 'session_transport_options.dart';
 /// With no `proxy`, each atSign's own atServer is reached over its `/ws`,
 /// found through the root's HTTPS lookup. With one, every connection goes to
 /// it and every atSign resolves to it. There is no fallback from one to the
-/// other.
+/// other. Either way the transport carries [options]' root.
 SessionTransport sessionTransport(SessionTransportOptions options) {
   final root = options.root;
   return switch (options.proxy) {
@@ -17,10 +17,12 @@ SessionTransport sessionTransport(SessionTransportOptions options) {
         lookUps: webSocketLookUps(directoryPort: root.rootPort),
         finder:
             HttpsSecondaryAddressFinder(root.rootDomain, port: root.rootPort),
+        root: root,
       ),
     (:final host, :final port) => (
         lookUps: proxyWebSocketLookUps(host: host, port: port),
         finder: FixedSecondaryAddressFinder(host, port),
+        root: root,
       ),
   };
 }
