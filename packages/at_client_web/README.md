@@ -71,7 +71,7 @@ for (const request of await approver.pendingEnrollments()) {
 const client = await pending; // resolves once the approval lands
 ```
 
-`pendingEnrollments()` returns `{ id, appName, deviceName, namespaces }`, where `namespaces` maps each requested namespace to `r` or `rw`. `otp`, `pendingEnrollments`, `approve` and `deny` reject with `unsupported` on a session without `__manage`.
+`pendingEnrollments()` returns `{ id, appName, deviceName, namespaces }`, where `namespaces` maps each requested namespace to `r` or `rw`. `otp`, `pendingEnrollments`, `approve` and `deny` reject with `unsupported` on a session without `__manage`. The enrollment `onboard` creates holds it (the atServer grants it to the CRAM-activated first enrollment), also when `create` reopens it later; a browser added with `enroll` asks only for its own namespaces and does not. `approve` and `deny` with an id that is not pending reject with `enrollment_denied`.
 
 ## Entry points
 
