@@ -11,23 +11,13 @@ import 'package:mocktail/mocktail.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import 'fake_path_provider.dart';
+import 'loopback_flows.dart';
 
 class _MockBiometricStorage extends Mock implements BiometricStorage {}
 
 class _MockBiometricStorageFile extends Mock implements BiometricStorageFile {}
 
 class _MockAtLookUp extends Mock implements AtLookupImpl {}
-
-/// A preference naming an atDirectory on the loopback interface, at a port
-/// nothing listens on.
-Future<AtClientPreference> loopbackPreference() async {
-  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-  final port = socket.port;
-  await socket.close();
-  return AtClientPreference()
-    ..rootDomain = InternetAddress.loopbackIPv4.address
-    ..rootPort = port;
-}
 
 /// A keychain the platform refuses to read, or whose one document does not
 /// parse, is refused as unreadable, and nothing is written or sent.
@@ -151,7 +141,7 @@ void main() {
 
     test('open refuses them as unreadable, before connecting', () async {
       await expectLater(
-        const AtsignFlows().open(
+        const LoopbackFlows().open(
           atSign,
           keys: KeychainAtKeysIo(keychainStorage: keychain({legacy: refused})),
           preference: await loopbackPreference(),
@@ -192,7 +182,7 @@ void main() {
   group('Activation refuses unusable keys with AtKeysUnusableException', () {
     test('a legacy keychain store the platform refuses to read', () async {
       await expectLater(
-        const AtsignFlows().activate(
+        const LoopbackFlows().activate(
           atSign,
           cramSecret: 'cram-secret-6d1f0b',
           keys: KeychainAtKeysIo(keychainStorage: keychain({legacy: refused})),
@@ -208,7 +198,7 @@ void main() {
   group("a keychain whose document does not parse affects every Atsign", () {
     Future<void> refusedSaying(String document, String reason) async {
       await expectLater(
-        const AtsignFlows().open(
+        const LoopbackFlows().open(
           atSign,
           keys: KeychainAtKeysIo(
             keychainStorage: keychain({current: () async => document}),
@@ -242,7 +232,7 @@ void main() {
 
     test('activation says the same', () async {
       await expectLater(
-        const AtsignFlows().activate(
+        const LoopbackFlows().activate(
           atSign,
           cramSecret: 'cram-secret-6d1f0b',
           keys: KeychainAtKeysIo(
@@ -272,7 +262,7 @@ void main() {
       File(path).writeAsStringSync('{"keys":[');
 
       await expectLater(
-        const AtsignFlows().open(
+        const LoopbackFlows().open(
           atSign,
           keys: FileAtKeysIo(filePath: (_) => path),
           preference: await loopbackPreference(),
