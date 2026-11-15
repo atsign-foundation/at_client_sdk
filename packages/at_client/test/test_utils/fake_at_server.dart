@@ -227,6 +227,11 @@ class FakeAtServer {
       }
       return;
     }
+    if (command.startsWith('stats:')) {
+      unawaited(socket.serverSends(
+          'data:[{"id":"3","name":"lastCommitID","value":"null"}]\n$atSign@'));
+      return;
+    }
     // Everything else is answered the way the atServer answers a verb it
     // understands, so an unexpected command cannot read as a hung socket.
     unawaited(socket.serverSends('data:ok\n$atSign@'));
