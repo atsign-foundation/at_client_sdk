@@ -16,6 +16,8 @@ void main() {
 
     test('gives nothing for a url without a port', () {
       expect(LookUpUtil.getSecondaryInfo('vip.ve.atsign.zone'), isEmpty);
+      expect(LookUpUtil.getSecondaryInfo('[::1]'), isEmpty,
+          reason: 'the colons inside the brackets are not a port separator');
     });
   });
 }

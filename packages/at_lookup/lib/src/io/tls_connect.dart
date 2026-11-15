@@ -28,7 +28,7 @@ Future<SecureSocket> connectTls(
   required Duration timeout,
   void Function(String line)? keyLog,
 }) async {
-  final address = _withoutBrackets(host);
+  final address = dialledHost(host);
   final ended = Completer<Never>();
   ended.future.ignore();
   Object? endedBy;
@@ -83,11 +83,11 @@ Future<SecureSocket> connectTls(
   }
 }
 
-/// [host] without the brackets a URL puts round an IPv6 literal.
-String _withoutBrackets(String host) =>
-    host.startsWith('[') && host.endsWith(']')
-        ? host.substring(1, host.length - 1)
-        : host;
+/// The address [connectTls] dials for [host]: [host] without the brackets a
+/// URL puts round an IPv6 literal.
+String dialledHost(String host) => host.startsWith('[') && host.endsWith(']')
+    ? host.substring(1, host.length - 1)
+    : host;
 
 /// A [SecureSocket] over a [RawSecureSocket], for the members at_lookup's
 /// connections use and the rest of the interface.

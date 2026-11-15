@@ -175,6 +175,35 @@ void main() {
         reason: 'the brackets are URL syntax, not part of the address');
   });
 
+  group('dialledHost', () {
+    test('takes the brackets off an IPv6 literal', () {
+      expect(dialledHost('[::1]'), '::1');
+      expect(dialledHost('[2001:db8::1]'), '2001:db8::1');
+    });
+
+    test('leaves a DNS name or IPv4 address as written', () {
+      expect(dialledHost('vip.ve.atsign.zone'), 'vip.ve.atsign.zone');
+      expect(dialledHost('127.0.0.1'), '127.0.0.1');
+    });
+
+    test('leaves brackets round anything but an IPv6 address as written', () {
+      for (final host in [
+        '[zz]',
+        '[127.0.0.1]',
+        '[]',
+        '[vip.ve.atsign.zone]'
+      ]) {
+        expect(dialledHost(host), host, reason: '"$host" is no IPv6 literal');
+      }
+    });
+
+    test('leaves a host with only one bracket as written', () {
+      for (final host in ['[::1', '::1]', '1::1]', '[::1:']) {
+        expect(dialledHost(host), host, reason: '"$host" is not bracketed');
+      }
+    });
+  });
+
   group('against a server that never answers the handshake', () {
     test('the timeout ends the connect, not only the TCP part of it', () async {
       final (server, held) = await silentServer();
