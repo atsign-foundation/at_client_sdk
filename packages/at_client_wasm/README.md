@@ -7,8 +7,8 @@ This is a pre-release and unpublished package intended for WebAssembly/browser t
 - Transport is direct by default: the browser reaches each Atsign's own atServer over `wss://host:port/ws`. A dev proxy is used only when `SessionTransportOptions` is given both `proxyHost` and `proxyPort`, or a `proxy:<host>` root. There is no fallback from one to the other. See [docs/direct-mode.md](docs/direct-mode.md).
 - Keys that carry ML-DSA-65 signing or namespace key material are refused for now (`UnsupportedKeyMaterialException`, before any connection). The passkey-onboarding work lifts this.
 - Reads and writes go to the atServer (`RemoteLocalPref.remoteOnly`) unless the caller passes its own `prefs`. Sync still runs, and starts at every open: it pulls the atServer's records into the in-memory store without the app asking. Under `remoteOnly` a put or delete goes to the atServer unless its request options set `useRemoteAtServer = false` explicitly. Only that keeps a write local (queued for sync); options that leave it unset do not.
-- The atSign goes through `toAtsign()`: `alice` and `@Alice` open the same session, and an atSign it rejects, such as one with whitespace, throws `InvalidAtSignException`.
-- Opens for one atSign as one enrollment run one at a time. An open started while another for the same enrollment is running waits for it, then fails with a `StateError` if that client is live, or builds afresh if it failed. Opens for different enrollments of the atSign do not wait on each other.
+- The Atsign goes through `toAtsign()`: `alice` and `@Alice` open the same session, and an Atsign it rejects, such as one with whitespace, throws `InvalidAtSignException`.
+- Opens for one Atsign as one enrollment run one at a time. An open started while another for the same enrollment is running waits for it, then fails with a `StateError` if that client is live, or builds afresh if it failed. Opens for different enrollments of the Atsign do not wait on each other.
 
 ## Browser entry points
 
