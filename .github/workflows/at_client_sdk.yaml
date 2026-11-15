@@ -160,10 +160,25 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Check out the virtual environment's certificate from at_server
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: atsign-foundation/at_server
+          ref: trunk
+          path: at_server
+          persist-credentials: false
+          sparse-checkout: tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
+          sparse-checkout-cone-mode: false
+
       - uses: ./actions/setup-flutter-and-dart
+
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
       - name: Run at_client_wasm browser tests in Chrome
         working-directory: packages/at_client_wasm
+        env:
+          AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
         run: |
           dart pub get
           dart test -p chrome --concurrency=1

@@ -16,7 +16,8 @@ void main() {
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
 
-  SessionTransport transport() => (lookUps: wire.lookUps, finder: finder);
+  SessionTransport transport({AtRootDomain root = AtRootDomain.atsignDomain}) =>
+      (lookUps: wire.lookUps, finder: finder, root: root);
 
   Future<AtClient> open(
           {String atSign = _atSign,
@@ -39,6 +40,166 @@ void main() {
     }
     AtClientImpl.atClientInstanceMap.clear();
     AtClientManager.getInstance().reset();
+  });
+
+  test(
+      'A session opened without a preference takes its root from the transport',
+      () async {
+    final client =
+        await open(over: transport(root: AtRootDomain('root.example', 6464)));
+    client.notificationService.startListening();
+    await pumpEventQueue();
+
+    final prefs = client.getPreferences()!;
+    expect((prefs.rootDomain, prefs.rootPort), ('root.example', 6464),
+        reason: "the preference portalSession builds names the transport's "
+            'root');
+    expect(wire.roots, hasLength(greaterThan(1)),
+        reason: "the client's own connection and the monitor's");
+    final roots = {for (final r in wire.roots) (r.rootDomain, r.rootPort)};
+    expect(roots, {('root.example', 6464)},
+        reason: "every connection is built for the transport's root");
+  });
+
+  test(
+      'A session opened with a preference on another root is refused before '
+      'any connection', () async {
+    final prefs = AtClientPreference()
+      ..namespace = _app
+      ..rootDomain = 'root.atsign.org'
+      ..rootPort = 64
+      ..monitorAutoStart = false;
+
+    await expectLater(
+        open(
+            over: transport(root: AtRootDomain('root.example', 6464)),
+            prefs: prefs),
+        throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'prefs')),
+        reason: "a preference on another root would build connections for a "
+            'root the transport does not name');
+    expect(wire.dials, 0, reason: 'the refusal comes before any connection');
+  });
+
+  AtClientPreference prefsOn(String rootDomain, int rootPort) =>
+      AtClientPreference()
+        ..namespace = _app
+        ..rootDomain = rootDomain
+        ..rootPort = rootPort
+        ..monitorAutoStart = false;
+
+  Matcher refusedNamingPrefs() =>
+      throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'prefs'));
+
+  group('Given a transport whose root is root.example at port 6464', () {
+    final root = AtRootDomain('root.example', 6464);
+
+    test(
+        'when a prefs differs from it only in its host, then the open is '
+        'refused before any connection', () async {
+      await expectLater(
+          open(
+              over: transport(root: root),
+              prefs: prefsOn('other.example', 6464)),
+          refusedNamingPrefs(),
+          reason: 'a prefs on another host names another root');
+      expect(wire.dials, 0, reason: 'the refusal comes before any connection');
+    });
+
+    test(
+        'when a prefs differs from it only in its port, then the open is '
+        'refused before any connection', () async {
+      await expectLater(
+          open(over: transport(root: root), prefs: prefsOn('root.example', 64)),
+          refusedNamingPrefs(),
+          reason: 'a prefs on another port names another root');
+      expect(wire.dials, 0, reason: 'the refusal comes before any connection');
+    });
+
+    test(
+        'when a prefs differs from it only in the case of its host, then the '
+        'open goes ahead', () async {
+      final opened = await open(
+              over: transport(root: root), prefs: prefsOn('Root.Example', 6464))
+          .then<Object>((c) => c, onError: (Object e) => e);
+      expect(opened, isA<AtClient>(),
+          reason: 'host names are compared ignoring case');
+    });
+
+    test(
+        'when a prefs is changed to another root while its open waits for an '
+        'earlier one, then the open is refused', () async {
+      final held = Completer<bool>();
+      wire.pkamScript.add(held);
+      final first = open(over: transport(root: root))
+          .then<Object>((c) => c, onError: (Object e) => e);
+      await pumpEventQueue();
+      final prefs = prefsOn('root.example', 6464);
+      final second = open(over: transport(root: root), prefs: prefs);
+      await pumpEventQueue();
+
+      prefs.rootDomain = 'other.example';
+      held.complete(false);
+
+      expect(await first, isA<PortalSessionOfflineException>());
+      await expectLater(second, refusedNamingPrefs(),
+          reason: 'prefs is checked when its open runs, not when it queues');
+      final roots = {for (final r in wire.roots) r.rootDomain};
+      expect(roots, {'root.example'},
+          reason: 'no connection is built for the changed root');
+    });
+  });
+
+  group('Given a proxy transport whose root is proxy:proxy.example at port 443',
+      () {
+    final root = AtRootDomain('proxy:proxy.example', 443);
+
+    test(
+        'when portalSession opens with no prefs, then every connection is '
+        'built for the proxy: root', () async {
+      final client = await open(over: transport(root: root));
+      client.notificationService.startListening();
+      await pumpEventQueue();
+
+      final prefs = client.getPreferences()!;
+      expect((prefs.rootDomain, prefs.rootPort), ('proxy:proxy.example', 443),
+          reason: "the preference portalSession builds names the proxy: root");
+      expect(wire.roots, hasLength(greaterThan(1)),
+          reason: "the client's own connection and the monitor's");
+      final roots = {
+        for (final r in wire.roots) (r.rootDomain, r.rootPort, r.isProxyAddress)
+      };
+      expect(roots, {('proxy:proxy.example', 443, true)},
+          reason: 'every connection is built for the proxy: root, so '
+              'at_lookup sends from:<atSign> on each');
+    });
+
+    test(
+        'when a prefs names its host with a Proxy: prefix in another case, '
+        'then the open is refused before any connection', () async {
+      await expectLater(
+          open(
+              over: transport(root: root),
+              prefs: prefsOn('Proxy:proxy.example', 443)),
+          refusedNamingPrefs(),
+          reason: 'a root that is not proxy: gets no from:<atSign> from '
+              'at_lookup');
+      expect(wire.dials, 0, reason: 'the refusal comes before any connection');
+    });
+
+    test(
+        'when a default AtClientPreference is passed, then the open is '
+        'refused before any connection', () async {
+      await expectLater(
+          open(
+              over: transport(root: root),
+              prefs: AtClientPreference()
+                ..namespace = _app
+                ..monitorAutoStart = false),
+          refusedNamingPrefs(),
+          reason: 'a default preference names the production atDirectory, '
+              'not the proxy');
+      expect(wire.dials, 0, reason: 'the refusal comes before any connection');
+    });
   });
 
   group('transport', () {
@@ -339,8 +500,6 @@ void main() {
     test('an atSign with whitespace is rejected before any dial', () async {
       await expectLater(
           open(atSign: '@alice '), throwsA(isA<InvalidAtSignException>()));
-      expect(() => DevSessionOptions(atSign: '@alice ', app: _app),
-          throwsA(isA<InvalidAtSignException>()));
       expect(wire.dials, 0);
     });
 
@@ -352,10 +511,6 @@ void main() {
         expect(AtClientImpl.holdsLiveClient(_atSign), isTrue);
         await client.stop();
         await open(atSign: _atSign);
-      });
-
-      test('DevSessionOptions holds "$input" as @alice', () {
-        expect(DevSessionOptions(atSign: input, app: _app).atSign, _atSign);
       });
     }
   });
