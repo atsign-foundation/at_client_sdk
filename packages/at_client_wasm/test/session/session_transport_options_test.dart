@@ -11,6 +11,23 @@ Matcher _namingField(String field) =>
 final _sayingToBracketIpv6 = throwsA(isA<ArgumentError>().having(
     (e) => e.message, 'message', contains('in brackets, such as [::1]')));
 
+/// Hosts with one character outside ASCII letters, digits, `.`, `-` and `_`,
+/// each of which a host must not hold.
+const _outsideTheAllowlist = [
+  'prøxy.example',
+  'a[b',
+  'a]b',
+  'a,b',
+  'a;b',
+  'a!b',
+  'a&b',
+  'a=b',
+  'a+b',
+  'a~b',
+  'a\u0000b',
+  'a\u200Bb',
+];
+
 void main() {
   test('no proxyHost opens direct', () {
     expect(_options().proxy, isNull);
@@ -84,12 +101,18 @@ void main() {
     });
 
     test(
-        'when its host holds whitespace, a colon or a slash, then it throws '
-        'naming root', () {
+        'when its host holds anything but ASCII letters, digits, ., - and _, '
+        'then it throws naming root', () {
       for (final domain in [
         'proxy:proxy example',
         'proxy:proxy.example:443',
         'proxy:proxy.example/ws',
+        'proxy:proxy.example?',
+        'proxy:localhost@other.example',
+        'proxy:proxy.example#',
+        r'proxy:proxy.example\',
+        'proxy:proxy.example%2f',
+        for (final host in _outsideTheAllowlist) 'proxy:$host',
       ]) {
         expect(() => SessionTransportOptions(root: AtRootDomain(domain, 443)),
             _namingField('root'),
@@ -134,6 +157,41 @@ void main() {
       }
     });
 
+    test(
+        'when it holds anything but ASCII letters, digits, ., - and _, then '
+        'it throws naming proxyHost', () {
+      for (final host in [
+        'proxy.example?',
+        'localhost@other.example',
+        r'proxy.example\',
+        'proxy.example#',
+        'proxy.example%2f',
+        ..._outsideTheAllowlist,
+      ]) {
+        expect(() => _options(proxyHost: host, proxyPort: 8443),
+            _namingField('proxyHost'),
+            reason: '"$host" holds a character other than ASCII letters, '
+                'digits, ., - and _');
+      }
+    });
+
+    test('when it is a DNS name or IPv4 address, then it is the proxy', () {
+      for (final host in ['vip.ve.atsign.zone', 'my-proxy_1', '127.0.0.1']) {
+        expect(_options(proxyHost: host, proxyPort: 8443).proxy,
+            (host: host, port: 8443));
+      }
+    });
+
+    test(
+        'when it is a Unicode hostname, then it throws naming proxyHost, and '
+        'its punycode form is the proxy', () {
+      expect(() => _options(proxyHost: 'bücher.example', proxyPort: 8443),
+          _namingField('proxyHost'));
+      expect(
+          _options(proxyHost: 'xn--bcher-kva.example', proxyPort: 8443).proxy,
+          (host: 'xn--bcher-kva.example', port: 8443));
+    });
+
     test('when it is a bracketed IPv6 literal, then it selects the proxy', () {
       expect(_options(proxyHost: '[::1]', proxyPort: 8443).proxy,
           (host: '[::1]', port: 8443));
@@ -142,14 +200,20 @@ void main() {
 
   group('Given a direct root', () {
     test(
-        'when its host is empty or holds whitespace, a colon or a slash, then '
-        'it throws naming root', () {
+        'when its host is empty or holds anything but ASCII letters, digits, '
+        '., - and _, then it throws naming root', () {
       for (final domain in [
         '',
         ' ',
         'root example',
         'root.example:64',
         'root.example/x',
+        'root.example?',
+        'user@root.example',
+        'root.example#',
+        r'root.example\',
+        'root.example%2f',
+        ..._outsideTheAllowlist,
       ]) {
         expect(() => SessionTransportOptions(root: AtRootDomain(domain, 64)),
             _namingField('root'),
