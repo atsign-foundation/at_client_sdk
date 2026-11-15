@@ -52,6 +52,17 @@ void main() {
   List<String> ids(List<JsItem> items) =>
       [for (final item in items) item['id'] as String];
 
+  // list() and query() resolve to `{items, unreadable}`.
+  Future<List<JsItem>> itemsOf(Future<dynamic> listing) async =>
+      [for (final i in (await listing).items as List) i as JsItem];
+
+  Future<List<Map<String, Object?>>> unreadableOf(
+          Future<dynamic> listing) async =>
+      [
+        for (final u in (await listing).unreadable as List)
+          {'id': u.id, 'owner': u.owner, 'code': u.code}
+      ];
+
   /// @bob writes [id], shared with @alice, and makes @alice's copy of it
   /// unreadable.
   Future<void> bobSharesUnreadable(String id) async {
@@ -77,6 +88,49 @@ void main() {
       sharedWith: {'@alice'.toAtsign()},
     );
   }
+
+  // ---------------------------------------------------------------------------
+  group('item ids', () {
+    final badIds = [
+      'public:x',
+      '@bob:x',
+      '',
+      'A1',
+      'a.b',
+      'x y',
+      'a' * 65,
+      '_x',
+    ];
+
+    test('An item id outside the allowed set rejects with W8_INVALID_ARGUMENT',
+        () async {
+      final todos = await open();
+
+      for (final id in badIds) {
+        for (final call in <String, Future<Object?> Function()>{
+          'create': () => todos.create({'t': 1}, id: id),
+          'get': () => todos.get(mine(id)),
+          'update': () => todos.update(mine(id), {'t': 2}),
+          'share': () => todos.share(mine(id), ['@bob']),
+          'remove': () => todos.remove(mine(id)),
+        }.entries) {
+          await expectLater(call.value(), _rejectsWith(W8.invalidArgument),
+              reason: '${call.key} of "$id"');
+        }
+      }
+      expect(server.keyCount, 0);
+    });
+
+    test('An item id of 64 allowed characters round-trips', () async {
+      final todos = await open();
+      final id = 'a${'0-' * 31}_';
+      expect(id.length, 64);
+
+      await todos.create({'t': 1}, id: id);
+
+      expect((await todos.get(mine(id)))?['id'], id);
+    });
+  });
 
   // ---------------------------------------------------------------------------
   group('open', () {
@@ -235,14 +289,17 @@ void main() {
       );
     });
 
-    test('A list rejects with W8_UNREADABLE when one record is unreadable',
-        () async {
+    test('A list returns readable items and reports unreadable ones', () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 'a1');
       await bobSharesUnreadable('b1');
 
+      expect(ids(await itemsOf(todos.list())), ['a1']);
+      expect(await unreadableOf(todos.list()), [
+        {'id': 'b1', 'owner': '@bob', 'code': W8.unreadable}
+      ]);
       await expectLater(
-        todos.list(),
+        todos.get(bobs('b1')),
         _rejectsWith(W8.unreadable, id: 'b1', owner: '@bob'),
       );
     });
@@ -256,7 +313,7 @@ void main() {
         await todos.create({'title': id}, id: id, sharedWith: ['@zed', '@amy']);
       }
 
-      final listed = await todos.list();
+      final listed = await itemsOf(todos.list());
       final upstream = await rawCollection(alice, _ns).getItems();
 
       expect(ids(listed), [for (final item in upstream) item.id]);
@@ -279,7 +336,7 @@ void main() {
           .create(obj: {'title': 'untagged'}, id: 'n1');
 
       final types = {
-        for (final item in await todos.list()) item['id']: item['type']
+        for (final item in await itemsOf(todos.list())) item['id']: item['type']
       };
 
       expect(types, {'t1': 'Todo', 'o1': 'Other', 'n1': 'n/a'});
@@ -496,7 +553,8 @@ void main() {
 
     Future<Set<String>> where(JsCollectionsAdapter todos, String path,
             String op, Object? value) async =>
-        ids(await todos.query([(path: path, op: op, value: value)])).toSet();
+        ids(await itemsOf(todos.query([(path: path, op: op, value: value)])))
+            .toSet();
 
     test(
         'Each where operator maps onto wherePath over nested and missing paths',
@@ -521,10 +579,10 @@ void main() {
     test('Chained where clauses combine with AND', () async {
       final todos = await seeded();
 
-      final both = await todos.query([
+      final both = await itemsOf(todos.query([
         (path: 'done', op: '==', value: false),
         (path: 'prio', op: '>', value: 0),
-      ]);
+      ]));
 
       expect(ids(both), ['a']);
     });
@@ -566,14 +624,44 @@ void main() {
           todos.query([(path: 'prio', op: '>=', value: null)]), naming('>='));
     });
 
-    test('A query rejects with W8_UNREADABLE when one record is unreadable',
+    test('A query returns matching readable items and reports unreadable ones',
         () async {
       final todos = await seeded();
       await bobSharesUnreadable('b1');
 
-      await expectLater(
-        todos.query([(path: 'done', op: '==', value: false)]),
-        _rejectsWith(W8.unreadable, id: 'b1', owner: '@bob'),
+      final clause = [(path: 'done', op: '==', value: false)];
+
+      expect(ids(await itemsOf(todos.query(clause))).toSet(), {'a', 'c'});
+      expect(await unreadableOf(todos.query(clause)), [
+        {'id': 'b1', 'owner': '@bob', 'code': W8.unreadable}
+      ]);
+    });
+
+    test(
+        'A query with where clauses over a set with an unreadable record keeps upstream order',
+        () async {
+      final todos = await open();
+      const prios = {'c': 3, 'a': 1, 'a-b': 2, 'd': 4};
+      for (final entry in prios.entries) {
+        await todos.create({'prio': entry.value}, id: entry.key);
+      }
+      final upstream = [
+        for (final item in await rawCollection(alice, _ns).getItems())
+          if ((item.obj['prio'] as int) >= 2 && item.obj['prio'] != 4) item.id
+      ];
+      expect(upstream.length, 2);
+      await bobSharesUnreadable('a-bb');
+      await bobSharesUnreadable('zz');
+
+      final clauses = [
+        (path: 'prio', op: '>=', value: 2),
+        (path: 'prio', op: '<', value: 4),
+      ];
+
+      expect(ids(await itemsOf(todos.query(clauses))), upstream);
+      expect(
+        [for (final u in await unreadableOf(todos.query(clauses))) u['id']],
+        unorderedEquals(['a-bb', 'zz']),
       );
     });
   });

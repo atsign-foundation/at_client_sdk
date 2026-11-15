@@ -65,6 +65,9 @@ class FakeAtServer {
       ..metadata = stored.key.metadata;
   }
 
+  /// How many keys are stored.
+  int get keyCount => _store.length;
+
   /// Whether a key named [key] (its `AtKey.toString()` form) is stored.
   bool hasKey(String key) => _store.containsKey(key);
 
