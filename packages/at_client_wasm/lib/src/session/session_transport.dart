@@ -1,8 +1,8 @@
 import 'package:at_lookup/at_lookup_web.dart';
 
-import 'dev_session_options.dart';
 import 'portal_session.dart';
 import 'proxy_lookups.dart';
+import 'session_transport_options.dart';
 
 /// The transport a browser session uses for [options].
 ///
@@ -10,7 +10,7 @@ import 'proxy_lookups.dart';
 /// found through the root's HTTPS lookup. With one, every connection goes to
 /// it and every atSign resolves to it. There is no fallback from one to the
 /// other.
-SessionTransport sessionTransport(DevSessionOptions options) {
+SessionTransport sessionTransport(SessionTransportOptions options) {
   final root = options.root;
   return switch (options.proxy) {
     null => (

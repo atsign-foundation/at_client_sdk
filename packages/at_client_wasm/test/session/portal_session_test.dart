@@ -339,8 +339,6 @@ void main() {
     test('an atSign with whitespace is rejected before any dial', () async {
       await expectLater(
           open(atSign: '@alice '), throwsA(isA<InvalidAtSignException>()));
-      expect(() => DevSessionOptions(atSign: '@alice ', app: _app),
-          throwsA(isA<InvalidAtSignException>()));
       expect(wire.dials, 0);
     });
 
@@ -352,10 +350,6 @@ void main() {
         expect(AtClientImpl.holdsLiveClient(_atSign), isTrue);
         await client.stop();
         await open(atSign: _atSign);
-      });
-
-      test('DevSessionOptions holds "$input" as @alice', () {
-        expect(DevSessionOptions(atSign: input, app: _app).atSign, _atSign);
       });
     }
   });

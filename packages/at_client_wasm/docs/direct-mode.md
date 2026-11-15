@@ -1,6 +1,6 @@
 # Transport: direct (default) and the dev proxy
 
-By default the browser reaches each atSign's own atServer over `wss://host:port/ws`, with no proxy. A dev proxy is used only when `DevSessionOptions` is given both `proxyHost` and `proxyPort`; then every connection goes to it. There is no fallback from one to the other: a failed direct connect fails the open.
+By default the browser reaches each atSign's own atServer over `wss://host:port/ws`, with no proxy. A dev proxy is used only when `SessionTransportOptions` is given both `proxyHost` and `proxyPort`, or a `proxy:<host>` root; then every connection goes to it. There is no fallback from one to the other: a failed direct connect fails the open.
 
 ```mermaid
 flowchart LR

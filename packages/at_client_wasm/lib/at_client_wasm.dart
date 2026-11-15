@@ -1,4 +1,4 @@
 library;
 
-export 'src/session/dev_session_options.dart';
 export 'src/session/portal_session.dart';
+export 'src/session/session_transport_options.dart';
