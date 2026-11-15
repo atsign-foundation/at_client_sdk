@@ -435,7 +435,7 @@ class AtClient implements AtClientLike {
 | Errors | One `AtError` with a closed `code` union (`AtErrorCode`); unknown bridge codes become `internal` (§6) |
 | Options | `namespace` is required; `rootDomain`, if set, must be `root.atsign.org`; `rpId` defaults to `location.hostname` and is one hostname |
 | Keys custody | Passkey-held (`create`/`onboard`/`enroll`); no key-file import and no `keys`/`storage` option, unlike the sketch in §5.3 |
-| Runtime | Browser, secure context, CSP with `'wasm-unsafe-eval'` (§8a); no Node shim |
+| Runtime | Browser, secure context; the shipped bundle is dart2js only, so no `'wasm-unsafe-eval'` is needed; no Node shim |
 | Collections | No collections API is exported |
 
 ### 5.4 Mapping table — Dart to JS/TS

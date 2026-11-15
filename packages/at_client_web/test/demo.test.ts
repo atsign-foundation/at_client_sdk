@@ -40,11 +40,11 @@ describe('demo sources', () => {
     for (const file of files) expect(readFileSync(file, 'utf8'), file).not.toMatch(ingress);
   });
 
-  it.each(pages)('%s carries a CSP that allows wasm-unsafe-eval and no unsafe-eval', (page) => {
+  it.each(pages)('%s carries a CSP with no wasm-unsafe-eval and no unsafe-eval', (page) => {
     const html = readFileSync(join(demo, page), 'utf8');
     const csp = /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(html)?.[1];
     expect(csp).toBeDefined();
-    expect(csp).toContain("'wasm-unsafe-eval'");
+    expect(csp).not.toContain('wasm-unsafe-eval');
     expect(csp).not.toMatch(/'unsafe-eval'|'unsafe-inline'|\*(?!\.)/);
     expect(csp).toContain("default-src 'none'");
   });

@@ -110,7 +110,7 @@ Every call rejects with an `AtError`. Branch on `error.code`, never on the messa
 ## Requirements
 
 - **A secure context.** HTTPS (or `localhost`). `create`, `onboard` and `enroll` outside one reject `unsupported`, as does any non-browser runtime.
-- **A CSP that allows WebAssembly.** The bundle compiles WebAssembly, so `script-src` needs `'wasm-unsafe-eval'`. The demo's policy is a worked example:
+- **A strict CSP works.** The bundle is plain JavaScript (compiled with dart2js): it needs no `'wasm-unsafe-eval'` and no `'unsafe-eval'`. The demo's policy is a worked example:
 
   ```
   default-src 'none';

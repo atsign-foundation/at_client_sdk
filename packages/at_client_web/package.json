@@ -1,7 +1,7 @@
 {
   "name": "@atsign/at_client_web",
   "version": "0.1.0",
-  "description": "atPlatform client for browsers: passkey-custodied atSign sessions over WebAssembly.",
+  "description": "atPlatform client for browsers: passkey-custodied atSign sessions.",
   "license": "BSD-3-Clause",
   "type": "module",
   "sideEffects": false,
