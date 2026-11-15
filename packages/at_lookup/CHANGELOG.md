@@ -6,6 +6,10 @@
   the proxy is sent it twice. An `error:` reply to it, a proxy that cannot
   route the atSign, closes the connection and fails the command with that
   error.
+- fix: a `proxy:<host>` root naming a bracketed IPv6 literal, such as
+  `proxy:[::1]`, reaches that address over TLS. It used to fail its lookup
+  with a `FormatException`, and a TLS connect to `[::1]` failed its host
+  lookup.
 
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.

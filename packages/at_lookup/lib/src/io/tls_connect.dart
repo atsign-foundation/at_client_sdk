@@ -11,6 +11,9 @@ export '../util/abandonment.dart';
 /// Opens a TLS connection to [host]:[port], bounded by [timeout] from the TCP
 /// connect to the end of the handshake.
 ///
+/// [host] may be a bracketed IPv6 literal, as a URL writes it, such as
+/// `[::1]`: the connect and the certificate check use the address inside.
+///
 /// Built on [RawSocket] rather than [SecureSocket.connect], whose timeout
 /// bounds only the TCP connect: a peer that accepts and never answers the
 /// handshake leaves that connect pending for ever, and nothing reachable
@@ -25,6 +28,7 @@ Future<SecureSocket> connectTls(
   required Duration timeout,
   void Function(String line)? keyLog,
 }) async {
+  final address = _withoutBrackets(host);
   final ended = Completer<Never>();
   ended.future.ignore();
   Object? endedBy;
@@ -59,7 +63,7 @@ Future<SecureSocket> connectTls(
       'TLS connect to $host:$port abandoned: its owner has closed')));
   try {
     final connecting =
-        await unlessEnded(RawSocket.startConnect(host, port), (task) {
+        await unlessEnded(RawSocket.startConnect(address, port), (task) {
       task.socket.ignore();
       task.cancel();
     });
@@ -70,7 +74,7 @@ Future<SecureSocket> connectTls(
     connected.setOption(SocketOption.tcpNoDelay, true);
     final secure = await unlessEnded(
         RawSecureSocket.secure(connected,
-            host: host, context: context, keyLog: keyLog),
+            host: address, context: context, keyLog: keyLog),
         (socket) => socket.close());
     return _TlsSocket(secure);
   } finally {
@@ -78,6 +82,12 @@ Future<SecureSocket> connectTls(
     unregister?.call();
   }
 }
+
+/// [host] without the brackets a URL puts round an IPv6 literal.
+String _withoutBrackets(String host) =>
+    host.startsWith('[') && host.endsWith(']')
+        ? host.substring(1, host.length - 1)
+        : host;
 
 /// A [SecureSocket] over a [RawSecureSocket], for the members at_lookup's
 /// connections use and the rest of the interface.

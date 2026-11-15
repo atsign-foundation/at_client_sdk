@@ -1,12 +1,15 @@
 /// LookUpUtil class
 class LookUpUtil {
-  /// Returns List contains domain and port
+  /// Returns List contains domain and port.
+  ///
+  /// The port follows the last `:`, so a bracketed IPv6 literal such as
+  /// `[::1]:8443` keeps its brackets and gives `[::1]` and `8443`.
   static List<String> getSecondaryInfo(String url) {
     var result = <String>[];
-    if (url.contains(':')) {
-      var arr = url.split(':');
-      result.add(arr[0]);
-      result.add(arr[1]);
+    final separator = url.lastIndexOf(':');
+    if (separator != -1) {
+      result.add(url.substring(0, separator));
+      result.add(url.substring(separator + 1));
     }
     return result;
   }
