@@ -115,16 +115,24 @@ void main() {
         '  static const _p = 1;',
         '  static String get _q => _y;',
         '  static Map<String, int> _m = {};',
+        '  static T gen<T>(T a) => a;',
+        '  static T _gen<T>(T a) => a;',
+        '  static Map<String, List<int>> _n = {};',
         '',
       ].join('\n'));
-    final result = Process.runSync('grep', ['-nP', pattern, file.path]);
+    final result = Process.runSync(
+        'git', ['grep', '--no-index', '-hnP', pattern, '--', 'preference.dart'],
+        workingDirectory: dir.path);
     expect(result.stderr, isEmpty);
     expect(
         (result.stdout as String)
             .trim()
             .split('\n')
             .map((l) => int.parse(l.split(':').first)),
-        [1, 2, 3, 4, 5]);
+        [1, 2, 3, 4, 5, 11],
+        reason: 'A5 in docs/architecture/invariants.md must count every '
+            'factory and public static member of AtClientPreference, and no '
+            'private static.');
   });
 
   test('every count on the page reproduces', () {
