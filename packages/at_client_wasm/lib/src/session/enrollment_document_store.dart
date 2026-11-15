@@ -17,16 +17,22 @@ abstract interface class EnrollmentDocumentStore {
 
 final _enrollmentId = RegExp(r'^[A-Za-z0-9_-]+$');
 
+/// Throws [ArgumentError] when [enrollmentId] is empty or holds a character
+/// outside `A-Z a-z 0-9 _ -`; the one test every use of an id goes through.
+void checkEnrollmentId(String enrollmentId) {
+  if (!_enrollmentId.hasMatch(enrollmentId)) {
+    throw ArgumentError.value(
+        enrollmentId, 'enrollmentId', 'must match [A-Za-z0-9_-]+');
+  }
+}
+
 /// The atProtocol key of an enrollment's document,
 /// `atkeys.<enrollmentId>.a.__e@<atsign>` with the atSign canonical.
 ///
 /// Throws [ArgumentError] when [enrollmentId] is empty or holds a character
 /// outside `A-Z a-z 0-9 _ -`.
 String enrollmentDocumentKey(String enrollmentId, String atSign) {
-  if (!_enrollmentId.hasMatch(enrollmentId)) {
-    throw ArgumentError.value(
-        enrollmentId, 'enrollmentId', 'must match [A-Za-z0-9_-]+');
-  }
+  checkEnrollmentId(enrollmentId);
   return 'atkeys.$enrollmentId.a.__e${atSign.toAtsign()}';
 }
 

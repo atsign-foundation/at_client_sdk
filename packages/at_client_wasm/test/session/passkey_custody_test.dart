@@ -484,6 +484,24 @@ void main() {
       expect(server.documentReads, 0);
     });
 
+    test('a remembered enrollment id that is malformed is refused before PKAM',
+        () async {
+      final bad = FakeHints()..ids[_atSign] = 'bad id/..';
+      await expectLater(custody(withHints: bad).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()));
+      expect(gateway.authenticated, isEmpty);
+    });
+
+    test('a pointed enrollment id that is malformed is refused before PKAM',
+        () async {
+      final keys = await keysOf(0);
+      server.pointers[keys.lookupHex] = await PasskeyRecordCodec.seal(
+          keys.kek, PasskeyRecordType.eid, {'enrollmentId': 'bad id/..'});
+      await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()));
+      expect(gateway.authenticated, isEmpty);
+    });
+
     test('a revoked enrollment is a lost passkey whose cause needs an approver',
         () async {
       server.revoked.add('eid1');

@@ -8,3 +8,4 @@
 - The passkey pointer is stored in a namespace derived from the passkey; an enrollment asks for that namespace and the app's, and no longer for `atkeysv`.
 - Secrets derived from the passkey are overwritten with zeroes once used and when the session closes.
 - A registered passkey's `user.displayName` is its enrollment time (UTC, to the minute) and the enrollment's device name, cut to 64 UTF-8 bytes at a code point; it no longer carries the atSign.
+- `passkeyLogin` refuses a remembered or pointed enrollment id outside `A-Za-z0-9_-` as a lost passkey, before any PKAM.

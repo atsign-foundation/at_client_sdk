@@ -189,6 +189,9 @@ class FakeGateway implements EnrollmentGateway {
   final seedBuffers = <Uint8List>[];
   FakeSession? lastSession;
 
+  /// The enrollment id of every [authenticate] call.
+  final authenticated = <String>[];
+
   /// The close error the next session this gateway hands out will throw.
   Object? closeErrorForNext;
 
@@ -226,6 +229,7 @@ class FakeGateway implements EnrollmentGateway {
       required String enrollmentId,
       required Uint8List authSeed}) async {
     seedBuffers.add(authSeed);
+    authenticated.add(enrollmentId);
     if (server.revoked.contains(enrollmentId) ||
         server.seedByEnrollment[enrollmentId] != authSeed.join(',')) {
       throw PkamRefusedException(enrollmentId);

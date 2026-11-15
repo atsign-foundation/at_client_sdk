@@ -397,6 +397,9 @@ class PasskeyCustody {
   /// and enrollment returns without reading the pointer; any other asserts
   /// any discoverable passkey and finds the enrollment through the pointer.
   ///
+  /// A remembered or pointed enrollment id outside the id alphabet is a lost
+  /// passkey, refused before any PKAM.
+  ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException] or
   /// [PublicKeyMismatchException]; none leaves a session open or the device's
   /// hints rewritten.
@@ -415,6 +418,13 @@ class PasskeyCustody {
     try {
       final enrollmentId =
           hintedEnrollment ?? await _enrollmentIdFromPointer(canonical, keys);
+      try {
+        checkEnrollmentId(enrollmentId);
+      } on ArgumentError {
+        // Not the id: it came from the device or the server, and is not ours
+        // to echo.
+        throw PasskeyLostException(canonical, 'malformed enrollment id');
+      }
 
       final EnrollmentSession session;
       try {
