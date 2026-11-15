@@ -164,9 +164,12 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test(
-      'Given at_register\'s onboard command line, when at_activate runs it as '
-      'at_register, then its CRAM from: names at_register', () async {
-    final config = await firstConfigFromProcess('at_register', onboard);
+      'Given an atSign at_register has registered, when onboardRegistered '
+      'activates it, then its CRAM from: names at_register', () async {
+    final config = await firstConfigFromProcess(
+        'onboardRegistered',
+        (_) =>
+            ['@alice', 'the-one-time-secret', 'proxy:127.0.0.1:${proxy.port}']);
 
     expect(config['appName'], 'at_register');
     expect(config['appVersion'], _atClientCliVersion());

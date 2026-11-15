@@ -10,6 +10,7 @@ import 'package:at_client_cli/src/register/register_api_task.dart';
 
 import 'package:at_client_cli/src/register/onboarding_util.dart';
 import 'package:at_client_cli/src/register/registrar_api_constants.dart';
+import 'package:meta/meta.dart';
 
 ///Class containing logic to register a free atsign to email provided
 ///through [args] by utilizing methods defined in [RegisterUtil]
@@ -75,19 +76,26 @@ class Register {
         .add(ValidateOtp())
         .start();
 
-    final activated = await auth_cli.main(
-      [
-        'onboard',
-        '-a',
-        params['atsign']!,
-        '-c',
-        params['cramkey']!,
-      ],
-      program: 'at_register',
-    );
+    final activated =
+        await onboardRegistered(params['atsign']!, params['cramkey']!);
     if (activated != 0) exit(activated);
   }
 }
+
+/// Activates [atSign] with [cramKey] as `at_activate onboard` does, run as
+/// at_register, and answers its exit code; [rootServer], when set, is the
+/// atDirectory it asks.
+@visibleForTesting
+Future<int> onboardRegistered(String atSign, String cramKey,
+        {String? rootServer}) =>
+    auth_cli.main([
+      'onboard',
+      '-a',
+      atSign,
+      '-c',
+      cramKey,
+      if (rootServer != null) ...['-r', rootServer],
+    ], program: 'at_register');
 
 ///class that handles multiple tasks of type [RegisterApiTask]
 ///Initialized with a params map that needs to be populated with - email and api host address
