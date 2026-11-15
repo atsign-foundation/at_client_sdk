@@ -175,6 +175,34 @@ void main() {
       expect(client.lastKey!.sharedBy, '@bob');
     });
 
+    test('isPublic makes a public key', () async {
+      await session.get(const JsKey('k', isPublic: true));
+
+      expect(client.lastKey!.toString(), 'public:k.wavi@alice');
+    });
+
+    test('isCached makes a cached shared key, and a cached public one',
+        () async {
+      await session.get(const JsKey('k',
+          sharedWith: '@bob', isCached: true, sharedBy: '@carol'));
+      expect(client.lastKey!.toString(), 'cached:@bob:k.wavi@carol');
+
+      await session.get(const JsKey('k', isPublic: true, isCached: true));
+      expect(client.lastKey!.toString(), 'cached:public:k.wavi@alice');
+    });
+
+    test('noNamespace leaves the session namespace off', () async {
+      await session.get(const JsKey('k', noNamespace: true));
+      expect(client.lastKey!.toString(), 'k@alice');
+
+      await session
+          .get(const JsKey('k', sharedWith: '@bob', noNamespace: true));
+      expect(client.lastKey!.toString(), '@bob:k@alice');
+
+      await session.get(const JsKey('k', isPublic: true, noNamespace: true));
+      expect(client.lastKey!.toString(), 'public:k@alice');
+    });
+
     test('an atSign without @ is put in @name form', () async {
       await session.put(const JsKey('k', sharedWith: 'bob'), 'v');
 

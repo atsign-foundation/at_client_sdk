@@ -100,15 +100,31 @@ String _string(JSAny? value, String name) =>
 String? _field(JSObject object, String name) =>
     _optionalString(object[name], name);
 
+bool _flag(JSObject object, String name) {
+  final value = object[name];
+  if (value == null || value.isUndefinedOrNull) return false;
+  if (!value.isA<JSBoolean>()) throw _expected(name, 'a boolean');
+  return (value as JSBoolean).toDart;
+}
+
+/// The [JsKey] [value] names. A malformed key is a [BadKeyException] naming
+/// the offending field, never the value received.
 JsKey _jsKey(JSAny? value) {
-  if (value == null || !value.isA<JSObject>()) {
-    throw _expected('key', 'an object');
+  try {
+    if (value == null || !value.isA<JSObject>()) {
+      throw _expected('key', 'an object');
+    }
+    final object = value as JSObject;
+    return JsKey(_string(object['key'], 'key'),
+        namespace: _field(object, 'namespace'),
+        sharedWith: _field(object, 'sharedWith'),
+        sharedBy: _field(object, 'sharedBy'),
+        isPublic: _flag(object, 'public'),
+        isCached: _flag(object, 'cached'),
+        noNamespace: _flag(object, 'noNamespace'));
+  } on ArgumentError catch (e) {
+    throw BadKeyException('$e');
   }
-  final object = value as JSObject;
-  return JsKey(_string(object['key'], 'key'),
-      namespace: _field(object, 'namespace'),
-      sharedWith: _field(object, 'sharedWith'),
-      sharedBy: _field(object, 'sharedBy'));
 }
 
 /// The text or bytes a caller stores.

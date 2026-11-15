@@ -388,9 +388,10 @@ void main() {
     final options =
         _obj({'atSign': '@alice', 'namespace': 'tally', 'rpName': 'Tally'});
 
-    Future<void> expectNamed(JSAny? promise, String parameter) async {
+    Future<void> expectNamed(JSAny? promise, String parameter,
+        {String code = 'internal'}) async {
       final r = await _rejected(promise);
-      expect(r.code, 'internal');
+      expect(r.code, code);
       expect(r.message, contains(parameter));
       expect(r.message, isNot(contains(sentinel)));
     }
@@ -428,12 +429,26 @@ void main() {
             wrapped()
           ]),
           'value');
-      await expectNamed(_call(s, 'put', [sentinel.toJS, 'v'.toJS]), 'key');
+      await expectNamed(_call(s, 'put', [sentinel.toJS, 'v'.toJS]), 'key',
+          code: 'bad_key');
       await expectNamed(
           _call(s, 'get', [
             _obj({'key': wrapped()})
           ]),
-          'key');
+          'key',
+          code: 'bad_key');
+      await expectNamed(
+          _call(s, 'delete', [
+            _obj({'key': 'k', 'namespace': wrapped()})
+          ]),
+          'namespace',
+          code: 'bad_key');
+      await expectNamed(
+          _call(s, 'get', [
+            _obj({'key': 'k', 'public': sentinel})
+          ]),
+          'public',
+          code: 'bad_key');
       await expectNamed(_call(s, 'keys', [wrapped()]), 'regex');
       await expectNamed(
           _call(s, 'notify', [
@@ -474,6 +489,24 @@ void main() {
       final second = session.keysSeen.last;
       expect((second.namespace, second.sharedWith, second.sharedBy),
           (null, null, null));
+    });
+
+    test('put maps the public, cached and noNamespace flags', () async {
+      await _resolved(_call(s, 'put', [
+        _obj({'key': 'k', 'public': true, 'cached': true, 'noNamespace': true}),
+        'v'.toJS
+      ]));
+      await _resolved(_call(s, 'put', [
+        _obj({'key': 'k', 'public': false}),
+        'v'.toJS
+      ]));
+
+      final flagged = session.keysSeen.first;
+      expect((flagged.isPublic, flagged.isCached, flagged.noNamespace),
+          (true, true, true));
+      final plain = session.keysSeen.last;
+      expect((plain.isPublic, plain.isCached, plain.noNamespace),
+          (false, false, false));
     });
 
     test('put rejects a value that is neither a string nor bytes', () async {

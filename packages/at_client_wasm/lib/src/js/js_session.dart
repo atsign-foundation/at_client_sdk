@@ -6,14 +6,25 @@ import 'package:at_client/at_client.dart';
 
 /// A key as the JS bridge names it: [key] under [namespace] (the session's
 /// own when null), shared with [sharedWith] when that is set, by [sharedBy]
-/// (the session's own atSign when null).
+/// (the session's own atSign when null). [isPublic] and [isCached] make it
+/// the `public:` and `cached:` form of that key; [noNamespace] keeps the
+/// session's namespace off a key that has none.
 class JsKey {
-  const JsKey(this.key, {this.namespace, this.sharedWith, this.sharedBy});
+  const JsKey(this.key,
+      {this.namespace,
+      this.sharedWith,
+      this.sharedBy,
+      this.isPublic = false,
+      this.isCached = false,
+      this.noNamespace = false});
 
   final String key;
   final String? namespace;
   final String? sharedWith;
   final String? sharedBy;
+  final bool isPublic;
+  final bool isCached;
+  final bool noNamespace;
 }
 
 /// A decrypted notification as a subscriber receives it; [operation] is
@@ -128,15 +139,19 @@ class AtClientJsSession implements JsSession {
 
   AtKey _atKey(JsKey key) {
     final sharedBy = key.sharedBy?.toAtsign() ?? _client.getCurrentAtSign()!;
-    final namespace = key.namespace ?? _namespace;
+    final namespace = key.noNamespace ? null : key.namespace ?? _namespace;
     final sharedWith = key.sharedWith;
-    final builder = sharedWith == null
-        ? AtKey.self(key.key, namespace: namespace, sharedBy: sharedBy)
-        : (AtKey.shared(key.key, namespace: namespace, sharedBy: sharedBy)
-          ..sharedWith(sharedWith.toAtsign()));
+    final builder = key.isPublic
+        ? AtKey.public(key.key, namespace: namespace, sharedBy: sharedBy)
+        : sharedWith == null
+            ? AtKey.self(key.key, namespace: namespace, sharedBy: sharedBy)
+            : (AtKey.shared(key.key, namespace: namespace, sharedBy: sharedBy)
+              ..sharedWith(sharedWith.toAtsign()));
     // Not namespace-aware: at_client would otherwise fold the session's
     // namespace into [namespace] (`rpc.tally` -> `rpc.tally.<app>`).
-    return builder.build()..metadata.namespaceAware = false;
+    final atKey = builder.build()..metadata.namespaceAware = false;
+    if (key.isCached) atKey.metadata.isCached = true;
+    return atKey;
   }
 
   @override
