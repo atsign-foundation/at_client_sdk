@@ -824,11 +824,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   /// Adds [refusal] to [notifications] as an error, leaving the stream open.
-  void _reportRefusal(UnAuthenticatedException refusal) {
-    final controller = _notificationController;
-    if (controller == null || controller.isClosed) return;
-    controller.addError(refusal);
-  }
+  void _reportRefusal(UnAuthenticatedException refusal) =>
+      _notificationController?.addError(refusal);
 
   void _startHeartbeat() {
     _stopHeartbeat();
