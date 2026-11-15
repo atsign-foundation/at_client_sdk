@@ -88,10 +88,15 @@ void main() {
     final enrollmentId = listener.enrollmentId!;
 
     await owner.enrollments.revoke(enrollmentId);
+    await until(() => !listening(),
+        "the revoked listener's notification connection dropping");
     await until(() => listener.connection.current.isRefused,
         'the revoked listener reading refused');
     expect(listener.connection.current.cause, AtConnectionCause.revoked,
         reason: 'the atServer refuses a revoked enrollment as revoked');
+    expect(listening(), isFalse,
+        reason: 'the atServer refuses every reconnect of the revoked '
+            'listener, so its notification connection stays down');
 
     await owner.enrollments.unrevoke(enrollmentId);
     await until(listening, 'the restored listener reconnecting',
