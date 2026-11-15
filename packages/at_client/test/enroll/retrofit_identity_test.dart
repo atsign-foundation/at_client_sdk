@@ -7,6 +7,7 @@ import 'package:at_client/at_client_io.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
+import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -179,4 +180,68 @@ void main() {
         reason: 'the atServer holds an approved enrollment nobody can use, '
             'which a rerun replaces rather than reuses');
   });
+
+  test(
+      'Given an app named in its particulars and no connection handed in, '
+      'when retrofitIdentity authenticates one of its own, then its from: '
+      'names the app and at_client', () async {
+    final server = atServer();
+    when(() => server.lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
+    when(() => server.lookUp.close()).thenAnswer((_) async {});
+    final installed = <AtAuthenticator?>[];
+
+    await retrofitIdentity(
+        session: AtAuthSession(
+            atSign: atSign,
+            rootDomain: const AtRootDomain('127.0.0.1', 1),
+            atKeysIo: InMemoryAtKeysIo.holding(atSign, legacyKeys()),
+            namespace: 'lifecycle',
+            enrollmentId: legacyId),
+        preference: preference()
+          ..atClientParticulars.appName = 'acme_chat'
+          ..atClientParticulars.appVersion = '2.3.1',
+        lookUps: (
+            {required atSign,
+            required rootDomain,
+            required authenticator,
+            secondaryAddressFinder}) {
+          installed.add(authenticator);
+          return server.lookUp;
+        },
+        secondaryAddressFinder: MockSecondaryAddressFinder(),
+        appName: 'wavi',
+        deviceName: 'laptop',
+        namespaces: const {'*': 'rw', '__manage': 'rw'},
+        signingAlgo: SigningAlgoType.mldsa65);
+
+    expect(installed, hasLength(1),
+        reason: 'the control: the retrofit built its own connection');
+    final recorder = _FromRecorder();
+    await installed.single!(recorder);
+    const prefix = 'from:$atSign:clientConfig:';
+    expect(recorder.from, startsWith(prefix));
+    final config = jsonDecode(recorder.from!.substring(prefix.length).trim())
+        as Map<String, dynamic>;
+    expect(config, {
+      'appName': 'acme_chat',
+      'appVersion': '2.3.1',
+      'sdkName': 'atsign.dart.at_client',
+      'sdkVersion': RegExp(r'^version:\s*(\S+)', multiLine: true)
+          .firstMatch(File('pubspec.yaml').readAsStringSync())!
+          .group(1)!,
+    });
+  });
+}
+
+/// Keeps the `from:` an authenticator sends, answering it with nothing so the
+/// authenticator stops there.
+class _FromRecorder implements AtCommandExecutor {
+  String? from;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    from ??= command;
+    return '';
+  }
 }

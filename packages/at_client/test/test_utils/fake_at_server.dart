@@ -89,12 +89,35 @@ class FakeAtServerSocket implements AtTransport {
 /// Hands out the [AtLookUpFactory] a client or a notification service is built
 /// on, so everything between the subscriber and the socket is production code.
 class FakeAtServer {
-  FakeAtServer({this.atSign = '@alice'});
+  FakeAtServer({this.atSign = '@alice', this.runsClientAuthenticator = false});
 
   final String atSign;
 
+  /// Whether each lookup runs the authenticator its caller hands in, whose
+  /// `from:` this server answers with a challenge and whose `pkam:` or `cram:`
+  /// it accepts, in place of this server's own.
+  final bool runsClientAuthenticator;
+
   /// Every socket this server has handed out, oldest first.
   final List<FakeAtServerSocket> sockets = <FakeAtServerSocket>[];
+
+  /// Every lookup [lookUps] has built, oldest first.
+  final List<AtLookUp> lookUpsBuilt = <AtLookUp>[];
+
+  final Map<AtLookUp, List<FakeAtServerSocket>> _socketsOf = Map.identity();
+
+  /// The `from:` commands sent on the connections [lookUp] opened, in order.
+  List<String> fromsOn(AtLookUp lookUp) => [
+        for (final socket in _socketsOf[lookUp] ?? const <FakeAtServerSocket>[])
+          ...socket.written.where((command) => command.startsWith('from:'))
+      ];
+
+  /// The `from:` commands every connection sent, in the order the connections
+  /// were opened.
+  List<String> get froms => [
+        for (final socket in sockets)
+          ...socket.written.where((command) => command.startsWith('from:'))
+      ];
 
   /// The connection the client is on now.
   FakeAtServerSocket get socket => sockets.last;
@@ -134,20 +157,25 @@ class FakeAtServer {
         required AtRootDomain rootDomain,
         required AtAuthenticator? authenticator,
         SecondaryAddressFinder? secondaryAddressFinder,
-      }) =>
-          AtLookUp.withSecureSocket(
-            atSign: atSign,
-            rootDomain: rootDomain,
-            // NOTE: this server's own, not the caller's. The caller's would
-            // sign a real PKAM challenge; this one decides whether the
-            // atServer accepts the credential at all.
-            authenticator: _authenticate,
-            // NOTE: this server's own, whatever the caller passed: the
-            // caller's would ask the real atDirectory.
-            secondaryAddressFinder: addressFinder,
-            transport: AtLookupTransport(
-                transportFactory: _FakeTransportFactory(this)),
-          );
+      }) {
+        final transport = _FakeTransportFactory(this);
+        final lookUp = AtLookUp.withSecureSocket(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          // NOTE: unless runsClientAuthenticator, this server's own, not the
+          // caller's. The caller's would sign a real PKAM challenge; this one
+          // decides whether the atServer accepts the credential at all.
+          authenticator:
+              runsClientAuthenticator ? authenticator : _authenticate,
+          // NOTE: this server's own, whatever the caller passed: the
+          // caller's would ask the real atDirectory.
+          secondaryAddressFinder: addressFinder,
+          transport: AtLookupTransport(transportFactory: transport),
+        );
+        transport.owner = lookUp;
+        lookUpsBuilt.add(lookUp);
+        return lookUp;
+      };
 
   Future<bool> _authenticate(AtCommandExecutor _) async {
     authCount++;
@@ -159,7 +187,7 @@ class FakeAtServer {
     return true;
   }
 
-  FakeAtServerSocket _connect() {
+  FakeAtServerSocket _connect(AtLookUp? owner) {
     if (refuseConnects > 0) {
       refuseConnects--;
       throw SecondaryConnectException('the atServer is not reachable');
@@ -167,10 +195,21 @@ class FakeAtServer {
     connectCount++;
     final socket = FakeAtServerSocket(_onWrite);
     sockets.add(socket);
+    if (owner != null) _socketsOf.putIfAbsent(owner, () => []).add(socket);
     return socket;
   }
 
   void _onWrite(FakeAtServerSocket socket, String command) {
+    if (runsClientAuthenticator && command.startsWith('from:')) {
+      unawaited(socket.serverSends('data:_9e8169dc-5618-44ec-ab43-1a5b2144c581'
+          '$atSign:c3d345fc-5691-4f90-bc34-17cba31f060f\n@'));
+      return;
+    }
+    if (runsClientAuthenticator &&
+        (command.startsWith('pkam:') || command.startsWith('cram:'))) {
+      unawaited(socket.serverSends('data:success\n$atSign@'));
+      return;
+    }
     if (command.startsWith('monitor:')) {
       monitorCount++;
       monitorCommands.add(command.trim());
@@ -233,10 +272,13 @@ class _FakeTransportFactory implements AtTransportFactory {
 
   final FakeAtServer _server;
 
+  /// The lookup this factory connects for.
+  AtLookUp? owner;
+
   @override
   Future<AtTransport> connect(String host, String port,
           {Duration? timeout}) async =>
-      _server._connect();
+      _server._connect(owner);
 }
 
 class _FixedAddress extends SecondaryAddressFinder {

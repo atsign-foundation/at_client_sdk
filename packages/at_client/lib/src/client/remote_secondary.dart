@@ -11,6 +11,7 @@ import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -102,25 +103,21 @@ class RemoteSecondary implements Secondary {
     _installAuthenticator();
   }
 
+  /// [clientConfigOf] this client's particulars, with the client's version,
+  /// its id and, when set, its platform.
+  ///
+  /// NOTE: only this connection sends version; the atServer formats its error
+  /// replies by it, so another connection that sends one changes how its
+  /// errors read.
   Map<String, String> _getClientConfig() {
-    var clientConfig = <String, String>{};
-    clientConfig[AtConstants.version] =
-        AtClientConfig.getInstance().atClientVersion;
-    clientConfig[AtConstants.clientId] =
-        _preference.atClientParticulars.clientId;
-    if (_preference.atClientParticulars.appName.isNotNull) {
-      clientConfig[AtConstants.appName] =
-          _preference.atClientParticulars.appName!;
-    }
-    if (_preference.atClientParticulars.appVersion.isNotNull) {
-      clientConfig[AtConstants.appVersion] =
-          _preference.atClientParticulars.appVersion!;
-    }
-    if (_preference.atClientParticulars.platform.isNotNull) {
-      clientConfig[AtConstants.platform] =
-          _preference.atClientParticulars.platform!;
-    }
-    return clientConfig;
+    final particulars = _preference.atClientParticulars;
+    return {
+      ...clientConfigOf(particulars),
+      AtConstants.version: AtClientConfig.getInstance().atClientVersion,
+      AtConstants.clientId: particulars.clientId,
+      if (particulars.platform.isNotNull)
+        AtConstants.platform: particulars.platform!,
+    };
   }
 
   /// Executes the command returned by [VerbBuilder] on a remote
@@ -257,13 +254,15 @@ class RemoteSecondary implements Secondary {
 /// its credentials it holds: a keystore [atKeysIo], a bare PKAM [privateKey],
 /// a CRAM [cramSecret]. Null when it holds none, which is a real mode: an
 /// OTP enrollment's submit runs unauthenticated.
+///
+/// Its `from:` carries [clientConfig], as at_auth completes it.
 AtAuthenticator? clientAuthenticator(
   String atSign, {
   AtKeysIo? atKeysIo,
   String? privateKey,
   String? cramSecret,
   String? enrollmentId,
-  Map<String, dynamic> clientConfig = const {},
+  required Map<String, dynamic> clientConfig,
 }) {
   if (atKeysIo != null) {
     return authenticatorFor(atKeysIo, atSign,

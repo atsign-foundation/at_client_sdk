@@ -971,6 +971,12 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
+    if ((_preference!.atClientParticulars.appName ?? '').isEmpty) {
+      _logger.warning('AtClientPreference.atClientParticulars sets no '
+          'appName, so this client names itself to its atServer after its '
+          'program file. Set atClientParticulars.appName and appVersion to '
+          'name the app');
+    }
     // NOTE: resolved before anything signs, so nothing signs with the
     // rsa2048 fallback under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();

@@ -12,7 +12,9 @@ import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
@@ -141,11 +143,15 @@ extension AtsignLifecycle on Atsign {
   ///
   /// [lookUps] builds the connection, which finds the atServer through
   /// [secondaryAddressFinder].
+  ///
+  /// [particulars] name the app on the connection's `from:`, as a client's
+  /// `AtClientPreference.atClientParticulars` do.
   Future<String> authenticatesAs({
     required AtKeysIo keys,
     required AtRootDomain rootDomain,
     required AtLookUpFactory lookUps,
     required SecondaryAddressFinder secondaryAddressFinder,
+    AtClientParticulars? particulars,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
     final AtLookUp lookUp;
@@ -153,7 +159,8 @@ extension AtsignLifecycle on Atsign {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
           enrollmentId: enrollmentId,
           lookUps: lookUps,
-          secondaryAddressFinder: secondaryAddressFinder);
+          secondaryAddressFinder: secondaryAddressFinder,
+          clientConfig: clientConfigOf(particulars));
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {
@@ -253,7 +260,8 @@ extension AtsignLifecycle on Atsign {
               overallTimeout: provisioningBudget),
           onProgress: onProgress,
           atLookUp: connection,
-          awaitProvisioning: atLookUp == null);
+          awaitProvisioning: atLookUp == null,
+          clientConfig: clientConfigOf(preference.atClientParticulars));
     } finally {
       if (atLookUp == null) await connection.close();
     }
@@ -389,6 +397,7 @@ extension AtsignLifecycle on Atsign {
         signingAlgo: algo,
         keyExchangeMode: mode,
         atLookUp: atLookUp,
+        clientConfig: clientConfigOf(preference.atClientParticulars),
         lookUps: lookUps,
         secondaryAddressFinder: secondaryAddressFinder);
   }
@@ -458,6 +467,7 @@ extension AtsignLifecycle on Atsign {
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
           atLookUp: atLookUp,
+          clientConfig: clientConfigOf(preference.atClientParticulars),
           lookUps: lookUps,
           secondaryAddressFinder: secondaryAddressFinder);
     }
