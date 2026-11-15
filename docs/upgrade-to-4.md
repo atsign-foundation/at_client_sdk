@@ -566,7 +566,8 @@ null passes a default in its place, such as
 add the members to any class implementing either. A `SyncService` of your own
 drops `setOnDone` and `sync`'s `onDone` and `onError`, and an `AtServiceFactory` of your own
 drops `atClient` and takes only the client in `notificationService` and
-`syncService`.
+`syncService`. A class that implements `WrittenAtKeysIo`, rather than
+extending it, adds `describeSource` and `checkWritable`.
 
 ### Changes the analyzer won't show
 
@@ -574,6 +575,8 @@ These compile and then fail when the code runs, usually first in a test:
 
 - A keyfile that is not valid JSON throws `AtKeysFormatException`, as
   [above](#a-keyfile-that-is-not-valid-json-throws-atkeysformatexception).
+- `CLIBase` throws `AtKeysUnusableException`, not `ArgumentError`, for a
+  missing keyfile, so a `catch` for `ArgumentError` no longer catches it.
 - `storage` cannot be null, so a mocktail stub that matches it with `any()`
   needs `registerFallbackValue` for `AtClientStorage` first, for instance an
   `InMemoryAtClientStorage`.
