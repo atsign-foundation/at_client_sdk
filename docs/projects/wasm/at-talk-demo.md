@@ -84,7 +84,7 @@ The VE root needs a trunk rebuild (at_server#2894) before `?direct=1&root=` can 
 
 - **Bug:** `RemoteWriteThroughKeyStore.exists` threw `UnsupportedError`. The watermark migration calls `exists`, so a remote-only client's monitor reconnected with no `since`, and anything sent while it was down was lost.
 - **Fix (in #2430):** `exists` is `get`-or-`KeyNotFoundException`. The monitor now sends `monitor:selfNotifications:<epochMillis>`; this was seen live.
-- **Limit:** the watermark is a `local:` key, held in memory for the session. A page reload starts from the new session's creation time. The browser default replay is now *connect* with a reconnect supervisor ([`decisions.md`](decisions.md) D-24, amended 2026-11-02; [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439)).
+- **Persistence (P4b):** the watermark is a `local:` key. The dev session keeps it in IndexedDB, one database per (atSign, enrollment), so a page reload resumes from the last notification seen under the default *resume* policy. This is covered by tests and has not been seen live yet. The browser default replay is now *connect* with a reconnect supervisor ([`decisions.md`](decisions.md) D-24, amended 2026-11-02; [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439)).
 
 ## Not done
 

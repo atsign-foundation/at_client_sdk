@@ -1196,9 +1196,9 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 - **J5 — Entry point.** `packages/at_client_wasm/web/at_client_js.dart` — the `main()`
   that installs the facade on the global scope. Compiled with `dart compile js`; keep the
   dart2wasm build green in CI to preserve the option.
-  **Planned (not done):** the entry's session factory defaults to `webSocketLookUps()`
-  (direct, D-15), with `fixedAddressWebSocketLookUps` as an explicit dev option, both from
-  `at_lookup_web.dart`.
+  The entry's session factory defaults to `webSocketLookUps()` (direct, D-15). Passing
+  `proxyHost`/`proxyPort` selects the dev proxy (`fixedAddressWebSocketLookUps` plus the
+  `from:` preamble); the old `direct` option throws.
 - **J6 — npm package.** `packages/at_client_wasm/npm/` — `package.json` **generated**, not
   hand-committed (verified dart-sass practice, `js-api.md` §8); `index.js` sets
   `globalThis.self` before load (or every Promise hangs on Node) **and wraps the raw
