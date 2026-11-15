@@ -221,6 +221,10 @@ product; the compiler is a packaging decision.*
 3. **Dart consumers do not pay for it.** The facade is reachable only from that entry
    point's `main()`, so it tree-shakes out of any Dart application that imports
    `at_client_wasm` as a library.
+4. **JS objects built from item data have a null prototype.** Item `data`, `sharedWith`
+   entries and every other value a peer can write reach JavaScript only through the
+   facade's conversion, which creates each object with `Object.create(null)` (or an
+   equivalent). Keys such as `__proto__` or `constructor` are then plain properties.
 
 ```
 packages/at_client_wasm/
@@ -433,14 +437,32 @@ does not exist yet.
 | Operation | `AtCollection` call | Rule |
 | --- | --- | --- |
 | `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `expirationMs` must be positive, else `W8_INVALID_ARGUMENT` |
-| `create(data, {id, sharedWith})` | `create` | |
-| `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent |
-| `list()` | `getItems()` | upstream order; never re-sorted |
-| `query([{path, op, value}])` | `query().wherePath(...)` per clause, then `get()` | clauses AND together; upstream order |
+| `create(data, {id, sharedWith})` | `create` | a given `id` must match the item-id rule below |
+| `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent; an unreadable item rejects `W8_UNREADABLE` |
+| `list()` | `getItemsAsStream()` with a per-item error handler | resolves `{items, unreadable}` (below); upstream order; never re-sorted |
+| `query([{path, op, value}])` | `getItemsAsStream()` with a per-item error handler, then each clause's `Predicate` applied to the readable items | clauses AND together; resolves `{items, unreadable}`; upstream order |
 | `update({id, owner}, data)` | re-read `get`, then `update(draft, unshareWithOthers: false)` | the draft keeps the re-read `sharedWith`, `expiresAt`, `availableAt` |
 | `share({id, owner}, atSigns)` | re-read `get`, then `updateSharedWith(item, reread ∪ atSigns, unshareWithOthers: false)` | add-only; never `update` with a stale `sharedWith` |
 | `remove({id, owner}, {cascade})` | re-read `get`, then `delete` | |
 | `watch(onEvent, {onError}) → cancel` | `watch().listen` | callbacks (D-9); `cancel()` returns a Future that completes once the subscription is cancelled |
+
+**Item ids.** An id given to `create`, or in the address of `get`, `update`, `share` and
+`remove`, must match `^[a-z0-9][a-z0-9_-]{0,63}$`, else the call rejects with
+`W8_INVALID_ARGUMENT` before any `AtCollection` call. When `create` is given no id,
+`AtCollection` generates one.
+
+**List and query results.** `list()` and `query()` resolve to
+`{items, unreadable}`. `items` holds every readable item, in upstream order.
+`unreadable` holds one `{id, owner, code}` per record this device cannot read, where `code`
+is `W8_UNREADABLE`; an unreadable record does not fail the call. `get()` of such an item
+still rejects with `W8_UNREADABLE`.
+
+**Known limits.**
+
+- Items that Dart apps wrote with ids outside the id rule appear in `list()` and `query()`
+  but cannot be addressed from JS.
+- Await each write on an item before starting the next. Two writes to one item that
+  overlap can overwrite each other, as upstream (last writer wins).
 
 A write to an item whose owner is not the client's atSign rejects with `W8_NOT_OWNER` before
 any `AtCollection` call: `draft` always stamps the client's own atSign, so translating such a
@@ -510,12 +532,12 @@ same shape.
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `W8_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign or id | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `W8_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign, or an item id outside `^[a-z0-9][a-z0-9_-]{0,63}$` | `ArgumentError`, `InvalidAtSignException`, adapter checks |
 | `W8_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
 | `W8_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `W8_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
 | `W8_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
-| `W8_UNREADABLE` | a record this device cannot read, from get, list or query, or on the watch stream | `CItemReadException`. Never skipped. The message names the id and owner, not the cause |
+| `W8_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing | `CItemReadException`. The message names the id and owner, not the cause |
 | `W8_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
 | `W8_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
 | `W8_FAILED` | anything else; `kind` names it | |

@@ -14,13 +14,16 @@ Feature: The JS collections adapter translates onto AtCollection
   writing the item's data at once still end last-writer-wins, as upstream.
   Replay: none arise; the adapter issues the same AtCollection calls an app
   would and nothing it accepts is signed or checked for freshness here.
-  DoS: none new; every call is one AtCollection call plus at most one
-  re-read, and a watch holds one subscription that cancel releases.
+  DoS: every call is one AtCollection call plus at most one re-read, and a
+  watch holds one subscription that cancel releases. A record this device
+  cannot read is reported in the `unreadable` list of a list or query and
+  does not fail the listing, so one peer's record never blocks the others.
   Forgery and impersonation: every item carries the owner AtCollection read
   from the key, and a write to an item owned by another atSign is refused
   before it reaches AtCollection, so a peer's id can never turn into a write
   of the caller's own item. Atsigns are normalised and validated by
-  toAtsign, not by the adapter.
+  toAtsign. An item id must match ^[a-z0-9][a-z0-9_-]{0,63}$ on every
+  address, so no id reaches AtCollection outside that set.
 
   Scenario: An open passes namespace, expiration, type and eventSource through unchanged
     Given a client
@@ -70,10 +73,11 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter gets "b1" owned by @bob
     Then the get rejects with W8_UNREADABLE, id "b1", owner "@bob" and no cause text
 
-  Scenario: A list rejects with W8_UNREADABLE when one record is unreadable
-    Given a readable item and an unreadable shared item
+  Scenario: A list returns readable items and reports unreadable ones
+    Given a readable item and an unreadable shared item "b1" owned by @bob
     When the adapter lists the collection
-    Then the list rejects with W8_UNREADABLE instead of skipping the record
+    Then the list resolves with the readable item in items
+    And unreadable holds one entry with id "b1", owner "@bob" and code W8_UNREADABLE
 
   Scenario: A list keeps the upstream order of items and recipients
     Given items created in an unsorted order with recipients in an unsorted order
@@ -163,10 +167,26 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter queries with "like", "~", "=<" with a map value, an empty path segment or a map value for "<"
     Then each rejects with W8_INVALID_ARGUMENT naming the problem
 
-  Scenario: A query rejects with W8_UNREADABLE when one record is unreadable
-    Given a readable item and an unreadable shared item
+  Scenario: A query returns matching readable items and reports unreadable ones
+    Given a readable item and an unreadable shared item "b1" owned by @bob
     When the adapter queries the collection
-    Then the query rejects with W8_UNREADABLE
+    Then the query resolves with the matching readable item in items
+    And unreadable holds one entry with id "b1", owner "@bob" and code W8_UNREADABLE
+
+  Scenario: A query with where clauses over a set with an unreadable record keeps upstream order
+    Given items matching and not matching a where clause and an unreadable shared item
+    When the adapter queries with the where clause
+    Then items holds the matching readable items in the order AtCollection returns them
+    And unreadable holds the unreadable record
+
+  Scenario: An item id outside the allowed set rejects with W8_INVALID_ARGUMENT
+    When the adapter creates, gets, updates, shares or removes with the id "public:x", "@bob:x", "", "A1", "a.b", "x y", a 65-character id or "_x"
+    Then each rejects with W8_INVALID_ARGUMENT
+    And nothing is written
+
+  Scenario: An item id of 64 allowed characters round-trips
+    When the adapter creates an item with a 64-character id of lowercase letters, digits, "_" and "-"
+    Then a get of that id returns the item
 
   Scenario: Each upstream event is delivered once and cancel stops delivery
     Given a watch on the collection
