@@ -1495,8 +1495,8 @@ SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
 /// Windows), which at_activate deletes when its command ends, except on
 /// Windows, and nothing else deletes.
 ///
-/// Its `from:` names the calling program after its program file, as
-/// at_client names an app that names none.
+/// [appName] and [appVersion] name the calling program on its `from:`;
+/// without them it is named after its program file, at version `unknown`.
 Future<AtClient> createAtClient(
         {required String atSign,
         String? atKeysFilePath,
@@ -1504,9 +1504,13 @@ Future<AtClient> createAtClient(
         String? passPhrase,
         PqPosture? posture,
         bool waitForPqStartup = true,
-        int maxConnectAttempts = 5}) =>
+        int maxConnectAttempts = 5,
+        String? appName,
+        String? appVersion}) =>
     _commandClient(
         program: null,
+        appName: appName,
+        appVersion: appVersion,
         atSign: atSign,
         atKeysFilePath: atKeysFilePath,
         rootDomain: rootDomain,
@@ -1515,9 +1519,13 @@ Future<AtClient> createAtClient(
         waitForPqStartup: waitForPqStartup,
         maxConnectAttempts: maxConnectAttempts);
 
-/// [createAtClient]'s client, whose `from:` names [program] when it is set.
+/// [createAtClient]'s client, whose `from:` names [program] at
+/// at_client_cli's version when it is set, and [appName] at [appVersion]
+/// when it is not.
 Future<AtClient> _commandClient(
     {required String? program,
+    String? appName,
+    String? appVersion,
     required String atSign,
     String? atKeysFilePath,
     String? rootDomain,
@@ -1538,7 +1546,13 @@ Future<AtClient> _commandClient(
     ..namespace = commandNamespace
     ..rootDomain = parsedRootDomain.rootDomain
     ..rootPort = parsedRootDomain.rootPort;
-  if (program != null) namedAs(program, preference);
+  if (program != null) {
+    namedAs(program, preference);
+  } else {
+    preference.atClientParticulars
+      ..appName = appName
+      ..appVersion = appVersion;
+  }
 
   stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
   final AtClient client;

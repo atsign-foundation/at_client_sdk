@@ -211,6 +211,27 @@ void main() {
   });
 
   test(
+      'Given a program outside at_client_cli that passes appName and '
+      'appVersion, when the client createAtClient opens authenticates, then '
+      'its from: names them', () async {
+    final keysPath = await keyfile();
+
+    final config = await firstConfigWhile(createAtClient(
+        atSign: '@alice',
+        atKeysFilePath: keysPath,
+        rootDomain: 'proxy:127.0.0.1:${proxy.port}',
+        posture: PqPosture.legacy,
+        waitForPqStartup: false,
+        maxConnectAttempts: 1,
+        appName: 'acme_admin',
+        appVersion: '3.2.1'));
+
+    expect(config['appName'], 'acme_admin');
+    expect(config['appVersion'], '3.2.1');
+    expect(config['sdkName'], 'atsign.dart.at_client');
+  });
+
+  test(
       'Given at_activate\'s list command, when its client authenticates, '
       'then its from: names at_activate at at_client_cli\'s version', () async {
     final keysPath = await keyfile();
