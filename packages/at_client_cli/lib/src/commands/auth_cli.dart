@@ -467,7 +467,7 @@ Future<int> status(ArgResults ar) async {
       atSign,
       CacheableSecondaryAddressFinder(
           rootDomain.rootDomain, rootDomain.rootPort),
-      (atDirectory) => lookUpsFor(rootDomain.rootDomain)(
+      (atDirectory) => secureSocketLookUps()(
             atSign: atSign,
             rootDomain: rootDomain,
             authenticator: null,
