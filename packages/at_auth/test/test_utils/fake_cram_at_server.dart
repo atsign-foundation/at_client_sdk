@@ -43,8 +43,7 @@ class FakeCramAtServer {
       String hex(int length) => List.generate(length, (_) => random.nextInt(16))
           .map((n) => n.toRadixString(16))
           .join();
-      String uuid() =>
-          '${hex(8)}-${hex(4)}-${hex(4)}-${hex(4)}-${hex(12)}';
+      String uuid() => '${hex(8)}-${hex(4)}-${hex(4)}-${hex(4)}-${hex(12)}';
       return 'data:_${uuid()}$atSign:${uuid()}';
     }
     if (command.startsWith('cram:')) return cramReply;

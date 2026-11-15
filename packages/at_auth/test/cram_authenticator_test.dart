@@ -28,7 +28,7 @@ void main() {
 
       final result = await cramAuthenticator.authenticate(
           atSign, cramSecret, mockAtLookup,
-              clientConfig: const {});
+          clientConfig: const {});
 
       expect(result, isTrue);
     });
@@ -61,8 +61,8 @@ void main() {
         atLookUp.authenticator = held;
 
         await CramAuthenticator()
-            .authenticate('@alice', 'secret', atLookUp, clientConfig: const {})
-            .then<Object?>((result) => result, onError: (Object e) => e);
+            .authenticate('@alice', 'secret', atLookUp, clientConfig: const {}).then<
+                Object?>((result) => result, onError: (Object e) => e);
 
         expect(
             atServer.written.where((c) => c.startsWith('cram:')), hasLength(1),
@@ -84,10 +84,11 @@ void main() {
       Future<bool> held(AtCommandExecutor executor) async => true;
       atLookUp.authenticator = held;
 
-      final first =
-          CramAuthenticator().authenticate('@alice', 'secret', atLookUp, clientConfig: const {});
+      final first = CramAuthenticator()
+          .authenticate('@alice', 'secret', atLookUp, clientConfig: const {});
       await expectLater(
-          CramAuthenticator().authenticate('@alice', 'secret', atLookUp, clientConfig: const {}),
+          CramAuthenticator().authenticate('@alice', 'secret', atLookUp,
+              clientConfig: const {}),
           throwsA(isA<StateError>()));
       expect(await first, isTrue);
 
@@ -106,8 +107,8 @@ void main() {
       Future<bool> installed(AtCommandExecutor executor) async => true;
       atLookUp.authenticator = held;
 
-      final running =
-          CramAuthenticator().authenticate('@alice', 'secret', atLookUp, clientConfig: const {});
+      final running = CramAuthenticator()
+          .authenticate('@alice', 'secret', atLookUp, clientConfig: const {});
       atLookUp.authenticator = installed;
       expect(await running, isTrue);
 
@@ -132,8 +133,8 @@ void main() {
       addTearDown(atLookUp.close);
 
       final thrown = await CramAuthenticator()
-          .authenticate(atSign, secret, atLookUp, clientConfig: const {})
-          .then<Object?>((_) => null, onError: (Object e) => e);
+          .authenticate(atSign, secret, atLookUp, clientConfig: const {}).then<
+              Object?>((_) => null, onError: (Object e) => e);
 
       expect('$thrown', holdsNoneOf(secret),
           reason: 'the exception holds none of the secret');
