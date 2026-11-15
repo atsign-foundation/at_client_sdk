@@ -101,8 +101,8 @@ String _where(String source) =>
 /// was read.
 String _reasonFor(Object error) {
   final text = switch (error) {
-    AtKeysFormatException(:final reason, :final position) =>
-      reason == AtKeysFormatException.notAnObject('').reason && position == null
+    AtKeysFormatException(:final isJson, :final reason, :final position) =>
+      isJson
           ? 'it is not a JSON object'
           : 'it is not valid JSON: $reason'
               '${position == null ? '' : ' (at character $position)'}',

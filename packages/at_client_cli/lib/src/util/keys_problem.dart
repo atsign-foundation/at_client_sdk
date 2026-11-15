@@ -43,7 +43,7 @@ void reportKeysProblem(AtKeysUnusableException e,
       ],
     AtKeysUnusableCause.anotherAtsign => ['${e.message} Check -a and -k.'],
     AtKeysUnusableCause.pendingEnrollment
-        when e is AtEnrollmentPendingException && !_isSeveralMatching(e) =>
+        when e is AtEnrollmentPendingException && !e.severalMatched =>
       [_waitForApproval(e)],
     _ => [e.message],
   };
@@ -54,13 +54,6 @@ void reportKeysProblem(AtKeysUnusableException e,
   }
   stderr.writeln(keysProblemFooter);
 }
-
-/// Whether [e] is `AtEnrollmentPendingException.several`'s refusal of
-/// several pending enrollments that match, which waiting cannot resolve.
-bool _isSeveralMatching(AtEnrollmentPendingException e) =>
-    e.message ==
-    AtEnrollmentPendingException.several(e.atSign, e.pendingEnrollmentIds)
-        .message;
 
 /// The line for keys holding only the pending enrollment requests [e] names:
 /// wait for approval, then run the command again.

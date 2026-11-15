@@ -464,8 +464,13 @@ class AtNoCredentialException extends AtKeysUnusableException {
 class AtEnrollmentPendingException extends AtKeysUnusableException {
   final List<String> pendingEnrollmentIds;
 
+  /// Whether `Atsign.resumeEnrollment` threw this, finding several pending
+  /// enrollments that match what it was given, which waiting cannot resolve.
+  final bool severalMatched;
+
   AtEnrollmentPendingException(String atSign, this.pendingEnrollmentIds)
-      : super(
+      : severalMatched = false,
+        super(
             '$atSign holds no live credential, only the pending enrollment'
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
             '${pendingEnrollmentIds.join(', ')}: resume it with '
@@ -476,7 +481,8 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
   /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
   /// enrollments of [atSign] matching what it was given.
   AtEnrollmentPendingException.several(String atSign, this.pendingEnrollmentIds)
-      : super(
+      : severalMatched = true,
+        super(
             '$atSign holds several pending enrollments that match: '
             '${pendingEnrollmentIds.join(', ')}. To resume one, name both the '
             'app and the device',

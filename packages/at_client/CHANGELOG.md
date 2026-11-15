@@ -86,6 +86,8 @@
   every device, for keys it cannot use: absent, unreadable, holding no
   keypair it can sign with, or for another atSign. `AtNoCredentialException`
   and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
+- feat: `AtEnrollmentPendingException.severalMatched` says whether
+  `resumeEnrollment` threw it for several matching pending enrollments.
 - fix: `Atsign.enroll` refusing a keys store that holds live keys says to give
   the new enrollment a keys store of its own.
 
