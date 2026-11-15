@@ -2,7 +2,9 @@ import 'package:at_client/at_client.dart';
 
 const _proxyPrefix = 'proxy:';
 
-final _notInAHost = RegExp(r'[\s:/]');
+/// A bare host: a DNS name or IPv4 address, nothing a URL would read as
+/// userinfo, port, path, query or fragment.
+final _bareHost = RegExp(r'^[A-Za-z0-9._-]+$');
 
 /// A bracketed IPv6 literal, as it is written in a URL's authority.
 final _bracketedIpv6 = RegExp(r'^\[([0-9A-Fa-f:.]+)\]$');
@@ -18,8 +20,8 @@ class SessionTransportOptions {
   /// Throws an [ArgumentError] naming the field for a [proxyHost] without a
   /// [proxyPort] or the reverse, a [root] given with a proxy, a port outside
   /// 1-65535, and a host, the proxy's or the root's, that is empty or holds
-  /// whitespace, `:` or `/`, unless it is a bracketed IPv6 literal such as
-  /// `[::1]`.
+  /// anything but ASCII letters, digits, `.`, `-` and `_`, unless it is a
+  /// bracketed IPv6 literal such as `[::1]`.
   SessionTransportOptions(
       {AtRootDomain? root, String? proxyHost, int? proxyPort})
       : root = _root(root, proxyHost, proxyPort);
@@ -69,12 +71,12 @@ class SessionTransportOptions {
       throw ArgumentError.value(value, name, 'must not be empty');
     }
     if (_isBracketedIpv6(host)) return;
-    if (host.contains(_notInAHost)) {
+    if (!_bareHost.hasMatch(host)) {
       throw ArgumentError.value(
           value,
           name,
-          'must be a bare host, without whitespace, : or /, or an IPv6 '
-          'literal in brackets, such as [::1]');
+          'must be a bare host of letters, digits, ., - and _ only, or an '
+          'IPv6 literal in brackets, such as [::1]');
     }
   }
 

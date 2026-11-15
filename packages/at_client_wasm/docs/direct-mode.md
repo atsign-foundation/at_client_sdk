@@ -19,6 +19,8 @@ Both modes are trunk's at_lookup, chosen once by `sessionTransport(options)`.
 
 `SessionTransportOptions.root` is an `AtRootDomain`: by default the production atDirectory, `root.atsign.org:64`, and for a proxy `proxy:<host>` at the proxy's port. `sessionTransport` passes it on as `SessionTransport.root`, and `portalSession` fills `AtClientPreference.rootDomain`/`rootPort` from it. A `prefs` that names another root is refused with an `ArgumentError` before any connection.
 
+Unicode hostnames are refused; use their punycode (`xn--`) form.
+
 ## What the dev proxy sees
 The proxy is opt-in and for development. Use it only on a machine and network you control, never against production Atsigns through a proxy you do not run.
 
