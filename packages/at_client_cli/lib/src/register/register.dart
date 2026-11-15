@@ -83,19 +83,15 @@ class Register {
 }
 
 /// Activates [atSign] with [cramKey] as `at_activate onboard` does, run as
-/// at_register, and answers its exit code; [rootServer], when set, is the
-/// atDirectory it asks.
+/// at_register, and answers its exit code; [onboard] runs that command line,
+/// at_activate's own when it is null.
 @visibleForTesting
 Future<int> onboardRegistered(String atSign, String cramKey,
-        {String? rootServer}) =>
-    auth_cli.main([
-      'onboard',
-      '-a',
-      atSign,
-      '-c',
-      cramKey,
-      if (rootServer != null) ...['-r', rootServer],
-    ], program: 'at_register');
+    {Future<int> Function(List<String> arguments, {required String program})?
+        onboard}) {
+  final run = onboard ?? auth_cli.main;
+  return run(['onboard', '-a', atSign, '-c', cramKey], program: 'at_register');
+}
 
 ///class that handles multiple tasks of type [RegisterApiTask]
 ///Initialized with a params map that needs to be populated with - email and api host address

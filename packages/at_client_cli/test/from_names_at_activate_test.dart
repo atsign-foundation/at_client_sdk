@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart';
+import 'package:at_client_cli/src/register/register.dart'
+    show onboardRegistered;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
@@ -112,6 +114,27 @@ void main() {
       expect(config['appName'], 'at_register');
       expect(config['appVersion'], atClientCliVersion);
     }
+  });
+
+  test(
+      'Given an atSign at_register has registered, when onboardRegistered '
+      'activates it, then it runs onboard with the atSign and CRAM secret, '
+      'as at_register', () async {
+    final runs = <({List<String> arguments, String program})>[];
+
+    final code = await onboardRegistered('@newborn', 'the-one-time-secret',
+        onboard: (arguments, {required program}) async {
+      runs.add((arguments: arguments, program: program));
+      return 0;
+    });
+
+    expect(code, 0);
+    expect(runs, hasLength(1));
+    expect(runs.single.arguments,
+        ['onboard', '-a', '@newborn', '-c', 'the-one-time-secret'],
+        reason: 'the command line at_register ran before onboardRegistered '
+            'existed, with no root server, so the atDirectory is the default');
+    expect(runs.single.program, 'at_register');
   });
 }
 
