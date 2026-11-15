@@ -127,9 +127,11 @@ class _FakeClient extends Fake implements AtClient {
 }
 
 AtNotification _event(String id,
-        {String value = 'yo', String? operation = 'update'}) =>
-    AtNotification(
-        id, '@alice:attalk.wavi@bob', '@bob', '@alice', 42, 'key', true,
+        {String value = 'yo',
+        String? operation = 'update',
+        String key = '@alice:attalk.wavi@bob',
+        String from = '@bob'}) =>
+    AtNotification(id, key, from, '@alice', 42, 'key', true,
         value: value, operation: operation);
 
 void main() {
@@ -337,6 +339,33 @@ void main() {
       await pumpEventQueue();
 
       expect(received, isEmpty);
+    });
+
+    test('delivers only a notification sent by the key owner', () async {
+      final received = <JsNotification>[];
+      session.subscribe('.*', received.add);
+
+      service.events
+        ..add(_event('other', from: '@carol'))
+        ..add(_event('own', from: '@bob'));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), ['own']);
+    });
+
+    test('matches the sender and the key owner by canonical atSign', () async {
+      final received = <JsNotification>[];
+      session.subscribe('.*', received.add);
+
+      service.events
+        ..add(_event('a', from: 'BOB'))
+        ..add(_event('b', key: '@alice:attalk.wavi@BOB', from: '@bob'))
+        ..add(_event('c', key: 'public:k@bob', from: ' Bob '))
+        ..add(_event('d', key: 'nokey', from: '@bob'));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), ['a', 'b', 'c']);
+      expect(received.map((n) => n.from), everyElement('@bob'));
     });
 
     test('drops the echo of a notification this session sent', () async {

@@ -119,7 +119,7 @@ class AtClientJsSession implements JsSession {
   final AtClient _client;
   final String _namespace;
   final _sent = <String>{};
-  final _subscriptions = <StreamSubscription<AtNotification>>{};
+  final _subscriptions = <StreamSubscription<Object?>>{};
   bool _closed = false;
 
   void _open() {
@@ -204,6 +204,26 @@ class AtClientJsSession implements JsSession {
     if (_sent.length > sentIdLimit) _sent.remove(_sent.first);
   }
 
+  /// The canonical atSign that sent [n], or null when it is not the owner of
+  /// the notification's key (the atSign after the key's last `@`).
+  static String? _sender(AtNotification n) {
+    final at = n.key.lastIndexOf('@');
+    if (at < 0) return null;
+    final owner = _canonical(n.key.substring(at));
+    final from = _canonical(n.from);
+    return owner != null && owner == from ? from : null;
+  }
+
+  /// [atSign] trimmed, lower-cased and put in `@name` form; null when it is
+  /// not an atSign.
+  static String? _canonical(String atSign) {
+    try {
+      return atSign.trim().toLowerCase().toAtsign();
+    } on Exception {
+      return null;
+    }
+  }
+
   @override
   void Function() subscribe(
       String regex, void Function(JsNotification) onEvent) {
@@ -212,15 +232,20 @@ class AtClientJsSession implements JsSession {
     final subscription = service
         .subscribe(regex: regex, shouldDecrypt: true)
         .where((n) => !_sent.contains(n.id))
-        .listen((n) => onEvent((
-              id: n.id,
-              from: n.from,
-              key: n.key,
-              value: n.value,
-              epochMillis: n.epochMillis,
-              operation:
-                  n.operation?.endsWith('delete') == true ? 'delete' : 'update',
-            )));
+        .map((n) => (n, _sender(n)))
+        .where((e) => e.$2 != null)
+        .listen((e) {
+      final (n, from) = e;
+      onEvent((
+        id: n.id,
+        from: from!,
+        key: n.key,
+        value: n.value,
+        epochMillis: n.epochMillis,
+        operation:
+            n.operation?.endsWith('delete') == true ? 'delete' : 'update',
+      ));
+    });
     _subscriptions.add(subscription);
     service.startListening();
     return () {
