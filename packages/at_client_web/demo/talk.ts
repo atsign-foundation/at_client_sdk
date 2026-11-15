@@ -113,6 +113,8 @@ byId('send').addEventListener('submit', (event) => {
   );
 });
 
-window.addEventListener('pagehide', () => {
-  void stop();
+// A page entering the back/forward cache (`persisted`) keeps its client open
+// for when it is restored; only a page that is going away closes it.
+window.addEventListener('pagehide', (event) => {
+  if (!event.persisted) void stop();
 });
