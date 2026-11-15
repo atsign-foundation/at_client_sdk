@@ -2,8 +2,8 @@ import 'package:at_client/at_client.dart';
 
 const _proxyPrefix = 'proxy:';
 
-/// A bare host: a DNS name or IPv4 address, nothing a URL would read as
-/// userinfo, port, path, query or fragment.
+/// A bare host: a DNS name or IPv4 address of ASCII letters, digits, `.`,
+/// `-` and `_` only.
 final _bareHost = RegExp(r'^[A-Za-z0-9._-]+$');
 
 /// A bracketed IPv6 literal, as it is written in a URL's authority.

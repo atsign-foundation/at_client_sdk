@@ -11,6 +11,23 @@ Matcher _namingField(String field) =>
 final _sayingToBracketIpv6 = throwsA(isA<ArgumentError>().having(
     (e) => e.message, 'message', contains('in brackets, such as [::1]')));
 
+/// Hosts with one character outside ASCII letters, digits, `.`, `-` and `_`,
+/// each of which a host must not hold.
+const _outsideTheAllowlist = [
+  'prøxy.example',
+  'a[b',
+  'a]b',
+  'a,b',
+  'a;b',
+  'a!b',
+  'a&b',
+  'a=b',
+  'a+b',
+  'a~b',
+  'a\u0000b',
+  'a\u200Bb',
+];
+
 void main() {
   test('no proxyHost opens direct', () {
     expect(_options().proxy, isNull);
@@ -84,14 +101,18 @@ void main() {
     });
 
     test(
-        'when its host holds whitespace, a colon, a slash, ? or @, then it '
-        'throws naming root', () {
+        'when its host holds anything but ASCII letters, digits, ., - and _, '
+        'then it throws naming root', () {
       for (final domain in [
         'proxy:proxy example',
         'proxy:proxy.example:443',
         'proxy:proxy.example/ws',
         'proxy:proxy.example?',
         'proxy:localhost@other.example',
+        'proxy:proxy.example#',
+        r'proxy:proxy.example\',
+        'proxy:proxy.example%2f',
+        for (final host in _outsideTheAllowlist) 'proxy:$host',
       ]) {
         expect(() => SessionTransportOptions(root: AtRootDomain(domain, 443)),
             _namingField('root'),
@@ -137,19 +158,20 @@ void main() {
     });
 
     test(
-        'when it holds a character a URL reads as userinfo, query, fragment '
-        'or path, then it throws naming proxyHost', () {
+        'when it holds anything but ASCII letters, digits, ., - and _, then '
+        'it throws naming proxyHost', () {
       for (final host in [
         'proxy.example?',
         'localhost@other.example',
         r'proxy.example\',
         'proxy.example#',
         'proxy.example%2f',
+        ..._outsideTheAllowlist,
       ]) {
         expect(() => _options(proxyHost: host, proxyPort: 8443),
             _namingField('proxyHost'),
-            reason: '"$host" would connect somewhere other than its own '
-                'host and port');
+            reason: '"$host" holds a character other than ASCII letters, '
+                'digits, ., - and _');
       }
     });
 
@@ -178,8 +200,8 @@ void main() {
 
   group('Given a direct root', () {
     test(
-        'when its host is empty or holds whitespace, a colon, a slash, ? or @, '
-        'then it throws naming root', () {
+        'when its host is empty or holds anything but ASCII letters, digits, '
+        '., - and _, then it throws naming root', () {
       for (final domain in [
         '',
         ' ',
@@ -188,6 +210,10 @@ void main() {
         'root.example/x',
         'root.example?',
         'user@root.example',
+        'root.example#',
+        r'root.example\',
+        'root.example%2f',
+        ..._outsideTheAllowlist,
       ]) {
         expect(() => SessionTransportOptions(root: AtRootDomain(domain, 64)),
             _namingField('root'),
