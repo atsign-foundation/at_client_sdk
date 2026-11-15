@@ -416,6 +416,11 @@ interface class AtCollection<T> {
 
   final Duration defaultExpiration;
 
+  // Type tag stamped on items this collection creates when no factory is
+  // registered for their runtime type. Lets items carry a wire-format tag
+  // without a `fromJson` factory.
+  final String? _writeTypeTag;
+
   late final AtSignLogger _logger;
 
   // Internal event controller and derived streams.
@@ -498,6 +503,10 @@ interface class AtCollection<T> {
   /// [fromJson] and [typeTag] travel together: supplying one without the
   /// other throws [ArgumentError]. See [registerFactory] for why
   /// [typeTag] is required.
+  ///
+  /// [writeTypeTag] stamps created items with that tag when no factory is
+  /// registered for their type. It is independent of [fromJson]; when
+  /// [typeTag] is also set, the two must match.
   factory AtCollection(
     AtClient atClient,
     String namespace,
@@ -505,6 +514,7 @@ interface class AtCollection<T> {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -513,6 +523,7 @@ interface class AtCollection<T> {
         eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
 
   /// Test-only factory that bypasses `atClient.notificationService.subscribe`
@@ -526,6 +537,7 @@ interface class AtCollection<T> {
     required Stream<AtNotification> notifications,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -534,6 +546,7 @@ interface class AtCollection<T> {
         eventSource: EventSource.notifs,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
       );
 
@@ -549,6 +562,7 @@ interface class AtCollection<T> {
     required Stream<DataEvent> dataEvents,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -557,6 +571,7 @@ interface class AtCollection<T> {
         eventSource: EventSource.data,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         injectedDataEvents: dataEvents,
       );
 
@@ -573,6 +588,7 @@ interface class AtCollection<T> {
     required Stream<DataEvent> dataEvents,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -581,24 +597,20 @@ interface class AtCollection<T> {
         eventSource: EventSource.both,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
         injectedDataEvents: dataEvents,
       );
 
-  AtCollection._(
-    this.atClient,
-    this.namespace,
-    this.defaultExpiration, {
-    required EventSource eventSource,
-    T Function(Map<String, dynamic>)? fromJson,
-    String? typeTag,
-    Stream<AtNotification>? notifications,
-    Stream<DataEvent>? injectedDataEvents,
-  }) : _eventSource = eventSource {
-    if (!namespace.contains('.')) {
-      throw ArgumentError('namespace must be fully qualified');
-    }
-    if (fromJson != null && typeTag == null) {
+  /// Throws [ArgumentError] when the tag arguments of a collection cannot be
+  /// used together: [typeTag] without a `fromJson` or the reverse, a blank
+  /// [writeTypeTag], or a [writeTypeTag] that differs from [typeTag].
+  static void _checkTagArgs<T>({
+    required bool hasFromJson,
+    required String? typeTag,
+    required String? writeTypeTag,
+  }) {
+    if (hasFromJson && typeTag == null) {
       throw ArgumentError(
         'typeTag is required when fromJson is supplied. '
         "Pass typeTag: '$T' alongside fromJson, or call "
@@ -607,13 +619,44 @@ interface class AtCollection<T> {
         'survives Dart minifier / tree-shaker renames in release builds.',
       );
     }
-    if (fromJson == null && typeTag != null) {
+    if (!hasFromJson && typeTag != null) {
       throw ArgumentError(
         'typeTag was supplied without fromJson. Pass fromJson alongside '
         'it, or omit both and register the factory separately via '
         'AtCollection.registerFactory.',
       );
     }
+    if (writeTypeTag != null && writeTypeTag.trim().isEmpty) {
+      throw ArgumentError('writeTypeTag must be non-blank when supplied.');
+    }
+    if (typeTag != null && writeTypeTag != null && writeTypeTag != typeTag) {
+      throw ArgumentError(
+        'writeTypeTag "$writeTypeTag" conflicts with typeTag "$typeTag". '
+        'Pass the same value or omit writeTypeTag.',
+      );
+    }
+  }
+
+  AtCollection._(
+    this.atClient,
+    this.namespace,
+    this.defaultExpiration, {
+    required EventSource eventSource,
+    T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
+    String? writeTypeTag,
+    Stream<AtNotification>? notifications,
+    Stream<DataEvent>? injectedDataEvents,
+  })  : _eventSource = eventSource,
+        _writeTypeTag = writeTypeTag {
+    if (!namespace.contains('.')) {
+      throw ArgumentError('namespace must be fully qualified');
+    }
+    _checkTagArgs<T>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
     if (fromJson != null) {
       registerFactory<T>(fromJson, typeTag: typeTag!);
     }
@@ -1691,6 +1734,11 @@ interface class AtCollection<T> {
   /// - `parent.id` contains a `.`;
   /// - the composed namespace would exceed 128 chars.
   ///
+  /// [writeTypeTag] stamps items this sub-collection creates with that tag
+  /// when no factory is registered for their type. It is not inherited from
+  /// the parent collection. Opening the same composed namespace again with
+  /// another tag is not refused: sub-collections are not cached.
+  ///
   /// **Parent-delete behaviour.** When [parent] is deleted — locally,
   /// or via a remote-delete notification — the sub-collection
   /// automatically deletes this atSign's own items scoped to it. See
@@ -1701,6 +1749,7 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       _subCollectionInternal<U>(
         parent: parent,
@@ -1708,6 +1757,7 @@ interface class AtCollection<T> {
         defaultExpiration: defaultExpiration,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
 
   /// Walks a descendant chain in one call and returns the typed leaf
@@ -1869,6 +1919,7 @@ interface class AtCollection<T> {
     required Stream<AtNotification> notifications,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       _subCollectionInternal<U>(
         parent: parent,
@@ -1876,6 +1927,7 @@ interface class AtCollection<T> {
         defaultExpiration: defaultExpiration,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
       );
 
@@ -1885,6 +1937,7 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (subName == _rr) {
@@ -1901,6 +1954,7 @@ interface class AtCollection<T> {
       defaultExpiration: defaultExpiration,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
       notifications: notifications,
     );
   }
@@ -1913,6 +1967,7 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
     if (subName.isEmpty || subName.contains('.')) {
@@ -1965,6 +2020,7 @@ interface class AtCollection<T> {
         notifications: notifications,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     } else if (_consumesData && _injectedDataEvents != null) {
       sub = AtCollection<U>._withInjectedDataEvents(
@@ -1974,6 +2030,7 @@ interface class AtCollection<T> {
         dataEvents: _injectedDataEvents!,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     } else {
       sub = AtCollection<U>(
@@ -1983,6 +2040,7 @@ interface class AtCollection<T> {
         eventSource: _eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     }
     sub._parentItem = parent;
@@ -3083,10 +3141,13 @@ interface class AtCollection<T> {
 
   String _resolveType(Object? obj) {
     if (obj is Uint8List) return 'binary';
-    final entry = _factoriesByType[obj.runtimeType];
-    if (entry != null) return entry.tag;
-    return 'n/a';
+    return _tagFor(obj.runtimeType, _writeTypeTag);
   }
+
+  /// The tag stamped on a new item of [type], other than a byte array, by a
+  /// collection whose writeTypeTag is [writeTypeTag].
+  static String _tagFor(Type type, String? writeTypeTag) =>
+      _factoriesByType[type]?.tag ?? writeTypeTag ?? 'n/a';
 
   // Drops a past [availableAt] so rehydrated CItems don't carry a stale
   // schedule. The Atsign Protocol metadata wire format is additive — a past
@@ -5478,4 +5539,51 @@ class _FactoryEntry {
   final Function fromJson;
 
   _FactoryEntry(this.tag, this.fromJson);
+}
+
+// -----------------------------------------------------------------------------
+// Reopening a collection with another type tag
+
+/// [AtCollection]'s tag-argument check, for [AtClient.collection], which must
+/// refuse bad arguments even when it hands out a cached collection.
+@internal
+void checkCollectionTagArgs<T>({
+  required bool hasFromJson,
+  required String? typeTag,
+  required String? writeTypeTag,
+}) =>
+    AtCollection._checkTagArgs<T>(
+      hasFromJson: hasFromJson,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+
+/// Throws [ArgumentError] when [open], a collection [AtClient.collection]
+/// already handed out, would stamp a new [T] with another tag than a new
+/// collection opened with [typeTag] and [writeTypeTag] would.
+///
+/// A new collection stamps [typeTag], else the tag of the factory registered
+/// for [T], else [writeTypeTag], else `n/a`; [open] stamps the registered
+/// tag, else its own writeTypeTag, else `n/a`. A [T] of [Uint8List] is always
+/// stamped `binary`, so it never differs. Call [checkCollectionTagArgs]
+/// first.
+@internal
+void refuseCollectionTagChange<T>(
+  AtCollection<dynamic> open, {
+  required String? typeTag,
+  required String? writeTypeTag,
+}) {
+  if (T == Uint8List) return;
+  final held = AtCollection._tagFor(T, open._writeTypeTag);
+  final asked = typeTag ?? AtCollection._tagFor(T, writeTypeTag);
+  if (held == asked) return;
+  throw ArgumentError.value(
+      writeTypeTag ?? typeTag,
+      typeTag != null && writeTypeTag == null ? 'typeTag' : 'writeTypeTag',
+      'the collection ${open.namespace} is already open on this client '
+      'stamping "$held" on a new $T, not "$asked", and a collection\'s '
+      'tag is final at construction — it cannot adopt this one. Open it with '
+      'the tag it was first opened with, or use another namespace. '
+      'Handing it out would leave this caller writing items under a tag '
+      'it did not ask for');
 }

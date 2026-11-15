@@ -5,6 +5,9 @@
 - Keys `open` cannot use throw `AtKeysUnusableException` before it connects,
   `AtNoCredentialException` and `AtEnrollmentPendingException` among them
   (`SKILL.md`; `references/05`, `15`).
+- On a `remoteOnly` client, request options that leave `useRemoteAtServer`
+  unset follow the preference; only an explicit value overrides it
+  (`references/12`).
 - A `CLIBase` program whose keyfile holds only an enrollment request waits
   for its approval rather than throwing (`SKILL.md`; `references/14`).
 - A screen that only closes calls `pending.stop()`, which keeps the request
