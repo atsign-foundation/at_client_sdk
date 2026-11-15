@@ -41,6 +41,54 @@ void main() {
     expect(parsed.counts.single.quoted, 7);
   });
 
+  test('every bullet in the section is a count line the parser reads', () {
+    expect(
+        () => _parse('## How the counts were made\n\n'
+            '```sh\nW="packages/a/lib"\n```\n\n'
+            "- A9, things: `git grep -n 'x' -- \$W | wc -l` gives 7.\n"
+            "- A10, others: `git grep -n 'y' -- \$W | wc -l` yields 2.\n"),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('A10, others'))));
+  });
+
+  test('a section with no count lines is refused', () {
+    expect(
+        () => _parse('## How the counts were made\n\n'
+            '```sh\nW="packages/a/lib"\n```\n'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('no count lines'))));
+  });
+
+  test('a command whose search fails is refused, not counted as 0', () {
+    expect(
+        () => _run(
+            _Count('bad', 'git grep -nP "(" -- \$W 2>/dev/null | wc -l', 0),
+            root,
+            workspace),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('bad: exit 128'))));
+  });
+
+  test('a command that writes to stderr is refused', () {
+    expect(
+        () => _run(
+            _Count(
+                'warns',
+                "git grep -n 'no''such''text' -- \$W | wc -l; echo oops >&2",
+                0),
+            root,
+            workspace),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('warns: exit 0: oops'))));
+  });
+
+  test('a command whose search matches nothing gives 0', () {
+    expect(
+        _run(_Count('none', "git grep -n 'no''such''text' -- \$W | wc -l", 0),
+            root, workspace),
+        0);
+  });
+
   test('a result is read as a number, a tally or a list of hits', () {
     expect(_tally(''), 0);
     expect(_tally('5\n'), 5);
@@ -50,15 +98,9 @@ void main() {
   });
 
   test('every count on the page reproduces', () {
-    expect(counts.length, greaterThanOrEqualTo(20),
-        reason: 'the parser must reach every command on the page');
     final risen = <String>[];
     for (final count in counts) {
-      final result = Process.runSync('bash', ['-c', count.command],
-          workingDirectory: root, environment: {'W': workspace});
-      expect(result.exitCode, anyOf(0, 1),
-          reason: '${count.label}: ${result.stderr}');
-      final found = _tally(result.stdout as String);
+      final found = _run(count, root, workspace);
       if (found > count.quoted) {
         risen.add('${count.label}: ${count.quoted} on the page, $found now');
       } else if (found < count.quoted) {
@@ -85,14 +127,29 @@ class _Count {
   final workspace =
       RegExp(r'^W="([^"]+)"$', multiLine: true).firstMatch(section)?.group(1);
   if (workspace == null) throw StateError('no W="..." line in the section');
-  final line = RegExp(r'^- (.+?): `(git .+?)` gives (\d+)', multiLine: true);
-  return (
-    workspace: workspace,
-    counts: [
-      for (final m in line.allMatches(section))
-        _Count(m.group(1)!, m.group(2)!, int.parse(m.group(3)!)),
-    ],
-  );
+  final line = RegExp(r'^- (.+?): `(git .+?)` gives (\d+)');
+  final counts = <_Count>[];
+  for (final bullet in section.split('\n').where((l) => l.startsWith('- '))) {
+    final m = line.firstMatch(bullet);
+    if (m == null) throw StateError('not a count line: $bullet');
+    counts.add(_Count(m.group(1)!, m.group(2)!, int.parse(m.group(3)!)));
+  }
+  if (counts.isEmpty) throw StateError('no count lines in the section');
+  return (workspace: workspace, counts: counts);
+}
+
+/// The tally of [count]'s command, run under bash with `pipefail`. Exit 1 is
+/// a search that matched nothing; a higher exit or any stderr throws, so a
+/// broken command is never read as 0.
+int _run(_Count count, String root, String workspace) {
+  final result = Process.runSync(
+      'bash', ['-o', 'pipefail', '-c', count.command],
+      workingDirectory: root, environment: {'W': workspace});
+  final stderr = (result.stderr as String).trim();
+  if (result.exitCode > 1 || stderr.isNotEmpty) {
+    throw StateError('${count.label}: exit ${result.exitCode}: $stderr');
+  }
+  return _tally(result.stdout as String);
 }
 
 /// A command's result as one number: a bare number, the sum of a
