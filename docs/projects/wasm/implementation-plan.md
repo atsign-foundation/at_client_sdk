@@ -310,8 +310,8 @@ break; it stays as ruled.
   (`decryptPackets`, `tlsKeysSavePath`, `pathToCerts`) the default factory,
   `defaultLookUps(preference)` in at_client's `lifecycle/lookups.dart`, reads until 4.0.
   The proxy convention at_onboarding_cli carried as a string prefix is the first
-  non-default factory, `proxyLookUps()`, which sends `from:<atSign>` first on every
-  connection through `onConnect`. The web equivalent is dev-only too:
+  non-default factory, `proxyLookUps()`, which sent `from:<atSign>` first on every
+  connection through `onConnect` (2026-11-15: at_lookup 4.1.0 sends it itself for a `proxy:` root; `proxyLookUps()` is deprecated). The web equivalent is dev-only too:
   `fixedAddressWebSocketLookUps(host:, port:)` in `at_lookup_web.dart`. The default web
   path is `webSocketLookUps()` (D-15): HTTPS directory lookup, then `wss://` straight to
   the atServer.

@@ -58,7 +58,7 @@ final client = await Atsign(atSign).open(
     keys: CliKeys.fileFor(atSign, path: keysPath),
     preference: prefs,
     storage: CliKeys.storageFor(atSign, program: 'my_app', path: dir),
-    lookUps: lookUpsFor(prefs.rootDomain),
+    lookUps: secureSocketLookUps(),
     secondaryAddressFinder:
         CacheableSecondaryAddressFinder(prefs.rootDomain, prefs.rootPort));
 ```
@@ -150,7 +150,7 @@ final client = await Atsign(atSign).open(
   keys: CliKeys.fileFor(atSign, path: keysPath),
   preference: prefs,
   storage: CliKeys.storageFor(atSign, program: 'my_app', path: tempDir.path),
-  lookUps: lookUpsFor(prefs.rootDomain),
+  lookUps: secureSocketLookUps(),
   secondaryAddressFinder:
       CacheableSecondaryAddressFinder(prefs.rootDomain, prefs.rootPort),
   serviceFactory: ServiceFactoryWithNoOpSyncService(),

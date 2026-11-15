@@ -21,7 +21,7 @@ void main(List<String> args) async {
       preference: preference,
       namespace: 'wavi',
       storage: CliKeys.storageFor(atSign, program: 'wavi', id: enrollmentId),
-      lookUps: lookUpsFor(preference.rootDomain),
+      lookUps: secureSocketLookUps(),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));
 

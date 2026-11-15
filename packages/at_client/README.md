@@ -221,15 +221,17 @@ final client = await Atsign('@alice').open(
     preference: AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos',
     secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64),
     lookUps: secureSocketLookUps(
-        config: SecureSocketConfig()..pathToCerts = '/certs',
-        onConnect: (connection) => connection.sendSync('from:@alice\n')));
+        config: SecureSocketConfig()..pathToCerts = '/certs'));
 ```
 
 `lookUps` builds every connection the client opens. `secureSocketLookUps`
 connects with TLS on TCP, taking a `SecureSocketConfig` and an `onConnect`
-run on each new connection before anything else (a proxy that routes on
-`from:` is what that is for). A factory of your own can hand back any
-`AtLookUp`.
+run on each new connection before anything else. Behind a proxy that routes
+on the atSign, set the preference's `rootDomain` to `proxy:<host>` and its
+`rootPort` to the proxy's port, and give the address finder the same two:
+at_lookup then sends `from:<atSign>` first on every connection itself, so
+`onConnect` must not send it too. A factory of your own can hand
+back any `AtLookUp`.
 
 Every client keeps local storage, even if only in memory: `storage` is
 required, and `InMemoryAtClientStorage` keeps nothing on disk.
