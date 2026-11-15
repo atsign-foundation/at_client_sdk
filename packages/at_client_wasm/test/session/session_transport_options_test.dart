@@ -8,6 +8,9 @@ SessionTransportOptions _options({String? proxyHost, int? proxyPort}) =>
 Matcher _namingField(String field) =>
     throwsA(isA<ArgumentError>().having((e) => e.name, 'name', field));
 
+final _sayingToBracketIpv6 = throwsA(isA<ArgumentError>().having(
+    (e) => e.message, 'message', contains('in brackets, such as [::1]')));
+
 void main() {
   test('no proxyHost opens direct', () {
     expect(_options().proxy, isNull);
@@ -93,6 +96,24 @@ void main() {
             reason: '"$domain" does not name a bare proxy host');
       }
     });
+
+    test(
+        'when its host is a bare IPv6 literal, or a host or bracketed IPv6 '
+        'literal with a port, then it throws naming root', () {
+      for (final domain in [
+        'proxy:::1',
+        'proxy:[::1]:443',
+        'proxy:proxy.example:443',
+      ]) {
+        expect(() => SessionTransportOptions(root: AtRootDomain(domain, 443)),
+            _namingField('root'),
+            reason: '"$domain" does not name a bare proxy host');
+      }
+      expect(
+          () => SessionTransportOptions(root: AtRootDomain('proxy:::1', 443)),
+          _sayingToBracketIpv6,
+          reason: 'the refusal says how to write an IPv6 proxy host');
+    });
   });
 
   group('Given a proxyHost', () {
@@ -160,6 +181,22 @@ void main() {
           SessionTransportOptions(root: AtRootDomain('[2001:db8::1]', 64));
 
       expect(options.root.rootDomain, '[2001:db8::1]');
+      expect(SessionTransportOptions(root: AtRootDomain('[::1]', 64)).proxy,
+          isNull,
+          reason: '[::1] is a direct root');
+    });
+
+    test(
+        'when its host is a bare IPv6 literal, or a host or bracketed IPv6 '
+        'literal with a port, then it throws naming root', () {
+      for (final domain in ['::1', '[::1]:443', 'root.example:64']) {
+        expect(() => SessionTransportOptions(root: AtRootDomain(domain, 64)),
+            _namingField('root'),
+            reason: '"$domain" is not a bare atDirectory host');
+      }
+      expect(() => SessionTransportOptions(root: AtRootDomain('::1', 64)),
+          _sayingToBracketIpv6,
+          reason: 'the refusal says how to write an IPv6 atDirectory host');
     });
   });
 

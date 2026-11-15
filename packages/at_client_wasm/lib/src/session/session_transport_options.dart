@@ -71,7 +71,10 @@ class SessionTransportOptions {
     if (_isBracketedIpv6(host)) return;
     if (host.contains(_notInAHost)) {
       throw ArgumentError.value(
-          value, name, 'must be a bare host, without whitespace, : or /');
+          value,
+          name,
+          'must be a bare host, without whitespace, : or /, or an IPv6 '
+          'literal in brackets, such as [::1]');
     }
   }
 
