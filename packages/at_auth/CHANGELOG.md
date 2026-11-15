@@ -35,6 +35,8 @@
   it cannot read (`AtKeysUnusableException`, naming the store and why) or
   when a `FileAtKeysIo` keyfile cannot be written there
   (`FileSystemException` naming its path).
+- fix: `AtAuth.onboard` refuses a request with no `atKeysIo`, or a read-only
+  one, before it sends anything to the atServer.
 - fix: a failed PKAM step during activation throws a message that holds no
   stack trace; the trace is logged at fine.
 - fix: a message about an atKeys date that does not parse gives the

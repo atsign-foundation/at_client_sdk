@@ -83,11 +83,12 @@ class AtAuthImpl implements AtAuth {
   /// Onboard a new atSign using CRAM
   /// Requires an AtOnboardingRequest and a cramSecret
   ///
-  /// Nothing is sent until the request's `atKeysIo` has been read and, for a
-  /// [WrittenAtKeysIo], checked with [WrittenAtKeysIo.checkWritable]: keys
-  /// already there are refused, and any read failure other than
-  /// [AtKeysSourceAbsentException] throws [AtKeysUnusableException] with
-  /// cause [AtKeysUnusableCause.unreadable], naming the source.
+  /// Nothing is sent until the request's `atKeysIo` has been read and checked
+  /// with [WrittenAtKeysIo.checkWritable]: a missing or read-only `atKeysIo`
+  /// throws [AtAuthenticationException], keys already there are refused, and
+  /// any read failure other than [AtKeysSourceAbsentException] throws
+  /// [AtKeysUnusableException] with cause [AtKeysUnusableCause.unreadable],
+  /// naming the source.
   ///
   /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
@@ -120,9 +121,22 @@ class AtAuthImpl implements AtAuth {
         'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
       );
     }
-    if (keysIo is WrittenAtKeysIo) {
-      await keysIo.checkWritable(atOnboardingRequest.atSign);
+    // Onboarding mints key material and must persist it, so a writable store
+    // is required. There is no default: the core cannot assume a filesystem.
+    if (keysIo == null) {
+      throw AtAuthenticationException(
+          'onboarding needs somewhere to persist the key material it mints: '
+          'set AtOnboardingRequest.atKeysIo. On a platform with a '
+          'filesystem that is usually FileAtKeysIo() from '
+          'package:at_auth/at_auth_io.dart');
     }
+    if (keysIo is! WrittenAtKeysIo) {
+      throw AtAuthenticationException(
+          'onboarding mints key material and must write it, but the AtKeysIo '
+          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
+          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
+    }
+    await keysIo.checkWritable(atOnboardingRequest.atSign);
 
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
@@ -143,22 +157,7 @@ class AtAuthImpl implements AtAuth {
         ' and try again (or) contact support@atsign.com',
       );
     }
-    //2. generate key pairs. Onboarding mints key material and must persist
-    // it, so a writable store is required. There is no default: the core
-    // cannot assume a filesystem.
-    if (atOnboardingRequest.atKeysIo == null) {
-      throw AtAuthenticationException(
-          'onboarding needs somewhere to persist the key material it mints: '
-          'set AtOnboardingRequest.atKeysIo. On a platform with a '
-          'filesystem that is usually FileAtKeysIo() from '
-          'package:at_auth/at_auth_io.dart');
-    }
-    if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
-      throw AtAuthenticationException(
-          'onboarding mints key material and must write it, but the AtKeysIo '
-          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
-          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
-    }
+    //2. generate key pairs.
     final OnboardingMint mint = await mintOnboardingKeys(
         signingAlgo: atOnboardingRequest.signingAlgoType,
         // Null resolves to the release default, not to false: legacy

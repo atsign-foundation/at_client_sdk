@@ -15,6 +15,11 @@ Feature: Activation refuses a keyfile it cannot read or write before it uses the
     When the app activates the atSign with its CRAM secret
     Then it throws naming the path, and sends nothing to the atServer
 
+  Scenario: Activation with no keys store, or a read-only one, is refused before anything is sent
+    Given an onboarding request for @alice with no atKeysIo, or with one that cannot be written
+    When onboard is called with the CRAM secret
+    Then it throws AtAuthenticationException saying where the keys must go, and sends nothing to the atServer
+
   Scenario: An absent keyfile still activates
     Given no atKeys file at the activation's path
     When the app activates the atSign with its CRAM secret

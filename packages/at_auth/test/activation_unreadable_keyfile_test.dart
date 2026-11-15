@@ -55,6 +55,17 @@ class _UnreadableStore extends WrittenAtKeysIo {
   Future write(String atsign, AtKeys atKeys) async {}
 }
 
+/// A keys store that cannot be written, holding nothing.
+class _ReadOnlyStore extends GeneratedAtKeysIo {
+  @override
+  AtKeys read(String atsign) =>
+      throw AtKeysSourceAbsentException('no keys for $atsign');
+
+  @override
+  AtKeys generateKeys(String publicKeyId) =>
+      throw UnsupportedError('no keys are generated');
+}
+
 /// A platform's refusal to read its keychain, as a plugin reports one.
 class _PlatformRefusal implements Exception {
   @override
@@ -286,6 +297,33 @@ void main() {
                   (e) => e.osError?.errorCode, 'osError.errorCode', eacces)));
       expectNothingSent();
     }, skip: skipModes);
+  });
+
+  group(
+      'Activation with no keys store, or a read-only one, is refused before '
+      'anything is sent', () {
+    Future<AtOnboardingResponse> onboardInto(AtKeysIo? keys) => atAuth.onboard(
+        AtOnboardingRequest(atSign,
+            signingAlgoType: SigningAlgoType.rsa2048, atKeysIo: keys),
+        cramSecret);
+
+    final saysWhereTheKeysGo = isA<AtAuthenticationException>().having(
+        (e) => e.message,
+        'message',
+        contains('set AtOnboardingRequest.atKeysIo'));
+
+    test('no atKeysIo', () async {
+      await expectLater(onboardInto(null), throwsA(saysWhereTheKeysGo));
+      expectNothingSent();
+    });
+
+    test('a read-only atKeysIo', () async {
+      await expectLater(
+          onboardInto(_ReadOnlyStore()),
+          throwsA(saysWhereTheKeysGo.having(
+              (e) => e.message, 'read-only', contains('is read-only'))));
+      expectNothingSent();
+    });
   });
 
   group(
