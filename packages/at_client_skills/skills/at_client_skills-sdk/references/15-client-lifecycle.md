@@ -138,8 +138,11 @@ is.
 // TLS on TCP; the config is where TLS settings now live.
 lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = '/certs')
 
-// Behind a proxy that routes on the atSign: send `from:` first on every connection.
-lookUps: secureSocketLookUps(onConnect: (c) => c.sendSync('from:@alice\n'))
+// Behind a proxy that routes on the atSign: make it the root domain, as
+// preference..rootDomain = 'proxy:proxy.example.com' and ..rootPort = 443, and
+// give the finder the same two. at_lookup then sends `from:<atSign>` first on
+// every connection itself; an onConnect must not send it too.
+lookUps: secureSocketLookUps()
 
 // A factory of your own: any AtLookUp implementation, another transport.
 AtLookupMuxable mine({required atSign, required rootDomain, required authenticator,
