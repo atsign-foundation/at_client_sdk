@@ -5,8 +5,9 @@
   `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
   is not of `signingAlgoType`, is refused with `AtSigningException` before the
   enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
-- fix: a supplied mldsa65 APKAM key pair of the wrong shape, on either the
-  activation or the enrollment path, is refused with `AtSigningException`.
+- A malformed mldsa65 APKAM key pair, on activation or enrollment, is refused
+  with the message `the supplied mldsa65 APKAM key pair is malformed`. The
+  exception type, `AtSigningException`, is unchanged.
 
 ## 4.1.0
 

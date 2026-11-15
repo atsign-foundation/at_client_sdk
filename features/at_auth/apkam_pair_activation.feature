@@ -83,7 +83,7 @@ Feature: An activation can use an APKAM keypair the caller supplies
     When it runs
     Then a fresh pair is minted
 
-  Scenario: A malformed mldsa65 pair is refused with fixed text that echoes no key
+  Scenario: A malformed mldsa65 pair is refused with a fixed message
     # packages/at_auth/test/enrollment_test.dart
     #   test 'when an mldsa65 pair is base64 of the wrong length, then the error
     #   is fixed text holding none of the keys'

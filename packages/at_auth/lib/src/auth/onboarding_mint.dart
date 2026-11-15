@@ -174,8 +174,7 @@ Future<({String publicKey, String privateKey})> checkApkamKeyPair(
     try {
       MlDsa65KeyPair.create(canonical.publicKey, canonical.privateKey);
     } catch (_) {
-      // Fixed text only: the caught error's own text is not ours to repeat,
-      // as it may quote what was supplied.
+      // Report a fixed message for any failure to build the pair.
       throw AtSigningException(
         'the supplied mldsa65 APKAM key pair is malformed',
       );
