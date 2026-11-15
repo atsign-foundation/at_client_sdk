@@ -306,8 +306,9 @@ class CLIBase {
   ///
   /// Throws [AtKeysUnusableException] at once, saying why on stderr, when
   /// the keys cannot be used: the keyfile is absent or cannot be read, names
-  /// another atSign, or holds no credential, as a denial, a cancel or an
-  /// expiry leaves it ([AtNoCredentialException]);
+  /// another atSign, holds no authentication keypair this device can use, or
+  /// holds no credential, as a denial, a cancel or an expiry leaves it
+  /// ([AtNoCredentialException]);
   /// [AtStorageInUseException] when another process holds the store open,
   /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentException] when the request is denied or expires,

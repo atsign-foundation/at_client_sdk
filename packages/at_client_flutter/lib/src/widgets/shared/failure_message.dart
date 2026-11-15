@@ -4,16 +4,21 @@ import 'dart:io' show SocketException;
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 
-/// What a dialog shows when its operation on [atSign] failed with [error]: a
-/// keys problem's own message, or for keys holding no credential or only an
-/// enrollment awaiting approval what to do next, an atServer refusal's cause
-/// in plain words,
-/// [timedOut] for a wait that ran out, [unreachable] for any other failure to
-/// reach a server, as the client's connection classifies one, and otherwise
-/// that something went wrong, with the error's message.
+/// What a dialog shows when its operation on [atSign] failed with [error].
 ///
-/// [unreachable] defaults to saying the atServer for [atSign] could not be
-/// reached. It holds no stack trace and no exception type.
+/// For an [AtNoCredentialException], it says this device's enrollment ended
+/// or never completed, and to enroll the device again. For an
+/// [AtEnrollmentPendingException], it says the enrollment is still waiting
+/// for approval, and to enroll again from this app. For any other
+/// [AtKeysUnusableException], it is the first line of that exception's
+/// message. For an atServer's refusal, or an atSign not in the atDirectory,
+/// it is the cause in plain words. For a wait that ran out, it is [timedOut].
+/// For any other failure to reach a server, as the client's connection
+/// classifies one, it is [unreachable], which defaults to saying the atServer
+/// for [atSign] could not be reached. For anything else, it says something
+/// went wrong, with the first line of the error's message.
+///
+/// It holds no stack trace and no exception type.
 String failureMessage(
   String atSign,
   Object error, {
