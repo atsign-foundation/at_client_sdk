@@ -1,7 +1,6 @@
 // ignore_for_file: unused_field, deprecated_member_use_from_same_package
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:at_commons/at_builders.dart';
@@ -12,6 +11,8 @@ import 'package:at_lookup/src/connection/base_connection.dart'
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
 import 'package:at_lookup/src/util/command_for_log.dart' show commandForLog;
+import 'package:at_lookup/src/util/error_response.dart'
+    show errorResponseException;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:meta/meta.dart' show internal;
@@ -275,26 +276,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   void _errorResponseHandler(String verbResult) {
-    verbResult = verbResult.replaceFirst(RegExp('^error:'), '');
-    // Setting the errorCode and errorDescription to default values.
-    var errorCode = 'AT0014';
-    var errorDescription = 'Unknown server error';
-    try {
-      var errorMap = jsonDecode(verbResult);
-      errorCode = errorMap['errorCode'];
-      errorDescription = errorMap['errorDescription'];
-    } on FormatException {
-      // Catching the FormatException to preserve backward compatibility - responses without jsonEncoding.
-      // TODO: Can we remove the below catch block in next release once all the servers are migrated to new version.
-      if (verbResult.contains('-')) {
-        errorCode = verbResult.substring(0, verbResult.indexOf('-'));
-        errorDescription = verbResult.substring(verbResult.indexOf('-') + 1);
-      } else {
-        errorDescription += ": $verbResult";
-      }
-    }
-
-    throw AtLookUpException(errorCode, errorDescription);
+    throw errorResponseException(verbResult);
   }
 
   Future<String> _update(UpdateVerbBuilder builder) async {

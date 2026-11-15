@@ -474,15 +474,13 @@ Future<int> status(ArgResults ar) async {
   final found = await _lookUpPublicKey(
       atSign,
       CacheableSecondaryAddressFinder(
-          rootDomain.rootDomain, rootDomain.rootPort), () {
-    final settings = enrollerSettingsFrom(ar);
-    return settings.lookUps(
-      atSign: atSign,
-      rootDomain: rootDomain,
-      authenticator: null,
-      secondaryAddressFinder: settings.secondaryAddressFinder,
-    );
-  });
+          rootDomain.rootDomain, rootDomain.rootPort),
+      (atDirectory) => secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: atDirectory,
+          ));
   stderr.writeln('returning ${found.outcome.exitCode}: ${found.detail}');
   return found.outcome.exitCode;
 }
@@ -502,10 +500,12 @@ enum _PublicKey {
 }
 
 /// Asks [atDirectory] for [atSign]'s atServer and that atServer, over the
-/// connection [connect] builds, for its public key, unauthenticated; [detail]
-/// says what was found.
-Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
-    SecondaryAddressFinder atDirectory, AtLookUp Function() connect) async {
+/// connection [connect] builds on the same [atDirectory], for its public key,
+/// unauthenticated; [detail] says what was found.
+Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(
+    String atSign,
+    SecondaryAddressFinder atDirectory,
+    AtLookUp Function(SecondaryAddressFinder atDirectory) connect) async {
   try {
     await atDirectory.findSecondary(atSign);
   } on SecondaryNotFoundException {
@@ -524,7 +524,7 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
   try {
     // NOTE: a public key lookup needs no authentication, and no credential is
     // held here.
-    al = connect();
+    al = connect(atDirectory);
   } catch (e) {
     return (
       outcome: _PublicKey.atServerUnreachable,
@@ -543,6 +543,10 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
 /// What [al] answers for [atSign]'s public key.
 Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
     AtLookUp al, String atSign) async {
+  ({_PublicKey outcome, String detail}) unreachable(AtException e) => (
+        outcome: _PublicKey.atServerUnreachable,
+        detail: 'atServer cannot be reached $atSign ($e)'
+      );
   final String? pk;
   try {
     try {
@@ -551,10 +555,9 @@ Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
       throw AtExceptionUtils.get(e.errorCode, e.errorMessage);
     }
   } on SecondaryServerConnectivityException catch (e) {
-    return (
-      outcome: _PublicKey.atServerUnreachable,
-      detail: 'atServer cannot be reached $atSign ($e)'
-    );
+    return unreachable(e);
+  } on SecondaryConnectException catch (e) {
+    return unreachable(e);
   } on KeyNotFoundException catch (e) {
     return (outcome: _PublicKey.absent, detail: '$e');
   } catch (e) {
@@ -589,16 +592,16 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   } catch (_) {
     return eitherKeysHint(atSign);
   }
-  final atDirectory =
-      CacheableSecondaryAddressFinder(rootDomain.rootDomain, rootDomain.rootPort);
   final found = await _lookUpPublicKey(
       atSign,
-      atDirectory,
-      () => lookUpsFor(rootDomain.rootDomain)(
-          atSign: atSign,
-          rootDomain: rootDomain,
-          authenticator: null,
-          secondaryAddressFinder: atDirectory)).timeout(_absentKeysHintBudget,
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort),
+      (atDirectory) => secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: atDirectory,
+          )).timeout(_absentKeysHintBudget,
       onTimeout: () => (
             outcome: _PublicKey.atDirectoryUnreachable,
             detail: 'no answer within $_absentKeysHintBudget'
@@ -1109,8 +1112,7 @@ Future<void> list(ArgResults ar, AtClient atClient,
 /// Whether [e]'s keys are anchored, as a row shows it: `anchored`,
 /// `unsigned`, or the verdict for a key that fails followed by its kid; `-`
 /// for an enrollment that is not approved, and `?` when it could not be read.
-Future<String> _describeAnchoring(
-    Enrollment e,
+Future<String> _describeAnchoring(Enrollment e,
     Future<ChainResult> Function(String enrollmentId) anchoring) async {
   final id = e.enrollmentId;
   if (id == null || e.enrollmentStatus != EnrollmentStatus.approved) {
@@ -1509,7 +1511,8 @@ EnrollerSettings enrollerSettingsFrom(ArgResults ar) {
         ..rootPort = rootDomain.rootPort
         ..cramSecret = ar[AuthCliArgs.argNameCramSecret],
       atKeysFilePath: ar[AuthCliArgs.argNameAtKeys] ??
-          getDefaultAtKeysFilePath(getHomeDirectory(throwIfNull: true)!, atSign),
+          getDefaultAtKeysFilePath(
+              getHomeDirectory(throwIfNull: true)!, atSign),
       passPhrase: ar[AuthCliArgs.argNamePassPhrase],
       registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn],
       registrarApiKey: Platform.environment[registrarApiKeyVariable]);
@@ -1543,9 +1546,10 @@ class EnrollerSettings {
   AtClientStorage storageFor(String atSign) =>
       CliKeys.storageFor(atSign, program: commandNamespace, path: storagePath);
 
-  AtLookUpFactory get lookUps => lookUpsFor(preference.rootDomain);
+  AtLookUpFactory get lookUps => secureSocketLookUps();
 
-  SecondaryAddressFinder get secondaryAddressFinder => _atDirectoryOf(preference);
+  SecondaryAddressFinder get secondaryAddressFinder =>
+      _atDirectoryOf(preference);
 }
 
 /// The namespace at_activate's clients run under, and the program its stores
@@ -1564,11 +1568,11 @@ SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
 ///
 /// [rootDomain] is the atDirectory as `host:port`, `root.atsign.org` when
 /// null; one of the form `proxy:host:port` sends every connection through
-/// that proxy, as [lookUpsFor] does. Keys it cannot use throw
-/// [AtKeysUnusableException] before it connects. The connection is given
-/// [maxConnectAttempts] tries, three seconds apart, to come online; a client
-/// the atServer refuses, or that is still offline after that, is stopped and
-/// an [UnAuthenticatedException] says so.
+/// that proxy, and at_lookup names the atSign first on each connection to it.
+/// Keys it cannot use throw [AtKeysUnusableException] before it connects. The
+/// connection is given [maxConnectAttempts] tries, three seconds apart, to
+/// come online; a client the atServer refuses, or that is still offline after
+/// that, is stopped and an [UnAuthenticatedException] says so.
 ///
 /// [waitForPqStartup] holds the call until the client's post-quantum startup
 /// has finished, for at most 30 seconds; a command that reads what that
@@ -1611,7 +1615,7 @@ Future<AtClient> createAtClient(
         preference: preference,
         storage: CliKeys.storageFor(atSign,
             program: commandNamespace, path: storageDir!.path),
-        lookUps: lookUpsFor(preference.rootDomain),
+        lookUps: secureSocketLookUps(),
         secondaryAddressFinder: _atDirectoryOf(preference),
         serviceFactory: ServiceFactoryWithNoOpSyncService());
   } on AtOpenRefusedException catch (e) {

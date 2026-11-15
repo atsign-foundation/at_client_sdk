@@ -216,9 +216,11 @@ flows still read it when an app passes no storage, until 5.0.
 Every client, enrollment and lookup is handed its transport and the atDirectory
 it asks: `secureSocketLookUps()` and
 `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`,
-as above. A command-line program takes its transport from at_client_cli's
-`lookUpsFor(preference.rootDomain)`, as `CLIBase` does: `proxyLookUps()` for a
-root domain beginning `proxy:`, and `secureSocketLookUps()` otherwise.
+as above. A command-line program takes its transport from `secureSocketLookUps()`, as
+`CLIBase` does. at_lookup 4.1.0 sends `from:<atSign>` itself on every
+connection for a root domain beginning `proxy:`, so at_client_cli's
+`lookUpsFor(rootDomain)` returns `secureSocketLookUps()` for every root and is
+deprecated, as is `proxyLookUps()`.
 
 ### `Undefined name 'FileAtKeysIo'`, `'CacheableSecondaryAddressFinder'`, `'HiveAtClientStorage'`
 
@@ -634,7 +636,7 @@ Future<AtClient> openFromKeyfile() {
       preference: preference,
       storage: CliKeys.storageFor('@alice',
           program: 'my_app', path: 'storage/hive'),
-      lookUps: lookUpsFor(preference.rootDomain),
+      lookUps: secureSocketLookUps(),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));
 }
@@ -669,7 +671,7 @@ Future<AtClient?> openIfOnline(Future<AtClient> Function() open) async {
 
 **From a 4.0 release candidate.** at_onboarding_cli 2.0.0's release
 candidates gave `AtOnboardingPreference` a `storageFor` and a `lookUps`.
-`CliKeys.storageFor` and `lookUpsFor(preference.rootDomain)` replace them,
+`CliKeys.storageFor` and `secureSocketLookUps()` replace them,
 and an `AtClientPreference` replaces the preference itself. A program on a
 release candidate also meets three changes section 2 covers by error:
 `open`, `activate`, `enroll` and `resumeEnrollment` require
