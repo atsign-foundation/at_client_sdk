@@ -227,7 +227,7 @@ no longer "keys cross as strings because they have no codec," it is **"no raw ke
 exposed at all,"** codec or not. `AtKey`/`AtValue` remain excluded either way; the reason
 is now structural rather than a workaround for a missing codec.
 
-**Amended 2026-11-14 — callbacks stay inside the bridge, iterators outside it.** The Dart bridge still delivers events as `subscribe(cb) → unsubscribe`. The TypeScript layer adapts that to an `AsyncIterable<AtEvent>` (the shape the pinned d.ts specifies): it registers when called, buffers events without a bound, and leaving the loop or `close()` unsubscribes. Keys still cross the bridge as plain objects of strings, never as `AtKey`/`AtValue`.
+**Amended 2026-11-14 — callbacks stay inside the bridge, iterators outside it.** The Dart bridge still delivers events as `subscribe(cb) → unsubscribe`. The TypeScript layer adapts that to an `AsyncIterable<AtEvent>` (the shape the pinned d.ts specifies): it registers when called, buffers at most 4096 events (on overflow the subscription ends, its buffered events are discarded and the next read rejects with `AtError('overflow')`), and leaving the loop or `close()` unsubscribes. Keys still cross the bridge as plain objects of strings, never as `AtKey`/`AtValue`.
 
 Separately, and unaffected by D-10/D-11: `Stream` has no JS bridge in any Dart SDK,
 official or community, so every event surface is `subscribe(cb) → unsubscribe` — including

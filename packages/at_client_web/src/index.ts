@@ -100,8 +100,9 @@ export interface AtClientLike {
    * Real-time event subscription via AsyncIterable.
    * Registers when called, buffers up to 4096 events and unsubscribes when
    * the loop ends (`break`/`return()`) or the client closes. A subscription
-   * that buffers more rejects its next read with `AtError('overflow')` and
-   * ends; subscribe again. Without
+   * that buffers more ends: on overflow the subscription ends, buffered events
+   * are discarded, and `next()` rejects with `AtError('overflow')`; subscribe
+   * again. Without
    * `regex` it matches the client's namespace. Throws `AtError('closed')`
    * after `close()`.
    */

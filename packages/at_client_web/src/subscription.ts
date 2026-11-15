@@ -7,8 +7,9 @@ export const MAX_BUFFERED_EVENTS = 4096;
  * A buffer of at most `MAX_BUFFERED_EVENTS` events read as an async iterator.
  * `end()` and `return()` finish it: waiting readers settle done, the buffer is
  * dropped, later pushes are ignored and `onDone` runs once. A push past the
- * cap ends it the same way and the next `next()` rejects with an `overflow`
- * `AtError`; after that it is done.
+ * cap ends it the same way: on overflow the subscription ends, buffered events
+ * are discarded, and `next()` rejects with `AtError('overflow')`; after that it
+ * is done.
  */
 export class EventQueue<T> implements AsyncIterableIterator<T> {
   private readonly buffer: T[] = [];
