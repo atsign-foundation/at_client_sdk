@@ -1,6 +1,6 @@
 # Transport: direct (default) and the dev proxy
 
-By default the browser reaches each atSign's own atServer over `wss://host:port/ws`, with no proxy. A dev proxy is used only when `SessionTransportOptions` is given both `proxyHost` and `proxyPort`, or a `proxy:<host>` root; then every connection goes to it. There is no fallback from one to the other: a failed direct connect fails the open.
+By default the browser reaches each Atsign's own atServer over `wss://host:port/ws`, with no proxy. A dev proxy is used only when `SessionTransportOptions` is given both `proxyHost` and `proxyPort`, or a `proxy:<host>` root; then every connection goes to it. There is no fallback from one to the other: a failed direct connect fails the open.
 
 ```mermaid
 flowchart LR
@@ -22,7 +22,7 @@ Both modes are trunk's at_lookup, chosen once by `sessionTransport(options)`.
 ## What the dev proxy sees
 The proxy is opt-in and for development. Use it only on a machine and network you control, never against production atSigns through a proxy you do not run.
 
-The connection to the proxy is the whole atProtocol session, so the proxy:
+The connection to the proxy is the whole Atsign Protocol session, so the proxy:
 - learns the Atsign, and which atServer each connection is for, from the `from:<atSign>` that at_lookup sends first on each connection;
 - sees every command and response on the connection: key names, metadata, the authentication exchange, notification traffic and timing;
 - resolves and answers for every atSign the session talks to, since the single proxy stands in for each atServer: it is trusted for addressing as well as transport;

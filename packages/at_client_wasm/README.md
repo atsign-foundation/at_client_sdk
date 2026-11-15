@@ -14,7 +14,7 @@ This is a pre-release and unpublished package intended for WebAssembly/browser t
 
 `package:at_client_wasm/at_client_wasm_web.dart` exports everything in `at_client_wasm.dart` plus the browser transports:
 
-- `sessionTransport(SessionTransportOptions)` returns the `SessionTransport` (`lookUps`, `finder` and `root`) that `portalSession` takes: direct, or the dev proxy when `proxyHost` and `proxyPort` are set. `portalSession` builds its preference on the transport's `root`, and refuses a `prefs` that names another root.
+- `sessionTransport(SessionTransportOptions)` returns the `SessionTransport` (`lookUps`, `finder` and `root`) that `portalSession` takes: direct, or the dev proxy when `proxyHost` and `proxyPort` are set or the root is `proxy:<host>`. `portalSession` builds its preference on the transport's `root`, and refuses a `prefs` that names another root.
 - Through the dev proxy, each connection goes to `wss://host:port/ws`, and at_lookup sends `from:<atSign>` first on it because the session's root is `proxy:<host>`. A proxy that fronts many atServers reads it to learn which atServer the connection is for.
 
 ## Building the browser entry
