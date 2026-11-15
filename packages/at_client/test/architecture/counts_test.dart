@@ -103,23 +103,22 @@ void main() {
         RegExp(r"git grep -nP '([^']+)' --").firstMatch(a5.command)!.group(1)!;
     final dir = Directory.systemTemp.createTempSync('a5_');
     addTearDown(() => dir.deleteSync(recursive: true));
-    final file = File(p.join(dir.path, 'preference.dart'))
-      ..writeAsStringSync([
-        '  factory AtClientPreference.browser() => AtClientPreference._web();',
-        '  static final AtClientPreference web = _makeWeb();',
-        '  static const int x = 1;',
-        '  static String get y => _y;',
-        '  static void z() {}',
-        '  static List<String> _sealableOrRefuse(List<String> algorithms) {',
-        '  static Set<SigningAlgoType> _signableOrRefuse(',
-        '  static const _p = 1;',
-        '  static String get _q => _y;',
-        '  static Map<String, int> _m = {};',
-        '  static T gen<T>(T a) => a;',
-        '  static T _gen<T>(T a) => a;',
-        '  static Map<String, List<int>> _n = {};',
-        '',
-      ].join('\n'));
+    File(p.join(dir.path, 'preference.dart')).writeAsStringSync([
+      '  factory AtClientPreference.browser() => AtClientPreference._web();',
+      '  static final AtClientPreference web = _makeWeb();',
+      '  static const int x = 1;',
+      '  static String get y => _y;',
+      '  static void z() {}',
+      '  static List<String> _sealableOrRefuse(List<String> algorithms) {',
+      '  static Set<SigningAlgoType> _signableOrRefuse(',
+      '  static const _p = 1;',
+      '  static String get _q => _y;',
+      '  static Map<String, int> _m = {};',
+      '  static T gen<T>(T a) => a;',
+      '  static T _gen<T>(T a) => a;',
+      '  static Map<String, List<int>> _n = {};',
+      '',
+    ].join('\n'));
     final result = Process.runSync(
         'git', ['grep', '--no-index', '-hnP', pattern, '--', 'preference.dart'],
         workingDirectory: dir.path);
