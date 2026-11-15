@@ -25,8 +25,9 @@
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
 - feat: `AtKeysIo.describeSource` says where an atSign's keys are kept (for
   `FileAtKeysIo`, the keyfile path), and `WrittenAtKeysIo.checkWritable`
-  throws unless the store could take new keys now. A class that implements
-  `WrittenAtKeysIo` rather than extending it must add both.
+  throws when the store could not take new keys now (`FileAtKeysIo` checks;
+  by default it checks nothing). A class that implements `WrittenAtKeysIo`
+  rather than extending it must add both.
 - feat: `AtKeysUnusableException` says why an atSign's keys cannot be used
   (`cause`) and where they were looked for (`source`).
 - feat: `AtKeysFormatException.isJson` says whether the document parsed, as

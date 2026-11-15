@@ -2,7 +2,7 @@
 
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
-- chore: requires at_client 4.1.0.
+- chore: requires at_client 4.1.0 and at_auth 4.1.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
 - fix: `at_activate status` asks the atDirectory once, prints no posture
   notice, and says a refused atServer connection is unreachable rather than
@@ -13,7 +13,10 @@
   reached a proxy without a `proxy:<host>` root must make it the root.
   Requires at_lookup 4.1.0.
 - fix: at_activate and programs built on `CLIBase` report a keys problem
-  once, naming the keyfile and the next step to take.
+  once, naming the keyfile and the next step to take where there is one.
+- feat: when an atSign's keys are absent, at_activate looks up its public
+  key, for up to 5 seconds, to say whether to activate it or enroll this
+  machine.
 - fix: at_activate and programs built on `CLIBase` name the keyfile that
   holds no credential; at_activate also names one holding only a pending
   enrollment request, and says to run the enroll command again once the
