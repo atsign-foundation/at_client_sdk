@@ -20,8 +20,8 @@ typedef JsEvent = Map<String, Object?>;
 
 /// The W8 error codes a [JsCollectionsError] carries (js-api.md §6.1).
 abstract final class W8 {
-  /// A malformed argument: an unknown eventSource or operator, an empty
-  /// type or path segment, a value an operator cannot compare, or an
+  /// A malformed argument: an unknown eventSource or operator, a
+  /// non-positive expirationMs, an empty type or path segment, a value an operator cannot compare, or an
   /// invalid atSign or id.
   static const invalidArgument = 'W8_INVALID_ARGUMENT';
 
@@ -114,6 +114,10 @@ final class JsCollectionsAdapter {
     String? eventSource,
   }) =>
       _guard(() async {
+        if (expirationMs <= 0) {
+          throw JsCollectionsError(
+              W8.invalidArgument, 'expirationMs must be > 0');
+        }
         final expiration = Duration(milliseconds: expirationMs);
         final AtCollection<Map<String, dynamic>> collection;
         if (eventSource == null) {

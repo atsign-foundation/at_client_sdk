@@ -133,6 +133,26 @@ void main() {
       await expectLater(open(type: ''), _rejectsWith(W8.invalidArgument));
     });
 
+    test('A non-positive expirationMs rejects with W8_INVALID_ARGUMENT',
+        () async {
+      for (final ms in [0, -1]) {
+        await expectLater(
+          JsCollectionsAdapter.open(alice.mock,
+              namespace: _ns, type: 'Todo', expirationMs: ms),
+          _rejectsWith(W8.invalidArgument),
+        );
+      }
+      verifyNever(() => alice.mock.collection<Map<String, dynamic>>(
+            any(),
+            any(),
+            eventSource: any(named: 'eventSource'),
+            fromJson: any(named: 'fromJson'),
+            typeTag: any(named: 'typeTag'),
+            writeTypeTag: any(named: 'writeTypeTag'),
+            cleanupOrphansOnCreation: any(named: 'cleanupOrphansOnCreation'),
+          ));
+    });
+
     test('A failed open rejects with W8_FAILED naming the error kind',
         () async {
       alice.failNextCollection(StateError('upstream down'));

@@ -36,6 +36,11 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter opens a collection with type ""
     Then the open rejects with W8_INVALID_ARGUMENT
 
+  Scenario: A non-positive expirationMs rejects with W8_INVALID_ARGUMENT
+    When the adapter opens a collection with expirationMs 0 or -1
+    Then the open rejects with W8_INVALID_ARGUMENT
+    And AtClient.collection is never called
+
   Scenario: A failed open rejects with W8_FAILED naming the error kind
     Given AtClient.collection fails with a StateError
     When the adapter opens a collection

@@ -432,7 +432,7 @@ does not exist yet.
 
 | Operation | `AtCollection` call | Rule |
 | --- | --- | --- |
-| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default |
+| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `expirationMs` must be positive, else `W8_INVALID_ARGUMENT` |
 | `create(data, {id, sharedWith})` | `create` | |
 | `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent |
 | `list()` | `getItems()` | upstream order; never re-sorted |
@@ -510,7 +510,7 @@ same shape.
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `W8_INVALID_ARGUMENT` | unknown `eventSource` or operator, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign or id | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `W8_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign or id | `ArgumentError`, `InvalidAtSignException`, adapter checks |
 | `W8_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
 | `W8_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `W8_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
