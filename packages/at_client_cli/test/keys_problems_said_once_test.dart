@@ -305,6 +305,32 @@ void main() {
     expect(directoryConnections, 0, reason: 'only absent keys are looked up');
   }, timeout: const Timeout(Duration(minutes: 2)));
 
+  test('Keys with no authentication keypair this machine can use', () async {
+    final encryption = RsaKeyPair.generate();
+    await FileAtKeysIo(filePath: (_) => defaultKeyfile()).write(
+        atSign,
+        AtKeys.legacy(
+            apkamPrivateKey: RsaKeyPair.generate().atPrivateKey.privateKey,
+            encryptionPublicKey: encryption.atPublicKey.publicKey,
+            encryptionPrivateKey: encryption.atPrivateKey.privateKey,
+            selfEncryptionKey: AESKey.generate(32).key));
+
+    final run =
+        await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
+
+    expect(
+        run.stderr,
+        holdsOnceInOrder([
+          'The keys for $atSign at ${defaultKeyfile()} cannot be used to '
+              'authenticate: AtKeys holds no authentication keypair for the '
+              'enrollment it authenticates as, so there is nothing to sign '
+              'with.',
+          footer,
+        ]));
+    expect(run.exitCode, 1);
+    expect(directoryConnections, 0, reason: 'only absent keys are looked up');
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test(
       'A keys problem is said once, with no prefix, retry advice or stack '
       'trace', () async {

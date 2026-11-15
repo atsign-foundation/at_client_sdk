@@ -52,6 +52,11 @@ Feature: A CLI program says what is wrong with the keys once, and what to do nex
     When the user runs "at_activate otp -a @alice -k <path>"
     Then stderr holds, once, "The keys at <path> are for @bob, not @alice. Check -a and -k." then the footer, and it exits 1
 
+  Scenario: Keys with no authentication keypair this machine can use
+    Given a keyfile for @alice at <path> that holds no authentication keypair for the enrollment it authenticates as
+    When the user runs "at_activate otp -a @alice"
+    Then stderr holds, once, the message open throws for those keys, then the footer, and it exits 1
+
   Scenario: A keys problem is said once, with no prefix, retry advice or stack trace
     Given no keyfile for @alice at <path>
     When the user runs "at_activate otp -a @alice"

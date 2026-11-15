@@ -72,8 +72,8 @@ class AtKeysUnusableException extends AtException {
       {required String this.source, required Object error})
       : cause = AtKeysUnusableCause.noAuthenticationKeypair,
         error = _withoutSource(error),
-        super('The keys for $atSign ${_where(source)} hold no authentication '
-            'keypair this device can use: ${_reasonFor(error)}.');
+        super('The keys for $atSign ${_where(source)} cannot be used to '
+            'authenticate: ${_reasonFor(error)}.');
 
   /// The keys in [source] record [recorded], an atSign other than [atSign].
   AtKeysUnusableException.anotherAtsign(this.atSign, String recorded,

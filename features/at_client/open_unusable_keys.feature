@@ -31,7 +31,7 @@ Feature: Atsign.open refuses keys it cannot use before connecting, and says why
   Scenario: Keys that hold no authentication keypair this device can use are refused before connecting, even on a device that has held the atSign online
     Given a device that has held @alice online, and an atKeys file for @alice that can be read but holds no authentication keypair this device can use
     When an app calls Atsign.open for @alice
-    Then it throws AtKeysUnusableException with cause noAuthenticationKeypair and the message "The keys for @alice at <path> hold no authentication keypair this device can use: <reason>.", holding no key material, and opens no connection
+    Then it throws AtKeysUnusableException with cause noAuthenticationKeypair and the message "The keys for @alice at <path> cannot be used to authenticate: <reason>.", holding no key material, and opens no connection
     # cases: no authentication keypair; an algorithm this build cannot sign with; several enrollments qualifying
 
   Scenario: A keyfile naming another atSign is refused before connecting

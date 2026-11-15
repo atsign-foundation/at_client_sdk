@@ -307,7 +307,7 @@ void main() {
             required Matcher error}) =>
         refusedAfterOnline(
             cause: AtKeysUnusableCause.noAuthenticationKeypair,
-            says: 'hold no authentication keypair this device can use',
+            says: 'cannot be used to authenticate',
             unreadable: unreadable,
             reader: reader,
             reason: reason,
