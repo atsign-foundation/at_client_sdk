@@ -9,8 +9,9 @@ import 'package:at_lookup/at_lookup.dart';
 /// `cram:` that follows with [cramReply], reached through a real
 /// `AtLookupImpl` over an [AtTransport] it scripts.
 ///
-/// It accepts the rest of an activation too: the first enrollment is
-/// approved, every `pkam:` succeeds and every `update:` and `delete:` is done.
+/// It accepts the rest of an activation too: a `lookup:publickey` finds no
+/// key, the first enrollment is approved, every `pkam:` succeeds and every
+/// `update:` and `delete:` is done.
 class FakeCramAtServer {
   FakeCramAtServer(this.atSign, {required this.cramReply});
 
@@ -47,6 +48,7 @@ class FakeCramAtServer {
       return 'data:_${uuid()}$atSign:${uuid()}';
     }
     if (command.startsWith('cram:')) return cramReply;
+    if (command.startsWith('lookup:publickey')) return 'data:null';
     if (command.startsWith('enroll:request:')) {
       return 'data:{"enrollmentId":"e-1","status":"approved"}';
     }

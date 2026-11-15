@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth.dart';
+import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_chops/at_chops.dart';
@@ -21,6 +22,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/fake_cram_at_server.dart';
+import 'test_utils/from_recorder.dart';
 
 class _MockLookUp extends Mock implements AtLookupImpl {}
 
@@ -41,24 +43,9 @@ class _FixedAddress implements SecondaryAddressFinder {
       SecondaryAddress('127.0.0.1', 6464);
 }
 
-/// Records every command an authenticator sends, answering each with an empty
-/// response so the authenticator stops after `from:`.
-class _RecordingExecutor implements AtCommandExecutor {
-  final List<String> sent = [];
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    sent.add(command);
-    return '';
-  }
-}
-
 /// Catalogue: features/at_client/from_names_program_and_sdk.feature
 void main() {
-  final pubspecVersion = RegExp(r'^version:\s*(\S+)', multiLine: true)
-      .firstMatch(File('pubspec.yaml').readAsStringSync())!
-      .group(1)!;
+  final atAuthVersion = pubspecVersion();
   const callerConfig = {
     'appName': 'acme_chat',
     'appVersion': '2.3.1',
@@ -86,9 +73,9 @@ void main() {
       List<AtAuthenticator> installed, String atSign) async {
     final configs = <Map<String, dynamic>>[];
     for (final authenticator in installed) {
-      final executor = _RecordingExecutor();
-      await authenticator(executor);
-      configs.add(configIn(executor.sent.first, atSign));
+      final recorder = FromRecorder();
+      await authenticator(recorder);
+      configs.add(configIn(recorder.from!, atSign));
     }
     return configs;
   }
@@ -123,7 +110,7 @@ void main() {
           reason: 'the program file is acme_onboard.dart');
       expect(config['appVersion'], 'unknown');
       expect(config['sdkName'], 'atsign.dart.at_auth');
-      expect(config['sdkVersion'], pubspecVersion);
+      expect(config['sdkVersion'], atAuthVersion);
     }
   }, timeout: const Timeout(Duration(minutes: 4)));
 
@@ -146,6 +133,36 @@ void main() {
         reason: 'the control: CRAM, then PKAM as the new enrollment');
     for (final from in atServer.froms) {
       expect(configIn(from, '@alice'), callerConfig);
+    }
+  });
+
+  test(
+      'Given a caller config, when activateAtSign first waits for the '
+      'atServer to be provisioned, then the CRAM and PKAM from: commands '
+      'carry it', () async {
+    final atServer = FakeCramAtServer('@alice', cramReply: 'data:success');
+    final lookUp = atServer.lookUp();
+    addTearDown(lookUp.close);
+
+    await activateAtSign(
+        atSign: '@alice',
+        cramSecret: 'the-one-time-secret',
+        keys: InMemoryAtKeysIo(),
+        signingAlgo: SigningAlgoType.rsa2048,
+        atLookUp: lookUp,
+        awaitProvisioning: true,
+        clientConfig: callerConfig);
+
+    expect(atServer.written.where((c) => c.startsWith('lookup:publickey')),
+        isNotEmpty,
+        reason: 'the control: the activation asked whether the atSign is '
+            'provisioned before it authenticated');
+    expect(atServer.froms, hasLength(2),
+        reason: 'the control: CRAM, then PKAM as the new enrollment');
+    for (final from in atServer.froms) {
+      expect(configIn(from, '@alice'), callerConfig,
+          reason: 'the activation that waits for provisioning sends the '
+              'caller\'s config too');
     }
   });
 
@@ -190,48 +207,56 @@ void main() {
     }
   });
 
-  test(
-      'Given a caller config, when AtEnrollment.create waits for approval, '
-      'then the handshake\'s from: carries it', () async {
-    const atSign = '@alice🛠';
-    final apkamSymmetricKey = demo.apkamSymmetricKeyMap[atSign]!;
-    final sealer = AESEncryptionAlgo(AESKey(apkamSymmetricKey));
-    Future<String> sealed(String value) async => base64.encode(
-        await sealer.encrypt(Uint8List.fromList(utf8.encode(value)),
-            iv: InitialisationVector.legacy()));
-    final lookUp = _MockLookUp();
-    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
-    final sealedPrivateKey =
-        await sealed(demo.encryptionPrivateKeyMap[atSign]!);
-    final sealedSelfKey = await sealed(demo.aesKeyMap[atSign]!);
-    when(() =>
-        lookUp.executeCommand(any(that: contains('default_enc_private_key')),
-            auth: any(named: 'auth'))).thenAnswer(
-        (_) async => 'data:${jsonEncode({'value': sealedPrivateKey})}');
-    when(() =>
-        lookUp.executeCommand(any(that: contains('default_self_enc_key')),
-            auth: any(named: 'auth'))).thenAnswer(
-        (_) async => 'data:${jsonEncode({'value': sealedSelfKey})}');
-    final keys = AtKeys()
-      ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap[atSign]!)
-      ..apkamPrivateKey = AtBytes.fromString(demo.pkamPrivateKeyMap[atSign]!)
-      ..defaultEncryptionPublicKey =
-          AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!)
-      ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey);
+  final enrollments = <String, AtEnrollment Function(AtLookupImpl lookUp)>{
+    'AtEnrollment.create': (_) =>
+        AtEnrollment.create(clientConfig: callerConfig),
+    'the enrollment AtAuthImpl builds when it is given none': (lookUp) =>
+        AtAuthImpl(atLookUp: lookUp, clientConfig: callerConfig).atEnrollment,
+  };
+  enrollments.forEach((name, enrollmentOver) {
+    test(
+        'Given a caller config, when $name waits for approval, then the '
+        'handshake\'s from: carries it', () async {
+      const atSign = '@alice🛠';
+      final apkamSymmetricKey = demo.apkamSymmetricKeyMap[atSign]!;
+      final sealer = AESEncryptionAlgo(AESKey(apkamSymmetricKey));
+      Future<String> sealed(String value) async => base64.encode(
+          await sealer.encrypt(Uint8List.fromList(utf8.encode(value)),
+              iv: InitialisationVector.legacy()));
+      final lookUp = _MockLookUp();
+      when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
+      final sealedPrivateKey =
+          await sealed(demo.encryptionPrivateKeyMap[atSign]!);
+      final sealedSelfKey = await sealed(demo.aesKeyMap[atSign]!);
+      when(() =>
+          lookUp.executeCommand(any(that: contains('default_enc_private_key')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => 'data:${jsonEncode({'value': sealedPrivateKey})}');
+      when(() =>
+          lookUp.executeCommand(any(that: contains('default_self_enc_key')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => 'data:${jsonEncode({'value': sealedSelfKey})}');
+      final keys = AtKeys()
+        ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap[atSign]!)
+        ..apkamPrivateKey = AtBytes.fromString(demo.pkamPrivateKeyMap[atSign]!)
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!)
+        ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey);
 
-    await AtEnrollment.create(clientConfig: callerConfig).waitForApproval(
-        AtEnrollmentResponse('123', EnrollmentStatus.pending,
-            atSign: atSign,
-            rootDomain: AtRootDomain.atsignDomain,
-            atAuthKeys: keys),
-        atLookup: lookUp);
+      await enrollmentOver(lookUp).waitForApproval(
+          AtEnrollmentResponse('123', EnrollmentStatus.pending,
+              atSign: atSign,
+              rootDomain: AtRootDomain.atsignDomain,
+              atAuthKeys: keys),
+          atLookup: lookUp);
 
-    final installed = verify(() => lookUp.authenticator = captureAny())
-        .captured
-        .whereType<AtAuthenticator>()
-        .toList();
-    expect(installed, hasLength(1),
-        reason: 'the control: the handshake installs one authenticator');
-    expect((await configsSentBy(installed, atSign)).single, callerConfig);
+      final installed = verify(() => lookUp.authenticator = captureAny())
+          .captured
+          .whereType<AtAuthenticator>()
+          .toList();
+      expect(installed, hasLength(1),
+          reason: 'the control: the handshake installs one authenticator');
+      expect((await configsSentBy(installed, atSign)).single, callerConfig);
+    });
   });
 }
