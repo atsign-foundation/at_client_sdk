@@ -11,6 +11,7 @@ import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
@@ -216,7 +217,7 @@ void main() {
 
     expect(installed, hasLength(1),
         reason: 'the control: the retrofit built its own connection');
-    final recorder = _FromRecorder();
+    final recorder = FromRecorder();
     await installed.single!(recorder);
     const prefix = 'from:$atSign:clientConfig:';
     expect(recorder.from, startsWith(prefix));
@@ -226,22 +227,7 @@ void main() {
       'appName': 'acme_chat',
       'appVersion': '2.3.1',
       'sdkName': 'atsign.dart.at_client',
-      'sdkVersion': RegExp(r'^version:\s*(\S+)', multiLine: true)
-          .firstMatch(File('pubspec.yaml').readAsStringSync())!
-          .group(1)!,
+      'sdkVersion': pubspecVersion(),
     });
   });
-}
-
-/// Keeps the `from:` an authenticator sends, answering it with nothing so the
-/// authenticator stops there.
-class _FromRecorder implements AtCommandExecutor {
-  String? from;
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    from ??= command;
-    return '';
-  }
 }

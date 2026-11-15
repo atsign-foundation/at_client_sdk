@@ -11,6 +11,7 @@ import 'package:at_lookup/at_lookup.dart'
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/key_package_filing.dart';
@@ -285,11 +286,9 @@ void main() {
     expect(installed.length, greaterThanOrEqualTo(3),
         reason: 'the control: the CRAM login, the new keys, and the new keys '
             'again once the atServer names the enrollment');
-    final pubspecVersion = RegExp(r'^version:\s*(\S+)', multiLine: true)
-        .firstMatch(File('pubspec.yaml').readAsStringSync())!
-        .group(1)!;
+    final atClientVersion = pubspecVersion();
     for (final authenticator in installed) {
-      final recorder = _FromRecorder();
+      final recorder = FromRecorder();
       await authenticator(recorder);
       const prefix = 'from:$atSign:clientConfig:';
       expect(recorder.from, startsWith(prefix));
@@ -298,22 +297,9 @@ void main() {
       expect(config['appName'], 'acme_chat');
       expect(config['appVersion'], '2.3.1');
       expect(config['sdkName'], 'atsign.dart.at_client');
-      expect(config['sdkVersion'], pubspecVersion);
+      expect(config['sdkVersion'], atClientVersion);
     }
   });
-}
-
-/// Keeps the `from:` an authenticator sends, answering it with nothing so the
-/// authenticator stops there.
-class _FromRecorder implements AtCommandExecutor {
-  String? from;
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    from ??= command;
-    return '';
-  }
 }
 
 /// Answers `from:` with a challenge, and `cram:` with success only for the
