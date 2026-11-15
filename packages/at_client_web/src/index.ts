@@ -90,7 +90,7 @@ export interface AtClientLike {
   /** Deletes a key; resolves `true` once it is gone. */
   delete(key: AtKey): Promise<boolean>;
 
-  /** Lists the keys whose wire form matches the `filter` regex; every key when it is omitted. */
+  /** Lists the keys whose wire form matches the `filter` regex; the client's namespace when it is omitted. */
   keys(filter?: string): Promise<AtKey[]>;
 
   /** Sends `value` to the key's `sharedWith` atSign as a notification. */
@@ -227,7 +227,7 @@ export class AtClient implements AtClientLike {
     return true;
   }
 
-  /** Lists the keys whose wire form matches the `filter` regex; every key when it is omitted. */
+  /** Lists the keys whose wire form matches the `filter` regex; the client's namespace when it is omitted. */
   async keys(filter?: string): Promise<AtKey[]> {
     const keys = await bridged(() => this.session.keys(filter));
     return keys.map((text) => parseKey(text, this.namespace));
