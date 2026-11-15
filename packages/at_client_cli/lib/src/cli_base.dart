@@ -200,12 +200,11 @@ class CLIBase {
   /// holds only the request for has been approved.
   final Duration approvalRetryInterval;
 
-  /// What [init] builds the client's connections with: [lookUps], else what
-  /// [lookUpsFor] picks for the root domain, so a `proxy:` root names the
-  /// atSign first on each connection.
+  /// What [init] builds the client's connections with: [lookUps], else
+  /// [secureSocketLookUps], which at_lookup makes name the atSign first on
+  /// each connection when the root is a proxy (`proxy:<host>`).
   @visibleForTesting
-  AtLookUpFactory get lookUpsToUse =>
-      lookUps ?? lookUpsFor(atRootDomain.rootDomain);
+  AtLookUpFactory get lookUpsToUse => lookUps ?? secureSocketLookUps();
 
   late final String atKeysFilePathToUse;
   late final String localStoragePathToUse;

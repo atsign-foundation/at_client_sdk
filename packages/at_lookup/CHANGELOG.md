@@ -1,3 +1,12 @@
+## 4.1.0
+- feat: a lookup built with a `proxy:<host>` root domain sends
+  `from:<atSign>` first on each connection it opens, ahead of any
+  `onConnect`, as it already resolves every atSign to the proxy. A caller that
+  sent `from:<atSign>` from its own `onConnect` for such a root must stop, or
+  the proxy is sent it twice. An `error:` reply to it, a proxy that cannot
+  route the atSign, closes the connection and fails the command with that
+  error.
+
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
 - breaking: `AtLookupImpl`'s constructor is internal to at_lookup; build a
