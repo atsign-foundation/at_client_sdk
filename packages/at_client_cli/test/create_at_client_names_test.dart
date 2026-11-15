@@ -9,10 +9,11 @@ import 'package:test/test.dart';
 import 'keyfile_helpers.dart';
 
 /// The app a command's client names on its authenticating `from:`: the
-/// calling program's own for the public [createAtClient], at_activate for
-/// at_activate's own commands. Observed at a TLS proxy on the loopback
-/// interface, which answers the proxy's `from:@alice` and keeps the
-/// authenticating `from:` that follows it.
+/// calling program's own for the public [createAtClient], and the program
+/// at_activate runs as for its own commands, onboard among them. Observed at a
+/// TLS proxy on the loopback interface, which answers the proxy's
+/// `from:@alice`, keeps the authenticating `from:` that follows it, and
+/// answers anything else with `data:null`.
 void main() {
   AtSignLogger.root_level = 'SHOUT';
   late Directory certs;
@@ -62,6 +63,10 @@ void main() {
           } else if (line.startsWith('from:@alice:clientConfig:')) {
             configs.add(line.substring('from:@alice:clientConfig:'.length));
             socket.destroy();
+          } else if (line.startsWith('enroll:request:')) {
+            socket.write('data:{"enrollmentId":"e-1","status":"pending"}\n@');
+          } else {
+            socket.write('data:null\n@');
           }
         }
       }, onError: (_) {});
@@ -106,6 +111,84 @@ void main() {
     return config;
   }
 
+  /// The clientConfig of the first authenticating `from:` the proxy receives
+  /// from at_activate run in a process of its own with [arguments], as
+  /// [program] (`AtActivate` for its own entry point), and a home directory
+  /// of its own. The process is ended once that `from:` arrives.
+  Future<Map<String, dynamic>> firstConfigFromProcess(
+      String program, List<String> Function(String home) arguments) async {
+    final home = Directory.systemTemp.createTempSync('from_names_home_');
+    final first = configs.stream.first;
+    final process = await Process.start(Platform.resolvedExecutable, [
+      'test/fixtures/at_activate_through_proxy.dart',
+      '${certs.path}/cert.pem',
+      program,
+      ...arguments(home.path),
+    ], environment: {
+      'HOME': home.path
+    });
+    final errors = process.stderr.transform(utf8.decoder).join();
+    unawaited(process.stdout.drain<void>());
+    try {
+      final config = await Future.any([
+        first,
+        process.exitCode.then((code) async => throw StateError(
+            'at_activate exited $code before it authenticated: '
+            '${await errors}')),
+      ]).timeout(const Duration(seconds: 90));
+      return jsonDecode(config) as Map<String, dynamic>;
+    } finally {
+      process.kill();
+      await process.exitCode;
+      home.deleteSync(recursive: true);
+    }
+  }
+
+  /// An onboard command line for `@alice` through the proxy, over in one
+  /// provisioning check.
+  List<String> onboard(String home) => [
+        'onboard', '-a', '@alice', '-c', 'the-one-time-secret', //
+        '-r', 'proxy:127.0.0.1:${proxy.port}',
+        '--posture', 'legacy', '--max-retries', '1',
+      ];
+
+  test(
+      'Given at_activate\'s onboard command line, when AtActivate.main runs '
+      'it, then its CRAM from: names at_activate at at_client_cli\'s version',
+      () async {
+    final config = await firstConfigFromProcess('AtActivate', onboard);
+
+    expect(config['appName'], 'at_activate');
+    expect(config['appVersion'], _atClientCliVersion());
+    expect(config['sdkName'], 'atsign.dart.at_client');
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test(
+      'Given at_register\'s onboard command line, when at_activate runs it as '
+      'at_register, then its CRAM from: names at_register', () async {
+    final config = await firstConfigFromProcess('at_register', onboard);
+
+    expect(config['appName'], 'at_register');
+    expect(config['appVersion'], _atClientCliVersion());
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test(
+      'Given at_activate run as another program, when its enroll command\'s '
+      'approval handshake authenticates, then its from: names that program',
+      () async {
+    final config = await firstConfigFromProcess(
+        'acme_admin',
+        (home) => [
+              'enroll', '-a', '@alice', '-k', '$home/keys/@alice_key.atKeys', //
+              '-r', 'proxy:127.0.0.1:${proxy.port}',
+              '-s', 'ABC123', '-p', 'wavi', '-d', 'phone', '-n', 'wavi:rw',
+              '--posture', 'pqReady',
+            ]);
+
+    expect(config['appName'], 'acme_admin');
+    expect(config['sdkName'], 'atsign.dart.at_client');
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
   test(
       'Given a program outside at_client_cli, when the client createAtClient '
       'opens authenticates, then its from: does not name at_activate',
@@ -139,11 +222,12 @@ void main() {
     ]));
 
     expect(config['appName'], 'at_activate');
-    expect(
-        config['appVersion'],
-        RegExp(r'^version:\s*(\S+)', multiLine: true)
-            .firstMatch(File('pubspec.yaml').readAsStringSync())!
-            .group(1));
+    expect(config['appVersion'], _atClientCliVersion());
     expect(config['sdkName'], 'atsign.dart.at_client');
   });
 }
+
+/// The version at_client_cli's pubspec declares.
+String _atClientCliVersion() => RegExp(r'^version:\s*(\S+)', multiLine: true)
+    .firstMatch(File('pubspec.yaml').readAsStringSync())!
+    .group(1)!;
