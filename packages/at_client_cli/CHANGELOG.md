@@ -4,6 +4,8 @@
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - chore: requires at_client 4.1.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
+- fix: `at_activate status` asks the atDirectory once, prints no posture
+  notice, and reports a refused atServer connection as unreachable.
 
 ## 1.0.0
 
