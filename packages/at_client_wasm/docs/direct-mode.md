@@ -15,7 +15,7 @@ Both modes are trunk's at_lookup, chosen once by `sessionTransport(options)`.
 | Mode | Lookup factory | Address finder |
 |---|---|---|
 | direct (default) | `webSocketLookUps(directoryPort: root.rootPort)` | `HttpsSecondaryAddressFinder(root.rootDomain, port: root.rootPort)` |
-| proxy (`proxyHost` + `proxyPort`) | `proxyWebSocketLookUps(host, port)`: `fixedAddressWebSocketLookUps` with `proxyPreamble` (`from:<atSign>`) | `FixedSecondaryAddressFinder(proxyHost, proxyPort)` |
+| proxy (`proxyHost` + `proxyPort`, or a `proxy:<host>` root) | `fixedAddressWebSocketLookUps(host: host, port: port)`; at_lookup sends `from:<atSign>` first on each connection, because the root is `proxy:<host>` | `FixedSecondaryAddressFinder(host, port)` |
 
 `SessionTransportOptions.root` is an `AtRootDomain`: by default the production atDirectory, `root.atsign.org:64`, and for a proxy `proxy:<host>` at the proxy's port. `sessionTransport` passes it on as `SessionTransport.root`, and `portalSession` fills `AtClientPreference.rootDomain`/`rootPort` from it. A `prefs` that names another root is refused with an `ArgumentError` before any connection.
 
@@ -23,7 +23,7 @@ Both modes are trunk's at_lookup, chosen once by `sessionTransport(options)`.
 The proxy is opt-in and for development. Use it only on a machine and network you control, never against production atSigns through a proxy you do not run.
 
 The connection to the proxy is the whole atProtocol session, so the proxy:
-- learns the atSign from the `from:<atSign>` preamble and which atServer each connection is for;
+- learns the Atsign, and which atServer each connection is for, from the `from:<atSign>` that at_lookup sends first on each connection;
 - sees every command and response on the connection: key names, metadata, the authentication exchange, notification traffic and timing;
 - resolves and answers for every atSign the session talks to, since the single proxy stands in for each atServer: it is trusted for addressing as well as transport;
 - sees value ciphertext only: values are end-to-end encrypted by the client, and private keys never leave the page.

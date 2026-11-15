@@ -59,4 +59,45 @@ void main() {
     expect((address.host, address.port), ('proxy.example', 443),
         reason: 'a proxy: root sends every Atsign to its host and port');
   });
+
+  AtLookupImpl lookUpFor(SessionTransport t) => t.lookUps(
+      atSign: '@alice',
+      rootDomain: t.root,
+      authenticator: null,
+      secondaryAddressFinder: t.finder) as AtLookupImpl;
+
+  test(
+      'Each connection of a proxy session sends from:<atSign> once, before '
+      'anything else', () async {
+    final t = sessionTransport(
+        SessionTransportOptions(proxyHost: 'proxy.example', proxyPort: 443));
+    final connection = _Recorder();
+
+    await lookUpFor(t).onConnect?.call(connection);
+
+    expect(connection.sent, ['from:@alice\n'],
+        reason: 'at_lookup sends from:<atSign> for a proxy: root, and the '
+            'session sends nothing more');
+  });
+
+  test(
+      "A direct session's connections send nothing before the caller's first "
+      'command', () {
+    final t = sessionTransport(SessionTransportOptions());
+
+    expect(lookUpFor(t).onConnect, isNull,
+        reason: 'a direct connection has no preamble');
+  });
+}
+
+/// An [AtCommandExecutor] that records each command and answers `data:ok`.
+class _Recorder implements AtCommandExecutor {
+  final sent = <String>[];
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return 'data:ok';
+  }
 }
