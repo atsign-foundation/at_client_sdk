@@ -9,10 +9,12 @@
 - fix: a `proxy:<host>` root naming a bracketed IPv6 literal, such as
   `proxy:[::1]`, reaches that address over TLS. It used to fail its lookup
   with a `FormatException`, and a TLS connect to `[::1]` failed its host
-  lookup.
+  lookup. Only brackets round an IPv6 address come off: `[zz]` or
+  `[127.0.0.1]` is looked up as written, and fails.
 - fix: `LookUpUtil.getSecondaryInfo` splits `host:port` on the last `:`, so
   `[::1]:8443` gives `[::1]` and `8443`. It used to split on every `:` and
-  keep the first two parts, giving `[` and an empty port.
+  keep the first two parts, giving `[` and an empty port. `[::1]` with no
+  port gives nothing.
 
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.

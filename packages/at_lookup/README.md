@@ -99,8 +99,10 @@ A root domain of `proxy:<host>` names a proxy fronting many atServers: every
 atSign resolves to `<host>` at the root port, and the lookup sends
 `from:<atSign>` first on each connection, before any `onConnect`, so that the
 proxy knows which atServer the connection is for. Do not send it yourself.
-The host may be a bracketed IPv6 literal, as in `proxy:[::1]`, over TLS and
-over a browser WebSocket alike.
+The host may be a bracketed IPv6 literal, as in `proxy:[::1]`, over TLS.
+Build such a root with `AtRootDomain('proxy:[::1]', port)`: at_commons'
+`AtRootDomain.parse` refuses `proxy:[::1]:64` and `[::1]:64`, so a root read
+from a command line or a settings dialog cannot name one yet.
 
 A factory of your own returns any `AtLookupMuxable`. Each call names what the
 connection is for: the atSign, the root domain, the authenticator (null for a

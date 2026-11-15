@@ -13,6 +13,7 @@ export '../util/abandonment.dart';
 ///
 /// [host] may be a bracketed IPv6 literal, as a URL writes it, such as
 /// `[::1]`: the connect and the certificate check use the address inside.
+/// Brackets round anything else stay on, so that host fails its lookup.
 ///
 /// Built on [RawSocket] rather than [SecureSocket.connect], whose timeout
 /// bounds only the TCP connect: a peer that accepts and never answers the
@@ -84,10 +85,18 @@ Future<SecureSocket> connectTls(
 }
 
 /// The address [connectTls] dials for [host]: [host] without the brackets a
-/// URL puts round an IPv6 literal.
-String dialledHost(String host) => host.startsWith('[') && host.endsWith(']')
-    ? host.substring(1, host.length - 1)
-    : host;
+/// URL puts round an IPv6 literal, and anything else as written, brackets
+/// round something that is no IPv6 address included.
+String dialledHost(String host) {
+  if (!host.startsWith('[') || !host.endsWith(']')) return host;
+  final inside = host.substring(1, host.length - 1);
+  try {
+    Uri.parseIPv6Address(inside);
+    return inside;
+  } on FormatException {
+    return host;
+  }
+}
 
 /// A [SecureSocket] over a [RawSecureSocket], for the members at_lookup's
 /// connections use and the rest of the interface.
