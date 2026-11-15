@@ -77,6 +77,9 @@
   after a reconnect (latest 1024 ids capped per millisecond watermark).
   Conflicting duplicate IDs trigger warnings and are reported on
   `droppedEvents`.
+- feat: `client.connection` reads refused, with its cause, while the atServer
+  refuses the notification connection, and the connection keeps retrying,
+  waiting up to 5 minutes between attempts.
 
 ## 4.0.0
 

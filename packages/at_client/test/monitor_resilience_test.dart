@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:crypton/crypton.dart' show RSAKeypair;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -28,12 +29,23 @@ void main() {
   late NotificationServiceImpl service;
   late List<Duration> defaultReconnects;
   late List<Duration> defaultStartRetries;
+  late List<Duration> defaultRefusalReconnects;
+  late List<Duration> defaultStartRefusalRetries;
+  late String pkamPrivateKey;
   final received = <AtNotification>[];
   var subscriptionEnded = false;
+
+  /// The delay chosen before each reconnect, and before each retry of the
+  /// first connect, since the service was built.
+  final reconnectDelays = <Duration>[];
+  final startDelays = <Duration>[];
 
   setUpAll(() {
     defaultReconnects = AtLookupImpl.notificationReconnectDelays;
     defaultStartRetries = Monitor.startRetryDelays;
+    defaultRefusalReconnects = AtLookupImpl.notificationRefusalReconnectDelays;
+    defaultStartRefusalRetries = Monitor.startRefusalRetryDelays;
+    pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
   });
 
   setUp(() {
@@ -47,6 +59,16 @@ void main() {
     ];
     AtLookupImpl.notificationReconnectDelays = fast;
     Monitor.startRetryDelays = fast;
+    // After a refusal: distinct from [fast] at every index, so each delay
+    // taken names the schedule it came from.
+    const afterRefusal = [
+      Duration(milliseconds: 30),
+      Duration(milliseconds: 50),
+      Duration(milliseconds: 70),
+      Duration(milliseconds: 90),
+    ];
+    AtLookupImpl.notificationRefusalReconnectDelays = afterRefusal;
+    Monitor.startRefusalRetryDelays = afterRefusal;
 
     server = FakeAtServer(atSign: atSign);
     client = MockAtClient();
@@ -72,6 +94,8 @@ void main() {
     await service.stop();
     AtLookupImpl.notificationReconnectDelays = defaultReconnects;
     Monitor.startRetryDelays = defaultStartRetries;
+    AtLookupImpl.notificationRefusalReconnectDelays = defaultRefusalReconnects;
+    Monitor.startRefusalRetryDelays = defaultStartRefusalRetries;
   });
 
   /// Waits until the monitor reports itself listening.
@@ -82,18 +106,27 @@ void main() {
 
   /// Builds the service and starts it listening, with one subscriber attached
   /// before the monitor connects - as a program that must miss nothing does.
-  Future<void> startListening() async {
+  ///
+  /// [connection] is the client's connection state the monitor reports into;
+  /// with [untilListening] false this returns without waiting to connect.
+  Future<void> startListening(
+      {AtConnection? connection, bool untilListening = true}) async {
     received.clear();
     subscriptionEnded = false;
+    reconnectDelays.clear();
+    startDelays.clear();
     service = await NotificationServiceImpl.create(client,
-            lookUps: server.lookUps,
-            secondaryAddressFinder: server.addressFinder)
-        as NotificationServiceImpl;
+        lookUps: server.lookUps,
+        secondaryAddressFinder: server.addressFinder,
+        connection: connection) as NotificationServiceImpl;
+    service.monitor.onStartRetryDelay = startDelays.add;
+    (service.monitor.lookUp as AtLookupImpl).onNotificationReconnectDelay =
+        reconnectDelays.add;
     service
         .subscribe(regex: '.*')
         .listen(received.add, onDone: () => subscriptionEnded = true);
     service.startListening();
-    await connected();
+    if (untilListening) await connected();
   }
 
   /// Sends [id] and waits for the subscriber to receive it.
@@ -417,5 +450,194 @@ void main() {
           reason: 'a program watching this to decide whether it is live has '
               'to see it come back up');
     });
+  });
+
+  late AtConnection connection;
+  final changes = <AtConnectionState>[];
+
+  /// Points the test at an atServer whose `pkam:` answers decide whether
+  /// at_auth's own authenticator is accepted, so a refusal reaches the client
+  /// in the words at_auth composes around the atServer's answer, and builds
+  /// the connection state the monitor reports into.
+  void refusableServer() {
+    server = FakeAtServer(atSign: atSign, pkamPrivateKey: pkamPrivateKey);
+    connection = AtConnection(
+        atSign: atSign,
+        attempt: (_) async =>
+            fail('only the monitor reports the connection here'));
+    changes.clear();
+    connection.changes.listen(changes.add);
+    addTearDown(connection.close);
+  }
+
+  Duration ms(int n) => Duration(milliseconds: n);
+
+  Duration longest(List<Duration> delays) =>
+      delays.reduce((a, b) => a > b ? a : b);
+
+  // Each as an atServer answers a `pkam:` before the connection has
+  // authenticated: an enrollment's state as `error:<code>:<message>`, an
+  // exception as `error:<code>-<description>`.
+  const enrollment = '7f3a2c1e-4b5d-4e6f-8a9b-0c1d2e3f4a5b';
+  const refusals = [
+    (
+      code: 'AT0027',
+      cause: AtConnectionCause.revoked,
+      answer: 'error:AT0027:enrollment_id: $enrollment is revoked',
+    ),
+    (
+      code: 'AT0025',
+      cause: AtConnectionCause.enrollmentDenied,
+      answer: 'error:AT0025:enrollment_id: $enrollment is denied',
+    ),
+    (
+      code: 'AT0029',
+      cause: AtConnectionCause.invalidEnrollment,
+      answer: 'error:AT0029-Exception: enrollment $enrollment has expired',
+    ),
+    (
+      code: 'AT0026',
+      cause: AtConnectionCause.enrollmentNotApproved,
+      answer: 'error:AT0026:enrollment_id: $enrollment is pending',
+    ),
+    (
+      code: 'AT0401',
+      cause: AtConnectionCause.unauthenticated,
+      answer: 'error:AT0401-Exception: pkam authentication failed',
+    ),
+    (
+      code: 'an authentication refusal with a code this build does not know',
+      cause: AtConnectionCause.unauthenticated,
+      answer: 'error:AT9999:a refusal this build has no name for',
+    ),
+  ];
+
+  /// Asserts the connection reads refused with [cause], reported once
+  /// however many refusals there were.
+  void refusedWith(AtConnectionCause cause) {
+    expect(connection.current.outcome, AtConnectionOutcome.refused,
+        reason: 'the app can see the atServer refused this client');
+    expect(connection.current.cause, cause,
+        reason: 'and why, from the code the atServer answered with');
+    expect(changes.where((c) => c.isRefused), hasLength(1),
+        reason: 'one change for many refusals: a repeated refusal is not a '
+            'new situation');
+  }
+
+  group(
+      'a notification reconnect the atServer refuses as <cause> is retried '
+      'less often', () {
+    setUp(refusableServer);
+
+    for (final row in refusals) {
+      test('${row.code} | ${row.cause.name}', () async {
+        await startListening(connection: connection);
+        server.pkamRefusal = row.answer;
+
+        await server.drop();
+        await server.waitUntil(() => server.authCount >= 7,
+            what: 'six refused reconnects');
+
+        expect(reconnectDelays.take(6),
+            [ms(20), ms(50), ms(70), ms(90), ms(90), ms(90)],
+            reason: 'the wait after the drop is the network one; after each '
+                'refusal the wait is from the refusal schedule, longer each '
+                'time and holding at its last entry, and the attempts go on '
+                'past it');
+        expect(longest(defaultRefusalReconnects), const Duration(minutes: 5),
+            reason: 'the refusal schedule a client runs on grows to 5 '
+                'minutes');
+        refusedWith(row.cause);
+      });
+    }
+  });
+
+  group(
+      'a notification start the atServer refuses as <cause> is retried '
+      'less often', () {
+    setUp(refusableServer);
+
+    for (final row in refusals) {
+      test('${row.code} | ${row.cause.name}', () async {
+        server.pkamRefusal = row.answer;
+
+        await startListening(connection: connection, untilListening: false);
+        await server.waitUntil(() => server.authCount >= 6,
+            what: 'six refused starts');
+
+        expect(startDelays.take(5), [ms(30), ms(50), ms(70), ms(90), ms(90)],
+            reason: 'each retry of a refused start waits from the refusal '
+                'schedule, longer each time and holding at its last entry, '
+                'and the retries go on past it');
+        expect(defaultStartRefusalRetries, defaultRefusalReconnects,
+            reason: 'a refused start backs off on the schedule a refused '
+                'reconnect does, which grows to 5 minutes');
+        refusedWith(row.cause);
+      });
+    }
+  });
+
+  test('an app keeps its notifications through a refusal that clears',
+      () async {
+    refusableServer();
+    await startListening(connection: connection);
+    await deliver('before');
+    server.pkamRefusal = refusals.first.answer;
+    await server.drop();
+    await server.waitUntil(
+        () => connection.current.isRefused && server.authCount >= 3,
+        what: 'two refused reconnects');
+
+    server.pkamRefusal = null;
+    await connected();
+    await deliver('after');
+
+    expect(received.map((n) => n.id), ['before', 'after'],
+        reason: 'the subscription the app took before the refusal is the one '
+            'that receives once the atServer accepts the client again');
+    expect(subscriptionEnded, isFalse,
+        reason: 'a refusal does not end the app\'s stream');
+    expect(connection.current.isOnline, isTrue);
+    expect(changes.map((c) => (c.outcome, c.cause)), [
+      (AtConnectionOutcome.online, null),
+      (AtConnectionOutcome.refused, AtConnectionCause.revoked),
+      (AtConnectionOutcome.online, null),
+    ]);
+  });
+
+  test(
+      'a dropped notification connection to an unreachable atServer is '
+      'retried as before', () async {
+    refusableServer();
+    await startListening(connection: connection);
+    await deliver('before');
+
+    server.refuseConnects = 5;
+    await server.drop();
+    await server.waitUntil(() => server.connectCount == 2,
+        what: 'the reconnect that got through');
+    await connected();
+    await deliver('after');
+
+    expect(reconnectDelays, [ms(20), ms(40), ms(60), ms(60), ms(60), ms(60)],
+        reason: 'an atServer that cannot be reached is retried on the '
+            'network schedule, held at its last entry');
+    expect(longest(defaultReconnects), const Duration(seconds: 34),
+        reason: 'the network schedule a client runs on grows to 34 seconds');
+    expect(received.map((n) => n.id), ['before', 'after']);
+    expect(changes.where((c) => c.isRefused), isEmpty,
+        reason: 'an unreachable atServer is not a refusal');
+  });
+
+  test('a start that cannot reach the atServer is retried as before', () async {
+    refusableServer();
+    server.refuseConnects = 3;
+
+    await startListening(connection: connection);
+
+    expect(startDelays, [ms(20), ms(40), ms(60)],
+        reason: 'a start that never reached the atServer retries on the '
+            'network schedule');
+    expect(changes.where((c) => c.isRefused), isEmpty);
   });
 }

@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:at_auth/at_auth.dart' show authenticatorForPrivateKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:uuid/uuid.dart';
 
 /// An [AtTransport] the [FakeAtServer] drives, over a real single-subscription
 /// [StreamController] so pause, resume, done and error are real events.
@@ -89,9 +91,18 @@ class FakeAtServerSocket implements AtTransport {
 /// Hands out the [AtLookUpFactory] a client or a notification service is built
 /// on, so everything between the subscriber and the socket is production code.
 class FakeAtServer {
-  FakeAtServer({this.atSign = '@alice'});
+  FakeAtServer({this.atSign = '@alice', this.pkamPrivateKey});
 
   final String atSign;
+
+  /// When set, every lookup authenticates with at_auth's own authenticator
+  /// for this PKAM private key: this server issues each `from:` challenge,
+  /// and [pkamRefusal] decides how each `pkam:` is answered.
+  final String? pkamPrivateKey;
+
+  /// The whole line the atServer answers each `pkam:` with while set, as an
+  /// atServer refusing the credential; null accepts it.
+  String? pkamRefusal;
 
   /// Every socket this server has handed out, oldest first.
   final List<FakeAtServerSocket> sockets = <FakeAtServerSocket>[];
@@ -113,7 +124,8 @@ class FakeAtServer {
   /// Connects that fail before there is a socket, as an unreachable atServer.
   int refuseConnects = 0;
 
-  /// Authentications that fail, as an atServer refusing the credential.
+  /// Authentications that fail, as an atServer refusing the credential,
+  /// when there is no [pkamPrivateKey].
   int failAuths = 0;
 
   /// `monitor:` commands answered with an error instead of accepted.
@@ -138,10 +150,11 @@ class FakeAtServer {
           AtLookUp.withSecureSocket(
             atSign: atSign,
             rootDomain: rootDomain,
-            // NOTE: this server's own, not the caller's. The caller's would
-            // sign a real PKAM challenge; this one decides whether the
-            // atServer accepts the credential at all.
-            authenticator: _authenticate,
+            // NOTE: this server's own, not the caller's, which would read the
+            // client's keystore.
+            authenticator: pkamPrivateKey == null
+                ? _authenticate
+                : authenticatorForPrivateKey(atSign, pkamPrivateKey!),
             // NOTE: this server's own, whatever the caller passed: the
             // caller's would ask the real atDirectory.
             secondaryAddressFinder: addressFinder,
@@ -171,6 +184,19 @@ class FakeAtServer {
   }
 
   void _onWrite(FakeAtServerSocket socket, String command) {
+    if (command.startsWith('from:')) {
+      const uuid = Uuid();
+      unawaited(
+          socket.serverSends('data:_${uuid.v4()}$atSign:${uuid.v4()}\n@'));
+      return;
+    }
+    if (command.startsWith('pkam:')) {
+      authCount++;
+      final refusal = pkamRefusal;
+      unawaited(socket.serverSends(
+          refusal == null ? 'data:success\n$atSign@' : '$refusal\n@'));
+      return;
+    }
     if (command.startsWith('monitor:')) {
       monitorCount++;
       monitorCommands.add(command.trim());
