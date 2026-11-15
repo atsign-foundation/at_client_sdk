@@ -16,8 +16,10 @@ Feature: A lookup through a proxy root opens each connection with from:<atSign>
   DoS: one short command per connection, no loop. A preamble that fails
   because the connection drops before its reply closes the connection, as any
   failing `onConnect` does, and the next command opens another and sends it
-  again. A reply that is an error is not inspected here, as before: the
-  atServer's own `from:` challenge and the authentication after it fail.
+  again. An `error:` reply, a proxy that cannot route the atSign, fails the
+  preamble the same way: the connection is closed and the command fails with
+  the error the proxy sent, rather than going out on a connection the proxy
+  did not route.
   Forgery and impersonation: `from:<atSign>` is a claim about which atServer
   the proxy should route to, not a proof. at_lookup proves nothing; the
   atServer behind the proxy proves the atSign, through its own `from:`
@@ -54,3 +56,9 @@ Feature: A lookup through a proxy root opens each connection with from:<atSign>
     When a command is run
     Then it fails and the command is not written
     And the next command opens a new connection and writes "from:@alice" on it first
+
+  Scenario: A proxy root's preamble that gets an error: reply fails the connection
+    Given a lookup built with a proxy root whose proxy answers from:<atSign> with an error
+    When a command is run
+    Then it fails with the proxy's error code and the command is not written
+    And the connection is closed

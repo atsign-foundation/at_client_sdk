@@ -145,4 +145,25 @@ void main() {
 
     await lookUp.close();
   });
+
+  test(
+      "A proxy root's preamble that gets an error: reply closes the "
+      'connection and fails the command', () async {
+    final lookUp = lookUpAt('proxy:proxy.example.com');
+
+    final command = expectLater(
+        lookUp.executeCommand('noop:0\n'),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0015')));
+    await pumpEventQueue();
+    final refused = transportFactory.created.single;
+    await refused.settle();
+    await refused.serverSends('error:AT0015-unknown atSign\n@');
+    await command;
+    expect(refused.written, ['from:@alice\n'],
+        reason: 'nothing is sent on a connection the proxy did not route');
+    expect(refused.destroyed, isTrue);
+
+    await lookUp.close();
+  });
 }
