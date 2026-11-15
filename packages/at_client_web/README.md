@@ -114,7 +114,7 @@ Every call rejects with an `AtError`. Branch on `error.code`, never on the messa
 
   ```
   default-src 'none';
-  script-src 'self' 'wasm-unsafe-eval';
+  script-src 'self';
   style-src 'self';
   connect-src https: wss:;
   img-src 'self';
@@ -123,6 +123,14 @@ Every call rejects with an `AtError`. Branch on `error.code`, never on the messa
   ```
 
   `script-src 'self'` serves the bundle from your origin. `connect-src` is broad because the atServer's host comes from a root lookup at run time; narrow it if you know the host.
+- **The bundle loads relative to the module URL.** `dist/dart/at_client.js` is injected by a `<script>` whose URL is resolved from `import.meta.url`, so it must stay beside `dist/index.js` on the origin that serves your app. Vite pre-bundles dependencies and would move the module away from it; exclude the package:
+
+  ```ts
+  // vite.config.ts
+  export default defineConfig({
+    optimizeDeps: { exclude: ['@atsign/at_client_web'] },
+  });
+  ```
 - **One `rpId`.** Passkeys are bound to a relying-party id, a single hostname (default `location.hostname`). A passkey made on one hostname is not offered on another, so an app that moves hostnames starts over with `enroll`.
 - **Passkey PRF.** Keys are sealed with the PRF extension's output. Check `await AtClient.prfSupported()` first. Without PRF, `onboard` refuses before any passkey prompt and sessions reject `prf_unavailable`.
 
