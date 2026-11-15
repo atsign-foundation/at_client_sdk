@@ -4,8 +4,8 @@
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName` is named after its program file, with `appVersion`
   `unknown`, and the client logs one warning when it starts.
-- feat: `Atsign.authenticatesAs` takes optional `particulars` to name the app,
-  and `AtClientParticulars` is exported.
+- feat: `Atsign.authenticatesAs` and `PendingEnrollment` take optional
+  `particulars` to name the app, and `AtClientParticulars` is exported.
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
   putMeta or delete whose request options leave `useRemoteAtServer` unset
   goes to the atServer; an explicit true or false is still enforced. A
