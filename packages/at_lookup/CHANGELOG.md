@@ -6,6 +6,9 @@
   the proxy is sent it twice. An `error:` reply to it, a proxy that cannot
   route the atSign, closes the connection and fails the command with that
   error.
+- feat: after the atServer refuses a notification reconnect, reconnecting
+  carries on, waiting up to 5 minutes between attempts, and each refusal
+  arrives as an error on `notifications`, so a listener needs an `onError`.
 
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.

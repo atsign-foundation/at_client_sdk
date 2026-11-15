@@ -15,7 +15,7 @@ import 'package:at_lookup/src/util/error_response.dart'
     show errorResponseException;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
-import 'package:meta/meta.dart' show internal;
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:mutex/mutex.dart';
 
 /// The `from:` challenge an atServer issues a client, once the `data:` prefix
@@ -686,6 +686,31 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     Duration(seconds: 34),
   ];
 
+  /// Delays between reconnect attempts after the atServer refused the last
+  /// one, by the same attempt count. The last is repeated indefinitely.
+  ///
+  /// Settable for the same reason as [notificationReconnectDelays].
+  static List<Duration> notificationRefusalReconnectDelays = const [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+    Duration(seconds: 34),
+    Duration(seconds: 55),
+    Duration(seconds: 89),
+    Duration(seconds: 144),
+    Duration(seconds: 233),
+    Duration(seconds: 300),
+  ];
+
+  /// Told the delay chosen before each notification reconnect attempt, so a
+  /// test can see which schedule it came from.
+  @visibleForTesting
+  void Function(Duration delay)? onNotificationReconnectDelay;
+
   /// How often a quiet notification connection is probed, and how long the
   /// probe waits. Settable so a test does not have to wait 30 seconds.
   @override
@@ -758,11 +783,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // that never went down.
     final generation = ++_notifyGeneration;
     _reconnecting = true;
+    var refused = false;
     try {
       while (_isNotifying && generation == _notifyGeneration) {
-        final delay = notificationReconnectDelays[
-            min(_reconnectIx, notificationReconnectDelays.length - 1)];
+        final delays = refused
+            ? notificationRefusalReconnectDelays
+            : notificationReconnectDelays;
+        final delay = delays[min(_reconnectIx, delays.length - 1)];
         _reconnectIx++;
+        onNotificationReconnectDelay?.call(delay);
         logger.info('Reconnecting notifications in ${delay.inSeconds}s '
             '(attempt $_reconnectIx)');
         await Future.delayed(delay);
@@ -783,6 +812,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         } catch (e) {
           if (generation != _notifyGeneration) return;
           logger.warning('Reconnect attempt $_reconnectIx failed: $e');
+          refused = e is UnAuthenticatedException;
+          if (e is UnAuthenticatedException) _reportRefusal(e);
         }
       }
     } finally {
@@ -790,6 +821,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // the flag would disarm nothing and re-arm the live loop's guard.
       if (generation == _notifyGeneration) _reconnecting = false;
     }
+  }
+
+  /// Adds [refusal] to [notifications] as an error, leaving the stream open.
+  void _reportRefusal(UnAuthenticatedException refusal) {
+    final controller = _notificationController;
+    if (controller == null || controller.isClosed) return;
+    controller.addError(refusal);
   }
 
   void _startHeartbeat() {
@@ -861,6 +899,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   bool get isNotifying => _isNotifying;
 
+  /// See [AtLookupMuxable.notifications]. A reconnect attempt the atServer
+  /// refuses is added to this stream as an error, and the stream stays open.
   @override
   Stream<String> get notifications {
     if (_stopped) return const Stream.empty();

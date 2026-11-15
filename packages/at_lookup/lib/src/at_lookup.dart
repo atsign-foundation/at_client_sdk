@@ -273,6 +273,12 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   ///
   /// Listen as soon as you read it: until a listener arrives, notifications
   /// are held without bound, and none of that back-pressure applies.
+  ///
+  /// While notifying, each reconnect attempt the atServer refuses, one that
+  /// fails with an [UnAuthenticatedException], arrives here as that exception
+  /// in an error event, and the stream stays open: reconnecting carries on,
+  /// waiting longer after each refusal. Listen with an `onError`, or each
+  /// refusal is an unhandled error.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.
