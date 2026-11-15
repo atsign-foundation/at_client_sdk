@@ -1,9 +1,11 @@
 # PB-3 — the storage bundle, remote-only client and io split
 
-**Status:** six stages, partly landed. Re-checked with `gh` 2026-11-02: #2257, #2262 and #2263 are closed. Stages 4 and 5 did not merge as written: [#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415) superseded them and shipped `at_client` 4.0.0 (on pub.dev 2026-11-04). The [4.0.0 CHANGELOG](../../../packages/at_client/CHANGELOG.md) is the record of what shipped; the stage 4/5 sections below are the closed PRs' design. #2258–#2261, #2273–#2276 and #2336 are open. The remote-only classes are not on trunk: they and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (CI [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431), tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). Merge order and the publish ladder live in the landing plan, not here.
+> Superseded 2026-11-13: the remote-only storage path this records is gone from #2430 (the client runs on `InMemoryAtClientStorage`; see D-18 in [`decisions.md`](../decisions.md)). Kept as the historical record of PB-3.
+
+**Status:** six stages, partly landed. Re-checked with `gh` 2026-11-02: #2257, #2262 and #2263 are closed. Stages 4 and 5 did not merge as written: [#2415](https://github.com/atsign-foundation/at_client_sdk/pull/2415) superseded them and shipped `at_client` 4.0.0 (on pub.dev 2026-11-04). The [4.0.0 CHANGELOG](../../../../packages/at_client/CHANGELOG.md) is the record of what shipped; the stage 4/5 sections below are the closed PRs' design. #2258–#2261, #2273–#2276 and #2336 are open. The remote-only classes are not on trunk: they and `at_client_wasm` are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (CI [#2431](https://github.com/atsign-foundation/at_client_sdk/pull/2431), tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). Merge order and the publish ladder live in the landing plan, not here.
 **Purpose:** the delivered record of PB-3 — what each stage changed in `at_client`, why, and what its tests prove. It merges the former `pb3-stage1.md` … `pb3-stage6.md`; per-PR status was dropped, so this table is the only place state is recorded.
-**Rulings it implements:** [`decisions.md`](decisions.md) D-12 (storage bundle), D-17 (V1 ships remote-only), D-18 (remote-only is an `AtClientStorage` implementation), D-13/D-14 (location per atSign). Gates: [`acceptance.md`](acceptance.md) §9a.2, X-R1/X-R2.
-**Not here:** the web crypto and web lookups (PB-4), `at_client_wasm` sessions and the JS entry (PB-5) — see [`implementation-plan.md`](implementation-plan.md).
+**Rulings it implements:** [`decisions.md`](../decisions.md) D-12 (storage bundle), D-17 (V1 ships remote-only), D-18 (remote-only is an `AtClientStorage` implementation), D-13/D-14 (location per atSign). Gates: [`acceptance.md`](../acceptance.md) §9a.2, X-R1/X-R2.
+**Not here:** the web crypto and web lookups (PB-4), `at_client_wasm` sessions and the JS entry (PB-5) — see [`implementation-plan.md`](../implementation-plan.md).
 
 ## The stack
 
@@ -558,7 +560,7 @@ sequenceDiagram
 
 ## Stage 4 — Hive leaves the default barrel
 
-> **Closed PR's design.** #2262 did not merge; #2415 shipped `at_client` 4.0.0 instead. The [4.0.0 CHANGELOG](../../../packages/at_client/CHANGELOG.md) is what shipped. See [the trunk comparison](#the-stack).
+> **Closed PR's design.** #2262 did not merge; #2415 shipped `at_client` 4.0.0 instead. The [4.0.0 CHANGELOG](../../../../packages/at_client/CHANGELOG.md) is what shipped. See [the trunk comparison](#the-stack).
 
 **Bottom line:**
 - `package:at_client/at_client.dart` no longer exports `HiveAtClientStorage`. It now comes from `package:at_client/hive.dart`.
@@ -795,7 +797,7 @@ As reported in the PR description:
 
 ## Stage 5 — no `dart:io` in `at_client.dart`, file/stream API removed, CI gate
 
-> **Closed PR's design.** #2263 did not merge; #2415 shipped `at_client` 4.0.0 instead. The [4.0.0 CHANGELOG](../../../packages/at_client/CHANGELOG.md) is what shipped. See [the trunk comparison](#the-stack).
+> **Closed PR's design.** #2263 did not merge; #2415 shipped `at_client` 4.0.0 instead. The [4.0.0 CHANGELOG](../../../../packages/at_client/CHANGELOG.md) is what shipped. See [the trunk comparison](#the-stack).
 
 **Bottom line:**
 - **BREAKING:** the deprecated file-transfer and stream API is **deleted, not moved**. The SDK has no replacement for it.
