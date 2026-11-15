@@ -14,8 +14,9 @@ This is a pre-release and unpublished package intended for WebAssembly/browser t
 
 `package:at_client_wasm/at_client_wasm_web.dart` exports everything in `at_client_wasm.dart` plus the browser transports:
 
-- `sessionTransport(SessionTransportOptions)` returns the `SessionTransport` (`lookUps`, `finder` and `root`) that `portalSession` takes: direct, or the dev proxy when `proxyHost` and `proxyPort` are set or the root is `proxy:<host>`. `portalSession` builds its preference on the transport's `root`, and refuses a `prefs` that names another root.
+- `sessionTransport(SessionTransportOptions)` returns the `SessionTransport` (`lookUps`, `finder` and `root`) that `portalSession` takes: direct, or the dev proxy when `proxyHost` and `proxyPort` are set or the root is `proxy:<host>`. A host, the proxy's or the root's, is a bare host of ASCII letters, digits, `.`, `-` and `_` only, or a bracketed IPv6 literal such as `[::1]`; `SessionTransportOptions` throws an `ArgumentError` naming the field for an empty host, one holding any other character outside such a literal, a port outside 1-65535, a `proxyHost` or `proxyPort` without the other, and a `root` given with a proxy. `portalSession` builds its preference on the transport's `root`, and refuses a `prefs` that names another root.
 - Through the dev proxy, each connection goes to `wss://host:port/ws`, and at_lookup sends `from:<atSign>` first on it because the session's root is `proxy:<host>`. A proxy that fronts many atServers reads it to learn which atServer the connection is for.
+- If you pass your own prefs, set their rootDomain and rootPort to match the transport's root; a default AtClientPreference() names the production root, so passing it with a proxy transport throws an ArgumentError before connecting.
 
 ## Building the browser entry
 

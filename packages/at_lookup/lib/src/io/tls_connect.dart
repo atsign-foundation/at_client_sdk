@@ -11,6 +11,10 @@ export '../util/abandonment.dart';
 /// Opens a TLS connection to [host]:[port], bounded by [timeout] from the TCP
 /// connect to the end of the handshake.
 ///
+/// [host] may be a bracketed IPv6 literal, as a URL writes it, such as
+/// `[::1]`: the connect and the certificate check use the address inside.
+/// Brackets round anything else stay on, so that host fails its lookup.
+///
 /// Built on [RawSocket] rather than [SecureSocket.connect], whose timeout
 /// bounds only the TCP connect: a peer that accepts and never answers the
 /// handshake leaves that connect pending for ever, and nothing reachable
@@ -25,6 +29,7 @@ Future<SecureSocket> connectTls(
   required Duration timeout,
   void Function(String line)? keyLog,
 }) async {
+  final address = dialledHost(host);
   final ended = Completer<Never>();
   ended.future.ignore();
   Object? endedBy;
@@ -59,7 +64,7 @@ Future<SecureSocket> connectTls(
       'TLS connect to $host:$port abandoned: its owner has closed')));
   try {
     final connecting =
-        await unlessEnded(RawSocket.startConnect(host, port), (task) {
+        await unlessEnded(RawSocket.startConnect(address, port), (task) {
       task.socket.ignore();
       task.cancel();
     });
@@ -70,12 +75,26 @@ Future<SecureSocket> connectTls(
     connected.setOption(SocketOption.tcpNoDelay, true);
     final secure = await unlessEnded(
         RawSecureSocket.secure(connected,
-            host: host, context: context, keyLog: keyLog),
+            host: address, context: context, keyLog: keyLog),
         (socket) => socket.close());
     return _TlsSocket(secure);
   } finally {
     timer.cancel();
     unregister?.call();
+  }
+}
+
+/// The address [connectTls] dials for [host]: [host] without the brackets a
+/// URL puts round an IPv6 literal, and anything else as written, brackets
+/// round something that is no IPv6 address included.
+String dialledHost(String host) {
+  if (!host.startsWith('[') || !host.endsWith(']')) return host;
+  final inside = host.substring(1, host.length - 1);
+  try {
+    Uri.parseIPv6Address(inside);
+    return inside;
+  } on FormatException {
+    return host;
   }
 }
 

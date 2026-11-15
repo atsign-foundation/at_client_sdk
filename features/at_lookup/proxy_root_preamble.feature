@@ -62,3 +62,9 @@ Feature: A lookup through a proxy root opens each connection with from:<atSign>
     When a command is run
     Then it fails with the proxy's error code and the command is not written
     And the connection is closed
+
+  Scenario: A proxy root naming a bracketed IPv6 literal reaches the proxy at that address
+    Given a lookup built over TLS with a root domain of "proxy:[::1]" for "@alice" and no address finder of its own
+    When a command is run
+    Then the connection reaches the proxy listening on "::1"
+    And "from:@alice" is the first thing written on it
