@@ -13,17 +13,6 @@ import 'at_lookup_test_utils.dart';
 
 /// Catalogue, in part: features/at_lookup/atdirectory_answer.feature
 void main() async {
-  group('this should be moved to functional tests', () {
-    test('look up @cicd1 from root.atsign.wtf:64', () async {
-      var secondaryAddress =
-          await CacheableSecondaryAddressFinder('root.atsign.wtf', 64)
-              .findSecondary('@cicd1');
-      expect(secondaryAddress.port, isNotNull);
-      expect(secondaryAddress.host, isNotNull);
-      print(secondaryAddress.toString());
-    });
-  });
-
   group('some cache tests with a MockSecondaryFinder', () {
     String rootDomain = 'root.atsign.unit.tests';
     int rootPort = 64;
