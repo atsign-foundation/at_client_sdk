@@ -79,5 +79,73 @@ void main() {
           _namingField('root'),
           reason: 'port 65536 is no proxy port');
     });
+
+    test(
+        'when its host holds whitespace, a colon or a slash, then it throws '
+        'naming root', () {
+      for (final domain in [
+        'proxy:proxy example',
+        'proxy:proxy.example:443',
+        'proxy:proxy.example/ws',
+      ]) {
+        expect(() => SessionTransportOptions(root: AtRootDomain(domain, 443)),
+            _namingField('root'),
+            reason: '"$domain" does not name a bare proxy host');
+      }
+    });
+  });
+
+  group('Given a proxyHost', () {
+    test(
+        'when it holds whitespace, a colon or a slash, then it throws naming '
+        'proxyHost', () {
+      for (final host in [
+        'proxy example',
+        'proxy.example:443',
+        'proxy.example/ws',
+        'https://proxy.example',
+      ]) {
+        expect(() => _options(proxyHost: host, proxyPort: 443),
+            _namingField('proxyHost'),
+            reason: '"$host" is not a bare host');
+      }
+    });
+  });
+
+  group('Given a direct root', () {
+    test(
+        'when its host is empty or holds whitespace, a colon or a slash, then '
+        'it throws naming root', () {
+      for (final domain in [
+        '',
+        ' ',
+        'root example',
+        'root.example:64',
+        'root.example/x',
+      ]) {
+        expect(() => SessionTransportOptions(root: AtRootDomain(domain, 64)),
+            _namingField('root'),
+            reason: '"$domain" is not a bare atDirectory host');
+      }
+    });
+
+    test('when its port is outside 1-65535, then it throws naming root', () {
+      for (final port in [0, 65536]) {
+        expect(
+            () => SessionTransportOptions(
+                root: AtRootDomain('root.example', port)),
+            _namingField('root'),
+            reason: 'port $port is no atDirectory port');
+      }
+    });
+
+    test('when its host and port are well formed, then it is the root', () {
+      final options =
+          SessionTransportOptions(root: AtRootDomain('root.example', 6464));
+
+      expect((options.root.rootDomain, options.root.rootPort),
+          ('root.example', 6464));
+      expect(options.proxy, isNull);
+    });
   });
 }

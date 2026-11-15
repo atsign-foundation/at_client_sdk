@@ -2,6 +2,8 @@ import 'package:at_client/at_client.dart';
 
 const _proxyPrefix = 'proxy:';
 
+final _notInAHost = RegExp(r'[\s:/]');
+
 /// How a browser session reaches atServers: directly, through an
 /// atDirectory, or through one proxy for every connection.
 class SessionTransportOptions {
@@ -11,9 +13,9 @@ class SessionTransportOptions {
   final AtRootDomain root;
 
   /// Throws an [ArgumentError] naming the field for a [proxyHost] without a
-  /// [proxyPort] or the reverse, an empty [proxyHost], a [proxyPort] outside
-  /// 1-65535, a [root] given with a proxy, and a `proxy:` [root] with an
-  /// empty host or a port outside 1-65535.
+  /// [proxyPort] or the reverse, a [root] given with a proxy, a port outside
+  /// 1-65535, and a host, the proxy's or the root's, that is empty or holds
+  /// whitespace, `:` or `/`.
   SessionTransportOptions(
       {AtRootDomain? root, String? proxyHost, int? proxyPort})
       : root = _root(root, proxyHost, proxyPort);
@@ -22,10 +24,7 @@ class SessionTransportOptions {
   /// Atsign's own atServer is reached over its `/ws`, found through [root]'s
   /// HTTPS lookup.
   ({String host, int port})? get proxy => root.isProxyAddress
-      ? (
-          host: root.rootDomain.substring(_proxyPrefix.length),
-          port: root.rootPort
-        )
+      ? (host: _proxyHost(root), port: root.rootPort)
       : null;
 
   static AtRootDomain _root(AtRootDomain? root, String? host, int? port) {
@@ -37,15 +36,11 @@ class SessionTransportOptions {
       }
       return AtRootDomain('$_proxyPrefix${proxy.host}', proxy.port);
     }
-    if (root == null) return AtRootDomain.atsignDomain;
-    if (root.isProxyAddress) {
-      if (root.rootDomain.substring(_proxyPrefix.length).trim().isEmpty) {
-        throw ArgumentError.value(
-            root.rootDomain, 'root', 'names no proxy host');
-      }
-      _checkPort(root.rootPort, 'root');
-    }
-    return root;
+    final chosen = root ?? AtRootDomain.atsignDomain;
+    _checkHost(chosen.isProxyAddress ? _proxyHost(chosen) : chosen.rootDomain,
+        chosen.rootDomain, 'root');
+    _checkPort(chosen.rootPort, 'root');
+    return chosen;
   }
 
   static ({String host, int port})? _proxy(String? host, int? port) {
@@ -53,15 +48,26 @@ class SessionTransportOptions {
       if (port == null) return null;
       throw ArgumentError.value(port, 'proxyPort', 'needs a proxyHost');
     }
-    if (host.trim().isEmpty) {
-      throw ArgumentError.value(host, 'proxyHost', 'must not be empty');
-    }
+    _checkHost(host, host, 'proxyHost');
     if (port == null) {
       throw ArgumentError.value(
           null, 'proxyPort', 'is required with a proxyHost');
     }
     _checkPort(port, 'proxyPort');
     return (host: host, port: port);
+  }
+
+  static String _proxyHost(AtRootDomain root) =>
+      root.rootDomain.substring(_proxyPrefix.length);
+
+  static void _checkHost(String host, String value, String name) {
+    if (host.trim().isEmpty) {
+      throw ArgumentError.value(value, name, 'must not be empty');
+    }
+    if (host.contains(_notInAHost)) {
+      throw ArgumentError.value(
+          value, name, 'must be a bare host, without whitespace, : or /');
+    }
   }
 
   static void _checkPort(int port, String name) {
