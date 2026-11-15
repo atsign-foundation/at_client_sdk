@@ -5,7 +5,9 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 
 /// What a dialog shows when its operation on [atSign] failed with [error]: a
-/// keys problem's own message, an atServer refusal's cause in plain words,
+/// keys problem's own message, or for keys holding no credential or only an
+/// enrollment awaiting approval what to do next, an atServer refusal's cause
+/// in plain words,
 /// [timedOut] for a wait that ran out, [unreachable] for any other failure to
 /// reach a server, as the client's connection classifies one, and otherwise
 /// that something went wrong, with the error's message.
@@ -18,6 +20,16 @@ String failureMessage(
   required String timedOut,
   String? unreachable,
 }) {
+  if (error is AtNoCredentialException) {
+    return "This device's enrollment for $atSign was denied, cancelled or "
+        'expired, or never completed. Enroll this device again to use '
+        '$atSign here.';
+  }
+  if (error is AtEnrollmentPendingException) {
+    return "This device's enrollment for $atSign is still waiting for "
+        'approval and cannot be completed here. Enroll this device again '
+        'from this app to carry on.';
+  }
   if (error is AtKeysUnusableException) return _firstLine(error.message);
   final classified = classifyConnectionFailure(error);
   final refusal = switch (error) {

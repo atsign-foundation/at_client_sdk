@@ -166,6 +166,61 @@ void main() {
     expect(result(), isNull, reason: 'the dialog returns no client');
   });
 
+  group(
+    'Keys with no credential, or an enrollment PkamDialog cannot wait on, say '
+    'what to do in plain words',
+    () {
+      testWidgets('hold no credential', (tester) async {
+        whenOpenFails(AtNoCredentialException(atSign));
+        final result = await pumpOpener(tester, pkamDialog);
+
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        expect(
+          shown(tester),
+          "This device's enrollment for $atSign was denied, cancelled or "
+          'expired, or never completed. Enroll this device again to use '
+          '$atSign here.',
+        );
+        expect(result(), isNull, reason: 'the dialog returns no client');
+      });
+
+      testWidgets('hold only several enrollments awaiting approval', (
+        tester,
+      ) async {
+        const pending = ['e-1', 'e-2'];
+        whenOpenFails(AtEnrollmentPendingException(atSign, pending));
+        when(
+          () => flows.resumeEnrollment(
+            any(),
+            app: any(named: 'app'),
+            device: any(named: 'device'),
+            keys: any(named: 'keys'),
+            preference: any(named: 'preference'),
+            lookUps: any(named: 'lookUps'),
+          ),
+        ).thenAnswer(
+          (_) => Future.error(
+            AtEnrollmentPendingException.several(atSign, pending),
+          ),
+        );
+        final result = await pumpOpener(tester, pkamDialog);
+
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        expect(
+          shown(tester),
+          "This device's enrollment for $atSign is still waiting for approval "
+          'and cannot be completed here. Enroll this device again from this '
+          'app to carry on.',
+        );
+        expect(result(), isNull, reason: 'the dialog returns no client');
+      });
+    },
+  );
+
   group('An atServer refusal shows its cause in plain words', () {
     final examples = {
       AtConnectionCause.revoked:

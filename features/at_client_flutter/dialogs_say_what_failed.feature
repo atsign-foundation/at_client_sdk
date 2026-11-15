@@ -1,12 +1,13 @@
 Feature: The onboarding dialogs say what failed
 
   PkamDialog, CramDialog, ApkamDialog and RegistrarCramDialog show a message
-  chosen by what failed: a keys problem its own message, an atServer refusal
-  its cause in plain words, a network failure the advice to check the
-  connection, and anything else that something went wrong with the
-  exception's message. No dialog shows a stack trace. PkamDialog's contract
-  is unchanged: only a refusal on a device that has never held the atSign
-  online is a failure.
+  chosen by what failed: a keys problem its own message, keys holding no
+  credential or an enrollment PkamDialog cannot wait on what to do next in
+  plain words, an atServer refusal its cause in plain words, a network
+  failure the advice to check the connection, and anything else that
+  something went wrong with the exception's message. No dialog shows a stack
+  trace. PkamDialog's contract is unchanged: only a refusal on a device that
+  has never held the atSign online is a failure.
 
   Races: none arise; each dialog shows one outcome of one attempt.
   Replay: none arise; nothing new is sent.
@@ -19,6 +20,15 @@ Feature: The onboarding dialogs say what failed
     Given no keys for @alice in this device's keychain
     When PkamDialog opens @alice
     Then it shows "No keys for @alice in this device's keychain, so this device cannot authenticate as @alice. Activate @alice, enroll this device, or use the keyfile it already has." and returns no client
+
+  Scenario Outline: Keys with no credential, or an enrollment PkamDialog cannot wait on, say what to do in plain words
+    Given keys for @alice that <hold>
+    When PkamDialog opens @alice
+    Then it shows "<message>" and returns no client
+    Examples:
+      | hold                                            | message                                                                                                                                             |
+      | hold no credential                              | This device's enrollment for @alice was denied, cancelled or expired, or never completed. Enroll this device again to use @alice here.              |
+      | hold only several enrollments awaiting approval | This device's enrollment for @alice is still waiting for approval and cannot be completed here. Enroll this device again from this app to carry on. |
 
   Scenario Outline: An atServer refusal shows its cause in plain words
     Given keys for @alice the atServer refuses with cause <cause>, on a device that has never held @alice online
