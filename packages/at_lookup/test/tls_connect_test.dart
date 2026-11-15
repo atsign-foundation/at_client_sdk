@@ -19,7 +19,7 @@ void main() {
     final made = await Process.run('openssl', [
       'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', //
       '-subj', '/CN=127.0.0.1',
-      '-addext', 'subjectAltName=IP:127.0.0.1',
+      '-addext', 'subjectAltName=IP:127.0.0.1,IP:::1',
       // NOTE: macOS verifies through the system, which refuses a self-signed
       // certificate that names no server use.
       '-addext', 'extendedKeyUsage=serverAuth',
@@ -156,6 +156,51 @@ void main() {
       expect(() => transport.add([0x41]), throwsA(isA<AtIOException>()),
           reason: 'and each write after it, which the closed socket refuses '
               'with a StateError');
+    });
+  });
+
+  test(
+      'a bracketed IPv6 literal, as a URL writes it, reaches the server at '
+      'that address', () async {
+    final server = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv6, 0, serverContext);
+    addTearDown(server.close);
+    final accepted = server.first;
+
+    final client = await connectTls('[::1]', server.port,
+        context: clientContext, timeout: const Duration(seconds: 10));
+    addTearDown(client.destroy);
+
+    expect((await accepted).remoteAddress, InternetAddress.loopbackIPv6,
+        reason: 'the brackets are URL syntax, not part of the address');
+  });
+
+  group('dialledHost', () {
+    test('takes the brackets off an IPv6 literal', () {
+      expect(dialledHost('[::1]'), '::1');
+      expect(dialledHost('[2001:db8::1]'), '2001:db8::1');
+    });
+
+    test('leaves a DNS name or IPv4 address as written', () {
+      expect(dialledHost('vip.ve.atsign.zone'), 'vip.ve.atsign.zone');
+      expect(dialledHost('127.0.0.1'), '127.0.0.1');
+    });
+
+    test('leaves brackets round anything but an IPv6 address as written', () {
+      for (final host in [
+        '[zz]',
+        '[127.0.0.1]',
+        '[]',
+        '[vip.ve.atsign.zone]'
+      ]) {
+        expect(dialledHost(host), host, reason: '"$host" is no IPv6 literal');
+      }
+    });
+
+    test('leaves a host with only one bracket as written', () {
+      for (final host in ['[::1', '::1]', '1::1]', '[::1:']) {
+        expect(dialledHost(host), host, reason: '"$host" is not bracketed');
+      }
     });
   });
 

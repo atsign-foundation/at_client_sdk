@@ -4,6 +4,5 @@ import 'package:at_client_wasm/at_client_wasm_web.dart';
 /// dart2wasm: it pulls in the whole slim client, `InMemoryAtClientStorage`
 /// among it.
 Future<void> main() async {
-  final options = DevSessionOptions(atSign: '@alice', app: 'wavi');
-  print(sessionTransport(options).finder);
+  print(sessionTransport(SessionTransportOptions()).finder);
 }
