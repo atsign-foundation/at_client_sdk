@@ -157,7 +157,7 @@ AtLookupMuxable mine({required atSign, required rootDomain, required authenticat
 - The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
   and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through. With
   none, the dialogs use `secureSocketLookUps()`, and `CLIBase` uses
-  at_client_cli's `lookUpsFor(rootDomain)`: `secureSocketLookUps()`; at_lookup 4.1.0
+  `secureSocketLookUps()` (at_client_cli's `lookUpsFor` is deprecated); at_lookup 4.1.0
   sends `from:<atSign>` itself for a proxy root (`proxy:host:port`), and
   `proxyLookUps()` is deprecated.
 - at_client 4.0 removed `AtClientPreference.decryptPackets`, `pathToCerts` and
