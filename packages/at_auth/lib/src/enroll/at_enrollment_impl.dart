@@ -26,8 +26,7 @@ import 'package:at_utils/at_progress.dart';
 /// passcode expiry is decided whichever of the two types it holds. The
 /// collaborators then take those values explicitly.
 class AtEnrollmentImpl implements AtEnrollment {
-  AtEnrollmentImpl(
-      {Map<String, dynamic> clientConfig = AtEnrollment.defaultClientConfig})
+  AtEnrollmentImpl({Map<String, dynamic> clientConfig = const {}})
       : _clientConfig = clientConfig;
 
   final Map<String, dynamic> _clientConfig;
