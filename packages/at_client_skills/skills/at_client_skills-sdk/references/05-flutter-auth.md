@@ -277,7 +277,8 @@ client.connection.changes.listen((s) => setState(() => _state = s));
   keys. Ask the user.
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
-- Keys `open` cannot use (absent, unreadable, or for another atSign) throw
+- Keys `open` cannot use (absent, unreadable, holding no authentication
+  keypair it can use, or for another atSign) throw
   `AtKeysUnusableException` before it connects, on any device, and
   `PkamDialog` shows its message.
 

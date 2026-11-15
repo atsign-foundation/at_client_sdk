@@ -1,8 +1,9 @@
 Feature: Atsign.open refuses keys it cannot use before connecting, and says why
 
   An app opens an atSign with Atsign.open. Keys that are absent, cannot be
-  read, or name another atSign are refused before any connection, on every
-  device, with AtKeysUnusableException and a cause the app can switch on. The
+  read, hold no authentication keypair this device can use, or name another
+  atSign are refused before any connection, on every device, with
+  AtKeysUnusableException and a cause the app can switch on. The
   released AtNoCredentialException and AtEnrollmentPendingException are
   AtKeysUnusableExceptions too, so one catch covers every keys problem and a
   catch written for either still works. The connection state describes only
@@ -25,7 +26,13 @@ Feature: Atsign.open refuses keys it cannot use before connecting, and says why
     Given a device that has held @alice online, and an atKeys file for @alice that cannot be read
     When an app calls Atsign.open for @alice
     Then it throws AtKeysUnusableException with cause unreadable and the message "The keys for @alice at <path> could not be read: <reason>.", holding none of the file's contents, and opens no connection
-    # cases: permission denied; not a JSON object; wrong passphrase; no passphrase; unsupported algorithm; a field of the wrong type
+    # cases: permission denied; not a JSON object; wrong passphrase; no passphrase; a field of the wrong type
+
+  Scenario: Keys that hold no authentication keypair this device can use are refused before connecting, even on a device that has held the atSign online
+    Given a device that has held @alice online, and an atKeys file for @alice that can be read but holds no authentication keypair this device can use
+    When an app calls Atsign.open for @alice
+    Then it throws AtKeysUnusableException with cause noAuthenticationKeypair and the message "The keys for @alice at <path> hold no authentication keypair this device can use: <reason>.", holding no key material, and opens no connection
+    # cases: no authentication keypair; an algorithm this build cannot sign with; several enrollments qualifying
 
   Scenario: A keyfile naming another atSign is refused before connecting
     Given an atKeys file whose atsign is @bob

@@ -508,7 +508,7 @@ extension AtsignLifecycle on Atsign {
       }
     } catch (e, stackTrace) {
       _refuse(
-          AtKeysUnusableException.unreadable(this,
+          AtKeysUnusableException.noAuthenticationKeypair(this,
               source: keys.describeSource(this), error: e),
           stackTrace);
     }

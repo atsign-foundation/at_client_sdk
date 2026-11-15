@@ -145,6 +145,61 @@ void main() {
     expect(atDirectory.asked, isEmpty, reason: 'the atDirectory is not asked');
   }
 
+  /// Holds [atSign] online on this device from a keyfile at the test's
+  /// path written with [passPhrase], then leaves the keyfile as [unreadable]
+  /// makes it and opens [atSign] from what [reader] reads; expects the open
+  /// to fail with [cause] and a message that [says] what is wrong, whose
+  /// reason matches [reason], holding no 16-character run of the text
+  /// [unreadable] returns.
+  Future<void> refusedAfterOnline(
+      {String? passPhrase,
+      AtKeysUnusableCause cause = AtKeysUnusableCause.unreadable,
+      String says = 'could not be read',
+      required Future<String> Function() unreadable,
+      required AtKeysIo reader,
+      required Matcher reason,
+      Matcher error = anything}) async {
+    final pref = await preference();
+    await FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase)
+        .write(atSign, liveKeys());
+    final first = await Atsign(atSign).open(
+        keys: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+        preference: pref,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: atDirectoryOf(pref),
+        atLookUp: lookUpAnswering(() async => true),
+        storage: hiveStoreFor(atSign, pref));
+    expect(first.connection.current.isOnline, isTrue,
+        reason: 'the precondition: this device has held the atSign online');
+    await first.stop();
+
+    final secret = await unreadable();
+    final prefix = 'The keys for $atSign at $path $says: ';
+    await expectLater(
+        Atsign(atSign).open(
+            keys: reader,
+            preference: pref,
+            lookUps: recordingLookUps,
+            secondaryAddressFinder: atDirectory,
+            storage: hiveStoreFor(atSign, pref)),
+        throwsA(isA<AtKeysUnusableException>()
+            .having((e) => e.cause, 'cause', cause)
+            .having((e) => e.source, 'source', path)
+            .having((e) => e.error, 'error', error)
+            .having(
+                (e) => e.message,
+                'message',
+                allOf(
+                    startsWith(prefix),
+                    endsWith('.'),
+                    predicate<String>(
+                        (m) => reason.matches(
+                            m.substring(prefix.length, m.length - 1), {}),
+                        'a reason that $reason')))
+            .having((e) => e.message, 'what was read', holdsNoRunOf(secret))));
+    expectNoConnection();
+  }
+
   test('An absent keyfile is refused before connecting', () async {
     await expectLater(
         openUnconnected(FileAtKeysIo(filePath: (_) => path)),
@@ -174,60 +229,6 @@ void main() {
         : runningAsRoot
             ? 'root reads whatever the mode says'
             : false;
-
-    /// Holds [atSign] online on this device from a keyfile at the test's
-    /// path written with [passPhrase], then leaves the keyfile as [unreadable]
-    /// makes it and opens [atSign] from what [reader] reads; expects the open
-    /// to fail with cause unreadable and a message whose reason matches
-    /// [reason], holding no 16-character run of the text [unreadable]
-    /// returns.
-    Future<void> refusedAfterOnline(
-        {String? passPhrase,
-        required Future<String> Function() unreadable,
-        required AtKeysIo reader,
-        required Matcher reason,
-        Matcher error = anything}) async {
-      final pref = await preference();
-      await FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase)
-          .write(atSign, liveKeys());
-      final first = await Atsign(atSign).open(
-          keys: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
-          preference: pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref),
-          atLookUp: lookUpAnswering(() async => true),
-          storage: hiveStoreFor(atSign, pref));
-      expect(first.connection.current.isOnline, isTrue,
-          reason: 'the precondition: this device has held the atSign online');
-      await first.stop();
-
-      final secret = await unreadable();
-      final prefix = 'The keys for $atSign at $path could not be read: ';
-      await expectLater(
-          Atsign(atSign).open(
-              keys: reader,
-              preference: pref,
-              lookUps: recordingLookUps,
-              secondaryAddressFinder: atDirectory,
-              storage: hiveStoreFor(atSign, pref)),
-          throwsA(isA<AtKeysUnusableException>()
-              .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
-              .having((e) => e.source, 'source', path)
-              .having((e) => e.error, 'error', error)
-              .having(
-                  (e) => e.message,
-                  'message',
-                  allOf(
-                      startsWith(prefix),
-                      endsWith('.'),
-                      predicate<String>(
-                          (m) => reason.matches(
-                              m.substring(prefix.length, m.length - 1), {}),
-                          'a reason that $reason')))
-              .having(
-                  (e) => e.message, 'what was read', holdsNoRunOf(secret))));
-      expectNoConnection();
-    }
 
     test('permission denied', () async {
       await refusedAfterOnline(
@@ -278,11 +279,45 @@ void main() {
           error: isA<AtDecryptionException>());
     });
 
-    test('unsupported algorithm', () async {
+    test('a field of the wrong type', () async {
+      final selfEncryptionKey = randomBase64(32);
+      await refusedAfterOnline(
+          unreadable: () async {
+            File(path).writeAsStringSync(jsonEncode({
+              'selfEncryptionKey': selfEncryptionKey,
+              'aesPkamPublicKey': 5
+            }));
+            return selfEncryptionKey;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path),
+          reason: equals(
+              "type 'int' is not a subtype of type 'String' in type cast"),
+          error: isA<TypeError>());
+    });
+  });
+
+  group(
+      'Keys that hold no authentication keypair this device can use are '
+      'refused before connecting, even on a device that has held the atSign '
+      'online', () {
+    Future<void> refusedWithNoKeypair(
+            {required Future<String> Function() unreadable,
+            required AtKeysIo reader,
+            required Matcher reason,
+            required Matcher error}) =>
+        refusedAfterOnline(
+            cause: AtKeysUnusableCause.noAuthenticationKeypair,
+            says: 'hold no authentication keypair this device can use',
+            unreadable: unreadable,
+            reader: reader,
+            reason: reason,
+            error: error);
+
+    test('an algorithm this build cannot sign with', () async {
       final algorithm =
           'future-${List.generate(16, (_) => random.nextInt(16).toRadixString(16)).join()}';
       final privateKey = randomBase64(32);
-      await refusedAfterOnline(
+      await refusedWithNoKeypair(
           unreadable: () async {
             File(path).deleteSync();
             await FileAtKeysIo(filePath: (_) => path).write(
@@ -308,7 +343,7 @@ void main() {
 
     test('no authentication keypair', () async {
       final privateKey = randomBase64(64);
-      await refusedAfterOnline(
+      await refusedWithNoKeypair(
           unreadable: () async {
             File(path).deleteSync();
             await FileAtKeysIo(filePath: (_) => path).write(
@@ -327,20 +362,24 @@ void main() {
           error: isA<AtKeyNotFoundException>());
     });
 
-    test('a field of the wrong type', () async {
-      final selfEncryptionKey = randomBase64(32);
-      await refusedAfterOnline(
+    test('several enrollments qualifying', () async {
+      await refusedWithNoKeypair(
           unreadable: () async {
-            File(path).writeAsStringSync(jsonEncode({
-              'selfEncryptionKey': selfEncryptionKey,
-              'aesPkamPublicKey': 5
-            }));
-            return selfEncryptionKey;
+            final document = (liveKeys(enrollmentId: 'e-one')
+                  ..atsign = atSign.toAtsign())
+                .toJson();
+            final other = (liveKeys(enrollmentId: 'e-two')
+                  ..atsign = atSign.toAtsign())
+                .toJson();
+            (document['enrollments'] as List)
+                .addAll(other['enrollments'] as List);
+            File(path).writeAsStringSync(jsonEncode(document));
+            return File(path).readAsStringSync();
           },
           reader: FileAtKeysIo(filePath: (_) => path),
-          reason: equals(
-              "type 'int' is not a subtype of type 'String' in type cast"),
-          error: isA<TypeError>());
+          reason: allOf(contains('e-one'), contains('e-two'),
+              contains('is not derivable')),
+          error: isA<AtKeysEnrollmentException>());
     });
   });
 

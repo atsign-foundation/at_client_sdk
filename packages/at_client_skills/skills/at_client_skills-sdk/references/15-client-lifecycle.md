@@ -80,19 +80,19 @@ connect attempt waits before the client comes back offline, 5 s by default).
 
 **What can refuse:**
 
-| Thrown                          | When                                                                                                     | Do                                                            |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `AtKeysUnusableException`       | The keys are absent, cannot be read, or record another atSign; thrown before connecting, on any device   | Show its message; `cause` says which                          |
-| `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
-| `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval (an `AtKeysUnusableException`)                        | `resumeEnrollment`                                            |
-| `AtEnrollmentPendingException`  | `resumeEnrollment` found several pending enrollments matching what it was given                          | Name both `app` and `device`                                  |
-| `AtNoCredentialException`       | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                 | Enroll again                                                  |
-| `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |
-| `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
-| `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired                                                | Tell the user; a new `enroll` is a new request                |
-| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
-| `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
-| `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
+| Thrown                           | When                                                                                                                               | Do                                                    |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `AtKeysUnusableException`        | The keys are absent, cannot be read, hold no keypair it can use, or record another atSign; thrown before connecting, on any device | Show its message; `cause` says which                  |
+| `AtOpenRefusedException`         | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none)                           | Show the cause; nothing local to serve                |
+| `AtEnrollmentPendingException`   | The keys hold only an enrollment awaiting approval (an `AtKeysUnusableException`)                                                  | `resumeEnrollment`                                    |
+| `AtEnrollmentPendingException`   | `resumeEnrollment` found several pending enrollments matching what it was given                                                    | Name both `app` and `device`                          |
+| `AtNoCredentialException`        | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                                           | Enroll again                                          |
+| `AtStorageInUseException`        | Another process holds the Hive store at this location open                                                                         | Give each process a location of its own               |
+| `StateError` "already live"      | A client for this atSign as the same enrollment, or on the same storage, is live in this process                                   | `stop()` it first; another enrollment opens beside it |
+| `AtEnrollmentException`          | `pending.client(...)`: the request was denied, or expired                                                                          | Tell the user; a new `enroll` is a new request        |
+| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                                                        | Nothing; the pending keys are gone                    |
+| `StoppedException`               | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                                          | `resumeEnrollment` later; the request is kept         |
+| `AtCredentialRefusedException`   | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal                                       | Show the cause                                        |
 
 ---
 

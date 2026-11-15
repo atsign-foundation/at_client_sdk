@@ -175,7 +175,8 @@ atSign again as an enrollment whose client is still live throws a
 
 `Atsign.open` reads the keys first and throws `AtKeysUnusableException`
 before connecting, on any device, when they cannot be used: when they are
-absent, cannot be read or record another atSign, and, as its subclasses,
+absent, cannot be read, hold no authentication keypair this device can use
+or record another atSign, and, as its subclasses,
 `AtEnrollmentPendingException` when they hold only an enrollment request
 that has not been approved and `AtNoCredentialException` when they hold no
 credential and no request, as a denial, a cancel or an expiry leaves them.

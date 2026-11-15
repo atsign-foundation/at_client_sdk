@@ -10,6 +10,12 @@ enum AtKeysUnusableCause {
   /// The keys source holds something for the atSign that cannot be read.
   unreadable,
 
+  /// The keys were read but hold no authentication keypair this device can
+  /// use: none for the enrollment they authenticate as, one under an
+  /// algorithm this build cannot sign with, or several enrollments that each
+  /// could be the one.
+  noAuthenticationKeypair,
+
   /// The keys record another atSign.
   anotherAtsign,
 
@@ -59,6 +65,15 @@ class AtKeysUnusableException extends AtException {
         super('The keys for $atSign ${_where(source)} could not be read: '
             '${_reasonFor(error)}.');
 
+  /// The keys in [source] for [atSign] were read, and resolving the keypair
+  /// to authenticate with failed with [error].
+  AtKeysUnusableException.noAuthenticationKeypair(this.atSign,
+      {required String this.source, required Object error})
+      : cause = AtKeysUnusableCause.noAuthenticationKeypair,
+        error = _withoutSource(error),
+        super('The keys for $atSign ${_where(source)} hold no authentication '
+            'keypair this device can use: ${_reasonFor(error)}.');
+
   /// The keys in [source] record [recorded], an atSign other than [atSign].
   AtKeysUnusableException.anotherAtsign(this.atSign, String recorded,
       {required String this.source})
@@ -81,7 +96,7 @@ String _where(String source) =>
         ? 'in $source'
         : 'at $source';
 
-/// Why reading keys failed with [error], in one line holding none of what
+/// Why [error] leaves the keys unusable, in one line holding none of what
 /// was read.
 String _reasonFor(Object error) {
   final text = switch (error) {
