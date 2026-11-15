@@ -119,8 +119,33 @@ void main() {
     return KeychainStorage(biometricStorage: biometricStorage);
   }
 
+  /// Expects [actual] to hold none of [entry]: no 8-character run of its key
+  /// material, and no 5-character run of its [opening].
+  void expectHoldsNoneOfEntry(Object? actual, String reason) {
+    expect(actual, _holdsNoneOf(keyMaterial), reason: reason);
+    expect(actual, _holdsNoneOf(opening, window: 5), reason: reason);
+  }
+
+  /// Expects no log record to hold any of [entry], and the recorder to hear
+  /// the logger the keychain logs through.
+  void expectNoLogHoldsEntry() {
+    for (final record in logs.records) {
+      expectHoldsNoneOfEntry(record, 'no log record holds the entry\'s text');
+    }
+    const heard = 'a record the keychain logs';
+    KeychainStorage(
+      biometricStorage: _MockBiometricStorage(),
+    ).log(heard, false);
+    expect(
+      logs.records.where((r) => r.contains(heard)),
+      isNotEmpty,
+      reason: 'the recorder hears the logger the keychain logs through',
+    );
+  }
+
   /// Expects [error] to be an [AtKeysFormatException] holding none of the
-  /// entry's text, and [store] to be unchanged.
+  /// entry's text, no log record to hold any of it, and [store] to be
+  /// unchanged.
   void expectRefusedLeaving(String store, Object? error) {
     expect(
       '$error',
@@ -136,18 +161,18 @@ void main() {
         reason: 'no field of the error with $store holds the entry',
       );
     }
+    for (final held in [error, format.message, format.reason]) {
+      expectHoldsNoneOfEntry(
+        held,
+        'no field of the error with $store holds the entry\'s text',
+      );
+    }
+    expectNoLogHoldsEntry();
     expect(
       changed,
       isEmpty,
       reason: 'nothing is written or deleted with $store holding the entry',
     );
-  }
-
-  /// Expects [actual] to hold none of [entry]: no 8-character run of its key
-  /// material, and no 5-character run of its [opening].
-  void expectHoldsNoneOfEntry(Object? actual, String reason) {
-    expect(actual, _holdsNoneOf(keyMaterial), reason: reason);
-    expect(actual, _holdsNoneOf(opening, window: 5), reason: reason);
   }
 
   FormatException parserErrorOf(String text) {
@@ -194,6 +219,13 @@ void main() {
             reason: 'no field of the error reading $store holds the entry',
           );
         }
+        for (final held in [error, format.message, format.reason]) {
+          expectHoldsNoneOfEntry(
+            held,
+            'no field of the error reading $store holds the entry\'s text',
+          );
+        }
+        expectNoLogHoldsEntry();
       }
     },
   );
@@ -267,18 +299,7 @@ void main() {
         'no field of the exception holds the entry\'s text',
       );
     }
-    for (final record in logs.records) {
-      expectHoldsNoneOfEntry(record, 'no log record holds the entry\'s text');
-    }
-    const heard = 'a record the keychain logs';
-    KeychainStorage(
-      biometricStorage: _MockBiometricStorage(),
-    ).log(heard, false);
-    expect(
-      logs.records.where((r) => r.contains(heard)),
-      isNotEmpty,
-      reason: 'the recorder hears the logger open reads the keychain through',
-    );
+    expectNoLogHoldsEntry();
   }
 
   test(
