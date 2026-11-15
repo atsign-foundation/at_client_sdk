@@ -24,21 +24,17 @@ class _LookUpRunningItsAuthenticator extends Mock implements AtLookupImpl {
   Future<bool> pkamAuthenticate() => authenticator!(this);
 }
 
-/// Every record logged, as the text of each of its fields.
+/// Every record logged, as its logger's name, its message and its error,
+/// without its stack trace, whose frames name the files of the checkout.
 class _RecordedLogs implements LoggingHandler {
-  final List<String> records = [];
+  final List<({String logger, String message, Object? error})> records = [];
 
   @override
-  void call(dynamic record) => records.add(
-    [
-      record.level,
-      record.loggerName,
-      record.message,
-      record.object,
-      record.error,
-      record.stackTrace,
-    ].join('\n'),
-  );
+  void call(dynamic record) => records.add((
+    logger: record.loggerName,
+    message: record.message,
+    error: record.error,
+  ));
 }
 
 /// Matches an object whose text holds no run of [window] consecutive
@@ -126,18 +122,25 @@ void main() {
     expect(actual, _holdsNoneOf(opening, window: 5), reason: reason);
   }
 
-  /// Expects no log record to hold any of [entry], and the recorder to hear
-  /// the logger the keychain logs through.
+  /// Expects no log record's message or error to hold any of [entry], and the
+  /// recorder to hear the logger the keychain logs through.
   void expectNoLogHoldsEntry() {
     for (final record in logs.records) {
-      expectHoldsNoneOfEntry(record, 'no log record holds the entry\'s text');
+      expectHoldsNoneOfEntry(
+        record.message,
+        'no log record\'s message holds the entry\'s text',
+      );
+      expectHoldsNoneOfEntry(
+        record.error,
+        'no log record\'s error holds the entry\'s text',
+      );
     }
     const heard = 'a record the keychain logs';
     KeychainStorage(
       biometricStorage: _MockBiometricStorage(),
     ).log(heard, false);
     expect(
-      logs.records.where((r) => r.contains(heard)),
+      logs.records.where((r) => r.message.contains(heard)),
       isNotEmpty,
       reason: 'the recorder hears the logger the keychain logs through',
     );
@@ -317,9 +320,9 @@ void main() {
       expect(
         logs.records.where(
           (r) =>
-              r.contains('KeychainStorage') &&
-              r.contains('READ: Fetched') &&
-              r.contains('from @atsigns:test'),
+              r.logger == 'KeychainStorage' &&
+              r.message.contains('READ: Fetched') &&
+              r.message.contains('from @atsigns:test'),
         ),
         isNotEmpty,
         reason: 'the recorder hears the Windows read of the current store',
