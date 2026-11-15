@@ -31,6 +31,7 @@ void main() {
       expect(keys, isA<WrittenAtKeysIo>());
       expect(store, isA<HiveAtClientStorage>());
       expect(lookUps, isNotNull);
+      // ignore: deprecated_member_use_from_same_package
       expect(proxyLookUps(), isNotNull);
       expect(atDirectory, isNotNull);
     });

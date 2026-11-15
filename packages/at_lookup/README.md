@@ -89,11 +89,16 @@ import 'package:at_lookup/at_lookup_io.dart';
 final lookUps = secureSocketLookUps(
     config: SecureSocketConfig()..pathToCerts = '/certs');
 
-// Behind a proxy that routes on the atSign: `onConnect` runs once on each new
-// connection, before anything else is sent on it.
-final viaProxy = secureSocketLookUps(
-    onConnect: (connection) => connection.sendSync('from:@alice\n'));
+// `onConnect` runs once on each new connection, before anything else is sent
+// on it.
+final withPreamble = secureSocketLookUps(
+    onConnect: (connection) => connection.sendSync('noop:0\n'));
 ```
+
+A root domain of `proxy:<host>` names a proxy fronting many atServers: every
+atSign resolves to `<host>` at the root port, and the lookup sends
+`from:<atSign>` first on each connection, before any `onConnect`, so that the
+proxy knows which atServer the connection is for. Do not send it yourself.
 
 A factory of your own returns any `AtLookupMuxable`. Each call names what the
 connection is for: the atSign, the root domain, the authenticator (null for a

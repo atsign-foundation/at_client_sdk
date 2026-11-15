@@ -7,8 +7,10 @@ import 'package:test/test.dart';
 
 import 'keyfile_helpers.dart';
 
-/// [lookUpsFor] decides what a connection sends first from the root domain
-/// alone, observed at a TLS server on the loopback interface.
+/// What a connection sends first is decided by at_lookup from the root domain
+/// alone (`proxy:<host>` names the atSign first), whether through the
+/// deprecated [lookUpsFor] or [secureSocketLookUps], observed at a TLS server
+/// on the loopback interface.
 ///
 /// Catalogue: features/at_client_cli/lookups_for.feature
 void main() {
@@ -62,12 +64,13 @@ void main() {
     certs.deleteSync(recursive: true);
   });
 
-  /// The first line the server receives when a lookup [lookUps] builds for
-  /// `@alice` runs `scan`.
-  Future<String> firstLineFrom(AtLookUpFactory lookUps) async {
-    final lookUp = lookUps(
+  /// The first line the server receives when a lookup that [lookUpsFor]
+  /// [root] builds for `@alice`, on a client whose root is [root], runs
+  /// `scan`.
+  Future<String> firstLineFrom(String root) async {
+    final lookUp = lookUpsFor(root)(
         atSign: '@alice',
-        rootDomain: AtRootDomain.atsignDomain,
+        rootDomain: AtRootDomain(root, 64),
         authenticator: null,
         secondaryAddressFinder:
             FixedSecondaryAddressFinder('127.0.0.1', server.port));
@@ -81,7 +84,7 @@ void main() {
   }
 
   test('Through a proxy, each connection names its atSign first', () async {
-    expect(await firstLineFrom(lookUpsFor('proxy:127.0.0.1')), 'from:@alice',
+    expect(await firstLineFrom('proxy:127.0.0.1'), 'from:@alice',
         reason: 'a proxy routes a connection by the atSign it names first');
   });
 
@@ -113,12 +116,13 @@ void main() {
     // only what it sent first matters here.
     final opened = cli.init().then((_) {}, onError: (_) {});
     expect(await line.timeout(const Duration(seconds: 10)), 'from:@alice',
-        reason: 'CLIBase.init opens its client with lookUpsFor the root');
+        reason: 'CLIBase.init opens its client with secureSocketLookUps, and '
+            'at_lookup names the atSign first for a proxy root');
     await opened;
   });
 
   test('Straight to an atServer, the command goes first', () async {
-    expect(await firstLineFrom(lookUpsFor('root.atsign.org')), 'scan',
+    expect(await firstLineFrom('root.atsign.org'), 'scan',
         reason: 'an atServer reached directly is sent no from: unasked');
   });
 }
