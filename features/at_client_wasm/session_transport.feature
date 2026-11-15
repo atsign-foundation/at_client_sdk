@@ -79,3 +79,20 @@ Feature: A browser session's transport carries the root its connections are buil
     Given a session transport built with no proxy
     When a connection for "@alice" is built from its lookups for its root
     Then it has no preamble
+
+  Scenario Outline: A proxy named by a bracketed IPv6 literal is reached at that address
+    Given a session transport built from <options> naming "[::1]" and the port of a proxy on ::1
+    When a connection for "@alice" is built from its lookups for its root and opened
+    Then it opens a WebSocket to "wss://[::1]" at that port, path "/ws"
+    And "from:@alice" is the only thing it sends before the caller's first command
+
+    Examples:
+      | options                  |
+      | proxyHost and proxyPort  |
+      | a proxy: root            |
+
+  Scenario: An atDirectory named by a bracketed IPv6 literal is asked at that address
+    Given an HTTPS finder for "[::1]" at the port of an atDirectory on ::1
+    When it looks up "@alice"
+    Then the atDirectory receives one request, for "/@alice"
+    And the finder returns the atDirectory's answer
