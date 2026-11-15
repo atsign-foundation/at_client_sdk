@@ -9,6 +9,10 @@ import 'package:at_client/src/preference/posture_floor.dart';
 /// How a session's connections reach atServers: [lookUps] builds each
 /// connection, [finder] resolves an atSign to its atServer, and [root] is the
 /// root domain every connection is built for.
+///
+/// [root] must be the root [lookUps] and [finder] were built for, since
+/// at_lookup sends `from:<atSign>` first only for a `proxy:` root; the
+/// transport `sessionTransport()` builds is made that way.
 typedef SessionTransport = ({
   AtLookUpFactory lookUps,
   SecondaryAddressFinder finder,
@@ -90,8 +94,10 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// [atSign] is put in `@name` form by `toAtsign()`, which throws an
 /// [InvalidAtSignException] for one it cannot take, whitespace included.
 /// [app] is the client's namespace. [prefs], when given, is used as it is,
-/// and one that names a root other than [transport]'s throws an
-/// [ArgumentError] before any connection is made. Otherwise the preference
+/// so it must not be changed once passed, and one that names a root other
+/// than [transport]'s throws an [ArgumentError] before any connection is
+/// made. Hosts are compared ignoring case; ports, and whether each is a
+/// `proxy:` root, exactly. Otherwise the preference
 /// names [app] and [transport]'s root, routes reads and writes to the
 /// atServer ([RemoteLocalPref.remoteOnly]) and leaves the monitor off.
 /// Sync runs under every preference and starts at every open, pulling the
@@ -134,16 +140,6 @@ Future<AtClient> portalSession({
   SessionKeysIo? keysIo,
 }) async {
   final normalized = atSign.toAtsign();
-  final root = transport.root;
-  if (prefs != null &&
-      (prefs.rootDomain != root.rootDomain ||
-          prefs.rootPort != root.rootPort)) {
-    throw ArgumentError.value(
-        '${prefs.rootDomain}:${prefs.rootPort}',
-        'prefs',
-        "names a root other than the transport's "
-            '(${root.rootDomain}:${root.rootPort})');
-  }
   final enrollmentId = keys.enrollmentToAuthenticateAs();
   if (floorOfKeyMaterial(keys, enrollmentId) != null) {
     throw UnsupportedKeyMaterialException(normalized);
@@ -157,12 +153,29 @@ Future<AtClient> portalSession({
   _opening[lock] = done;
   try {
     if (previous != null) await previous.future;
+    if (prefs != null) _checkRoot(prefs, transport.root);
     return await _open(normalized, app, keys, transport, prefs, keysIo);
   } finally {
     done.complete();
     if (identical(_opening[lock], done)) {
       _opening.remove(lock);
     }
+  }
+}
+
+/// Throws an [ArgumentError] naming `prefs` when [prefs] names a root other
+/// than [root]: a host that differs other than in case, another port, or one
+/// that is a `proxy:` root where the other is not.
+void _checkRoot(AtClientPreference prefs, AtRootDomain root) {
+  final asked = AtRootDomain(prefs.rootDomain, prefs.rootPort);
+  if (asked.isProxyAddress != root.isProxyAddress ||
+      asked.rootDomain.toLowerCase() != root.rootDomain.toLowerCase() ||
+      asked.rootPort != root.rootPort) {
+    throw ArgumentError.value(
+        '${asked.rootDomain}:${asked.rootPort}',
+        'prefs',
+        "names a root other than the transport's "
+            '(${root.rootDomain}:${root.rootPort})');
   }
 }
 
