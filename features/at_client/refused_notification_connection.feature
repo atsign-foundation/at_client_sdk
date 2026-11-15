@@ -11,11 +11,14 @@ Feature: A notification connection the atServer refuses is retried less often
   notification connection at once is one change of connection state.
   Replay: no value crosses attempts; each attempt is a new connection
   answering a new challenge.
-  DoS: today a refused device authenticates every 34 seconds for as long as it
-  runs; after the change it settles at one attempt every 5 minutes.
-  Forgery: only the atServer this client authenticated to over TLS can give
-  the refusal; a party able to forge it there holds more than this denies,
-  and a refusal now only slows reconnecting, never ends it.
+  DoS: today a refused device's notification connection authenticates every
+  34 seconds for as long as it runs; after the change it settles at one
+  attempt every 5 minutes. Sync's own attempts are unchanged.
+  Forgery: a refusal comes from the atServer this client reached over TLS, or
+  from this client's own authenticator when it has no credential to offer or
+  will not sign the challenge it was sent; a party able to forge either holds
+  the atServer or the device, more than this denies, and a refusal only slows
+  reconnecting, never ends it.
   Impersonation: the refusal changes only this client's own attempts and lets
   no one act as the atSign.
 
