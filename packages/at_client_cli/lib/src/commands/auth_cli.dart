@@ -466,15 +466,13 @@ Future<int> status(ArgResults ar) async {
   final found = await _lookUpPublicKey(
       atSign,
       CacheableSecondaryAddressFinder(
-          rootDomain.rootDomain, rootDomain.rootPort), () {
-    final settings = enrollerSettingsFrom(ar);
-    return settings.lookUps(
-      atSign: atSign,
-      rootDomain: rootDomain,
-      authenticator: null,
-      secondaryAddressFinder: settings.secondaryAddressFinder,
-    );
-  });
+          rootDomain.rootDomain, rootDomain.rootPort),
+      (atDirectory) => lookUpsFor(rootDomain.rootDomain)(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: atDirectory,
+          ));
   stderr.writeln('returning ${found.outcome.exitCode}: ${found.detail}');
   return found.outcome.exitCode;
 }
@@ -494,10 +492,12 @@ enum _PublicKey {
 }
 
 /// Asks [atDirectory] for [atSign]'s atServer and that atServer, over the
-/// connection [connect] builds, for its public key, unauthenticated; [detail]
-/// says what was found.
-Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
-    SecondaryAddressFinder atDirectory, AtLookUp Function() connect) async {
+/// connection [connect] builds on the same [atDirectory], for its public key,
+/// unauthenticated; [detail] says what was found.
+Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(
+    String atSign,
+    SecondaryAddressFinder atDirectory,
+    AtLookUp Function(SecondaryAddressFinder atDirectory) connect) async {
   try {
     await atDirectory.findSecondary(atSign);
   } on SecondaryNotFoundException {
@@ -516,7 +516,7 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
   try {
     // NOTE: a public key lookup needs no authentication, and no credential is
     // held here.
-    al = connect();
+    al = connect(atDirectory);
   } catch (e) {
     return (
       outcome: _PublicKey.atServerUnreachable,
@@ -535,6 +535,10 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(String atSign,
 /// What [al] answers for [atSign]'s public key.
 Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
     AtLookUp al, String atSign) async {
+  ({_PublicKey outcome, String detail}) unreachable(AtException e) => (
+        outcome: _PublicKey.atServerUnreachable,
+        detail: 'atServer cannot be reached $atSign ($e)'
+      );
   final String? pk;
   try {
     try {
@@ -543,10 +547,9 @@ Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
       throw AtExceptionUtils.get(e.errorCode, e.errorMessage);
     }
   } on SecondaryServerConnectivityException catch (e) {
-    return (
-      outcome: _PublicKey.atServerUnreachable,
-      detail: 'atServer cannot be reached $atSign ($e)'
-    );
+    return unreachable(e);
+  } on SecondaryConnectException catch (e) {
+    return unreachable(e);
   } on KeyNotFoundException catch (e) {
     return (outcome: _PublicKey.absent, detail: '$e');
   } catch (e) {

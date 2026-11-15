@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client_cli/at_client_cli.dart' show AtActivate;
+import 'package:at_client_cli/at_client_cli.dart' show AtActivate, AuthCliArgs;
 import 'package:mocktail/mocktail.dart' show Fake;
 import 'package:test/test.dart';
 
@@ -147,15 +147,91 @@ void main() {
         reason: 'status closes its connection to the atServer once it has '
             'read the answer');
   });
+
+  group(
+      'Given an atDirectory naming an atServer that holds @alice\'s '
+      'public key', () {
+    test(
+        'when at_activate status -a @alice runs, then the atDirectory is '
+        'asked for @alice once', () async {
+      final server = await atServer(publicKey: _alicePublicKey);
+      final root = await atDirectory('127.0.0.1:${server.port}');
+
+      final run = await _status(root.port);
+
+      expect(run.code, 0,
+          reason: 'the premise: the atServer holds @alice\'s public key; '
+              'status wrote: ${run.stderr}');
+      expect(root.asked, ['alice'],
+          reason: 'status.feature allows one lookup per run, so status asks '
+              'the atDirectory for @alice once and reaches the atServer on '
+              'that answer; status wrote: ${run.stderr}');
+    });
+  });
+
+  group('Given the atDirectory names an atServer nothing answers', () {
+    test(
+        'when at_activate status -a @alice runs, then it returns 2, naming '
+        'that atServer as unreachable rather than as an unexpected failure',
+        () async {
+      final refused = await refusedPort();
+      final root = await atDirectory('127.0.0.1:$refused');
+
+      final run = await _status(root.port);
+
+      final detail = run.stderr.split('\n').firstWhere(
+          (line) => line.startsWith('returning '),
+          orElse: () => '');
+      expect(detail, startsWith('returning 2: '),
+          reason: 'the premise: status returns 2 when nothing answers where '
+              'the atDirectory says @alice\'s atServer is; status wrote: '
+              '${run.stderr}');
+      expect(detail, isNot(contains('unexpected')),
+          reason: 'a refused connection to the atServer is the atServer '
+              'cannot be reached outcome, not an unexpected failure; status '
+              'wrote: ${run.stderr}');
+      expect(detail, contains('127.0.0.1:$refused'),
+          reason: 'the detail names the atServer that could not be reached; '
+              'status wrote: ${run.stderr}');
+    });
+  });
+
+  group('Given no --posture is named', () {
+    test(
+        'when at_activate status -a @alice runs, then it writes no '
+        '[Information] line', () async {
+      final server = await atServer(publicKey: _alicePublicKey);
+      final root = await atDirectory('127.0.0.1:${server.port}');
+      final enroller = AuthCliArgs.postureForEnroller(AuthCliArgs()
+          .createStatusCommandParser()
+          .parse(_statusArguments(root.port)));
+      expect(enroller.notice, isNotNull,
+          reason: 'the premise: under these arguments an enroller command '
+              'announces the posture it takes');
+
+      final run = await _status(root.port);
+
+      expect(run.code, 0,
+          reason: 'the premise: the atServer holds @alice\'s public key; '
+              'status wrote: ${run.stderr}');
+      expect(run.stderr, isNot(contains('[Information]')),
+          reason: 'status enrolls nothing and runs at no posture, so it '
+              'announces none; status wrote: ${run.stderr}');
+    });
+  });
 }
+
+/// The arguments at_activate status is given for @alice, with its root at
+/// [rootPort] on the loopback interface.
+List<String> _statusArguments(int rootPort) =>
+    ['-a', '@alice', '-r', '127.0.0.1:$rootPort'];
 
 /// at_activate status run for @alice with its root at [rootPort] on the
 /// loopback interface: the code it returns and what it wrote on stderr.
 Future<({int code, String stderr})> _status(int rootPort) async {
   final written = _Written();
   final code = await IOOverrides.runZoned(
-      () => AtActivate.main(
-          ['status', '-a', '@alice', '-r', '127.0.0.1:$rootPort']),
+      () => AtActivate.main(['status', ..._statusArguments(rootPort)]),
       stderr: () => written);
   return (code: code, stderr: written.text);
 }
