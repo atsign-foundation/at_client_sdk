@@ -301,6 +301,19 @@ void main() {
           unorderedEquals(['code', 'message']));
     });
 
+    test('an unmapped exception rejects internal with a fixed message',
+        () async {
+      openFailure = StateError('secret-sentinel');
+
+      final r = await _rejected(_call(api, 'create', [
+        _obj({'atSign': '@alice', 'namespace': 'tally', 'rpName': 'Tally'})
+      ]));
+
+      expect(r.code, 'internal');
+      expect(r.message, 'internal error');
+      expect(r.message, isNot(contains('secret-sentinel')));
+    });
+
     test('options without an atSign or namespace reject', () async {
       final r = await _rejected(_call(api, 'create', [
         _obj({'rpName': 'T'})
@@ -582,6 +595,18 @@ void main() {
       ]));
 
       expect(r.code, 'bad_key');
+    });
+
+    test('a mapped exception keeps its message', () async {
+      session.failure = BadKeyException('notify needs sharedWith');
+
+      final r = await _rejected(_call(s, 'notify', [
+        _obj({'key': 'rpc'}),
+        'x'.toJS
+      ]));
+
+      expect(r.code, 'bad_key');
+      expect(r.message, contains('notify needs sharedWith'));
     });
 
     test('subscribe delivers events and returns an unsubscribe function',

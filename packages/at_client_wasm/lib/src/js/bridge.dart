@@ -74,13 +74,26 @@ extension type _Rejection._(JSObject _) implements JSObject {
   external factory _Rejection({String code, String message});
 }
 
+/// The rejection for [error]: its [atErrorCode] and its text, except that an
+/// unmapped error's text may hold anything, so it becomes a fixed message. An
+/// [ArgumentError] keeps its text: the bridge words it to name the parameter,
+/// never the value.
+_Rejection _rejection(Object error) {
+  final code = atErrorCode(error);
+  return _Rejection(
+      code: code,
+      message: code == 'internal' && error is! ArgumentError
+          ? 'internal error'
+          : error.toString());
+}
+
 /// A promise of [body]'s result that rejects with a [_Rejection] carrying
 /// [atErrorCode] of whatever [body] throws.
 JSPromise<T> _promise<T extends JSAny?>(FutureOr<T> Function() body) =>
     JSPromise<T>((JSFunction resolve, JSFunction reject) {
       Future<T>.sync(body).then((value) => resolve.callAsFunction(null, value),
-          onError: (Object error) => reject.callAsFunction(null,
-              _Rejection(code: atErrorCode(error), message: error.toString())));
+          onError: (Object error) =>
+              reject.callAsFunction(null, _rejection(error)));
     }.toJS);
 
 /// An argument error that names the parameter and the type it expects, never
@@ -193,7 +206,7 @@ class BridgeSession {
               }.jsify()));
       return unsubscribe.toJS;
     } on Object catch (error) {
-      return _Rejection(code: atErrorCode(error), message: error.toString());
+      return _rejection(error);
     }
   }
 

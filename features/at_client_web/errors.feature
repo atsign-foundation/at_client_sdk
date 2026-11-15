@@ -23,6 +23,17 @@ Feature: Every failure is an AtError whose code the caller branches on
     When create is called
     Then it rejects with AtError code internal and the message given
 
+  Scenario: an unmapped exception rejects internal with a fixed message
+    Given a failure inside the Dart bridge that no code maps
+    When create is called
+    Then it rejects with code internal and the message 'internal error'
+    And nothing the exception printed is in the message
+
+  Scenario: a mapped exception keeps its message
+    Given a failure inside the Dart bridge that maps to bad_key
+    When a session call is made
+    Then it rejects with code bad_key and the exception's message
+
   Scenario: a rejection is a plain object with only code and message
     Given a failure inside the Dart bridge
     When create is called
