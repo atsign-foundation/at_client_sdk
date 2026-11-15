@@ -4,6 +4,9 @@ const _proxyPrefix = 'proxy:';
 
 final _notInAHost = RegExp(r'[\s:/]');
 
+/// A bracketed IPv6 literal, as it is written in a URL's authority.
+final _bracketedIpv6 = RegExp(r'^\[([0-9A-Fa-f:.]+)\]$');
+
 /// How a browser session reaches atServers: directly, through an
 /// atDirectory, or through one proxy for every connection.
 class SessionTransportOptions {
@@ -15,7 +18,8 @@ class SessionTransportOptions {
   /// Throws an [ArgumentError] naming the field for a [proxyHost] without a
   /// [proxyPort] or the reverse, a [root] given with a proxy, a port outside
   /// 1-65535, and a host, the proxy's or the root's, that is empty or holds
-  /// whitespace, `:` or `/`.
+  /// whitespace, `:` or `/`, unless it is a bracketed IPv6 literal such as
+  /// `[::1]`.
   SessionTransportOptions(
       {AtRootDomain? root, String? proxyHost, int? proxyPort})
       : root = _root(root, proxyHost, proxyPort);
@@ -64,9 +68,22 @@ class SessionTransportOptions {
     if (host.trim().isEmpty) {
       throw ArgumentError.value(value, name, 'must not be empty');
     }
+    if (_isBracketedIpv6(host)) return;
     if (host.contains(_notInAHost)) {
       throw ArgumentError.value(
           value, name, 'must be a bare host, without whitespace, : or /');
+    }
+  }
+
+  static bool _isBracketedIpv6(String host) {
+    final address = _bracketedIpv6.firstMatch(host)?.group(1);
+    if (address == null) return false;
+    try {
+      Uri.parseIPv6Address(address);
+      return true;
+    } on FormatException {
+      // Not a valid IPv6 address: the bare-host check after this refuses it.
+      return false;
     }
   }
 

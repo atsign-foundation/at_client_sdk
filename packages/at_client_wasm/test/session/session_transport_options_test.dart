@@ -104,11 +104,18 @@ void main() {
         'proxy.example:443',
         'proxy.example/ws',
         'https://proxy.example',
+        '[::1]:443',
+        '[not:an:address]',
       ]) {
         expect(() => _options(proxyHost: host, proxyPort: 443),
             _namingField('proxyHost'),
             reason: '"$host" is not a bare host');
       }
+    });
+
+    test('when it is a bracketed IPv6 literal, then it selects the proxy', () {
+      expect(_options(proxyHost: '[::1]', proxyPort: 8443).proxy,
+          (host: '[::1]', port: 8443));
     });
   });
 
@@ -147,5 +154,18 @@ void main() {
           ('root.example', 6464));
       expect(options.proxy, isNull);
     });
+
+    test('when its host is a bracketed IPv6 literal, then it is the root', () {
+      final options =
+          SessionTransportOptions(root: AtRootDomain('[2001:db8::1]', 64));
+
+      expect(options.root.rootDomain, '[2001:db8::1]');
+    });
+  });
+
+  test('a proxy: root naming a bracketed IPv6 literal selects that proxy', () {
+    expect(
+        SessionTransportOptions(root: AtRootDomain('proxy:[::1]', 8443)).proxy,
+        (host: '[::1]', port: 8443));
   });
 }
