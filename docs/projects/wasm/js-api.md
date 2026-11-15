@@ -430,8 +430,8 @@ class AtClient implements AtClientLike {
 |---|---|
 | Pinned part | `AtClientLike`, `AtKey`, `AtEvent` and the flat methods are Tally's pinned d.ts, checked by a type test against a copy of it |
 | Superset | `onboard`, `AtClientOptions.app`/`rpId`/`rpName`, `enroll`, `prfSupported`, and the four pairing calls |
-| Keys | `AtKey` is `{ key, sharedBy?, sharedWith?, namespace? }`; the package turns it into the wire string at the bridge (D-9). `public:` and `cached:` prefixes are dropped when parsing, so public keys are not representable |
-| Events | The bridge delivers callbacks (D-9). `subscribe` adapts them to an `AsyncIterable`: it registers on call, buffers at most 4096 events (a read past that rejects with `overflow` and ends), and `break`/`return()`/`close()` unsubscribes; each event carries `from`, the sending atSign |
+| Keys | `AtKey` is `{ key, sharedBy?, sharedWith?, namespace? }` plus optional `public`, `cached` and `noNamespace` flags that `keys()` and `subscribe` set, so a returned key passed back to `get` names the same record; the package turns it into a plain object at the bridge (D-9) |
+| Events | The bridge delivers callbacks (D-9). `subscribe` adapts them to an `AsyncIterable`: it registers on call, buffers at most 4096 events (on overflow the subscription ends, buffered events are discarded, and `next()` rejects with `AtError('overflow')`), and `break`/`return()`/`close()` unsubscribes; each event carries `from`, the sending atSign |
 | Errors | One `AtError` with a closed `code` union (`AtErrorCode`); unknown bridge codes become `internal` (§6) |
 | Options | `namespace` is required; `rootDomain`, if set, must be `root.atsign.org`; `rpId` defaults to `location.hostname` and is one hostname |
 | Keys custody | Passkey-held (`create`/`onboard`/`enroll`); no key-file import and no `keys`/`storage` option, unlike the sketch in §5.3 |

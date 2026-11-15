@@ -130,7 +130,6 @@ Every call rejects with an `AtError`. Branch on `error.code`, never on the messa
 
 - No key-file (`.atKeys`) import.
 - Only the `root.atsign.org` root; any other `rootDomain` rejects `unsupported`.
-- The key codec cannot represent public keys: `public:` and `cached:` prefixes are dropped when a key is parsed, so `keys()` and `subscribe` do not distinguish a public key from a self key.
 - Browser only; there is no Node runtime.
 
 ## API reference
