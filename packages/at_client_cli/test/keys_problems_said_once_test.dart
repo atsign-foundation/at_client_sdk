@@ -408,9 +408,7 @@ void main() {
     }, timeout: const Timeout(Duration(minutes: 2)));
   });
 
-  test(
-      'a keyfile holding only a pending enrollment request says to wait for '
-      'its approval', () async {
+  test('A keyfile holding only a pending enrollment request', () async {
     await FileAtKeysIo(filePath: (_) => defaultKeyfile()).write(
         atSign,
         AtKeys()
@@ -430,8 +428,8 @@ void main() {
         run.stderr,
         holdsOnceInOrder([
           'This keyfile holds only a pending enrollment request for $atSign '
-              '(id e-1). Wait for it to be approved, then run this command '
-              'again.',
+              '(id e-1). Once it is approved, run the same at_activate enroll '
+              'command again to finish it.',
           footer,
         ]));
     expect(run.exitCode, 1);

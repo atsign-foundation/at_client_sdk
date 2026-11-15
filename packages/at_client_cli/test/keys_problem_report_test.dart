@@ -34,37 +34,39 @@ void main() {
 
       expect(lines, [several.message, keysProblemFooter]);
       expect(lines.first, contains('name both the app and the device'));
-      expect(lines.join('\n'), isNot(contains('Wait for')));
+      expect(lines.join('\n'), isNot(contains('is approved')));
     });
   });
 
   group('Given keys holding only pending enrollment requests', () {
     test(
         'when one is reported, then the report names its id in the singular '
-        'and says to wait for it', () {
+        'and says to run the same enroll command again once it is approved',
+        () {
       final lines = stderrOf(() => reportKeysProblem(
           AtEnrollmentPendingException(atSign, ['e-1']),
           absentHint: const []));
 
       expect(lines, [
         'This keyfile holds only a pending enrollment request for $atSign '
-            '(id e-1). Wait for it to be approved, then run this command '
-            'again.',
+            '(id e-1). Once it is approved, run the same at_activate enroll '
+            'command again to finish it.',
         keysProblemFooter,
       ]);
     });
 
     test(
         'when two are reported, then the report names both ids in the plural '
-        'and says to wait for them', () {
+        'and says to run the enroll command that made one again once it is '
+        'approved', () {
       final lines = stderrOf(() => reportKeysProblem(
           AtEnrollmentPendingException(atSign, ['e-1', 'e-2']),
           absentHint: const []));
 
       expect(lines, [
         'This keyfile holds only pending enrollment requests for $atSign '
-            '(ids e-1, e-2). Wait for them to be approved, then run this '
-            'command again.',
+            '(ids e-1, e-2). Once one is approved, run the at_activate enroll '
+            'command that made it again to finish it.',
         keysProblemFooter,
       ]);
     });

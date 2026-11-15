@@ -56,14 +56,16 @@ void reportKeysProblem(AtKeysUnusableException e,
 }
 
 /// The line for keys holding only the pending enrollment requests [e] names:
-/// wait for approval, then run the command again.
+/// once one is approved, the enroll command that made it finishes it.
 String _waitForApproval(AtEnrollmentPendingException e) {
   final ids = e.pendingEnrollmentIds;
-  final one = ids.length == 1;
-  return 'This keyfile holds only '
-      '${one ? 'a pending enrollment request' : 'pending enrollment requests'} '
-      'for ${e.atSign} (${one ? 'id' : 'ids'} ${ids.join(', ')}). Wait for '
-      '${one ? 'it' : 'them'} to be approved, then run this command again.';
+  return ids.length == 1
+      ? 'This keyfile holds only a pending enrollment request for '
+          '${e.atSign} (id ${ids.single}). Once it is approved, run the same '
+          'at_activate enroll command again to finish it.'
+      : 'This keyfile holds only pending enrollment requests for '
+          '${e.atSign} (ids ${ids.join(', ')}). Once one is approved, run the '
+          'at_activate enroll command that made it again to finish it.';
 }
 
 /// Whether the keyfile at [path] is a passphrase envelope.

@@ -57,6 +57,11 @@ Feature: A CLI program says what is wrong with the keys once, and what to do nex
     When the user runs "at_activate otp -a @alice"
     Then stderr holds, once, the message open throws for those keys, then the footer, and it exits 1
 
+  Scenario: A keyfile holding only a pending enrollment request
+    Given a keyfile for @alice at <path> that holds only a pending enrollment request, id e-1
+    When the user runs "at_activate otp -a @alice"
+    Then stderr holds, once, "This keyfile holds only a pending enrollment request for @alice (id e-1). Once it is approved, run the same at_activate enroll command again to finish it." then the footer, and it exits 1
+
   Scenario: A keys problem is said once, with no prefix, retry advice or stack trace
     Given no keyfile for @alice at <path>
     When the user runs "at_activate otp -a @alice"
