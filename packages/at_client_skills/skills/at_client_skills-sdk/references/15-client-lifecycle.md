@@ -138,8 +138,11 @@ is.
 // TLS on TCP; the config is where TLS settings now live.
 lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = '/certs')
 
-// Behind a proxy that routes on the atSign: send `from:` first on every connection.
-lookUps: secureSocketLookUps(onConnect: (c) => c.sendSync('from:@alice\n'))
+// Behind a proxy that routes on the atSign: make it the root domain, as
+// preference..rootDomain = 'proxy:proxy.example.com' and ..rootPort = 443, and
+// give the finder the same two. at_lookup then sends `from:<atSign>` first on
+// every connection itself; an onConnect must not send it too.
+lookUps: secureSocketLookUps()
 
 // A factory of your own: any AtLookUp implementation, another transport.
 AtLookupMuxable mine({required atSign, required rootDomain, required authenticator,
@@ -154,8 +157,9 @@ AtLookupMuxable mine({required atSign, required rootDomain, required authenticat
 - The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
   and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through. With
   none, the dialogs use `secureSocketLookUps()`, and `CLIBase` uses
-  at_client_cli's `lookUpsFor(rootDomain)`: `proxyLookUps()` when the root
-  domain names a proxy (`proxy:host:port`), TLS otherwise.
+  `secureSocketLookUps()` (at_client_cli's `lookUpsFor` is deprecated); at_lookup 4.1.0
+  sends `from:<atSign>` itself for a proxy root (`proxy:host:port`), and
+  `proxyLookUps()` is deprecated.
 - at_client 4.0 removed `AtClientPreference.decryptPackets`, `pathToCerts` and
   `tlsKeysSavePath`: the transport is the factory's to configure, through the
   `SecureSocketConfig` given to `secureSocketLookUps(config:)`.
