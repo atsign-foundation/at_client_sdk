@@ -27,12 +27,6 @@ import 'package:at_lookup/at_lookup.dart';
 /// reaches, the client remembering its answer in [storage] for a start with
 /// the atDirectory unreachable. The platform package supplies both.
 ///
-/// [notificationLookUps], when given, builds the monitor's connection instead
-/// of [lookUps]; the client's own requests still go through [lookUps]. A
-/// browser client can pass a factory that shares a single notification monitor
-/// across multiple tabs via BroadcastChannel or SharedWorker, while each tab
-/// keeps a connection of its own for request-response operations.
-///
 /// With [atKeysIo] the enrollment is the keys' own answer,
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
 /// logged at shout level and ignored.
@@ -53,7 +47,6 @@ Future<AtClient> buildAtClient({
   String? enrollmentId,
   AtLookUp? atLookUp,
   required AtLookUpFactory lookUps,
-  AtLookUpFactory? notificationLookUps,
   required SecondaryAddressFinder secondaryAddressFinder,
   FutureOr<NotificationService> Function(AtClient)? notificationServiceBuilder,
   FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
@@ -93,7 +86,7 @@ Future<AtClient> buildAtClient({
         ? await NotificationServiceImpl.create(client,
             secondaryAddressFinder: client.secondaryAddressFinder,
             connection: client.connection,
-            lookUps: notificationLookUps ?? client.lookUps)
+            lookUps: client.lookUps)
         : await notificationServiceBuilder(client);
     client.syncService = syncServiceBuilder == null
         ? await SyncServiceImpl.create(client)
