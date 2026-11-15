@@ -524,11 +524,13 @@ void main() {
         expect(sent, isEmpty);
       });
 
-      test('when an mldsa65 pair is base64 of the wrong length, then the error '
+      test(
+          'when an mldsa65 pair is base64 of the wrong length, then the error '
           'is fixed text holding none of the keys', () async {
         final (lookUp, sent) = recordingLookUp();
         final publicKey = base64Encode(utf8.encode('PUBLIC-KEY-MATERIAL' * 5));
-        final privateKey = base64Encode(utf8.encode('PRIVATE-KEY-MATERIAL' * 5));
+        final privateKey =
+            base64Encode(utf8.encode('PRIVATE-KEY-MATERIAL' * 5));
         Object? error;
         try {
           await AtEnrollmentImpl().submit(
