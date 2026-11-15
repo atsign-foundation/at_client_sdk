@@ -45,12 +45,18 @@ class AtAuthImpl implements AtAuth {
   @override
   final AtLookupMuxable atLookUp;
 
+  /// What every `from:` this activation sends carries, as
+  /// `authenticatorFor` completes it.
+  final Map<String, dynamic> clientConfig;
+
   AtAuthImpl(
       {required this.atLookUp,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      AtEnrollment? atEnrollment,
+      required this.clientConfig})
+      : atEnrollment =
+            atEnrollment ?? AtEnrollment.create(clientConfig: clientConfig);
 
   /// The keystore the authenticator should read, matching the precedence
   /// [authenticate] itself uses.
@@ -117,6 +123,7 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.atSign,
       cramSecret,
       atLookUp,
+      clientConfig: clientConfig,
     );
     if (!cramAuthResult) {
       _addProgress(
@@ -156,6 +163,7 @@ class AtAuthImpl implements AtAuth {
     atLookUp.authenticator = authenticatorFor(
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
+      clientConfig: clientConfig,
     );
 
     //3. send onboarding enrollment
@@ -176,6 +184,7 @@ class AtAuthImpl implements AtAuth {
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
       enrollmentId: enrollmentIdFromServer,
+      clientConfig: clientConfig,
     );
 
     //4. Drop the CRAM-authenticated connection; the PKAM below opens another

@@ -10,9 +10,16 @@ import 'package:at_utils/at_progress.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
-  factory AtEnrollment.create() {
-    return AtEnrollmentImpl();
+  /// An enrollment whose approval handshake's `from:` carries [clientConfig],
+  /// as `clientConfigFor` fills and cuts it.
+  factory AtEnrollment.create(
+      {Map<String, dynamic> clientConfig = defaultClientConfig}) {
+    return AtEnrollmentImpl(clientConfig: clientConfig);
   }
+
+  /// What an enrollment's `from:` carries when a caller states nothing:
+  /// at_auth's own four values.
+  static const Map<String, dynamic> defaultClientConfig = {};
 
   /// How long [waitForApproval] leaves between polls when a caller states no
   /// interval of its own.

@@ -29,7 +29,10 @@ class EnrollmentHandshake {
 
   final EnrollmentProgress _progress;
 
-  EnrollmentHandshake(this._progress);
+  /// What the handshake's `from:` carries, as `authenticatorFor` completes it.
+  final Map<String, dynamic> clientConfig;
+
+  EnrollmentHandshake(this._progress, {required this.clientConfig});
 
   /// Waits over [atLookup] for the enrollment in [enrollmentResponse] to be
   /// approved, then collects what the approval released into its keys.
@@ -92,6 +95,7 @@ class EnrollmentHandshake {
       memory,
       enrollmentResponse.atSign!,
       enrollmentId: handshakeEnrollmentId,
+      clientConfig: clientConfig,
     );
 
     await _waitForPkamAuthSuccess(

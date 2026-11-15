@@ -99,7 +99,8 @@ void main() {
     atAuth = AtAuthImpl(
         atLookUp: mockAtLookUp,
         pkamAuthenticator: mockPkam,
-        atEnrollment: mockAtEnrollment);
+        atEnrollment: mockAtEnrollment,
+        clientConfig: const {});
   });
 
   tearDown(() => tempDir.deleteSync(recursive: true));

@@ -1,0 +1,251 @@
+// The keys a PKAM signs with are set through their flat fields.
+// ignore_for_file: deprecated_member_use
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/auth/program_name.dart';
+import 'package:at_auth/src/auth/program_name_stub.dart' as no_io;
+import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart' show AtBytes;
+import 'package:at_demo_data/at_demo_data.dart' as demo;
+import 'package:at_lookup/at_lookup.dart';
+import 'package:test/test.dart';
+
+/// Records every command an authenticator sends, answering each with an empty
+/// response so the authenticator stops after `from:`.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return '';
+  }
+}
+
+void main() {
+  const atSign = '@alice🛠';
+  final pubspecVersion = RegExp(r'^version:\s*(\S+)', multiLine: true)
+      .firstMatch(File('pubspec.yaml').readAsStringSync())!
+      .group(1)!;
+
+  group('clientConfigFor', () {
+    test('an absent app version, SDK name and SDK version take at_auth\'s', () {
+      final config = clientConfigFor(appName: 'acme_chat');
+
+      expect(config['appName'], 'acme_chat');
+      expect(config['appVersion'], 'unknown');
+      expect(config['sdkName'], 'atsign.dart.at_auth');
+      expect(config['sdkVersion'], pubspecVersion,
+          reason: 'at_auth names its own version, the one its pubspec '
+              'declares');
+    });
+
+    test('an absent app name is the name of the program file', () {
+      final programFile = Platform.script.pathSegments.last;
+
+      expect(clientConfigFor()['appName'],
+          programFile.substring(0, programFile.indexOf('.')),
+          reason: 'the program file is $programFile; its name is what comes '
+              'before the first dot');
+    });
+
+    test('an empty value counts as absent', () {
+      final config = clientConfigFor(
+          appName: '', appVersion: '', sdkName: '', sdkVersion: '');
+
+      expect(config['appName'], isNotEmpty);
+      expect(config['appVersion'], 'unknown');
+      expect(config['sdkName'], 'atsign.dart.at_auth');
+      expect(config['sdkVersion'], pubspecVersion);
+    });
+
+    test('given values are sent as given, under these four keys', () {
+      expect(
+          clientConfigFor(
+              appName: 'acme_chat',
+              appVersion: '2.3.1',
+              sdkName: 'atsign.dart.at_client',
+              sdkVersion: '4.1.0'),
+          {
+            'appName': 'acme_chat',
+            'appVersion': '2.3.1',
+            'sdkName': 'atsign.dart.at_client',
+            'sdkVersion': '4.1.0',
+          });
+    });
+
+    test('each value longer than 64 characters is cut to its first 64', () {
+      final config = clientConfigFor(
+          appName: 'a' * 80,
+          appVersion: 'b' * 80,
+          sdkName: 'c' * 80,
+          sdkVersion: 'd' * 80);
+
+      expect(config['appName'], 'a' * 64);
+      expect(config['appVersion'], 'b' * 64);
+      expect(config['sdkName'], 'c' * 64);
+      expect(config['sdkVersion'], 'd' * 64);
+    });
+
+    test('a value of exactly 64 characters is sent whole', () {
+      expect(clientConfigFor(appName: 'a' * 64)['appName'], 'a' * 64);
+    });
+
+    test('a cut never leaves half of a surrogate pair', () {
+      // The emoji is two code units, the 64th and 65th.
+      final config = clientConfigFor(appName: '${'a' * 63}😀b');
+
+      expect(config['appName'], 'a' * 63,
+          reason: 'a lone high surrogate is not text; the atServer would '
+              'decode and log a malformed name');
+    });
+
+    test(
+        'a from: whose appName holds a line or paragraph separator still '
+        'matches the from: syntax', () {
+      final syntax = RegExp(VerbSyntax.from);
+      String fromCommand(String appName) => (FromVerbBuilder()
+            ..atSign = '@alice'
+            ..clientConfig = clientConfigFor(appName: appName))
+          .buildCommand()
+          .trim();
+
+      expect(syntax.hasMatch(fromCommand('acme_chat')), isTrue,
+          reason: 'the control: a plain from: matches');
+      expect(syntax.hasMatch(fromCommand('acme\u2028chat\u2029app')), isTrue,
+          reason: 'the atServer parses from: with this syntax, whose `.` '
+              'matches neither separator, and JSON leaves both raw');
+      expect(clientConfigFor(appName: 'acme\u2028chat\u2029app')['appName'],
+          'acme chat app');
+    });
+  });
+
+  group('the name of the program file', () {
+    test('a script run from acme_chat.dart is acme_chat', () {
+      expect(programNameOf(() => Uri.file('/home/me/acme_chat.dart')),
+          'acme_chat');
+    });
+
+    test('a pub snapshot named at_activate.dart-3.14.0.snapshot is at_activate',
+        () {
+      expect(
+          programNameOf(() => Uri.file(
+              '/home/me/.dart_tool/pub/bin/at_client_cli/at_activate.dart-3.14.0.snapshot')),
+          'at_activate');
+    });
+
+    test('an executable compiled as at_activate is at_activate', () {
+      expect(programNameOf(() => Uri.file('/usr/local/bin/at_activate')),
+          'at_activate');
+    });
+
+    test('a Windows executable at_activate.exe is at_activate', () {
+      expect(
+          programNameOf(() => Uri.file(
+              r'C:\Program Files\atsign\at_activate.exe',
+              windows: true)),
+          'at_activate');
+    });
+
+    test('a file whose name starts with a dot names nothing, so is "unknown"',
+        () {
+      expect(programNameOf(() => Uri.file('/home/me/.hidden')), 'unknown');
+    });
+
+    test('a script that cannot be read is "unknown"', () {
+      expect(programNameOf(() => throw UnsupportedError('no script here')),
+          'unknown');
+    });
+
+    test('a script that is not a file is "unknown"', () {
+      expect(
+          programNameOf(() => Uri.dataFromString('void main() {}',
+              mimeType: 'application/dart')),
+          'unknown',
+          reason: 'a data: URI holds the program\'s source, which is never '
+              'sent');
+    });
+
+    test('a platform without dart:io has no program file, so is "unknown"', () {
+      expect(no_io.derivedProgramName(), 'unknown');
+    });
+  });
+
+  group('an authenticator fills the four values its caller leaves out', () {
+    final keys = InMemoryAtKeysIo.holding(
+        atSign,
+        AtKeys()
+          ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap[atSign]!)
+          ..apkamPrivateKey =
+              AtBytes.fromString(demo.pkamPrivateKeyMap[atSign]!));
+
+    final builders =
+        <String, AtAuthenticator Function(Map<String, dynamic> clientConfig)>{
+      'authenticatorFor, signing PKAM': (config) =>
+          authenticatorFor(keys, atSign, clientConfig: config),
+      // An empty store reads as no keyfile, which is when CRAM applies.
+      'authenticatorFor, falling back to CRAM': (config) => authenticatorFor(
+          InMemoryAtKeysIo(), atSign,
+          cramSecret: 'secret', clientConfig: config),
+      'authenticatorForPrivateKey': (config) =>
+          authenticatorForPrivateKey(atSign, 'unused', clientConfig: config),
+      'authenticatorForCramSecret': (config) =>
+          authenticatorForCramSecret(atSign, 'secret', clientConfig: config),
+    };
+
+    Future<Map<String, dynamic>> sentBy(AtAuthenticator authenticator) async {
+      final executor = _RecordingExecutor();
+      await authenticator(executor);
+      const prefix = 'from:$atSign:clientConfig:';
+      expect(executor.sent.first, startsWith(prefix),
+          reason: 'the authenticator sent from: without a clientConfig');
+      return jsonDecode(executor.sent.first.substring(prefix.length).trim())
+          as Map<String, dynamic>;
+    }
+
+    builders.forEach((name, build) {
+      group(name, () {
+        test('the caller\'s keys win, the rest are filled, others pass through',
+            () async {
+          final config = await sentBy(build({
+            'appName': 'acme_chat',
+            'version': '4.1.0',
+            'clientId': '42',
+            'platform': 'macos',
+          }));
+
+          expect(config, {
+            'appName': 'acme_chat',
+            'version': '4.1.0',
+            'clientId': '42',
+            'platform': 'macos',
+            'appVersion': 'unknown',
+            'sdkName': 'atsign.dart.at_auth',
+            'sdkVersion': pubspecVersion,
+          });
+        });
+
+        test('a caller that passes none sends at_auth\'s four and no more',
+            () async {
+          final config = await sentBy(build(const {}));
+
+          expect(config.keys.toSet(),
+              {'appName', 'appVersion', 'sdkName', 'sdkVersion'},
+              reason: 'no version key: at_server reads it to choose its '
+                  'error format');
+          expect(config['sdkName'], 'atsign.dart.at_auth');
+        });
+
+        test('the caller\'s values are cut to 64 characters too', () async {
+          final config = await sentBy(build({'appName': 'a' * 80}));
+
+          expect(config['appName'], 'a' * 64);
+        });
+      });
+    });
+  });
+}
