@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_client_wasm/src/keys/passkey_record.dart';
 import 'package:at_client_wasm/src/keys/passkey_record_keys.dart';
+import 'package:at_client_wasm/src/keys/prf_support.dart';
 import 'package:at_client_wasm/src/keys/unlock_secret.dart';
 import 'package:at_client_wasm/src/session/passkey_custody.dart';
 import 'package:test/test.dart';
@@ -147,6 +148,28 @@ void main() {
         () async {
       await custody().enroll(atSign: _atSign, otp: _otp);
       expectStamped();
+    });
+  });
+
+  group('onboard without PRF', () {
+    test('refuses before any passkey prompt, CRAM or setup write', () async {
+      final unsupported = PasskeyCustody(
+          kek: PasskeyKek(authenticator,
+              prfSupport: PrfSupport(_NoPrfEnvironment())),
+          pointerReader: server,
+          gateway: gateway,
+          credentials: hints,
+          enrollmentIds: hints,
+          persistence: persistence,
+          now: () => _enrolledAt,
+          retryDelay: Duration.zero,
+          setupLock: setupLock);
+      await expectLater(unsupported.onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(isA<PrfUnavailableException>()));
+      expect(authenticator.creates, 0);
+      expect(authenticator.gets, 0);
+      expect(gateway.activated, isEmpty);
+      expect(server.log, isEmpty);
     });
   });
 
@@ -627,4 +650,19 @@ void main() {
           throwsA(anything));
     });
   });
+}
+
+/// A browser whose client capabilities say it has no PRF extension.
+class _NoPrfEnvironment implements PrfEnvironment {
+  @override
+  Future<bool?> clientCapabilityPrf() async => false;
+
+  @override
+  DateTime? missRecordedAt() => null;
+
+  @override
+  void recordMiss(DateTime at) {}
+
+  @override
+  DateTime now() => _enrolledAt;
 }
