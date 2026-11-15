@@ -18,6 +18,50 @@ describe('toBridgeKey', () => {
   });
 });
 
+describe('keys round-trip to the bridge', () => {
+  const texts = [
+    'note.wavi@alice',
+    '@bob:note.wavi@alice',
+    'public:note.wavi@alice',
+    'cached:@bob:note.wavi@alice',
+    'cached:public:note.wavi@alice',
+    '@bob:shared_key@alice',
+    'public:plain@alice',
+  ];
+
+  for (const text of texts) {
+    it(`rebuilds ${text}`, () => {
+      const bridge = toBridgeKey(parseKey(text, 'wavi'), 'wavi');
+      const namespace = bridge.noNamespace ? undefined : bridge.namespace;
+      const rebuilt = formatKey(
+        {
+          key: bridge.key,
+          sharedWith: bridge.sharedWith,
+          sharedBy: bridge.sharedBy,
+          namespace,
+          public: bridge.public,
+          cached: bridge.cached,
+          noNamespace: bridge.noNamespace,
+        },
+        'wavi',
+      );
+      expect(rebuilt).toBe(text);
+    });
+  }
+
+  it('sends the flags and no default namespace for a key that had none', () => {
+    expect(toBridgeKey(parseKey('public:plain@alice', 'wavi'), 'wavi')).toEqual({
+      key: 'plain', sharedBy: '@alice', public: true, noNamespace: true,
+    });
+  });
+
+  it('sends public and cached through', () => {
+    expect(toBridgeKey({ key: 'k', public: true, cached: true }, 'wavi')).toEqual({
+      key: 'k', namespace: 'wavi', public: true, cached: true,
+    });
+  });
+});
+
 describe('parseKey', () => {
   it('splits a self key into key, namespace and sharedBy', () => {
     expect(parseKey('@alice:note.wavi@alice', 'wavi')).toEqual({
@@ -43,18 +87,21 @@ describe('parseKey', () => {
     });
   });
 
-  it('drops the public and cached prefixes', () => {
+  it('carries the public and cached prefixes', () => {
     expect(parseKey('public:note.wavi@alice', 'wavi')).toEqual({
-      key: 'note', namespace: 'wavi', sharedBy: '@alice',
+      key: 'note', namespace: 'wavi', sharedBy: '@alice', public: true,
     });
     expect(parseKey('cached:@bob:note.wavi@alice', 'wavi')).toEqual({
-      key: 'note', namespace: 'wavi', sharedWith: '@bob', sharedBy: '@alice',
+      key: 'note', namespace: 'wavi', sharedWith: '@bob', sharedBy: '@alice', cached: true,
+    });
+    expect(parseKey('cached:public:note.wavi@alice', 'wavi')).toEqual({
+      key: 'note', namespace: 'wavi', sharedBy: '@alice', public: true, cached: true,
     });
   });
 
-  it('leaves the namespace out of a key that has none', () => {
+  it('leaves the namespace out of a key that has none and says so', () => {
     expect(parseKey('@bob:shared_key@alice')).toEqual({
-      key: 'shared_key', sharedWith: '@bob', sharedBy: '@alice',
+      key: 'shared_key', sharedWith: '@bob', sharedBy: '@alice', noNamespace: true,
     });
   });
 
@@ -75,7 +122,7 @@ describe('formatKey', () => {
   });
 
   it('round-trips what parseKey reads', () => {
-    for (const text of ['note.wavi@alice', '@bob:a.b.wavi@alice', '@alice:rpc.req.9.tally@alice']) {
+    for (const text of ['note.wavi@alice', '@bob:a.b.wavi@alice', '@alice:rpc.req.9.tally@alice', 'public:n.wavi@alice', 'cached:public:n.wavi@alice', '@bob:plain@alice']) {
       expect(formatKey(parseKey(text, 'wavi'), 'wavi')).toBe(text);
     }
   });

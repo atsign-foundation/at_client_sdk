@@ -39,6 +39,12 @@ export interface AtKey {
   sharedWith?: string;
   /** Defaults to the client's `namespace`. */
   namespace?: string;
+  /** A public key (`public:`); set on the keys `keys()` and `subscribe` return. */
+  public?: boolean;
+  /** A key cached from another atSign (`cached:`); set on the keys `keys()` and `subscribe` return. */
+  cached?: boolean;
+  /** The key has no namespace; set on the keys `keys()` and `subscribe` return, so `get` reads the same record. */
+  noNamespace?: boolean;
 }
 
 /** One notification delivered to a `subscribe` iterator. */
