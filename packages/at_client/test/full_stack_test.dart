@@ -587,6 +587,15 @@ void main() {
         var atKey = AtKey.fromString('test_get_self_key_when_remote_is_false'
             '.${atClient.getPreferences()!.namespace!}'
             '${atClient.getCurrentAtSign()!}');
+        when(() => mockRemoteSecondary
+                .executeVerb(any(that: isA<LLookupVerbBuilder>())))
+            .thenAnswer((invocation) async {
+          var builder = invocation.positionalArguments[0] as LLookupVerbBuilder;
+          if (builder.atKey.toString() == atKey.toString()) {
+            executedRemotely = true;
+          }
+          return 'data:null';
+        });
 
         dynamic caught;
 

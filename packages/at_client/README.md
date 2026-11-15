@@ -36,9 +36,15 @@ Upgrading from 3.x: see
 The `AtClient` interface ([`lib/src/client/at_client_spec.dart`](lib/src/client/at_client_spec.dart))
 is the main entry point once authentication is complete.
 
-- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, eventSource, cleanupOrphansOnCreation})` —
+- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, writeTypeTag, eventSource, cleanupOrphansOnCreation})` —
   returns a `Future<AtCollection<T>>`. `fromJson` and `typeTag` travel
-  together; pass either both or neither. AtCollections hide the
+  together; pass either both or neither. `writeTypeTag` can be passed
+  without a factory to stamp the items an untyped collection writes; it must
+  be non-blank, and must equal `typeTag` when both are given (else
+  `ArgumentError`). Reopening an open namespace on the same client so that a
+  new `T` would be stamped with another tag (`typeTag`, else the factory tag
+  registered for `T`, else `writeTypeTag`, else `n/a`) throws
+  `ArgumentError`. The namespace is folded to lower case. AtCollections hide the
   low-level keystore plumbing and let you work directly with your own
   domain objects and types (see [Collections](#collections) below).
 - `notificationService` — fire-and-forget and pub/sub messaging
@@ -215,15 +221,17 @@ final client = await Atsign('@alice').open(
     preference: AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos',
     secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64),
     lookUps: secureSocketLookUps(
-        config: SecureSocketConfig()..pathToCerts = '/certs',
-        onConnect: (connection) => connection.sendSync('from:@alice\n')));
+        config: SecureSocketConfig()..pathToCerts = '/certs'));
 ```
 
 `lookUps` builds every connection the client opens. `secureSocketLookUps`
 connects with TLS on TCP, taking a `SecureSocketConfig` and an `onConnect`
-run on each new connection before anything else (a proxy that routes on
-`from:` is what that is for). A factory of your own can hand back any
-`AtLookUp`.
+run on each new connection before anything else. Behind a proxy that routes
+on the atSign, set the preference's `rootDomain` to `proxy:<host>` and its
+`rootPort` to the proxy's port, and give the address finder the same two:
+at_lookup then sends `from:<atSign>` first on every connection itself, so
+`onConnect` must not send it too. A factory of your own can hand
+back any `AtLookUp`.
 
 Every client keeps local storage, even if only in memory: `storage` is
 required, and `InMemoryAtClientStorage` keeps nothing on disk.

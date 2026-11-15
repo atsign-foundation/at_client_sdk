@@ -1053,8 +1053,7 @@ Future<void> list(ArgResults ar, AtClient atClient,
 /// Whether [e]'s keys are anchored, as a row shows it: `anchored`,
 /// `unsigned`, or the verdict for a key that fails followed by its kid; `-`
 /// for an enrollment that is not approved, and `?` when it could not be read.
-Future<String> _describeAnchoring(
-    Enrollment e,
+Future<String> _describeAnchoring(Enrollment e,
     Future<ChainResult> Function(String enrollmentId) anchoring) async {
   final id = e.enrollmentId;
   if (id == null || e.enrollmentStatus != EnrollmentStatus.approved) {
@@ -1453,7 +1452,8 @@ EnrollerSettings enrollerSettingsFrom(ArgResults ar) {
         ..rootPort = rootDomain.rootPort
         ..cramSecret = ar[AuthCliArgs.argNameCramSecret],
       atKeysFilePath: ar[AuthCliArgs.argNameAtKeys] ??
-          getDefaultAtKeysFilePath(getHomeDirectory(throwIfNull: true)!, atSign),
+          getDefaultAtKeysFilePath(
+              getHomeDirectory(throwIfNull: true)!, atSign),
       passPhrase: ar[AuthCliArgs.argNamePassPhrase],
       registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn],
       registrarApiKey: Platform.environment[registrarApiKeyVariable]);
@@ -1487,9 +1487,10 @@ class EnrollerSettings {
   AtClientStorage storageFor(String atSign) =>
       CliKeys.storageFor(atSign, program: commandNamespace, path: storagePath);
 
-  AtLookUpFactory get lookUps => lookUpsFor(preference.rootDomain);
+  AtLookUpFactory get lookUps => secureSocketLookUps();
 
-  SecondaryAddressFinder get secondaryAddressFinder => _atDirectoryOf(preference);
+  SecondaryAddressFinder get secondaryAddressFinder =>
+      _atDirectoryOf(preference);
 }
 
 /// The namespace at_activate's clients run under, and the program its stores
@@ -1508,7 +1509,7 @@ SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
 ///
 /// [rootDomain] is the atDirectory as `host:port`, `root.atsign.org` when
 /// null; one of the form `proxy:host:port` sends every connection through
-/// that proxy, as [lookUpsFor] does. The connection is given
+/// that proxy, and at_lookup names the atSign first on each connection to it. The connection is given
 /// [maxConnectAttempts] tries, three seconds apart, to come online; a client
 /// the atServer refuses, or that is still offline after that, is stopped and
 /// an [UnAuthenticatedException] says so.
@@ -1554,7 +1555,7 @@ Future<AtClient> createAtClient(
         preference: preference,
         storage: CliKeys.storageFor(atSign,
             program: commandNamespace, path: storageDir!.path),
-        lookUps: lookUpsFor(preference.rootDomain),
+        lookUps: secureSocketLookUps(),
         secondaryAddressFinder: _atDirectoryOf(preference),
         serviceFactory: ServiceFactoryWithNoOpSyncService());
   } on AtOpenRefusedException catch (e) {

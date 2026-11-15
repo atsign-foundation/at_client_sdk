@@ -7,6 +7,11 @@
 - fix: `at_activate status` asks the atDirectory once, prints no posture
   notice, and says a refused atServer connection is unreachable rather than
   an unexpected failure (it still returns 2).
+- fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
+  it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
+  `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that
+  reached a proxy without a `proxy:<host>` root must make it the root.
+  Requires at_lookup 4.1.0.
 
 ## 1.0.0
 

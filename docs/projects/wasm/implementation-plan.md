@@ -310,8 +310,8 @@ break; it stays as ruled.
   (`decryptPackets`, `tlsKeysSavePath`, `pathToCerts`) the default factory,
   `defaultLookUps(preference)` in at_client's `lifecycle/lookups.dart`, reads until 4.0.
   The proxy convention at_onboarding_cli carried as a string prefix is the first
-  non-default factory, `proxyLookUps()`, which sends `from:<atSign>` first on every
-  connection through `onConnect`. The web equivalent is dev-only too:
+  non-default factory, `proxyLookUps()`, which sent `from:<atSign>` first on every
+  connection through `onConnect` (2026-11-15: at_lookup 4.1.0 sends it itself for a `proxy:` root; `proxyLookUps()` is deprecated). The web equivalent is dev-only too:
   `fixedAddressWebSocketLookUps(host:, port:)` in `at_lookup_web.dart`. The default web
   path is `webSocketLookUps()` (D-15): HTTPS directory lookup, then `wss://` straight to
   the atServer.
@@ -1215,7 +1215,10 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   dart2js and whether Web Crypto removes the deferred Argon2id work
   ([`design.md`](design.md) §2.10).
 - **J9 — Resolve JS-7**: raise the additive `writeTypeTag` change upstream; fall back to
-  J1a's carrier-class shim only if declined.
+  J1a's carrier-class shim only if declined. *Status, 2026-11-14:* upstream
+  `writeTypeTag` is implemented in at_client 4.1.0 (unreleased), with a
+  per-client reopen check (`ArgumentError` from `AtClient.collection`). Still open here: the JS
+  binding adopting it, so JS writes stop stamping `n/a`.
 - **J10 — Resolve JS-8**: ship the `AtClientManager` singleton documented as one atSign
   per page/process, plus a Layer B `AtFailure.alreadyInitialised` on a second distinct
   atSign (~10 lines) — converts silent state corruption into a clear error.
