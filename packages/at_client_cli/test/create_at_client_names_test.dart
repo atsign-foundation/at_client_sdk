@@ -1,0 +1,149 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/commands/auth_cli.dart' show deleteStorage;
+import 'package:test/test.dart';
+
+import 'keyfile_helpers.dart';
+
+/// The app a command's client names on its authenticating `from:`: the
+/// calling program's own for the public [createAtClient], at_activate for
+/// at_activate's own commands. Observed at a TLS proxy on the loopback
+/// interface, which answers the proxy's `from:@alice` and keeps the
+/// authenticating `from:` that follows it.
+void main() {
+  AtSignLogger.root_level = 'SHOUT';
+  late Directory certs;
+  late Directory dir;
+  late SecureServerSocket proxy;
+  late StreamController<String> configs;
+
+  setUpAll(() async {
+    certs = Directory.systemTemp.createTempSync('create_at_client_names_');
+    final made = await Process.run('openssl', [
+      'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', //
+      '-subj', '/CN=127.0.0.1',
+      '-addext', 'subjectAltName=IP:127.0.0.1',
+      // NOTE: macOS verifies through the system, which refuses a self-signed
+      // certificate that names no server use.
+      '-addext', 'extendedKeyUsage=serverAuth',
+      '-addext', 'keyUsage=digitalSignature,keyEncipherment,keyCertSign',
+      '-keyout', '${certs.path}/key.pem',
+      '-out', '${certs.path}/cert.pem',
+    ]);
+    expect(made.exitCode, 0,
+        reason: 'openssl made no test certificate: ${made.stderr}');
+    // NOTE: the default lookUps connect through
+    // SecurityContext.defaultContext, which is this test file's isolate's own.
+    SecurityContext.defaultContext
+        .setTrustedCertificates('${certs.path}/cert.pem');
+    proxy = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+        SecurityContext()
+          ..useCertificateChain('${certs.path}/cert.pem')
+          ..usePrivateKey('${certs.path}/key.pem'));
+    configs = StreamController.broadcast();
+    // NOTE: a client that hangs up mid-handshake surfaces here, not on a
+    // socket; it is noise, and unhandled it fails setUpAll after the tests.
+    proxy.listen((socket) {
+      var received = '';
+      socket.cast<List<int>>().transform(utf8.decoder).listen((text) {
+        received += text;
+        for (var end = received.indexOf('\n');
+            end >= 0;
+            end = received.indexOf('\n')) {
+          final line = received.substring(0, end);
+          received = received.substring(end + 1);
+          if (line == 'from:@alice') {
+            socket.write('data:ok\n@');
+          } else if (line.startsWith('from:@alice:clientConfig:')) {
+            configs.add(line.substring('from:@alice:clientConfig:'.length));
+            socket.destroy();
+          }
+        }
+      }, onError: (_) {});
+    }, onError: (_) {});
+  });
+
+  tearDownAll(() async {
+    await proxy.close();
+    certs.deleteSync(recursive: true);
+  });
+
+  setUp(() => dir = Directory.systemTemp.createTempSync('create_at_client_'));
+
+  tearDown(() async {
+    for (final client
+        in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+      await client.stop();
+    }
+    AtClientImpl.atClientInstanceMap.clear();
+    AtClientManager.getInstance().reset();
+    deleteStorage();
+    dir.deleteSync(recursive: true);
+  });
+
+  /// A keyfile for `@alice`, at a path under the test's directory.
+  Future<String> keyfile() async {
+    final path = '${dir.path}/keys/key.atKeys';
+    await FileAtKeysIo(filePath: (_) => path)
+        .write('@alice', randomLegacyKeys());
+    return path;
+  }
+
+  /// The clientConfig of the first authenticating `from:` the proxy receives
+  /// while [run] runs; [run]'s own failure, once the proxy hangs up, is
+  /// expected and ignored.
+  Future<Map<String, dynamic>> firstConfigWhile(Future<Object?> run) async {
+    final first = configs.stream.first;
+    final finished = run.then((_) {}, onError: (_) {});
+    final config = jsonDecode(await first.timeout(const Duration(seconds: 20)))
+        as Map<String, dynamic>;
+    await finished;
+    return config;
+  }
+
+  test(
+      'Given a program outside at_client_cli, when the client createAtClient '
+      'opens authenticates, then its from: does not name at_activate',
+      () async {
+    final keysPath = await keyfile();
+
+    final config = await firstConfigWhile(createAtClient(
+        atSign: '@alice',
+        atKeysFilePath: keysPath,
+        rootDomain: 'proxy:127.0.0.1:${proxy.port}',
+        posture: PqPosture.legacy,
+        waitForPqStartup: false,
+        maxConnectAttempts: 1));
+
+    expect(config['appName'], isNot('at_activate'));
+    expect(config['appVersion'], 'unknown',
+        reason: 'the calling program names no version through createAtClient');
+    expect(config['sdkName'], 'atsign.dart.at_client',
+        reason: 'the control: this is at_client\'s config');
+  });
+
+  test(
+      'Given at_activate\'s list command, when its client authenticates, '
+      'then its from: names at_activate at at_client_cli\'s version', () async {
+    final keysPath = await keyfile();
+
+    final config = await firstConfigWhile(AtActivate.main([
+      'list', '-a', '@alice', '-k', keysPath, //
+      '-r', 'proxy:127.0.0.1:${proxy.port}',
+      '--posture', 'legacy', '--mca', '1',
+    ]));
+
+    expect(config['appName'], 'at_activate');
+    expect(
+        config['appVersion'],
+        RegExp(r'^version:\s*(\S+)', multiLine: true)
+            .firstMatch(File('pubspec.yaml').readAsStringSync())!
+            .group(1));
+    expect(config['sdkName'], 'atsign.dart.at_client');
+  });
+}

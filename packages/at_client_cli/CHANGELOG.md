@@ -1,5 +1,7 @@
 ## 1.1.0
 
+- feat: `at_activate` and `at_register` name themselves, at at_client_cli's
+  version, on every `from:` their clients send to authenticate.
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - chore: requires at_client 4.1.0.

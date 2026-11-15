@@ -83,6 +83,7 @@ class Register {
         '-c',
         params['cramkey']!,
       ],
+      program: 'at_register',
     );
     if (activated != 0) exit(activated);
   }
