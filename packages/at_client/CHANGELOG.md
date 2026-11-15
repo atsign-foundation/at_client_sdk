@@ -77,8 +77,6 @@
   after a reconnect (latest 1024 ids capped per millisecond watermark).
   Conflicting duplicate IDs trigger warnings and are reported on
   `droppedEvents`.
-- feat: `buildAtClient` takes an optional `notificationLookUps` factory for the
-  monitor's connection.
 
 ## 4.0.0
 
