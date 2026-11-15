@@ -29,8 +29,8 @@ enum AtKeysUnusableCause {
 /// Keys that cannot be used to authenticate as [atSign]: [cause] says why,
 /// and [source] where they were looked for.
 ///
-/// Its message holds no stack trace, and quotes from the keys only a value
-/// the parse refused, such as an unsupported token or a duplicate keyId.
+/// Its message holds no stack trace. It can quote values from the keys, such
+/// as an unsupported token, a duplicate keyId or an enrollment id.
 class AtKeysUnusableException extends AtException {
   final String atSign;
   final AtKeysUnusableCause cause;
