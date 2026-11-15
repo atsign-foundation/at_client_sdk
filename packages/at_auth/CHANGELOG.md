@@ -1,3 +1,8 @@
+## Unreleased
+
+- fix: a supplied mldsa65 APKAM key pair of the wrong shape is refused with
+  `AtSigningException`.
+
 ## 4.2.0
 
 - feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
