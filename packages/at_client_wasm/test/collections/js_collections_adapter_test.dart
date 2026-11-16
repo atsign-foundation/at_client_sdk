@@ -356,6 +356,33 @@ void main() {
       );
     });
 
+    test("An item's owner comes from the key's sharedBy, never from its data",
+        () async {
+      await bobShares('f1', {'owner': '@carol', 'sharedBy': '@carol'});
+      server.overwriteValues(
+        (key) =>
+            key.sharedBy?.toAtsign() == '@bob'.toAtsign() &&
+            key.sharedWith?.toAtsign() == '@alice'.toAtsign(),
+        jsonEncode({
+          'type': 'Todo',
+          'owner': '@carol',
+          'sharedBy': '@carol',
+          'obj': {'owner': '@carol', 'sharedBy': '@carol'},
+        }),
+      );
+      final todos = await open();
+
+      final got = await todos.get(bobs('f1'));
+      final listed = (await todos.list()).items;
+
+      expect(got?['owner'], '@bob');
+      expect(ids(listed), ['f1']);
+      expect(listed.single['owner'], '@bob');
+      expect(await todos.get(mine('f1')), isNull);
+      await expectLater(todos.update((id: 'f1', owner: '@carol'), {'x': 1}),
+          _rejectsWith(CollectionErrorCodes.notOwner, owner: '@carol'));
+    });
+
     test('A list returns readable items and reports unreadable ones', () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 'a1');

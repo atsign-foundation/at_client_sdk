@@ -7,6 +7,28 @@ Feature: The JS collections adapter translates onto AtCollection
   no defaults, no sorting, no caching, no type filter. Items are addressed by
   id and owner. A failure rejects with a collection error code (js-api.md §6).
 
+  # Threats. Each answer names the scenario that holds it.
+  #
+  # Race: another device may write a recipient copy while this adapter updates
+  #   or shares an item. Each write re-reads the item right before writing and
+  #   never removes a recipient it did not read: "An update keeps a recipient
+  #   copy another device writes during the update" and "A share keeps a
+  #   recipient copy another device writes during the share". Two creates with
+  #   one id at the same moment are not serialised by the adapter; AtCollection.create
+  #   is being changed in at_client to refuse the second.
+  # Replay: a replayed notification only makes the collection re-read the stored,
+  #   signed record. It creates no item and changes no item's type or owner:
+  #   "Each upstream event is delivered once and cancel stops delivery".
+  # DoS: an item id is bounded to 64 characters from a fixed set ("An item id
+  #   outside the allowed set rejects ..."), and an unreadable record is reported
+  #   beside the readable items instead of failing the listing ("A list returns
+  #   readable items and reports unreadable ones").
+  # Forgery: an item's owner is the sharedBy of its key and never a field of its
+  #   data or envelope: "An item's owner comes from the key's sharedBy, never from its data".
+  # Impersonation: a write to an item another atSign owns is refused before any
+  #   key is written: "An update, share or remove of another owner's item rejects
+  #   with COLLECTION_ITEM_NOT_OWNER".
+
   Scenario: An open passes namespace, expiration, type and eventSource through unchanged
     Given a client
     When the adapter opens "todos.demo" with type "Todo", 5 hours and each eventSource
@@ -64,6 +86,12 @@ Feature: The JS collections adapter translates onto AtCollection
     Given @bob shares "b1" with @alice and @alice cannot read it
     When the adapter gets "b1" owned by @bob
     Then the get rejects with COLLECTION_ITEM_UNREADABLE, id "b1", owner "@bob" and no cause text
+
+  Scenario: An item's owner comes from the key's sharedBy, never from its data
+    Given @bob shares "f1" with @alice and its stored envelope and data name @carol as owner
+    When the adapter gets and lists "f1"
+    Then the owner is "@bob" in both
+    And a get of "f1" owned by @alice is null and an update of "f1" owned by @carol rejects with COLLECTION_ITEM_NOT_OWNER
 
   Scenario: A list returns readable items and reports unreadable ones
     Given a readable item and an unreadable shared item "b1" owned by @bob
