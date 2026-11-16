@@ -7,6 +7,9 @@
   sent on one line and cut to 64 UTF-16 code units.
 - feat: `clientConfigFor` builds that clientConfig, and `activateAtSign` and
   `AtEnrollment.create` take a `clientConfig` for their `from:`.
+- fix: an enrollment's wait for approval reads an atServer's refusal the
+  same whether it arrives as plain text or as JSON, so it keeps waiting or
+  ends as the refusal says.
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
   private half does not sign for its public half is refused with

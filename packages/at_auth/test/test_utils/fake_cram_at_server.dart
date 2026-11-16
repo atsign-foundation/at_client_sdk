@@ -13,12 +13,15 @@ import 'package:at_lookup/at_lookup.dart';
 /// key, the first enrollment is approved, every `pkam:` succeeds and every
 /// `update:` and `delete:` is done.
 class FakeCramAtServer {
-  FakeCramAtServer(this.atSign, {required this.cramReply});
+  FakeCramAtServer(this.atSign, {required this.cramReply, this.answer});
 
   final String atSign;
 
   /// The atServer's one-line answer to `cram:`.
   final String cramReply;
+
+  /// Answers a command in place of the answers above when it returns one.
+  final String? Function(String command)? answer;
 
   /// Every command the client wrote, in order.
   final List<String> written = <String>[];
@@ -38,6 +41,8 @@ class FakeCramAtServer {
   Iterable<String> get froms => written.where((c) => c.startsWith('from:'));
 
   String? _replyTo(String command) {
+    final answered = answer?.call(command);
+    if (answered != null) return answered;
     if (command.startsWith('from:')) {
       final random = Random.secure();
       String hex(int length) => List.generate(length, (_) => random.nextInt(16))
