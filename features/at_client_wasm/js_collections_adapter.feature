@@ -7,24 +7,6 @@ Feature: The JS collections adapter translates onto AtCollection
   no defaults, no sorting, no caching, no type filter. Items are addressed by
   id and owner. A failure rejects with a W8 code (js-api.md §6).
 
-  Races: a write re-reads the item right before writing and writes recipient
-  copies with unshareWithOthers false, so a recipient another device added
-  since the last read is never removed. A share passes the union of the
-  re-read recipients and the new ones to updateSharedWith. Two devices
-  writing the item's data at once still end last-writer-wins, as upstream.
-  Replay: none arise; the adapter issues the same AtCollection calls an app
-  would and nothing it accepts is signed or checked for freshness here.
-  DoS: every call is one AtCollection call plus at most one re-read, and a
-  watch holds one subscription that cancel releases. A record this device
-  cannot read is reported in the `unreadable` list of a list or query and
-  does not fail the listing, so one peer's record never blocks the others.
-  Forgery and impersonation: every item carries the owner AtCollection read
-  from the key, and a write to an item owned by another atSign is refused
-  before it reaches AtCollection, so a peer's id can never turn into a write
-  of the caller's own item. Atsigns are normalised and validated by
-  toAtsign. An item id must match ^[a-z0-9][a-z0-9_-]{0,63}$ on every
-  address, so no id reaches AtCollection outside that set.
-
   Scenario: An open passes namespace, expiration, type and eventSource through unchanged
     Given a client
     When the adapter opens "todos.demo" with type "Todo", 5 hours and each eventSource

@@ -222,7 +222,7 @@ product; the compiler is a packaging decision.*
    point's `main()`, so it tree-shakes out of any Dart application that imports
    `at_client_wasm` as a library.
 4. **JS objects built from item data have a null prototype.** Item `data`, `sharedWith`
-   entries and every other value a peer can write reach JavaScript only through the
+   entries and every other value read from an item reach JavaScript only through the
    facade's conversion, which creates each object with `Object.create(null)` (or an
    equivalent). Keys such as `__proto__` or `constructor` are then plain properties.
 
@@ -465,8 +465,7 @@ still rejects with `W8_UNREADABLE`.
   overlap can overwrite each other, as upstream (last writer wins).
 
 A write to an item whose owner is not the client's atSign rejects with `W8_NOT_OWNER` before
-any `AtCollection` call: `draft` always stamps the client's own atSign, so translating such a
-write would otherwise write the caller's own item under a peer's id.
+any `AtCollection` call.
 
 A `where` path is dotted (`'meta.prio'`) and reads `['obj', ...segments]`; a missing step
 reads as null. `==`/`!=` map to `eq`/`neq`, `isNull`/`isNotNull` to the nullable field, and
