@@ -378,6 +378,22 @@ void main() {
     expect(await c.exists('_a', bob), isTrue);
   });
 
+  test(
+      'Given an id containing U+0000, when get is called, then ArgumentError is thrown and nothing is read',
+      () async {
+    final c = await todos();
+    await expectLater(c.get('a\u0000b', alice), refusesStructure('a\u0000b'));
+    expectNothingRead();
+  });
+
+  test(
+      'Given an id containing U+009B, when get is called, then ArgumentError is thrown and nothing is read',
+      () async {
+    final c = await todos();
+    await expectLater(c.get('a\u009bb', alice), refusesStructure('a\u009bb'));
+    expectNothingRead();
+  });
+
   // A new item's id
 
   test(

@@ -181,6 +181,20 @@ Feature: AtCollection checks every item id before using it in a key
     When exists is called with the id "_a" and the owner @bob
     Then it returns true
 
+  @forgery
+  Scenario: Given an id containing U+0000, when get is called, then ArgumentError is thrown and nothing is read
+    Given a collection "todos.demo" of @alice
+    When get is called with the id "a", U+0000 and "b" and the owner @alice
+    Then ArgumentError is thrown
+    And nothing is read
+
+  @forgery
+  Scenario: Given an id containing U+009B, when get is called, then ArgumentError is thrown and nothing is read
+    Given a collection "todos.demo" of @alice
+    When get is called with the id "a", U+009B and "b" and the owner @alice
+    Then ArgumentError is thrown
+    And nothing is read
+
   # A new item's id
 
   @dos
