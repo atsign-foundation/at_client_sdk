@@ -15,6 +15,7 @@ import 'package:test/test.dart';
 void main() {
   late Directory certs;
   late SecureServerSocket server;
+  late SecureServerSocket ipv6Server;
   late List<String> lines;
   late SecureSocketConfig trusting;
 
@@ -23,7 +24,7 @@ void main() {
     final made = await Process.run('openssl', [
       'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', //
       '-subj', '/CN=127.0.0.1',
-      '-addext', 'subjectAltName=IP:127.0.0.1',
+      '-addext', 'subjectAltName=IP:127.0.0.1,IP:::1',
       // NOTE: macOS verifies through the system, which refuses a self-signed
       // certificate that names no server use.
       '-addext', 'extendedKeyUsage=serverAuth',
@@ -36,43 +37,51 @@ void main() {
     // NOTE: the transport trusts pathToCerts through
     // SecurityContext.defaultContext, which is this file's isolate's own.
     trusting = SecureSocketConfig()..pathToCerts = '${certs.path}/cert.pem';
+    final serverContext = SecurityContext()
+      ..useCertificateChain('${certs.path}/cert.pem')
+      ..usePrivateKey('${certs.path}/key.pem');
     server = await SecureServerSocket.bind(
-        InternetAddress.loopbackIPv4,
-        0,
-        SecurityContext()
-          ..useCertificateChain('${certs.path}/cert.pem')
-          ..usePrivateKey('${certs.path}/key.pem'));
-    // NOTE: a client that hangs up mid-handshake surfaces here, not on a
-    // socket; it is noise, and unhandled it fails setUpAll after the tests.
-    server.listen((socket) {
-      socket
-          .cast<List<int>>()
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((line) {
-        lines.add(line);
-        socket.write('data:ok\n@alice@');
+        InternetAddress.loopbackIPv4, 0, serverContext);
+    ipv6Server = await SecureServerSocket.bind(
+        InternetAddress.loopbackIPv6, 0, serverContext);
+    for (final listening in [server, ipv6Server]) {
+      // NOTE: a client that hangs up mid-handshake surfaces here, not on a
+      // socket; it is noise, and unhandled it fails setUpAll after the tests.
+      listening.listen((socket) {
+        socket
+            .cast<List<int>>()
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .listen((line) {
+          lines.add(line);
+          socket.write('data:ok\n@alice@');
+        }, onError: (_) {});
       }, onError: (_) {});
-    }, onError: (_) {});
+    }
   });
 
   setUp(() => lines = []);
 
   tearDownAll(() async {
     await server.close();
+    await ipv6Server.close();
     certs.deleteSync(recursive: true);
   });
 
   /// A lookup built by `secureSocketLookUps()` for `@alice` at [rootDomain],
-  /// connecting to the test server, that has run `noop:0`.
+  /// connecting to the test server, that has run `noop:0`. With a
+  /// [rootPort] the lookup finds the server through its own default finder,
+  /// from the root alone.
   Future<void> runCommandAt(String rootDomain,
-      {Future<void> Function(AtCommandExecutor connection)? onConnect}) async {
+      {int? rootPort,
+      Future<void> Function(AtCommandExecutor connection)? onConnect}) async {
     final lookUp = secureSocketLookUps(config: trusting, onConnect: onConnect)(
         atSign: '@alice',
-        rootDomain: AtRootDomain(rootDomain, 443),
+        rootDomain: AtRootDomain(rootDomain, rootPort ?? 443),
         authenticator: null,
-        secondaryAddressFinder:
-            FixedSecondaryAddressFinder('127.0.0.1', server.port));
+        secondaryAddressFinder: rootPort == null
+            ? FixedSecondaryAddressFinder('127.0.0.1', server.port)
+            : null);
     try {
       await lookUp
           .executeCommand('noop:0\n')
@@ -99,6 +108,15 @@ void main() {
 
       expect(lines, ['from:@alice', 'noop:own', 'noop:0']);
     });
+  });
+
+  test(
+      'Given a proxy root naming a bracketed IPv6 literal, when a lookup built '
+      'by secureSocketLookUps() runs a command, then it reaches the proxy at '
+      'that address and from:<atSign> comes first', () async {
+    await runCommandAt('proxy:[::1]', rootPort: ipv6Server.port);
+
+    expect(lines, ['from:@alice', 'noop:0']);
   });
 
   group('Given a lookup built by secureSocketLookUps() for a plain root', () {

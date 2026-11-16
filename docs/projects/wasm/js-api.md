@@ -221,11 +221,17 @@ product; the compiler is a packaging decision.*
 3. **Dart consumers do not pay for it.** The facade is reachable only from that entry
    point's `main()`, so it tree-shakes out of any Dart application that imports
    `at_client_wasm` as a library.
+4. **JS objects built from item data have a null prototype.** Item `data`, `sharedWith`
+   entries and every other value read from an item reach JavaScript only through the
+   facade's conversion, which creates each object with `Object.create(null)` (or an
+   equivalent). Keys such as `__proto__` or `constructor` are then plain properties.
 
 ```
 packages/at_client_wasm/
   lib/at_client_wasm.dart        # Dart-facing platform impls — unchanged by this doc
   lib/src/js/                   # the @JSExport facade, marshalling, error mapping
+  lib/src/collections/          # js_collections_adapter.dart: Dart-side translation onto
+                                #   AtCollection, unexported, VM-tested (§5.5)
   web/at_client_js.dart         # main() that installs the facade  ← dart compile js
   npm/src/                      # index.ts + shim.ts — hand-written TypeScript, the ONLY
                                 #   hand-maintained facade source
@@ -317,9 +323,10 @@ with typed Dart peers, not yet write-compatible.**
 `writeTypeTag`, and `_resolveType` falls back to it before `n/a` when no factory is
 registered for the item's type. The same change adds a per-client reopen check: a
 namespace reopened on the same client so that a new item would be stamped with another
-tag throws `ArgumentError`. The JS binding still has to
-adopt `writeTypeTag` before JS writes stop stamping `n/a`; until then the gap above
-holds for JS consumers.
+tag throws `ArgumentError`. The Dart-side adapter
+(§5.5) passes `type` straight through as `writeTypeTag`, so records it writes carry the
+declared tag (T6.9). JS consumers get this once the `@JSExport` facade exposes the
+adapter; until then the gap above holds for them.
 
 ### 5.3 The surface
 
@@ -414,6 +421,66 @@ paragraph as the code above, not buried in §10:**
 | `subCollection` / `getDescendant` | in scope, same declared-tag mechanism as the root | verify the `fromJson`/`typeTag` XOR check behaves identically to `AtClient.collection`'s (measured only for the root) |
 | `watchWithTree` / `SubSpec` | **excluded** | `SubSpec` has no exported opener (`collections_test_hooks.dart:168`, `@visibleForTesting`, not in the barrel) — blocked on an upstream export, not a design choice |
 
+### 5.5 The Dart-side collections adapter
+
+`packages/at_client_wasm/lib/src/collections/js_collections_adapter.dart` is the layer the
+`@JSExport` facade calls. No library directly under `lib/` exports it. It is plain Dart with no
+interop imports, so it runs under `dart test` on the VM, and `web/at_client_wasm_entry.dart`
+reaches every operation so both dart2js and dart2wasm compile it.
+
+It **only translates**: plain values in, `AtCollection` calls, plain values out. It adds no
+behaviour of its own. In particular it does **not** do the facade conveniences in §5.3:
+namespace auto-qualification, defaulting `expiration` or `eventSource`, `orderByPath` and
+`limit`, a type filter, or a `(name, type)` registry. Where §5.3 shows them, that layer
+does not exist yet.
+
+| Operation | `AtCollection` call | Rule |
+| --- | --- | --- |
+| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `expirationMs` must be positive, else `COLLECTION_INVALID_ARGUMENT` |
+| `create(data, {id, sharedWith})` | `create` | a given `id` must match the item-id rule below |
+| `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent; an unreadable item rejects `COLLECTION_ITEM_UNREADABLE` |
+| `list()` | `getItemsAsStream()` with a per-item error handler | resolves `{items, unreadable}` (below); upstream order; never re-sorted |
+| `query([{path, op, value}])` | `getItemsAsStream()` with a per-item error handler, then each clause's `Predicate` applied to the readable items | clauses AND together; resolves `{items, unreadable}`; upstream order |
+| `update({id, owner}, data)` | re-read `get`, then `update(draft, unshareWithOthers: false)` | the draft keeps the re-read `sharedWith`, `expiresAt`, `availableAt` |
+| `share({id, owner}, atSigns)` | re-read `get`, then `updateSharedWith(item, reread ∪ atSigns, unshareWithOthers: false)` | add-only; never `update` with a stale `sharedWith` |
+| `remove({id, owner}, {cascade})` | re-read `get`, then `delete` | |
+| `watch(onEvent, {onError}) → cancel` | `watch().listen` | callbacks (D-9); `cancel()` returns a Future that completes once the subscription is cancelled |
+
+**Item ids.** An id given to `create`, or in the address of `get`, `update`, `share` and
+`remove`, must match `^[a-z0-9][a-z0-9_-]{0,63}$`, else the call rejects with
+`COLLECTION_INVALID_ARGUMENT` before any `AtCollection` call. When `create` is given no id,
+`AtCollection` generates one.
+
+**List and query results.** `list()` and `query()` resolve to
+`{items, unreadable}`. `items` holds every readable item, in upstream order.
+`unreadable` holds one `{id, owner, code}` per record this device cannot read, where `code`
+is `COLLECTION_ITEM_UNREADABLE`; an unreadable record does not fail the call. `get()` of such an item
+still rejects with `COLLECTION_ITEM_UNREADABLE`.
+
+**Known limits.**
+
+- Items that Dart apps wrote with ids outside the id rule appear in `list()` and `query()`
+  but cannot be addressed from JS. This includes a peer's item: `list()` can return an item
+  whose id `get()` refuses with `COLLECTION_INVALID_ARGUMENT`. It happens only when a writer
+  other than this adapter used a non-conforming id; the adapter's own `create` never does.
+- Await each write on an item before starting the next. Two writes to one item that
+  overlap can overwrite each other, as upstream (last writer wins).
+
+A write to an item whose owner is not the client's atSign rejects with `COLLECTION_ITEM_NOT_OWNER` before
+any `AtCollection` call.
+
+A `where` path is dotted (`'meta.prio'`) and reads `['obj', ...segments]`; a missing step
+reads as null. `==`/`!=` map to `eq`/`neq`, `isNull`/`isNotNull` to the nullable field, and
+`<`/`<=`/`>`/`>=` to `isNotNull.and(lt|lte|gt|gte)` with a number or string value. The five
+reserved `PredicateOp`s are not accepted.
+
+Events map to `{type, id, owner, ...}` with `type` one of `updated`, `deleted`
+(`wasExpired`), `available` (`availableAt`), `expiringSoon` (`expiresAt`, `leadTimeMs`),
+`readReceipt` (`from`, `readAt`), `subItemUpdated`/`subItemDeleted` (`ancestry`), and
+`unknown` for a subtype the adapter does not know (T6.8). The adapter reads no item for an
+event, so an unreadable item's event still arrives with its id and owner. Times are
+milliseconds since the epoch.
+
 ---
 
 ## 6. Error mapping
@@ -436,8 +503,8 @@ classes), the facade must catch on the Dart side and rethrow a JS-shaped error:
 
 ```ts
 class AtError extends Error {
-  readonly code: string;      // stable, from AtExceptionCodes
-  readonly kind: string;      // e.g. 'AtKeyException'
+  readonly code: string;      // stable; collection codes are listed in §6.1
+  readonly kind: string;      // e.g. 'AtKeyNotFoundException'
   readonly retriable: boolean;
 }
 ```
@@ -455,6 +522,38 @@ the boundary.** The facade catches `CollectionOpException`, and rethrows a singl
 equivalent structured field) carries the mapped `OpFailure.reason` entries. A JS consumer
 sees one `AtError` shape regardless of whether the underlying failure was a single
 exception or a batch of `OpFailure`s — never a tuple, never a second thrown type.
+
+### 6.1 Collection error codes
+
+Every collections adapter operation (§5.5) returns a Future that rejects with one
+`JsCollectionsError {code, message, id?, owner?, kind?, failures}`, which the facade turns
+into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` names
+the underlying error from a fixed set (`AtKeyNotFoundException`, `InvalidAtSignException`,
+`CItemReadException`, `AtClientException`, `AtException`, `StateError`, `ArgumentError`,
+`TimeoutException`, `FormatException`), or is `Unknown`; it is never read from the runtime
+type, which dart2js minifies. A watch reports stream errors to `onError` in the
+same shape. The codes are a registry of their own, not the at_commons `AT00xx` codes: those
+name the atServer and client failures of key operations, and none of them says "the item is
+owned by another atSign" or "some of the key writes landed". Codes that describe one item are
+`COLLECTION_ITEM_*`; the rest are `COLLECTION_*`. `COLLECTION_NOT_FOUND` would read as a missing
+collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollectionsError` is an `AtException`, so callers that catch
+`AtException` also catch it; the JS shape is unchanged.
+
+| Code | Raised for | Upstream source |
+| --- | --- | --- |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign, or an item id outside `^[a-z0-9][a-z0-9_-]{0,63}$` | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
+| `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
+| `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
+| `COLLECTION_ITEM_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
+| `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing | `CItemReadException`. The message names the id and owner, not the cause |
+| `COLLECTION_ITEM_WRONG_TYPE` | update of an item whose stored type tag is another type's. An untagged (`n/a`) item is adopted. Share and remove work on an item of any type | adapter check on the item as just re-read |
+| `COLLECTION_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
+| `COLLECTION_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
+| `COLLECTION_FAILED` | anything else; `kind` names it | |
+
+Schema errors get a `COLLECTION_*` code from §6.1 when the persisted collection record and its schema validation
+land. Until then no adapter operation validates data against a schema.
 
 ---
 
@@ -738,8 +837,8 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   binding writes stamps `type: 'n/a'` and cannot be rehydrated as a typed object by a
   Dart peer app. This is a real interop gap for a mixed JS+Dart fleet, not a documentation
   nicety — see [§11](#11-open-questions) JS-7. (Route A is implemented upstream in
-  at_client 4.1.0, unreleased; the JS binding has yet to adopt it — see the 2026-11-14
-  status note in §5.2.)
+  at_client 4.1.0, unreleased, and the §5.5 adapter adopts it; JS consumers get it once
+  the facade exposes the adapter — see the 2026-11-14 status note in §5.2.)
 
 ---
 
@@ -787,9 +886,9 @@ achievable unilaterally in the facade. **Resolve on upstream's answer to the add
 change; document the gap and ship read-compatibility in the meantime.**
 
 *Status, 2026-11-14:* upstream has implemented route A as `writeTypeTag` in at_client
-4.1.0 (unreleased), together with a per-client reopen check in `AtClient.collection`
-that throws `ArgumentError`. The JS binding has yet to adopt it, so JS writes
-still stamp `n/a`; route B stays documented as the fallback.
+4.1.0 (unreleased), together with a per-client reopen check in
+`AtClient.collection` that throws `ArgumentError`. The §5.5 adapter adopts it; JS writes still stamp
+`n/a` until the facade exposes the adapter. Route B stays documented as the fallback.
 
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
 `packages/at_client/lib/src/manager/at_client_manager.dart` holds a

@@ -35,6 +35,8 @@ for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer sto
 
 > ## ⚠️ Scope change, 2026-08-30 (amended 2026-09-06) — V1 ships remote-only
 >
+> **Narrowed 2026-11-13:** the remote-only storage classes were deleted from [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430); the V1 session runs on `InMemoryAtClientStorage` ([`decisions.md`](decisions.md) D-18, reversed). The task group named below is not built.
+>
 > The first browser release **ships** a remote-only storage bundle as its default: no
 > SQLite, no VFS, no `sqlite3.wasm`, no Hive in the shipped payload. It is a default, not a
 > prohibition — under D-12 storage is an injected bundle, so the SQLite, `:memory:` and Hive
@@ -1029,11 +1031,11 @@ count is sound for at_client's own sync service, and the extension seam is fine 
 
 ## 5b. The browser-lane build, PB-3…PB-7 (2026-10-18)
 
-The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column was re-read with `gh` on 2026-11-05. **PB-4 A has landed on trunk** (`at_lookup` 4.0.0 with `at_lookup_web.dart`) and PB-3 has **partly** landed (the `hive.dart`, `memory.dart` and `sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate; `at_utils` 4.0.0 too). The 4.0.0 package set (`at_client`, `at_lookup`, `at_auth`, `at_utils`; `at_onboarding_cli` and `at_policy` 2.0.0) is on pub.dev since 2026-11-04. The remote-only pieces (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) are **not** on trunk, and `packages/at_client_wasm` and `at_chops_web.dart` are not either; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
+The work was executed as numbered stacks (PB-n), not as the P/X/W task ids above. This is the crosswalk and the current state. The State column was re-read with `gh` on 2026-11-05. **PB-4 A has landed on trunk** (`at_lookup` 4.0.0 with `at_lookup_web.dart`) and PB-3 has **partly** landed (the `hive.dart`, `memory.dart` and `sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate; `at_utils` 4.0.0 too). The 4.0.0 package set (`at_client`, `at_lookup`, `at_auth`, `at_utils`; `at_onboarding_cli` and `at_policy` 2.0.0) is on pub.dev since 2026-11-04. The remote-only pieces (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) are **not** on trunk and were deleted from #2430 on 2026-11-13 (D-18 reversed), and `packages/at_client_wasm` and `at_chops_web.dart` are not either; the PB-5 N row was amended 2026-10-27 for K-10/K-11. The merge order is a separate landing plan (21 open PRs in four tiers: trunk roots, the PB-3 chain, web lookups, `at_client_wasm`; merge commits bottom-up, integration branches never merged).
 
 | Stack | Delivers | Nearest task ids | PRs | State |
 | --- | --- | --- | --- | --- |
-| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263) closed, superseded by #2415, which shipped the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open; the remote-only classes are in #2430. [`pb3-storage-bundle.md`](pb3-storage-bundle.md) |
+| PB-3 | Storage bundle, remote-only client, `hive.dart` barrel, io split, wasm gate, X-R2 interop | X1–X6, I-sweep for `at_client`, T0 gate for `at_client` | #2257–#2263, #2273–#2276, #2336 | **partly landed**: stages 4–5 (#2262, #2263) closed, superseded by #2415, which shipped the barrels, `at_client` 4.0.0 and the gate; #2257 closed; #2258–#2261, #2273–#2276 and #2336 open; the remote-only classes were deleted from #2430 (D-18 reversed, 2026-11-13), which runs on `InMemoryAtClientStorage`. [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md) (superseded) |
 | PB-4 A | `WebSocketTransport` + `at_lookup_web.dart`, `at_lookup` 4.0.0 | T1–T7 | #2399 | **landed on trunk** via #2415; at_lookup 4.0.0 on pub.dev (T8 done) |
 | PB-4 B | `at_client` web `defaultLookUps` branch | W1 (transport leg) | #2266 | closed 2026-11-02, not merged |
 | PB-4 C | `at_chops_web.dart`: WebCrypto AES-CTR, envelope-selectable Argon2id/PBKDF2 | C1–C4 | #2265 | open, draft |
@@ -1138,8 +1140,8 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 - **W1 — New package.** The three legs of the platform bundle
   ([`design.md` §4](design.md#4-the-platform-bundle-capabilities-are-parameters-on-the-doors)): a WebSocket-backed `AtLookupMuxable` against
-  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, a remote-only `AtClientStorage` as the
-  V1 default ([`decisions.md`](decisions.md) D-18; a web SQLite one is V2, behind P1–P4),
+  `wss://<host>:<port>/ws` behind an `AtLookUpFactory`, `InMemoryAtClientStorage` for
+  the V1 session ([`decisions.md`](decisions.md) D-18, reversed 2026-11-13; a web SQLite one is V2, behind P1–P4),
   a web `WrittenAtKeysIo` subtype; plus web connectivity and console logging.
 - **W2 — Browser test harness** for the T3 and T4 gates: a page that loads the module
   and drives a virtualenv atServer. First run must confirm
@@ -1164,20 +1166,23 @@ Builds on W1. Adds no Dart package — everything lands inside `at_client_wasm`.
 a flat ~25-method surface; that surface is removed, not extended. `AtCollection<T>`
 (`packages/at_client/lib/src/collections/collections.dart`) is now the sole facade target.
 
-- **J1 — Layer B, the collections-shaped facade.** `packages/at_client_wasm/lib/at_easy.dart`
-  (pure Dart, zero interop imports — `api-designing.md` §2.3): `AtEasy.collection<T>()`,
-  `AtEasyCollection<T>` (`create`/`update`/`share`/`remove`/`where`/`watch`), `AtEasyItem<T>`
-  (`data`, not `obj` — the ergonomic fix), `AtEasyQuery<T>`. `where(path, op, value)` builds
-  the `PathField`/`Predicate` AST internally — `Predicate` is not serializable upstream
-  (private `CmpPredicate._`, closure `PathField.extract`), so this bridge is Layer B's job,
-  never Layer C's. Namespace auto-qualification and `expiration` defaulting live here too.
-  → T6.3
-- **J1a — The declared-`typeTag` registry (D-11).** Layer B tracks `(name, type)` →
-  collection, enforcing the tag as mandatory at `collection()` call time. Ships with
-  write-compatibility documented as open (JS-7): every JS-written record stamps `'n/a'` on
-  the wire until route A (upstream `writeTypeTag`) or route B (a bounded carrier-class
-  shim, verified viable via `CItem.toJson()`/`jsonEncode`) lands. Do not silently attempt
-  route B without a decision recorded in `decisions.md` — it has a real ceiling.
+- **J1 — The Dart-side collections adapter.**
+  `packages/at_client_wasm/lib/src/collections/js_collections_adapter.dart` (pure Dart,
+  zero interop imports, exported from no library under `lib/`), specified in
+  `js-api.md` §5.5. It only translates plain values onto `AtCollection` and back: items
+  addressed by `{id, owner}`; writes re-read first and share add-only through
+  `updateSharedWith(..., unshareWithOthers: false)`; `where(path, op, value)` clauses map
+  onto `wherePath`, because `Predicate` is not serializable upstream (private
+  `CmpPredicate._`, closure `PathField.extract`); events go to callbacks; failures reject
+  with the collection error codes in `js-api.md` §6.1. Namespace auto-qualification, `expiration`
+  defaulting, ordering and limits are **not** in it. It replaces the `AtEasy` facade
+  proposed in #2481, per D-27 (`decisions.md`, accepted 2026-11-16). Scenarios: `features/at_client_wasm/js_collections_adapter.feature`.
+  → T6.3, T6.9
+- **J1a — The declared `typeTag` (D-11): route A.** Upstream `writeTypeTag` on
+  `AtClient.collection` stamps the declared tag on every record a collection writes.
+  The adapter passes `type` straight through as `writeTypeTag`, so a JS-written record
+  carries its declared tag on the wire on the Dart side (T6.9 stays expected-red until the facade exposes the adapter). Scope per D-27. There is no `(name, type)` registry and no
+  carrier-class shim (route B). Read-compatibility with typed Dart peers is unchanged.
 - **J1b — Verify `subCollection`'s `fromJson`/`typeTag` XOR check.** `js-api.md` §5.4
   measured the omit-both escape (F1) only for the root `AtClient.collection()`; confirm
   `subCollection` behaves identically before binding it.
@@ -1208,17 +1213,18 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   precedent). Ship the `.js.map`.
 - **J7 — T6 harness**, timeout-bounded throughout, plus a sample TS consumer that
   `tsc --noEmit` type-checks against the published typings. Extend T6.3 to cover
-  `CItem`/`CEvent`/`Predicate` (not just `Future`/`Stream`/`List`/`Uint8List`), and add a
-  gate asserting a JS-written record carries its declared `typeTag` correctly once J1a's
-  route is chosen. → T6.1, T6.2, T6.7
+  `CItem`/`CEvent`/`Predicate` (not just `Future`/`Stream`/`List`/`Uint8List`). The
+  declared-`typeTag` gate (T6.9) is expected-red until the facade exists; the Dart-side adapter test passes through J1a.
+  → T6.1, T6.2, T6.7
 - **J8 — Resolve JS-1**: measure which implementation `cryptography` selects under
   dart2js and whether Web Crypto removes the deferred Argon2id work
   ([`design.md`](design.md) §2.10).
 - **J9 — Resolve JS-7**: raise the additive `writeTypeTag` change upstream; fall back to
   J1a's carrier-class shim only if declined. *Status, 2026-11-14:* upstream
   `writeTypeTag` is implemented in at_client 4.1.0 (unreleased), with a
-  per-client reopen check (`ArgumentError` from `AtClient.collection`). Still open here: the JS
-  binding adopting it, so JS writes stop stamping `n/a`.
+  per-client reopen check (`ArgumentError` from `AtClient.collection`), and the J1 adapter
+  adopts it. Still open here: the facade exposing the adapter, so JS writes stop stamping
+  `n/a`.
 - **J10 — Resolve JS-8**: ship the `AtClientManager` singleton documented as one atSign
   per page/process, plus a Layer B `AtFailure.alreadyInitialised` on a second distinct
   atSign (~10 lines) — converts silent state corruption into a clear error.

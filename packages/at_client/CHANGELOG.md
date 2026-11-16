@@ -1,4 +1,4 @@
-## 4.1.0
+## 4.1.0-rc.1
 
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
   putMeta or delete whose request options leave `useRemoteAtServer` unset
@@ -60,7 +60,7 @@
 - fix: a refusal that quotes an envelope's enrollment id or namespace, a
   record's key id or Atsign, or the `_apsk` value `verifyEnvelopeSignature`
   fetched shows it escaped and cut to 80 characters.
-- chore: requires at_auth 4.1.0.
+- chore: requires at_auth 4.1.0-rc.1.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata
@@ -91,6 +91,10 @@
   `resumeEnrollment` throws them.
 - fix: `Atsign.enroll` refusing a keys store that holds live keys says to give
   the new enrollment a keys store of its own.
+- feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
+  first activation in place of a minted one; a pair that does not sign under
+  the activation's algorithm is refused with `AtSigningException` before
+  anything is enrolled. Requires at_auth 4.1.0-rc.1.
 
 ## 4.0.0
 

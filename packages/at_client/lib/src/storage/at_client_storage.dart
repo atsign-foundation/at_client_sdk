@@ -6,6 +6,12 @@ import 'package:meta/meta.dart';
 
 /// The local storage one [AtClient] holds: its keystore and its sync queue.
 ///
+/// A storage is storage on the device and nothing else: it holds no
+/// connection, sends nothing to an atServer and decides no routing. An
+/// operation goes to the atServer when `useRemoteAtServer` on its request, or
+/// `AtClientPreference.remoteLocalPref` for the whole client, says so. When
+/// nothing durable is wanted, use `InMemoryAtClientStorage`.
+///
 /// An app chooses a backend from its own import: `HiveAtClientStorage` from
 /// `package:at_client/hive.dart`, `SqliteAtClientStorage` from
 /// `package:at_client/sqlite.dart`, or `InMemoryAtClientStorage` from
