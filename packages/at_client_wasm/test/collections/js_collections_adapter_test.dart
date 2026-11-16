@@ -257,27 +257,56 @@ void main() {
           _rejectsWith(CollectionErrorCodes.failed, kind: 'StateError'));
     });
 
-    test('An error of a type the adapter does not know has kind "Unknown"',
-        () async {
-      alice.failNextCollection(_LaterError());
+    group('An error kind is a name the adapter knows or "Unknown"', () {
+      test('An open fails with a known kind named by its literal', () async {
+        alice.failNextCollection(AtKeyNotFoundException('gone'));
+        await expectLater(
+            open(),
+            _rejectsWith(CollectionErrorCodes.notFound,
+                kind: 'AtKeyNotFoundException'));
 
-      await expectLater(
-          open(), _rejectsWith(CollectionErrorCodes.failed, kind: 'Unknown'));
-    });
+        alice.failNextCollection(FormatException('bad'));
+        await expectLater(open(),
+            _rejectsWith(CollectionErrorCodes.failed, kind: 'FormatException'));
+      });
 
-    test('A failed key-level write of an unknown reason has kind "Unknown"',
-        () async {
-      final todos = await open();
-      alice.failPutsWith(
-          (key) => key.sharedWith?.toAtsign() == '@bob', _LaterError());
+      test('A key-level write fails with a known kind named by its literal',
+          () async {
+        final todos = await open();
+        alice.failPutsWith((key) => key.sharedWith?.toAtsign() == '@bob',
+            TimeoutException('t'));
 
-      await expectLater(
-        todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
-        throwsA(
-            isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
-          {'op': 'put', 'recipient': '@bob', 'kind': 'Unknown'}
-        ])),
-      );
+        await expectLater(
+          todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
+          throwsA(
+              isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
+            {'op': 'put', 'recipient': '@bob', 'kind': 'TimeoutException'}
+          ])),
+        );
+      });
+
+      test('An error of a type the adapter does not know has kind "Unknown"',
+          () async {
+        alice.failNextCollection(_LaterError());
+
+        await expectLater(
+            open(), _rejectsWith(CollectionErrorCodes.failed, kind: 'Unknown'));
+      });
+
+      test('A failed key-level write of an unknown reason has kind "Unknown"',
+          () async {
+        final todos = await open();
+        alice.failPutsWith(
+            (key) => key.sharedWith?.toAtsign() == '@bob', _LaterError());
+
+        await expectLater(
+          todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
+          throwsA(
+              isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
+            {'op': 'put', 'recipient': '@bob', 'kind': 'Unknown'}
+          ])),
+        );
+      });
     });
 
     test(
