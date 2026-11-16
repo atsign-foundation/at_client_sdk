@@ -239,7 +239,15 @@ void main() {
       });
     }
 
-    for (final port in ['0', '-1', '65536', 'abc']) {
+    for (final port in [
+      '0',
+      '-1',
+      '65536',
+      'abc',
+      '0x1BB',
+      '+443',
+      ' 443',
+    ]) {
       test('throws ArgumentError naming registrarUrl when the port is $port',
           () {
         expect(
@@ -252,6 +260,30 @@ void main() {
             isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
           ),
         );
+      });
+    }
+
+    for (final entry in {
+      '0x1BB': '0x1BB',
+      '+443': '+443',
+      ' 443': ' 443',
+    }.entries) {
+      test(
+          'ArgumentError for port ${entry.key} never echoes registrarUrl '
+          'and is not a FormatException', () {
+        final invalidUrl = '$_registrarUrl:${entry.value}';
+        try {
+          RegistrarAdminService(
+            registrarUrl: invalidUrl,
+            superApiKey: _apiKey,
+            httpClient: _mockResponse({}),
+          );
+          fail('expected an ArgumentError');
+        } catch (e) {
+          expect(e, isNot(isA<FormatException>()));
+          expect(e, isA<ArgumentError>());
+          expect(e.toString().contains(invalidUrl), isFalse);
+        }
       });
     }
   });
@@ -573,8 +605,11 @@ void main() {
       final service = _makeAdminService(client);
       expect(
         () => service.registerAtsign(atsign: '@alice'.toAtsign()),
-        throwsA(isA<RegistrarException>().having(
-            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+        throwsA(isA<RegistrarException>()
+            .having(
+                (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)
+            .having((e) => e.toString().contains('502 Bad Gateway'),
+                'leaks the response body', isFalse)),
       );
     });
 
@@ -668,7 +703,9 @@ void main() {
             .having(
                 (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
             .having((e) => e.statusCode, 'statusCode', 500)
-            .having((e) => e.endpoint, 'endpoint', '/register-atsign/')),
+            .having((e) => e.endpoint, 'endpoint', '/register-atsign/')
+            .having((e) => e.toString().contains('@alice:k'),
+                'leaks the cramkey', isFalse)),
       );
     });
 
@@ -820,19 +857,10 @@ void main() {
       expect(result.cramKey, equals('K'));
     });
 
-    test(
-        'the deprecated superApiKey getter throws instead of returning the '
-        'key', () {
+    test('the deprecated superApiKey getter still returns the key', () {
       final service = _makeAdminService(_mockResponse({}));
-      expect(
-        // ignore: deprecated_member_use_from_same_package
-        () => service.superApiKey,
-        throwsA(
-          predicate(
-            (e) => e is UnsupportedError && !e.toString().contains(_apiKey),
-          ),
-        ),
-      );
+      // ignore: deprecated_member_use_from_same_package
+      expect(service.superApiKey, equals(_apiKey));
     });
 
     test(
@@ -1104,7 +1132,9 @@ void main() {
         throwsA(isA<RegistrarException>()
             .having(
                 (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
-            .having((e) => e.statusCode, 'statusCode', 500)),
+            .having((e) => e.statusCode, 'statusCode', 500)
+            .having((e) => e.toString().contains('Server Error'),
+                'leaks the response body', isFalse)),
       );
     });
 
@@ -1156,8 +1186,11 @@ void main() {
       final service = _makeAdminService(client);
       expect(
         () => service.generateAtSignDeleteToken(['@one']),
-        throwsA(isA<RegistrarException>().having(
-            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+        throwsA(isA<RegistrarException>()
+            .having(
+                (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)
+            .having((e) => e.toString().contains('502 Bad Gateway'),
+                'leaks the response body', isFalse)),
       );
     });
 
@@ -1287,11 +1320,19 @@ void main() {
             200);
       });
       final service = _makeAdminService(client);
-      await service.generateAtSignDeleteToken(['@one']);
+      await service.generateAtSignDeleteToken(['@one', '@two']);
 
       expect(captured.url.scheme, equals('https'));
       expect(captured.url.host, equals(_registrarUrl));
       expect(captured.url.path, equals('/api/app/v4/manage-atsigns/'));
+      expect(captured.headers['Authorization'], equals(_apiKey));
+      expect(
+        jsonDecode(captured.body),
+        equals({
+          'operation': 'deletetoken',
+          'atSigns': ['@one', '@two'],
+        }),
+      );
     });
   });
 
@@ -1352,7 +1393,9 @@ void main() {
         throwsA(isA<RegistrarException>()
             .having(
                 (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
-            .having((e) => e.statusCode, 'statusCode', 500)),
+            .having((e) => e.statusCode, 'statusCode', 500)
+            .having((e) => e.toString().contains('Server Error'),
+                'leaks the response body', isFalse)),
       );
     });
 
@@ -1364,8 +1407,11 @@ void main() {
       final service = _makeAdminService(client);
       expect(
         () => service.deleteAtSigns(token: 'the-token', atSigns: ['@one']),
-        throwsA(isA<RegistrarException>().having(
-            (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+        throwsA(isA<RegistrarException>()
+            .having(
+                (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)
+            .having((e) => e.toString().contains('502 Bad Gateway'),
+                'leaks the response body', isFalse)),
       );
     });
 
@@ -1453,11 +1499,21 @@ void main() {
             200);
       });
       final service = _makeAdminService(client);
-      await service.deleteAtSigns(token: 'the-token', atSigns: ['@one']);
+      await service
+          .deleteAtSigns(token: 'the-token', atSigns: ['@one', '@two']);
 
       expect(captured.url.scheme, equals('https'));
       expect(captured.url.host, equals(_registrarUrl));
       expect(captured.url.path, equals('/api/app/v4/manage-atsigns/'));
+      expect(captured.headers['Authorization'], equals(_apiKey));
+      expect(
+        jsonDecode(captured.body),
+        equals({
+          'token': 'the-token',
+          'atSigns': ['@one', '@two'],
+          'operation': 'delete',
+        }),
+      );
     });
 
     test('throws RegistrarException(malformedResponse) when data is not a Map',

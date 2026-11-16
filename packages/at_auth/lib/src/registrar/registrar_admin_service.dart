@@ -86,11 +86,8 @@ class RegistrarAdminService {
   final String registrarUrl;
   final String _superApiKey;
 
-  /// Dead: always throws. Nothing should read the super key back.
-  @Deprecated('Will be removed in at_auth 5.0.0; already throws, does not '
-      'return the key.')
-  String get superApiKey => throw UnsupportedError(
-      'superApiKey is deprecated and no longer returns the key.');
+  @Deprecated('Will be removed in at_auth 5.0.0.')
+  String get superApiKey => _superApiKey;
 
   /// How long a single registrar request may take before it fails with
   /// [RegistrarFailure.timeout].
@@ -113,6 +110,7 @@ class RegistrarAdminService {
   }
 
   static final _hostPattern = RegExp(r'^[a-zA-Z0-9.-]+$');
+  static final _portPattern = RegExp(r'^[0-9]+$');
 
   static void _validateRegistrarUrl(String registrarUrl) {
     const invalidMessage =
@@ -130,21 +128,19 @@ class RegistrarAdminService {
     if (!_hostPattern.hasMatch(host)) {
       throw ArgumentError(invalidMessage, 'registrarUrl');
     }
-    int explicitPort = 443;
     if (hostAndPort.length == 2) {
-      final port = int.tryParse(hostAndPort[1]);
-      if (port == null || port < 1 || port > 65535) {
+      final rawPort = hostAndPort[1];
+      if (!_portPattern.hasMatch(rawPort)) {
         throw ArgumentError(
             'registrarUrl port must be numeric and between 1 and 65535',
             'registrarUrl');
       }
-      explicitPort = port;
-    }
-    final uri = Uri.https(registrarUrl, '/');
-    if (uri.userInfo.isNotEmpty ||
-        uri.host != host.toLowerCase() ||
-        uri.port != explicitPort) {
-      throw ArgumentError(invalidMessage, 'registrarUrl');
+      final port = int.parse(rawPort);
+      if (port < 1 || port > 65535) {
+        throw ArgumentError(
+            'registrarUrl port must be numeric and between 1 and 65535',
+            'registrarUrl');
+      }
     }
   }
 
