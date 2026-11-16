@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/storage/memory/memory_at_key_value_store.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -118,6 +119,23 @@ void main() {
     expectNothingRead();
     expectNothingWritten();
   }
+
+  /// Gives @alice a local keystore, as the notification mirror writes to it.
+  MemoryAtKeyValueStore stubLocalKeyStore() {
+    final keyStore = MemoryAtKeyValueStore('@alice');
+    final local = MockLocalSecondary();
+    when(() => local.keyStore).thenReturn(keyStore);
+    when(() => atClient.getLocalSecondary()).thenReturn(local);
+    return keyStore;
+  }
+
+  Future<List<String>> keysIn(MemoryAtKeyValueStore keyStore) async =>
+      (await keyStore.getKeys()).toList();
+
+  /// [notification] carrying metadata, as a notification from an atServer
+  /// does.
+  AtNotification withMetadata(AtNotification notification) =>
+      notification..metadata = (Metadata()..ttl = 60000);
 
   /// Stubs @alice's notification service, which a sub-collection subscribes
   /// to; returns how many subscriptions have been opened on it.
@@ -742,6 +760,52 @@ void main() {
     await pumpEventQueue();
 
     expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a notification from @bob with metadata whose key\'s item id is empty, when it reaches the collection, then nothing is written to the local keystore',
+      () async {
+    final keyStore = stubLocalKeyStore();
+    final c = await todos();
+    eventsOf(c);
+
+    notifications.add(withMetadata(
+        fromBob('@alice:.$namespace@bob', value: envelope('from bob'))));
+    await pumpEventQueue();
+
+    expect(await keysIn(keyStore), isEmpty);
+    final warnings = logs.at('WARNING').where((m) => m.contains('item id ""'));
+    expect(warnings, hasLength(1));
+    expect(warnings.single, contains('@bob'));
+
+    notifications
+        .add(withMetadata(fromBob(control, value: envelope('from bob'))));
+    await pumpEventQueue();
+    expect(await keysIn(keyStore), ['cached:$control'],
+        reason: 'the control notification is mirrored');
+  });
+
+  test(
+      'Given a notification from @bob with metadata whose key\'s item id contains ":", when it reaches the collection, then a warning shows the id and @bob and nothing is written to the local keystore',
+      () async {
+    final keyStore = stubLocalKeyStore();
+    final c = await todos();
+    eventsOf(c);
+
+    notifications.add(withMetadata(
+        fromBob('@alice:x:y.$namespace@bob', value: envelope('from bob'))));
+    await pumpEventQueue();
+
+    final warnings = logs.at('WARNING').where((m) => m.contains('"x:y"'));
+    expect(warnings, hasLength(1));
+    expect(warnings.single, contains('@bob'));
+    expect(await keysIn(keyStore), isEmpty);
+
+    notifications
+        .add(withMetadata(fromBob(control, value: envelope('from bob'))));
+    await pumpEventQueue();
+    expect(await keysIn(keyStore), ['cached:$control'],
+        reason: 'the control notification is mirrored');
   });
 
   test(

@@ -2426,6 +2426,7 @@ interface class AtCollection<T> {
         return;
       }
       final parts = _getPartsFromNotifKey(n);
+      if (_refusesEvent(parts)) return;
 
       // Until fsync is done, notifications will race ahead of sync events
       // We need to keep the local keystore current
@@ -2437,7 +2438,6 @@ interface class AtCollection<T> {
           await _deleteLocal(n);
           break;
       }
-      if (_refusesEvent(parts)) return;
 
       if (parts.ancestry.isEmpty) {
         await _handleObjNotificationImpl(n);

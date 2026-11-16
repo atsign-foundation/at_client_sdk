@@ -15,9 +15,9 @@ Feature: AtCollection checks every item id before using it in a key
   refuses one that is empty, contains ".", ":", "@", whitespace or a control
   character, or holds a character a key's name cannot. A notification or data
   event whose item id, ancestor id or subName the check refuses emits no
-  event, and a warning shows the id, escaped on one line, and its owner, never
-  the value. Every other event carries its item id and ancestor ids folded to
-  lower case.
+  event, a notification writes nothing to the local keystore, and a warning
+  shows the id, escaped on one line, and its owner, never the value. Every
+  other event carries its item id and ancestor ids folded to lower case.
 
   Races: two callers in one process, or two clients of one atSign, may use
   the same id at once. The check reads only the id string and runs before
@@ -32,8 +32,8 @@ Feature: AtCollection checks every item id before using it in a key
   id's length, an item another atSign shares under an id starting with "_" can
   still be read by that id, and an event whose ids the check refuses is not
   emitted, so no event hands the app an id its reads refuse; each such event
-  costs one warning, as each notification already costs a log line and a local
-  write (the scenarios tagged @dos).
+  costs one warning and writes nothing to the local keystore, while each other
+  notification costs a log line and a local write (the scenarios tagged @dos).
   Forgery: the app's own code supplies every id, and it holds this atSign's
   keys and could write any key directly; the check matters when an app builds
   an id from input it did not write. Every call refuses an id containing ".",
@@ -341,6 +341,20 @@ Feature: AtCollection checks every item id before using it in a key
     Given a collection "todos.demo" of @alice
     When a notification from @bob arrives for the key "@alice:c1.a:b.p1.todos.demo@bob"
     Then the collection emits no event
+
+  @dos
+  Scenario: Given a notification from @bob with metadata whose key's item id is empty, when it reaches the collection, then nothing is written to the local keystore
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob carrying metadata arrives for the key "@alice:.todos.demo@bob"
+    Then nothing is written to @alice's local keystore
+    And a warning is logged that shows the id "" and the owner @bob
+
+  @dos
+  Scenario: Given a notification from @bob with metadata whose key's item id contains ":", when it reaches the collection, then a warning shows the id and @bob and nothing is written to the local keystore
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob carrying metadata arrives for the key "@alice:x:y.todos.demo@bob"
+    Then a warning is logged that shows the id "x:y" and the owner @bob
+    And nothing is written to @alice's local keystore
 
   @dos
   Scenario: Given a data event for a key @bob shares whose item id contains a tab, when it reaches the collection, then no event is emitted
