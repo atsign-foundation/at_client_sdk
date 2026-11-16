@@ -116,10 +116,11 @@ starting with `_`. A new item's id must be 1 to 64 characters of `a-z`, `0-9`,
 case, so `Todo-1` and `todo-1` name the same item. `subCollection` folds a
 `subName` to lower case and throws `ArgumentError` for one that is empty,
 contains `.`, `:`, `@`, whitespace or a control character, or holds a
-character a key's name cannot. An id that arrives in an event or a listing
-always passes these checks and is folded to lower case: no event is emitted
-for a key whose id, ancestor id or subName they refuse, and `getItems` leaves
-out an item stored under such an id, each with a warning.
+character a key's name cannot. An id that arrives in an event or a listing is
+folded to lower case, is never empty and holds no `.`, `:`, `@`, whitespace or
+control character: no event is emitted for a key whose id, ancestor id or
+subName is empty or holds one, and `getItems` leaves out an item stored under
+such an id, each with a warning.
 
 **Fix:** Omit `id` to get a generated 8-character one, or build ids from
 lower-case letters, digits, `-` and `_` only:
