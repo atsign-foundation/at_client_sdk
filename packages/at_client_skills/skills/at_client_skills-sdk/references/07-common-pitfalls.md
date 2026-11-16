@@ -107,19 +107,19 @@ final todos = await atClient.collection<Todo>(
 ## 6. Item ids and sub-collection names
 
 **Problem:** An item id is the first segment of every key `AtCollection`
-writes or reads for the item. `create`, `upsert`, `draft`, `get`,
-`getOrNull`, `exists`, `getItems` and `getItemsAsStream` throw
-`ArgumentError`, before any read or write, for an id that is empty or
-contains `.`, `:`, `@`, whitespace or a control character; `create`,
-`upsert` and `draft` also refuse one starting with `_`. A new item's id
-must be 1 to 64 characters of `a-z`, `0-9`, `-` and `_`, starting with a
-letter or digit. Every id is folded to lower case, so `Todo-1` and
-`todo-1` name the same item. `subCollection` throws `ArgumentError` for a
-`subName` that is empty or contains `.`, `:`, `@`, whitespace or a control
-character.
-An id that arrives in an event or a listing always passes these checks: no
-event is emitted for a key whose id, ancestor id or subName they refuse, and
-`getItems` leaves out an item stored under such an id, each with a warning.
+writes or reads for the item. `create`, `upsert`, `draft`, `get`, `getOrNull`,
+`exists`, `getItems` and `getItemsAsStream` throw `ArgumentError`, before any
+read or write, for an id that is empty or contains `.`, `:`, `@`, whitespace
+or a control character; `create`, `upsert` and `draft` also refuse one
+starting with `_`. A new item's id must be 1 to 64 characters of `a-z`, `0-9`,
+`-` and `_`, starting with a letter or digit. Every id is folded to lower
+case, so `Todo-1` and `todo-1` name the same item. `subCollection` folds a
+`subName` to lower case and throws `ArgumentError` for one that is empty,
+contains `.`, `:`, `@`, whitespace or a control character, or holds a
+character a key's name cannot. An id that arrives in an event or a listing
+always passes these checks and is folded to lower case: no event is emitted
+for a key whose id, ancestor id or subName they refuse, and `getItems` leaves
+out an item stored under such an id, each with a warning.
 
 **Fix:** Omit `id` to get a generated 8-character one, or build ids from
 lower-case letters, digits, `-` and `_` only:

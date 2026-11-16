@@ -113,8 +113,9 @@ awaits local emission so `watch()` listeners see the update before
 Idempotent write. Creates if not exists, rewrites if it does.
 Use for re-runnable publishers that may restart within the TTL window.
 
-- `id` is checked and folded as for `draft`; when no item has it, it must
-  also meet `create`'s rule for a new id
+- `id` is checked and folded as for `draft`; when a read finds no item with
+  it, it must also meet `create`'s rule for a new id, and an item that cannot
+  be read counts as one that exists
 
 ### `Future<void> update(CItem<T> item, {bool unshareWithOthers = true})`
 
@@ -197,8 +198,9 @@ parent's `eventSource`.
 
 **Constraints:**
 
-- `subName` must be non-empty and must NOT contain `.`, `:`, `@`, whitespace
-  or a control character
+- `subName` is folded to lower case, must be non-empty, and must NOT contain
+  `.`, `:`, `@`, whitespace, a control character or a character a key's name
+  cannot hold
 - `ArgumentError` thrown if the composed namespace would exceed 128 chars, the
   cap that keeps keys inside the atServer key length (max ~11 levels)
 
