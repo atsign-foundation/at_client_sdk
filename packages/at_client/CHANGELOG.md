@@ -27,24 +27,16 @@
 - fix: `AtCollection` folds an item id to lower case wherever it takes one,
   and refuses, with an `ArgumentError` before any read or write, an id that is
   empty or contains `.`, `:`, `@`, whitespace or a control character;
-  `create`, `upsert` and `draft` also refuse an id that starts with `_`. The
-  error's text shows the id escaped on one line. A new item's id, given to
-  `create` or to `upsert` when no item has it, must be 1 to 64 characters of
-  a-z, 0-9, `-` and `_`, starting with a letter or digit. An item already
-  stored under an id the check accepts keeps its id. `upsert` applies that
-  rule only when a read finds no item with the id, and counts an item it
-  cannot read as one that exists. `subCollection` folds a `subName` to lower
-  case, and refuses one that contains `:`, `@`, whitespace, a control
-  character or a character a key's name cannot hold. An event whose item id,
+  `create`, `upsert` and `draft` also refuse an id that starts with `_`. A new
+  item's id must be 1 to 64 characters of a-z, 0-9, `-` and `_`, starting with
+  a letter or digit. An item already stored under an id the check accepts
+  keeps its id. `subCollection` folds a `subName` to lower case, and refuses
+  one that is empty, contains `.`, `:`, `@`, whitespace or a control
+  character, or holds a character a key's name cannot. An event whose item id,
   ancestor id or `subName` the check refuses is not emitted, and a warning
-  names the id and its owner. Nor is an event whose key has an even number of
-  segments before the namespace; its warning names those segments and the
-  owner. A notification refused either way writes nothing to the local
-  keystore. An event's item id is read between its key's leading recipient and
-  trailing sender only. Events carry item and ancestor ids folded to lower
-  case. `getItems` and `getItemsAsStream` leave out an item stored under such
-  an id, with the same warning. `AtCollection` matches a namespace or
-  `subName` literally when it lists keys.
+  names the id and its owner; `getItems` and `getItemsAsStream` leave out an
+  item stored under such an id, with the same warning. `AtCollection` matches
+  a namespace or `subName` literally when it lists keys.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
