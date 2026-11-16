@@ -5,9 +5,11 @@
 - An `AtCollection` item id is folded to lower case, and one holding `.`, `:`,
   `@`, whitespace or a control character is refused; a new item's id is 1 to
   64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit;
-  a `subName` is folded too and must hold only characters a key's name can
-  hold; no event or listed item carries a refused id, and event ids arrive
-  folded (`SKILL.md`; `references/02`, `07`).
+  `upsert` applies that rule only when a read finds no item with the id, and
+  counts an item it cannot read as one that exists; a `subName` is folded too
+  and must hold only characters a key's name can hold; no event or listed item
+  carries a refused id, and event ids arrive folded (`SKILL.md`;
+  `references/02`, `07`).
 - On a `remoteOnly` client, request options that leave `useRemoteAtServer`
   unset follow the preference; only an explicit value overrides it
   (`references/12`).
