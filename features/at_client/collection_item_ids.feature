@@ -16,7 +16,8 @@ Feature: AtCollection checks every item id before using it in a key
   character, or holds a character a key's name cannot. A notification or data
   event whose item id, ancestor id or subName the check refuses emits no
   event, and a warning shows the id, escaped on one line, and its owner, never
-  the value.
+  the value. Every other event carries its item id and ancestor ids folded to
+  lower case.
 
   Races: two callers in one process, or two clients of one atSign, may use
   the same id at once. The check reads only the id string and runs before
@@ -357,3 +358,23 @@ Feature: AtCollection checks every item id before using it in a key
     Given a collection "todos.demo" of @alice
     When a notification from @bob arrives for a key whose item id is 65 "a" characters
     Then the collection emits an update event with that id and the owner @bob
+
+  @dos
+  Scenario: Given a notification from @bob whose key's item id is "Zz", when it reaches the collection, then an update event with the id "zz" is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:Zz.todos.demo@bob"
+    Then the collection emits an update event with the id "zz" and the owner @bob
+
+  @dos
+  Scenario: Given a query watch over an item @bob shares under the id "zz", when notifications from @bob arrive for "Zz" and "ZZ", then every snapshot holds that item once
+    Given a collection "todos.demo" of @alice holding an item @bob shares under the id "zz", with a query watch listening
+    When notifications from @bob arrive for the keys "@alice:Zz.todos.demo@bob" and "@alice:ZZ.todos.demo@bob"
+    Then every snapshot the watch emits holds the item "zz" of @bob once
+
+  @dos
+  Scenario: Given getDescendant has returned an item through the ancestor id "abcd", when it is called with the ancestor id "ABCD", then it opens no further sub-collection
+    Given a collection "todos.demo" of @alice holding an item "abcd" with an item "c1" in its sub-collection "comments"
+    And getDescendant has returned "c1" for the ancestor "abcd" of @alice in "comments"
+    When getDescendant is called for the ancestor "ABCD" of @alice in "comments" and the item "c1"
+    Then it returns "c1"
+    And no further notification subscription is opened

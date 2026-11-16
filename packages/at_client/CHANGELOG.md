@@ -34,9 +34,10 @@
   lower case, and refuses one that contains `:`, `@`, whitespace, a control
   character or a character a key's name cannot hold. An event whose item id,
   ancestor id or `subName` the check refuses is not emitted, and a warning
-  names the id and its owner. `getItems` and `getItemsAsStream` leave out an
-  item stored under such an id, with the same warning. `AtCollection` matches
-  a namespace or `subName` literally when it lists keys.
+  names the id and its owner. Events carry item and ancestor ids folded to
+  lower case. `getItems` and `getItemsAsStream` leave out an item stored under
+  such an id, with the same warning. `AtCollection` matches a namespace or
+  `subName` literally when it lists keys.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than

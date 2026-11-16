@@ -786,4 +786,62 @@ void main() {
 
     expect(events, ['updated "$long" @bob']);
   });
+
+  test(
+      'Given a notification from @bob whose key\'s item id is "Zz", when it reaches the collection, then an update event with the id "zz" is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications.add(fromBob('@alice:Zz.$namespace@bob'));
+    await pumpEventQueue();
+
+    expect(events, ['updated "zz" @bob']);
+  });
+
+  test(
+      'Given a query watch over an item @bob shares under the id "zz", when notifications from @bob arrive for "Zz" and "ZZ", then every snapshot holds that item once',
+      () async {
+    seed('cached:@alice:zz.$namespace@bob', 'from bob');
+    final c = await todos();
+    final snapshots = <List<String>>[];
+    final watching = c.query().watch().listen(
+        (l) => snapshots.add([for (final i in l) '${i.id} ${i.owner}']));
+    addTearDown(watching.cancel);
+    await pumpEventQueue();
+
+    notifications
+      ..add(fromBob('@alice:Zz.$namespace@bob', value: envelope('from bob')))
+      ..add(fromBob('@alice:ZZ.$namespace@bob', value: envelope('from bob')));
+    await pumpEventQueue();
+
+    expect(snapshots, isNotEmpty);
+    expect(snapshots, everyElement(['zz @bob']));
+  });
+
+  test(
+      'Given getDescendant has returned an item through the ancestor id "abcd", when it is called with the ancestor id "ABCD", then it opens no further sub-collection',
+      () async {
+    final opened = stubNotificationService();
+    final c = await todos();
+    final parent = await c.create(obj: 'p', id: 'abcd');
+    await c
+        .subCollection<String>(
+            parent: parent,
+            subName: 'comments',
+            defaultExpiration: const Duration(days: 1))
+        .create(obj: 'leaf', id: 'c1');
+    Future<CItem<String>?> descendant(String ancestorId) =>
+        c.getDescendant<String>(ancestry: [
+          CAncestor(id: ancestorId, subName: 'comments', owner: alice)
+        ], id: 'c1', owner: alice, leafExpiration: const Duration(days: 1));
+    expect((await descendant('abcd'))?.id, 'c1');
+    final openedBefore = opened();
+
+    final item = await descendant('ABCD');
+
+    expect(item?.id, 'c1');
+    expect(opened(), openedBefore,
+        reason: 'no further notification subscription is opened');
+  });
 }

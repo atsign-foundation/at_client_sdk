@@ -1906,7 +1906,7 @@ interface class AtCollection<T> {
     final prefix = StringBuffer();
     for (var i = 0; i < ancestry.length; i++) {
       final ancestor = ancestry[i];
-      prefix.write(ancestor.id);
+      prefix.write(ancestor.id.toLowerCase());
       prefix.write('@');
       prefix.write(ancestor.owner!);
       prefix.write('/');
@@ -2620,7 +2620,7 @@ interface class AtCollection<T> {
     if (fromStr.isNotEmpty) keyName = keyName.replaceAll(fromStr, '');
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) keyName = keyName.substring(0, ix);
-    final parts = keyName.split('.');
+    final parts = keyName.toLowerCase().split('.');
     final ancestry = <CAncestor>[];
     for (int i = parts.length - 1; i >= 2; i -= 2) {
       ancestry.add(CAncestor(id: parts[i], subName: parts[i - 1]));
@@ -2953,7 +2953,7 @@ interface class AtCollection<T> {
     if (ix >= 0) {
       keyName = keyName.substring(0, ix);
     }
-    final parts = keyName.split('.');
+    final parts = keyName.toLowerCase().split('.');
     // parts layout by depth (natural order):
     //   L0 root  : [id]                               (length 1)
     //   L1 sub   : [id, subName, parentId]            (length 3)
@@ -2992,7 +2992,9 @@ interface class AtCollection<T> {
   ///
   /// No event is emitted for a key whose item id, ancestor id or subName
   /// is empty or contains `.`, `:`, `@`, whitespace or a control
-  /// character; a warning names the id and its owner instead.
+  /// character, or whose subName holds a character a key's name cannot; a
+  /// warning names the id and its owner instead. Every other event carries
+  /// its item id, ancestor ids and subNames folded to lower case.
   Stream<CEvent> watch() => _events.stream;
 
   /// Fires when a direct item (at this collection's namespace, depth
@@ -5637,10 +5639,11 @@ final class CSubItemDeleted extends CEvent {
 typedef _CParts = ({
   Atsign from,
 
-  /// The item's own id (at any depth).
+  /// The item's own id (at any depth), folded to lower case.
   String id,
 
-  /// Root-to-direct-parent chain. Empty for a root-level item.
+  /// Root-to-direct-parent chain, folded to lower case. Empty for a
+  /// root-level item.
   List<CAncestor> ancestry,
 });
 
