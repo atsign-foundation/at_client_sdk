@@ -908,4 +908,35 @@ void main() {
     expect(opened(), openedBefore,
         reason: 'no further notification subscription is opened');
   });
+
+  test(
+      'Given a notification from @bob whose key has two segments before the namespace, when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:a.b.$namespace@bob'))
+      ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+    final warnings = logs.at('WARNING').where((m) => m.contains('"a.b"'));
+    expect(warnings, hasLength(1));
+    expect(warnings.single, contains('@bob'));
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s item id is "x@bob", when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:x@bob.$namespace@bob'))
+      ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
 }

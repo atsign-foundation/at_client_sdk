@@ -2454,9 +2454,16 @@ interface class AtCollection<T> {
     }
   }
 
-  /// Whether an event for [parts] is dropped because its item id, an
-  /// ancestor id or a subName is one the reads refuse; logs it if so.
+  /// Whether an event for [parts] is dropped because its key does not name
+  /// an item, or its item id, an ancestor id or a subName is one the reads
+  /// or [subCollection] refuse; logs it if so.
   bool _refusesEvent(_CParts parts) {
+    if (parts.name.split('.').length.isEven) {
+      _logger.warning('Dropped an event for ${_forLog(parts.name)} owned by '
+          '${_forLog('${parts.from}')} in $namespace: an item key has an odd '
+          'number of segments before the namespace');
+      return true;
+    }
     String? refused;
     if (_refusesStructure(parts.id)) {
       refused = 'the id $_structureRule';
@@ -2620,13 +2627,15 @@ interface class AtCollection<T> {
     if (fromStr.isNotEmpty) keyName = keyName.replaceAll(fromStr, '');
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) keyName = keyName.substring(0, ix);
-    final parts = keyName.toLowerCase().split('.');
+    final name = keyName.toLowerCase();
+    final parts = name.split('.');
     final ancestry = <CAncestor>[];
     for (int i = parts.length - 1; i >= 2; i -= 2) {
       ancestry.add(CAncestor(id: parts[i], subName: parts[i - 1]));
     }
     return (
       from: fromStr.toAtsign(),
+      name: name,
       id: parts.first,
       ancestry: ancestry,
     );
@@ -2948,12 +2957,20 @@ interface class AtCollection<T> {
   }
 
   _CParts _getPartsFromNotifKey(AtNotification n) {
-    String keyName = n.key.replaceAll('${n.to}:', '').replaceAll(n.from, '');
+    String keyName = n.key;
+    final recipient = '${n.to}:';
+    if (keyName.startsWith(recipient)) {
+      keyName = keyName.substring(recipient.length);
+    }
+    if (keyName.endsWith(n.from)) {
+      keyName = keyName.substring(0, keyName.length - n.from.length);
+    }
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) {
       keyName = keyName.substring(0, ix);
     }
-    final parts = keyName.toLowerCase().split('.');
+    final name = keyName.toLowerCase();
+    final parts = name.split('.');
     // parts layout by depth (natural order):
     //   L0 root  : [id]                               (length 1)
     //   L1 sub   : [id, subName, parentId]            (length 3)
@@ -2971,6 +2988,7 @@ interface class AtCollection<T> {
     }
     return (
       from: n.from.toAtsign(),
+      name: name,
       id: parts.first,
       ancestry: ancestry,
     );
@@ -2992,9 +3010,11 @@ interface class AtCollection<T> {
   ///
   /// No event is emitted for a key whose item id, ancestor id or subName
   /// is empty or contains `.`, `:`, `@`, whitespace or a control
-  /// character, or whose subName holds a character a key's name cannot; a
-  /// warning names the id and its owner instead. Every other event carries
-  /// its item id, ancestor ids and subNames folded to lower case.
+  /// character, or whose subName holds a character a key's name cannot, or
+  /// whose key does not have an odd number of segments before the namespace;
+  /// a warning names the id, or those segments, and its owner instead. Every
+  /// other event carries its item id, ancestor ids and subNames folded to
+  /// lower case.
   Stream<CEvent> watch() => _events.stream;
 
   /// Fires when a direct item (at this collection's namespace, depth
@@ -5638,6 +5658,9 @@ final class CSubItemDeleted extends CEvent {
 /// Parsed components of a notification key. Private to [AtCollection].
 typedef _CParts = ({
   Atsign from,
+
+  /// The key's segments before the namespace, folded to lower case.
+  String name,
 
   /// The item's own id (at any depth), folded to lower case.
   String id,

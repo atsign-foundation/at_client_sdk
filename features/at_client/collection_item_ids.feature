@@ -16,8 +16,10 @@ Feature: AtCollection checks every item id before using it in a key
   character, or holds a character a key's name cannot. A notification or data
   event whose item id, ancestor id or subName the check refuses emits no
   event, a notification writes nothing to the local keystore, and a warning
-  shows the id, escaped on one line, and its owner, never the value. Every
-  other event carries its item id and ancestor ids folded to lower case.
+  shows the id, escaped on one line, and its owner, never the value. An event
+  whose key does not have an odd number of segments before the namespace emits
+  no event, with the same warning. Every other event carries its item id and
+  ancestor ids folded to lower case.
 
   Races: two callers in one process, or two clients of one atSign, may use
   the same id at once. The check reads only the id string and runs before
@@ -392,3 +394,16 @@ Feature: AtCollection checks every item id before using it in a key
     When getDescendant is called for the ancestor "ABCD" of @alice in "comments" and the item "c1"
     Then it returns "c1"
     And no further notification subscription is opened
+
+  @dos
+  Scenario: Given a notification from @bob whose key has two segments before the namespace, when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:a.b.todos.demo@bob"
+    Then the collection emits no event
+    And a warning is logged that shows "a.b" and the owner @bob
+
+  @dos @forgery
+  Scenario: Given a notification from @bob whose key's item id is "x@bob", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:x@bob.todos.demo@bob"
+    Then the collection emits no event
