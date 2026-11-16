@@ -882,7 +882,7 @@ interface class AtCollection<T> {
   /// id. Throws [ArgumentError] when [id] is empty, starts with `_`, or
   /// contains `.`, `:`, `@`, whitespace or a control character. [create]'s
   /// rule for a new item's id is not applied, so a draft for an item
-  /// already stored under another id can be passed to [update].
+  /// already stored under an id outside that rule can be passed to [update].
   ///
   /// The item holds its own copy of [sharedWith], so a set the app keeps
   /// and passes again is never changed by a write of this item.

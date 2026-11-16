@@ -429,6 +429,12 @@ void main() {
   test(
       'Given a subName containing ":", when subCollection is called, then ArgumentError is thrown',
       () async {
+    final notificationService = MockNotificationService();
+    when(() => notificationService.subscribe(
+            regex: any(named: 'regex'),
+            shouldDecrypt: any(named: 'shouldDecrypt')))
+        .thenAnswer((_) => const Stream.empty());
+    when(() => atClient.notificationService).thenReturn(notificationService);
     final c = await todos();
     final parent = await c.create(obj: 'v', id: 'p1');
 
