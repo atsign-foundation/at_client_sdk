@@ -1,0 +1,18 @@
+# What a file under packages/at_client/lib/src/storage/ may import or export.
+# An entry ending in ':' or '/' admits every URI that starts with it; any other
+# entry admits that URI alone. Rule A7 in docs/architecture/invariants.md.
+# A change to this list needs a code owner's review, in a PR of its own.
+dart:async
+dart:collection
+dart:convert
+dart:io
+package:meta/
+package:path/
+package:hive/
+package:at_commons/
+package:at_utils/
+package:at_persistence_secondary_server/
+package:at_client/src/storage/
+package:at_client/src/sync/at_sync_queue.dart
+package:at_client/src/sync/sync_queue_store.dart
+package:at_client/src/client/at_client_spec.dart

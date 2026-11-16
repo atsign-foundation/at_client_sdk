@@ -64,6 +64,7 @@ void main() {
     Duration ttl = const Duration(days: 7),
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) {
     return collectionWithInjectedNotifications<T>(
       atClient,
@@ -72,8 +73,92 @@ void main() {
       notifications: notifStream.stream,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
     );
   }
+
+  // ---------------------------------------------------------------------------
+  group('writeTypeTag', () {
+    setUp(() {
+      clearFactoriesForTest();
+      // No prior self-key — create's existence probe returns "not found".
+      when(() => atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
+      when(
+        () => atClient.getAtKeys(regex: any(named: 'regex')),
+      ).thenAnswer((_) async => <AtKey>[]);
+    });
+
+    test(
+        'Given a collection with writeTypeTag Todo and no registered factory, when an item is created, then its type is Todo',
+        () async {
+      final c = buildCollection<String>(writeTypeTag: 'Todo');
+      final item = await c.create(obj: 'buy milk', id: 'abc');
+      expect(item.type, 'Todo');
+    });
+
+    test(
+        'Given a collection with no writeTypeTag and no registered factory, when an item is created, then its type is n/a',
+        () async {
+      final c = buildCollection<String>();
+      final item = await c.create(obj: 'buy milk', id: 'abc');
+      expect(item.type, 'n/a');
+    });
+
+    test(
+        'Given an empty writeTypeTag, when a collection is built, then ArgumentError is thrown',
+        () {
+      expect(
+        () => buildCollection<String>(writeTypeTag: ''),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'Given a whitespace-only writeTypeTag, when a collection is built, then ArgumentError is thrown',
+        () {
+      expect(
+        () => buildCollection<String>(writeTypeTag: '  '),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'Given a writeTypeTag that differs from typeTag, when a collection is built, then ArgumentError is thrown',
+        () {
+      expect(
+        () => buildCollection<Widget>(
+          fromJson: Widget.fromJson,
+          typeTag: 'A',
+          writeTypeTag: 'B',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'Given a writeTypeTag equal to typeTag, when an item is created, then its type is that tag',
+        () async {
+      final c = buildCollection<Widget>(
+        fromJson: Widget.fromJson,
+        typeTag: 'A',
+        writeTypeTag: 'A',
+      );
+      final item = await c.create(obj: Widget('w1'), id: 'abc');
+      expect(item.type, 'A');
+    });
+
+    test(
+        'Given a registered factory tag and a different writeTypeTag, when an item is drafted, then its type is the factory tag',
+        () {
+      AtCollection.registerFactory<Widget>(
+        Widget.fromJson,
+        typeTag: 'Widget',
+      );
+      final c = buildCollection<Widget>(writeTypeTag: 'Other');
+      expect(c.draft(obj: Widget('w1')).type, 'Widget');
+    });
+  });
 
   // ---------------------------------------------------------------------------
   group('construction', () {

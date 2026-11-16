@@ -1,4 +1,4 @@
-## 4.1.0
+## 4.1.0-rc.1
 
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
   putMeta or delete whose request options leave `useRemoteAtServer` unset
@@ -10,6 +10,20 @@
   `IllegalArgumentException` without writing anything when `noCommit` is set
   but the call is not routed to the atServer, as `put` and `delete` do.
 - feat: `AtClientPreference.notificationReplay` chooses where the monitor replays from — connect, resume, window (default 1h) or full; `fetchOfflineNotifications` is deprecated.
+- feat: `collection`/`subCollection` take an optional `writeTypeTag` for new
+  items without a factory; `AtClient` implementers must add it. `AtCollection`
+  gains no public member.
+- fix: `collection` throws `ArgumentError` when a namespace already open on
+  the client, under any `eventSource`, would stamp a new `T` with another tag
+  than the open asks for (its `typeTag`, else the factory tag registered for
+  `T`, else its `writeTypeTag`, else `n/a`), instead of silently returning the
+  collection built with the first one. A refused open caches nothing. The
+  check holds on one client only, not across clients, sessions or devices,
+  and sub-collections, which are not cached, are not checked. `AtClient`
+  implementers must refuse the same way.
+- fix: `collection` folds the namespace to lower case, as atProtocol keys
+  are, so `Todos.wavi` and `todos.wavi` hand back the same collection, whose
+  `namespace` is `todos.wavi`.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
@@ -46,7 +60,7 @@
 - fix: a refusal that quotes an envelope's enrollment id or namespace, a
   record's key id or Atsign, or the `_apsk` value `verifyEnvelopeSignature`
   fetched shows it escaped and cut to 80 characters.
-- chore: requires at_auth 4.1.0.
+- chore: requires at_auth 4.1.0-rc.1.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata
@@ -63,8 +77,10 @@
   after a reconnect (latest 1024 ids capped per millisecond watermark).
   Conflicting duplicate IDs trigger warnings and are reported on
   `droppedEvents`.
-- feat: `buildAtClient` takes an optional `notificationLookUps` factory for the
-  monitor's connection.
+- feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
+  first activation in place of a minted one; a pair that does not sign under
+  the activation's algorithm is refused with `AtSigningException` before
+  anything is enrolled. Requires at_auth 4.1.0-rc.1.
 
 ## 4.0.0
 

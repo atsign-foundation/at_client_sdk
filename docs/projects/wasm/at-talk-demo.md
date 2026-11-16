@@ -1,5 +1,7 @@
 # at_talk in the browser — demo
 
+> **Historical record (2026-11-13).** These sessions ran on the earlier dev harness (remote-only storage, `openSession`, `web/talk.html`, `atClientDev`). The slim #2430 package keeps the Dart `portalSession` and the two transports; the page and the JS export return with the JS `at_client_web` PR. Class and function names below are the ones the runs used.
+
 **Status:** two-way chat working through the dev proxy (2026-10-27) and direct on production atSigns, both ways (2026-11-03) · **Bead:** `at_client_sdk-5q6` · **Code:** the session opener, both transports (`devTransport`) and the peer-key fix are in [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430) (tracker [#2437](https://github.com/atsign-foundation/at_client_sdk/issues/2437)). The chat page `web/talk.html` and the Dart `at_talk` CLI example are committed on #2430's branch but not pushed, so they are in no PR yet; how to run them lands with them.
 
 A Chrome tab (`web/talk.html` on the `at_client_wasm` dev harness) chats end-to-end encrypted with an `at_talk` CLI. Two transports, chosen once per page load:
@@ -82,7 +84,7 @@ The VE root needs a trunk rebuild (at_server#2894) before `?direct=1&root=` can 
 
 ## Replay after reconnect (`at_client_sdk-336`)
 
-- **Bug:** `RemoteWriteThroughKeyStore.exists` threw `UnsupportedError`. The watermark migration calls `exists`, so a remote-only client's monitor reconnected with no `since`, and anything sent while it was down was lost.
+- **Bug** (since removed: `RemoteWriteThroughKeyStore` left #2430 on 2026-11-13 and the client runs on `InMemoryAtClientStorage`): `RemoteWriteThroughKeyStore.exists` threw `UnsupportedError`. The watermark migration calls `exists`, so a remote-only client's monitor reconnected with no `since`, and anything sent while it was down was lost.
 - **Fix (in #2430):** `exists` is `get`-or-`KeyNotFoundException`. The monitor now sends `monitor:selfNotifications:<epochMillis>`; this was seen live.
 - **Limit:** the watermark is a `local:` key, held in memory for the session. A page reload starts from the new session's creation time. The browser default replay is now *connect* with a reconnect supervisor ([`decisions.md`](decisions.md) D-24, amended 2026-11-02; [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439)).
 

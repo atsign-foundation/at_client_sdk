@@ -1,4 +1,4 @@
-## 4.1.0
+## 4.1.0-rc.1
 
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
@@ -23,6 +23,16 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
+  activation enrolls in place of a freshly minted APKAM keypair, as
+  `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
+  is not of `signingAlgoType`, is refused with `AtSigningException` before the
+  enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
+  A supplied pair is checked before the atServer is contacted. If activation
+  fails after the enrollment is accepted (the PKAM login or the keyfile
+  write), retrying with the same pair is refused by the atServer while that
+  enrollment's record exists: retry with a different pair, or with none so one
+  is minted. The CRAM secret stays valid until an activation completes.
 - feat: `RegistrarAdminService.registerAtsign`, registering an Atsign under
   the super API key alongside the existing `/manage-atsigns/` delete flow.
   Returns a `RegisteredAtsign`, whose `registeredAtsign` is the Atsign the
@@ -54,8 +64,8 @@
   that is not a bare host, optionally followed by `:<port>`, which existing
   `/manage-atsigns/` callers will meet; the `ArgumentError` never echoes the
   offending value.
-- deprecated: `RegistrarAdminService.superApiKey` no longer returns the key
-  — it throws `UnsupportedError` — and will be removed in at_auth 5.0.0.
+- deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
+  5.0.0.
 
 ## 4.0.0
 

@@ -581,6 +581,19 @@ abstract class AtClient {
   /// minifier / tree-shaker — see [AtCollection.registerFactory] for
   /// the full rationale.
   ///
+  /// [writeTypeTag] stamps items this collection creates with that tag when
+  /// no factory is registered for their type, without registering a
+  /// [fromJson]. When [typeTag] is also set, the two must match.
+  ///
+  /// [namespace] is folded to lower case, as atProtocol keys are, and a
+  /// client hands back the collection it already built for the same folded
+  /// [namespace] and [eventSource]. While any collection of [namespace] is
+  /// open, an open that would stamp a new [T] with another tag throws
+  /// [ArgumentError] and caches nothing. An open stamps [typeTag], else the
+  /// tag of the factory registered for [T], else [writeTypeTag], else `n/a`.
+  /// The check holds on this client only: another client, session or device
+  /// of the atSign does not see it. Implementers should refuse the same way.
+  ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
   /// Idempotent: the sweep runs at most once per collection instance
@@ -610,6 +623,7 @@ abstract class AtClient {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     bool cleanupOrphansOnCreation = false,
   });
 }
