@@ -119,6 +119,21 @@ void main() {
     expectNothingWritten();
   }
 
+  /// Stubs @alice's notification service, which a sub-collection subscribes
+  /// to; returns how many subscriptions have been opened on it.
+  int Function() stubNotificationService() {
+    var opened = 0;
+    final service = MockNotificationService();
+    when(() => service.subscribe(
+        regex: any(named: 'regex'),
+        shouldDecrypt: any(named: 'shouldDecrypt'))).thenAnswer((_) {
+      opened++;
+      return const Stream.empty();
+    });
+    when(() => atClient.notificationService).thenReturn(service);
+    return () => opened;
+  }
+
   Matcher refusedId(String id, String rule) => throwsA(isA<ArgumentError>()
       .having((e) => e.name, 'name', 'id')
       .having((e) => e.invalidValue, 'invalidValue', id)
@@ -526,6 +541,23 @@ void main() {
           .having((e) => e.name, 'name', 'subName')
           .having((e) => '${e.message}', 'message', contains(structureRule))),
     );
+  });
+
+  test(
+      'Given items in the sub-collections "a", "aa" and "a*" of "p1", when getItems is called on the sub-collection "a*", then it lists only that sub-collection\'s item',
+      () async {
+    stubNotificationService();
+    final c = await todos();
+    final parent = await c.create(obj: 'p', id: 'p1');
+    AtCollection<String> sub(String subName) => c.subCollection<String>(
+        parent: parent,
+        subName: subName,
+        defaultExpiration: const Duration(days: 1));
+    await sub('a').create(obj: 'in a', id: 'c1');
+    await sub('aa').create(obj: 'in aa', id: 'c2');
+    await sub('a*').create(obj: 'in a*', id: 'c3');
+
+    expect([for (final item in await sub('a*').getItems()) item.id], ['c3']);
   });
 
   // Ids that arrive in events

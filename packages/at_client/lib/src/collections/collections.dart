@@ -467,13 +467,8 @@ interface class AtCollection<T> {
   late final RegExp _regexObjAny;
   late final String _regexAllStr;
 
-  /// `namespace` with every literal `.` escaped — produced once at
-  /// construction and reused at every scan site. Namespaces commonly
-  /// contain periods (e.g. `samples.dockerstats.demos`) and an
-  /// unescaped `.` in a regex matches any character, so the
-  /// non-escaped form would wrongly accept keys like
-  /// `lastreceivednotification.<ns>@<atSign>` whose first `.` lines
-  /// up with the namespace's first `.` (see #1942).
+  /// `namespace` escaped for a regex, so it matches only itself — produced
+  /// once at construction and reused at every scan site.
   late final String _escapedNamespace;
 
   /// Which source(s) this collection consumes events from. Set once
@@ -690,7 +685,7 @@ interface class AtCollection<T> {
 
     _logger = AtSignLogger(' AtCollection<$T> $namespace ');
 
-    _escapedNamespace = namespace.replaceAll('.', '\\.');
+    _escapedNamespace = RegExp.escape(namespace);
 
     // Broadest possible match for keys at this namespace — used by
     // the bulk-read path. `.*` permits any leading wire shape
@@ -1323,8 +1318,8 @@ interface class AtCollection<T> {
   // ───────────────────────────────────────────────────────────────────────
   // Regex builders. Three shapes cover every AtKey scan this class
   // emits; they share the [_atKeyScanPrefix] + [_escapedNamespace]
-  // pieces so the "reject `local:` and public keys, escape namespace
-  // dots" contract lives in one place.
+  // pieces so the "reject `local:` and public keys, escape the namespace"
+  // contract lives in one place.
 
   /// Regex matching **direct items** at this collection's namespace:
   /// `<prefix><idPattern>.<ns><ownerSuffix>`.
@@ -1369,8 +1364,7 @@ interface class AtCollection<T> {
   /// chain-walker which probes alive-at-mid-namespace levels above
   /// the collection's own namespace.
   String _directKeyRegexForComposed(String composedNs) {
-    final escaped = composedNs.replaceAll('.', '\\.');
-    return '$_atKeyScanPrefix[^.]+\\.$escaped@';
+    return '$_atKeyScanPrefix[^.]+\\.${RegExp.escape(composedNs)}@';
   }
 
   /// True iff an item with the given [id] owned by [owner] exists in

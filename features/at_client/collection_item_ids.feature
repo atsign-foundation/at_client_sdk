@@ -33,11 +33,12 @@ Feature: AtCollection checks every item id before using it in a key
   costs one warning, as each notification already costs a log line and a local
   write (the scenarios tagged @dos).
   Forgery: the app's own code supplies every id, and it holds this atSign's
-  keys and could write any key directly; the check matters when an app
-  builds an id from input it did not write. Every call refuses an id
-  containing ".", ":", "@", whitespace or a control character, so each key
-  built from an id names that id's item in this collection, and the error
-  shows the id on one line (the scenarios tagged @forgery).
+  keys and could write any key directly; the check matters when an app builds
+  an id from input it did not write. Every call refuses an id containing ".",
+  ":", "@", whitespace or a control character, so each key built from an id
+  names that id's item in this collection, and each read matches only the keys
+  of its own collection, and the error shows the id on one line (the scenarios
+  tagged @forgery).
   Impersonation: cannot arise. An id is not an identity: update,
   updateSharedWith and delete refuse an item another atSign owns, and an
   item's owner comes from its key's sharedBy.
@@ -263,6 +264,12 @@ Feature: AtCollection checks every item id before using it in a key
     Given a collection "todos.demo" of @alice holding an item "p1"
     When subCollection is called on "p1" with the subName "a:b"
     Then ArgumentError is thrown
+
+  @forgery
+  Scenario: Given items in the sub-collections "a", "aa" and "a*" of "p1", when getItems is called on the sub-collection "a*", then it lists only that sub-collection's item
+    Given a collection "todos.demo" of @alice holding an item "p1" with an item "c1" in its sub-collection "a", an item "c2" in its sub-collection "aa" and an item "c3" in its sub-collection "a*"
+    When getItems is called on the sub-collection "a*" of "p1"
+    Then it lists "c3" only
 
   # Ids that arrive in events
 
