@@ -9,11 +9,13 @@ import 'dart:isolate';
 
 import 'package:test/test.dart';
 
-final _directive =
-    RegExp(r'''^\s*(?:export|part)\s+'([^']+)'[^;]*;''', multiLine: true);
+final _directive = RegExp(r'''^\s*(?:export|part)\s+[^;]*;''', multiLine: true);
+final _quotedUri = RegExp(r'''['"]([^'"]+)['"]''');
 
 /// The files [entry] re-exports or includes, directly or through other
-/// files of [libDir]: every `export` and `part` directive is followed, and
+/// files of [libDir]: every quoted URI of every `export` and `part`
+/// directive (single or double quoted, conditional branches included) is
+/// followed, and
 /// a `package:at_client_wasm/` URI is resolved inside [libDir].
 Set<String> _exportGraph(File entry, Directory libDir) {
   final seen = <String>{};
@@ -23,14 +25,16 @@ Set<String> _exportGraph(File entry, Directory libDir) {
     if (!seen.add(path)) continue;
     final file = File(path);
     if (!file.existsSync()) continue;
-    for (final match in _directive.allMatches(file.readAsStringSync())) {
-      final target = match.group(1)!;
-      if (target.startsWith('package:at_client_wasm/')) {
-        pending.add(libDir.uri
-            .resolve(target.substring('package:at_client_wasm/'.length))
-            .toFilePath());
-      } else if (!target.contains(':')) {
-        pending.add(file.parent.uri.resolve(target).toFilePath());
+    for (final directive in _directive.allMatches(file.readAsStringSync())) {
+      for (final uri in _quotedUri.allMatches(directive.group(0)!)) {
+        final target = uri.group(1)!;
+        if (target.startsWith('package:at_client_wasm/')) {
+          pending.add(libDir.uri
+              .resolve(target.substring('package:at_client_wasm/'.length))
+              .toFilePath());
+        } else if (!target.contains(':')) {
+          pending.add(file.parent.uri.resolve(target).toFilePath());
+        }
       }
     }
   }
@@ -109,6 +113,23 @@ void main() {
             .writeAsStringSync("part 'a/adapter.dart';");
         File('${lib.path}/top.dart')
             .writeAsStringSync("export 'package:at_client_wasm/src/mid.dart';");
+
+        expect(_librariesReaching(lib, adapter()), ['${lib.path}/top.dart']);
+      });
+
+      test('A conditional export reaches the adapter through its branch', () {
+        File('${lib.path}/src/mid.dart')
+            .writeAsStringSync("export 'a/adapter.dart';");
+        File('${lib.path}/src/stub.dart').writeAsStringSync('class S {}');
+        File('${lib.path}/top.dart').writeAsStringSync(
+            "export 'src/stub.dart' if (dart.library.js_interop) 'src/mid.dart';");
+
+        expect(_librariesReaching(lib, adapter()), ['${lib.path}/top.dart']);
+      });
+
+      test('A double-quoted export is found', () {
+        File('${lib.path}/top.dart')
+            .writeAsStringSync('export "src/a/adapter.dart";');
 
         expect(_librariesReaching(lib, adapter()), ['${lib.path}/top.dart']);
       });
