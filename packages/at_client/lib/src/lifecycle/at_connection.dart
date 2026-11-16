@@ -351,17 +351,8 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
   return AtConnectionState.online();
 }
 
-AtConnectionCause? _refusalCauseIn(String message) {
-  final coded = _refusalCodes[atServerErrorCodeIn(message)];
-  if (coded != null) return coded;
-  for (final entry in _refusalCodes.entries) {
-    if (message.contains('error:${entry.key}') ||
-        message.contains('${entry.key}:')) {
-      return entry.value;
-    }
-  }
-  return null;
-}
+AtConnectionCause? _refusalCauseIn(String message) =>
+    _refusalCodes[atServerErrorCodeIn(message)];
 
 bool _readsUnreachable(String message) =>
     _unreachableText.any((pattern) => message.contains(pattern));
