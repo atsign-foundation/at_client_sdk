@@ -52,4 +52,13 @@ void main() {
       expect(visited, contains(adapter.toFilePath()));
     });
   });
+
+  group('adapter source', () {
+    test('The adapter names error kinds without runtimeType', () async {
+      final adapter = await Isolate.resolvePackageUri(Uri.parse(
+          'package:at_client_wasm/src/collections/js_collections_adapter.dart'));
+      expect(File.fromUri(adapter!).readAsStringSync(),
+          isNot(contains('runtimeType')));
+    });
+  });
 }

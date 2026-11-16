@@ -144,6 +144,12 @@ Feature: The JS collections adapter translates onto AtCollection
     Then the create rejects with W8_PARTIAL_FAILURE carrying the id and owner of the item that was written
     And a get of that id returns the item
 
+  Scenario: An error kind is a name the adapter knows or "Unknown"
+    Given an error of a type the adapter does not name, for an open and for a key-level write
+    When the adapter rejects
+    Then kind and each failure's kind are "Unknown"
+    And the adapter source never reads a runtime type name
+
   Scenario: A remove deletes the item and a missing item rejects with W8_NOT_FOUND
     Given an item "i1"
     When the adapter removes "i1" twice

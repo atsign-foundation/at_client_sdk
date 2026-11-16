@@ -127,6 +127,7 @@ class FakeAtClient {
 
   void Function(AtKey key)? _beforePut;
   bool Function(AtKey key)? _failPuts;
+  Object _putFailure = AtClientException.message('put refused by the test');
 
   /// Calls [hook] once, before the next `AtClient.put` of a key that [match]
   /// accepts is stored. Tests use it to land another device's write in the
@@ -141,6 +142,12 @@ class FakeAtClient {
 
   /// Makes every `AtClient.put` of a key that [match] accepts fail.
   void failPutsFor(bool Function(AtKey key) match) => _failPuts = match;
+
+  /// Like [failPutsFor], failing with [error].
+  void failPutsWith(bool Function(AtKey key) match, Object error) {
+    _failPuts = match;
+    _putFailure = error;
+  }
 
   /// Makes the next `AtClient.collection` call return a failed future with
   /// [error].
@@ -162,7 +169,7 @@ class FakeAtClient {
     when(() => mock.put(any(), any())).thenAnswer((inv) async {
       final key = inv.positionalArguments[0] as AtKey;
       if (_failPuts?.call(key) ?? false) {
-        throw AtClientException.message('put refused by the test');
+        throw _putFailure;
       }
       _beforePut?.call(key);
       return _server._put(key, inv.positionalArguments[1] as String);

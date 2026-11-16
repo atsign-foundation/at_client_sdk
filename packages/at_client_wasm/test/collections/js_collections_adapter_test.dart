@@ -20,6 +20,10 @@ final class _LaterEvent extends CEvent {
   _LaterEvent() : super(owner: '@alice'.toAtsign(), id: 'later');
 }
 
+/// An error type the adapter has no name for, standing in for one a later
+/// at_client throws.
+final class _LaterError {}
+
 Matcher _rejectsWith(String code, {String? id, String? owner, String? kind}) =>
     throwsA(isA<JsCollectionsError>()
         .having((e) => e.code, 'code', code)
@@ -227,6 +231,28 @@ void main() {
       alice.failNextCollection(StateError('upstream down'));
 
       await expectLater(open(), _rejectsWith(W8.failed, kind: 'StateError'));
+    });
+
+    test('An error of a type the adapter does not know has kind "Unknown"',
+        () async {
+      alice.failNextCollection(_LaterError());
+
+      await expectLater(open(), _rejectsWith(W8.failed, kind: 'Unknown'));
+    });
+
+    test('A failed key-level write of an unknown reason has kind "Unknown"',
+        () async {
+      final todos = await open();
+      alice.failPutsWith(
+          (key) => key.sharedWith?.toAtsign() == '@bob', _LaterError());
+
+      await expectLater(
+        todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
+        throwsA(
+            isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
+          {'op': 'put', 'recipient': '@bob', 'kind': 'Unknown'}
+        ])),
+      );
     });
 
     test(

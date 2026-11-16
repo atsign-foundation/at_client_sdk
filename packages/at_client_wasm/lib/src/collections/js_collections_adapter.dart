@@ -83,7 +83,7 @@ final class JsCollectionsError extends AtException {
   final String? owner;
 
   /// The Dart type of the underlying error, for [W8.failed] and each
-  /// [failures] entry.
+  /// [failures] entry: a name the adapter knows, or `'Unknown'`.
   final String? kind;
 
   /// For [W8.partialFailure]: one `{op, recipient, kind}` per failed
@@ -463,6 +463,21 @@ final class JsCollectionsAdapter {
     }
   }
 
+  /// A stable name for [error]'s type; the runtime type's name is minified
+  /// under dart2js. An error of a type not listed here is `'Unknown'`.
+  static String _kindOf(Object error) => switch (error) {
+        AtKeyNotFoundException() => 'AtKeyNotFoundException',
+        InvalidAtSignException() => 'InvalidAtSignException',
+        CItemReadException() => 'CItemReadException',
+        AtClientException() => 'AtClientException',
+        AtException() => 'AtException',
+        StateError() => 'StateError',
+        ArgumentError() => 'ArgumentError',
+        TimeoutException() => 'TimeoutException',
+        FormatException() => 'FormatException',
+        _ => 'Unknown',
+      };
+
   static JsCollectionsError _error(Object error, {String? id, String? owner}) {
     switch (error) {
       case JsCollectionsError():
@@ -485,7 +500,7 @@ final class JsCollectionsAdapter {
                 {
                   'op': f.op.name,
                   'recipient': f.atKey.sharedWith ?? f.atKey.sharedBy ?? '',
-                  'kind': f.reason.runtimeType.toString(),
+                  'kind': _kindOf(f.reason),
                 }
             ]);
       case AtKeyNotFoundException():
@@ -499,7 +514,7 @@ final class JsCollectionsAdapter {
             id: id, owner: owner, kind: 'ArgumentError');
       default:
         return JsCollectionsError(W8.failed, 'operation failed',
-            id: id, owner: owner, kind: error.runtimeType.toString());
+            id: id, owner: owner, kind: _kindOf(error));
     }
   }
 }
