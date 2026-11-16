@@ -1,15 +1,4 @@
-## 4.2.0
-
-- feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
-  activation enrolls in place of a freshly minted APKAM keypair, as
-  `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
-  is not of `signingAlgoType`, is refused with `AtSigningException` before the
-  enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
-- A malformed mldsa65 APKAM key pair, on activation or enrollment, is refused
-  with the message `the supplied mldsa65 APKAM key pair is malformed`. The
-  exception type, `AtSigningException`, is unchanged.
-
-## 4.1.0
+## 4.1.0-rc.1
 
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
@@ -34,6 +23,14 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
+  activation enrolls in place of a freshly minted APKAM keypair, as
+  `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
+  is not of `signingAlgoType`, is refused with `AtSigningException` before the
+  enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
+- A malformed mldsa65 APKAM key pair, on activation or enrollment, is refused
+  with the message `the supplied mldsa65 APKAM key pair is malformed`. The
+  exception type, `AtSigningException`, is unchanged.
 
 ## 4.0.0
 

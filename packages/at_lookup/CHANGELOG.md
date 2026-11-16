@@ -1,4 +1,4 @@
-## 4.1.0
+## 4.1.0-rc.1
 - feat: a lookup built with a `proxy:<host>` root domain sends
   `from:<atSign>` first on each connection it opens, ahead of any
   `onConnect`, as it already resolves every atSign to the proxy. A caller that
