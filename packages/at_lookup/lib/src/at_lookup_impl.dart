@@ -690,9 +690,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// one. Each refusal moves one step on, starting from the step the
   /// [notificationReconnectDelays] had reached, at most its last; the last
   /// here is repeated indefinitely.
-  ///
-  /// Settable for the same reason as [notificationReconnectDelays].
-  static List<Duration> notificationRefusalReconnectDelays = const [
+  static const List<Duration> notificationRefusalReconnectDelays = [
     Duration(seconds: 1),
     Duration(seconds: 2),
     Duration(seconds: 3),
@@ -707,6 +705,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     Duration(seconds: 233),
     Duration(seconds: 300),
   ];
+
+  /// The [notificationRefusalReconnectDelays] this lookup waits on, settable
+  /// so a test of several refusals does not wait minutes.
+  @visibleForTesting
+  List<Duration> refusalReconnectDelays = notificationRefusalReconnectDelays;
 
   /// Told the delay chosen before each notification reconnect attempt, so a
   /// test can see which schedule it came from.
@@ -790,9 +793,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     var step = 0;
     try {
       while (_isNotifying && generation == _notifyGeneration) {
-        final delays = refused
-            ? notificationRefusalReconnectDelays
-            : notificationReconnectDelays;
+        final delays =
+            refused ? refusalReconnectDelays : notificationReconnectDelays;
         final delay = delays[min(step, delays.length - 1)];
         step++;
         _reconnectIx++;

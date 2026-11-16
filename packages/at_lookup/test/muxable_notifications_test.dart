@@ -771,7 +771,6 @@ void main() {
 
   group('a reconnect the atServer refuses', () {
     late List<Duration> defaultReconnects;
-    late List<Duration> defaultRefusalReconnects;
 
     // Distinct at every index, so each delay taken names the schedule it came
     // from.
@@ -789,16 +788,11 @@ void main() {
 
     setUp(() {
       defaultReconnects = AtLookupImpl.notificationReconnectDelays;
-      defaultRefusalReconnects =
-          AtLookupImpl.notificationRefusalReconnectDelays;
       AtLookupImpl.notificationReconnectDelays = network;
-      AtLookupImpl.notificationRefusalReconnectDelays = refusal;
     });
 
     tearDown(() {
       AtLookupImpl.notificationReconnectDelays = defaultReconnects;
-      AtLookupImpl.notificationRefusalReconnectDelays =
-          defaultRefusalReconnects;
     });
 
     UnAuthenticatedException refusedByAtServer() =>
@@ -823,12 +817,16 @@ void main() {
       };
     }
 
-    /// A lookup authenticating with [outcomes], recording into [taken] the
-    /// delay chosen before each reconnect attempt.
-    AtLookupMuxable recording(List<_Attempt> outcomes, List<Duration> taken) {
+    /// A lookup authenticating with [outcomes], waiting on [afterRefusal]
+    /// after a refusal and recording into [taken] the delay chosen before each
+    /// reconnect attempt.
+    AtLookupMuxable recording(List<_Attempt> outcomes, List<Duration> taken,
+        {List<Duration> afterRefusal = refusal}) {
       final atLookup = build(authenticator: scripted(outcomes))
         ..heartbeatInterval = const Duration(hours: 1);
-      (atLookup as AtLookupImpl).onNotificationReconnectDelay = taken.add;
+      (atLookup as AtLookupImpl)
+        ..onNotificationReconnectDelay = taken.add
+        ..refusalReconnectDelays = afterRefusal;
       addTearDown(atLookup.stopNotifications);
       return atLookup;
     }
@@ -907,15 +905,17 @@ void main() {
     test(
         'refusals after more failures than the network schedule holds wait '
         'from the step past its last, longer after each refusal', () async {
-      AtLookupImpl.notificationRefusalReconnectDelays = [
-        for (final n in [20, 21, 22, 23, 24, 25]) ms(n),
-      ];
       final taken = <Duration>[];
-      final atLookup = recording([
-        _Attempt.accept,
-        ...List.filled(4, _Attempt.timeOut),
-        ...List.filled(3, _Attempt.refuse),
-      ], taken);
+      final atLookup = recording(
+          [
+            _Attempt.accept,
+            ...List.filled(4, _Attempt.timeOut),
+            ...List.filled(3, _Attempt.refuse),
+          ],
+          taken,
+          afterRefusal: [
+            for (final n in [20, 21, 22, 23, 24, 25]) ms(n),
+          ]);
       atLookup.notifications.listen((_) {}, onError: (_) {});
       await atLookup.startNotifications();
 
@@ -963,8 +963,9 @@ void main() {
           () => taken.length == 3 && !atLookup.isReconnectingNotifications,
           'two failed preambles and the reconnect after them');
 
-      expect(connects, 4, reason: 'the start, two failed preambles, and one '
-          'that succeeded');
+      expect(connects, 4,
+          reason: 'the start, two failed preambles, and one '
+              'that succeeded');
       expect(taken, [ms(10), ms(11), ms(12)],
           reason: 'only an UnAuthenticatedException is a refusal; any other '
               'failure, whatever code it carries, waits on the network '
@@ -1112,7 +1113,7 @@ void main() {
         'any other failure', () {
       // Raw literals: these are what a refused device costs its atServer, one
       // attempt every 5 minutes once it has settled.
-      expect(defaultRefusalReconnects, [
+      expect((build() as AtLookupImpl).refusalReconnectDelays, [
         for (final s in [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 300])
           Duration(seconds: s),
       ]);

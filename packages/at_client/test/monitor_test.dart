@@ -231,25 +231,21 @@ void main() {
 
     group('after a failed start', () {
       late List<Duration> defaultStartRetries;
-      late List<Duration> defaultRefusalRetries;
       final delays = <Duration>[];
 
       setUp(() {
         defaultStartRetries = Monitor.startRetryDelays;
-        defaultRefusalRetries = AtLookupImpl.notificationRefusalReconnectDelays;
         // Long enough that no retry runs inside a test.
         Monitor.startRetryDelays = const [Duration(seconds: 10)];
-        AtLookupImpl.notificationRefusalReconnectDelays = const [
-          Duration(seconds: 20)
-        ];
         delays.clear();
-        monitor.onStartRetryDelay = delays.add;
+        monitor
+          ..startRefusalRetryDelays = const [Duration(seconds: 20)]
+          ..onStartRetryDelay = delays.add;
       });
 
       tearDown(() {
         monitor.stop();
         Monitor.startRetryDelays = defaultStartRetries;
-        AtLookupImpl.notificationRefusalReconnectDelays = defaultRefusalRetries;
       });
 
       test(

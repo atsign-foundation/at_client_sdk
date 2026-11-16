@@ -29,7 +29,6 @@ void main() {
   late NotificationServiceImpl service;
   late List<Duration> defaultReconnects;
   late List<Duration> defaultStartRetries;
-  late List<Duration> defaultRefusalReconnects;
   late String pkamPrivateKey;
   final received = <AtNotification>[];
   var subscriptionEnded = false;
@@ -39,10 +38,24 @@ void main() {
   final reconnectDelays = <Duration>[];
   final startDelays = <Duration>[];
 
+  /// The delays the last service's monitor and lookup would have waited on
+  /// after a refusal, before the test set its own.
+  late List<Duration> builtStartRefusalDelays;
+  late List<Duration> builtReconnectRefusalDelays;
+
+  /// The delays after a refusal, for a reconnect and a first start alike:
+  /// distinct at every index from the network delays [setUp] sets, so each
+  /// delay taken names the schedule it came from.
+  const afterRefusal = [
+    Duration(milliseconds: 30),
+    Duration(milliseconds: 50),
+    Duration(milliseconds: 70),
+    Duration(milliseconds: 90),
+  ];
+
   setUpAll(() {
     defaultReconnects = AtLookupImpl.notificationReconnectDelays;
     defaultStartRetries = Monitor.startRetryDelays;
-    defaultRefusalReconnects = AtLookupImpl.notificationRefusalReconnectDelays;
     pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
   });
 
@@ -57,15 +70,6 @@ void main() {
     ];
     AtLookupImpl.notificationReconnectDelays = fast;
     Monitor.startRetryDelays = fast;
-    // After a refusal: distinct from [fast] at every index, so each delay
-    // taken names the schedule it came from.
-    const afterRefusal = [
-      Duration(milliseconds: 30),
-      Duration(milliseconds: 50),
-      Duration(milliseconds: 70),
-      Duration(milliseconds: 90),
-    ];
-    AtLookupImpl.notificationRefusalReconnectDelays = afterRefusal;
 
     server = FakeAtServer(atSign: atSign);
     client = MockAtClient();
@@ -91,7 +95,6 @@ void main() {
     await service.stop();
     AtLookupImpl.notificationReconnectDelays = defaultReconnects;
     Monitor.startRetryDelays = defaultStartRetries;
-    AtLookupImpl.notificationRefusalReconnectDelays = defaultRefusalReconnects;
   });
 
   /// Waits until the monitor reports itself listening.
@@ -105,8 +108,11 @@ void main() {
   ///
   /// [connection] is the client's connection state the monitor reports into;
   /// with [untilListening] false this returns without waiting to connect.
+  /// [refusalDelays] are waited on after a refusal.
   Future<void> startListening(
-      {AtConnection? connection, bool untilListening = true}) async {
+      {AtConnection? connection,
+      bool untilListening = true,
+      List<Duration> refusalDelays = afterRefusal}) async {
     received.clear();
     subscriptionEnded = false;
     reconnectDelays.clear();
@@ -115,9 +121,15 @@ void main() {
         lookUps: server.lookUps,
         secondaryAddressFinder: server.addressFinder,
         connection: connection) as NotificationServiceImpl;
-    service.monitor.onStartRetryDelay = startDelays.add;
-    (service.monitor.lookUp as AtLookupImpl).onNotificationReconnectDelay =
-        reconnectDelays.add;
+    final lookUp = service.monitor.lookUp as AtLookupImpl;
+    builtStartRefusalDelays = service.monitor.startRefusalRetryDelays;
+    builtReconnectRefusalDelays = lookUp.refusalReconnectDelays;
+    service.monitor
+      ..onStartRetryDelay = startDelays.add
+      ..startRefusalRetryDelays = refusalDelays;
+    lookUp
+      ..onNotificationReconnectDelay = reconnectDelays.add
+      ..refusalReconnectDelays = refusalDelays;
     service
         .subscribe(regex: '.*')
         .listen(received.add, onDone: () => subscriptionEnded = true);
@@ -540,7 +552,7 @@ void main() {
                 'refusal the wait is from the refusal schedule, longer each '
                 'time and holding at its last entry, and the attempts go on '
                 'past it');
-        expect(longest(defaultRefusalReconnects), const Duration(minutes: 5),
+        expect(longest(builtReconnectRefusalDelays), const Duration(minutes: 5),
             reason: 'the refusal schedule a client runs on grows to 5 '
                 'minutes');
         refusedWith(row.cause);
@@ -565,9 +577,11 @@ void main() {
             reason: 'each retry of a refused start waits from the refusal '
                 'schedule, longer each time and holding at its last entry, '
                 'and the retries go on past it');
-        expect(longest(defaultRefusalReconnects), const Duration(minutes: 5),
+        expect(builtStartRefusalDelays, builtReconnectRefusalDelays,
             reason: 'a refused start backs off on the schedule a refused '
-                'reconnect does, which grows to 5 minutes');
+                'reconnect does');
+        expect(longest(builtStartRefusalDelays), const Duration(minutes: 5),
+            reason: 'which grows to 5 minutes');
         refusedWith(row.cause);
       });
     }
@@ -578,12 +592,15 @@ void main() {
       'holds wait from the step past its last, longer after each refusal',
       () async {
     refusableServer();
-    final longer = [for (final n in [30, 50, 70, 90, 110, 130]) ms(n)];
-    AtLookupImpl.notificationRefusalReconnectDelays = longer;
     server.refuseConnects = 5;
     server.pkamRefusal = refusals.first.answer;
 
-    await startListening(connection: connection, untilListening: false);
+    await startListening(
+        connection: connection,
+        untilListening: false,
+        refusalDelays: [
+          for (final n in [30, 50, 70, 90, 110, 130]) ms(n)
+        ]);
     await server.waitUntil(() => startDelays.length >= 8,
         what: 'five unreachable starts and three refused ones');
 
