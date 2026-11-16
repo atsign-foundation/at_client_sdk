@@ -216,6 +216,8 @@ void main() {
       'fragment': '$_registrarUrl#leaksecret',
       'query': '$_registrarUrl?q=leaksecret',
       'whitespace': '$_registrarUrl leaksecret',
+      'multiColon': '$_registrarUrl:443:leaksecret',
+      'schemeAndMultiColon': 'https://leaksecret.$_registrarUrl:443',
     };
     for (final entry in hostShapeLeakCases.entries) {
       test(
