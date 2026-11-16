@@ -408,8 +408,7 @@ String? _errorCodeIn(String message) {
   final body = message.substring(at + 'error:'.length);
   if (!body.startsWith('{')) return _leadingErrorCode.stringMatch(body);
   try {
-    final decoded = jsonDecode(body);
-    final code = decoded is Map ? decoded['errorCode'] : null;
+    final code = jsonDecode(body)['errorCode'];
     return code is String ? code : null;
   } on FormatException {
     return null;

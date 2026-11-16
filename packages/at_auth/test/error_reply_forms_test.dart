@@ -352,5 +352,32 @@ void main() {
         });
       });
     });
+
+    /// Refusals whose code cannot be read where an atServer writes it.
+    final unreadable = {
+      'a refusal with no error: in it': 'data:refused',
+      'a JSON body that does not parse': 'error:{"errorCode":"AT0401"',
+      'a JSON body that is not an object': 'error:["AT0401"]',
+      'a JSON code that is a number': 'error:{"errorCode":401}',
+      'a JSON code that is a list': 'error:{"errorCode":["AT0401"]}',
+      'a code that does not lead the reply':
+          'error:Exception: AT0401 pkam authentication failed',
+      'a description naming a second error:':
+          'error:{"errorCode":"AT0027","errorDescription":"was error:AT0401"}',
+    };
+    unreadable.forEach((what, reply) {
+      test(
+          'Given $what on every poll, when it waits, then it ends once its '
+          'retry budget is spent, as a refusal it cannot resolve', () async {
+        final server = await atServer(List.filled(maxRetries + 2, reply));
+
+        await expectLater(
+            waitOver(server),
+            throwsA(isA<AtEnrollmentException>().having(
+                (e) => e.message, 'message', contains('cannot resolve'))));
+        expect(polls(server), maxRetries + 1,
+            reason: 'a code that cannot be read is no approval to wait for');
+      });
+    });
   });
 }
