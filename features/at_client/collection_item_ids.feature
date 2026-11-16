@@ -83,6 +83,13 @@ Feature: AtCollection checks every item id before using it in a key
     Then the ArgumentError's text holds no newline
     And it shows the id with the newline escaped
 
+  @forgery
+  Scenario: Given an id containing U+2028, when create is called, then the ArgumentError's text holds no line or paragraph separator
+    Given a collection "todos.demo" of @alice
+    When create is called with the id "a", U+2028 and "b"
+    Then the ArgumentError's text holds none of U+2028, U+2029 and U+0085
+    And its invalidValue is the id as given
+
   Scenario: Given an empty id, when create is called, then ArgumentError is thrown and nothing is read or written
     Given a collection "todos.demo" of @alice
     When create is called with the id ""

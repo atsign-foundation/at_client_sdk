@@ -372,12 +372,16 @@ interface class AtCollection<T> {
   bool _refusesKeyName(String subName) =>
       !isAtKeyNamespace('$subName.$namespace');
 
-  /// A character JSON leaves unescaped that would still break a log line.
-  static final RegExp _unescapedLineBreak = RegExp(r'[\x7f-\x9f\u2028\u2029]');
+  /// A character JSON leaves unescaped that would break a line or reorder
+  /// it: DEL, a C1 control, a line or paragraph separator, or a
+  /// bidirectional formatting character.
+  static final RegExp _jsonUnescaped =
+      RegExp(r'[\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
 
-  /// [text] quoted and escaped onto one line, for a log message.
+  /// [text] quoted and escaped onto one line, for a log message or an
+  /// error's text.
   static String _forLog(String text) => jsonEncode(text).replaceAllMapped(
-      _unescapedLineBreak,
+      _jsonUnescaped,
       (m) => '\\u${m[0]!.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}');
 
   /// A new item's id, after folding to lower case.
@@ -2037,10 +2041,10 @@ interface class AtCollection<T> {
     Stream<AtNotification>? notifications,
   }) {
     if (_refusesStructure(subName)) {
-      throw ArgumentError.value(subName, 'subName', _structureRule);
+      throw _IdArgumentError(subName, 'subName', _structureRule);
     }
     if (_refusesKeyName(subName)) {
-      throw ArgumentError.value(subName, 'subName', _keyNameRule);
+      throw _IdArgumentError(subName, 'subName', _keyNameRule);
     }
     final composedNs = '$subName.${parent.id}.$namespace';
     const int maxComposedNsLength = 128;
@@ -3216,10 +3220,10 @@ interface class AtCollection<T> {
   static String _foldedId(String id, {bool forWrite = false}) {
     final folded = id.toLowerCase();
     if (_refusesStructure(folded)) {
-      throw ArgumentError.value(id, 'id', _structureRule);
+      throw _IdArgumentError(id, 'id', _structureRule);
     }
     if (forWrite && folded.startsWith('_')) {
-      throw ArgumentError.value(id, 'id', 'must not start with "_"');
+      throw _IdArgumentError(id, 'id', 'must not start with "_"');
     }
     return folded;
   }
@@ -3228,7 +3232,7 @@ interface class AtCollection<T> {
   /// valid id for a new item.
   static void _checkNewId(String folded, String given) {
     if (!_newIdPattern.hasMatch(folded)) {
-      throw ArgumentError.value(given, 'id',
+      throw _IdArgumentError(given, 'id',
           'a new item id must be 1 to 64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit');
     }
   }
@@ -5663,6 +5667,17 @@ final class CSubItemDeleted extends CEvent {
   /// The subName of the innermost sub-collection containing this
   /// item — equivalent to `ancestry.last.subName`.
   String get subName => ancestry.last.subName;
+}
+
+/// An [ArgumentError] for an item id or subName whose text shows the value
+/// escaped onto one line, as AtCollection's warnings show it.
+final class _IdArgumentError extends ArgumentError {
+  _IdArgumentError(String super.value, String super.name, super.message)
+      : super.value();
+
+  @override
+  String toString() => 'Invalid argument ($name): $message: '
+      '${AtCollection._forLog(invalidValue as String)}';
 }
 
 /// Parsed components of a notification key. Private to [AtCollection].

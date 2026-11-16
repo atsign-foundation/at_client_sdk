@@ -236,6 +236,23 @@ void main() {
   });
 
   test(
+      "Given an id containing U+2028, when create is called, then the ArgumentError's text holds no line or paragraph separator",
+      () async {
+    final c = await todos();
+    await expectLater(
+      c.create(obj: 'v', id: 'a\u2028b'),
+      throwsA(isA<ArgumentError>()
+          .having(
+              (e) => '$e'
+                  .runes
+                  .where((r) => r == 0x2028 || r == 0x2029 || r == 0x85),
+              'line or paragraph separators',
+              isEmpty)
+          .having((e) => e.invalidValue, 'invalidValue', 'a\u2028b')),
+    );
+  });
+
+  test(
       'Given an empty id, when create is called, then ArgumentError is thrown and nothing is read or written',
       () async {
     final c = await todos();
