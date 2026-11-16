@@ -30,6 +30,26 @@ Matcher _rejectsWith(String code, {String? id, String? owner, String? kind}) =>
 void main() {
   setUpAll(registerAdapterFallbacks);
 
+  test('JsCollectionsError is an AtException and keeps its fields', () {
+    final error = JsCollectionsError(W8.partialFailure, 'boom',
+        id: 'i',
+        owner: '@alice',
+        kind: 'K',
+        failures: const [
+          {'op': 'put'}
+        ]);
+    expect(error, isA<AtException>());
+    expect(error.code, W8.partialFailure);
+    expect(error.message, 'boom');
+    expect(error.id, 'i');
+    expect(error.owner, '@alice');
+    expect(error.kind, 'K');
+    expect(error.failures, [
+      {'op': 'put'}
+    ]);
+    expect(error.toString(), 'JsCollectionsError(W8_PARTIAL_FAILURE): boom');
+  });
+
   late FakeAtServer server;
   late FakeAtClient alice;
 

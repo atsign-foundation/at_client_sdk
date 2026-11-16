@@ -62,10 +62,10 @@ abstract final class W8 {
 }
 
 /// The single error shape every adapter operation rejects with.
-final class JsCollectionsError implements Exception {
+final class JsCollectionsError extends AtException {
   JsCollectionsError(
     this.code,
-    this.message, {
+    super.message, {
     this.id,
     this.owner,
     this.kind,
@@ -74,8 +74,6 @@ final class JsCollectionsError implements Exception {
 
   /// One of the [W8] codes.
   final String code;
-
-  final String message;
 
   /// The item the failure is about, when known.
   final String? id;
