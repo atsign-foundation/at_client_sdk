@@ -111,13 +111,13 @@ class AtAuthImpl implements AtAuth {
     }
 
     // A supplied pair is judged before the atServer is contacted, so a bad
-    // one costs no connection and no CRAM login. mintOnboardingKeys checks
-    // it again for its other callers.
+    // one costs no connection and no CRAM login. The canonical pair the check
+    // returns is the one minted from.
     final suppliedApkam = atOnboardingRequest.apkamKeyPair;
-    if (suppliedApkam != null) {
-      await checkApkamKeyPair(
-          atOnboardingRequest.signingAlgoType, suppliedApkam);
-    }
+    final checkedApkam = suppliedApkam == null
+        ? null
+        : await checkApkamKeyPair(
+            atOnboardingRequest.signingAlgoType, suppliedApkam);
 
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
@@ -156,7 +156,7 @@ class AtAuthImpl implements AtAuth {
     }
     final OnboardingMint mint = await mintOnboardingKeys(
         signingAlgo: atOnboardingRequest.signingAlgoType,
-        apkamKeyPair: atOnboardingRequest.apkamKeyPair,
+        apkamKeyPair: checkedApkam,
         // Null resolves to the release default, not to false: legacy
         // material is retained until the ecosystem is PQ, not until this
         // atSign is.
