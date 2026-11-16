@@ -293,7 +293,7 @@ compatibility described above stands for JS consumers today.
 the JS `type` as `writeTypeTag`, so a record it writes carries the declared tag. JS
 consumers still write `n/a` until the `@JSExport` facade exposes the adapter, and T6.9
 (a record written by the JS facade) stays expected-red until then. The adapter scope is
-proposed in D-27.
+set by D-27.
 
 **Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
 outright: it would force every JS app into a Dart build step, destroying the
@@ -1058,8 +1058,9 @@ The browser lane holds the atSign's @keys behind a passkey, derived from a singl
 
 ### D-27 — The JS collections adapter replaces the `AtEasy` facade; J1 and J1a shrink to it (2026-11-16)
 
-**Proposed.** Accepted by: (blank; binds only with an accepted row in
-[`docs/architecture/decisions.md`](../../architecture/decisions.md)).
+**Accepted.** Accepted by: gkc, 2026-11-16, in the review of
+[#2488](https://github.com/atsign-foundation/at_client_sdk/pull/2488); its row is in
+[`docs/architecture/decisions.md`](../../architecture/decisions.md).
 
 J1 (an `AtEasy` Layer B facade with namespace auto-qualification, `expiration`
 defaulting, ordering and limits) and J1a (a `(name, type)` registry that enforces the tag
@@ -1479,3 +1480,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-11 | D-24's policy is implemented in [#2476](https://github.com/atsign-foundation/at_client_sdk/pull/2476): `AtClientPreference.notificationReplay` takes `connect`, `resume` (the default), `window(d)` and `full`, and `fetchOfflineNotifications` is deprecated. The start resolves once per notification service and a failed read is retried on the next connect; a window start is never later than service creation and a negative duration is zero. A live test covers `full` sending `monitor:0` to an atServer. (implemented by srieteja) |
 | 2026-11-13 | **D-18 reversed** (review of [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430)). The remote-only storage path is deleted; the client runs on `InMemoryAtClientStorage`. Key custody follows K-16. [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md) moved to `superseded/`. D-12, D-15, D-17 and D-24 annotated and `acceptance.md` X-R1..X-R3 amended to match: remote-only is the routing preference, and sync still runs, since only an explicit `useRemoteAtServer = false` keeps a write local. |
 | 2026-11-16 | **D-27 proposed** (review of [#2488](https://github.com/atsign-foundation/at_client_sdk/pull/2488)). The JS collections adapter replaces the `AtEasy` facade and J1/J1a shrink to it; not accepted until it has a row in `docs/architecture/decisions.md`. D-11's 2026-11-14 note is restored as written and a 2026-11-16 status added; T6.9 is expected-red again. |
+| 2026-11-16 | **D-27 accepted** by gkc in the review of [#2488](https://github.com/atsign-foundation/at_client_sdk/pull/2488); its row is added to `docs/architecture/decisions.md`. |
