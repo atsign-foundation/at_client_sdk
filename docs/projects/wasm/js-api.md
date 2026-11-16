@@ -549,7 +549,7 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 | `COLLECTION_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
 | `COLLECTION_FAILED` | anything else; `kind` names it | |
 
-Schema errors get a W8 code when the persisted collection record and its schema validation
+Schema errors get a `COLLECTION_*` code from §6.1 when the persisted collection record and its schema validation
 land. Until then no adapter operation validates data against a schema.
 
 ---
