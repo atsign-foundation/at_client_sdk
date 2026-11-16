@@ -2,20 +2,21 @@ Feature: AtCollection checks every item id before using it in a key
 
   An item's id is the first segment of every key AtCollection writes or reads
   for that item. Every call that takes an id (create, upsert, draft, get,
-  getOrNull, exists, getItems and getItemsAsStream) folds it to lower case
-  and refuses, with ArgumentError and before any read or write, an id that
-  is empty or contains ".", ":", "@", whitespace or a control character.
-  create, upsert and draft also refuse an id that starts with "_". A new
-  item's id, given to create or to upsert when no item has it, must be 1 to
-  64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit.
-  An id that create generates is 8 characters of a-z and 0-9. An item already
-  stored under an id that the check accepts but that is outside that set keeps
-  its id: it is listed, read by that id, changed through draft and update or
-  through upsert, shared, and deleted. subCollection refuses a subName that is
-  empty or contains ".", ":", "@", whitespace or a control character. A
-  notification or data event whose item id, ancestor id or subName the check
-  refuses emits no event, and a warning shows the id, escaped on one line, and
-  its owner, never the value.
+  getOrNull, exists, getItems and getItemsAsStream) folds it to lower case and
+  refuses, with ArgumentError and before any read or write, an id that is
+  empty or contains ".", ":", "@", whitespace or a control character. create,
+  upsert and draft also refuse an id that starts with "_". A new item's id,
+  given to create or to upsert when no item has it, must be 1 to 64 characters
+  of a-z, 0-9, "-" and "_", starting with a letter or digit. An id that create
+  generates is 8 characters of a-z and 0-9. An item already stored under an id
+  that the check accepts but that is outside that set keeps its id: it is
+  listed, read by that id, changed through draft and update or through upsert,
+  shared, and deleted. subCollection folds a subName to lower case, and
+  refuses one that is empty, contains ".", ":", "@", whitespace or a control
+  character, or holds a character a key's name cannot. A notification or data
+  event whose item id, ancestor id or subName the check refuses emits no
+  event, and a warning shows the id, escaped on one line, and its owner, never
+  the value.
 
   Races: two callers in one process, or two clients of one atSign, may use
   the same id at once. The check reads only the id string and runs before
@@ -264,6 +265,29 @@ Feature: AtCollection checks every item id before using it in a key
     Given a collection "todos.demo" of @alice holding an item "p1"
     When subCollection is called on "p1" with the subName "a:b"
     Then ArgumentError is thrown
+
+  Scenario: Given a subName "Comments", when an item is created in that sub-collection, then getItems on it lists the item
+    Given a collection "todos.demo" of @alice holding an item "p1"
+    When subCollection is called on "p1" with the subName "Comments"
+    And create is called on that sub-collection with the id "c1"
+    Then getItems on that sub-collection lists "c1"
+
+  Scenario: Given an item in the sub-collection "comments" of "p1", when subCollection is called with the subName "COMMENTS", then getItems lists that item
+    Given a collection "todos.demo" of @alice holding an item "p1" with an item "c1" in its sub-collection "comments"
+    When subCollection is called on "p1" with the subName "COMMENTS"
+    Then getItems on that sub-collection lists "c1"
+
+  @forgery
+  Scenario: Given a subName containing "#", when subCollection is called, then ArgumentError is thrown
+    Given a collection "todos.demo" of @alice holding an item "p1"
+    When subCollection is called on "p1" with the subName "x#y"
+    Then ArgumentError is thrown
+
+  @dos
+  Scenario: Given a notification from @bob whose key's subName contains "|", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:c1.a|b.p1.todos.demo@bob"
+    Then the collection emits no event
 
   @forgery
   Scenario: Given items in the sub-collections "a", "aa" and "a*" of "p1", when getItems is called on the sub-collection "a*", then it lists only that sub-collection's item

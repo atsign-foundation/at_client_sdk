@@ -544,6 +544,76 @@ void main() {
   });
 
   test(
+      'Given a subName "Comments", when an item is created in that sub-collection, then getItems on it lists the item',
+      () async {
+    stubNotificationService();
+    final c = await todos();
+    final parent = await c.create(obj: 'p', id: 'p1');
+    final comments = c.subCollection<String>(
+        parent: parent,
+        subName: 'Comments',
+        defaultExpiration: const Duration(days: 1));
+
+    await comments.create(obj: 'v', id: 'c1');
+
+    expect([for (final item in await comments.getItems()) item.id], ['c1']);
+  });
+
+  test(
+      'Given an item in the sub-collection "comments" of "p1", when subCollection is called with the subName "COMMENTS", then getItems lists that item',
+      () async {
+    stubNotificationService();
+    final c = await todos();
+    final parent = await c.create(obj: 'p', id: 'p1');
+    await c
+        .subCollection<String>(
+            parent: parent,
+            subName: 'comments',
+            defaultExpiration: const Duration(days: 1))
+        .create(obj: 'v', id: 'c1');
+
+    final shouted = c.subCollection<String>(
+        parent: parent,
+        subName: 'COMMENTS',
+        defaultExpiration: const Duration(days: 1));
+
+    expect([for (final item in await shouted.getItems()) item.id], ['c1']);
+  });
+
+  test(
+      'Given a subName containing "#", when subCollection is called, then ArgumentError is thrown',
+      () async {
+    stubNotificationService();
+    final c = await todos();
+    final parent = await c.create(obj: 'v', id: 'p1');
+
+    expect(
+      () => c.subCollection<String>(
+        parent: parent,
+        subName: 'x#y',
+        defaultExpiration: const Duration(days: 1),
+      ),
+      throwsA(isA<ArgumentError>()
+          .having((e) => e.name, 'name', 'subName')
+          .having((e) => e.invalidValue, 'invalidValue', 'x#y')),
+    );
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s subName contains "|", when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:c1.a|b.p1.$namespace@bob'))
+      ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
       'Given items in the sub-collections "a", "aa" and "a*" of "p1", when getItems is called on the sub-collection "a*", then it lists only that sub-collection\'s item',
       () async {
     stubNotificationService();

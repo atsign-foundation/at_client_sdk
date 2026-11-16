@@ -30,9 +30,10 @@
   `create`, `upsert` and `draft` also refuse an id that starts with `_`. A new
   item's id, given to `create` or to `upsert` when no item has it, must be 1
   to 64 characters of a-z, 0-9, `-` and `_`. An item already stored under an
-  id the check accepts keeps its id. `subCollection` refuses a `subName` that
-  contains `:`, `@`, whitespace or a control character. An event whose item
-  id, ancestor id or `subName` the check refuses is not emitted, and a warning
+  id the check accepts keeps its id. `subCollection` folds a `subName` to
+  lower case, and refuses one that contains `:`, `@`, whitespace, a control
+  character or a character a key's name cannot hold. An event whose item id,
+  ancestor id or `subName` the check refuses is not emitted, and a warning
   names the id and its owner. `getItems` and `getItemsAsStream` leave out an
   item stored under such an id, with the same warning. `AtCollection` matches
   a namespace or `subName` literally when it lists keys.

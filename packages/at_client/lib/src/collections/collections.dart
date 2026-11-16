@@ -22,6 +22,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 import 'package:mutex/mutex.dart';
+import 'package:at_client/src/util/at_key_grammar.dart' show isAtKeyNamespace;
 import 'package:at_client/src/util/swallowed_error.dart';
 
 part 'collections_test_hooks.dart';
@@ -362,6 +363,14 @@ interface class AtCollection<T> {
   /// character.
   static bool _refusesStructure(String segment) =>
       segment.isEmpty || _keyStructure.hasMatch(segment);
+
+  static const String _keyNameRule =
+      "must hold only characters a key's name can hold";
+
+  /// Whether a namespace composed of [subName] and this collection's
+  /// namespace is one an atKey cannot carry.
+  bool _refusesKeyName(String subName) =>
+      !isAtKeyNamespace('$subName.$namespace');
 
   /// A character JSON leaves unescaped that would still break a log line.
   static final RegExp _unescapedLineBreak = RegExp(r'[\x7f-\x9f\u2028\u2029]');
@@ -1783,16 +1792,14 @@ interface class AtCollection<T> {
   /// generated id fits while each atSign is at most 55 chars with its
   /// `@`; a key that does not fit is refused when it is written.
   ///
-  /// Throws [ArgumentError] when:
-  /// - [subName] is empty, or contains `.`, `:`, `@`, whitespace or a
-  ///   control character;
+  /// [subName] is folded to lower case, and may start with `_`. Throws
+  /// [ArgumentError] when:
+  /// - [subName] is empty, contains `.`, `:`, `@`, whitespace or a
+  ///   control character, or holds a character a key's name cannot;
   /// - [subName] is `__rr` (reserved for the built-in read-receipt
   ///   sub-collection — use `item.readBy` / `item.markReadByMe` /
   ///   `AtCollection.readReceiptsFor` instead);
   /// - the composed namespace would exceed 128 chars.
-  ///
-  /// [subName] is used as given: it is not folded to lower case, and it
-  /// may start with `_`.
   ///
   /// [writeTypeTag] stamps items this sub-collection creates with that tag
   /// when no factory is registered for their type. It is not inherited from
@@ -1903,7 +1910,7 @@ interface class AtCollection<T> {
       prefix.write('@');
       prefix.write(ancestor.owner!);
       prefix.write('/');
-      prefix.write(ancestor.subName);
+      prefix.write(ancestor.subName.toLowerCase());
       prefix.write('|');
       final isLast = (i == ancestry.length - 1);
 
@@ -2000,6 +2007,7 @@ interface class AtCollection<T> {
     String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
+    subName = subName.toLowerCase();
     if (subName == _rr) {
       throw ArgumentError(
         'subName "$_rr" is reserved for the built-in read-receipt '
@@ -2032,6 +2040,9 @@ interface class AtCollection<T> {
   }) {
     if (_refusesStructure(subName)) {
       throw ArgumentError.value(subName, 'subName', _structureRule);
+    }
+    if (_refusesKeyName(subName)) {
+      throw ArgumentError.value(subName, 'subName', _keyNameRule);
     }
     final composedNs = '$subName.${parent.id}.$namespace';
     const int maxComposedNsLength = 128;
@@ -2448,23 +2459,26 @@ interface class AtCollection<T> {
   bool _refusesEvent(_CParts parts) {
     String? refused;
     if (_refusesStructure(parts.id)) {
-      refused = 'the id';
+      refused = 'the id $_structureRule';
     } else {
       for (final a in parts.ancestry) {
         if (_refusesStructure(a.id)) {
-          refused = 'its ancestor id ${_forLog(a.id)}';
+          refused = 'its ancestor id ${_forLog(a.id)} $_structureRule';
           break;
         }
         if (_refusesStructure(a.subName)) {
-          refused = 'its subName ${_forLog(a.subName)}';
+          refused = 'its subName ${_forLog(a.subName)} $_structureRule';
+          break;
+        }
+        if (_refusesKeyName(a.subName)) {
+          refused = 'its subName ${_forLog(a.subName)} $_keyNameRule';
           break;
         }
       }
     }
     if (refused == null) return false;
     _logger.warning('Dropped an event for item id ${_forLog(parts.id)} owned '
-        'by ${_forLog('${parts.from}')} in $namespace: $refused '
-        '$_structureRule');
+        'by ${_forLog('${parts.from}')} in $namespace: $refused');
     return true;
   }
 
