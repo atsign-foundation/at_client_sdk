@@ -253,6 +253,22 @@ void main() {
   });
 
   test(
+      'Given an id containing U+202E, when create is called, then the ArgumentError\'s text shows it escaped',
+      () async {
+    final c = await todos();
+    final id = 'a${String.fromCharCode(0x202e)}b';
+    final escaped = 'a' r'\' 'u' '202e' 'b';
+    expect(escaped.length, 8, reason: 'the escape is six characters');
+    await expectLater(
+      c.create(obj: 'v', id: id),
+      throwsA(isA<ArgumentError>()
+          .having((e) => '$e', 'text', contains(escaped))
+          .having((e) => '$e'.runes.contains(0x202e), 'holds U+202E', isFalse)
+          .having((e) => e.invalidValue, 'invalidValue', id)),
+    );
+  });
+
+  test(
       'Given an empty id, when create is called, then ArgumentError is thrown and nothing is read or written',
       () async {
     final c = await todos();
@@ -721,6 +737,23 @@ void main() {
     expect([for (final item in await sub('a*').getItems()) item.id], ['c3']);
   });
 
+  test(
+      'Given an item with no parents in its envelope, two levels under the sub-collection "a*" of "p1", whose ancestors are stored, when cleanupOrphans is called, then the item is not deleted',
+      () async {
+    seed('p1.$namespace@alice', 'root');
+    seed('b1.a*.p1.$namespace@alice', 'mid');
+    seed('c1.x.b1.a*.p1.$namespace@alice', 'legacy leaf');
+    seed('c2.x.b2.a*.p1.$namespace@alice', 'orphan leaf');
+    final c = await todos();
+
+    await c.cleanupOrphans();
+
+    expect(store.keys, contains('c1.x.b1.a*.p1.$namespace@alice'),
+        reason: 'its ancestors are stored');
+    expect(store.keys, isNot(contains('c2.x.b2.a*.p1.$namespace@alice')),
+        reason: 'control: the leaf whose parent b2 is absent is swept');
+  });
+
   // Ids that arrive in events
 
   test(
@@ -983,6 +1016,34 @@ void main() {
   });
 
   test(
+      'Given getDescendant has returned an item through the subName "comments", when it is called with the subName "COMMENTS", then it opens no further sub-collection',
+      () async {
+    final opened = stubNotificationService();
+    final c = await todos();
+    final parent = await c.create(obj: 'p', id: 'p1');
+    await c
+        .subCollection<String>(
+            parent: parent,
+            subName: 'comments',
+            defaultExpiration: const Duration(days: 1))
+        .create(obj: 'leaf', id: 'c1');
+    Future<CItem<String>?> descendant(String subName) =>
+        c.getDescendant<String>(
+            ancestry: [CAncestor(id: 'p1', subName: subName, owner: alice)],
+            id: 'c1',
+            owner: alice,
+            leafExpiration: const Duration(days: 1));
+    expect((await descendant('comments'))?.id, 'c1');
+    final openedBefore = opened();
+
+    final item = await descendant('COMMENTS');
+
+    expect(item?.id, 'c1');
+    expect(opened(), openedBefore,
+        reason: 'no further notification subscription is opened');
+  });
+
+  test(
       'Given a notification from @bob whose key has two segments before the namespace, when it reaches the collection, then no event is emitted',
       () async {
     final c = await todos();
@@ -1007,6 +1068,20 @@ void main() {
 
     notifications
       ..add(fromBob('@alice:x@bob.$namespace@bob'))
+      ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s item id is "x@alice:y", when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:x@alice:y.$namespace@bob'))
       ..add(fromBob(control));
     await pumpEventQueue();
 

@@ -95,6 +95,13 @@ Feature: AtCollection checks every item id before using it in a key
     Then the ArgumentError's text holds none of U+2028, U+2029 and U+0085
     And its invalidValue is the id as given
 
+  @forgery
+  Scenario: Given an id containing U+202E, when create is called, then the ArgumentError's text shows it escaped
+    Given a collection "todos.demo" of @alice
+    When create is called with the id "a", U+202E and "b"
+    Then the ArgumentError's text does not hold U+202E and shows it as a six-character escape
+    And its invalidValue is the id as given
+
   Scenario: Given an empty id, when create is called, then ArgumentError is thrown and nothing is read or written
     Given a collection "todos.demo" of @alice
     When create is called with the id ""
@@ -337,6 +344,11 @@ Feature: AtCollection checks every item id before using it in a key
     When getItems is called on the sub-collection "a*" of "p1"
     Then it lists "c3" only
 
+  Scenario: Given an item with no parents in its envelope, two levels under the sub-collection "a*" of "p1", whose ancestors are stored, when cleanupOrphans is called, then the item is not deleted
+    Given a collection "todos.demo" of @alice holding an item "p1", an item "b1" in its sub-collection "a*", and an item "c1" whose envelope has no parents in the sub-collection "x" of "b1"
+    When cleanupOrphans is called on the collection
+    Then "c1" is not deleted
+
   # Ids that arrive in events
 
   @dos
@@ -435,6 +447,14 @@ Feature: AtCollection checks every item id before using it in a key
     And no further notification subscription is opened
 
   @dos
+  Scenario: Given getDescendant has returned an item through the subName "comments", when it is called with the subName "COMMENTS", then it opens no further sub-collection
+    Given a collection "todos.demo" of @alice holding an item "p1" with an item "c1" in its sub-collection "comments"
+    And getDescendant has returned "c1" for the ancestor "p1" of @alice in "comments"
+    When getDescendant is called for the ancestor "p1" of @alice in "COMMENTS" and the item "c1"
+    Then it returns "c1"
+    And no further notification subscription is opened
+
+  @dos
   Scenario: Given a notification from @bob whose key has two segments before the namespace, when it reaches the collection, then no event is emitted
     Given a collection "todos.demo" of @alice
     When a notification from @bob arrives for the key "@alice:a.b.todos.demo@bob"
@@ -445,4 +465,10 @@ Feature: AtCollection checks every item id before using it in a key
   Scenario: Given a notification from @bob whose key's item id is "x@bob", when it reaches the collection, then no event is emitted
     Given a collection "todos.demo" of @alice
     When a notification from @bob arrives for the key "@alice:x@bob.todos.demo@bob"
+    Then the collection emits no event
+
+  @dos @forgery
+  Scenario: Given a notification from @bob whose key's item id is "x@alice:y", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:x@alice:y.todos.demo@bob"
     Then the collection emits no event
