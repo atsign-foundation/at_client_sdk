@@ -54,8 +54,8 @@ Map<String, String> clientConfigFor({
 /// makes its values. One of the four that is not a string is sent as its
 /// `toString()`, and one that is absent, empty or only whitespace takes
 /// at_auth's. A value of any other key that is not a string is passed through
-/// unchanged. A `version` is sent only when [config] holds one; at_auth adds
-/// none.
+/// unchanged. A `version` is sent only when [config] holds one, made sendable
+/// when it is a string and unchanged when it is not; at_auth adds none.
 Map<String, dynamic> withClientConfigDefaults(Map<String, dynamic> config) {
   String? given(String key) => config[key]?.toString();
   return {

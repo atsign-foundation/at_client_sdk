@@ -603,9 +603,16 @@ D-12. Independent of the P series, which is `at_server`-side.
     to authenticate: `clientConfigOf` adds it, so the verb connection, sync's, the
     monitor's, the enrollment handshake's and the start-up key check's all carry it.
     `RemoteSecondary`'s alone adds `clientId` and `platform`. A program using at_auth
-    without at_client sends no `version`. Settled (plan-d3q, 2026-11-16): the atServer
-    writes its error replies as JSON on a connection whose `from:` named a version, so
-    every reader of a refusal on these connections reads both forms.
+    without at_client sends no `version`. Settled (plan-d3q, 2026-11-16): on a connection
+    whose `from:` named a version above 3.0.37, the atServer's global exception handler
+    writes its error replies as JSON, while the PKAM handler's enrollment refusals stay
+    `error:<code>:<text>`. The readers
+    that match a refusal's code as text read it in the plain, colon and JSON forms: the
+    enrollment wait in at_auth, and at_client's expired-request cleanup and
+    connection-failure classification, through one internal reader in each package.
+    `DefaultResponseParser` reads only `<code>-<text>`, but no atServer `error:` reply
+    reaches it: every remote path to it goes through at_lookup's `executeVerb`, which
+    throws on such a reply first.
   - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
     has exactly one consumer, and that consumer uses five members — `currentState`,
     `targetState`, `currentStateStream`, `start()`, `stop()`. What is left in it is
