@@ -189,6 +189,56 @@ void main() {
           reason: 'a dropped monitor says nothing about whether the atServer '
               'is reachable; the next failing verb does');
     });
+
+    group('after a failed start', () {
+      late List<Duration> defaultStartRetries;
+      late List<Duration> defaultStartRefusalRetries;
+      final delays = <Duration>[];
+
+      setUp(() {
+        defaultStartRetries = Monitor.startRetryDelays;
+        defaultStartRefusalRetries = Monitor.startRefusalRetryDelays;
+        // Long enough that no retry runs inside a test.
+        Monitor.startRetryDelays = const [Duration(seconds: 10)];
+        Monitor.startRefusalRetryDelays = const [Duration(seconds: 20)];
+        delays.clear();
+        monitor.onStartRetryDelay = delays.add;
+      });
+
+      tearDown(() {
+        monitor.stop();
+        Monitor.startRetryDelays = defaultStartRetries;
+        Monitor.startRefusalRetryDelays = defaultStartRefusalRetries;
+      });
+
+      test(
+          'an UnAuthenticatedException is retried on the refusal schedule and '
+          'reported refused', () async {
+        muxable.startError = UnAuthenticatedException('Failed connecting to '
+            '@alice. error:AT0027:enrollment_id: e1 is revoked');
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(delays, [const Duration(seconds: 20)]);
+        expect(connection.current.isRefused, isTrue);
+        expect(connection.current.cause, AtConnectionCause.revoked);
+      });
+
+      test(
+          'any other error is retried on the network schedule and not '
+          'reported, even when it carries a refusal code', () async {
+        muxable.startError =
+            AtLookUpException('AT0027', 'enrollment_id: e1 is revoked');
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(delays, [const Duration(seconds: 10)],
+            reason: 'a start counts as refused only what a reconnect does, an '
+                'UnAuthenticatedException, so the two back off alike');
+        expect(connection.current.isRefused, isFalse,
+            reason: 'and a reconnect would not report it');
+      });
+    });
   });
 
   group('start', () {

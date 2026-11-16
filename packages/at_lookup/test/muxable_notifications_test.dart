@@ -935,6 +935,45 @@ void main() {
     });
 
     test(
+        'a reconnect whose connection preamble fails with a refusal code is '
+        'retried on the network schedule and adds no error', () async {
+      var connects = 0;
+      final atLookup = AtLookUp.withSecureSocket(
+        atSign: '@alice',
+        rootDomain: const AtRootDomain(host, 64),
+        authenticator: (_) async => true,
+        secondaryAddressFinder: addressFinder,
+        transport: AtLookupTransport(transportFactory: transportFactory),
+        onConnect: (_) async {
+          connects++;
+          if (connects == 2 || connects == 3) {
+            throw AtLookUpException('AT0027', 'enrollment_id: e1 is revoked');
+          }
+        },
+      )..heartbeatInterval = const Duration(hours: 1);
+      final taken = <Duration>[];
+      (atLookup as AtLookupImpl).onNotificationReconnectDelay = taken.add;
+      addTearDown(atLookup.stopNotifications);
+      final errors = <Object>[];
+      atLookup.notifications.listen((_) {}, onError: errors.add);
+      await atLookup.startNotifications();
+
+      await transport().serverCloses();
+      await until(
+          () => taken.length == 3 && !atLookup.isReconnectingNotifications,
+          'two failed preambles and the reconnect after them');
+
+      expect(connects, 4, reason: 'the start, two failed preambles, and one '
+          'that succeeded');
+      expect(taken, [ms(10), ms(11), ms(12)],
+          reason: 'only an UnAuthenticatedException is a refusal; any other '
+              'failure, whatever code it carries, waits on the network '
+              'schedule');
+      expect(errors, isEmpty,
+          reason: 'and is not reported on the stream as a refusal');
+    });
+
+    test(
         'each refused attempt arrives as an error on notifications, which '
         'stays open', () async {
       final taken = <Duration>[];

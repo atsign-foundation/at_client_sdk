@@ -4,7 +4,8 @@ import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_commons/at_commons.dart' show StoppedException;
+import 'package:at_commons/at_commons.dart'
+    show StoppedException, UnAuthenticatedException;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
@@ -276,23 +277,32 @@ class Monitor {
         return;
       }
       logger.warning('Failed to start notifications: $e');
-      final state = classifyConnectionFailure(e);
-      final refused = state != null && state.isRefused;
-      if (refused) unawaited(connection?.report(state));
-      _scheduleStartRetry(refused: refused);
+      final refusal = _refusalIn(e);
+      if (refusal != null) unawaited(connection?.report(refusal));
+      _scheduleStartRetry(refused: refusal != null);
     }
   }
 
   /// Reports a reconnect the atServer refused to [connection]; any other
   /// error on the notification stream is logged.
   void _onNotificationStreamError(Object e) {
-    final state = classifyConnectionFailure(e);
-    if (state != null && state.isRefused) {
-      unawaited(connection?.report(state));
+    final refusal = _refusalIn(e);
+    if (refusal != null) {
+      unawaited(connection?.report(refusal));
       return;
     }
     logger.warning('Error on the notification stream: $e');
   }
+
+  /// The refused state [error] stands for, or null when it is not a refusal.
+  ///
+  /// A refusal is an [UnAuthenticatedException], the one failure [lookUp]
+  /// counts as refused when it reconnects, so a first start and a reconnect
+  /// back off alike; [classifyConnectionFailure] names its cause.
+  AtConnectionState? _refusalIn(Object error) =>
+      error is UnAuthenticatedException
+          ? classifyConnectionFailure(error)
+          : null;
 
   /// Tries the first connect again, while the caller still wants to listen,
   /// waiting longer when the atServer [refused] the last attempt.

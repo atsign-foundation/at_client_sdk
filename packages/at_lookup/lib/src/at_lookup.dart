@@ -17,6 +17,12 @@ import 'package:at_lookup/src/util/error_response.dart'
 /// so a closure held for an instance's life must decide afresh each time what
 /// credential applies: an instance that CRAM-onboards and then PKAM-
 /// authenticates is one instance and two answers.
+///
+/// Return false, or throw [UnAuthenticatedException], when the atServer
+/// refuses the credential: only those count as a refusal, which
+/// [AtLookupMuxable.notifications] reports and a notification reconnect waits
+/// longer after. A reconnect retries any other exception as a failure to
+/// reach the atServer.
 typedef AtAuthenticator = Future<bool> Function(AtCommandExecutor executor);
 
 /// The narrow view of a connection that an [AtAuthenticator] is given: enough
