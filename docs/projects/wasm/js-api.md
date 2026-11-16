@@ -460,7 +460,9 @@ still rejects with `COLLECTION_ITEM_UNREADABLE`.
 **Known limits.**
 
 - Items that Dart apps wrote with ids outside the id rule appear in `list()` and `query()`
-  but cannot be addressed from JS.
+  but cannot be addressed from JS. This includes a peer's item: `list()` can return an item
+  whose id `get()` refuses with `COLLECTION_INVALID_ARGUMENT`. It happens only when a writer
+  other than this adapter used a non-conforming id; the adapter's own `create` never does.
 - Await each write on an item before starting the next. Two writes to one item that
   overlap can overwrite each other, as upstream (last writer wins).
 
