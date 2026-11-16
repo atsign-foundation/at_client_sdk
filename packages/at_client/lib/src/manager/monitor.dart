@@ -287,11 +287,16 @@ class Monitor {
   /// error on the notification stream is logged.
   void _onNotificationStreamError(Object e) {
     final refusal = _refusalIn(e);
-    if (refusal != null) {
-      unawaited(connection?.report(refusal));
+    if (refusal == null) {
+      logger.warning('Error on the notification stream: $e');
       return;
     }
-    logger.warning('Error on the notification stream: $e');
+    if (_targetState != NotificationListenerState.listening) {
+      logger.info('stop() arrived before this refusal, which is not '
+          'reported: $e');
+      return;
+    }
+    unawaited(connection?.report(refusal));
   }
 
   /// The refused state [error] stands for, or null when it is not a refusal.

@@ -56,6 +56,10 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// muxable authenticates, so a test can land a stop() in that window.
   Future<void>? startGate;
 
+  /// Awaited before [stopNotifications] tears down, so a test can land an
+  /// event between a stop() and the teardown it queues.
+  Future<void>? stopGate;
+
   @override
   Stream<String> get notifications => _notifications.stream;
 
@@ -84,6 +88,7 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   @override
   Future<void> stopNotifications() async {
+    if (stopGate != null) await stopGate;
     started = false;
     if (!_up.isClosed) _up.add(false);
     // Closed and replaced, as the real one does.
@@ -97,6 +102,9 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   /// The atServer sends one.
   void deliver(String notification) => _notifications.add(notification);
+
+  /// The atServer refuses a reconnect, reported as the real muxable does.
+  void refuse(Object refusal) => _notifications.addError(refusal);
 
   /// The connection drops under us - the muxable reports it and reconnects.
   @override
@@ -188,6 +196,37 @@ void main() {
       expect(connection.current.isOnline, isTrue,
           reason: 'a dropped monitor says nothing about whether the atServer '
               'is reachable; the next failing verb does');
+    });
+
+    test('a refused reconnect is reported refused', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.refuse(UnAuthenticatedException('Failed connecting to @alice. '
+          'error:AT0027:enrollment_id: e1 is revoked'));
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(connection.current.isRefused, isTrue);
+      expect(connection.current.cause, AtConnectionCause.revoked);
+    });
+
+    test('a refused reconnect that arrives after stop() is not reported',
+        () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      final gate = Completer<void>();
+      muxable.stopGate = gate.future;
+
+      monitor.stop();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.refuse(UnAuthenticatedException('Failed connecting to @alice. '
+          'error:AT0027:enrollment_id: e1 is revoked'));
+      await Future.delayed(const Duration(milliseconds: 20));
+      gate.complete();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(connection.current.isOnline, isTrue,
+          reason: 'the caller stopped listening before the refusal arrived, '
+              'so the attempt ends as a stop does, with nothing reported');
     });
 
     group('after a failed start', () {
