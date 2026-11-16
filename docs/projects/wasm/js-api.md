@@ -504,7 +504,7 @@ classes), the facade must catch on the Dart side and rethrow a JS-shaped error:
 ```ts
 class AtError extends Error {
   readonly code: string;      // stable; collection codes are listed in §6.1
-  readonly kind: string;      // e.g. 'AtKeyException'
+  readonly kind: string;      // e.g. 'AtKeyNotFoundException'
   readonly retriable: boolean;
 }
 ```
@@ -527,8 +527,11 @@ exception or a batch of `OpFailure`s — never a tuple, never a second thrown ty
 
 Every collections adapter operation (§5.5) returns a Future that rejects with one
 `JsCollectionsError {code, message, id?, owner?, kind?, failures}`, which the facade turns
-into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` is
-the Dart type of the underlying error. A watch reports stream errors to `onError` in the
+into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` names
+the underlying error from a fixed set (`AtKeyNotFoundException`, `InvalidAtSignException`,
+`CItemReadException`, `AtClientException`, `AtException`, `StateError`, `ArgumentError`,
+`TimeoutException`, `FormatException`), or is `Unknown`; it is never read from the runtime
+type, which dart2js minifies. A watch reports stream errors to `onError` in the
 same shape. The codes are a registry of their own, not the at_commons `AT00xx` codes: those
 name the atServer and client failures of key operations, and none of them says "the item is
 owned by another atSign" or "some of the key writes landed". Codes that describe one item are
