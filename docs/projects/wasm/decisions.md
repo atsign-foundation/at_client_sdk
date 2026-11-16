@@ -14,7 +14,7 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
-- [1. The rulings](#1-the-rulings) — D-1..D-26, then [K-1..K-18 browser at-keys custody](#browser-at-keys-custody--k-1k-18)
+- [1. The rulings](#1-the-rulings) — D-1..D-27, then [K-1..K-18 browser at-keys custody](#browser-at-keys-custody--k-1k-18)
 - [2. Measured findings](#2-measured-findings)
 - [3. Superseded positions](#3-superseded-positions)
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
@@ -283,11 +283,17 @@ surface is read-compatible with typed Dart peers but not write-compatible.** See
 **Status, 2026-11-14.** Route A is now implemented upstream: at_client 4.1.0
 (unreleased) adds an optional `writeTypeTag` to `AtClient.collection` and
 `AtCollection.subCollection`, which stamps items written without a registered factory
-instead of `n/a`. The same change adds a per-client reopen check: opening a namespace
-again on the same client so that a new item would be stamped with another tag throws
-`ArgumentError`. The Dart-side collections adapter passes
-the JS `type` as `writeTypeTag`, but JS writes still stamp `n/a` until the facade exposes
-the adapter; the read-only compatibility described above stands for JS consumers today.
+instead of `n/a`. The same change adds a per-client reopen check: `AtClient.collection`
+throws `ArgumentError` when a namespace already open on the client would stamp a new item
+with another tag than the new open asks for. The JS binding has not yet adopted
+`writeTypeTag`, so JS writes still stamp `n/a` until it does; the read-only
+compatibility described above stands for JS consumers today.
+
+**Status, 2026-11-16.** The Dart-side collections adapter (`JsCollectionsAdapter`) passes
+the JS `type` as `writeTypeTag`, so a record it writes carries the declared tag. JS
+consumers still write `n/a` until the `@JSExport` facade exposes the adapter, and T6.9
+(a record written by the JS facade) stays expected-red until then. The adapter scope is
+proposed in D-27.
 
 **Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
 outright: it would force every JS app into a Dart build step, destroying the
@@ -1050,6 +1056,28 @@ The browser lane holds the atSign's @keys behind a passkey, derived from a singl
 | at_client `Enrollments.unrevoke` cited by name ([`enterprise-identity.md`](enterprise-identity.md)) | Applied; to confirm |
 | Reinterpretations: BO-5 "recorded in the blob" → "recorded with the enrollment (`signingAlgo`)"; X-K1, X-K3, X-K4 re-read for a hint-only IndexedDB | Applied; to confirm |
 
+### D-27 — The JS collections adapter replaces the `AtEasy` facade; J1 and J1a shrink to it (2026-11-16)
+
+**Proposed.** Accepted by: (blank; binds only with an accepted row in
+[`docs/architecture/decisions.md`](../../architecture/decisions.md)).
+
+J1 (an `AtEasy` Layer B facade with namespace auto-qualification, `expiration`
+defaulting, ordering and limits) and J1a (a `(name, type)` registry that enforces the tag
+at `collection()` call time) are cut to a smaller piece: `JsCollectionsAdapter`
+(`packages/at_client_wasm/lib/src/collections/js_collections_adapter.dart`), which only
+translates plain values onto `AtCollection` and back and passes `type` straight through
+as `writeTypeTag`. It is exported from no library under `lib/`.
+
+- **Removed from scope:** the `AtEasy` types, namespace auto-qualification, `expiration`
+  defaulting, ordering and limits, the `(name, type)` registry.
+- **Kept:** `{id, owner}` addressing, add-only sharing, `where(path, op, value)` over
+  `wherePath`, callback events, the collection error codes (`js-api.md` §6.1).
+- **Existing mechanism not used:** the `AtEasy` facade proposed in #2481, because the
+  upstream `writeTypeTag` makes the registry unnecessary and the rest is the facade's
+  job, not a Layer B concern.
+- **Consequence:** T6.9 holds on the Dart side only; the facade that exposes the adapter
+  is still to be built.
+
 ---
 
 ## 2. Measured findings
@@ -1450,3 +1478,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-10 | D-24 brought current once [#2451](https://github.com/atsign-foundation/at_client_sdk/pull/2451) merged: the dedupe is on trunk, keyed by the pair (from, id) with the sender canonical, and the watermark stores `[from, id]` pairs capped at 1024. D-19's handover dedupes by the same pair. The browser preset was taken out of #2451 before it merged, and where browser presets live is still open. |
 | 2026-11-11 | D-24's policy is implemented in [#2476](https://github.com/atsign-foundation/at_client_sdk/pull/2476): `AtClientPreference.notificationReplay` takes `connect`, `resume` (the default), `window(d)` and `full`, and `fetchOfflineNotifications` is deprecated. The start resolves once per notification service and a failed read is retried on the next connect; a window start is never later than service creation and a negative duration is zero. A live test covers `full` sending `monitor:0` to an atServer. (implemented by srieteja) |
 | 2026-11-13 | **D-18 reversed** (review of [#2430](https://github.com/atsign-foundation/at_client_sdk/pull/2430)). The remote-only storage path is deleted; the client runs on `InMemoryAtClientStorage`. Key custody follows K-16. [`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md) moved to `superseded/`. D-12, D-15, D-17 and D-24 annotated and `acceptance.md` X-R1..X-R3 amended to match: remote-only is the routing preference, and sync still runs, since only an explicit `useRemoteAtServer = false` keeps a write local. |
+| 2026-11-16 | **D-27 proposed** (review of [#2488](https://github.com/atsign-foundation/at_client_sdk/pull/2488)). The JS collections adapter replaces the `AtEasy` facade and J1/J1a shrink to it; not accepted until it has a row in `docs/architecture/decisions.md`. D-11's 2026-11-14 note is restored as written and a 2026-11-16 status added; T6.9 is expected-red again. |

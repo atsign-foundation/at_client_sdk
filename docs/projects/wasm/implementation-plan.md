@@ -1176,12 +1176,12 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   `CmpPredicate._`, closure `PathField.extract`); events go to callbacks; failures reject
   with the collection error codes in `js-api.md` §6.1. Namespace auto-qualification, `expiration`
   defaulting, ordering and limits are **not** in it. It replaces the `AtEasy` facade
-  proposed in #2481. Scenarios: `features/at_client_wasm/js_collections_adapter.feature`.
+  proposed in #2481, as D-27 proposes (`decisions.md`; not yet accepted). Scenarios: `features/at_client_wasm/js_collections_adapter.feature`.
   → T6.3, T6.9
 - **J1a — The declared `typeTag` (D-11): route A.** Upstream `writeTypeTag` on
   `AtClient.collection` stamps the declared tag on every record a collection writes.
   The adapter passes `type` straight through as `writeTypeTag`, so a JS-written record
-  carries its declared tag on the wire (T6.9). There is no `(name, type)` registry and no
+  carries its declared tag on the wire on the Dart side (T6.9 stays expected-red until the facade exposes the adapter). Scope per D-27 (proposed). There is no `(name, type)` registry and no
   carrier-class shim (route B). Read-compatibility with typed Dart peers is unchanged.
 - **J1b — Verify `subCollection`'s `fromJson`/`typeTag` XOR check.** `js-api.md` §5.4
   measured the omit-both escape (F1) only for the root `AtClient.collection()`; confirm
@@ -1214,7 +1214,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 - **J7 — T6 harness**, timeout-bounded throughout, plus a sample TS consumer that
   `tsc --noEmit` type-checks against the published typings. Extend T6.3 to cover
   `CItem`/`CEvent`/`Predicate` (not just `Future`/`Stream`/`List`/`Uint8List`). The
-  declared-`typeTag` gate (T6.9) is already green on the Dart side through J1a.
+  declared-`typeTag` gate (T6.9) is expected-red until the facade exists; the Dart-side adapter test passes through J1a.
   → T6.1, T6.2, T6.7
 - **J8 — Resolve JS-1**: measure which implementation `cryptography` selects under
   dart2js and whether Web Crypto removes the deferred Argon2id work
