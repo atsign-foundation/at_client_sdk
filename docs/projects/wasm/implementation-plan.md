@@ -600,9 +600,10 @@ D-12. Independent of the P series, which is `at_server`-side.
   - **The monitor connection sends no `version`.** Every authenticating `from:` names
     the app and the SDK (`appName`, `appVersion`, `sdkName`, `sdkVersion`), the monitor's
     included; `RemoteSecondary`'s alone adds `version`, `clientId` and `platform`.
-    `AtClientConfig.atClientVersion` therefore reaches the atServer as `version` over the
-    verb connection only, and at_client's version reaches it as `sdkVersion` over every
-    connection. Settled (plan-d3q): `version` stays off the monitor, because the atServer
+    `AtClientConfig.atClientVersion` therefore reaches the atServer as `version` over
+    `RemoteSecondary`'s connections only: the verb connection, and sync's, which
+    `SyncServiceImpl.remoteSecondaryFor` builds as a `RemoteSecondary` of its own.
+    at_client's version reaches it as `sdkVersion` over every connection. Settled (plan-d3q): `version` stays off the monitor, because the atServer
     chooses how it formats an error reply by the `version` a connection sent.
   - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
     has exactly one consumer, and that consumer uses five members — `currentState`,
