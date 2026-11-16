@@ -250,6 +250,23 @@ void main() {
   });
 
   test(
+      'Given an id starting with "_", when draft is called, then ArgumentError is thrown',
+      () async {
+    final c = await todos();
+    expect(() => c.draft(obj: 'v', id: '_a'), refusedId('_a', underscoreRule));
+  });
+
+  test(
+      'Given a stored item whose id starts with "_", when upsert is called with that id, then ArgumentError is thrown and nothing is read or written',
+      () async {
+    seed('_a.$namespace@alice', 'old');
+    final c = await todos();
+    await expectLater(
+        c.upsert(obj: 'new', id: '_a'), refusedId('_a', underscoreRule));
+    expectNothingReadOrWritten();
+  });
+
+  test(
       'Given an id containing ":", when get is called, then ArgumentError is thrown and nothing is read',
       () async {
     final c = await todos();
@@ -300,6 +317,15 @@ void main() {
     expect(item.id, '_a');
     expect(item.owner, bob);
     expect(item.obj, 'from bob');
+  });
+
+  test(
+      'Given an item @bob shares under an id starting with "_", when exists is called with that id and @bob, then it returns true',
+      () async {
+    seed('cached:@alice:_a.$namespace@bob', 'from bob');
+    final c = await todos();
+
+    expect(await c.exists('_a', bob), isTrue);
   });
 
   // A new item's id

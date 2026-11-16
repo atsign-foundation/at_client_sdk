@@ -115,6 +115,17 @@ Feature: AtCollection checks every item id before using it in a key
     When draft is called with the id "a@b"
     Then ArgumentError is thrown
 
+  Scenario: Given an id starting with "_", when draft is called, then ArgumentError is thrown
+    Given a collection "todos.demo" of @alice
+    When draft is called with the id "_a"
+    Then ArgumentError is thrown
+
+  Scenario: Given a stored item whose id starts with "_", when upsert is called with that id, then ArgumentError is thrown and nothing is read or written
+    Given a collection "todos.demo" of @alice holding a stored item with the id "_a"
+    When upsert is called with the id "_a" and a new value
+    Then ArgumentError is thrown
+    And nothing is read or written
+
   Scenario: Given an id containing ":", when get is called, then ArgumentError is thrown and nothing is read
     Given a collection "todos.demo" of @alice
     When get is called with the id "a:b" and the owner @alice
@@ -151,6 +162,12 @@ Feature: AtCollection checks every item id before using it in a key
     Given a collection "todos.demo" of @alice holding an item @bob shares under the id "_a"
     When get is called with the id "_a" and the owner @bob
     Then it returns that item
+
+  @dos
+  Scenario: Given an item @bob shares under an id starting with "_", when exists is called with that id and @bob, then it returns true
+    Given a collection "todos.demo" of @alice holding an item @bob shares under the id "_a"
+    When exists is called with the id "_a" and the owner @bob
+    Then it returns true
 
   # A new item's id
 
