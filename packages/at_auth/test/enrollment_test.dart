@@ -388,20 +388,27 @@ void main() {
     });
 
     test('given a pair of the wrong length for mldsa65, when it is submitted, '
-        'then it is refused before sending', () async {
+        'then it is refused before sending, naming no key text', () async {
       final (lookUp, sent) = recordingLookUp();
-      await expectLater(
-        AtEnrollmentImpl().submit(
+      final publicKey = base64Encode(utf8.encode('PUBLIC-KEY-MATERIAL' * 5));
+      final privateKey = base64Encode(utf8.encode('PRIVATE-KEY-MATERIAL' * 5));
+      Object? error;
+      try {
+        await AtEnrollmentImpl().submit(
           legacyRequest(
-            apkamKeyPair: (
-              publicKey: base64Encode(List<int>.filled(32, 1)),
-              privateKey: base64Encode(List<int>.filled(32, 2)),
-            ),
+            apkamKeyPair: (publicKey: publicKey, privateKey: privateKey),
           ),
           lookUp,
-        ),
-        throwsA(isA<AtSigningException>()),
-      );
+        );
+      } catch (e) {
+        error = e;
+      }
+      expect(error, isA<AtSigningException>());
+      final text = '${(error as AtSigningException).message} $error';
+      expect(text, isNot(contains(publicKey)));
+      expect(text, isNot(contains(privateKey)));
+      expect(text, isNot(contains('PUBLIC-KEY-MATERIAL')));
+      expect(text, isNot(contains('PRIVATE-KEY-MATERIAL')));
       expect(sent, isEmpty);
     });
 
@@ -521,35 +528,6 @@ void main() {
             ),
           );
         }
-        expect(sent, isEmpty);
-      });
-
-      test(
-          'when an mldsa65 pair is base64 of the wrong length, then the error '
-          'is fixed text holding none of the keys', () async {
-        final (lookUp, sent) = recordingLookUp();
-        final publicKey = base64Encode(utf8.encode('PUBLIC-KEY-MATERIAL' * 5));
-        final privateKey =
-            base64Encode(utf8.encode('PRIVATE-KEY-MATERIAL' * 5));
-        Object? error;
-        try {
-          await AtEnrollmentImpl().submit(
-            legacyRequest(
-              apkamKeyPair: (publicKey: publicKey, privateKey: privateKey),
-            ),
-            lookUp,
-          );
-        } catch (e) {
-          error = e;
-        }
-        expect(
-          error,
-          isA<AtSigningException>().having(
-            (e) => e.message,
-            'message',
-            'the supplied mldsa65 APKAM key pair is malformed',
-          ),
-        );
         expect(sent, isEmpty);
       });
 

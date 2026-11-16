@@ -5,7 +5,9 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
+import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
+import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
@@ -19,6 +21,29 @@ class MockAtLookUp extends Mock implements AtLookupImpl {}
 class MockAtEnrollment extends Mock implements AtEnrollment {}
 
 class MockPkamAuthenticator extends Mock implements PkamAuthenticator {}
+
+class MockCramAuthenticator extends Mock implements CramAuthenticator {}
+
+/// An [AtAuthImpl] that counts how often it was asked to reach the atServer.
+class _CountingAtAuth extends AtAuthImpl {
+  int validations = 0;
+  final Object? validationFailure;
+
+  _CountingAtAuth({
+    required super.atLookUp,
+    required super.pkamAuthenticator,
+    required super.atEnrollment,
+    required super.cramAuthenticator,
+    this.validationFailure,
+  });
+
+  @override
+  Future<void> validateAtServer(AuthRequest atRequest) async {
+    validations++;
+    final failure = validationFailure;
+    if (failure != null) throw failure;
+  }
+}
 
 class FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -86,8 +111,7 @@ void main() {
         mockAtLookUp.executeCommand(any(that: startsWith('lookup:publickey')),
             auth: any(named: 'auth'))).thenAnswer(
         (_) async => throw AtLookUpException('AT0015', 'key not found'));
-    when(() => mockAtLookUp.pkamAuthenticate())
-        .thenAnswer((_) async => true);
+    when(() => mockAtLookUp.pkamAuthenticate()).thenAnswer((_) async => true);
     when(() => mockAtLookUp.executeVerb(any()))
         .thenAnswer((_) async => 'data:2');
     when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
@@ -247,7 +271,7 @@ void main() {
       );
     });
 
-    test('the supplied ML-DSA-65 pair is the one filed under the enrollment id',
+    test('The supplied ML-DSA-65 pair is the one filed under the enrollment id',
         () async {
       await atAuth.onboard(
           requestFor(signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: mldsa),
@@ -270,7 +294,7 @@ void main() {
           mldsa.publicKey);
     });
 
-    test('the supplied RSA pair is the one in the flat fields', () async {
+    test('The supplied RSA pair is the one in the flat fields', () async {
       await atAuth.onboard(requestFor(apkamKeyPair: rsa), cramSecret);
 
       final keys = await keysIo.read(atSign);
@@ -278,7 +302,7 @@ void main() {
       expect(keys.apkamPublicKey.toString(), rsa.publicKey);
     });
 
-    test('the public key sent equals the supplied one', () async {
+    test('The public key sent equals the supplied one', () async {
       await atAuth.onboard(
           requestFor(signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: mldsa),
           cramSecret);
@@ -286,32 +310,76 @@ void main() {
       expect(submittedRequest().apkamPublicKey, mldsa.publicKey);
     });
 
-    test('a pair whose halves do not match is refused and nothing is sent',
+    /// An activation whose CRAM leg and enrollment are spies, for the
+    /// scenarios that say nothing is sent.
+    ({
+      _CountingAtAuth auth,
+      MockCramAuthenticator cram,
+    }) spied({Object? validationFailure}) {
+      final cram = MockCramAuthenticator();
+      when(() => cram.authenticate(any(), any(), any()))
+          .thenAnswer((_) async => true);
+      return (
+        auth: _CountingAtAuth(
+            atLookUp: mockAtLookUp,
+            pkamAuthenticator: MockPkamAuthenticator(),
+            atEnrollment: mockAtEnrollment,
+            cramAuthenticator: cram,
+            validationFailure: validationFailure),
+        cram: cram,
+      );
+    }
+
+    void expectNothingSent(
+        ({_CountingAtAuth auth, MockCramAuthenticator cram}) spy) {
+      expect(spy.auth.validations, 0,
+          reason: 'the atServer is not contacted for a refused pair');
+      verifyNever(() => spy.cram.authenticate(any(), any(), any()));
+      verifyNever(() => mockAtLookUp.executeVerb(any()));
+      verifyNever(
+          () => mockAtLookUp.executeCommand(any(), auth: any(named: 'auth')));
+      verifyNever(() => mockAtEnrollment.submit(any(), any()));
+    }
+
+    test('A pair whose halves do not match is refused and nothing is sent',
         () async {
       final other = await MlDsa65KeyPair.generate();
+      final spy = spied();
       await expectLater(
-          atAuth.onboard(
+          spy.auth.onboard(
               requestFor(signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: (
                 publicKey: mldsa.publicKey,
                 privateKey: other.atPrivateKey.privateKey,
               )),
               cramSecret),
           throwsA(isA<AtSigningException>()));
-      verifyNever(() => mockAtEnrollment.submit(any(), any()));
+      expectNothingSent(spy);
     });
 
-    test('a pair of the wrong algorithm is refused and nothing is sent',
+    test('A pair of the wrong algorithm is refused and nothing is sent',
         () async {
+      final spy = spied();
       await expectLater(
-          atAuth.onboard(
+          spy.auth.onboard(
               requestFor(
                   signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: rsa),
               cramSecret),
           throwsA(isA<AtSigningException>()));
-      verifyNever(() => mockAtEnrollment.submit(any(), any()));
+      expectNothingSent(spy);
+
+      // The pair is judged before the atServer is reached, so an atServer
+      // that would fail still reports the pair.
+      final unreachable = spied(validationFailure: AtException('unreachable'));
+      await expectLater(
+          unreachable.auth.onboard(
+              requestFor(
+                  signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: rsa),
+              cramSecret),
+          throwsA(isA<AtSigningException>()));
+      expectNothingSent(unreachable);
     });
 
-    test('omitting it mints a fresh pair under the requested algorithm',
+    test('Omitting the pair mints a fresh one under the requested algorithm',
         () async {
       await atAuth.onboard(
           requestFor(signingAlgo: SigningAlgoType.mldsa65), cramSecret);
@@ -319,6 +387,61 @@ void main() {
       final sent = submittedRequest().apkamPublicKey!;
       expect(base64Decode(sent).length, 1952);
       expect(sent, isNot(mldsa.publicKey));
+    });
+
+    test('The real enrollment sends and files the supplied ML-DSA-65 pair',
+        () async {
+      final sentCommands = <String>[];
+      final lookUp = MockAtLookUp();
+      when(() => lookUp.secondaryAddressFinder)
+          .thenReturn(FakeSecondaryAddressFinder());
+      when(() =>
+          lookUp.executeCommand(any(that: startsWith('lookup:publickey')),
+              auth: any(named: 'auth'))).thenAnswer(
+          (_) async => throw AtLookUpException('AT0015', 'key not found'));
+      when(() => lookUp.executeCommand(any(that: startsWith('enroll:')),
+          auth: any(named: 'auth'))).thenAnswer((inv) async {
+        sentCommands.add(inv.positionalArguments.first as String);
+        return 'data:{"enrollmentId":"$enrollmentId","status":"approved"}';
+      });
+      when(() => lookUp.executeVerb(any())).thenAnswer((_) async => 'data:2');
+      when(() => lookUp.dropConnection()).thenAnswer((_) async => {});
+      final cram = MockCramAuthenticator();
+      when(() => cram.authenticate(any(), any(), any()))
+          .thenAnswer((_) async => true);
+      final pkam = MockPkamAuthenticator();
+      when(() => pkam.authenticate(any(), any())).thenAnswer((_) async => true);
+
+      await AtAuthImpl(
+              atLookUp: lookUp,
+              pkamAuthenticator: pkam,
+              cramAuthenticator: cram,
+              atEnrollment: AtEnrollmentImpl())
+          .onboard(
+              requestFor(
+                  signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: mldsa),
+              cramSecret);
+
+      final sent = jsonDecode(
+              sentCommands.single.substring(sentCommands.single.indexOf('{')))
+          as Map<String, dynamic>;
+      expect(sent['apkamPublicKey'], mldsa.publicKey);
+      expect(sent['signingAlgo'], 'mldsa65');
+      final keys = await keysIo.read(atSign);
+      expect(
+          keys
+              .getKey(enrollmentId, 'auth:mldsa65:1',
+                  CryptographicMaterialRole.privateAuthentication)!
+              .bytes
+              .toString(),
+          mldsa.privateKey);
+      expect(
+          keys
+              .getKey(enrollmentId, 'auth:mldsa65:1',
+                  CryptographicMaterialRole.publicAuthentication)!
+              .bytes
+              .toString(),
+          mldsa.publicKey);
     });
   });
 

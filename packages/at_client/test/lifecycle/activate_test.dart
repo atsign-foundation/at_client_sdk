@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
-import 'package:at_chops/at_chops.dart' show RsaKeyPair, SHA512HashingAlgo;
+import 'package:at_chops/at_chops.dart'
+    show MlDsa65KeyPair, RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtCommandExecutor;
@@ -232,9 +233,11 @@ void main() {
       InMemoryAtKeysIo store,
       ({MockAtLookupImpl lookUp, List<String> sent}) server, {
       ({String publicKey, String privateKey})? apkamKeyPair,
+      SigningAlgoType? signingAlgo,
     }) async =>
         Atsign(atSign).activate(
           cramSecret: cramSecret,
+          signingAlgo: signingAlgo,
           keys: store,
           preference: await preference(),
           lookUps: secureSocketLookUps(),
@@ -244,7 +247,7 @@ void main() {
           storage: hiveStoreFor(Atsign(atSign), await preference()),
         );
 
-    test('is the one enrolled and the one kept', () async {
+    test('Atsign.activate passes the pair through and keeps it', () async {
       final store = InMemoryAtKeysIo();
       final server = atServer();
 
@@ -257,7 +260,7 @@ void main() {
       expect(keys.apkamPrivateKey.toString(), supplied.privateKey);
     });
 
-    test('that does not match is refused before anything is enrolled',
+    test('Atsign.activate refuses a mismatched pair before enrolling',
         () async {
       final store = InMemoryAtKeysIo();
       final server = atServer();
@@ -277,7 +280,41 @@ void main() {
       expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     });
 
-    test('omitted, a fresh pair is minted', () async {
+    test(
+        'Atsign.activate passes a supplied ML-DSA-65 pair through and keeps it',
+        () async {
+      final pair = await MlDsa65KeyPair.generate();
+      final mldsa = (
+        publicKey: pair.atPublicKey.publicKey,
+        privateKey: pair.atPrivateKey.privateKey,
+      );
+      final store = InMemoryAtKeysIo();
+      final server = atServer();
+
+      await activateWith(store, server,
+          apkamKeyPair: mldsa, signingAlgo: SigningAlgoType.mldsa65);
+
+      final enroll = server.sent.singleWhere((c) => c.startsWith('enroll:'));
+      expect(enroll, contains('"apkamPublicKey":"${mldsa.publicKey}"'));
+      expect(enroll, contains('"signingAlgo":"mldsa65"'));
+      final keys = await store.read(atSign);
+      expect(
+          keys
+              .getKey(enrollmentId, 'auth:mldsa65:1',
+                  CryptographicMaterialRole.privateAuthentication)!
+              .bytes
+              .toString(),
+          mldsa.privateKey);
+      expect(
+          keys
+              .getKey(enrollmentId, 'auth:mldsa65:1',
+                  CryptographicMaterialRole.publicAuthentication)!
+              .bytes
+              .toString(),
+          mldsa.publicKey);
+    });
+
+    test('Atsign.activate with no pair mints a fresh one', () async {
       final store = InMemoryAtKeysIo();
       final server = atServer();
 

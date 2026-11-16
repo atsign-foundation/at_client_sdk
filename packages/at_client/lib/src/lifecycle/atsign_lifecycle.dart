@@ -183,6 +183,11 @@ extension AtsignLifecycle on Atsign {
   /// [apkamKeyPair] is an APKAM keypair the caller already holds, enrolled
   /// instead of a minted one. It must sign under the activation's algorithm,
   /// or the activation throws `AtSigningException` before enrolling.
+  /// If the activation fails after the enrollment is accepted (the PKAM login or
+  /// the keyfile write), retrying with the same pair is refused by the atServer
+  /// while that enrollment's record exists: retry with a different pair, or with
+  /// none so one is minted. The CRAM secret stays valid until an activation
+  /// completes.
   ///
   /// A newly registered atSign can take minutes to be provisioned: the
   /// activation polls every [provisioningPollInterval] until the atServer

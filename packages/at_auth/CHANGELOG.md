@@ -28,9 +28,11 @@
   `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
   is not of `signingAlgoType`, is refused with `AtSigningException` before the
   enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
-- A malformed mldsa65 APKAM key pair, on activation or enrollment, is refused
-  with the message `the supplied mldsa65 APKAM key pair is malformed`. The
-  exception type, `AtSigningException`, is unchanged.
+  A supplied pair is checked before the atServer is contacted. If activation
+  fails after the enrollment is accepted (the PKAM login or the keyfile
+  write), retrying with the same pair is refused by the atServer while that
+  enrollment's record exists: retry with a different pair, or with none so one
+  is minted. The CRAM secret stays valid until an activation completes.
 
 ## 4.0.0
 

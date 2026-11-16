@@ -96,6 +96,11 @@ class AtOnboardingRequest extends AuthRequest {
   /// It must be a working pair under [signingAlgoType]: the private half signs
   /// for the public half. A pair that is not is refused with
   /// [AtSigningException] before anything is enrolled. Null mints one.
+  ///
+  /// If activation fails after the enrollment is accepted (the PKAM login or the
+  /// keyfile write), retrying with the same pair is refused by the atServer while
+  /// that enrollment's record exists: retry with a different pair, or with none so
+  /// one is minted. The CRAM secret stays valid until an activation completes.
   ({String publicKey, String privateKey})? apkamKeyPair;
 
   /// A signing keypair this atSign's first enrollment owns from birth.

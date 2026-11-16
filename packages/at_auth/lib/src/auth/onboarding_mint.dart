@@ -171,14 +171,7 @@ Future<({String publicKey, String privateKey})> checkApkamKeyPair(
   );
 
   if (signingAlgo == SigningAlgoType.mldsa65) {
-    try {
-      MlDsa65KeyPair.create(canonical.publicKey, canonical.privateKey);
-    } catch (_) {
-      // Report a fixed message for any failure to build the pair.
-      throw AtSigningException(
-        'the supplied mldsa65 APKAM key pair is malformed',
-      );
-    }
+    MlDsa65KeyPair.create(canonical.publicKey, canonical.privateKey);
   }
 
   const challenge = 'apkam keypair check';

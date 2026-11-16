@@ -110,6 +110,15 @@ class AtAuthImpl implements AtAuth {
       );
     }
 
+    // A supplied pair is judged before the atServer is contacted, so a bad
+    // one costs no connection and no CRAM login. mintOnboardingKeys checks
+    // it again for its other callers.
+    final suppliedApkam = atOnboardingRequest.apkamKeyPair;
+    if (suppliedApkam != null) {
+      await checkApkamKeyPair(
+          atOnboardingRequest.signingAlgoType, suppliedApkam);
+    }
+
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator();
