@@ -231,5 +231,5 @@ Feature: The JS collections adapter translates onto AtCollection
 
   Scenario: The adapter is not exported and reaches no web-only API
     Given the libraries directly under lib/
-    Then none imports or exports the adapter
+    Then none reaches the adapter through exports or parts, directly or through lib/src
     And the adapter's package-local imports reach no dart:js_interop or package:web
