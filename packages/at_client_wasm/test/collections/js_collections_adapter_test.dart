@@ -35,7 +35,8 @@ void main() {
   setUpAll(registerAdapterFallbacks);
 
   test('JsCollectionsError is an AtException and keeps its fields', () {
-    final error = JsCollectionsError(W8.partialFailure, 'boom',
+    final error = JsCollectionsError(
+        CollectionErrorCodes.partialFailure, 'boom',
         id: 'i',
         owner: '@alice',
         kind: 'K',
@@ -43,7 +44,7 @@ void main() {
           {'op': 'put'}
         ]);
     expect(error, isA<AtException>());
-    expect(error.code, W8.partialFailure);
+    expect(error.code, CollectionErrorCodes.partialFailure);
     expect(error.message, 'boom');
     expect(error.id, 'i');
     expect(error.owner, '@alice');
@@ -51,7 +52,25 @@ void main() {
     expect(error.failures, [
       {'op': 'put'}
     ]);
-    expect(error.toString(), 'JsCollectionsError(W8_PARTIAL_FAILURE): boom');
+    expect(error.toString(),
+        'JsCollectionsError(COLLECTION_PARTIAL_FAILURE): boom');
+  });
+
+  test('The error codes are the COLLECTION_ and COLLECTION_ITEM_ names', () {
+    expect(
+        {
+          CollectionErrorCodes.invalidArgument: 'COLLECTION_INVALID_ARGUMENT',
+          CollectionErrorCodes.partialFailure: 'COLLECTION_PARTIAL_FAILURE',
+          CollectionErrorCodes.typeMismatch: 'COLLECTION_TYPE_MISMATCH',
+          CollectionErrorCodes.failed: 'COLLECTION_FAILED',
+          CollectionErrorCodes.notFound: 'COLLECTION_ITEM_NOT_FOUND',
+          CollectionErrorCodes.notOwner: 'COLLECTION_ITEM_NOT_OWNER',
+          CollectionErrorCodes.alreadyExists: 'COLLECTION_ITEM_ALREADY_EXISTS',
+          CollectionErrorCodes.unreadable: 'COLLECTION_ITEM_UNREADABLE',
+          CollectionErrorCodes.hasSubItems: 'COLLECTION_ITEM_HAS_SUB_ITEMS',
+          CollectionErrorCodes.wrongType: 'COLLECTION_ITEM_WRONG_TYPE',
+        }.entries.every((e) => e.key == e.value),
+        isTrue);
   });
 
   late FakeAtServer server;
@@ -121,7 +140,8 @@ void main() {
       '_x',
     ];
 
-    test('An item id outside the allowed set rejects with W8_INVALID_ARGUMENT',
+    test(
+        'An item id outside the allowed set rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await open();
 
@@ -133,7 +153,8 @@ void main() {
           'share': () => todos.share(mine(id), ['@bob']),
           'remove': () => todos.remove(mine(id)),
         }.entries) {
-          await expectLater(call.value(), _rejectsWith(W8.invalidArgument),
+          await expectLater(
+              call.value(), _rejectsWith(CollectionErrorCodes.invalidArgument),
               reason: '${call.key} of "$id"');
         }
       }
@@ -191,28 +212,30 @@ void main() {
           )).called(1);
     });
 
-    test('An unknown eventSource rejects with W8_INVALID_ARGUMENT', () async {
+    test('An unknown eventSource rejects with COLLECTION_INVALID_ARGUMENT',
+        () async {
       await expectLater(
         JsCollectionsAdapter.open(alice.mock,
             namespace: _ns,
             type: 'Todo',
             expirationMs: _day.inMilliseconds,
             eventSource: 'bogus'),
-        _rejectsWith(W8.invalidArgument),
+        _rejectsWith(CollectionErrorCodes.invalidArgument),
       );
     });
 
-    test('An empty type rejects with W8_INVALID_ARGUMENT', () async {
-      await expectLater(open(type: ''), _rejectsWith(W8.invalidArgument));
+    test('An empty type rejects with COLLECTION_INVALID_ARGUMENT', () async {
+      await expectLater(
+          open(type: ''), _rejectsWith(CollectionErrorCodes.invalidArgument));
     });
 
-    test('A non-positive expirationMs rejects with W8_INVALID_ARGUMENT',
+    test('A non-positive expirationMs rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       for (final ms in [0, -1]) {
         await expectLater(
           JsCollectionsAdapter.open(alice.mock,
               namespace: _ns, type: 'Todo', expirationMs: ms),
-          _rejectsWith(W8.invalidArgument),
+          _rejectsWith(CollectionErrorCodes.invalidArgument),
         );
       }
       verifyNever(() => alice.mock.collection<Map<String, dynamic>>(
@@ -226,18 +249,20 @@ void main() {
           ));
     });
 
-    test('A failed open rejects with W8_FAILED naming the error kind',
+    test('A failed open rejects with COLLECTION_FAILED naming the error kind',
         () async {
       alice.failNextCollection(StateError('upstream down'));
 
-      await expectLater(open(), _rejectsWith(W8.failed, kind: 'StateError'));
+      await expectLater(open(),
+          _rejectsWith(CollectionErrorCodes.failed, kind: 'StateError'));
     });
 
     test('An error of a type the adapter does not know has kind "Unknown"',
         () async {
       alice.failNextCollection(_LaterError());
 
-      await expectLater(open(), _rejectsWith(W8.failed, kind: 'Unknown'));
+      await expectLater(
+          open(), _rejectsWith(CollectionErrorCodes.failed, kind: 'Unknown'));
     });
 
     test('A failed key-level write of an unknown reason has kind "Unknown"',
@@ -286,14 +311,15 @@ void main() {
       expect(item['availableAt'], isNull);
     });
 
-    test('A create with an existing id rejects with W8_ALREADY_EXISTS',
+    test(
+        'A create with an existing id rejects with COLLECTION_ITEM_ALREADY_EXISTS',
         () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 'i1');
 
       await expectLater(
         todos.create({'title': 'b'}, id: 'i1'),
-        _rejectsWith(W8.alreadyExists),
+        _rejectsWith(CollectionErrorCodes.alreadyExists),
       );
     });
 
@@ -313,7 +339,7 @@ void main() {
     });
 
     test(
-        'A get of an unreadable item rejects with W8_UNREADABLE naming id and owner',
+        'A get of an unreadable item rejects with COLLECTION_ITEM_UNREADABLE naming id and owner',
         () async {
       await bobSharesUnreadable('b1');
       final todos = await open();
@@ -321,7 +347,7 @@ void main() {
       await expectLater(
         todos.get(bobs('b1')),
         throwsA(isA<JsCollectionsError>()
-            .having((e) => e.code, 'code', W8.unreadable)
+            .having((e) => e.code, 'code', CollectionErrorCodes.unreadable)
             .having((e) => e.id, 'id', 'b1')
             .having((e) => e.owner, 'owner', '@bob')
             .having((e) => e.message, 'message', isNot(contains('json')))
@@ -337,10 +363,10 @@ void main() {
 
       expect(ids(await itemsOf(todos.list())), ['a1']);
       expect(await unreadableOf(todos.list()),
-          [(id: 'b1', owner: '@bob', code: W8.unreadable)]);
+          [(id: 'b1', owner: '@bob', code: CollectionErrorCodes.unreadable)]);
       await expectLater(
         todos.get(bobs('b1')),
-        _rejectsWith(W8.unreadable, id: 'b1', owner: '@bob'),
+        _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
       );
     });
 
@@ -408,14 +434,17 @@ void main() {
       expect(server.hasKey('@bob:i1.$_ns@alice'), isTrue);
     });
 
-    test("An update of another type's item rejects with W8_WRONG_TYPE",
+    test(
+        "An update of another type's item rejects with COLLECTION_ITEM_WRONG_TYPE",
         () async {
       final todos = await open();
       await rawCollection(alice, _ns, writeTypeTag: 'Other')
           .create(obj: {'title': 'other'}, id: 'o1');
 
-      await expectLater(todos.update(mine('o1'), {'title': 'changed'}),
-          _rejectsWith(W8.wrongType, id: 'o1', owner: '@alice'));
+      await expectLater(
+          todos.update(mine('o1'), {'title': 'changed'}),
+          _rejectsWith(CollectionErrorCodes.wrongType,
+              id: 'o1', owner: '@alice'));
 
       final stored = (await todos.get(mine('o1')))!;
       expect(stored['type'], 'Other');
@@ -437,27 +466,29 @@ void main() {
       expect((await todos.get(mine('n1')))?['type'], 'Todo');
     });
 
-    test('An update of a missing item rejects with W8_NOT_FOUND', () async {
+    test('An update of a missing item rejects with COLLECTION_ITEM_NOT_FOUND',
+        () async {
       final todos = await open();
 
       await expectLater(
         todos.update(mine('nope'), {'title': 'x'}),
-        _rejectsWith(W8.notFound, id: 'nope', owner: '@alice'),
+        _rejectsWith(CollectionErrorCodes.notFound,
+            id: 'nope', owner: '@alice'),
       );
     });
 
     test(
-        "An update, share or remove of another owner's item rejects with W8_NOT_OWNER",
+        "An update, share or remove of another owner's item rejects with COLLECTION_ITEM_NOT_OWNER",
         () async {
       await bobShares('b1', {'title': 'bob'});
       final todos = await open();
 
       await expectLater(todos.update(bobs('b1'), {'title': 'mine'}),
-          _rejectsWith(W8.notOwner, id: 'b1', owner: '@bob'));
+          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1', owner: '@bob'));
       await expectLater(todos.share(bobs('b1'), ['@carol']),
-          _rejectsWith(W8.notOwner, id: 'b1', owner: '@bob'));
+          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1', owner: '@bob'));
       await expectLater(todos.remove(bobs('b1')),
-          _rejectsWith(W8.notOwner, id: 'b1', owner: '@bob'));
+          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1', owner: '@bob'));
 
       expect(server.hasKey('b1.$_ns@alice'), isFalse);
       expect((await todos.get(bobs('b1')))?['data'], {'title': 'bob'});
@@ -523,29 +554,32 @@ void main() {
       expect(server.hasKey('@dave:i1.$_ns@alice'), isTrue);
     });
 
-    test('A share of a missing item rejects with W8_NOT_FOUND', () async {
+    test('A share of a missing item rejects with COLLECTION_ITEM_NOT_FOUND',
+        () async {
       final todos = await open();
 
       await expectLater(
         todos.share(mine('nope'), ['@bob']),
-        _rejectsWith(W8.notFound, id: 'nope', owner: '@alice'),
+        _rejectsWith(CollectionErrorCodes.notFound,
+            id: 'nope', owner: '@alice'),
       );
     });
 
-    test('A share with an invalid atSign rejects with W8_INVALID_ARGUMENT',
+    test(
+        'A share with an invalid atSign rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']);
 
       await expectLater(
         todos.share(mine('i1'), ['@a@b']),
-        _rejectsWith(W8.invalidArgument),
+        _rejectsWith(CollectionErrorCodes.invalidArgument),
       );
       expect((await todos.get(mine('i1')))?['sharedWith'], ['@bob']);
     });
 
     test(
-        'A partial write failure rejects with W8_PARTIAL_FAILURE naming the recipient',
+        'A partial write failure rejects with COLLECTION_PARTIAL_FAILURE naming the recipient',
         () async {
       final todos = await open();
       alice.failPutsFor((key) => key.sharedWith?.toAtsign() == '@bob');
@@ -553,7 +587,7 @@ void main() {
       await expectLater(
         todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
         throwsA(isA<JsCollectionsError>()
-            .having((e) => e.code, 'code', W8.partialFailure)
+            .having((e) => e.code, 'code', CollectionErrorCodes.partialFailure)
             .having((e) => e.failures, 'failures', [
           {'op': 'put', 'recipient': '@bob', 'kind': 'AtClientException'}
         ])),
@@ -572,14 +606,14 @@ void main() {
           .catchError((Object e) => e as JsCollectionsError);
 
       expect(error, isNotNull);
-      expect(error!.code, W8.partialFailure);
+      expect(error!.code, CollectionErrorCodes.partialFailure);
       expect(error.id, isNotNull);
       expect(error.owner, '@alice');
       expect(await todos.get(mine(error.id!)), isNotNull);
     });
 
     test(
-        'A remove deletes the item and a missing item rejects with W8_NOT_FOUND',
+        'A remove deletes the item and a missing item rejects with COLLECTION_ITEM_NOT_FOUND',
         () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 'i1');
@@ -589,12 +623,12 @@ void main() {
       expect(await todos.get(mine('i1')), isNull);
       await expectLater(
         todos.remove(mine('i1')),
-        _rejectsWith(W8.notFound, id: 'i1', owner: '@alice'),
+        _rejectsWith(CollectionErrorCodes.notFound, id: 'i1', owner: '@alice'),
       );
     });
 
     test(
-        'A remove of an item with sub-items rejects with W8_HAS_SUB_ITEMS unless cascade',
+        'A remove of an item with sub-items rejects with COLLECTION_ITEM_HAS_SUB_ITEMS unless cascade',
         () async {
       final todos = await open();
       await todos.create({'title': 'p'}, id: 'p1');
@@ -609,7 +643,8 @@ void main() {
 
       await expectLater(
         todos.remove(mine('p1')),
-        _rejectsWith(W8.hasSubItems, id: 'p1', owner: '@alice'),
+        _rejectsWith(CollectionErrorCodes.hasSubItems,
+            id: 'p1', owner: '@alice'),
       );
       expect(await todos.get(mine('p1')), isNotNull);
 
@@ -674,7 +709,8 @@ void main() {
       expect(ids(both), ['a']);
     });
 
-    test('An ordering where over mixed types rejects with W8_TYPE_MISMATCH',
+    test(
+        'An ordering where over mixed types rejects with COLLECTION_TYPE_MISMATCH',
         () async {
       final todos = await open();
       await todos.create({'prio': 1}, id: 'n1');
@@ -683,16 +719,16 @@ void main() {
 
       await expectLater(
         todos.query([(path: 'prio', op: '<', value: 5)]),
-        _rejectsWith(W8.typeMismatch),
+        _rejectsWith(CollectionErrorCodes.typeMismatch),
       );
     });
 
     test(
-        'An unknown or reserved operator or a bad path or value rejects with W8_INVALID_ARGUMENT',
+        'An unknown or reserved operator or a bad path or value rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await seeded();
       Matcher naming(String text) => throwsA(isA<JsCollectionsError>()
-          .having((e) => e.code, 'code', W8.invalidArgument)
+          .having((e) => e.code, 'code', CollectionErrorCodes.invalidArgument)
           .having((e) => e.message, 'message', contains(text)));
 
       await expectLater(
@@ -720,7 +756,7 @@ void main() {
 
       expect(ids(await itemsOf(todos.query(clause))).toSet(), {'a', 'c'});
       expect(await unreadableOf(todos.query(clause)),
-          [(id: 'b1', owner: '@bob', code: W8.unreadable)]);
+          [(id: 'b1', owner: '@bob', code: CollectionErrorCodes.unreadable)]);
     });
 
     test(
@@ -799,7 +835,7 @@ void main() {
       expect(errors, isEmpty);
       await expectLater(
         todos.get(bobs('b1')),
-        _rejectsWith(W8.unreadable, id: 'b1', owner: '@bob'),
+        _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
       );
     });
 
@@ -923,7 +959,7 @@ void main() {
       });
 
       test(
-          'A stream error reaches onError as a W8 error and later events still arrive',
+          'A stream error reaches onError as a collection error and later events still arrive',
           () async {
         final events = <JsEvent>[];
         final errors = <JsCollectionsError>[];
@@ -935,7 +971,7 @@ void main() {
         await settle();
         await cancel();
 
-        expect(errors.single.code, W8.unreadable);
+        expect(errors.single.code, CollectionErrorCodes.unreadable);
         expect(errors.single.id, 'b1');
         expect(errors.single.owner, '@bob');
         expect(events, [

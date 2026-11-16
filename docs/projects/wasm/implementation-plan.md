@@ -1174,7 +1174,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   `updateSharedWith(..., unshareWithOthers: false)`; `where(path, op, value)` clauses map
   onto `wherePath`, because `Predicate` is not serializable upstream (private
   `CmpPredicate._`, closure `PathField.extract`); events go to callbacks; failures reject
-  with the W8 codes in `js-api.md` §6.1. Namespace auto-qualification, `expiration`
+  with the collection error codes in `js-api.md` §6.1. Namespace auto-qualification, `expiration`
   defaulting, ordering and limits are **not** in it. It replaces the `AtEasy` facade
   proposed in #2481. Scenarios: `features/at_client_wasm/js_collections_adapter.feature`.
   → T6.3, T6.9

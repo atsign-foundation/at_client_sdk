@@ -436,9 +436,9 @@ does not exist yet.
 
 | Operation | `AtCollection` call | Rule |
 | --- | --- | --- |
-| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `expirationMs` must be positive, else `W8_INVALID_ARGUMENT` |
+| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `expirationMs` must be positive, else `COLLECTION_INVALID_ARGUMENT` |
 | `create(data, {id, sharedWith})` | `create` | a given `id` must match the item-id rule below |
-| `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent; an unreadable item rejects `W8_UNREADABLE` |
+| `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent; an unreadable item rejects `COLLECTION_ITEM_UNREADABLE` |
 | `list()` | `getItemsAsStream()` with a per-item error handler | resolves `{items, unreadable}` (below); upstream order; never re-sorted |
 | `query([{path, op, value}])` | `getItemsAsStream()` with a per-item error handler, then each clause's `Predicate` applied to the readable items | clauses AND together; resolves `{items, unreadable}`; upstream order |
 | `update({id, owner}, data)` | re-read `get`, then `update(draft, unshareWithOthers: false)` | the draft keeps the re-read `sharedWith`, `expiresAt`, `availableAt` |
@@ -448,14 +448,14 @@ does not exist yet.
 
 **Item ids.** An id given to `create`, or in the address of `get`, `update`, `share` and
 `remove`, must match `^[a-z0-9][a-z0-9_-]{0,63}$`, else the call rejects with
-`W8_INVALID_ARGUMENT` before any `AtCollection` call. When `create` is given no id,
+`COLLECTION_INVALID_ARGUMENT` before any `AtCollection` call. When `create` is given no id,
 `AtCollection` generates one.
 
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
 `unreadable` holds one `{id, owner, code}` per record this device cannot read, where `code`
-is `W8_UNREADABLE`; an unreadable record does not fail the call. `get()` of such an item
-still rejects with `W8_UNREADABLE`.
+is `COLLECTION_ITEM_UNREADABLE`; an unreadable record does not fail the call. `get()` of such an item
+still rejects with `COLLECTION_ITEM_UNREADABLE`.
 
 **Known limits.**
 
@@ -464,7 +464,7 @@ still rejects with `W8_UNREADABLE`.
 - Await each write on an item before starting the next. Two writes to one item that
   overlap can overwrite each other, as upstream (last writer wins).
 
-A write to an item whose owner is not the client's atSign rejects with `W8_NOT_OWNER` before
+A write to an item whose owner is not the client's atSign rejects with `COLLECTION_ITEM_NOT_OWNER` before
 any `AtCollection` call.
 
 A `where` path is dotted (`'meta.prio'`) and reads `['obj', ...segments]`; a missing step
@@ -501,7 +501,7 @@ classes), the facade must catch on the Dart side and rethrow a JS-shaped error:
 
 ```ts
 class AtError extends Error {
-  readonly code: string;      // stable, from AtExceptionCodes
+  readonly code: string;      // stable; collection codes are listed in §6.1
   readonly kind: string;      // e.g. 'AtKeyException'
   readonly retriable: boolean;
 }
@@ -521,26 +521,31 @@ equivalent structured field) carries the mapped `OpFailure.reason` entries. A JS
 sees one `AtError` shape regardless of whether the underlying failure was a single
 exception or a batch of `OpFailure`s — never a tuple, never a second thrown type.
 
-### 6.1 W8 collection error codes
+### 6.1 Collection error codes
 
 Every collections adapter operation (§5.5) returns a Future that rejects with one
 `JsCollectionsError {code, message, id?, owner?, kind?, failures}`, which the facade turns
 into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` is
 the Dart type of the underlying error. A watch reports stream errors to `onError` in the
-same shape. On the Dart side `JsCollectionsError` is an `AtException`, so callers that catch
+same shape. The codes are a registry of their own, not the at_commons `AT00xx` codes: those
+name the atServer and client failures of key operations, and none of them says "the item is
+owned by another atSign" or "some of the key writes landed". Codes that describe one item are
+`COLLECTION_ITEM_*`; the rest are `COLLECTION_*`. `COLLECTION_NOT_FOUND` would read as a missing
+collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollectionsError` is an `AtException`, so callers that catch
 `AtException` also catch it; the JS shape is unchanged.
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `W8_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign, or an item id outside `^[a-z0-9][a-z0-9_-]{0,63}$` | `ArgumentError`, `InvalidAtSignException`, adapter checks |
-| `W8_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
-| `W8_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
-| `W8_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
-| `W8_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
-| `W8_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing | `CItemReadException`. The message names the id and owner, not the cause |
-| `W8_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
-| `W8_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
-| `W8_FAILED` | anything else; `kind` names it | |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign, or an item id outside `^[a-z0-9][a-z0-9_-]{0,63}$` | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
+| `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
+| `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
+| `COLLECTION_ITEM_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
+| `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing | `CItemReadException`. The message names the id and owner, not the cause |
+| `COLLECTION_ITEM_WRONG_TYPE` | update of an item whose stored type tag is another type's. An untagged (`n/a`) item is adopted. Share and remove work on an item of any type | adapter check on the item as just re-read |
+| `COLLECTION_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
+| `COLLECTION_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
+| `COLLECTION_FAILED` | anything else; `kind` names it | |
 
 Schema errors get a W8 code when the persisted collection record and its schema validation
 land. Until then no adapter operation validates data against a schema.
