@@ -53,7 +53,8 @@ void main() {
           '--posture', 'legacy',
           if (cramSecret != null) ...['-c', cramSecret],
         ]),
-        program: program);
+        program: program,
+        programVersion: null);
     return EnrollerSettings(settings.preference,
         atKeysFilePath: keysPath, storagePath: '${dir.path}/storage');
   }

@@ -165,6 +165,20 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test(
+      'Given a program that runs at_activate under its own name and version, '
+      'when AtActivate.main runs onboard, then its CRAM from: names that '
+      'program at that version', () async {
+    final config =
+        await firstConfigFromProcess('AtActivate:acme_admin:3.2.1', onboard);
+
+    expect(config['appName'], 'acme_admin');
+    expect(config['appVersion'], '3.2.1',
+        reason: 'the embedding program\'s version, not at_client_cli\'s');
+    expect(config['sdkName'], 'atsign.dart.at_client',
+        reason: 'the control: this is at_client\'s config');
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test(
       'Given at_register\'s onboard command line, when at_activate runs it as '
       'at_register, then its CRAM from: names at_register', () async {
     final config = await firstConfigFromProcess('at_register', onboard);

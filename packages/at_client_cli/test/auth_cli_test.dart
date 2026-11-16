@@ -454,11 +454,15 @@ void postureArgumentTests() {
     test('wrappedMain inserts onboard before parsing', () async {
       // NOTE: --help stops at onboard's usage, so this needs no atServer.
       expect(
-          await wrappedMain(['-a', '@alice', '--help'], program: 'at_activate'),
+          await wrappedMain(['-a', '@alice', '--help'],
+              program: 'at_activate', programVersion: null),
           0,
           reason: 'with no insertion, a leading -a reaches the top-level '
               'parser, which has no such option');
-      expect(await wrappedMain(['--version'], program: 'at_activate'), 0,
+      expect(
+          await wrappedMain(['--version'],
+              program: 'at_activate', programVersion: null),
+          0,
           reason: 'a leading option that is not a command must still be '
               'served');
     });

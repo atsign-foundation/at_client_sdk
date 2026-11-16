@@ -101,17 +101,20 @@ void deleteStorage() {
   }
 }
 
-/// Runs at_activate with [arguments] as [program], the app its clients name
-/// on every `from:` they send to authenticate, and answers its exit code.
+/// Runs at_activate with [arguments] as [program] at [programVersion], the
+/// app its clients name on every `from:` they send to authenticate, and
+/// answers its exit code; at_client_cli's version when [programVersion] is
+/// null.
 Future<int> main(List<String> arguments,
-    {String program = commandNamespace}) async {
+    {String program = commandNamespace, String? programVersion}) async {
   AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
   // NOTE: a retrofit reads a keyfile and writes back what it decided from what
   // it read, so two CLIs on one keyfile can each write a different enrollment
   // into it. This serialises the whole sequence on a lock beside the keyfile.
   retrofitSerializer = fileRetrofitSerializer;
   try {
-    return await wrappedMain(arguments, program: program);
+    return await wrappedMain(arguments,
+        program: program, programVersion: programVersion);
   } on ArgumentError catch (e) {
     stderr.writeln('Invalid argument: ${e.message}');
     aca.parser.printAllCommandsUsage();
@@ -155,7 +158,7 @@ Future<int> main(List<String> arguments,
 }
 
 Future<int> wrappedMain(List<String> arguments,
-    {required String program}) async {
+    {required String program, required String? programVersion}) async {
   if (arguments.isEmpty) {
     stderr.writeln('Version: $packageVersion');
     stderr.writeln('You must supply a command.');
@@ -243,7 +246,8 @@ Future<int> wrappedMain(List<String> arguments,
         break;
 
       case AuthCliCommand.status:
-        return await status(commandArgResults, program: program);
+        return await status(commandArgResults,
+            program: program, programVersion: programVersion);
 
       case AuthCliCommand.onboard:
         // First time an app is connecting to an atServer.
@@ -252,7 +256,8 @@ Future<int> wrappedMain(List<String> arguments,
         // then authenticate with PKAM to verify
         // and then delete the cram secret
         // Write keys to the usual output file @atSign_keys.atKeys
-        await onboard(commandArgResults, program: program);
+        await onboard(commandArgResults,
+            program: program, programVersion: programVersion);
 
       case AuthCliCommand.spp:
         // set a semi-permanent passcode for this atSign. This is a passcode
@@ -266,6 +271,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -287,6 +293,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -304,6 +311,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -317,6 +325,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -330,6 +339,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -344,6 +354,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -357,6 +368,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -370,6 +382,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -384,6 +397,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -399,13 +413,15 @@ Future<int> wrappedMain(List<String> arguments,
         // app which has permissions to approve enrollment requests.
         // Write keys to @atSign_keys.atKeys IFF it doesn't already exist; if
         // it does exist, then write to @atSign_appName_deviceName_keys.atKeys
-        await enroll(commandArgResults, program: program);
+        await enroll(commandArgResults,
+            program: program, programVersion: programVersion);
 
       case AuthCliCommand.unrevoke:
         await unrevoke(
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -420,6 +436,7 @@ Future<int> wrappedMain(List<String> arguments,
             commandArgResults,
             await _commandClient(
                 program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -463,7 +480,8 @@ Future<int> wrappedMain(List<String> arguments,
 ///  - 2 if the atSign exists but the atServer cannot be reached
 ///  - 1 if the atServer is reachable but there is no `public:publickey@<atsign>`
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
-Future<int> status(ArgResults ar, {required String program}) async {
+Future<int> status(ArgResults ar,
+    {required String program, required String? programVersion}) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -494,7 +512,8 @@ Future<int> status(ArgResults ar, {required String program}) async {
   try {
     // NOTE: a public key lookup needs no authentication, and no credential is
     // held here.
-    final settings = enrollerSettingsFrom(ar, program: program);
+    final settings = enrollerSettingsFrom(ar,
+        program: program, programVersion: programVersion);
     final AtLookUp al = settings.lookUps(
       atSign: atSign,
       rootDomain: rootDomain,
@@ -542,12 +561,15 @@ const Duration provisioningPollInterval = Duration(seconds: 2);
 /// atServer through the atDirectory.
 @visibleForTesting
 Future<bool> onboard(ArgResults argResults,
-    {required String program, AtLookupMuxable? atLookUp}) async {
+    {required String program,
+    required String? programVersion,
+    AtLookupMuxable? atLookUp}) async {
   if (argResults[AuthCliArgs.argNameVersion]) {
     stdout.writeln('Version: $packageVersion');
     return false;
   }
-  final settings = enrollerSettingsFrom(argResults, program: program);
+  final settings = enrollerSettingsFrom(argResults,
+      program: program, programVersion: programVersion);
   final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
   logger.info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
@@ -699,12 +721,15 @@ Future<bool> _isActivated(
 /// [atLookUp] is a connection to enrol over, for a test.
 @visibleForTesting
 Future<bool> enroll(ArgResults argResults,
-    {required String program, AtLookupMuxable? atLookUp}) async {
+    {required String program,
+    required String? programVersion,
+    AtLookupMuxable? atLookUp}) async {
   if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');
   }
-  final settings = enrollerSettingsFrom(argResults, program: program);
+  final settings = enrollerSettingsFrom(argResults,
+      program: program, programVersion: programVersion);
   final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
 
   Map<String, String> namespaces = {};
@@ -1389,7 +1414,7 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
 /// construction.
 @visibleForTesting
 EnrollerSettings enrollerSettingsFrom(ArgResults ar,
-    {required String program}) {
+    {required String program, required String? programVersion}) {
   final atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -1409,7 +1434,8 @@ EnrollerSettings enrollerSettingsFrom(ArgResults ar,
     stderr.writeln('${chalk.blue('[Information]')} ${enroller.notice}');
   }
   return EnrollerSettings(
-      namedAs(program, AuthCliArgs.preferenceUnder(enroller.posture))
+      namedAs(program, programVersion,
+          AuthCliArgs.preferenceUnder(enroller.posture))
         ..rootDomain = rootDomain.rootDomain
         ..rootPort = rootDomain.rootPort
         ..cramSecret = ar[AuthCliArgs.argNameCramSecret],
@@ -1459,13 +1485,15 @@ class EnrollerSettings {
 /// kept for, and the app they name to their atServer.
 const String commandNamespace = 'at_activate';
 
-/// [preference], naming [program] at at_client_cli's version as the app on
-/// every `from:` its clients send to authenticate.
+/// [preference], naming [program] at [version] as the app on every `from:`
+/// its clients send to authenticate; at at_client_cli's version when
+/// [version] is null.
 @visibleForTesting
-AtClientPreference namedAs(String program, AtClientPreference preference) =>
+AtClientPreference namedAs(
+        String program, String? version, AtClientPreference preference) =>
     preference
       ..atClientParticulars.appName = program
-      ..atClientParticulars.appVersion = packageVersion;
+      ..atClientParticulars.appVersion = version ?? packageVersion;
 
 /// The atDirectory [preference] names, asked over TLS.
 SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
@@ -1509,6 +1537,7 @@ Future<AtClient> createAtClient(
         String? appVersion}) =>
     _commandClient(
         program: null,
+        programVersion: null,
         appName: appName,
         appVersion: appVersion,
         atSign: atSign,
@@ -1520,10 +1549,11 @@ Future<AtClient> createAtClient(
         maxConnectAttempts: maxConnectAttempts);
 
 /// [createAtClient]'s client, whose `from:` names [program] at
-/// at_client_cli's version when it is set, and [appName] at [appVersion]
-/// when it is not.
+/// [programVersion], or at_client_cli's version, when [program] is set, and
+/// [appName] at [appVersion] when it is not.
 Future<AtClient> _commandClient(
     {required String? program,
+    required String? programVersion,
     String? appName,
     String? appVersion,
     required String atSign,
@@ -1547,7 +1577,7 @@ Future<AtClient> _commandClient(
     ..rootDomain = parsedRootDomain.rootDomain
     ..rootPort = parsedRootDomain.rootPort;
   if (program != null) {
-    namedAs(program, preference);
+    namedAs(program, programVersion, preference);
   } else {
     preference.atClientParticulars
       ..appName = appName
