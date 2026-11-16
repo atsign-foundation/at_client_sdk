@@ -1,0 +1,48 @@
+# Architecture guards: a change to any of these paths needs a code owner's review.
+/.github/CODEOWNERS                       @gkc @cconstab @cpswan
+/.github/wasm_gates.yaml                  @gkc @cconstab @cpswan
+/.github/copilot-instructions.md          @gkc @cconstab @cpswan
+/docs/architecture/                       @gkc @cconstab @cpswan
+/packages/at_client/test/architecture/    @gkc @cconstab @cpswan
+AGENTS.md                                 @gkc @cconstab @cpswan
+CLAUDE.md                                 @gkc @cconstab @cpswan
+
+# The tests, gates and CI workflows invariants.md names as a rule's check,
+# outside test/architecture/, with the fixtures and vectors they read.
+/.github/pull_request_template.md                                @gkc @cconstab @cpswan
+/.github/workflows/at_client_sdk.yaml                            @gkc @cconstab @cpswan
+/.github/workflows/at_libraries.yaml                             @gkc @cconstab @cpswan
+/docs/sdk-shape.md                                               @gkc @cconstab @cpswan
+/tools/check_architecture.sh                                     @gkc @cconstab @cpswan
+/tools/wasm_shakedown/                                           @gkc @cconstab @cpswan
+/tests/released_envelope/                                        @gkc @cconstab @cpswan
+/tests/upgrade/                                                  @gkc @cconstab @cpswan
+/tests/at_functional_test/test/upgrade_test.dart                 @gkc @cconstab @cpswan
+/packages/at_auth/test/at_keys_golden_test.dart                  @gkc @cconstab @cpswan
+/packages/at_auth/test/wire_literal_pins_test.dart               @gkc @cconstab @cpswan
+/packages/at_chops/test/wire_literal_pins_test.dart              @gkc @cconstab @cpswan
+/packages/at_client/test/acceptance/architecture_guard_test.dart @gkc @cconstab @cpswan
+/packages/at_client/test/import_topology_test.dart               @gkc @cconstab @cpswan
+/packages/at_client/test/public_api_surface_test.dart            @gkc @cconstab @cpswan
+/packages/at_client/test/rollout_axis_pinning_test.dart          @gkc @cconstab @cpswan
+/packages/at_client/test/storage/                                @gkc @cconstab @cpswan
+/packages/at_client/test/vectors/jws_envelope.json               @gkc @cconstab @cpswan
+/packages/at_client/test/web_safe_test.dart                      @gkc @cconstab @cpswan
+/packages/at_client/test/wire_literal_pins_test.dart             @gkc @cconstab @cpswan
+/packages/at_lookup/test/web_safe_test.dart                      @gkc @cconstab @cpswan
+/packages/at_utils/test/web_safe_test.dart                       @gkc @cconstab @cpswan
+
+# The lint settings A1 is held by, in each workspace package.
+/packages/at_auth/analysis_options.yaml                          @gkc @cconstab @cpswan
+/packages/at_chops/analysis_options.yaml                         @gkc @cconstab @cpswan
+/packages/at_cli_commons/analysis_options.yaml                   @gkc @cconstab @cpswan
+/packages/at_client/analysis_options.yaml                        @gkc @cconstab @cpswan
+/packages/at_client_cli/analysis_options.yaml                    @gkc @cconstab @cpswan
+/packages/at_client_flutter/analysis_options.yaml                @gkc @cconstab @cpswan
+/packages/at_commons/analysis_options.yaml                       @gkc @cconstab @cpswan
+/packages/at_contact/analysis_options.yaml                       @gkc @cconstab @cpswan
+/packages/at_lookup/analysis_options.yaml                        @gkc @cconstab @cpswan
+/packages/at_onboarding_cli/analysis_options.yaml                @gkc @cconstab @cpswan
+/packages/at_policy/analysis_options.yaml                        @gkc @cconstab @cpswan
+/packages/at_telemetry/analysis_options.yaml                     @gkc @cconstab @cpswan
+/packages/at_utils/analysis_options.yaml                         @gkc @cconstab @cpswan
