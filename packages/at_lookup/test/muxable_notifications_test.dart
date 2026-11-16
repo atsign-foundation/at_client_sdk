@@ -905,6 +905,36 @@ void main() {
     });
 
     test(
+        'refusals after more failures than the network schedule holds wait '
+        'from the step past its last, longer after each refusal', () async {
+      AtLookupImpl.notificationRefusalReconnectDelays = [
+        for (final n in [20, 21, 22, 23, 24, 25]) ms(n),
+      ];
+      final taken = <Duration>[];
+      final atLookup = recording([
+        _Attempt.accept,
+        ...List.filled(4, _Attempt.timeOut),
+        ...List.filled(3, _Attempt.refuse),
+      ], taken);
+      atLookup.notifications.listen((_) {}, onError: (_) {});
+      await atLookup.startNotifications();
+
+      await transport().serverCloses();
+      await until(
+          () => taken.length == 8 && !atLookup.isReconnectingNotifications,
+          'four timed-out and three refused reconnects, and the accepted one');
+
+      expect(taken.take(5), [ms(10), ms(11), ms(12), ms(12), ms(12)],
+          reason: 'the timeouts wait on the network schedule, held at its '
+              'last entry');
+      expect(taken.skip(5), [ms(23), ms(24), ms(25)],
+          reason: 'the first refusal waits one step past the network '
+              'schedule\'s last, not as far along the refusal schedule as the '
+              'attempts so far would reach, and each refusal after it waits '
+              'longer');
+    });
+
+    test(
         'each refused attempt arrives as an error on notifications, which '
         'stays open', () async {
       final taken = <Duration>[];

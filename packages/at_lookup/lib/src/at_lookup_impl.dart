@@ -687,7 +687,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   ];
 
   /// Delays between reconnect attempts after the atServer refused the last
-  /// one, by the same attempt count. The last is repeated indefinitely.
+  /// one. Each refusal moves one step on, starting from the step the
+  /// [notificationReconnectDelays] had reached, at most its last; the last
+  /// here is repeated indefinitely.
   ///
   /// Settable for the same reason as [notificationReconnectDelays].
   static List<Duration> notificationRefusalReconnectDelays = const [
@@ -784,12 +786,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     final generation = ++_notifyGeneration;
     _reconnecting = true;
     var refused = false;
+    // Where the next wait is read from in its schedule.
+    var step = 0;
     try {
       while (_isNotifying && generation == _notifyGeneration) {
         final delays = refused
             ? notificationRefusalReconnectDelays
             : notificationReconnectDelays;
-        final delay = delays[min(_reconnectIx, delays.length - 1)];
+        final delay = delays[min(step, delays.length - 1)];
+        step++;
         _reconnectIx++;
         onNotificationReconnectDelay?.call(delay);
         logger.info('Reconnecting notifications in ${delay.inSeconds}s '
@@ -813,7 +818,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           if (generation != _notifyGeneration) return;
           logger.warning('Reconnect attempt $_reconnectIx failed: $e');
           refused = e is UnAuthenticatedException;
-          if (e is UnAuthenticatedException) _reportRefusal(e);
+          if (e is UnAuthenticatedException) {
+            _reportRefusal(e);
+          } else {
+            // NOTE: held at the network schedule's last step, so the waits
+            // after the refusals that follow grow from there.
+            step = min(step, notificationReconnectDelays.length - 1);
+          }
         }
       }
     } finally {

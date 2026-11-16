@@ -577,6 +577,32 @@ void main() {
     }
   });
 
+  test(
+      'refused starts after more failed starts than the network schedule '
+      'holds wait from the step past its last, longer after each refusal',
+      () async {
+    refusableServer();
+    final longer = [for (final n in [30, 50, 70, 90, 110, 130]) ms(n)];
+    AtLookupImpl.notificationRefusalReconnectDelays = longer;
+    Monitor.startRefusalRetryDelays = longer;
+    server.refuseConnects = 5;
+    server.pkamRefusal = refusals.first.answer;
+
+    await startListening(connection: connection, untilListening: false);
+    await server.waitUntil(() => startDelays.length >= 8,
+        what: 'five unreachable starts and three refused ones');
+
+    expect(startDelays.take(5), [ms(20), ms(40), ms(60), ms(60), ms(60)],
+        reason: 'the unreachable starts wait on the network schedule, held at '
+            'its last entry');
+    expect(startDelays.skip(5).take(3), [ms(90), ms(110), ms(130)],
+        reason: 'the first refused start waits one step past the network '
+            'schedule\'s last, not as far along the refusal schedule as the '
+            'starts so far would reach, and each refusal after it waits '
+            'longer');
+    refusedWith(AtConnectionCause.revoked);
+  });
+
   test('an app keeps its notifications through a refusal that clears',
       () async {
     refusableServer();

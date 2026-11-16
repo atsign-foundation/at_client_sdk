@@ -299,6 +299,11 @@ class Monitor {
   void _scheduleStartRetry({required bool refused}) {
     _startRetry?.cancel();
     if (_targetState != NotificationListenerState.listening) return;
+    // NOTE: held at the network schedule's last step, so the waits after the
+    // refusals that follow grow from there.
+    if (!refused) {
+      _startRetryIx = _startRetryIx.clamp(0, startRetryDelays.length - 1);
+    }
     final delays = refused ? startRefusalRetryDelays : startRetryDelays;
     final delay = delays[_startRetryIx.clamp(0, delays.length - 1)];
     _startRetryIx++;
