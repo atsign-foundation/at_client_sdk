@@ -458,14 +458,14 @@ through the mobile / desktop widget stack the way a shipping app
 would use it.
 
 **Key-length note.** An atServer key is at most 248 characters, and the
-cached copy a recipient's atServer keeps at most 255. An atSign is at most
+cached copy a recipient's atServer keeps at most 255. An Atsign is at most
 56 characters including its `@`. The longest shape an item's key takes is
 that cached copy, `cached:<other>:<itemId>.<composedNs>@<self>`, whose
-wrapper is 120 characters when both atSigns are that long, leaving 135 for
+wrapper is 120 characters when both Atsigns are that long, leaving 135 for
 `<itemId>.<composedNs>`. `subCollection(...)` caps `composedNs` at 128
 characters with an `ArgumentError` at construction, so an 8-character
-generated id fits while each atSign is at most 55 characters with its `@`.
-An atSign of emoji takes up to 111 UTF-16 code units, so no fixed cap
+generated id fits while each Atsign is at most 55 characters with its `@`.
+An Atsign of emoji takes up to 111 UTF-16 code units, so no fixed cap
 covers every pair; a key that does not fit is refused when it is written.
 Plenty of room in practice: with 1-char collection / sub-collection names
 and a 15-char application namespace, the ceiling is **11 levels (root + 10

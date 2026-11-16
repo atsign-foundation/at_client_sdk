@@ -448,9 +448,9 @@ does not exist yet.
 
 **Item ids.** AtCollection checks every id. It folds the id to lower case, and the call
 rejects with `COLLECTION_INVALID_ARGUMENT` before any write when the id is empty or contains
-`.`, `:`, `@`, whitespace or a control character. `create` also refuses an id starting with
-`_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When `create` is given no
-id, `AtCollection` generates one.
+`.`, `:`, `@`, whitespace or a control character. `create` and `update` also refuse an id
+starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When
+`create` is given no id, `AtCollection` generates one.
 
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
@@ -538,7 +538,7 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign, or an item id AtCollection refuses | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid Atsign, or an item id AtCollection refuses | `ArgumentError`, `InvalidAtSignException`, adapter checks |
 | `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
 | `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |

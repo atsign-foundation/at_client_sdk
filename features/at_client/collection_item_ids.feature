@@ -11,32 +11,37 @@ Feature: AtCollection checks every item id before using it in a key
   generates is 8 characters of a-z and 0-9. An item already stored under an id
   that the check accepts but that is outside that set keeps its id: it is
   listed, read by that id, changed through draft and update or through upsert,
-  shared, and deleted. subCollection folds a subName to lower case, and
-  refuses one that is empty, contains ".", ":", "@", whitespace or a control
-  character, or holds a character a key's name cannot. A notification or data
-  event whose item id, ancestor id or subName the check refuses emits no
-  event, a notification writes nothing to the local keystore, and a warning
-  shows the id, escaped on one line, and its owner, never the value. An event
-  whose key does not have an odd number of segments before the namespace emits
-  no event, with the same warning. Every other event carries its item id and
-  ancestor ids folded to lower case.
+  shared, and deleted. An id that starts with "_" is accepted by reads only:
+  an item another Atsign shares under such an id is listed and read by it, and
+  this Atsign's own keys that start with "_" are hidden, so get and getOrNull
+  do not return its own item under such an id. subCollection folds a subName
+  to lower case, and refuses one that is empty, contains ".", ":", "@",
+  whitespace or a control character, or holds a character a key's name cannot.
+  A notification or data event whose item id, ancestor id or subName the check
+  refuses emits no event, a notification writes nothing to the local keystore,
+  and a warning shows the id, escaped on one line, and its owner, never the
+  value. An event whose key does not have an odd number of segments before the
+  namespace emits no event, with the same warning. Every other event carries
+  its item id and ancestor ids folded to lower case.
 
-  Races: two callers in one process, or two clients of one atSign, may use
+  Races: two callers in one process, or two clients of one Atsign, may use
   the same id at once. The check reads only the id string and runs before
   the first read or write, so no interleaving changes its answer, and
   folding at the same point makes two spellings of an id one item. The
   check-then-write in create for one given id is unchanged.
   Replay: cannot arise. No message, nonce or signature is added or changed,
   and an id is checked each time it is used.
-  DoS: whoever supplies an id to the app, any atSign that shares an item into
-  the namespace, and any atSign that can notify this one. An id longer than 64
-  characters is refused before any read or write, the check is linear in the
-  id's length, an item another atSign shares under an id starting with "_" can
-  still be read by that id, and an event whose ids the check refuses is not
-  emitted, so no event hands the app an id its reads refuse; each such event
-  costs one warning and writes nothing to the local keystore, while each other
-  notification costs a log line and a local write (the scenarios tagged @dos).
-  Forgery: the app's own code supplies every id, and it holds this atSign's
+  DoS: whoever supplies an id to the app, any Atsign that shares an item into
+  the namespace, and any Atsign that can notify this one. create refuses an id
+  longer than 64 characters before any read or write, and upsert refuses one
+  once a read finds no item under it; reads accept an id of any length, and
+  the check is linear in the id's length, an item another Atsign shares under
+  an id starting with "_" can still be read by that id, and an event whose ids
+  the check refuses is not emitted, so no event hands the app an id its reads
+  refuse; each such event costs one warning and writes nothing to the local
+  keystore, while each other notification costs a log line and a local write
+  (the scenarios tagged @dos).
+  Forgery: the app's own code supplies every id, and it holds this Atsign's
   keys and could write any key directly; the check matters when an app builds
   an id from input it did not write. Every call refuses an id containing ".",
   ":", "@", whitespace or a control character, so each key built from an id
@@ -44,7 +49,7 @@ Feature: AtCollection checks every item id before using it in a key
   of its own collection, and the error shows the id on one line (the scenarios
   tagged @forgery).
   Impersonation: cannot arise. An id is not an identity: update,
-  updateSharedWith and delete refuse an item another atSign owns, and an
+  updateSharedWith and delete refuse an item another Atsign owns, and an
   item's owner comes from its key's sharedBy.
 
   # Every call that takes an id

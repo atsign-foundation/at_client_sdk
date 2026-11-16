@@ -1089,7 +1089,7 @@ interface class AtCollection<T> {
   /// // Periodic stat publisher: re-runs within TTL must be safe.
   /// for (final s in samples) {
   ///   await stats.upsert(
-  ///     id: s.timestamp.toString(),
+  ///     id: '${s.timestamp.millisecondsSinceEpoch}',
   ///     obj: s,
   ///     sharedWith: subscribers,
   ///   );
