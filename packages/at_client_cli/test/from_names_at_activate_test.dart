@@ -94,6 +94,9 @@ void main() {
       expect(config['appVersion'], atClientCliVersion);
       expect(config['sdkName'], 'atsign.dart.at_client');
       expect(config['sdkVersion'], atClientVersion);
+      expect(config['version'], atClientVersion,
+          reason: 'at_activate authenticates through at_client, CRAM '
+              'included, so every from: carries at_client\'s version');
     }
   });
 
@@ -115,6 +118,7 @@ void main() {
     for (final config in onboarding) {
       expect(config['appName'], 'at_register');
       expect(config['appVersion'], atClientCliVersion);
+      expect(config['version'], atClientVersion);
     }
   });
 

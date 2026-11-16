@@ -298,6 +298,7 @@ void main() {
       expect(config['appVersion'], '2.3.1');
       expect(config['sdkName'], 'atsign.dart.at_client');
       expect(config['sdkVersion'], atClientVersion);
+      expect(config['version'], atClientVersion);
     }
   });
 }

@@ -5,8 +5,9 @@
   caller's values win; absent or blank ones are the program file's name,
   `unknown`, `atsign.dart.at_auth` and at_auth's version. Each string value is
   sent on one line and cut to 64 UTF-16 code units.
-- feat: `clientConfigFor` builds that clientConfig, and `activateAtSign` and
-  `AtEnrollment.create` take a `clientConfig` for their `from:`.
+- feat: `clientConfigFor` builds that clientConfig, with `version` only when
+  its caller gives one, and `activateAtSign` and `AtEnrollment.create` take a
+  `clientConfig` for their `from:`.
 - fix: an enrollment's wait for approval reads an atServer's refusal the
   same whether it arrives as plain text or as JSON, so it keeps waiting or
   ends as the refusal says.

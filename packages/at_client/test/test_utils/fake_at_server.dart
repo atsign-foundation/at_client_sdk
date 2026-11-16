@@ -139,6 +139,11 @@ class FakeAtServer {
   /// Authentications that fail, as an atServer refusing the credential.
   int failAuths = 0;
 
+  /// What the client authenticator's `pkam:` or `cram:` on a connection of
+  /// the given lookup is answered with in place of success, when it returns
+  /// an answer.
+  String? Function(AtLookUp? lookUp)? refuseClientAuth;
+
   /// `monitor:` commands answered with an error instead of accepted.
   int rejectMonitors = 0;
 
@@ -207,7 +212,13 @@ class FakeAtServer {
     }
     if (runsClientAuthenticator &&
         (command.startsWith('pkam:') || command.startsWith('cram:'))) {
-      unawaited(socket.serverSends('data:success\n$atSign@'));
+      final owner = _socketsOf.entries
+          .where((entry) => entry.value.contains(socket))
+          .map((entry) => entry.key)
+          .firstOrNull;
+      final refusal = refuseClientAuth?.call(owner);
+      unawaited(socket.serverSends(
+          refusal == null ? 'data:success\n$atSign@' : '$refusal\n@'));
       return;
     }
     if (command.startsWith('monitor:')) {

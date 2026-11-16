@@ -597,14 +597,15 @@ D-12. Independent of the P series, which is `at_server`-side.
     add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
     `dart analyze` and `flutter analyze --no-fatal-infos`.
   **Raised while building X6, tracked nowhere else:**
-  - **The monitor connection sends no `version`.** Every authenticating `from:` names
+  - **Every at_client connection sends `version`.** Every authenticating `from:` names
     the app and the SDK (`appName`, `appVersion`, `sdkName`, `sdkVersion`), the monitor's
-    included; `RemoteSecondary`'s alone adds `version`, `clientId` and `platform`.
-    `AtClientConfig.atClientVersion` therefore reaches the atServer as `version` over
-    `RemoteSecondary`'s connections only: the verb connection, and sync's, which
-    `SyncServiceImpl.remoteSecondaryFor` builds as a `RemoteSecondary` of its own.
-    at_client's version reaches it as `sdkVersion` over every connection. Settled (plan-d3q): `version` stays off the monitor, because the atServer
-    chooses how it formats an error reply by the `version` a connection sent.
+    included, and at_client sends its own version as `version` on every `from:` it sends
+    to authenticate: `clientConfigOf` adds it, so the verb connection, sync's, the
+    monitor's, the enrollment handshake's and the start-up key check's all carry it.
+    `RemoteSecondary`'s alone adds `clientId` and `platform`. A program using at_auth
+    without at_client sends no `version`. Settled (plan-d3q, 2026-11-16): the atServer
+    writes its error replies as JSON on a connection whose `from:` named a version, so
+    every reader of a refusal on these connections reads both forms.
   - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
     has exactly one consumer, and that consumer uses five members — `currentState`,
     `targetState`, `currentStateStream`, `start()`, `stop()`. What is left in it is

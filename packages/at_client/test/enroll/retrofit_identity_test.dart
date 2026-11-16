@@ -228,6 +228,7 @@ void main() {
       'appVersion': '2.3.1',
       'sdkName': 'atsign.dart.at_client',
       'sdkVersion': pubspecVersion(),
+      'version': pubspecVersion(),
     });
   });
 }

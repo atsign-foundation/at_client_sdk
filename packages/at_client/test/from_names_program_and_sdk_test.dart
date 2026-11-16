@@ -51,6 +51,8 @@ void main() {
     expect(config['sdkVersion'], atClientVersion,
         reason: 'at_client names its own version, the one its pubspec '
             'declares');
+    expect(config['version'], atClientVersion,
+        reason: 'every from: at_client sends carries its own version');
   }
 
   /// A client for [atSign] whose particulars name [appName] at [appVersion]
@@ -167,6 +169,7 @@ void main() {
     expect(config['appVersion'], 'unknown');
     expect(config['sdkName'], 'atsign.dart.at_client');
     expect(config['sdkVersion'], atClientVersion);
+    expect(config['version'], atClientVersion);
     final warnings = (outcome['warnings'] as List)
         .cast<String>()
         .where((warning) => warning.contains('atClientParticulars'));
@@ -223,22 +226,21 @@ void main() {
     expect(config.containsKey('platform'), isFalse, reason: '$config');
   });
 
-  test('a connection that sent no version still sends none', () async {
+  test('every from: at_client sends carries version, at_client\'s version',
+      () async {
     final (client, server) = await openClient();
     client.notificationService.subscribe(regex: '.*');
     await server.waitUntil(() => server.monitorCount > 0,
         what: 'the monitor starting');
 
     final monitor = configOf(server.fromsOn(monitorLookUp(client)));
-    expect(monitor.containsKey('version'), isFalse,
-        reason: 'the atServer chooses its error format by version, so a '
-            'connection that sent none must still send none: $monitor');
+    expect(monitor['version'], atClientVersion, reason: '$monitor');
     expect(monitor['sdkName'], 'atsign.dart.at_client',
         reason:
             'the control: this is the monitor\'s config, which names at_client');
+    await client.getRemoteSecondary()!.executeCommand('scan\n', auth: true);
     expect(configOf(server.fromsOn(verbLookUp(client)))['version'],
-        atClientVersion,
-        reason: 'the verb connection still sends version, as before');
+        monitor['version']);
   });
 
   test('a proxy root\'s preamble stays bare', () async {
@@ -268,6 +270,7 @@ void main() {
       'appVersion': 'unknown',
       'sdkName': 'atsign.dart.at_client',
       'sdkVersion': atClientVersion,
+      'version': atClientVersion,
     });
   });
 

@@ -1,14 +1,15 @@
 Feature: Every authenticating from: names the program and the SDK that sent it
 
   Every from: a client sends to authenticate carries, in its clientConfig,
-  the program's name and version and the SDK's name and version, so an
+  the program's name and version and the SDK's name and version, and an
+  at_client connection carries at_client's version as `version` too, so an
   atServer can tell which program and which build each connection came from.
 
   Races: the config is fixed when the client is built, and every connection
   sends the same one.
   Replay: the config carries no secret and no freshness; a resent from: is
   answered with a new challenge, as today.
-  DoS: the config is four short strings, each cut to 64 characters, built
+  DoS: the config is a few short strings, each cut to 64 characters, built
   once per client.
   Forgery: the config is the client's own claim to its own atServer; a client
   that misstates it mislabels only its own connections, and no key added here
@@ -44,11 +45,11 @@ Feature: Every authenticating from: names the program and the SDK that sent it
     When the client authenticates a connection
     Then the from: command's clientConfig has appName cut to its first 64 characters
 
-  Scenario: a connection that sent no version still sends none
+  Scenario: every from: at_client sends carries version, at_client's version
     Given an app listening for notifications
     When the client authenticates its notification connection
-    Then the from: command's clientConfig has no version key
-    And the verb connection's from: still carries version, as before
+    Then the from: command's clientConfig has version at_client's version
+    And the verb connection's from: carries the same version
 
   Scenario: at_activate names itself and at_client
     Given at_activate onboarding an atSign
@@ -58,7 +59,7 @@ Feature: Every authenticating from: names the program and the SDK that sent it
   Scenario: a program using at_auth alone is named after at_auth
     Given a program that onboards through at_auth and passes no client config
     When at_auth authenticates
-    Then the from: command's clientConfig has the program's derived appName, appVersion "unknown", sdkName "atsign.dart.at_auth" and sdkVersion at_auth's version
+    Then the from: command's clientConfig has the program's derived appName, appVersion "unknown", sdkName "atsign.dart.at_auth" and sdkVersion at_auth's version, and no version
 
   Scenario: a proxy root's preamble stays bare
     Given a client whose root is a proxy

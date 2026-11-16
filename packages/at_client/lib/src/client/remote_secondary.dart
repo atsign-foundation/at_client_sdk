@@ -9,7 +9,6 @@ import 'package:at_auth/at_auth.dart'
 
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
-import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -103,17 +102,12 @@ class RemoteSecondary implements Secondary {
     _installAuthenticator();
   }
 
-  /// [clientConfigOf] this client's particulars, with the client's version,
-  /// its id and, when set, its platform.
-  ///
-  /// NOTE: only this connection sends version; the atServer formats its error
-  /// replies by it, so another connection that sends one changes how its
-  /// errors read.
+  /// [clientConfigOf] this client's particulars, with the client's id and,
+  /// when set, its platform.
   Map<String, String> _getClientConfig() {
     final particulars = _preference.atClientParticulars;
     return {
       ...clientConfigOf(particulars),
-      AtConstants.version: AtClientConfig.getInstance().atClientVersion,
       AtConstants.clientId: particulars.clientId,
       if (particulars.platform.isNotNull)
         AtConstants.platform: particulars.platform!,

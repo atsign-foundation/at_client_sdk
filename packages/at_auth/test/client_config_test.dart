@@ -98,6 +98,21 @@ void main() {
       expect(config['sdkVersion'], 'd' * 64);
     });
 
+    test('with no version given, none is sent', () {
+      for (final version in [null, '', ' \t']) {
+        expect(clientConfigFor(appName: 'acme_chat', version: version),
+            isNot(contains('version')),
+            reason:
+                'at_auth adds no version of its own: ${jsonEncode(version)}');
+      }
+    });
+
+    test('a version, when given, is sent as version, cut like the others', () {
+      expect(clientConfigFor(version: '4.1.0')['version'], '4.1.0');
+      expect(clientConfigFor(version: 'v\u2028${'9' * 80}')['version'],
+          'v ${'9' * 62}');
+    });
+
     test('a value of exactly 64 characters is sent whole', () {
       expect(clientConfigFor(appName: 'a' * 64)['appName'], 'a' * 64);
     });
@@ -243,14 +258,14 @@ void main() {
             () async {
           final config = await sentBy(build({
             'appName': 'acme_chat',
-            'version': '4.1.0',
+            'version': '9.9.9',
             'clientId': '42',
             'platform': 'macos',
           }));
 
           expect(config, {
             'appName': 'acme_chat',
-            'version': '4.1.0',
+            'version': '9.9.9',
             'clientId': '42',
             'platform': 'macos',
             'appVersion': 'unknown',
@@ -265,8 +280,7 @@ void main() {
 
           expect(config.keys.toSet(),
               {'appName', 'appVersion', 'sdkName', 'sdkVersion'},
-              reason: 'no version key: at_server reads it to choose its '
-                  'error format');
+              reason: 'at_auth adds no version: only a caller\'s is sent');
           expect(config['sdkName'], 'atsign.dart.at_auth');
         });
 

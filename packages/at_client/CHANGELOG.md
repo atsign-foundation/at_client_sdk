@@ -4,7 +4,8 @@
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file
   and the client logs one warning when it starts; an unset `appVersion` is
-  sent as `unknown`.
+  sent as `unknown`. at_client sends its own version as `version` on every
+  one of them.
 - feat: `Atsign.authenticatesAs` and `PendingEnrollment` take optional
   `particulars` to name the app, and `AtClientParticulars` is exported.
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,

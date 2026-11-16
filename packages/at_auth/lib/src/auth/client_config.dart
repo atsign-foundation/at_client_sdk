@@ -20,19 +20,22 @@ const int maxClientConfigValueLength = 64;
 final RegExp _lineSeparators = RegExp(r'[\u2028\u2029]');
 
 /// The clientConfig a `from:` carries: the program's [appName] and
-/// [appVersion], and the SDK's [sdkName] and [sdkVersion].
+/// [appVersion], the SDK's [sdkName] and [sdkVersion], and [version] when
+/// the caller gives one.
 ///
-/// A value that is null, empty or only whitespace takes at_auth's: the name
-/// of the program file ("unknown" where there is none), "unknown",
-/// "atsign.dart.at_auth" and at_auth's version. Each value is then made
-/// sendable: a line or paragraph separator becomes a space, and the value is
-/// cut to its first 64 UTF-16 code units, never leaving half of a surrogate
-/// pair.
+/// A value of the four that is null, empty or only whitespace takes
+/// at_auth's: the name of the program file ("unknown" where there is none),
+/// "unknown", "atsign.dart.at_auth" and at_auth's version. [version] has no
+/// such default: one that is null, empty or only whitespace is not sent. Each
+/// value is then made sendable: a line or paragraph separator becomes a
+/// space, and the value is cut to its first 64 UTF-16 code units, never
+/// leaving half of a surrogate pair.
 Map<String, String> clientConfigFor({
   String? appName,
   String? appVersion,
   String? sdkName,
   String? sdkVersion,
+  String? version,
 }) =>
     {
       AtConstants.appName: _sendableOr(appName, derivedProgramName),
@@ -40,6 +43,8 @@ Map<String, String> clientConfigFor({
           _sendableOr(appVersion, () => unknownClientConfigValue),
       sdkNameKey: _sendableOr(sdkName, () => atAuthSdkName),
       sdkVersionKey: _sendableOr(sdkVersion, () => packageVersion),
+      if (version != null && version.trim().isNotEmpty)
+        AtConstants.version: _sendable(version),
     };
 
 /// [config] made sendable, with the four values [clientConfigFor] names
@@ -49,7 +54,8 @@ Map<String, String> clientConfigFor({
 /// makes its values. One of the four that is not a string is sent as its
 /// `toString()`, and one that is absent, empty or only whitespace takes
 /// at_auth's. A value of any other key that is not a string is passed through
-/// unchanged.
+/// unchanged. A `version` is sent only when [config] holds one; at_auth adds
+/// none.
 Map<String, dynamic> withClientConfigDefaults(Map<String, dynamic> config) {
   String? given(String key) => config[key]?.toString();
   return {

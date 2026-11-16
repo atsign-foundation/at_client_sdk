@@ -111,6 +111,8 @@ void main() {
       expect(config['appVersion'], 'unknown');
       expect(config['sdkName'], 'atsign.dart.at_auth');
       expect(config['sdkVersion'], atAuthVersion);
+      expect(config.containsKey('version'), isFalse,
+          reason: 'at_auth alone sends no version: $config');
     }
   }, timeout: const Timeout(Duration(minutes: 4)));
 
