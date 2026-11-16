@@ -136,27 +136,6 @@ class Monitor {
     Duration(seconds: 34),
   ];
 
-  /// The same backoff at_lookup uses after a reconnect the atServer refused,
-  /// so a refused first connect and a refused reconnect slow down alike.
-  ///
-  /// Settable for the same reason as [startRetryDelays].
-  @visibleForTesting
-  static List<Duration> startRefusalRetryDelays = const [
-    Duration(seconds: 1),
-    Duration(seconds: 2),
-    Duration(seconds: 3),
-    Duration(seconds: 5),
-    Duration(seconds: 8),
-    Duration(seconds: 13),
-    Duration(seconds: 21),
-    Duration(seconds: 34),
-    Duration(seconds: 55),
-    Duration(seconds: 89),
-    Duration(seconds: 144),
-    Duration(seconds: 233),
-    Duration(seconds: 300),
-  ];
-
   /// Told the delay chosen before each retry of the first connect, so a test
   /// can see which schedule it came from.
   @visibleForTesting
@@ -310,7 +289,9 @@ class Monitor {
           : null;
 
   /// Tries the first connect again, while the caller still wants to listen,
-  /// waiting longer when the atServer [refused] the last attempt.
+  /// waiting longer when the atServer [refused] the last attempt: on
+  /// [AtLookupImpl.notificationRefusalReconnectDelays], as a refused
+  /// reconnect does.
   void _scheduleStartRetry({required bool refused}) {
     _startRetry?.cancel();
     if (_targetState != NotificationListenerState.listening) return;
@@ -319,7 +300,9 @@ class Monitor {
     if (!refused) {
       _startRetryIx = _startRetryIx.clamp(0, startRetryDelays.length - 1);
     }
-    final delays = refused ? startRefusalRetryDelays : startRetryDelays;
+    final delays = refused
+        ? AtLookupImpl.notificationRefusalReconnectDelays
+        : startRetryDelays;
     final delay = delays[_startRetryIx.clamp(0, delays.length - 1)];
     _startRetryIx++;
     onStartRetryDelay?.call(delay);

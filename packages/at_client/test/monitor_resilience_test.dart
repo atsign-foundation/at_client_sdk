@@ -30,7 +30,6 @@ void main() {
   late List<Duration> defaultReconnects;
   late List<Duration> defaultStartRetries;
   late List<Duration> defaultRefusalReconnects;
-  late List<Duration> defaultStartRefusalRetries;
   late String pkamPrivateKey;
   final received = <AtNotification>[];
   var subscriptionEnded = false;
@@ -44,7 +43,6 @@ void main() {
     defaultReconnects = AtLookupImpl.notificationReconnectDelays;
     defaultStartRetries = Monitor.startRetryDelays;
     defaultRefusalReconnects = AtLookupImpl.notificationRefusalReconnectDelays;
-    defaultStartRefusalRetries = Monitor.startRefusalRetryDelays;
     pkamPrivateKey = RSAKeypair.fromRandom().privateKey.toString();
   });
 
@@ -68,7 +66,6 @@ void main() {
       Duration(milliseconds: 90),
     ];
     AtLookupImpl.notificationRefusalReconnectDelays = afterRefusal;
-    Monitor.startRefusalRetryDelays = afterRefusal;
 
     server = FakeAtServer(atSign: atSign);
     client = MockAtClient();
@@ -95,7 +92,6 @@ void main() {
     AtLookupImpl.notificationReconnectDelays = defaultReconnects;
     Monitor.startRetryDelays = defaultStartRetries;
     AtLookupImpl.notificationRefusalReconnectDelays = defaultRefusalReconnects;
-    Monitor.startRefusalRetryDelays = defaultStartRefusalRetries;
   });
 
   /// Waits until the monitor reports itself listening.
@@ -569,7 +565,7 @@ void main() {
             reason: 'each retry of a refused start waits from the refusal '
                 'schedule, longer each time and holding at its last entry, '
                 'and the retries go on past it');
-        expect(defaultStartRefusalRetries, defaultRefusalReconnects,
+        expect(longest(defaultRefusalReconnects), const Duration(minutes: 5),
             reason: 'a refused start backs off on the schedule a refused '
                 'reconnect does, which grows to 5 minutes');
         refusedWith(row.cause);
@@ -584,7 +580,6 @@ void main() {
     refusableServer();
     final longer = [for (final n in [30, 50, 70, 90, 110, 130]) ms(n)];
     AtLookupImpl.notificationRefusalReconnectDelays = longer;
-    Monitor.startRefusalRetryDelays = longer;
     server.refuseConnects = 5;
     server.pkamRefusal = refusals.first.answer;
 
