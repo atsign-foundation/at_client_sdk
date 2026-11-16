@@ -478,3 +478,15 @@ Feature: AtCollection checks every item id before using it in a key
     Given a collection "todos.demo" of @alice
     When a notification from @bob arrives for the key "@alice:x@alice:y.todos.demo@bob"
     Then the collection emits no event
+
+  @dos @forgery
+  Scenario: Given a data event for a key @bob shares whose AtKey was built with the key name "x@bob", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a data event arrives for an AtKey built with the key name "x@bob", shared by @bob with @alice
+    Then the collection emits no event
+
+  @dos @forgery
+  Scenario: Given a data event for a key @bob shares whose AtKey was built with the key name "x@alice:y", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a data event arrives for an AtKey built with the key name "x@alice:y", shared by @bob with @alice
+    Then the collection emits no event

@@ -2625,8 +2625,7 @@ interface class AtCollection<T> {
     if (keyName.startsWith('public:')) {
       keyName = keyName.substring('public:'.length);
     }
-    if (toStr.isNotEmpty) keyName = keyName.replaceAll('$toStr:', '');
-    if (fromStr.isNotEmpty) keyName = keyName.replaceAll(fromStr, '');
+    keyName = _betweenRecipientAndSender(keyName, toStr, fromStr);
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) keyName = keyName.substring(0, ix);
     final parts = keyName.split('.');
@@ -2957,15 +2956,22 @@ interface class AtCollection<T> {
     }
   }
 
+  /// [key] without a leading `<recipient>:` and a trailing [sender]; an
+  /// empty [recipient] or [sender] strips nothing.
+  static String _betweenRecipientAndSender(
+      String key, String recipient, String sender) {
+    var name = key;
+    if (recipient.isNotEmpty && name.startsWith('$recipient:')) {
+      name = name.substring(recipient.length + 1);
+    }
+    if (sender.isNotEmpty && name.endsWith(sender)) {
+      name = name.substring(0, name.length - sender.length);
+    }
+    return name;
+  }
+
   _CParts _getPartsFromNotifKey(AtNotification n) {
-    String keyName = n.key;
-    final recipient = '${n.to}:';
-    if (keyName.startsWith(recipient)) {
-      keyName = keyName.substring(recipient.length);
-    }
-    if (keyName.endsWith(n.from)) {
-      keyName = keyName.substring(0, keyName.length - n.from.length);
-    }
+    String keyName = _betweenRecipientAndSender(n.key, n.to, n.from);
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) {
       keyName = keyName.substring(0, ix);

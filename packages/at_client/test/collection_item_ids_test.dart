@@ -189,6 +189,26 @@ void main() {
   const control = '@alice:ok.$namespace@bob';
   const controlUpdated = 'updated "ok" @bob';
 
+  /// An AtKey @bob shares with @alice, built field by field with [name] as
+  /// its key name, as a received copy is.
+  AtKey builtFromBob(String name) => AtKey()
+    ..key = name
+    ..namespace = namespace
+    ..sharedBy = '@bob'
+    ..sharedWith = '@alice'
+    ..metadata = (Metadata()..isCached = true);
+
+  /// Each event a collection "todos.demo" of @alice emits for the data events
+  /// added to [dataEvents].
+  Future<List<String>> dataEventsOf(
+      StreamController<DataEvent> dataEvents) async {
+    final c = collectionWithInjectedDataEvents<String>(
+        atClient, namespace, const Duration(days: 7),
+        dataEvents: dataEvents.stream);
+    await pumpEventQueue();
+    return eventsOf(c);
+  }
+
   // Every call that takes an id
 
   test(
@@ -1107,6 +1127,36 @@ void main() {
     notifications
       ..add(fromBob('@alice:x@alice:y.$namespace@bob'))
       ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a data event for a key @bob shares whose AtKey was built with the key name "x@bob", when it reaches the collection, then no event is emitted',
+      () async {
+    final dataEvents = StreamController<DataEvent>.broadcast();
+    addTearDown(dataEvents.close);
+    final events = await dataEventsOf(dataEvents);
+
+    dataEvents
+      ..add(DataUpdated(builtFromBob('x@bob')))
+      ..add(DataUpdated(AtKey.fromString('cached:$control')));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a data event for a key @bob shares whose AtKey was built with the key name "x@alice:y", when it reaches the collection, then no event is emitted',
+      () async {
+    final dataEvents = StreamController<DataEvent>.broadcast();
+    addTearDown(dataEvents.close);
+    final events = await dataEventsOf(dataEvents);
+
+    dataEvents
+      ..add(DataUpdated(builtFromBob('x@alice:y')))
+      ..add(DataUpdated(AtKey.fromString('cached:$control')));
     await pumpEventQueue();
 
     expect(events, [controlUpdated]);
