@@ -6,6 +6,7 @@ import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart' show deleteStorage;
 import 'package:test/test.dart';
 
+import 'from_recorder.dart';
 import 'keyfile_helpers.dart';
 
 /// The app a command's client names on its authenticating `from:`: the
@@ -159,7 +160,7 @@ void main() {
     final config = await firstConfigFromProcess('AtActivate', onboard);
 
     expect(config['appName'], 'at_activate');
-    expect(config['appVersion'], _atClientCliVersion());
+    expect(config['appVersion'], pubspecVersion());
     expect(config['sdkName'], 'atsign.dart.at_client');
   }, timeout: const Timeout(Duration(minutes: 3)));
 
@@ -169,7 +170,7 @@ void main() {
     final config = await firstConfigFromProcess('at_register', onboard);
 
     expect(config['appName'], 'at_register');
-    expect(config['appVersion'], _atClientCliVersion());
+    expect(config['appVersion'], pubspecVersion());
   }, timeout: const Timeout(Duration(minutes: 3)));
 
   test(
@@ -191,8 +192,7 @@ void main() {
 
   test(
       'Given a program outside at_client_cli, when the client createAtClient '
-      'opens authenticates, then its from: does not name at_activate',
-      () async {
+      'opens authenticates, then its from: names the program file', () async {
     final keysPath = await keyfile();
 
     final config = await firstConfigWhile(createAtClient(
@@ -203,7 +203,10 @@ void main() {
         waitForPqStartup: false,
         maxConnectAttempts: 1));
 
-    expect(config['appName'], isNot('at_activate'));
+    expect(
+        config['appName'], Platform.script.pathSegments.last.split('.').first,
+        reason: 'the calling program names no app through createAtClient, so '
+            'it is named after its program file, not at_activate');
     expect(config['appVersion'], 'unknown',
         reason: 'the calling program names no version through createAtClient');
     expect(config['sdkName'], 'atsign.dart.at_client',
@@ -243,12 +246,7 @@ void main() {
     ]));
 
     expect(config['appName'], 'at_activate');
-    expect(config['appVersion'], _atClientCliVersion());
+    expect(config['appVersion'], pubspecVersion());
     expect(config['sdkName'], 'atsign.dart.at_client');
   });
 }
-
-/// The version at_client_cli's pubspec declares.
-String _atClientCliVersion() => RegExp(r'^version:\s*(\S+)', multiLine: true)
-    .firstMatch(File('pubspec.yaml').readAsStringSync())!
-    .group(1)!;

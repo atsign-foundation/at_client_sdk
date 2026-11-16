@@ -10,6 +10,7 @@ import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'from_recorder.dart';
 import 'lifecycle_rig.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
@@ -22,8 +23,8 @@ class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 void main() {
   AtSignLogger.root_level = 'SHOUT';
   late Directory dir;
-  final atClientCliVersion = _versionIn('pubspec.yaml');
-  final atClientVersion = _versionIn('../at_client/pubspec.yaml');
+  final atClientCliVersion = pubspecVersion();
+  final atClientVersion = pubspecVersion('../at_client/pubspec.yaml');
 
   setUpAll(() => registerFallbackValue(_FakeVerbBuilder()));
 
@@ -138,11 +139,6 @@ void main() {
   });
 }
 
-/// The version the pubspec at [path] declares.
-String _versionIn(String path) => RegExp(r'^version:\s*(\S+)', multiLine: true)
-    .firstMatch(File(path).readAsStringSync())!
-    .group(1)!;
-
 /// An atServer as the registrar leaves it: no encryption public key yet, an
 /// enrollment approved as soon as it is asked for, and every update and
 /// delete accepted.
@@ -185,24 +181,11 @@ Future<List<Map<String, dynamic>>> _configsInstalledOn(
   for (final authenticator in verify(() => lookUp.authenticator = captureAny())
       .captured
       .whereType<AtAuthenticator>()) {
-    final recorder = _FromRecorder();
+    final recorder = FromRecorder();
     await authenticator(recorder);
     expect(recorder.from, startsWith(prefix));
     configs.add(jsonDecode(recorder.from!.substring(prefix.length).trim())
         as Map<String, dynamic>);
   }
   return configs;
-}
-
-/// Keeps the `from:` an authenticator sends, answering it with nothing so the
-/// authenticator stops there.
-class _FromRecorder implements AtCommandExecutor {
-  String? from;
-
-  @override
-  Future<String> sendSync(String command,
-      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
-    from ??= command;
-    return '';
-  }
 }
