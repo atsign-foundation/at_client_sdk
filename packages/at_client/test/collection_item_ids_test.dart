@@ -6,10 +6,16 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 /// Catalogue: features/at_client/collection_item_ids.feature
 void main() {
-  setUpAll(() => registerFallbackValue(FakeAtKey()));
+  final logs = RecordedLogs();
+
+  setUpAll(() {
+    logs.installOn();
+    registerFallbackValue(FakeAtKey());
+  });
 
   const namespace = 'todos.demo';
   final alice = '@alice'.toAtsign();
@@ -24,16 +30,20 @@ void main() {
 
   String envelope(String obj) => jsonEncode({'type': 'n/a', 'obj': obj});
 
-  /// Writes a record directly, as another client writes it.
+  /// Writes a record directly, as another client writes it; a `cached:` key
+  /// keeps its prefix, as a received copy does.
   void seed(String key, String obj) {
-    final atKey = AtKey.fromString(key)
+    final parsed = AtKey.fromString(key);
+    final atKey = parsed
       ..metadata = (Metadata()
+        ..isCached = parsed.metadata.isCached
         ..createdAt = DateTime.now().toUtc()
         ..expiresAt = DateTime.now().toUtc().add(const Duration(days: 7)));
     store[atKey.toString()] = (key: atKey, value: envelope(obj));
   }
 
   setUp(() {
+    logs.records.clear();
     atClient = MockAtClient();
     notifications = StreamController<AtNotification>.broadcast();
     store = {};
@@ -120,6 +130,31 @@ void main() {
 
   Matcher refusesStructure(String id) => refusedId(id, structureRule);
   Matcher refusesNewId(String id) => refusedId(id, newIdRule);
+
+  var sequence = 0;
+
+  /// A notification from @bob to @alice for [key].
+  AtNotification fromBob(String key,
+          {String operation = 'update', String? value}) =>
+      AtNotification('n-${sequence++}', key, '@bob', '@alice',
+          DateTime.now().millisecondsSinceEpoch, 'key', false,
+          value: value, operation: operation);
+
+  /// Each event [c] emits, as its kind, id and owner.
+  List<String> eventsOf(AtCollection<String> c) {
+    final events = <String>[];
+    c.watch().listen((e) => events.add(switch (e) {
+          CItemUpdated() => 'updated ${jsonEncode(e.id)} ${e.owner}',
+          CItemDeleted() => 'deleted ${jsonEncode(e.id)} ${e.owner}',
+          _ => '${e.runtimeType} ${jsonEncode(e.id)} ${e.owner}',
+        }));
+    return events;
+  }
+
+  /// A notification whose ids pass, sent after the one under test so that
+  /// an empty result cannot come from nothing having been handled.
+  const control = '@alice:ok.$namespace@bob';
+  const controlUpdated = 'updated "ok" @bob';
 
   // Every call that takes an id
 
@@ -424,6 +459,23 @@ void main() {
         store.keys.where((k) => k.contains('$long.$namespace@alice')), isEmpty);
   });
 
+  test(
+      'Given an item @bob shares under an id containing a tab, when getItems is called, then it is not listed and a warning shows the id and @bob',
+      () async {
+    seed('cached:@alice:x\ty.$namespace@bob', 'from bob');
+    seed('cached:@alice:ok.$namespace@bob', 'from bob');
+    final c = await todos();
+
+    final items = await c.getItems();
+
+    expect([for (final i in items) i.id], ['ok'],
+        reason: 'the item under the accepted id is listed, the other is not');
+    final warnings = logs.at('WARNING').where((m) => m.contains(r'"x\ty"'));
+    expect(warnings, hasLength(1));
+    expect(warnings.single, contains('@bob'));
+    expect(warnings.single, isNot(contains('\t')));
+  });
+
   // Sub-collection names
 
   test(
@@ -448,5 +500,162 @@ void main() {
           .having((e) => e.name, 'name', 'subName')
           .having((e) => '${e.message}', 'message', contains(structureRule))),
     );
+  });
+
+  // Ids that arrive in events
+
+  test(
+      'Given a notification from @bob whose key\'s item id contains ":", when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:x:y.$namespace@bob'))
+      ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s item id contains ":", when it reaches the collection, then a warning shows the id and @bob and not the value',
+      () async {
+    final c = await todos();
+    eventsOf(c);
+
+    notifications
+        .add(fromBob('@alice:x:y.$namespace@bob', value: envelope('v-secret')));
+    await pumpEventQueue();
+
+    final warnings = logs.at('WARNING').where((m) => m.contains('"x:y"'));
+    expect(warnings, hasLength(1));
+    expect(warnings.single, contains('@bob'));
+    expect(warnings.single, isNot(contains('v-secret')));
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s item id contains a newline, when it reaches the collection, then the warning is a single line',
+      () async {
+    final c = await todos();
+    eventsOf(c);
+
+    notifications.add(fromBob('@alice:x\ny.$namespace@bob'));
+    await pumpEventQueue();
+
+    final warnings =
+        logs.at('WARNING').where((m) => m.contains(r'"x\ny"')).toList();
+    expect(warnings, hasLength(1),
+        reason: 'one warning shows the id with the newline escaped');
+    expect(warnings.single, isNot(contains('\n')));
+  });
+
+  test(
+      'Given a query watch and a notification from @bob whose key\'s item id contains a space, when it reaches the collection, then the watch emits no error',
+      () async {
+    final c = await todos();
+    final errors = <Object>[];
+    final snapshots = <int>[];
+    final watching = c
+        .query()
+        .watch()
+        .listen((l) => snapshots.add(l.length), onError: errors.add);
+    addTearDown(watching.cancel);
+    await pumpEventQueue();
+
+    notifications.add(fromBob('@alice:x y.$namespace@bob'));
+    await pumpEventQueue();
+    seed('cached:@alice:ok.$namespace@bob', 'from bob');
+    notifications.add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(errors, isEmpty);
+    expect(snapshots.last, 1,
+        reason: 'the watch went on to show the control item');
+  });
+
+  test(
+      'Given a delete notification from @bob whose key\'s item id contains ":", when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:x:y.$namespace@bob', operation: 'delete'))
+      ..add(fromBob(control, operation: 'delete'));
+    await pumpEventQueue();
+
+    expect(events, ['deleted "ok" @bob']);
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s ancestor id contains ":", when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:c1.comments.x:y.$namespace@bob'))
+      ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s subName contains ":", when it reaches the collection, then no event is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications
+      ..add(fromBob('@alice:c1.a:b.p1.$namespace@bob'))
+      ..add(fromBob(control));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a data event for a key @bob shares whose item id contains a tab, when it reaches the collection, then no event is emitted',
+      () async {
+    final dataEvents = StreamController<DataEvent>.broadcast();
+    addTearDown(dataEvents.close);
+    final c = collectionWithInjectedDataEvents<String>(
+        atClient, namespace, const Duration(days: 7),
+        dataEvents: dataEvents.stream);
+    await pumpEventQueue();
+    final events = eventsOf(c);
+
+    dataEvents
+      ..add(DataUpdated(AtKey.fromString('cached:@alice:x\ty.$namespace@bob')))
+      ..add(DataUpdated(AtKey.fromString('cached:$control')));
+    await pumpEventQueue();
+
+    expect(events, [controlUpdated]);
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s item id starts with "_", when it reaches the collection, then an update event with that id is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications.add(fromBob('@alice:_x.$namespace@bob'));
+    await pumpEventQueue();
+
+    expect(events, ['updated "_x" @bob']);
+  });
+
+  test(
+      'Given a notification from @bob whose key\'s item id is 65 characters, when it reaches the collection, then an update event with that id is emitted',
+      () async {
+    final c = await todos();
+    final events = eventsOf(c);
+
+    notifications.add(fromBob('@alice:$long.$namespace@bob'));
+    await pumpEventQueue();
+
+    expect(events, ['updated "$long" @bob']);
   });
 }

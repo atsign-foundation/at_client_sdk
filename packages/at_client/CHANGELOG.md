@@ -29,9 +29,12 @@
   is empty or contains `.`, `:`, `@`, whitespace or a control character;
   `create`, `upsert` and `draft` also refuse an id that starts with `_`. A
   new item's id, given to `create` or to `upsert` when no item has it, must
-  be 1 to 64 characters of a-z, 0-9, `-` and `_`. An item already stored
-  keeps its id. `subCollection` refuses a `subName` that contains `:`, `@`,
-  whitespace or a control character.
+  be 1 to 64 characters of a-z, 0-9, `-` and `_`. An item already stored under
+  an id the check accepts keeps its id. `subCollection` refuses a `subName`
+  that contains `:`, `@`, whitespace or a control character. An event whose
+  item id, ancestor id or `subName` the check refuses is not emitted, and a
+  warning names the id and its owner. `getItems` and `getItemsAsStream` leave
+  out an item stored under such an id, with the same warning.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than

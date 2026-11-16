@@ -8,11 +8,14 @@ Feature: AtCollection checks every item id before using it in a key
   create, upsert and draft also refuse an id that starts with "_". A new
   item's id, given to create or to upsert when no item has it, must be 1 to
   64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit.
-  An id that create generates is 8 characters of a-z and 0-9. An item
-  already stored under an id outside that set keeps its id: it is listed,
-  read by that id, changed through draft and update or through upsert,
-  shared, and deleted. subCollection refuses a subName that is empty or
-  contains ".", ":", "@", whitespace or a control character.
+  An id that create generates is 8 characters of a-z and 0-9. An item already
+  stored under an id that the check accepts but that is outside that set keeps
+  its id: it is listed, read by that id, changed through draft and update or
+  through upsert, shared, and deleted. subCollection refuses a subName that is
+  empty or contains ".", ":", "@", whitespace or a control character. A
+  notification or data event whose item id, ancestor id or subName the check
+  refuses emits no event, and a warning shows the id, escaped on one line, and
+  its owner, never the value.
 
   Races: two callers in one process, or two clients of one atSign, may use
   the same id at once. The check reads only the id string and runs before
@@ -21,11 +24,14 @@ Feature: AtCollection checks every item id before using it in a key
   check-then-write in create for one given id is unchanged.
   Replay: cannot arise. No message, nonce or signature is added or changed,
   and an id is checked each time it is used.
-  DoS: whoever supplies an id to the app, and any atSign that shares an item
-  into the namespace. An id longer than 64 characters is refused before any
-  read or write, the check is linear in the id's length, and an item another
-  atSign shares under an id starting with "_" can still be read by that id
-  (the scenarios tagged @dos).
+  DoS: whoever supplies an id to the app, any atSign that shares an item into
+  the namespace, and any atSign that can notify this one. An id longer than 64
+  characters is refused before any read or write, the check is linear in the
+  id's length, an item another atSign shares under an id starting with "_" can
+  still be read by that id, and an event whose ids the check refuses is not
+  emitted, so no event hands the app an id its reads refuse; each such event
+  costs one warning, as each notification already costs a log line and a local
+  write (the scenarios tagged @dos).
   Forgery: the app's own code supplies every id, and it holds this atSign's
   keys and could write any key directly; the check matters when an app
   builds an id from input it did not write. Every call refuses an id
@@ -227,9 +233,79 @@ Feature: AtCollection checks every item id before using it in a key
     When delete is called on it
     Then no key of the item remains
 
+  @dos
+  Scenario: Given an item @bob shares under an id containing a tab, when getItems is called, then it is not listed and a warning shows the id and @bob
+    Given a collection "todos.demo" of @alice holding an item @bob shares under the id "x", a tab and "y"
+    When getItems is called
+    Then the item is not listed
+    And a warning is logged that shows the id with the tab escaped and the owner @bob
+
   # Sub-collection names
 
   Scenario: Given a subName containing ":", when subCollection is called, then ArgumentError is thrown
     Given a collection "todos.demo" of @alice holding an item "p1"
     When subCollection is called on "p1" with the subName "a:b"
     Then ArgumentError is thrown
+
+  # Ids that arrive in events
+
+  @dos
+  Scenario: Given a notification from @bob whose key's item id contains ":", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:x:y.todos.demo@bob"
+    Then the collection emits no event
+
+  @dos
+  Scenario: Given a notification from @bob whose key's item id contains ":", when it reaches the collection, then a warning shows the id and @bob and not the value
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:x:y.todos.demo@bob" with a value holding the text "v-secret"
+    Then a warning is logged that shows the id "x:y" and the owner @bob
+    And the warning does not contain "v-secret"
+
+  @dos @forgery
+  Scenario: Given a notification from @bob whose key's item id contains a newline, when it reaches the collection, then the warning is a single line
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for a key whose item id is "x", a newline and "y"
+    Then the warning holds no newline
+    And it shows the id with the newline escaped
+
+  @dos
+  Scenario: Given a query watch and a notification from @bob whose key's item id contains a space, when it reaches the collection, then the watch emits no error
+    Given a collection "todos.demo" of @alice with a query watch listening
+    When a notification from @bob arrives for the key "@alice:x y.todos.demo@bob"
+    Then the watch emits no error
+
+  @dos
+  Scenario: Given a delete notification from @bob whose key's item id contains ":", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a delete notification from @bob arrives for the key "@alice:x:y.todos.demo@bob"
+    Then the collection emits no event
+
+  @dos
+  Scenario: Given a notification from @bob whose key's ancestor id contains ":", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:c1.comments.x:y.todos.demo@bob"
+    Then the collection emits no event
+
+  @dos
+  Scenario: Given a notification from @bob whose key's subName contains ":", when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:c1.a:b.p1.todos.demo@bob"
+    Then the collection emits no event
+
+  @dos
+  Scenario: Given a data event for a key @bob shares whose item id contains a tab, when it reaches the collection, then no event is emitted
+    Given a collection "todos.demo" of @alice reading data events
+    When a data event arrives for the key "cached:@alice:" followed by "x", a tab, "y" and ".todos.demo@bob"
+    Then the collection emits no event
+
+  @dos
+  Scenario: Given a notification from @bob whose key's item id starts with "_", when it reaches the collection, then an update event with that id is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for the key "@alice:_x.todos.demo@bob"
+    Then the collection emits an update event with the id "_x" and the owner @bob
+
+  Scenario: Given a notification from @bob whose key's item id is 65 characters, when it reaches the collection, then an update event with that id is emitted
+    Given a collection "todos.demo" of @alice
+    When a notification from @bob arrives for a key whose item id is 65 "a" characters
+    Then the collection emits an update event with that id and the owner @bob

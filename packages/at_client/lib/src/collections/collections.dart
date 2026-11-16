@@ -355,6 +355,22 @@ interface class AtCollection<T> {
   /// whitespace or a control character.
   static final RegExp _keyStructure = RegExp(r'[.:@\s\x00-\x1f\x7f-\x9f]');
 
+  static const String _structureRule =
+      'must not be empty or contain ".", ":", "@", whitespace or a control character';
+
+  /// Whether an item id or subName is empty or holds a [_keyStructure]
+  /// character.
+  static bool _refusesStructure(String segment) =>
+      segment.isEmpty || _keyStructure.hasMatch(segment);
+
+  /// A character JSON leaves unescaped that would still break a log line.
+  static final RegExp _unescapedLineBreak = RegExp(r'[\x7f-\x9f\u2028\u2029]');
+
+  /// [text] quoted and escaped onto one line, for a log message.
+  static String _forLog(String text) => jsonEncode(text).replaceAllMapped(
+      _unescapedLineBreak,
+      (m) => '\\u${m[0]!.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}');
+
   /// A new item's id, after folding to lower case.
   static final RegExp _newIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
 
@@ -1453,7 +1469,8 @@ interface class AtCollection<T> {
   /// deduplicated and their `sharedWith` sets are unioned.
   ///
   /// An [id] is checked and folded as [getItemsAsStream] does, and one it
-  /// refuses fails the returned future with [ArgumentError].
+  /// refuses fails the returned future with [ArgumentError]. The items
+  /// [getItemsAsStream] leaves out are left out here too.
   Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) async =>
       getItemsAsStream(id: id, owner: owner).toList();
 
@@ -1482,7 +1499,8 @@ interface class AtCollection<T> {
   /// An [id] is folded to lower case. This call throws [ArgumentError],
   /// before a stream is returned or anything is read, when [id] is empty
   /// or contains `.`, `:`, `@`, whitespace or a control character. An id
-  /// starting with `_` is accepted.
+  /// starting with `_` is accepted. An item stored under an id this call
+  /// would refuse is left out, with a warning naming its id and owner.
   Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) =>
       _getItemsAsStreamInternal(
         id: id == null ? null : _foldedId(id),
@@ -1523,6 +1541,13 @@ interface class AtCollection<T> {
           pendingKey = k.fullKeyAndOwner;
           // NOTE: only when the owner's own copy is gone, which sorts first.
           if (_isOutboundCopy(k)) continue;
+          final itemId = k.key.split('.').first;
+          if (_refusesStructure(itemId)) {
+            _logger.warning('Left out item id ${_forLog(itemId)} owned by '
+                '${_forLog('${k.sharedBy}')} in $namespace: the id '
+                '$_structureRule');
+            continue;
+          }
           final v = await atClient.get(k);
           // An item that is not yet available (`availableAt` in the
           // future) or whose value the keystore won't return for any
@@ -1555,7 +1580,7 @@ interface class AtCollection<T> {
             if (md == null || md.availableAt == null) continue;
             final placeholder = CItem<T>._placeholder(
               owner: k.sharedBy!.toAtsign(),
-              id: k.key.split('.').first,
+              id: itemId,
               sharedWith: {},
               createdAt: md.createdAt ?? DateTime.now().toUtc(),
               expiresAt: md.expiresAt ??
@@ -1595,7 +1620,7 @@ interface class AtCollection<T> {
           }
           pending = CItem._(
             owner: k.sharedBy!.toAtsign(),
-            id: k.key.split('.').first,
+            id: itemId,
             type: decoded['type'] as String,
             obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
             sharedWith: {},
@@ -2011,9 +2036,8 @@ interface class AtCollection<T> {
     String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
-    if (subName.isEmpty || _keyStructure.hasMatch(subName)) {
-      throw ArgumentError.value(subName, 'subName',
-          'must not be empty or contain ".", ":", "@", whitespace or a control character');
+    if (_refusesStructure(subName)) {
+      throw ArgumentError.value(subName, 'subName', _structureRule);
     }
     final composedNs = '$subName.${parent.id}.$namespace';
     const int maxComposedNsLength = 128;
@@ -2408,6 +2432,7 @@ interface class AtCollection<T> {
           await _deleteLocal(n);
           break;
       }
+      if (_refusesEvent(parts)) return;
 
       if (parts.ancestry.isEmpty) {
         await _handleObjNotificationImpl(n);
@@ -2422,6 +2447,31 @@ interface class AtCollection<T> {
       }
       _logger.shout('handleNotification: $e\nStackTrace:\n$st');
     }
+  }
+
+  /// Whether an event for [parts] is dropped because its item id, an
+  /// ancestor id or a subName is one the reads refuse; logs it if so.
+  bool _refusesEvent(_CParts parts) {
+    String? refused;
+    if (_refusesStructure(parts.id)) {
+      refused = 'the id';
+    } else {
+      for (final a in parts.ancestry) {
+        if (_refusesStructure(a.id)) {
+          refused = 'its ancestor id ${_forLog(a.id)}';
+          break;
+        }
+        if (_refusesStructure(a.subName)) {
+          refused = 'its subName ${_forLog(a.subName)}';
+          break;
+        }
+      }
+    }
+    if (refused == null) return false;
+    _logger.warning('Dropped an event for item id ${_forLog(parts.id)} owned '
+        'by ${_forLog('${parts.from}')} in $namespace: $refused '
+        '$_structureRule');
+    return true;
   }
 
   /// Mirror of [_handleNotificationImpl] for the event-driven path.
@@ -2516,6 +2566,7 @@ interface class AtCollection<T> {
         return;
       }
       final parts = _getPartsFromAtKey(event.key);
+      if (_refusesEvent(parts)) return;
       final operation = switch (event) {
         DataUpdated() => 'update',
         DataDeleted() => 'delete',
@@ -2930,6 +2981,10 @@ interface class AtCollection<T> {
   /// recommended — see [CEvent] doc comment), it should include a
   /// `default: break` branch to stay forward-compatible with future
   /// event types.
+  ///
+  /// No event is emitted for a key whose item id, ancestor id or subName
+  /// is empty or contains `.`, `:`, `@`, whitespace or a control
+  /// character; a warning names the id and its owner instead.
   Stream<CEvent> watch() => _events.stream;
 
   /// Fires when a direct item (at this collection's namespace, depth
@@ -3132,9 +3187,8 @@ interface class AtCollection<T> {
   /// write ([forWrite]), when it starts with `_`.
   static String _foldedId(String id, {bool forWrite = false}) {
     final folded = id.toLowerCase();
-    if (folded.isEmpty || _keyStructure.hasMatch(folded)) {
-      throw ArgumentError.value(id, 'id',
-          'must not be empty or contain ".", ":", "@", whitespace or a control character');
+    if (_refusesStructure(folded)) {
+      throw ArgumentError.value(id, 'id', _structureRule);
     }
     if (forWrite && folded.startsWith('_')) {
       throw ArgumentError.value(id, 'id', 'must not start with "_"');
