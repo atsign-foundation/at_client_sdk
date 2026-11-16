@@ -527,7 +527,8 @@ Every collections adapter operation (§5.5) returns a Future that rejects with o
 `JsCollectionsError {code, message, id?, owner?, kind?, failures}`, which the facade turns
 into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` is
 the Dart type of the underlying error. A watch reports stream errors to `onError` in the
-same shape.
+same shape. On the Dart side `JsCollectionsError` is an `AtException`, so callers that catch
+`AtException` also catch it; the JS shape is unchanged.
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |

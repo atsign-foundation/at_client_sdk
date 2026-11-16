@@ -31,6 +31,12 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter opens a collection
     Then the open rejects with W8_FAILED and kind "StateError"
 
+  Scenario: JsCollectionsError is an AtException and keeps its fields
+    Given an adapter error built with a code, message, id, owner, kind and failures
+    When a Dart caller catches AtException
+    Then the adapter error is caught
+    And its code, message, id, owner, kind and failures are kept
+
   Scenario: A record written through the adapter carries its declared type tag on the wire
     When the adapter creates an item in a collection opened with type "Todo"
     Then the stored envelope's type is "Todo"
