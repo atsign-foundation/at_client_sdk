@@ -151,6 +151,10 @@ class FakeAtServer {
   /// the socket open and says nothing.
   bool answerHeartbeat = true;
 
+  /// What a verb this server has no answer of its own for is answered with
+  /// in place of `data:ok`, when it returns an answer.
+  String? Function(String command)? answerVerb;
+
   /// The atDirectory answer for every lookup: this server, wherever it is
   /// asked about.
   late final SecondaryAddressFinder addressFinder = _FixedAddress(atSign);
@@ -241,6 +245,11 @@ class FakeAtServer {
     if (command.startsWith('stats:')) {
       unawaited(socket.serverSends(
           'data:[{"id":"3","name":"lastCommitID","value":"null"}]\n$atSign@'));
+      return;
+    }
+    final answer = answerVerb?.call(command);
+    if (answer != null) {
+      unawaited(socket.serverSends('$answer\n$atSign@'));
       return;
     }
     // Everything else is answered the way the atServer answers a verb it
