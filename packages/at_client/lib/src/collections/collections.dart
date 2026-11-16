@@ -133,22 +133,26 @@ enum EventSource { data, notifs, both }
 ///
 /// A [CItem] can be a parent of its own [AtCollection<U>]; that
 /// sub-collection's items can themselves be parents; and so on.
-/// Nesting is bounded only by the Atsign Protocol's 255-char key
-/// limit. The absolute worst-case wire shape is the cached-copy
-/// form `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`
-/// where each atSign can be up to 55 chars. That fixes the wrapper
-/// overhead at `cached:` (7) + `<other>` (55) + `:` (1) + `@<self>`
-/// (55) = **118 chars**, leaving **137 chars** for everything
-/// inside (item id + every level of composed namespace).
+/// Nesting is bounded only by the Atsign Protocol's key length. An
+/// atServer key is at most 248 chars, and the cached copy a
+/// recipient's atServer keeps at most 255. That cached copy,
+/// `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`, is the
+/// longest shape an item's key takes. An atSign is at most 56 chars
+/// including its `@`, so the wrapper is `cached:` (7) +
+/// `<other>` (56) + `:` (1) + `@<self>` (56) = **120 chars** when both
+/// are that long, leaving **135 chars** for everything inside (the
+/// item id and every level of composed namespace).
 ///
 /// In practice that's plenty. With a 15-char application namespace
 /// and a strategy of single-character collection / sub-collection
 /// names, each tree level costs 11 chars (`.<sub>.<parent.id>`),
 /// so the theoretical depth ceiling is **11 levels (root + 10
 /// nested sub-collections)** — far deeper than any realistic
-/// hierarchical model needs. Each [subCollection] call enforces
-/// the budget and throws [ArgumentError] before any I/O if the
-/// composed namespace would overflow.
+/// hierarchical model needs. Each [subCollection] call caps the
+/// composed namespace at 128 chars and throws [ArgumentError] before
+/// any I/O if it would be longer, so an 8-character generated id fits
+/// while each atSign is at most 55 chars with its `@`. A key that does
+/// not fit is refused when it is written.
 ///
 /// ```dart
 /// // Level 1: comments on a post.
@@ -346,6 +350,13 @@ interface class AtCollection<T> {
   // Random-id alphabet and RNG (for auto-generated item ids).
   static const String _idAlphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
   static final Random _rng = Random.secure();
+
+  /// A character an item id or subName must not contain: `.`, `:`, `@`,
+  /// whitespace or a control character.
+  static final RegExp _keyStructure = RegExp(r'[.:@\s\x00-\x1f\x7f-\x9f]');
+
+  /// A new item's id, after folding to lower case.
+  static final RegExp _newIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
 
   // Factory registry (process-global, NOT per-collection):
   //   - _factoriesByType: lookup by [Type] when drafting (obfuscation-safe)
@@ -867,6 +878,12 @@ interface class AtCollection<T> {
   /// guarantee a collision-free id, use [create] (which retries on
   /// collision) rather than calling [draft] followed by a manual write.
   ///
+  /// A supplied [id] is folded to lower case, and the item holds the folded
+  /// id. Throws [ArgumentError] when [id] is empty, starts with `_`, or
+  /// contains `.`, `:`, `@`, whitespace or a control character. [create]'s
+  /// rule for a new item's id is not applied, so a draft for an item
+  /// already stored under another id can be passed to [update].
+  ///
   /// The item holds its own copy of [sharedWith], so a set the app keeps
   /// and passes again is never changed by a write of this item.
   ///
@@ -892,15 +909,7 @@ interface class AtCollection<T> {
     DateTime? availableAt,
   }) {
     final now = DateTime.now().toUtc();
-    id ??= _newItemId();
-    // An id is one dot-separated key segment. A dotted id is written intact
-    // but read back truncated at the first dot (`k.key.split('.').first`),
-    // so it silently corrupts identity and collides with a real item of the
-    // truncated id. Reject it at the single construction point — same guard
-    // subCollection applies to `parent.id`.
-    if (id.contains('.')) {
-      throw ArgumentError('id must not contain dots: "$id"');
-    }
+    id = id == null ? _newItemId() : _foldedId(id, forWrite: true);
     return CItem._(
       owner: atSign,
       id: id,
@@ -922,6 +931,10 @@ interface class AtCollection<T> {
   /// check; we retry on collision (odds are astronomically low) and give
   /// up after 10 attempts with a [StateError].
   ///
+  /// A supplied [id] is folded to lower case, and must then be 1 to 64
+  /// characters of a-z, 0-9, `-` and `_`, starting with a letter or digit;
+  /// otherwise [ArgumentError] is thrown before any read or write.
+  ///
   /// [expiresAt] and [availableAt] are forwarded to [draft]. See that
   /// method's doc comment for the defaults and the null semantics.
   ///
@@ -938,13 +951,14 @@ interface class AtCollection<T> {
   }) async {
     final String useId;
     if (id != null) {
-      if (await _selfKeyExists(id)) {
+      useId = _foldedId(id, forWrite: true);
+      _checkNewId(useId, id);
+      if (await _selfKeyExists(useId)) {
         throw StateError(
-          'Cannot create item with id "$id": already exists in $namespace. '
+          'Cannot create item with id "$useId": already exists in $namespace. '
           'Use update() to modify an existing item.',
         );
       }
-      useId = id;
     } else {
       useId = await _uniqueItemId();
     }
@@ -1041,6 +1055,12 @@ interface class AtCollection<T> {
   /// defaults as [create] / [update]. Returns the persisted item.
   /// Throws [CollectionOpException] on any key-level failure.
   ///
+  /// [id] is folded to lower case. Throws [ArgumentError] before any read
+  /// or write when [id] is empty, starts with `_`, or contains `.`, `:`,
+  /// `@`, whitespace or a control character. When no item has the id,
+  /// throws [ArgumentError] before any write unless it meets [create]'s
+  /// rule for a new item's id.
+  ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
   /// for (final s in samples) {
@@ -1065,14 +1085,15 @@ interface class AtCollection<T> {
       expiresAt: expiresAt,
       availableAt: availableAt,
     );
-    final exists = await _selfKeyExists(id);
+    final exists = await _selfKeyExists(draft.id);
+    if (!exists) _checkNewId(draft.id, id);
     final results = await _put(draft);
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException<T>(results);
     }
     if (!exists) {
       // Mirror [create]'s seen-id bookkeeping for the brand-new case.
-      _seenSelfIds.add(id);
+      _seenSelfIds.add(draft.id);
     }
     await _awaitLocalEmissions();
     return draft;
@@ -1348,7 +1369,12 @@ interface class AtCollection<T> {
   /// received copy `cached:<self>:<id>.<namespace><owner>` — the same
   /// locally-stored key shape [getOrNull] reads — so `exists` and
   /// `getOrNull(id, owner) != null` agree, including offline.
+  ///
+  /// [id] is folded to lower case. Throws [ArgumentError] before any read
+  /// when [id] is empty or contains `.`, `:`, `@`, whitespace or a control
+  /// character.
   Future<bool> exists(String id, Atsign owner) async {
+    id = _foldedId(id);
     if (owner == atSign) {
       return _selfKeyExists(id);
     }
@@ -1374,6 +1400,10 @@ interface class AtCollection<T> {
   /// propagates as that failure (via [getItemsAsStream]'s stream-error
   /// mechanism). Once a matching item is yielded the stream is
   /// cancelled, so later-in-the-scan errors never surface here.
+  ///
+  /// [id] is folded to lower case. Throws [ArgumentError] before any read
+  /// when [id] is empty or contains `.`, `:`, `@`, whitespace or a control
+  /// character. An id starting with `_` is accepted.
   Future<CItem<T>> get(String id, Atsign owner) async {
     final item = await getOrNull(id, owner);
     if (item == null) {
@@ -1387,7 +1417,8 @@ interface class AtCollection<T> {
   /// Same as [get] but returns `null` when no item exists, instead of
   /// throwing [AtKeyNotFoundException]. Same error-propagation
   /// semantics as [get] for per-key decode failures that precede the
-  /// first matching item.
+  /// first matching item, and the same [ArgumentError] for an [id] [get]
+  /// refuses.
   Future<CItem<T>?> getOrNull(String id, Atsign owner) async {
     await for (final item in getItemsAsStream(id: id, owner: owner)) {
       return item; // first match; stream unsubscribed here.
@@ -1420,7 +1451,10 @@ interface class AtCollection<T> {
   ///
   /// Items with the same `owner+id` across self and shared copies are
   /// deduplicated and their `sharedWith` sets are unioned.
-  Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) =>
+  ///
+  /// An [id] is checked and folded as [getItemsAsStream] does, and one it
+  /// refuses fails the returned future with [ArgumentError].
+  Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) async =>
       getItemsAsStream(id: id, owner: owner).toList();
 
   /// Fundamental read path. Yields each item as it is fetched, deduping
@@ -1444,9 +1478,14 @@ interface class AtCollection<T> {
   ///
   /// All higher-level read methods ([get], [getOrNull], [getItems]) are
   /// thin wrappers over this stream.
+  ///
+  /// An [id] is folded to lower case. This call throws [ArgumentError],
+  /// before a stream is returned or anything is read, when [id] is empty
+  /// or contains `.`, `:`, `@`, whitespace or a control character. An id
+  /// starting with `_` is accepted.
   Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) =>
       _getItemsAsStreamInternal(
-        id: id,
+        id: id == null ? null : _foldedId(id),
         owner: owner,
         includeNotYetAvailable: false,
       );
@@ -1711,28 +1750,30 @@ interface class AtCollection<T> {
   /// );
   /// ```
   ///
-  /// **Nesting depth is bounded by the Atsign Protocol's 255-char
-  /// key limit.** The composed namespace this call produces is
-  /// `<subName>.<parent.id>.<this.namespace>`. The absolute
-  /// worst-case on-wire key for any descendant is the cached-copy
-  /// shape `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`;
-  /// at 55 chars per atSign that's a fixed wrapper overhead of
-  /// 118 chars (`cached:` 7 + `<other>` 55 + `:` 1 + `@<self>` 55),
-  /// leaving 137 chars for `<itemId>.<composedNs>`. Reserving 8
-  /// chars for the SDK's auto-generated item id and 1 for the
-  /// separator, **`composedNs` is capped at 128 chars** — applied
-  /// independently of the actual self-atSign length so the same
-  /// SDK builds round-trip-safe keys regardless of which atSign
-  /// owns this client.
+  /// **Nesting depth is bounded by the Atsign Protocol's key
+  /// length.** The composed namespace this call produces is
+  /// `<subName>.<parent.id>.<this.namespace>`. An atServer key is at
+  /// most 248 chars, and the cached copy a recipient's atServer keeps
+  /// at most 255. That cached copy,
+  /// `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`, is
+  /// the longest shape a descendant's key takes. An atSign is at most
+  /// 56 chars including its `@`, so its wrapper is at most 120 chars
+  /// (`cached:` 7 + `<other>` 56 + `:` 1 + `@<self>` 56), leaving 135
+  /// for `<itemId>.<composedNs>`. **`composedNs` is capped at 128
+  /// chars**, whatever this client's atSign, so an 8-character
+  /// generated id fits while each atSign is at most 55 chars with its
+  /// `@`; a key that does not fit is refused when it is written.
   ///
   /// Throws [ArgumentError] when:
-  /// - [subName] is empty;
-  /// - [subName] contains a `.`;
+  /// - [subName] is empty, or contains `.`, `:`, `@`, whitespace or a
+  ///   control character;
   /// - [subName] is `__rr` (reserved for the built-in read-receipt
   ///   sub-collection — use `item.readBy` / `item.markReadByMe` /
   ///   `AtCollection.readReceiptsFor` instead);
-  /// - `parent.id` contains a `.`;
   /// - the composed namespace would exceed 128 chars.
+  ///
+  /// [subName] is used as given: it is not folded to lower case, and it
+  /// may start with `_`.
   ///
   /// [writeTypeTag] stamps items this sub-collection creates with that tag
   /// when no factory is registered for their type. It is not inherited from
@@ -1970,40 +2011,20 @@ interface class AtCollection<T> {
     String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
-    if (subName.isEmpty || subName.contains('.')) {
-      throw ArgumentError('subName must be non-empty and dot-free: "$subName"');
-    }
-    if (parent.id.contains('.')) {
-      throw ArgumentError('parent.id must not contain dots: "${parent.id}"');
+    if (subName.isEmpty || _keyStructure.hasMatch(subName)) {
+      throw ArgumentError.value(subName, 'subName',
+          'must not be empty or contain ".", ":", "@", whitespace or a control character');
     }
     final composedNs = '$subName.${parent.id}.$namespace';
-    // Worst-case key shape (cached-shared-with form):
-    //   cached:<other>:<itemId>.<composedNs>@<self>
-    // The Atsign Protocol caps every atSign at 55 chars (including
-    // the leading '@'). At absolute worst case BOTH atSigns are at
-    // that max, fixing the wrapper overhead at:
-    //   cached: (7) + <other> (55) + : (1) + @<self> (55) = 118
-    // which leaves 255 - 118 = 137 chars for <itemId>.<composedNs>.
-    // The SDK's auto-generated item ids are 8 chars; reserving 8 +
-    // 1 for the separator '.' gives a hard cap of 128 chars on
-    // composedNs.
-    //
-    // The bound is INDEPENDENT of the actual self-atSign length —
-    // we want the same SDK to produce round-trip-safe keys
-    // regardless of which atSign owns this client. Custom item ids
-    // longer than 8 chars will still encounter a tighter limit at
-    // write time (atServer rejects keys > 255), but those callers
-    // will know they've stepped outside the SDK's documented
-    // contract.
     const int maxComposedNsLength = 128;
     if (composedNs.length > maxComposedNsLength) {
       throw ArgumentError(
         'Composed sub-collection namespace "$composedNs" is '
-        '${composedNs.length} chars, exceeds the absolute-worst-case '
-        'max of $maxComposedNsLength chars (255-char key limit minus 118 chars '
-        'of wrapper overhead for two 55-char atSigns + cached: prefix, and 9 '
-        'chars reserved for an 8-char item id + separator). Use a shorter '
-        'subName or a shallower nesting depth.',
+        '${composedNs.length} chars, more than the $maxComposedNsLength '
+        'allowed. A cached key is at most 255 chars; "cached:", ":" and two '
+        'atSigns of up to 56 chars each take 120, leaving 135 for the item '
+        'id, a "." and the namespace. Use a shorter subName or a shallower '
+        'nesting depth.',
       );
     }
     // Constructing the sub-collection directly (not via `atClient.collection`)
@@ -3104,6 +3125,30 @@ interface class AtCollection<T> {
       ids.add(parts[i]);
     }
     return ids;
+  }
+
+  /// [id] folded to lower case. Throws [ArgumentError] when it is empty or
+  /// contains `.`, `:`, `@`, whitespace or a control character, and, for a
+  /// write ([forWrite]), when it starts with `_`.
+  static String _foldedId(String id, {bool forWrite = false}) {
+    final folded = id.toLowerCase();
+    if (folded.isEmpty || _keyStructure.hasMatch(folded)) {
+      throw ArgumentError.value(id, 'id',
+          'must not be empty or contain ".", ":", "@", whitespace or a control character');
+    }
+    if (forWrite && folded.startsWith('_')) {
+      throw ArgumentError.value(id, 'id', 'must not start with "_"');
+    }
+    return folded;
+  }
+
+  /// Throws [ArgumentError], naming the [given] id, when [folded] is not a
+  /// valid id for a new item.
+  static void _checkNewId(String folded, String given) {
+    if (!_newIdPattern.hasMatch(folded)) {
+      throw ArgumentError.value(given, 'id',
+          'a new item id must be 1 to 64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit');
+    }
   }
 
   String _newItemId() {
@@ -4920,6 +4965,11 @@ final class CItem<T> {
   /// The unique identifier, prepended to the collection's namespace when
   /// persisted. E.g. if the collection namespace is `todos.my_apps` then
   /// the full persisted key prefix is `<id>.todos.my_apps`.
+  ///
+  /// An id given to [AtCollection.draft], [AtCollection.create] or
+  /// [AtCollection.upsert] is folded to lower case. A new item's id is 1 to
+  /// 64 characters of a-z, 0-9, `-` and `_`, starting with a letter or
+  /// digit; an item already stored keeps the id its key holds.
   final String id;
 
   /// The type-tag that drives rehydration. Set automatically by [draft]
