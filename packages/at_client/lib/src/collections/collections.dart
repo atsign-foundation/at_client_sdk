@@ -2629,15 +2629,14 @@ interface class AtCollection<T> {
     if (fromStr.isNotEmpty) keyName = keyName.replaceAll(fromStr, '');
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) keyName = keyName.substring(0, ix);
-    final name = keyName.toLowerCase();
-    final parts = name.split('.');
+    final parts = keyName.split('.');
     final ancestry = <CAncestor>[];
     for (int i = parts.length - 1; i >= 2; i -= 2) {
       ancestry.add(CAncestor(id: parts[i], subName: parts[i - 1]));
     }
     return (
       from: fromStr.toAtsign(),
-      name: name,
+      name: keyName,
       id: parts.first,
       ancestry: ancestry,
     );
