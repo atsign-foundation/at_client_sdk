@@ -2,8 +2,9 @@
 
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
-  that sets no `appName` is named after its program file, with `appVersion`
-  `unknown`, and the client logs one warning when it starts.
+  that sets no `appName`, or a blank one, is named after its program file
+  and the client logs one warning when it starts; an unset `appVersion` is
+  sent as `unknown`.
 - feat: `Atsign.authenticatesAs` and `PendingEnrollment` take optional
   `particulars` to name the app, and `AtClientParticulars` is exported.
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
