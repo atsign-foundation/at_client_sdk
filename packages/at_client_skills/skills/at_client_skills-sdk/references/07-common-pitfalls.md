@@ -117,6 +117,9 @@ letter or digit. Every id is folded to lower case, so `Todo-1` and
 `todo-1` name the same item. `subCollection` throws `ArgumentError` for a
 `subName` that is empty or contains `.`, `:`, `@`, whitespace or a control
 character.
+An id that arrives in an event or a listing always passes these checks: no
+event is emitted for a key whose id, ancestor id or subName they refuse, and
+`getItems` leaves out an item stored under such an id, each with a warning.
 
 **Fix:** Omit `id` to get a generated 8-character one, or build ids from
 lower-case letters, digits, `-` and `_` only:
