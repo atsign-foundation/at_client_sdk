@@ -506,6 +506,24 @@ void main() {
     });
 
     test(
+        'A partial failure on a create without an id rejects with the written id and owner',
+        () async {
+      final todos = await open();
+      alice.failPutsFor((key) => key.sharedWith?.toAtsign() == '@bob');
+
+      final error = await todos
+          .create({'title': 'a'}, sharedWith: ['@bob'])
+          .then<JsCollectionsError?>((_) => null)
+          .catchError((Object e) => e as JsCollectionsError);
+
+      expect(error, isNotNull);
+      expect(error!.code, W8.partialFailure);
+      expect(error.id, isNotNull);
+      expect(error.owner, '@alice');
+      expect(await todos.get(mine(error.id!)), isNotNull);
+    });
+
+    test(
         'A remove deletes the item and a missing item rejects with W8_NOT_FOUND',
         () async {
       final todos = await open();

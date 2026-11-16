@@ -127,6 +127,12 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter creates an item shared with @bob
     Then the create rejects with W8_PARTIAL_FAILURE listing a put for @bob
 
+  Scenario: A partial failure on a create without an id rejects with the written id and owner
+    Given writes of @bob's recipient copy fail
+    When the adapter creates an item shared with @bob and no id
+    Then the create rejects with W8_PARTIAL_FAILURE carrying the id and owner of the item that was written
+    And a get of that id returns the item
+
   Scenario: A remove deletes the item and a missing item rejects with W8_NOT_FOUND
     Given an item "i1"
     When the adapter removes "i1" twice

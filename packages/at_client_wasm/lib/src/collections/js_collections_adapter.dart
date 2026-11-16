@@ -458,11 +458,12 @@ final class JsCollectionsAdapter {
         return JsCollectionsError(
             W8.unreadable, 'item $id owned by $owner could not be read',
             id: id, owner: owner, kind: 'CItemReadException');
-      case CollectionOpException(:final failures):
+      case CollectionOpException(:final failures, :final item):
+        // A create without an id learns it here: the item that landed.
         return JsCollectionsError(
             W8.partialFailure, '${failures.length} key-level write(s) failed',
-            id: id,
-            owner: owner,
+            id: item?.id ?? id,
+            owner: item?.owner.toString() ?? owner,
             kind: 'CollectionOpException',
             failures: [
               for (final f in failures)
