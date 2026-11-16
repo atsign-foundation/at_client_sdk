@@ -14,8 +14,8 @@ Feature: The JS collections adapter translates onto AtCollection
   #   never removes a recipient it did not read: "An update keeps a recipient
   #   copy another device writes during the update" and "A share keeps a
   #   recipient copy another device writes during the share". Two creates with
-  #   one id at the same moment are not serialised by the adapter; AtCollection.create
-  #   is being changed in at_client to refuse the second.
+  #   one id at the same moment are not serialised by the adapter; that check
+  #   belongs to AtCollection.create.
   # Replay: a replayed notification only makes the collection re-read the stored,
   #   signed record. It creates no item and changes no item's type or owner:
   #   "Each upstream event is delivered once and cancel stops delivery".
