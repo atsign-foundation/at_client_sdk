@@ -16,8 +16,11 @@
   keep the first two parts, giving `[` and an empty port. `[::1]` with no
   port gives nothing.
 - feat: after the atServer refuses a notification reconnect, reconnecting
-  carries on, waiting up to 5 minutes between attempts, and each refusal
-  arrives as an error on `notifications`, so a listener needs an `onError`.
+  carries on, waiting longer after each refusal, up to 5 minutes between
+  attempts.
+- feat: `notifications` now carries an error event for each notification
+  reconnect the atServer refuses, and stays open. A listener with no
+  `onError` gets each refusal as an uncaught error, so give it one.
 
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
