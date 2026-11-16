@@ -34,6 +34,10 @@ typedef OnboardingMint = ({
 /// minted here — it belongs to the key package, which is built against this
 /// APKAM keypair by the request's `metadataBuilder`.
 ///
+/// [apkamKeyPair] is an APKAM keypair the caller already holds, used instead
+/// of minting one. The caller has already checked it with
+/// [checkApkamKeyPair], so it is used as given and not checked again.
+///
 /// [mintLegacyMaterial] cuts the RSA encryption keypair, the
 /// `selfEncryptionKey` and the `apkamSymmetricKey`. All three travel together
 /// deliberately: the symmetric key exists to wrap the other two for conveyance
@@ -45,6 +49,7 @@ typedef OnboardingMint = ({
 Future<OnboardingMint> mintOnboardingKeys({
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   bool mintLegacyMaterial = true,
+  ({String publicKey, String privateKey})? apkamKeyPair,
 }) async {
   final keys = AtKeys();
 
@@ -61,7 +66,7 @@ Future<OnboardingMint> mintOnboardingKeys({
       ..apkamSymmetricKey = AtBytes.fromString(AESKey.generate(32).key);
   }
 
-  final apkam = await mintApkamKeyPair(signingAlgo);
+  final apkam = apkamKeyPair ?? await mintApkamKeyPair(signingAlgo);
   if (signingAlgo == SigningAlgoType.rsa2048) {
     // The legacy shape: the flat fields are where every published reader
     // looks, so an rsa2048 activation fills them here and the caller files

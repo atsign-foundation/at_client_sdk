@@ -1,4 +1,4 @@
-## 4.1.0
+## 4.1.0-rc.1
 - feat: a lookup built with a `proxy:<host>` root domain sends
   `from:<atSign>` first on each connection it opens, ahead of any
   `onConnect`, as it already resolves every atSign to the proxy. A caller that
@@ -6,6 +6,15 @@
   the proxy is sent it twice. An `error:` reply to it, a proxy that cannot
   route the atSign, closes the connection and fails the command with that
   error.
+- fix: a `proxy:<host>` root naming a bracketed IPv6 literal, such as
+  `proxy:[::1]`, reaches that address over TLS. It used to fail its lookup
+  with a `FormatException`, and a TLS connect to `[::1]` failed its host
+  lookup. Only brackets round an IPv6 address come off: `[zz]` or
+  `[127.0.0.1]` is looked up as written, and fails.
+- fix: `LookUpUtil.getSecondaryInfo` splits `host:port` on the last `:`, so
+  `[::1]:8443` gives `[::1]` and `8443`. It used to split on every `:` and
+  keep the first two parts, giving `[` and an empty port. `[::1]` with no
+  port gives nothing.
 - feat: after the atServer refuses a notification reconnect, reconnecting
   carries on, waiting up to 5 minutes between attempts, and each refusal
   arrives as an error on `notifications`, so a listener needs an `onError`.

@@ -12,6 +12,7 @@ class Wire {
   var pkams = 0;
   final commands = <String>[];
   final finders = <SecondaryAddressFinder?>[];
+  final roots = <AtRootDomain>[];
   final lookUpsBuilt = <WireLookUp>[];
 
   /// What PKAM answers; false is a refusal.
@@ -45,6 +46,7 @@ class Wire {
         dials++;
         onDial?.call(dials);
         finders.add(secondaryAddressFinder);
+        roots.add(rootDomain);
         return WireLookUp(this)
           ..authenticator = authenticator
           ..also(lookUpsBuilt.add);
