@@ -535,6 +535,42 @@ void main() {
     expect(warnings.single, isNot(contains('\t')));
   });
 
+  test(
+      'Given a stored item with a 65-character id that this collection has found and that then expires, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
+      () async {
+    seed('$long.$namespace@alice', 'old');
+    final c = await todos();
+    expect(await c.exists(long, alice), isTrue);
+    store.remove('$long.$namespace@alice');
+    clearInteractions(atClient);
+
+    await expectLater(c.upsert(obj: 'new', id: long), refusesNewId(long));
+    expectNothingWritten();
+  });
+
+  test(
+      'Given a stored item with a 65-character id that cannot be read, when upsert is called with that id, then the item holds the new value',
+      () async {
+    seed('$long.$namespace@alice', 'old');
+    final c = await todos();
+    final unreadable = AtKey.fromString('$long.$namespace@alice').toString();
+    when(() => atClient.get(any())).thenAnswer((inv) async {
+      final k = inv.positionalArguments.first as AtKey;
+      if (k.toString() == unreadable) {
+        throw AtDecryptionException('cannot decrypt $k');
+      }
+      final stored = store[k.toString()];
+      if (stored == null) throw KeyNotFoundException('no value for $k');
+      return AtValue()
+        ..value = stored.value
+        ..metadata = stored.key.metadata;
+    });
+
+    await c.upsert(obj: 'new', id: long);
+
+    expect(jsonDecode(store[unreadable]!.value)['obj'], 'new');
+  });
+
   // Sub-collection names
 
   test(

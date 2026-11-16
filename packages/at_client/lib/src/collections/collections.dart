@@ -431,10 +431,9 @@ interface class AtCollection<T> {
   // circuit without a round-trip when the caller's about to update
   // an item we just persisted — the common bulk-edit path. Cleared
   // on successful self-delete; left alone on failures so a retry
-  // path still probes. Cross-process visibility: self-keys are
-  // owner-scoped and only this client writes them, so a local
-  // "I just wrote it" entry is authoritative for the
-  // does-it-exist question.
+  // path still probes. An entry can outlive its item, when another
+  // client of this atSign deletes it or it expires, so [upsert] reads
+  // past it to decide the new-item rule.
   final Set<String> _seenSelfIds = <String>{};
 
   // Lazy-init scheduler that fires CItemAvailable into [_events] when
@@ -1077,9 +1076,10 @@ interface class AtCollection<T> {
   ///
   /// [id] is folded to lower case. Throws [ArgumentError] before any read
   /// or write when [id] is empty, starts with `_`, or contains `.`, `:`,
-  /// `@`, whitespace or a control character. When no item has the id,
-  /// throws [ArgumentError] before any write unless it meets [create]'s
-  /// rule for a new item's id.
+  /// `@`, whitespace or a control character. When a read finds no item
+  /// with the id, throws [ArgumentError] before any write unless it meets
+  /// [create]'s rule for a new item's id; an item that cannot be read
+  /// counts as one that exists.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -1105,15 +1105,13 @@ interface class AtCollection<T> {
       expiresAt: expiresAt,
       availableAt: availableAt,
     );
-    final exists = await _selfKeyExists(draft.id);
-    if (!exists) _checkNewId(draft.id, id);
+    if (!_newIdPattern.hasMatch(draft.id) &&
+        !await _selfKeyFoundOrUnreadable(draft.id)) {
+      _checkNewId(draft.id, id);
+    }
     final results = await _put(draft);
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException<T>(results);
-    }
-    if (!exists) {
-      // Mirror [create]'s seen-id bookkeeping for the brand-new case.
-      _seenSelfIds.add(draft.id);
     }
     await _awaitLocalEmissions();
     return draft;
@@ -3252,6 +3250,18 @@ interface class AtCollection<T> {
       'Could not generate a unique item id in $maxAttempts attempts — '
       'is this collection catastrophically full?',
     );
+  }
+
+  /// Whether a read of this atSign's own copy of [id], past the seen-id
+  /// cache, finds it or fails for a reason other than its absence.
+  Future<bool> _selfKeyFoundOrUnreadable(String id) async {
+    try {
+      await atClient.get(AtKey.fromString('$id.$namespace$atSign'));
+      return true;
+    } catch (e) {
+      if (e is StoppedException) rethrow;
+      return e is! AtKeyNotFoundException && e is! KeyNotFoundException;
+    }
   }
 
   Future<bool> _selfKeyExists(String id) async {

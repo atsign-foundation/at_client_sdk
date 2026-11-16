@@ -262,6 +262,19 @@ Feature: AtCollection checks every item id before using it in a key
     Then the item is not listed
     And a warning is logged that shows the id with the tab escaped and the owner @bob
 
+  Scenario: Given a stored item with a 65-character id that this collection has found and that then expires, when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice for which exists has returned true for a stored item whose id is 65 "a" characters
+    And that item expires
+    When upsert is called with that id and a new value
+    Then ArgumentError is thrown
+    And nothing is written
+
+  Scenario: Given a stored item with a 65-character id that cannot be read, when upsert is called with that id, then the item holds the new value
+    Given a collection "todos.demo" of @alice holding a stored item whose id is 65 "a" characters
+    And reading that item fails with an error other than not found
+    When upsert is called with that id and a new value
+    Then the item holds the new value
+
   # Sub-collection names
 
   Scenario: Given a subName containing ":", when subCollection is called, then ArgumentError is thrown
