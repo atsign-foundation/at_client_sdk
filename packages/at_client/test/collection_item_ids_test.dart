@@ -575,6 +575,10 @@ void main() {
     final c = await todos();
     expect(await c.exists(long, alice), isTrue);
     store.remove('$long.$namespace@alice');
+    // NOTE: the client's local read reports an expired key this way.
+    when(() => atClient.get(any())).thenAnswer((inv) async =>
+        throw AtKeyNotFoundException('${inv.positionalArguments.first} '
+            'does not exist in keystore'));
     clearInteractions(atClient);
 
     await expectLater(c.upsert(obj: 'new', id: long), refusesNewId(long));
