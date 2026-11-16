@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/src/util/close_without_waiting.dart';
+import 'package:at_client/src/util/error_reply.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_utils/at_logger.dart';
@@ -277,7 +278,7 @@ final List<Pattern> _unreachableText = [
 /// for a type it has none for, so the refusal codes are read out of the
 /// message as well as the code: an `UnAuthenticatedException` raised by the
 /// authenticator is wrapped as `AT0401` and keeps the atServer's own
-/// `error:AT0027` in its text.
+/// `error:` reply, in whichever form the atServer wrote it, in its text.
 AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtLookUpException) {
     return _classifyCode(error.errorCode, error.errorMessage, error);
@@ -351,6 +352,8 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
 }
 
 AtConnectionCause? _refusalCauseIn(String message) {
+  final coded = _refusalCodes[atServerErrorCodeIn(message)];
+  if (coded != null) return coded;
   for (final entry in _refusalCodes.entries) {
     if (message.contains('error:${entry.key}') ||
         message.contains('${entry.key}:')) {

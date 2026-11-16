@@ -1327,6 +1327,28 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
+    test(
+        "An expired request's keys go, as a denial's do, when the atServer "
+        'writes its refusal as JSON', () async {
+      final store = InMemoryAtKeysIo();
+      final reply = jsonEncode({
+        'errorCode': 'AT0028',
+        'errorDescription': 'enrollment_id: $enrollmentId is expired or invalid'
+      });
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw UnAuthenticatedException(
+                  'Failed connecting to $atSign. error:$reply')));
+
+      await expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentException>()
+              .having((e) => e.message, 'message', contains('expired'))));
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
     /// A store holding two pending requests for app `wavi`, from devices named
     /// after their enrollment ids, `e-one` and `e-two`.
     AtKeys twoPending() {

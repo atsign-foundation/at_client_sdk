@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:test/test.dart';
 
 import 'test_utils/fake_at_server.dart';
@@ -26,6 +27,13 @@ final Map<String, String Function(String code, String description)> forms = {
 void main() {
   const atSign = '@alice';
   const pkamRefused = 'Exception: pkam authentication failed';
+  const causes = {
+    'AT0401': AtConnectionCause.unauthenticated,
+    'AT0027': AtConnectionCause.revoked,
+    'AT0029': AtConnectionCause.invalidEnrollment,
+    'AT0025': AtConnectionCause.enrollmentDenied,
+    'AT0026': AtConnectionCause.enrollmentNotApproved,
+  };
   final keys = keysHoldingApkam(atSign, null, pkamKeyPairFor(atSign, null));
   final logs = RecordedLogs();
   late List<Duration> defaultStartRetries;
@@ -48,23 +56,32 @@ void main() {
 
   forms.forEach((form, refusal) {
     group('Given an atServer that refuses a PKAM in the $form form', () {
-      test(
-          'when the start-up key check authenticates, then it is refused as '
-          'unauthenticated', () async {
-        final server =
-            FakeAtServer(atSign: atSign, runsClientAuthenticator: true)
-              ..refuseClientAuth = (_) => refusal('AT0401', pkamRefused);
+      causes.forEach((code, cause) {
+        test(
+            'when the start-up key check authenticates and is refused with '
+            '$code, then it is refused as ${cause.name}', () async {
+          final server =
+              FakeAtServer(atSign: atSign, runsClientAuthenticator: true)
+                ..refuseClientAuth = (_) => refusal(code, pkamRefused);
 
-        await expectLater(
-            Atsign(atSign).authenticatesAs(
-                keys: keys,
-                rootDomain: const AtRootDomain('127.0.0.1', 64),
-                lookUps: server.lookUps,
-                secondaryAddressFinder: server.addressFinder),
-            throwsA(isA<AtCredentialRefusedException>().having(
-                (e) => e.state.cause,
-                'cause',
-                AtConnectionCause.unauthenticated)));
+          await expectLater(
+              Atsign(atSign).authenticatesAs(
+                  keys: keys,
+                  rootDomain: const AtRootDomain('127.0.0.1', 64),
+                  lookUps: server.lookUps,
+                  secondaryAddressFinder: server.addressFinder),
+              throwsA(isA<AtCredentialRefusedException>()
+                  .having((e) => e.state.cause, 'cause', cause)));
+        });
+
+        test(
+            'when a verb connection is refused with $code, then the failure '
+            'is classified as ${cause.name}', () {
+          final failure = AtLookUpException('AT0401',
+              'Exception: Failed connecting to $atSign. ${refusal(code, pkamRefused)}');
+
+          expect(classifyConnectionFailure(failure)?.cause, cause);
+        });
       });
 
       test(

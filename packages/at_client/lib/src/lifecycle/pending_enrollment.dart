@@ -11,6 +11,7 @@ import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
+import 'package:at_client/src/util/error_reply.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtLookUpFactory, AtLookupMuxable, SecondaryAddressFinder;
@@ -158,7 +159,7 @@ class PendingEnrollment {
           ? null
           : e.message.contains('denied')
               ? 'denied'
-              : e.message.contains('error:AT0028')
+              : atServerErrorCodeIn(e.message) == 'AT0028'
                   ? 'expired'
                   : null;
       if (decided != null) {
