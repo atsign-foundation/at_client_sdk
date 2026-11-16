@@ -382,6 +382,35 @@ void main() {
       expect(server.hasKey('@bob:i1.$_ns@alice'), isTrue);
     });
 
+    test("An update of another type's item rejects with W8_WRONG_TYPE",
+        () async {
+      final todos = await open();
+      await rawCollection(alice, _ns, writeTypeTag: 'Other')
+          .create(obj: {'title': 'other'}, id: 'o1');
+
+      await expectLater(todos.update(mine('o1'), {'title': 'changed'}),
+          _rejectsWith(W8.wrongType, id: 'o1', owner: '@alice'));
+
+      final stored = (await todos.get(mine('o1')))!;
+      expect(stored['type'], 'Other');
+      expect(stored['data'], {'title': 'other'});
+    });
+
+    test('An update adopts an untagged item and returns its stored createdAt',
+        () async {
+      final todos = await open();
+      await rawCollection(alice, _ns)
+          .create(obj: {'title': 'untagged'}, id: 'n1');
+      final before = (await todos.get(mine('n1')))!;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final updated = await todos.update(mine('n1'), {'title': 'adopted'});
+
+      expect(updated['type'], 'Todo');
+      expect(updated['createdAt'], before['createdAt']);
+      expect((await todos.get(mine('n1')))?['type'], 'Todo');
+    });
+
     test('An update of a missing item rejects with W8_NOT_FOUND', () async {
       final todos = await open();
 

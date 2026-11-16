@@ -82,6 +82,17 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter updates its data
     Then the stored item has the new data and the same sharedWith, expiresAt and availableAt
 
+  Scenario: An update of another type's item rejects with W8_WRONG_TYPE
+    Given an item whose type tag is "Other"
+    When a "Todo" adapter updates it
+    Then the update rejects with W8_WRONG_TYPE and the stored item is unchanged
+    And share and remove of an item of any type are still allowed
+
+  Scenario: An update adopts an untagged item and returns its stored createdAt
+    Given an item with no type tag
+    When the adapter updates its data
+    Then the item's type is "Todo" and the returned createdAt is the stored one
+
   Scenario: An update of a missing item rejects with W8_NOT_FOUND
     When the adapter updates an id that does not exist
     Then the update rejects with W8_NOT_FOUND

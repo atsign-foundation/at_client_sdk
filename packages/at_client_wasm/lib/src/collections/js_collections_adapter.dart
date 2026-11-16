@@ -54,6 +54,9 @@ abstract final class W8 {
   /// An ordering `where` met a value of another type at its path.
   static const typeMismatch = 'W8_TYPE_MISMATCH';
 
+  /// An update of an item another type tag wrote.
+  static const wrongType = 'W8_WRONG_TYPE';
+
   /// Some key-level writes of one operation failed.
   static const partialFailure = 'W8_PARTIAL_FAILURE';
 
@@ -189,7 +192,10 @@ final class JsCollectionsAdapter {
       _guard(() => _read([for (final clause in clauses) _predicate(clause)]));
 
   /// Replaces the data of the item at [address], keeping its recipients,
-  /// expiresAt and availableAt as just re-read.
+  /// expiresAt, availableAt and createdAt as just re-read. Rejects with
+  /// [W8.wrongType] when the item carries another type tag; an untagged
+  /// (`n/a`) item takes this collection's tag. [share] and [remove] work on
+  /// an item of any type.
   Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data) =>
       _write(address, (current) async {
         final next = _collection.draft(
@@ -199,7 +205,16 @@ final class JsCollectionsAdapter {
           expiresAt: current.expiresAt,
           availableAt: current.availableAt,
         );
+        // An untagged item is adopted; another type's item is refused before
+        // any write.
+        if (current.type != 'n/a' && current.type != next.type) {
+          throw JsCollectionsError(W8.wrongType,
+              'item ${current.id} is a ${current.type}, not a ${next.type}',
+              id: current.id, owner: current.owner.toString());
+        }
         await _collection.update(next, unshareWithOthers: false);
+        // The stored creation time, not the draft's.
+        next.createdAt = current.createdAt;
         return next;
       });
 
