@@ -273,12 +273,14 @@ final List<Pattern> _unreachableText = [
 /// for those is [AtConnectionState.online], while an error about the caller's
 /// own arguments says nothing at all.
 ///
-/// at_lookup's `executeVerb` wraps every failure as an `AtLookUpException`
-/// carrying a code from `error_codes` for the exception's type, or `AT0014`
-/// for a type it has none for, so the refusal codes are read out of the
-/// message as well as the code: an `UnAuthenticatedException` raised by the
-/// authenticator is wrapped as `AT0401` and keeps the atServer's own
-/// `error:` reply, in whichever form the atServer wrote it, in its text.
+/// at_lookup's `executeVerb` throws an atServer's `error:` reply to the verb
+/// as an `AtLookUpException` carrying the code the reply names, or `AT0014`
+/// when it names none, and wraps every other failure as one carrying a code
+/// from `error_codes` for the exception's type, or `AT0014` for a type it
+/// has none for, so the refusal codes are read out of the message as well
+/// as the code: an `UnAuthenticatedException` raised by the authenticator is
+/// wrapped as `AT0401` and keeps the atServer's own `error:` reply, in
+/// whichever form the atServer wrote it, in its text.
 AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtLookUpException) {
     return _classifyCode(error.errorCode, error.errorMessage, error);

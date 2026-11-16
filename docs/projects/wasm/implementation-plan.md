@@ -605,10 +605,12 @@ D-12. Independent of the P series, which is `at_server`-side.
     `RemoteSecondary`'s alone adds `clientId` and `platform`. A program using at_auth
     without at_client sends no `version`. Settled (plan-d3q, 2026-11-16): on a connection
     whose `from:` named a version above 3.0.37, the atServer's global exception handler
-    writes its error replies as JSON, while the PKAM handler's enrollment refusals stay
-    `error:<code>:<text>`. The readers
-    that match a refusal's code as text read it in the plain, colon and JSON forms: the
-    enrollment wait in at_auth, and at_client's expired-request cleanup and
+    writes its error replies as JSON, while a refusal a verb handler sets on its response,
+    the PKAM handler's enrollment refusals among them, stays `error:<code>:<text>`.
+    at_lookup reads the code of
+    every `error:` reply to `executeVerb`, `executeCommand` or a proxy root's `from:` in
+    the plain, colon and JSON forms, and so do the readers that match a refusal's code as
+    text: the enrollment wait in at_auth, and at_client's expired-request cleanup and
     connection-failure classification, through one internal reader in each package.
     `DefaultResponseParser` reads only `<code>-<text>`, but no atServer `error:` reply
     reaches it: every remote path to it goes through at_lookup's `executeVerb`, which
