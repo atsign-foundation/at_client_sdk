@@ -433,6 +433,12 @@ Feature: AtCollection checks every item id before using it in a key
     Then the collection emits an update event with the id "zz" and the owner @bob
 
   @dos
+  Scenario: Given a data event for a key @bob shares whose AtKey was built with the key name "Zz", when it reaches the collection, then an update event with the id "zz" is emitted
+    Given a collection "todos.demo" of @alice
+    When a data event arrives for an AtKey built with the key name "Zz", shared by @bob with @alice
+    Then the collection emits an update event with the id "zz" and the owner @bob
+
+  @dos
   Scenario: Given a query watch over an item @bob shares under the id "zz", when notifications from @bob arrive for "Zz" and "ZZ", then every snapshot holds that item once
     Given a collection "todos.demo" of @alice holding an item @bob shares under the id "zz", with a query watch listening
     When notifications from @bob arrive for the keys "@alice:Zz.todos.demo@bob" and "@alice:ZZ.todos.demo@bob"

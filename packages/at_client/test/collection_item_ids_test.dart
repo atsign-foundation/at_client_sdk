@@ -970,6 +970,30 @@ void main() {
   });
 
   test(
+      'Given a data event for a key @bob shares whose AtKey was built with the key name "Zz", when it reaches the collection, then an update event with the id "zz" is emitted',
+      () async {
+    final dataEvents = StreamController<DataEvent>.broadcast();
+    addTearDown(dataEvents.close);
+    final c = collectionWithInjectedDataEvents<String>(
+        atClient, namespace, const Duration(days: 7),
+        dataEvents: dataEvents.stream);
+    await pumpEventQueue();
+    final events = eventsOf(c);
+    final mixed = AtKey()
+      ..key = 'Zz'
+      ..namespace = namespace
+      ..sharedBy = '@bob'
+      ..sharedWith = '@alice'
+      ..metadata = (Metadata()..isCached = true);
+    expect(mixed.key, 'Zz', reason: 'the AtKey holds the mixed-case name');
+
+    dataEvents.add(DataUpdated(mixed));
+    await pumpEventQueue();
+
+    expect(events, ['updated "zz" @bob']);
+  });
+
+  test(
       'Given a query watch over an item @bob shares under the id "zz", when notifications from @bob arrive for "Zz" and "ZZ", then every snapshot holds that item once',
       () async {
     seed('cached:@alice:zz.$namespace@bob', 'from bob');
