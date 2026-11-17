@@ -257,6 +257,28 @@ void main() {
       }
     });
 
+    test(
+        'An update, share or remove of the id "b1" owned by "a b", which is not an atSign, rejects with COLLECTION_INVALID_ARGUMENT and the owner "a b"',
+        () async {
+      final todos = await open();
+      final address = (id: 'b1', owner: 'a b');
+
+      for (final call in <String, Future<Object?> Function()>{
+        'update': () => todos.update(address, {'t': 2}),
+        'share': () => todos.share(address, ['@bob']),
+        'remove': () => todos.remove(address),
+      }.entries) {
+        late Future<Object?> pending;
+        expect(() => pending = call.value(), returnsNormally,
+            reason: '${call.key} returns a Future');
+        await expectLater(
+            pending,
+            _rejectsWith(CollectionErrorCodes.invalidArgument,
+                id: 'b1', owner: 'a b', kind: 'InvalidAtSignException'),
+            reason: call.key);
+      }
+    });
+
     test('A get addresses an item already stored under a 65-character id',
         () async {
       server.putRaw(
