@@ -177,6 +177,20 @@ Feature: getMeta reads a key's metadata without its value
     When getMeta is called with that key
     Then the returned Metadata has isPublic true and isCached false
 
+  Scenario: Given a key shared with the client by another Atsign, when getMeta is called, then it returns that Atsign's metadata for the key
+    Given a client of @alice
+    And @bob has put a key shared with @alice on @bob's atServer with a ttl of one hour
+    When getMeta is called with that key and no options
+    Then the metadata returned has a ttl of one hour
+    And it is not public
+
+  Scenario: Given a public key of another Atsign, when getMeta is called, then it returns that Atsign's metadata for the key
+    Given a client of @alice
+    And @bob has put a public key on @bob's atServer with a ttl of one hour
+    When getMeta is called with that key and no options
+    Then the metadata returned has a ttl of one hour
+    And it is public
+
   Scenario: Given an enrollment without access to a namespace, when getMeta is asked for a record in it that is held and for one that is missing, then both fail the same way
     Given a client whose enrollment has no access to namespace "ns"
     And the atServer holds one record in "ns" and none under a second key
