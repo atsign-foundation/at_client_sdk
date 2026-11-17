@@ -7,10 +7,10 @@
   64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit;
   `upsert` applies that rule only when neither local storage nor the atServer
   holds an item with the id, judges that from the item's metadata without
-  decrypting it, and keeps the refusal when its atServer lookup fails without
-  an answer; a `subName` is folded too and must hold only characters a key's
-  name can hold; no event or listed item carries a refused id, and event ids
-  arrive folded (`SKILL.md`; `references/02`, `07`).
+  decrypting it, and keeps the refusal when its atServer lookup fails for any
+  reason but the item's absence; a `subName` is folded too and must hold only
+  characters a key's name can hold; no event or listed item carries a refused
+  id, and event ids arrive folded (`SKILL.md`; `references/02`, `07`).
 - `getMeta` reads a key's metadata without decrypting its value, and takes
   `getRequestOptions` as `get` does (`references/12`).
 - On a `remoteOnly` client, request options that leave `useRemoteAtServer`

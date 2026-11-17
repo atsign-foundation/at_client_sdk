@@ -117,7 +117,7 @@ Use for re-runnable publishers that may restart within the TTL window.
   the atServer holds an item with it, it must also meet `create`'s rule for a
   new id; whether an item is held is decided from its metadata, so one this
   client cannot decrypt counts as held, and an atServer lookup that fails
-  without an answer counts as holding none
+  for any reason but the item's absence counts as holding none
 
 ### `Future<void> update(CItem<T> item, {bool unshareWithOthers = true})`
 

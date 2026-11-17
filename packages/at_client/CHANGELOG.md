@@ -39,8 +39,8 @@
   a namespace or `subName` literally when it lists keys.
   `upsert` looks up the metadata of an id that breaks the new-id rule, in local
   storage and then on the atServer, without decrypting; an item either holds
-  counts as stored, and when the atServer lookup fails without an answer the
-  refusal stands and says so.
+  counts as stored, and when the atServer lookup fails for any reason but the
+  item's absence the refusal stands and says so.
 - feat: `AtClient.getMeta` reads a key's metadata without its value, so it no
   longer decrypts and answers for a record this client cannot open; it takes
   `getRequestOptions`, as `get` does, to choose between local storage and the

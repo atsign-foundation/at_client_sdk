@@ -1088,9 +1088,9 @@ interface class AtCollection<T> {
   /// so an item this client cannot decrypt counts as held. A stopped client
   /// throws [StoppedException] from either lookup rather than counting as
   /// held; otherwise a local lookup that fails for any reason but the item's
-  /// absence counts as held, and an atServer lookup that fails without an
-  /// answer keeps the refusal, whose message says the atServer could not be
-  /// checked.
+  /// absence counts as held, and an atServer lookup that fails for any reason
+  /// but the item's absence keeps the refusal, whose message says the
+  /// atServer could not be checked.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -3283,8 +3283,8 @@ interface class AtCollection<T> {
   /// client's `remoteLocalPref` says, and one that fails for any reason but
   /// the item's absence counts as held. When local storage holds nothing, the
   /// atServer is asked too, so an item that sync has not yet brought to this
-  /// device is still held. There only an answer counts: a lookup that fails
-  /// without one leaves the item unchecked.
+  /// device is still held. There only metadata counts: a lookup that fails
+  /// for any reason but the item's absence leaves the item unchecked.
   Future<_Held> _selfKeyHeld(String id) async {
     final key = '$id.$namespace$atSign';
     for (final remote in [false, true]) {
@@ -3296,8 +3296,8 @@ interface class AtCollection<T> {
         if (e is StoppedException) rethrow;
         if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
         if (!remote) return _Held.yes;
-        // NOTE: a failed atServer lookup that is not an answer says nothing
-        // about the item, so the refusal holds.
+        // NOTE: an atServer lookup that fails for any reason but the item's
+        // absence leaves the item unchecked.
         return _Held.unchecked;
       }
     }
@@ -5705,9 +5705,8 @@ final class CSubItemDeleted extends CEvent {
   String get subName => ancestry.last.subName;
 }
 
-/// What [AtCollection]'s lookups of its own item's metadata found: an answer
-/// that the item is held, an answer that it is not, or no answer from the
-/// atServer.
+/// What [AtCollection]'s lookups of its own item's metadata found: the item
+/// is held, it is absent, or the atServer lookup failed for any other reason.
 enum _Held { yes, no, unchecked }
 
 /// An [ArgumentError] for an item id or subName whose text shows the value
