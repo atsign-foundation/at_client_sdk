@@ -8,10 +8,10 @@
   `upsert` applies that rule only when neither local storage nor the atServer
   holds an item with the id (a `remoteOnly` client asks the atServer alone),
   judges that from the item's metadata without decrypting it, and keeps the
-  refusal when its atServer lookup fails for any reason but the item's absence;
-  a `subName` is folded too and must hold only characters a key's name can hold;
-  no event or listed item carries a refused id, and event ids arrive folded
-  (`SKILL.md`; `references/02`, `07`).
+  refusal when its atServer lookup fails for any reason but the item's absence
+  or the client being stopped; a `subName` is folded too and must hold only
+  characters a key's name can hold; no event or listed item carries a refused
+  id, and event ids arrive folded (`SKILL.md`; `references/02`, `07`).
 - `getMeta` reads a key's metadata without decrypting its value, and takes
   `getRequestOptions` as `get` does (`references/12`).
 - On a `remoteOnly` client, request options that leave `useRemoteAtServer`
