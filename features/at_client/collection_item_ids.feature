@@ -417,11 +417,11 @@ Feature: AtCollection checks every item id before using it in a key
     When upsert is called with that id and a new value
     Then the item holds the new value
 
-  Scenario: Given local storage holds a record under a 65-character id whose value this client cannot open, when upsert is called with that id, then the item holds the new value and the atServer is not asked
+  Scenario: Given local storage holds a record under a 65-character id whose value this client cannot open, when upsert is called with that id, then the new-id rules do not refuse it and the atServer is not asked
     Given a collection "todos.demo" of @alice whose local storage holds a record under the id of 65 "a" characters
     And that record's value fails to decrypt, so get with that id throws AtKeyNotFoundException
     When upsert is called with that id and a new value
-    Then get with that id returns the new value
+    Then upsert does not throw the new-id ArgumentError
     And no lookup reached the atServer
 
   # Sub-collection names

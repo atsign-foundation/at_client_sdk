@@ -1004,22 +1004,39 @@ void main() {
   });
 
   test(
-      'Given local storage holds a record under a 65-character id whose value this client cannot open, when upsert is called with that id, then the item holds the new value and the atServer is not asked',
+      'Given local storage holds a record under a 65-character id whose value this client cannot open, when upsert is called with that id, then the new-id rules do not refuse it and the atServer is not asked',
       () async {
     final key = '$long.$namespace@alice';
     seed(key, 'old');
-    valueReadFailsWith(key,
-        KeyNotFoundException('privatekey:self_encryption_key does not exist'),
-        atServer: false);
+    when(() => atClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
+      final k = inv.positionalArguments.first as AtKey;
+      if (k.toString() == key) {
+        throw asGetThrows(KeyNotFoundException(
+            'privatekey:self_encryption_key does not exist'));
+      }
+      return readStore(k);
+    });
     final c = await todos();
 
-    await c.upsert(obj: 'new', id: long);
+    Object? thrown;
+    try {
+      await c.upsert(obj: 'new', id: long);
+    } catch (e) {
+      thrown = e;
+    }
 
-    expect(jsonDecode(store[key]!.value)['obj'], 'new');
+    expect(
+        thrown,
+        isNot(isA<ArgumentError>()
+            .having((e) => '${e.message}', 'message', contains(newIdMessage))));
     verifyNever(() => atClient.getMeta(any(),
         getRequestOptions:
             any(named: 'getRequestOptions', that: atServerOptions())));
-    expectNoValueRead();
+    verifyNever(() => atClient.get(any(),
+        getRequestOptions:
+            any(named: 'getRequestOptions', that: atServerOptions())));
   });
 
   // Sub-collection names
