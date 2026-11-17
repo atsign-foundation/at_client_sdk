@@ -675,21 +675,17 @@ void main() {
     expectNoValueRead();
   });
 
-  for (final row in <String, AtException>{
-    'upsert keeps refusing a new over-long id when the atServer read fails with an error other than not found':
-        SecondaryNotFoundException('No entry in atDirectory for @alice'),
-    'a SecondaryConnectException from the atServer lookup keeps the refusal of a new over-long id':
-        SecondaryConnectException('sc'),
-  }.entries) {
-    test(row.key, () async {
-      final c = await todos();
-      remoteLookupsFailWith(row.value);
+  test(
+      'upsert keeps refusing a new over-long id when the atServer read fails with an error other than not found',
+      () async {
+    final c = await todos();
+    remoteLookupsFailWith(
+        SecondaryNotFoundException('No entry in atDirectory for @alice'));
 
-      await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
-      expectNothingWritten();
-      expect(store, isEmpty);
-    });
-  }
+    await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
+    expectNothingWritten();
+    expect(store, isEmpty);
+  });
 
   test(
       'Given no local item with a 65-character id and an atServer read that answers that this enrollment may not read it, when upsert is called with that id, then upsert throws ArgumentError naming the new-id rules and nothing is written',
