@@ -164,11 +164,10 @@ final class AesGcm256FfiAlgo
                 0) {
               throw StateError('EVP_CIPHER_CTX_ctrl (get tag) failed');
             }
-            final Uint8List cipherText =
-                Uint8List.fromList(outBuf.asTypedList(encLen));
-            final Uint8List tag =
-                Uint8List.fromList(tagBuf.asTypedList(tagLength));
-            return Uint8List.fromList(cipherText + tag);
+            return Uint8List(encLen + tagLength)
+              ..setRange(0, encLen, outBuf.asTypedList(encLen))
+              ..setRange(
+                  encLen, encLen + tagLength, tagBuf.asTypedList(tagLength));
           } finally {
             calloc.free(tagBuf);
           }

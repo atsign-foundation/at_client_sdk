@@ -43,7 +43,11 @@ final class AesGcm256EncryptionAlgo
       nonce: _nonceBytesForEncrypt(iv),
       aad: aad,
     );
-    return Uint8List.fromList(box.cipherText + box.mac.bytes);
+    final List<int> cipherText = box.cipherText;
+    final List<int> tag = box.mac.bytes;
+    return Uint8List(cipherText.length + tag.length)
+      ..setRange(0, cipherText.length, cipherText)
+      ..setRange(cipherText.length, cipherText.length + tag.length, tag);
   }
 
   @override
