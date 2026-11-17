@@ -508,6 +508,19 @@ void main() {
     expect(store, isEmpty);
   });
 
+  /// Makes every read sent to the atServer fail with [error]; a local read
+  /// still reads [store].
+  void remoteReadsFailWith(Object error) {
+    when(() => atClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
+      final options =
+          inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+      if (options?.useRemoteAtServer == true) throw error;
+      return readStore(inv.positionalArguments.first as AtKey);
+    });
+  }
+
   for (final failure in <String, Exception>{
     'AtConnectException': AtConnectException('cannot reach the atServer'),
     'AtClientException wrapping a socket failure':
@@ -517,20 +530,35 @@ void main() {
         'Given no item with a 65-character id and an atServer that cannot be reached (${failure.key}), when upsert is called with that id, then ArgumentError is thrown and nothing is written',
         () async {
       final c = await todos();
-      when(() => atClient.get(any(),
-              getRequestOptions: any(named: 'getRequestOptions')))
-          .thenAnswer((inv) async {
-        final options =
-            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
-        if (options?.useRemoteAtServer == true) throw failure.value;
-        return readStore(inv.positionalArguments.first as AtKey);
-      });
+      remoteReadsFailWith(failure.value);
 
       await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
       expectNothingWritten();
       expect(store, isEmpty);
     });
   }
+
+  test(
+      'Given no item with a 65-character id and an atServer that refuses the session, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
+      () async {
+    final c = await todos();
+    remoteReadsFailWith(UnAuthenticatedException('session refused'));
+
+    await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
+    expectNothingWritten();
+    expect(store, isEmpty);
+  });
+
+  test(
+      'Given no local item with a 65-character id and an atServer read that fails to decrypt, when upsert is called with that id, then the item holds the new value',
+      () async {
+    final c = await todos();
+    remoteReadsFailWith(AtDecryptionException('cannot decrypt'));
+
+    await c.upsert(obj: 'new', id: long);
+
+    expect(jsonDecode(store['$long.$namespace@alice']!.value)['obj'], 'new');
+  });
 
   test(
       "Given no id, when create is called, then the item's id is 8 characters of a-z and 0-9",
