@@ -91,7 +91,8 @@ void main() {
       );
     });
 
-    test('throws AtException, not ArgumentError, when superApiKey is '
+    test(
+        'throws AtException, not ArgumentError, when superApiKey is '
         'whitespace-only', () {
       expect(
         () => RegistrarAdminService(
@@ -103,16 +104,15 @@ void main() {
       );
     });
 
-    test('throws ArgumentError naming registrarUrl when it is empty', () {
+    // Uri.https accepts an empty authority, as 4.0.0's request building did.
+    test('accepts an empty registrarUrl, as Uri.https does', () {
       expect(
         () => RegistrarAdminService(
           registrarUrl: '',
           superApiKey: _apiKey,
           httpClient: _mockResponse({}),
         ),
-        throwsA(
-          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
-        ),
+        returnsNormally,
       );
     });
 
@@ -207,17 +207,16 @@ void main() {
       );
     });
 
-    test('throws ArgumentError naming registrarUrl when it carries whitespace',
-        () {
+    // Uri.https percent-encodes a trailing space rather than rejecting it,
+    // as 4.0.0's request building did.
+    test('accepts registrarUrl trailing whitespace, as Uri.https does', () {
       expect(
         () => RegistrarAdminService(
           registrarUrl: '$_registrarUrl ',
           superApiKey: _apiKey,
           httpClient: _mockResponse({}),
         ),
-        throwsA(
-          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
-        ),
+        returnsNormally,
       );
     });
 
@@ -227,7 +226,6 @@ void main() {
       'userInfo': 'user:leaksecret@host',
       'fragment': '$_registrarUrl#leaksecret',
       'query': '$_registrarUrl?q=leaksecret',
-      'whitespace': '$_registrarUrl leaksecret',
       'multiColon': '$_registrarUrl:443:leaksecret',
       'schemeAndMultiColon': 'https://leaksecret.$_registrarUrl:443',
     };
@@ -253,15 +251,7 @@ void main() {
       });
     }
 
-    for (final port in [
-      '0',
-      '-1',
-      '65536',
-      'abc',
-      '0x1BB',
-      '+443',
-      ' 443',
-    ]) {
+    for (final port in ['0', '-1', '65536', 'abc']) {
       test('throws ArgumentError naming registrarUrl when the port is $port',
           () {
         expect(
@@ -274,30 +264,6 @@ void main() {
             isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
           ),
         );
-      });
-    }
-
-    for (final entry in {
-      '0x1BB': '0x1BB',
-      '+443': '+443',
-      ' 443': ' 443',
-    }.entries) {
-      test(
-          'ArgumentError for port ${entry.key} never echoes registrarUrl '
-          'and is not a FormatException', () {
-        final invalidUrl = '$_registrarUrl:${entry.value}';
-        try {
-          RegistrarAdminService(
-            registrarUrl: invalidUrl,
-            superApiKey: _apiKey,
-            httpClient: _mockResponse({}),
-          );
-          fail('expected an ArgumentError');
-        } catch (e) {
-          expect(e, isNot(isA<FormatException>()));
-          expect(e, isA<ArgumentError>());
-          expect(e.toString().contains(invalidUrl), isFalse);
-        }
       });
     }
 
@@ -325,8 +291,7 @@ void main() {
     for (final entry in {
       'newline': 'k\n',
       'crlfHeaderInjection': 'k\r\nX-Injected: 1',
-      'leadingSpace': ' k',
-      'embeddedSpace': 'k k',
+      'controlBelowSpace': 'k\x1F',
       'del': 'k\x7F',
       'highByte': 'k\x80',
       'nonAsciiLetter': 'kéy',
@@ -360,12 +325,12 @@ void main() {
       });
     }
 
-    for (final boundaryKey in ['!', '~']) {
-      test('accepts the visible-ASCII boundary superApiKey "$boundaryKey"', () {
+    for (final acceptedKey in ['!', '~', 'k k', ' k']) {
+      test('accepts the superApiKey "$acceptedKey"', () {
         expect(
           () => RegistrarAdminService(
             registrarUrl: _registrarUrl,
-            superApiKey: boundaryKey,
+            superApiKey: acceptedKey,
             httpClient: _mockResponse({}),
           ),
           returnsNormally,
@@ -373,46 +338,28 @@ void main() {
       });
     }
 
-    for (final host in [
-      'registrar_api:8443',
-      '[::1]:8443',
-      'bücher.example',
-    ]) {
-      test('throws ArgumentError naming registrarUrl for the host "$host"', () {
-        expect(
-          () => RegistrarAdminService(
-            registrarUrl: host,
-            superApiKey: _apiKey,
-            httpClient: _mockResponse({}),
-          ),
-          throwsA(
-            isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
-          ),
-        );
-      });
-    }
-
-    for (final port in ['', '0', '65536', '000443']) {
+    // Each registrarUrl below is a shape that worked under 4.0.0's request
+    // building (whatever Uri.https made of it), so it is accepted rather
+    // than refused, per docs/registrar/decisions.md. "+443", " 443" and
+    // "0x1BB" all parse as valid decimal ports via int.parse, coincidentally
+    // all landing on 443.
+    final acceptedRegistrarUrls = <String, ({String host, int port})>{
+      'registrar_api:8443': (host: 'registrar_api', port: 8443),
+      '[::1]:8443': (host: '::1', port: 8443),
+      'bücher.example': (host: 'b%C3%BCcher.example', port: 443),
+      '$_registrarUrl:1': (host: _registrarUrl, port: 1),
+      '$_registrarUrl:65535': (host: _registrarUrl, port: 65535),
+      '$_registrarUrl:00443': (host: _registrarUrl, port: 443),
+      '$_registrarUrl:': (host: _registrarUrl, port: 443),
+      '$_registrarUrl:000443': (host: _registrarUrl, port: 443),
+      '$_registrarUrl:+443': (host: _registrarUrl, port: 443),
+      '$_registrarUrl: 443': (host: _registrarUrl, port: 443),
+      '$_registrarUrl:0x1BB': (host: _registrarUrl, port: 443),
+    };
+    for (final entry in acceptedRegistrarUrls.entries) {
       test(
-          'throws ArgumentError naming registrarUrl when the port is '
-          '"$port"', () {
-        expect(
-          () => RegistrarAdminService(
-            registrarUrl: '$_registrarUrl:$port',
-            superApiKey: _apiKey,
-            httpClient: _mockResponse({}),
-          ),
-          throwsA(
-            isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
-          ),
-        );
-      });
-    }
-
-    for (final entry in {1: '1', 65535: '65535', 443: '00443'}.entries) {
-      test(
-          'accepts registrarUrl port "${entry.value}" and sends the request '
-          'to port ${entry.key}', () async {
+          'accepts registrarUrl "${entry.key}" and sends the request to '
+          'host "${entry.value.host}" port ${entry.value.port}', () async {
         late http.Request captured;
         final client = MockClient((req) async {
           captured = req;
@@ -420,12 +367,13 @@ void main() {
               jsonEncode({'status': 'success', 'cramkey': '@alice:K'}), 200);
         });
         final service = RegistrarAdminService(
-          registrarUrl: '$_registrarUrl:${entry.value}',
+          registrarUrl: entry.key,
           superApiKey: _apiKey,
           httpClient: client,
         );
         await service.registerAtsign(atsign: '@alice'.toAtsign());
-        expect(captured.url.port, equals(entry.key));
+        expect(captured.url.host, equals(entry.value.host));
+        expect(captured.url.port, equals(entry.value.port));
       });
     }
   });

@@ -88,17 +88,24 @@ API key with DEL or a non-ASCII character still fails late and is reported as
 `RegistrarFailure.network`; two port guards each mask the other; the `?? []`
 defaults for missing delete-flow lists are untested; a cancellation that never
 completes holds up the timeout and size-cap failures; `registrarUrl` refuses
-hosts with `_`, IPv6 literals and IDN hosts that 4.0.0 accepted.
+hosts with `_`, IPv6 literals and IDN hosts that 4.0.0 accepted, and the key
+rule refuses keys with spaces that 4.0.0 sent.
 
 Decision (human):
-- The super API key may contain only visible ASCII, 0x21 to 0x7E. Anything
-  else is refused with `ArgumentError` named `superApiKey`, without echoing
-  the key. This replaces the control-character rule above. An empty or
-  whitespace-only key still throws `AtException`, as in 4.0.0.
-- `registrarUrl` keeps its allow-list: letters, digits, `.` and `-`, with an
-  optional `:<port>` of 1 to 5 digits in 1 to 65535. Hosts with `_`, IPv6
-  literals and IDN hosts are refused; this is a behaviour change from 4.0.0
-  and is recorded in the CHANGELOG.
+- Everything that worked in at_auth 4.0.0 keeps working. The constructor
+  refuses only input that 4.0.0 could never have used, which 4.0.0 reported
+  late or as the wrong error. The one deliberate exception is user info in
+  `registrarUrl`.
+- `registrarUrl` is accepted when `Uri.https(registrarUrl, path)` accepts it,
+  as 4.0.0 did, so hosts with `_`, IPv6 literals and IDN hosts keep working.
+  It is refused with `ArgumentError` named `registrarUrl`, without echoing the
+  value, when `Uri.https` rejects it, when it carries user info, or when its
+  port is outside 1 to 65535.
+- The super API key may contain 0x20 to 0x7E, the characters dart:io accepts
+  in a header value. Anything else is refused with `ArgumentError` named
+  `superApiKey`, without echoing the key. This replaces the control-character
+  rule above. An empty or whitespace-only key still throws `AtException`, as
+  in 4.0.0.
 - A delete-flow response that omits `atSigns`, `skippedatSigns`, `deleted` or
   `failed` yields an empty list, as in 4.0.0.
 - On a timeout or the size cap the call throws its failure at once;
@@ -110,4 +117,5 @@ Decision (human):
 Consequences:
 - A misconfigured key or URL fails at construction, never as `network`.
 - A hung `onCancel` cannot hang a registrar call.
-- Callers using `_`, IPv6 or IDN registrar hosts must use a plain DNS name.
+- The only 4.0.0 input refused that could have worked is a `registrarUrl`
+  with user info; the CHANGELOG records it.

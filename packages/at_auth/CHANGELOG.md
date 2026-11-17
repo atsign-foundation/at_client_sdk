@@ -61,14 +61,12 @@
   a map (`RegistrarFailure.malformedResponse`). Exception text never carries
   the registrar's `message`, the raw cramkey or the super key.
 - feat: the `RegistrarAdminService` constructor refuses a `registrarUrl`
-  that is not a bare host, optionally followed by `:<port>`, which existing
-  `/manage-atsigns/` callers will meet; the `ArgumentError` never echoes the
-  offending value. This refuses a host containing `_`, an IPv6 literal, or
-  an IDN host that 4.0.0 accepted. A port is 1-5 digits and must parse to
-  1-65535; a port over 5 digits is refused the same way, without parsing
-  it. A `superApiKey` must be visible ASCII (`0x21`-`0x7E`); any other byte,
-  including a space or a non-ASCII character, is refused with an
-  `ArgumentError` naming `superApiKey`, which never echoes the key.
+  with an `ArgumentError` that never echoes the offending value, only when
+  `Uri.https` rejects it, it carries user info (a change from 4.0.0, which
+  sent a request to whichever host `Uri.https` picked out of it), or its
+  port is outside 1-65535. A `superApiKey` must be `0x20`-`0x7E`; any other
+  byte, including a non-ASCII character, is refused with an `ArgumentError`
+  naming `superApiKey`, which never echoes the key.
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
   5.0.0.
 - feat: `package:at_auth/at_registrar.dart`, a library exporting

@@ -95,9 +95,11 @@ class RegistrarAdminService {
 
   late final http.Client _http;
 
-  /// Throws [AtException] if [superApiKey] is empty or all whitespace, or
-  /// [ArgumentError] if it contains a byte outside visible ASCII
-  /// (`0x21`-`0x7E`) or [registrarUrl] is malformed.
+  /// Throws [AtException] if [superApiKey] is empty or all whitespace.
+  ///
+  /// Throws [ArgumentError] if [superApiKey] contains a code unit outside
+  /// `0x20`-`0x7E`, or if [registrarUrl] is not an authority [Uri.https]
+  /// accepts, carries user info, or has a port outside 1-65535.
   RegistrarAdminService({
     required this.registrarUrl,
     required String superApiKey,
@@ -108,45 +110,28 @@ class RegistrarAdminService {
       throw AtException(
           'Registrar super API key is required and cannot be empty.');
     }
-    if (_superApiKey.codeUnits.any((c) => c < 0x21 || c > 0x7E)) {
+    if (_superApiKey.codeUnits.any((c) => c < 0x20 || c > 0x7E)) {
       throw ArgumentError(
-          'superApiKey must contain only visible ASCII characters '
-              '(0x21-0x7E)',
+          'superApiKey must contain only visible ASCII characters and '
+              'spaces (0x20-0x7E)',
           'superApiKey');
     }
     _validateRegistrarUrl(registrarUrl);
     _http = httpClient ?? http.Client();
   }
 
-  static final _hostPattern = RegExp(r'^[a-zA-Z0-9.-]+$');
-  static final _portPattern = RegExp(r'^[0-9]{1,5}$');
-
   static void _validateRegistrarUrl(String registrarUrl) {
     const invalidMessage =
-        'registrarUrl must be a bare host of letters, digits, "." and "-", '
-        'optionally followed by ":<port>", with no scheme, path or user '
-        'info';
-    final hostAndPort = registrarUrl.split(':');
-    if (hostAndPort.length > 2) {
+        'registrarUrl must be an authority Uri.https accepts, with no user '
+        'info and a port between 1 and 65535';
+    final Uri uri;
+    try {
+      uri = Uri.https(registrarUrl, '/');
+    } on FormatException {
       throw ArgumentError(invalidMessage, 'registrarUrl');
     }
-    final host = hostAndPort.first;
-    if (!_hostPattern.hasMatch(host)) {
+    if (uri.userInfo.isNotEmpty || uri.port < 1 || uri.port > 65535) {
       throw ArgumentError(invalidMessage, 'registrarUrl');
-    }
-    if (hostAndPort.length == 2) {
-      final rawPort = hostAndPort[1];
-      if (!_portPattern.hasMatch(rawPort)) {
-        throw ArgumentError(
-            'registrarUrl port must be numeric and between 1 and 65535',
-            'registrarUrl');
-      }
-      final port = int.parse(rawPort);
-      if (port < 1 || port > 65535) {
-        throw ArgumentError(
-            'registrarUrl port must be numeric and between 1 and 65535',
-            'registrarUrl');
-      }
     }
   }
 
