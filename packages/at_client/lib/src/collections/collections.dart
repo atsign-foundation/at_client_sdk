@@ -14,8 +14,6 @@ import 'dart:typed_data';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart';
-import 'package:at_client/src/lifecycle/at_connection.dart'
-    show classifyConnectionFailure;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
@@ -1087,7 +1085,8 @@ interface class AtCollection<T> {
   /// nor the atServer holds an item with the id, throws [ArgumentError]
   /// before any write unless it meets [create]'s rule for a new item's id;
   /// a local item that cannot be read counts as one that exists, and an
-  /// atServer that cannot be reached counts as holding none.
+  /// atServer read counts the item as held only on a value or a value that
+  /// cannot be decrypted.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -3265,15 +3264,14 @@ interface class AtCollection<T> {
     );
   }
 
-  /// Whether a read of this atSign's own copy of [id], past the seen-id
-  /// cache, finds it or fails for a reason other than its absence.
+  /// Whether this atSign's own copy of [id], past the seen-id cache, is found
+  /// or is held but cannot be read.
   ///
-  /// When the local read finds nothing, the atServer is asked too, so an item
-  /// that sync has not yet brought to this device still counts as found. On
-  /// that pass only an answer from the atServer counts: a failure to reach it
-  /// or to be accepted by it says nothing about the item, so it counts as
-  /// not found, while any other failure (a value that cannot be decrypted,
-  /// say) means the atServer answered and counts as found.
+  /// A local read that fails for any reason but the item's absence counts as
+  /// found. When the local read finds nothing, the atServer is asked too, so
+  /// an item that sync has not yet brought to this device still counts as
+  /// found. On that read only a value or an [AtDecryptionException] counts as
+  /// found; any other failure counts as not found.
   Future<bool> _selfKeyFoundOrUnreadable(String id) async {
     final key = '$id.$namespace$atSign';
     for (final remote in [false, true]) {
@@ -3288,11 +3286,10 @@ interface class AtCollection<T> {
       } catch (e) {
         if (e is StoppedException) rethrow;
         if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
-        if (remote) {
-          final state = classifyConnectionFailure(e);
-          if (state != null && !state.isOnline) continue;
-        }
-        return true;
+        if (!remote) return true;
+        // NOTE: on the atServer read, the only failure that counts as found
+        // is one to decrypt the value.
+        if (e is AtDecryptionException) return true;
       }
     }
     return false;

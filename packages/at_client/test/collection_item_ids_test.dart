@@ -44,6 +44,11 @@ void main() {
       ..metadata = stored.key.metadata;
   }
 
+  /// [error] as `AtClient.get` rethrows it: an [AtException] rebuilt by
+  /// [AtExceptionManager.createException], anything else as it is.
+  Object asGetThrows(Object error) =>
+      error is AtException ? AtExceptionManager.createException(error) : error;
+
   /// Writes a record directly, as another client writes it; a `cached:` key
   /// keeps its prefix, as a received copy does.
   void seed(String key, String obj) {
@@ -81,11 +86,15 @@ void main() {
       final k = inv.positionalArguments.first as AtKey;
       final options =
           inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
-      if (options?.useRemoteAtServer == true &&
-          serverOnly.contains(k.toString())) {
+      if (options?.useRemoteAtServer != true) return readStore(k);
+      if (serverOnly.contains(k.toString())) {
         return AtValue()..value = envelope('on the atServer');
       }
-      return readStore(k);
+      try {
+        return readStore(k);
+      } catch (e) {
+        throw asGetThrows(e);
+      }
     });
     when(() => atClient.put(any(), any())).thenAnswer((inv) async {
       final k = inv.positionalArguments[0] as AtKey;
@@ -508,15 +517,15 @@ void main() {
     expect(store, isEmpty);
   });
 
-  /// Makes every read sent to the atServer fail with [error]; a local read
-  /// still reads [store].
+  /// Makes every read sent to the atServer fail with [error], as
+  /// `AtClient.get` rethrows it; a local read still reads [store].
   void remoteReadsFailWith(Object error) {
     when(() => atClient.get(any(),
             getRequestOptions: any(named: 'getRequestOptions')))
         .thenAnswer((inv) async {
       final options =
           inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
-      if (options?.useRemoteAtServer == true) throw error;
+      if (options?.useRemoteAtServer == true) throw asGetThrows(error);
       return readStore(inv.positionalArguments.first as AtKey);
     });
   }
@@ -558,6 +567,38 @@ void main() {
     await c.upsert(obj: 'new', id: long);
 
     expect(jsonDecode(store['$long.$namespace@alice']!.value)['obj'], 'new');
+  });
+
+  test(
+      'upsert keeps refusing a new over-long id when the atServer read fails without an answer',
+      () async {
+    for (final failure in <AtException>[
+      UnAuthenticatedException('session refused'),
+      UnAuthenticatedException(
+          'Failed connecting to @alice. The authenticator reported failure'),
+      SecondaryNotFoundException('No entry in atDirectory for @alice'),
+      SecondaryConnectException('sc'),
+    ]) {
+      final shape = '${failure.runtimeType}(${failure.message})';
+      remoteReadsFailWith(failure);
+      final c = await todos();
+
+      await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long),
+          reason: shape);
+      expectNothingWritten();
+      expect(store, isEmpty, reason: shape);
+    }
+  });
+
+  test(
+      'Given no local item with a 65-character id and an atServer read that answers that this enrollment may not read it, when upsert is called with that id, then upsert throws ArgumentError naming the new-id rules and nothing is written',
+      () async {
+    final c = await todos();
+    remoteReadsFailWith(AtExceptionUtils.get('AT0009', 'not authorized'));
+
+    await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
+    expectNothingWritten();
+    expect(store, isEmpty);
   });
 
   test(
@@ -729,6 +770,22 @@ void main() {
     await c.upsert(obj: 'new', id: long);
 
     expect(jsonDecode(store[unreadable]!.value)['obj'], 'new');
+  });
+
+  test(
+      'Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails without an answer, when upsert is called with that id, then the item holds the new value',
+      () async {
+    seed('$long.$namespace@alice', 'old');
+    final c = await todos();
+    remoteReadsFailWith(UnAuthenticatedException('session refused'));
+    // NOTE: stubbed last, so that the local read, which passes no request
+    // options, takes this stub rather than remoteReadsFailWith's.
+    when(() => atClient.get(any())).thenAnswer((_) async =>
+        throw asGetThrows(AtValueException('cannot parse the stored value')));
+
+    await c.upsert(obj: 'new', id: long);
+
+    expect(jsonDecode(store['$long.$namespace@alice']!.value)['obj'], 'new');
   });
 
   // Sub-collection names

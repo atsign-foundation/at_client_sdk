@@ -35,7 +35,7 @@ Feature: AtCollection checks every item id before using it in a key
   the namespace, and any Atsign that can notify this one. create refuses an id
   longer than 64 characters before any read or write, and upsert refuses one
   once neither local storage nor the atServer holds an item under it (an
-  atServer that cannot be reached keeps the refusal); reads accept an id of any length, and
+  atServer read that fails, unless it fails to decrypt, keeps the refusal); reads accept an id of any length, and
   the check is linear in the id's length, an item another Atsign shares under
   an id starting with "_" can still be read by that id, and an event whose ids
   the check refuses is not emitted, so no event hands the app an id its reads
@@ -267,6 +267,20 @@ Feature: AtCollection checks every item id before using it in a key
     When upsert is called with that id and a new value
     Then get with that id returns the new value
 
+  Scenario: upsert keeps refusing a new over-long id when the atServer read fails without an answer
+    Given local storage holds no item under a 65-character id
+    And reading that id from the atServer fails with an error that does not show the atServer answered, rethrown as `AtClientImpl.get` rethrows it
+    When the app calls `upsert` with that id
+    Then `upsert` throws `ArgumentError` naming the new-id rules
+    And nothing is written
+
+  Scenario: Given no local item with a 65-character id and an atServer read that answers that this enrollment may not read it, when upsert is called with that id, then upsert throws ArgumentError naming the new-id rules and nothing is written
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And a read sent to the atServer is answered with AT0009, rethrown as `AtClientImpl.get` rethrows it
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And nothing is written
+
   Scenario: Given no id, when create is called, then the item's id is 8 characters of a-z and 0-9
     Given a collection "todos.demo" of @alice
     When create is called with no id
@@ -338,6 +352,13 @@ Feature: AtCollection checks every item id before using it in a key
   Scenario: Given a stored item with a 65-character id that cannot be read, when upsert is called with that id, then the item holds the new value
     Given a collection "todos.demo" of @alice holding a stored item whose id is 65 "a" characters
     And reading that item fails with an error other than not found
+    When upsert is called with that id and a new value
+    Then the item holds the new value
+
+  Scenario: Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails without an answer, when upsert is called with that id, then the item holds the new value
+    Given a collection "todos.demo" of @alice holding a stored item whose id is 65 "a" characters
+    And reading that item locally fails with an error other than not found or a failure to decrypt
+    And reading it from the atServer fails with an error that does not show the atServer answered
     When upsert is called with that id and a new value
     Then the item holds the new value
 
