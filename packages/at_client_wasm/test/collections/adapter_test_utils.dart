@@ -52,8 +52,18 @@ class FakeAtServer {
   FakeAtClient client(String atSign) => _clients.putIfAbsent(
       atSign, () => FakeAtClient._(this, atSign.toAtsign()));
 
-  bool _visibleTo(AtKey key, Atsign me) =>
-      key.sharedBy?.toAtsign() == me || key.sharedWith?.toAtsign() == me;
+  /// Whether [me] may see [key]: it owns the key or the key is shared with
+  /// it. A key that names no atSign as its owner, as a malformed record in
+  /// device storage would, is visible to every client.
+  bool _visibleTo(AtKey key, Atsign me) {
+    final Atsign? owner;
+    try {
+      owner = key.sharedBy?.toAtsign();
+    } on InvalidAtSignException {
+      return true;
+    }
+    return owner == me || key.sharedWith?.toAtsign() == me;
+  }
 
   AtValue _get(Atsign me, AtKey key) {
     final stored = _store[key.toString()];

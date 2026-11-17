@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/src/collections/js_collections_adapter.dart';
+import 'package:at_utils/at_utils.dart' show LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -23,6 +24,17 @@ final class _LaterEvent extends CEvent {
 /// An error type the adapter has no name for, standing in for one a later
 /// at_client throws.
 final class _LaterError {}
+
+/// Collects each log record as `LEVEL|logger|message`.
+final class _Collect implements LoggingHandler {
+  _Collect(this.lines);
+
+  final List<String> lines;
+
+  @override
+  void call(record) =>
+      lines.add('${record.level.name}|${record.loggerName}|${record.message}');
+}
 
 Matcher _rejectsWith(String code, {String? id, String? owner, String? kind}) =>
     throwsA(isA<JsCollectionsError>()
@@ -519,6 +531,32 @@ void main() {
         todos.get(bobs('b1')),
         _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
       );
+    });
+
+    test(
+        'A list leaves out a stored record whose key names no Atsign, and logs a warning naming the key',
+        () async {
+      final records = <String>[];
+      final previous = AtSignLogger.defaultLoggingHandler;
+      AtSignLogger.defaultLoggingHandler = _Collect(records);
+      addTearDown(() => AtSignLogger.defaultLoggingHandler = previous);
+      final todos = await open();
+      await todos.create({'title': 'a'}, id: 'a1');
+      const key = 'b1.$_ns@';
+      server.putRaw(
+          key,
+          jsonEncode({
+            'type': 'Todo',
+            'obj': {'t': 1}
+          }));
+
+      final listing = await todos.list();
+
+      expect(ids(listing.items), ['a1']);
+      expect(listing.unreadable, isEmpty);
+      expect(records.where((r) => r.startsWith('WARNING|') && r.contains(key)),
+          isNotEmpty,
+          reason: 'a warning names the key $key; logged: $records');
     });
 
     test('A list keeps the upstream order of items and recipients', () async {

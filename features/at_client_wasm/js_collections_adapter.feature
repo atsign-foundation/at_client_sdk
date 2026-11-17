@@ -100,6 +100,13 @@ Feature: The JS collections adapter translates onto AtCollection
     Then the list resolves with the readable item in items
     And unreadable holds one entry with id "b1", owner "@bob" and code COLLECTION_ITEM_UNREADABLE
 
+  Scenario: A list leaves out a stored record whose key names no Atsign, and logs a warning naming the key
+    Given a readable item and a stored record in the collection whose key names no Atsign
+    When the adapter lists the collection
+    Then items holds the readable item
+    And unreadable holds no entry for that record
+    And a warning naming the record's key is logged
+
   Scenario: A list keeps the upstream order of items and recipients
     Given items created in an unsorted order with recipients in an unsorted order
     When the adapter lists the collection
