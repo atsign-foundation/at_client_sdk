@@ -263,7 +263,7 @@ Feature: AtCollection checks every item id before using it in a key
 
   Scenario: Given no item with a 65-character id and an atServer that refuses the session, when upsert is called with that id, then ArgumentError is thrown and nothing is written
     Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
-    And a read sent to the atServer fails with an UnAuthenticatedException
+    And getMeta, asked for that id on the atServer, throws an AtClientException, as it does when the atServer refuses the session
     When upsert is called with that id and a new value
     Then ArgumentError is thrown
     And nothing is written
