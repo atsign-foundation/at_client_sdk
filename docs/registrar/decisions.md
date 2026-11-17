@@ -52,3 +52,30 @@ Consequences:
   imports only `at_auth.dart` can catch it as `AtException`.
 - #2517's question of whether the admin service folds into `at_registrar.dart`
   or stays separate is settled: it folds in.
+
+## 2026-11-17: constructor validation of the port and the super API key (#2469)
+
+Context: a review of #2469 at its current head found that a `registrarUrl`
+port of 20 or more digits passes the digits-only pattern, then `int.parse`
+overflows and throws `FormatException` instead of the documented
+`ArgumentError`. A super API key holding CR/LF or another control character
+fails only when the `Authorization` header is set, and is reported as
+`RegistrarFailure.network`, which tells the caller the registration may have
+been committed. The timeout tests also pass if the send and the body read get
+separate `requestTimeout` budgets.
+
+Decision (human):
+- A port longer than 5 digits, or one that does not parse, is refused with
+  `ArgumentError` named `registrarUrl`, without echoing the value.
+- The constructor refuses a super API key that contains a control character
+  with `ArgumentError` named `superApiKey`, without echoing the key. The key
+  is not trimmed or otherwise repaired.
+- A test pins that `requestTimeout` bounds the send and the body read
+  together.
+- These are fix-ups on #2469, not a new PR.
+
+Consequences:
+- A misconfigured service fails at construction, before anything is sent, and
+  never as a `network` failure.
+- A key read from a file with a trailing newline is refused; the caller trims
+  it explicitly.
