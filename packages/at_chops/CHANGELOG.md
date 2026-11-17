@@ -24,6 +24,9 @@
 - perf: `AesGcm256FfiAlgo.encrypt` and `AesGcm256EncryptionAlgo.encrypt` build
   the ciphertext and tag in one buffer, which is faster for a 1.1 MB
   plaintext. The output is unchanged.
+- perf: `ChaCha20Poly1305Algo.encrypt` builds the ciphertext and tag in one
+  buffer, which is faster for plaintexts from 32 bytes to 1.1 MB. The output
+  is unchanged.
 
 ## 3.7.1
 
