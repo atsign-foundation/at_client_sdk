@@ -542,21 +542,30 @@ void main() {
       addTearDown(() => AtSignLogger.defaultLoggingHandler = previous);
       final todos = await open();
       await todos.create({'title': 'a'}, id: 'a1');
-      const key = 'b1.$_ns@';
-      server.putRaw(
-          key,
-          jsonEncode({
-            'type': 'Todo',
-            'obj': {'t': 1}
-          }));
+      const ownedByAt = 'b1.$_ns@';
+      const unowned = '@bob:b2.$_ns@alice@x';
+      expect(AtKey.fromString(ownedByAt).sharedBy, '@',
+          reason: 'the first record names "@" as its owner');
+      expect(AtKey.fromString(unowned).sharedBy, isNull,
+          reason: 'the second record names no owner at all');
+      final envelope = jsonEncode({
+        'type': 'Todo',
+        'obj': {'t': 1}
+      });
+      server.putRaw(ownedByAt, envelope);
+      server.putRaw(unowned, envelope);
 
       final listing = await todos.list();
 
       expect(ids(listing.items), ['a1']);
       expect(listing.unreadable, isEmpty);
-      expect(records.where((r) => r.startsWith('WARNING|') && r.contains(key)),
-          isNotEmpty,
-          reason: 'a warning names the key $key; logged: $records');
+      for (final stored in [ownedByAt, unowned]) {
+        final key = '${AtKey.fromString(stored)}';
+        expect(
+            records.where((r) => r.startsWith('WARNING|') && r.contains(key)),
+            isNotEmpty,
+            reason: 'a warning names the key $key; logged: $records');
+      }
     });
 
     test('A list keeps the upstream order of items and recipients', () async {
