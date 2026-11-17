@@ -66,6 +66,10 @@
   offending value.
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
   5.0.0.
+- feat: `package:at_auth/at_registrar.dart`, a library exporting
+  `RegistrarAdminService`, `RegistrarException` and `RegistrarFailure`.
+  `RegistrarException` is still catchable as `AtException` through
+  `at_auth.dart` alone; catching it by type needs `at_registrar.dart`.
 
 ## 4.0.0
 

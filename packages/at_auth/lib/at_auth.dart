@@ -60,5 +60,5 @@ export 'src/keys/io/memory_io.dart';
 
 /// Classes for registrar services
 export 'src/registrar/registrar.dart';
-export 'src/registrar/registrar_exceptions.dart';
 export 'src/registrar/registrar_service.dart';
+export 'src/registrar/registrar_admin_service.dart';
