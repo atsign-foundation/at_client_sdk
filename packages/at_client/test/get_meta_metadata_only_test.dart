@@ -326,6 +326,20 @@ void main() {
     });
   }
 
+  test(
+      'Given an atServer that answers a metadata lookup with an empty response, when getMeta is called, then it returns null',
+      () async {
+    final client = await clientFor('@alice');
+    final key = selfKey(client, 'empty');
+    atServer = (builder) async => '';
+
+    final answer =
+        await client.getMeta(key, getRequestOptions: atServerOptions());
+
+    expect(answer, isNull);
+    expect(atServerCommands, ['llookup:meta:$key']);
+  });
+
   const notFoundOutline =
       'Given no record under a key, when getMeta is called, then it throws AtKeyNotFoundException';
   for (final leg in ['local storage', 'the atServer']) {

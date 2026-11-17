@@ -111,6 +111,12 @@ Feature: getMeta reads a key's metadata without its value
       | the atServer  | not yet available                         |
       | the atServer  | past its expiry and not yet removed       |
 
+  Scenario: Given an atServer that answers a metadata lookup with an empty response, when getMeta is called, then it returns null
+    Given a client of @alice
+    And the atServer answers a metadata lookup for a self key with an empty response
+    When getMeta is called with that key and GetRequestOptions that set useRemoteAtServer to true
+    Then null is returned
+
   Scenario Outline: Given no record under a key, when getMeta is called, then it throws AtKeyNotFoundException
     Given a client of @alice
     And <leg> holds no record under a self key
