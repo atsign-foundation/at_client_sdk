@@ -18,6 +18,14 @@ class Wire {
   /// What PKAM answers; false is a refusal.
   var pkamAccepted = true;
 
+  /// Whether PKAM runs the authenticator the lookUp was built with, as a real
+  /// connection does: it reads the keys, answers `from:` with a challenge and
+  /// records each `pkam:` command in [pkamCommands]. Off, PKAM never calls it.
+  var runsAuthenticator = false;
+
+  /// Every `pkam:` command an authenticator sent, in order.
+  final pkamCommands = <String>[];
+
   /// One entry per PKAM, taken in order: that PKAM waits for it, then answers
   /// its value. Once empty, PKAM answers [pkamAccepted] at once.
   final pkamScript = Queue<Completer<bool>>();
@@ -76,6 +84,10 @@ class WireLookUp implements AtLookupMuxable {
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
     if (_wire.connectFails) throw StateError('connection refused');
+    final run = authenticator;
+    if (_wire.runsAuthenticator && run != null) {
+      return run(_WireExecutor(_wire));
+    }
     if (_wire.pkamScript.isNotEmpty) {
       return _wire.pkamScript.removeFirst().future;
     }
@@ -121,4 +133,28 @@ class WireLookUp implements AtLookupMuxable {
 
   @override
   dynamic noSuchMethod(Invocation invocation) {}
+}
+
+/// The connection an authenticator sees: answers `from:` with a challenge and
+/// accepts every `pkam:`, recording it.
+class _WireExecutor implements AtCommandExecutor {
+  _WireExecutor(this._wire);
+
+  final Wire _wire;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    if (command.startsWith('from:')) {
+      final atSign = command.substring(5).split(RegExp('[:\\n]')).first.trim();
+      final named = atSign.startsWith('@') ? atSign : '@$atSign';
+      return 'data:_123e4567-e89b-12d3-a456-426614174000$named:'
+          '123e4567-e89b-12d3-a456-426614174000';
+    }
+    if (command.startsWith('pkam:')) {
+      _wire.pkamCommands.add(command);
+      return 'data:success';
+    }
+    return 'error:unexpected $command';
+  }
 }
