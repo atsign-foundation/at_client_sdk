@@ -91,6 +91,18 @@ void main() {
       );
     });
 
+    test('throws AtException, not ArgumentError, when superApiKey is '
+        'whitespace-only', () {
+      expect(
+        () => RegistrarAdminService(
+          registrarUrl: _registrarUrl,
+          superApiKey: '   ',
+          httpClient: _mockResponse({}),
+        ),
+        throwsA(isA<AtException>()),
+      );
+    });
+
     test('throws ArgumentError naming registrarUrl when it is empty', () {
       expect(
         () => RegistrarAdminService(
@@ -313,6 +325,12 @@ void main() {
     for (final entry in {
       'newline': 'k\n',
       'crlfHeaderInjection': 'k\r\nX-Injected: 1',
+      'leadingSpace': ' k',
+      'embeddedSpace': 'k k',
+      'del': 'k\x7F',
+      'highByte': 'k\x80',
+      'nonAsciiLetter': 'kéy',
+      'emoji': 'k😀',
     }.entries) {
       test(
           'throws ArgumentError naming superApiKey for a ${entry.key} key, '
@@ -339,6 +357,75 @@ void main() {
         expect(requestSent, isFalse,
             reason: 'constructor validation must reject before any request '
                 'is sent');
+      });
+    }
+
+    for (final boundaryKey in ['!', '~']) {
+      test('accepts the visible-ASCII boundary superApiKey "$boundaryKey"', () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: _registrarUrl,
+            superApiKey: boundaryKey,
+            httpClient: _mockResponse({}),
+          ),
+          returnsNormally,
+        );
+      });
+    }
+
+    for (final host in [
+      'registrar_api:8443',
+      '[::1]:8443',
+      'bücher.example',
+    ]) {
+      test('throws ArgumentError naming registrarUrl for the host "$host"', () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: host,
+            superApiKey: _apiKey,
+            httpClient: _mockResponse({}),
+          ),
+          throwsA(
+            isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+          ),
+        );
+      });
+    }
+
+    for (final port in ['', '0', '65536', '000443']) {
+      test(
+          'throws ArgumentError naming registrarUrl when the port is '
+          '"$port"', () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: '$_registrarUrl:$port',
+            superApiKey: _apiKey,
+            httpClient: _mockResponse({}),
+          ),
+          throwsA(
+            isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+          ),
+        );
+      });
+    }
+
+    for (final entry in {1: '1', 65535: '65535', 443: '00443'}.entries) {
+      test(
+          'accepts registrarUrl port "${entry.value}" and sends the request '
+          'to port ${entry.key}', () async {
+        late http.Request captured;
+        final client = MockClient((req) async {
+          captured = req;
+          return http.Response(
+              jsonEncode({'status': 'success', 'cramkey': '@alice:K'}), 200);
+        });
+        final service = RegistrarAdminService(
+          registrarUrl: '$_registrarUrl:${entry.value}',
+          superApiKey: _apiKey,
+          httpClient: client,
+        );
+        await service.registerAtsign(atsign: '@alice'.toAtsign());
+        expect(captured.url.port, equals(entry.key));
       });
     }
   });
@@ -1150,6 +1237,102 @@ void main() {
         ),
       );
     });
+
+    test(
+        'sends a POST over https with Content-Type, Authorization and the '
+        'exact register body', () async {
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response(
+            jsonEncode({'status': 'success', 'cramkey': '@alice:KEY'}), 200);
+      });
+      final service = _makeAdminService(client);
+      await service.registerAtsign(atsign: '@alice'.toAtsign());
+
+      expect(captured.method, equals('POST'));
+      expect(captured.url.scheme, equals('https'));
+      expect(captured.url.host, equals(_registrarUrl));
+      expect(captured.url.path, equals('/api/app/v4/register-atsign/'));
+      expect(captured.headers['Content-Type'], equals('application/json'));
+      expect(captured.headers['Authorization'], equals(_apiKey));
+      expect(
+        jsonDecode(captured.body),
+        equals({
+          'operation': 'register',
+          'atSign': '@alice',
+          'startatServer': 'true',
+        }),
+      );
+    });
+
+    test('accepts a response body of exactly 65536 bytes', () async {
+      final unpadded = jsonEncode({'status': 'success', 'cramkey': '@alice:K'});
+      final body = unpadded.padRight(65536, ' ');
+      expect(utf8.encode(body).length, equals(65536));
+      final client = MockClient((_) async => http.Response(body, 200));
+      final result = await _makeAdminService(client)
+          .registerAtsign(atsign: '@alice'.toAtsign());
+      expect(result.cramKey, equals('K'));
+    });
+
+    test('rejects a response body of exactly 65537 bytes', () async {
+      final oversized = 'x' * 65537;
+      final client = MockClient((_) async => http.Response(oversized, 200));
+      final service = _makeAdminService(client);
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
+      );
+    });
+
+    test(
+        'a hung onCancel still yields timeout, within requestTimeout plus '
+        'a margin', () async {
+      final client = MockClient.streaming((request, bodyStream) async {
+        final controller = StreamController<List<int>>(
+          onCancel: () => Completer<void>().future,
+        );
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(milliseconds: 50),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      ).timeout(const Duration(milliseconds: 500));
+    });
+
+    test(
+        'a hung onCancel still yields responseTooLarge, within '
+        'requestTimeout plus a margin', () async {
+      final oversized = Uint8List(70 * 1024);
+      final client = MockClient.streaming((request, bodyStream) async {
+        late final StreamController<List<int>> controller;
+        controller = StreamController<List<int>>(
+          onListen: () => controller.add(oversized),
+          onCancel: () => Completer<void>().future,
+        );
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: const Duration(seconds: 5),
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>().having(
+            (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
+      ).timeout(const Duration(milliseconds: 500));
+    });
   });
 
   group('generateAtSignDeleteToken', () {
@@ -1406,9 +1589,11 @@ void main() {
       final service = _makeAdminService(client);
       await service.generateAtSignDeleteToken(['@one', '@two']);
 
+      expect(captured.method, equals('POST'));
       expect(captured.url.scheme, equals('https'));
       expect(captured.url.host, equals(_registrarUrl));
       expect(captured.url.path, equals('/api/app/v4/manage-atsigns/'));
+      expect(captured.headers['Content-Type'], equals('application/json'));
       expect(captured.headers['Authorization'], equals(_apiKey));
       expect(
         jsonDecode(captured.body),
@@ -1417,6 +1602,25 @@ void main() {
           'atSigns': ['@one', '@two'],
         }),
       );
+    });
+
+    test('returns an empty atSigns list when the response omits it', () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'token': 'the-token', 'skippedatSigns': []},
+      }));
+      final result = await service.generateAtSignDeleteToken(['@one']);
+      expect(result.atSigns, equals([]));
+    });
+
+    test('returns an empty skippedAtSigns list when the response omits it',
+        () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'token': 'the-token', 'atSigns': []},
+      }));
+      final result = await service.generateAtSignDeleteToken(['@one']);
+      expect(result.skippedAtSigns, equals([]));
     });
   });
 
@@ -1586,9 +1790,11 @@ void main() {
       await service
           .deleteAtSigns(token: 'the-token', atSigns: ['@one', '@two']);
 
+      expect(captured.method, equals('POST'));
       expect(captured.url.scheme, equals('https'));
       expect(captured.url.host, equals(_registrarUrl));
       expect(captured.url.path, equals('/api/app/v4/manage-atsigns/'));
+      expect(captured.headers['Content-Type'], equals('application/json'));
       expect(captured.headers['Authorization'], equals(_apiKey));
       expect(
         jsonDecode(captured.body),
@@ -1598,6 +1804,26 @@ void main() {
           'operation': 'delete',
         }),
       );
+    });
+
+    test('returns an empty deleted list when the response omits it', () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'failed': []},
+      }));
+      final result =
+          await service.deleteAtSigns(token: 'the-token', atSigns: ['@one']);
+      expect(result.deleted, equals([]));
+    });
+
+    test('returns an empty failed list when the response omits it', () async {
+      final service = _makeAdminService(_mockResponse({
+        'status': 'success',
+        'data': {'deleted': []},
+      }));
+      final result =
+          await service.deleteAtSigns(token: 'the-token', atSigns: ['@one']);
+      expect(result.failed, equals([]));
     });
 
     test('throws RegistrarException(malformedResponse) when data is not a Map',

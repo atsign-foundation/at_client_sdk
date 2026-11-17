@@ -63,9 +63,12 @@
 - feat: the `RegistrarAdminService` constructor refuses a `registrarUrl`
   that is not a bare host, optionally followed by `:<port>`, which existing
   `/manage-atsigns/` callers will meet; the `ArgumentError` never echoes the
-  offending value. A port over 5 digits is refused the same way, without
-  parsing it. A `superApiKey` containing a control character is refused
-  with an `ArgumentError` naming `superApiKey`, which never echoes the key.
+  offending value. This refuses a host containing `_`, an IPv6 literal, or
+  an IDN host that 4.0.0 accepted. A port is 1-5 digits and must parse to
+  1-65535; a port over 5 digits is refused the same way, without parsing
+  it. A `superApiKey` must be visible ASCII (`0x21`-`0x7E`); any other byte,
+  including a space or a non-ASCII character, is refused with an
+  `ArgumentError` naming `superApiKey`, which never echoes the key.
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
   5.0.0.
 - feat: `package:at_auth/at_registrar.dart`, a library exporting

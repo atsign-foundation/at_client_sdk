@@ -79,3 +79,35 @@ Consequences:
   never as a `network` failure.
 - A key read from a file with a trailing newline is refused; the caller trims
   it explicitly.
+
+## 2026-11-17: final validation, cancellation and test rules for #2469
+
+Context: each review round on #2469 found another guard that no test pinned,
+because each fix-up covered only the findings listed. Open at the time: a super
+API key with DEL or a non-ASCII character still fails late and is reported as
+`RegistrarFailure.network`; two port guards each mask the other; the `?? []`
+defaults for missing delete-flow lists are untested; a cancellation that never
+completes holds up the timeout and size-cap failures; `registrarUrl` refuses
+hosts with `_`, IPv6 literals and IDN hosts that 4.0.0 accepted.
+
+Decision (human):
+- The super API key may contain only visible ASCII, 0x21 to 0x7E. Anything
+  else is refused with `ArgumentError` named `superApiKey`, without echoing
+  the key. This replaces the control-character rule above. An empty or
+  whitespace-only key still throws `AtException`, as in 4.0.0.
+- `registrarUrl` keeps its allow-list: letters, digits, `.` and `-`, with an
+  optional `:<port>` of 1 to 5 digits in 1 to 65535. Hosts with `_`, IPv6
+  literals and IDN hosts are refused; this is a behaviour change from 4.0.0
+  and is recorded in the CHANGELOG.
+- A delete-flow response that omits `atSigns`, `skippedatSigns`, `deleted` or
+  `failed` yields an empty list, as in 4.0.0.
+- On a timeout or the size cap the call throws its failure at once;
+  cancelling the body stream runs unawaited.
+- Every guard in `RegistrarAdminService` is pinned: deleting or altering it
+  makes a test fail. A guard that cannot be pinned is removed.
+- These are fix-ups on #2469, not a new PR.
+
+Consequences:
+- A misconfigured key or URL fails at construction, never as `network`.
+- A hung `onCancel` cannot hang a registrar call.
+- Callers using `_`, IPv6 or IDN registrar hosts must use a plain DNS name.

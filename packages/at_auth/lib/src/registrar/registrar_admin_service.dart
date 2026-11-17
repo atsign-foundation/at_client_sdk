@@ -95,8 +95,9 @@ class RegistrarAdminService {
 
   late final http.Client _http;
 
-  /// Throws [AtException] if [superApiKey] is empty, or [ArgumentError] if
-  /// it contains a control character or [registrarUrl] is malformed.
+  /// Throws [AtException] if [superApiKey] is empty or all whitespace, or
+  /// [ArgumentError] if it contains a byte outside visible ASCII
+  /// (`0x21`-`0x7E`) or [registrarUrl] is malformed.
   RegistrarAdminService({
     required this.registrarUrl,
     required String superApiKey,
@@ -107,25 +108,24 @@ class RegistrarAdminService {
       throw AtException(
           'Registrar super API key is required and cannot be empty.');
     }
-    if (_superApiKey.codeUnits.any((c) => c < 0x20 || c == 0x7F)) {
+    if (_superApiKey.codeUnits.any((c) => c < 0x21 || c > 0x7E)) {
       throw ArgumentError(
-          'superApiKey must not contain control characters', 'superApiKey');
+          'superApiKey must contain only visible ASCII characters '
+              '(0x21-0x7E)',
+          'superApiKey');
     }
     _validateRegistrarUrl(registrarUrl);
     _http = httpClient ?? http.Client();
   }
 
   static final _hostPattern = RegExp(r'^[a-zA-Z0-9.-]+$');
-  static final _portPattern = RegExp(r'^[0-9]+$');
+  static final _portPattern = RegExp(r'^[0-9]{1,5}$');
 
   static void _validateRegistrarUrl(String registrarUrl) {
     const invalidMessage =
         'registrarUrl must be a bare host of letters, digits, "." and "-", '
         'optionally followed by ":<port>", with no scheme, path or user '
         'info';
-    if (registrarUrl.trim().isEmpty) {
-      throw ArgumentError('registrarUrl must not be empty', 'registrarUrl');
-    }
     final hostAndPort = registrarUrl.split(':');
     if (hostAndPort.length > 2) {
       throw ArgumentError(invalidMessage, 'registrarUrl');
@@ -136,13 +136,13 @@ class RegistrarAdminService {
     }
     if (hostAndPort.length == 2) {
       final rawPort = hostAndPort[1];
-      if (!_portPattern.hasMatch(rawPort) || rawPort.length > 5) {
+      if (!_portPattern.hasMatch(rawPort)) {
         throw ArgumentError(
             'registrarUrl port must be numeric and between 1 and 65535',
             'registrarUrl');
       }
-      final port = int.tryParse(rawPort);
-      if (port == null || port < 1 || port > 65535) {
+      final port = int.parse(rawPort);
+      if (port < 1 || port > 65535) {
         throw ArgumentError(
             'registrarUrl port must be numeric and between 1 and 65535',
             'registrarUrl');
@@ -159,15 +159,29 @@ class RegistrarAdminService {
     RegistrarApiEndpoint endpoint,
     Map<String, dynamic> data,
   ) async {
+    final url = Uri.https(registrarUrl, "$_apiBase${endpoint.path}");
+    final requestBody = utf8.encode(jsonEncode(data));
     final cancelToken = _ReadCancelToken();
     final abortTrigger = Completer<void>();
+    final request = http.AbortableStreamedRequest(
+      'POST',
+      url,
+      abortTrigger: abortTrigger.future,
+    )
+      ..followRedirects = false
+      ..headers['Content-Type'] = 'application/json'
+      ..headers['Authorization'] = _superApiKey
+      ..contentLength = requestBody.length
+      ..sink.add(requestBody);
+    unawaited(request.sink.close());
+
     try {
       return await _sendAndReadResponse(
-              endpoint, data, cancelToken, abortTrigger)
+              endpoint, request, cancelToken, abortTrigger)
           .timeout(requestTimeout);
     } on TimeoutException {
       if (!abortTrigger.isCompleted) abortTrigger.complete();
-      await cancelToken.cancel();
+      unawaited(cancelToken.cancel());
       throw RegistrarException(
         'Registrar request timed out after $requestTimeout.',
         endpoint: endpoint.path,
@@ -187,24 +201,10 @@ class RegistrarAdminService {
 
   Future<http.Response> _sendAndReadResponse(
     RegistrarApiEndpoint endpoint,
-    Map<String, dynamic> data,
+    http.AbortableStreamedRequest request,
     _ReadCancelToken cancelToken,
     Completer<void> abortTrigger,
   ) async {
-    final url = Uri.https(registrarUrl, "$_apiBase${endpoint.path}");
-    final requestBody = utf8.encode(jsonEncode(data));
-    final request = http.AbortableStreamedRequest(
-      'POST',
-      url,
-      abortTrigger: abortTrigger.future,
-    )
-      ..followRedirects = false
-      ..headers['Content-Type'] = 'application/json'
-      ..headers['Authorization'] = _superApiKey
-      ..contentLength = requestBody.length
-      ..sink.add(requestBody);
-    unawaited(request.sink.close());
-
     final streamed = await _http.send(request);
 
     final requestAlreadyTimedOut = abortTrigger.isCompleted;
@@ -234,9 +234,8 @@ class RegistrarAdminService {
     final bodyRead = Completer<void>();
     late final StreamSubscription<List<int>> subscription;
     subscription = streamed.stream.listen(
-      (chunk) async {
+      (chunk) {
         if (bodyBytes.length + chunk.length > _maxResponseBytes) {
-          await _cancelQuietly(subscription);
           if (!bodyRead.isCompleted) {
             bodyRead.completeError(RegistrarException(
               'Registrar response exceeded $_maxResponseBytes bytes.',
@@ -245,6 +244,7 @@ class RegistrarAdminService {
               reason: RegistrarFailure.responseTooLarge,
             ));
           }
+          unawaited(_cancelQuietly(subscription));
           return;
         }
         bodyBytes.addAll(chunk);
@@ -453,14 +453,11 @@ class RegistrarAdminService {
         reason: RegistrarFailure.malformedResponse,
       );
     }
-    final data = payload['data'];
-    final token = data is Map ? data['token'] : null;
-    final resultAtSigns = data is Map ? data['atSigns'] ?? [] : null;
-    final skippedAtSigns = data is Map ? data['skippedatSigns'] ?? [] : null;
-    if (data is! Map ||
-        token is! String ||
-        resultAtSigns is! List ||
-        skippedAtSigns is! List) {
+    final data = payload['data'] as Map;
+    final token = data['token'];
+    final resultAtSigns = data['atSigns'] ?? [];
+    final skippedAtSigns = data['skippedatSigns'] ?? [];
+    if (token is! String || resultAtSigns is! List || skippedAtSigns is! List) {
       throw RegistrarException(
         'Failed to generate delete token: unexpected response shape.',
         endpoint: endpointPath,
@@ -528,10 +525,10 @@ class RegistrarAdminService {
         reason: RegistrarFailure.malformedResponse,
       );
     }
-    final data = payload['data'];
-    final deleted = data is Map ? data['deleted'] ?? [] : null;
-    final failed = data is Map ? data['failed'] ?? [] : null;
-    if (data is! Map || deleted is! List || failed is! List) {
+    final data = payload['data'] as Map;
+    final deleted = data['deleted'] ?? [];
+    final failed = data['failed'] ?? [];
+    if (deleted is! List || failed is! List) {
       throw RegistrarException(
         'Failed to delete atSigns: unexpected response shape.',
         endpoint: endpointPath,
