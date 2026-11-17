@@ -311,8 +311,7 @@ void main() {
       if (local) {
         await holdLocally(client, key, metadata: metadata);
       } else {
-        // NOTE: the atServer answers both states this way: it holds the
-        // record and serves no metadata for a record that is not active.
+        // NOTE: both states are scripted with the same data:null answer.
         atServer = (builder) async => 'data:null';
       }
 
@@ -416,7 +415,6 @@ void main() {
       final client = await clientFor('@alice');
       final local = leg == 'local storage';
       await client.stop();
-      // NOTE: a stopped RemoteSecondary refuses every verb this way.
       atServer = (_) async =>
           throw StoppedException('the connection for @alice has been stopped');
 
@@ -503,7 +501,7 @@ void main() {
     final missing = AtKey.fromString('missing.ns@alice');
     atServer = (builder) async {
       final key = (builder as LLookupVerbBuilder).buildKey();
-      // NOTE: as the atServer does, authorisation before the record.
+      // NOTE: the refusal is scripted before any record lookup.
       if (key.endsWith('.ns@alice')) {
         throw AtExceptionUtils.get('AT0009',
             'Connection with enrollment ID e1 is not authorized to llookup key: $key');
