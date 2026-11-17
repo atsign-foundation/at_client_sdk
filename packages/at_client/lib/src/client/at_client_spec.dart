@@ -376,17 +376,22 @@ abstract class AtClient {
   /// [StoppedException] after [stop].
   /// ```
   /// e.g alice is current atsign
-  /// llookup:phone@alice
+  /// llookup:meta:phone@alice
   ///   var atKey = AtKey()..key='phone'
   ///   getMeta(atKey);
-  /// llookup:public:phone@alice
+  /// llookup:meta:public:phone@alice
   ///   var metaData = Metadata()..isPublic=true;
   ///   var atKey = AtKey()..key='phone'
   ///             ..metadata=metaData
   ///   getMeta(atKey);
-  /// lookup:phone@bob
-  ///   var metaData = Metadata()..sharedWith='@bob';
-  ///    var atKey = AtKey()..key='phone'
+  /// lookup:meta:phone@bob
+  ///   var atKey = AtKey()..key='phone'
+  ///                   ..sharedBy='@bob'
+  ///   getMeta(atKey);
+  /// plookup:meta:phone@bob
+  ///   var metaData = Metadata()..isPublic=true;
+  ///   var atKey = AtKey()..key='phone'
+  ///                   ..sharedBy='@bob'
   ///                   ..metadata=metaData
   ///   getMeta(atKey);
   ///
