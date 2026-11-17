@@ -69,9 +69,9 @@ bool _bypassesCache(String name, GetRequestOptions? options) =>
     name.startsWith('$apskRecordName.');
 
 class SecondaryManager {
-  /// - If [useRemoteAtServer] is true, return RemoteLocalPref.remoteOnly
-  /// - Else return [remoteLocalPref], or [RemoteLocalPref.localOnly]
-  /// if [remoteLocalPref] is null
+  /// [RemoteLocalPref.remoteOnly] when [useRemoteAtServer] is true and
+  /// [RemoteLocalPref.localOnly] when it is false; when it is null,
+  /// [remoteLocalPref], or [RemoteLocalPref.localOnly] when that is null too.
   static RemoteLocalPref getRemoteLocalPrefForOp(
     bool? useRemoteAtServer,
     RemoteLocalPref? remoteLocalPref,

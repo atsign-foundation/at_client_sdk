@@ -1,7 +1,8 @@
 import 'package:meta/meta.dart' show internal;
 
 /// Parameters that application code can optionally provide when calling
-/// `AtClient.get`, `AtClient.getMeta`, `AtClient.put` and `AtClient.delete`
+/// `AtClient.get`, `AtClient.getMeta`, `AtClient.put`, `AtClient.putText`,
+/// `AtClient.putBinary`, `AtClient.putMeta` and `AtClient.delete`
 abstract class RequestOptions {
   bool? _useRemoteAtServer;
 }
@@ -20,26 +21,29 @@ class GetRequestOptions extends RequestOptions {
   /// atServer.
   ///
   /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
-  /// is enforced. It reads false while unset, so copying it into another
-  /// options object sets the copy explicitly.
+  /// is enforced, except that a `local:` key is always read from local storage
+  /// and an uncached key owned by another atSign is always looked up on the
+  /// atServer. It reads false while unset, so copying it into another options
+  /// object sets the copy explicitly.
   ///
   /// A record this client wrote to local storage stays off the atServer until
   /// sync pushes it, so a remote read can fail to find what a local read would
-  /// return; an uncached key owned by another atSign is unaffected, because
-  /// that read is a lookup and always goes to the atServer.
+  /// return.
   bool get useRemoteAtServer => _useRemoteAtServer ?? false;
 
   set useRemoteAtServer(bool value) => _useRemoteAtServer = value;
 }
 
 /// Parameters that application code can optionally provide when calling
-/// `AtClient.put`
+/// `AtClient.put`, `AtClient.putText`, `AtClient.putBinary` or
+/// `AtClient.putMeta`
 class PutRequestOptions extends RequestOptions {
   /// Whether to send this update request directly to the remote atServer.
   ///
   /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
-  /// is enforced. It reads false while unset, so copying it into another
-  /// options object sets the copy explicitly.
+  /// is enforced, except that a `local:` key never leaves the device. It reads
+  /// false while unset, so copying it into another options object sets the
+  /// copy explicitly.
   ///
   /// A put routed to local storage reaches the atServer only when sync next
   /// pushes it, so a reader that is not this client's own store — another
@@ -112,8 +116,9 @@ class DeleteRequestOptions extends RequestOptions {
   /// Whether to send this delete request directly to the remote atServer.
   ///
   /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
-  /// is enforced. It reads false while unset, so copying it into another
-  /// options object sets the copy explicitly.
+  /// is enforced, except that a `local:` key never leaves the device. It reads
+  /// false while unset, so copying it into another options object sets the
+  /// copy explicitly.
   ///
   /// A delete routed to local storage reaches the atServer only when sync next
   /// pushes it, so another client or a peer can still read the record after
