@@ -37,7 +37,11 @@ final class ChaCha20Poly1305Algo {
       nonce: nonce,
       aad: aad,
     );
-    return Uint8List.fromList(box.cipherText + box.mac.bytes);
+    final List<int> cipherText = box.cipherText;
+    final List<int> tag = box.mac.bytes;
+    return Uint8List(cipherText.length + tag.length)
+      ..setRange(0, cipherText.length, cipherText)
+      ..setRange(cipherText.length, cipherText.length + tag.length, tag);
   }
 
   /// Opens `ciphertext || tag` under [key] and [nonce].
