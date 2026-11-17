@@ -8,8 +8,9 @@
 ///
 /// Samples alternate between the implementations, and which goes first
 /// alternates too. Each implementation's line prints the median, minimum and
-/// maximum time per call, and a SHA-256 of the output, so two builds can be
-/// compared for both time and bytes.
+/// maximum time per call, and the SHA-256 every sample's output shares, so two
+/// builds can be compared for both time and bytes. A sample whose output
+/// differs from the first sample's stops the run with a [StateError].
 library;
 
 import 'dart:convert';
@@ -65,7 +66,12 @@ Future<void> main(List<String> args) async {
       final Uint8List out = await algos[name]!.encrypt(plain, iv: iv);
       sw.stop();
       micros[name]!.add(sw.elapsedMicroseconds);
-      digests[name] ??= sha256.convert(out).toString();
+      final String digest = sha256.convert(out).toString();
+      final String first = digests.putIfAbsent(name, () => digest);
+      if (digest != first) {
+        throw StateError('impl=$name sample $i output SHA-256 $digest differs '
+            "from the first sample's $first");
+      }
     }
   }
 
