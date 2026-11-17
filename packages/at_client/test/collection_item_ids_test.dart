@@ -516,6 +516,30 @@ void main() {
     expect(store, isEmpty);
   });
 
+  test(
+      'Given an AtClient whose reads throw a raw KeyNotFoundException and no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
+      () async {
+    final c = await todos();
+    Future<AtValue> missing(Invocation inv) async => throw KeyNotFoundException(
+        'no value for ${inv.positionalArguments[0]}');
+    when(() => atClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer(missing);
+    when(() => atClient.get(any())).thenAnswer(missing);
+
+    await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long),
+        reason: 'a raw KeyNotFoundException is what an AtClient other than '
+            'AtClientImpl may throw for a missing key');
+    verify(() => atClient.get(any(),
+            getRequestOptions: any(
+                named: 'getRequestOptions',
+                that: isA<GetRequestOptions>().having(
+                    (o) => o.useRemoteAtServer, 'useRemoteAtServer', isTrue))))
+        .called(1);
+    expectNothingWritten();
+    expect(store, isEmpty);
+  });
+
   /// Makes every read sent to the atServer fail with [error], as
   /// `AtClient.get` rethrows it; a local read still reads [store].
   void remoteReadsFailWith(Object error) {

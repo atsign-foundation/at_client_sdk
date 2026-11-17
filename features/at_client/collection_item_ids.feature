@@ -240,6 +240,13 @@ Feature: AtCollection checks every item id before using it in a key
     Then ArgumentError is thrown
     And nothing is written
 
+  Scenario: Given an AtClient whose reads throw a raw KeyNotFoundException and no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice over an AtClient other than AtClientImpl, whose local and atServer reads throw a raw KeyNotFoundException for a missing key
+    And no item with the id of 65 "a" characters
+    When upsert is called with that id
+    Then ArgumentError is thrown
+    And nothing is written
+
   Scenario: Given no item with a 65-character id and an atServer that cannot be reached (AtConnectException), when upsert is called with that id, then ArgumentError is thrown and nothing is written
     Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
     And a read sent to the atServer fails with an AtConnectException
