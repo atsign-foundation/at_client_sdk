@@ -35,19 +35,22 @@ void main() {
 
   String envelope(String obj) => jsonEncode({'type': 'n/a', 'obj': obj});
 
-  /// [k]'s value in [store], as a local read returns it.
-  AtValue readStore(AtKey k) {
-    final stored = store[k.toString()];
-    if (stored == null) throw KeyNotFoundException('no value for $k');
-    return AtValue()
-      ..value = stored.value
-      ..metadata = stored.key.metadata;
-  }
-
   /// [error] as `AtClient.get` rethrows it: an [AtException] rebuilt by
   /// [AtExceptionManager.createException], anything else as it is.
   Object asGetThrows(Object error) =>
       error is AtException ? AtExceptionManager.createException(error) : error;
+
+  /// [k]'s value in [store], or the not-found error, as `AtClient.get`
+  /// returns or throws them.
+  AtValue readStore(AtKey k) {
+    final stored = store[k.toString()];
+    if (stored == null) {
+      throw asGetThrows(KeyNotFoundException('no value for $k'));
+    }
+    return AtValue()
+      ..value = stored.value
+      ..metadata = stored.key.metadata;
+  }
 
   /// Writes a record directly, as another client writes it; a `cached:` key
   /// keeps its prefix, as a received copy does.
@@ -90,11 +93,7 @@ void main() {
       if (serverOnly.contains(k.toString())) {
         return AtValue()..value = envelope('on the atServer');
       }
-      try {
-        return readStore(k);
-      } catch (e) {
-        throw asGetThrows(e);
-      }
+      return readStore(k);
     });
     when(() => atClient.put(any(), any())).thenAnswer((inv) async {
       final k = inv.positionalArguments[0] as AtKey;
