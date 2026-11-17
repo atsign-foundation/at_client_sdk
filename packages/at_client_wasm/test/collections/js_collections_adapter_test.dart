@@ -223,8 +223,8 @@ void main() {
         'share': () => todos.share(mine('B1'), ['@bob']),
         'remove': () => todos.remove(mine('B1')),
       }.entries) {
-        await expectLater(call.value(),
-            _rejectsWith(CollectionErrorCodes.notFound, id: 'b1'),
+        await expectLater(
+            call.value(), _rejectsWith(CollectionErrorCodes.notFound, id: 'b1'),
             reason: call.key);
       }
     });
@@ -236,6 +236,25 @@ void main() {
 
       await expectLater(todos.update(bobs('B1'), {'t': 2}),
           _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1'));
+    });
+
+    test(
+        'An update, share or remove of the missing id "b1" owned by "@ALICE" rejects with COLLECTION_ITEM_NOT_FOUND and the owner "@alice"',
+        () async {
+      final todos = await open();
+      final address = (id: 'b1', owner: '@ALICE');
+
+      for (final call in <String, Future<Object?> Function()>{
+        'update': () => todos.update(address, {'t': 2}),
+        'share': () => todos.share(address, ['@bob']),
+        'remove': () => todos.remove(address),
+      }.entries) {
+        await expectLater(
+            call.value(),
+            _rejectsWith(CollectionErrorCodes.notFound,
+                id: 'b1', owner: '@alice'),
+            reason: call.key);
+      }
     });
 
     test('A get addresses an item already stored under a 65-character id',

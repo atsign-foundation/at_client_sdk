@@ -273,7 +273,7 @@ final class JsCollectionsAdapter {
           return _item(await write(current));
         },
         id: _errorId(address.id),
-        owner: address.owner,
+        owner: _errorOwner(address.owner),
         stateError: stateError,
       );
 
@@ -434,6 +434,18 @@ final class JsCollectionsAdapter {
   /// The id an error reports for the caller's [id]: folded to lower case, as
   /// AtCollection folds it, so it matches the id of the item listed.
   static String? _errorId(String? id) => id?.toLowerCase();
+
+  /// The owner an error reports for the caller's [owner]: in `@name` form, as
+  /// AtCollection normalizes it, so it matches the owner of the item listed.
+  /// An owner that is not an atSign stays as given.
+  static String? _errorOwner(String? owner) {
+    if (owner == null) return null;
+    try {
+      return owner.toAtsign();
+    } on InvalidAtSignException {
+      return owner;
+    }
+  }
 
   /// Runs [body], turning anything it throws into a [JsCollectionsError].
   /// [stateError] is the code for a StateError from the operation, which
