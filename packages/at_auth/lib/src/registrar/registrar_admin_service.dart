@@ -95,6 +95,8 @@ class RegistrarAdminService {
 
   late final http.Client _http;
 
+  /// Throws [AtException] if [superApiKey] is empty, or [ArgumentError] if
+  /// it contains a control character or [registrarUrl] is malformed.
   RegistrarAdminService({
     required this.registrarUrl,
     required String superApiKey,
@@ -104,6 +106,10 @@ class RegistrarAdminService {
     if (_superApiKey.trim().isEmpty) {
       throw AtException(
           'Registrar super API key is required and cannot be empty.');
+    }
+    if (_superApiKey.codeUnits.any((c) => c < 0x20 || c == 0x7F)) {
+      throw ArgumentError(
+          'superApiKey must not contain control characters', 'superApiKey');
     }
     _validateRegistrarUrl(registrarUrl);
     _http = httpClient ?? http.Client();
@@ -130,13 +136,13 @@ class RegistrarAdminService {
     }
     if (hostAndPort.length == 2) {
       final rawPort = hostAndPort[1];
-      if (!_portPattern.hasMatch(rawPort)) {
+      if (!_portPattern.hasMatch(rawPort) || rawPort.length > 5) {
         throw ArgumentError(
             'registrarUrl port must be numeric and between 1 and 65535',
             'registrarUrl');
       }
-      final port = int.parse(rawPort);
-      if (port < 1 || port > 65535) {
+      final port = int.tryParse(rawPort);
+      if (port == null || port < 1 || port > 65535) {
         throw ArgumentError(
             'registrarUrl port must be numeric and between 1 and 65535',
             'registrarUrl');

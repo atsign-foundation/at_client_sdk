@@ -63,7 +63,9 @@
 - feat: the `RegistrarAdminService` constructor refuses a `registrarUrl`
   that is not a bare host, optionally followed by `:<port>`, which existing
   `/manage-atsigns/` callers will meet; the `ArgumentError` never echoes the
-  offending value.
+  offending value. A port over 5 digits is refused the same way, without
+  parsing it. A `superApiKey` containing a control character is refused
+  with an `ArgumentError` naming `superApiKey`, which never echoes the key.
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
   5.0.0.
 - feat: `package:at_auth/at_registrar.dart`, a library exporting

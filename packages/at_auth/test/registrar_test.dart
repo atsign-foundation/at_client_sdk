@@ -288,6 +288,59 @@ void main() {
         }
       });
     }
+
+    test(
+        'throws ArgumentError naming registrarUrl for an oversized port, '
+        'never echoing the digits and never a FormatException', () {
+      const oversizedPort = '99999999999999999999';
+      try {
+        RegistrarAdminService(
+          registrarUrl: '$_registrarUrl:$oversizedPort',
+          superApiKey: _apiKey,
+          httpClient: _mockResponse({}),
+        );
+        fail('expected an ArgumentError');
+      } catch (e) {
+        expect(e, isNot(isA<FormatException>()));
+        expect(
+          e,
+          isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+        );
+        expect(e.toString().contains(oversizedPort), isFalse);
+      }
+    });
+
+    for (final entry in {
+      'newline': 'k\n',
+      'crlfHeaderInjection': 'k\r\nX-Injected: 1',
+    }.entries) {
+      test(
+          'throws ArgumentError naming superApiKey for a ${entry.key} key, '
+          'never echoing it, and sends no request', () async {
+        var requestSent = false;
+        final client = MockClient((_) async {
+          requestSent = true;
+          return http.Response(jsonEncode({}), 200);
+        });
+        try {
+          RegistrarAdminService(
+            registrarUrl: _registrarUrl,
+            superApiKey: entry.value,
+            httpClient: client,
+          );
+          fail('expected an ArgumentError');
+        } catch (e) {
+          expect(
+            e,
+            isA<ArgumentError>().having((e) => e.name, 'name', 'superApiKey'),
+          );
+          expect(e.toString().contains(entry.value), isFalse);
+        }
+        expect(requestSent, isFalse,
+            reason: 'constructor validation must reject before any request '
+                'is sent');
+      });
+    }
   });
 
   group('sendActivationOtp', () {
@@ -789,6 +842,35 @@ void main() {
         service.registerAtsign(atsign: '@alice'.toAtsign()),
         throwsA(isA<RegistrarException>()
             .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+      );
+    });
+
+    test(
+        'requestTimeout bounds the send and the body read together, not '
+        'as separate budgets', () async {
+      const timeout = Duration(milliseconds: 100);
+      final client = MockClient.streaming((request, bodyStream) async {
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        final controller = StreamController<List<int>>();
+        Timer(const Duration(milliseconds: 60), () {
+          controller.add(utf8.encode(
+              jsonEncode({'status': 'success', 'cramkey': '@alice:K'})));
+          controller.close();
+        });
+        return http.StreamedResponse(controller.stream, 200);
+      });
+      final service = RegistrarAdminService(
+        registrarUrl: _registrarUrl,
+        superApiKey: _apiKey,
+        requestTimeout: timeout,
+        httpClient: client,
+      );
+      await expectLater(
+        service.registerAtsign(atsign: '@alice'.toAtsign()),
+        throwsA(isA<RegistrarException>()
+            .having((e) => e.reason, 'reason', RegistrarFailure.timeout)),
+        reason: 'each half taking 0.6x the timeout must still exceed it when '
+            'the budget is shared, not reset between send and read',
       );
     });
 
