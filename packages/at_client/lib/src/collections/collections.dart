@@ -14,6 +14,8 @@ import 'dart:typed_data';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show classifyConnectionFailure;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
@@ -1084,7 +1086,8 @@ interface class AtCollection<T> {
   /// `@`, whitespace or a control character. When neither local storage
   /// nor the atServer holds an item with the id, throws [ArgumentError]
   /// before any write unless it meets [create]'s rule for a new item's id;
-  /// an item that cannot be read counts as one that exists.
+  /// a local item that cannot be read counts as one that exists, and an
+  /// atServer that cannot be reached counts as holding none.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -3266,7 +3269,11 @@ interface class AtCollection<T> {
   /// cache, finds it or fails for a reason other than its absence.
   ///
   /// When the local read finds nothing, the atServer is asked too, so an item
-  /// that sync has not yet brought to this device still counts as found.
+  /// that sync has not yet brought to this device still counts as found. On
+  /// that pass only an answer from the atServer counts: a failure to reach it
+  /// or to be accepted by it says nothing about the item, so it counts as
+  /// not found, while any other failure (a value that cannot be decrypted,
+  /// say) means the atServer answered and counts as found.
   Future<bool> _selfKeyFoundOrUnreadable(String id) async {
     final key = '$id.$namespace$atSign';
     for (final remote in [false, true]) {
@@ -3280,9 +3287,12 @@ interface class AtCollection<T> {
         return true;
       } catch (e) {
         if (e is StoppedException) rethrow;
-        if (e is! AtKeyNotFoundException && e is! KeyNotFoundException) {
-          return true;
+        if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
+        if (remote) {
+          final state = classifyConnectionFailure(e);
+          if (state != null && !state.isOnline) continue;
         }
+        return true;
       }
     }
     return false;

@@ -499,13 +499,38 @@ void main() {
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
     verify(() => atClient.get(any())).called(1);
     verify(() => atClient.get(any(),
-        getRequestOptions: any(
-            named: 'getRequestOptions',
-            that: isA<GetRequestOptions>().having((o) => o.useRemoteAtServer,
-                'useRemoteAtServer', isTrue)))).called(1);
+            getRequestOptions: any(
+                named: 'getRequestOptions',
+                that: isA<GetRequestOptions>().having(
+                    (o) => o.useRemoteAtServer, 'useRemoteAtServer', isTrue))))
+        .called(1);
     expectNothingWritten();
     expect(store, isEmpty);
   });
+
+  for (final failure in <String, Exception>{
+    'AtConnectException': AtConnectException('cannot reach the atServer'),
+    'AtClientException wrapping a socket failure':
+        AtClientException.message('SocketException: Connection refused'),
+  }.entries) {
+    test(
+        'Given no item with a 65-character id and an atServer that cannot be reached (${failure.key}), when upsert is called with that id, then ArgumentError is thrown and nothing is written',
+        () async {
+      final c = await todos();
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final options =
+            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        if (options?.useRemoteAtServer == true) throw failure.value;
+        return readStore(inv.positionalArguments.first as AtKey);
+      });
+
+      await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
+      expectNothingWritten();
+      expect(store, isEmpty);
+    });
+  }
 
   test(
       "Given no id, when create is called, then the item's id is 8 characters of a-z and 0-9",
