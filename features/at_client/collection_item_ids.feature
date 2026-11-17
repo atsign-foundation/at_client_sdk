@@ -35,13 +35,14 @@ Feature: AtCollection checks every item id before using it in a key
   the namespace, and any Atsign that can notify this one. create refuses an id
   longer than 64 characters before any read or write, and upsert refuses one
   once neither local storage nor the atServer holds an item under it (an
-  atServer read that fails, unless it fails to decrypt, keeps the refusal);
-  reads accept an id of any length, and the check is linear in the id's
-  length, an item another Atsign shares under an id starting with "_" can
-  still be read by that id, and an event whose ids the check refuses is not
-  emitted, so no event hands the app an id its reads refuse; each such event
-  costs one warning and writes nothing to the local keystore, while each other
-  notification costs a log line and a local write (the scenarios tagged @dos).
+  atServer read that fails other than with an AtDecryptionException keeps the
+  refusal); reads accept an id of any length, and the check is linear in the
+  id's length, an item another Atsign shares under an id starting with "_"
+  can still be read by that id, and an event whose ids the check refuses is
+  not emitted, so no event hands the app an id its reads refuse; each such
+  event costs one warning and writes nothing to the local keystore, while each
+  other notification costs a log line and a local write (the scenarios tagged
+  @dos).
   Forgery: the app's own code supplies every id, and it holds this Atsign's
   keys and could write any key directly; the check matters when an app builds
   an id from input it did not write. Every call refuses an id containing ".",

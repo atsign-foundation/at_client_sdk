@@ -7,10 +7,10 @@
   64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit;
   `upsert` applies that rule only when neither local storage nor the atServer
   holds an item with the id, counts a local item it cannot read as one that
-  exists, and keeps the refusal when its atServer read fails other than to
-  decrypt; a `subName` is folded too and must hold only characters a key's
-  name can hold; no event or listed item carries a refused id, and event ids
-  arrive folded (`SKILL.md`; `references/02`, `07`).
+  exists, and keeps the refusal when its atServer read fails other than with
+  an `AtDecryptionException`; a `subName` is folded too and must hold only
+  characters a key's name can hold; no event or listed item carries a refused
+  id, and event ids arrive folded (`SKILL.md`; `references/02`, `07`).
 - On a `remoteOnly` client, request options that leave `useRemoteAtServer`
   unset follow the preference; only an explicit value overrides it
   (`references/12`).

@@ -1085,8 +1085,8 @@ interface class AtCollection<T> {
   /// nor the atServer holds an item with the id, throws [ArgumentError]
   /// before any write unless it meets [create]'s rule for a new item's id;
   /// a local item that cannot be read counts as one that exists, and an
-  /// atServer read counts the item as held only on a value or a value that
-  /// cannot be decrypted.
+  /// atServer read counts the item as held only on a value or an
+  /// [AtDecryptionException].
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -3286,7 +3286,7 @@ interface class AtCollection<T> {
         if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
         if (!remote) return true;
         // NOTE: on the atServer read, the only failure that counts as found
-        // is one to decrypt the value.
+        // is an AtDecryptionException.
         if (e is AtDecryptionException) return true;
       }
     }
