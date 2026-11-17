@@ -1,17 +1,17 @@
 Feature: getMeta reads a key's metadata without its value
 
   getMeta(key, getRequestOptions) returns the metadata stored for a key and
-  reads nothing else, so it decrypts nothing and answers for a record
-  whose value this client cannot open. It sends the lookup where get would:
+  reads nothing else, so it decrypts nothing and answers for a record whose
+  value this client cannot open. It sends the lookup where get would:
   useRemoteAtServer set to true asks the atServer, set to false asks local
-  storage, and unset follows AtClientPreference.remoteLocalPref; a key another
-  Atsign owns is always looked up on the atServer, and a local: key is never
-  sent. It returns null when the record is held but not visible now (not yet
-  available, or expired and not yet removed). It throws AtKeyNotFoundException
-  when no record is held, AtKeyException for an invalid key, AtClientException
-  when the lookup fails any other way, and StoppedException once the client has
-  stopped. It fills a missing sharedBy on the key it is given, as get does, and
-  changes nothing else on it.
+  storage, and unset follows AtClientPreference.remoteLocalPref; an uncached
+  key another Atsign owns is always looked up on the atServer, and a local: key
+  is never sent. It returns null when the record is held but not visible now
+  (not yet available, or expired and not yet removed). It throws
+  AtKeyNotFoundException when no record is held, AtKeyException for an invalid
+  key, AtClientException when the lookup fails any other way, and
+  StoppedException once the client has stopped. It fills a missing sharedBy on
+  the key it is given, as get does, and changes nothing else on it.
 
   Races: a record can be written, deleted or expire between two calls, or
   between getMeta and the call that acts on its answer. Each call answers for
