@@ -6,7 +6,8 @@ Feature: AES-256-GCM encryption builds its output in one buffer
   Uint8List of exactly their combined length, so the assembly costs one copy
   of the ciphertext and builds no concatenated list.
   With the same key and nonce and no associated data, the two classes produce
-  the same bytes, so each decrypts the other's output.
+  the same bytes, so each decrypts the other's output. With associated data,
+  each returns a published test vector's ciphertext followed by its tag.
 
   Races: none arise; each call allocates its own output and shares it with
   nothing.
@@ -26,3 +27,8 @@ Feature: AES-256-GCM encryption builds its output in one buffer
     When at_chops encrypts it with the FFI implementation and with the pure-Dart implementation
     Then each output is byte-identical to the ciphertext followed by the 16-byte tag
     And each implementation decrypts the other's output
+
+  Scenario: AES-256-GCM encryption with associated data returns the published ciphertext followed by the tag
+    Given the 256-bit key, 96-bit nonce, plaintext and associated data of a published AES-GCM test vector
+    When at_chops encrypts it with the FFI implementation and with the pure-Dart implementation
+    Then each output is the vector's ciphertext followed by its 16-byte tag

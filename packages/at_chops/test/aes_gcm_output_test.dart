@@ -42,7 +42,43 @@ void main() {
     expect(await pure.decrypt(ffiOut, iv: iv), plain,
         reason: 'pure-Dart does not decrypt the FFI output');
   });
+
+  test(
+      'AES-256-GCM encryption with associated data returns the published ciphertext followed by the tag',
+      () async {
+    final DynamicLibrary? lib = tryLoadLibCrypto();
+    if (lib == null) fail('libcrypto not available on this host');
+
+    // Test Case 16 of McGrew and Viega, "The Galois/Counter Mode of Operation
+    // (GCM)", appendix B.
+    final AESKey key = AESKey(base64Encode(_hex(
+        'feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308')));
+    final InitialisationVector iv =
+        InitialisationVector(_hex('cafebabefacedbaddecaf888'));
+    final Uint8List plain =
+        _hex('d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a72'
+            '1c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39');
+    final Uint8List aad = _hex('feedfacedeadbeeffeedfacedeadbeefabaddad2');
+    final Uint8List cipherText =
+        _hex('522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa'
+            '8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662');
+    final Uint8List tag = _hex('76fc6ece0f4e1768cddf8853bb2d551b');
+    final Uint8List expected = Uint8List.fromList([...cipherText, ...tag]);
+
+    final Uint8List ffiOut = await AesGcm256FfiAlgo.fromLib(lib, key)
+        .encrypt(plain, iv: iv, aad: aad);
+    final Uint8List pureOut =
+        await AesGcm256EncryptionAlgo(key).encrypt(plain, iv: iv, aad: aad);
+
+    expect(ffiOut, expected,
+        reason: "FFI output is not the vector's ciphertext and tag");
+    expect(pureOut, expected,
+        reason: "pure-Dart output is not the vector's ciphertext and tag");
+  });
 }
+
+Uint8List _hex(String s) => Uint8List.fromList(List<int>.generate(s.length ~/ 2,
+    (int i) => int.parse(s.substring(2 * i, 2 * i + 2), radix: 16)));
 
 /// AES-256-GCM with a 12-byte [nonce] and no associated data, built from
 /// AES-256-CTR and GHASH as NIST SP 800-38D defines them.
