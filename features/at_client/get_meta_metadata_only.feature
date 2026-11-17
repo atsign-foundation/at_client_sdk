@@ -127,7 +127,7 @@ Feature: getMeta reads a key's metadata without its value
       | local storage |
       | the atServer  |
 
-  Scenario Outline: Given a lookup that fails with an error other than not found about the record, when getMeta is called, then it throws AtClientException
+  Scenario Outline: Given a lookup that fails with an error other than not found, when getMeta is called, then it throws AtClientException
     Given a client of @alice
     And a lookup on <leg> fails because <cause>
     When getMeta is called with a self key and options that choose <leg>

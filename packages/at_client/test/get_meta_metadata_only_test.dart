@@ -359,7 +359,7 @@ void main() {
   }
 
   const failureOutline =
-      'Given a lookup that fails with an error other than not found about the record, when getMeta is called, then it throws AtClientException';
+      'Given a lookup that fails with an error other than not found, when getMeta is called, then it throws AtClientException';
   for (final row in <(String, String, Exception)>[
     (
       'the atServer',
