@@ -24,6 +24,19 @@
 - fix: `collection` folds the namespace to lower case, as atProtocol keys
   are, so `Todos.wavi` and `todos.wavi` hand back the same collection, whose
   `namespace` is `todos.wavi`.
+- fix: `AtCollection` folds an item id to lower case wherever it takes one,
+  and refuses, with an `ArgumentError` before any read or write, an id that is
+  empty or contains `.`, `:`, `@`, whitespace or a control character;
+  `create`, `upsert` and `draft` also refuse an id that starts with `_`. A new
+  item's id must be 1 to 64 characters of a-z, 0-9, `-` and `_`, starting with
+  a letter or digit. An item already stored under an id the check accepts
+  keeps its id. `subCollection` folds a `subName` to lower case, and refuses
+  one that is empty, contains `.`, `:`, `@`, whitespace or a control
+  character, or holds a character a key's name cannot. An event whose item id,
+  ancestor id or `subName` the check refuses is not emitted, and a warning
+  names the id and its owner; `getItems` and `getItemsAsStream` leave out an
+  item stored under such an id, with the same warning. `AtCollection` matches
+  a namespace or `subName` literally when it lists keys.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than

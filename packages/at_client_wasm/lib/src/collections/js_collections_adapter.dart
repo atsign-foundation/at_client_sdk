@@ -31,8 +31,8 @@ typedef JsEvent = Map<String, Object?>;
 abstract final class CollectionErrorCodes {
   /// A malformed argument: an unknown eventSource or operator, a
   /// non-positive expirationMs, an empty type or path segment, a value an
-  /// operator cannot compare, an invalid atSign, or an item id outside
-  /// [JsCollectionsAdapter.idPattern].
+  /// operator cannot compare, an invalid atSign, or an item id
+  /// AtCollection refuses.
   static const invalidArgument = 'COLLECTION_INVALID_ARGUMENT';
 
   /// No item with that id and owner.
@@ -108,9 +108,6 @@ final class JsCollectionsAdapter {
 
   final AtCollection<Map<String, dynamic>> _collection;
 
-  /// The ids the adapter accepts on every address.
-  static final idPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
-
   static const _eventSources = {
     'data': EventSource.data,
     'notifs': EventSource.notifs,
@@ -160,21 +157,19 @@ final class JsCollectionsAdapter {
   }) =>
       _guard(
         () async {
-          if (id != null) _checkId(id);
           return _item(await _collection.create(
             obj: data,
             id: id,
             sharedWith: {for (final a in sharedWith) a.toAtsign()},
           ));
         },
-        id: id,
+        id: _errorId(id),
         owner: _collection.atSign,
         stateError: id == null ? null : CollectionErrorCodes.alreadyExists,
       );
 
   /// The item at [address], or null when there is none.
   Future<JsItem?> get(JsItemAddress address) => _guard(() async {
-        _checkId(address.id);
         final item =
             await _collection.getOrNull(address.id, address.owner.toAtsign());
         return item == null ? null : _item(item);
@@ -268,18 +263,17 @@ final class JsCollectionsAdapter {
   }) =>
       _guard(
         () async {
-          _checkId(address.id);
           final owner = address.owner.toAtsign();
           if (owner != _collection.atSign) {
             throw JsCollectionsError(CollectionErrorCodes.notOwner,
                 'item ${address.id} is owned by $owner, not ${_collection.atSign}',
-                id: address.id, owner: owner);
+                id: _errorId(address.id), owner: owner);
           }
           final current = await _collection.get(address.id, owner);
           return _item(await write(current));
         },
-        id: address.id,
-        owner: address.owner,
+        id: _errorId(address.id),
+        owner: _errorOwner(address.owner),
         stateError: stateError,
       );
 
@@ -333,13 +327,6 @@ final class JsCollectionsAdapter {
         owner: error.key.sharedBy ?? '',
         code: CollectionErrorCodes.unreadable,
       );
-
-  static void _checkId(String id) {
-    if (!idPattern.hasMatch(id)) {
-      throw JsCollectionsError(CollectionErrorCodes.invalidArgument,
-          'an item id must match ${idPattern.pattern}');
-    }
-  }
 
   static Predicate _predicate(JsWhereClause clause) {
     final segments = clause.path.split('.');
@@ -442,6 +429,22 @@ final class JsCollectionsAdapter {
         },
       _ => {'type': 'unknown', ...head},
     };
+  }
+
+  /// The id an error reports for the caller's [id]: folded to lower case, as
+  /// AtCollection folds it, so it matches the id of the item listed.
+  static String? _errorId(String? id) => id?.toLowerCase();
+
+  /// The owner an error reports for the caller's [owner]: in `@name` form, as
+  /// AtCollection normalizes it, so it matches the owner of the item listed.
+  /// An owner that is not an atSign stays as given.
+  static String? _errorOwner(String? owner) {
+    if (owner == null) return null;
+    try {
+      return owner.toAtsign();
+    } on InvalidAtSignException {
+      return owner;
+    }
   }
 
   /// Runs [body], turning anything it throws into a [JsCollectionsError].

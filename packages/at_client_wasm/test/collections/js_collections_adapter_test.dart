@@ -129,23 +129,14 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('item ids', () {
-    final badIds = [
-      'public:x',
-      '@bob:x',
-      '',
-      'A1',
-      'a.b',
-      'x y',
-      'a' * 65,
-      '_x',
-    ];
+    final long = 'a' * 65;
 
     test(
-        'An item id outside the allowed set rejects with COLLECTION_INVALID_ARGUMENT',
+        'An item id AtCollection refuses rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await open();
 
-      for (final id in badIds) {
+      for (final id in ['a:b', 'a@b', '', 'a.b', 'a b']) {
         for (final call in <String, Future<Object?> Function()>{
           'create': () => todos.create({'t': 1}, id: id),
           'get': () => todos.get(mine(id)),
@@ -154,11 +145,133 @@ void main() {
           'remove': () => todos.remove(mine(id)),
         }.entries) {
           await expectLater(
-              call.value(), _rejectsWith(CollectionErrorCodes.invalidArgument),
+              call.value(),
+              _rejectsWith(CollectionErrorCodes.invalidArgument,
+                  kind: 'ArgumentError'),
               reason: '${call.key} of "$id"');
         }
       }
+      verifyNever(() => alice.mock.put(any(), any()));
       expect(server.keyCount, 0);
+    });
+
+    test(
+        'A create with an id starting with "_" rejects with COLLECTION_INVALID_ARGUMENT',
+        () async {
+      final todos = await open();
+
+      await expectLater(
+          todos.create({'t': 1}, id: '_a'),
+          _rejectsWith(CollectionErrorCodes.invalidArgument,
+              kind: 'ArgumentError'));
+
+      verifyNever(() => alice.mock.put(any(), any()));
+      expect(server.keyCount, 0);
+    });
+
+    test(
+        'A create with an id of 65 characters rejects with COLLECTION_INVALID_ARGUMENT',
+        () async {
+      final todos = await open();
+
+      await expectLater(
+          todos.create({'t': 1}, id: long),
+          _rejectsWith(CollectionErrorCodes.invalidArgument,
+              kind: 'ArgumentError'));
+
+      verifyNever(() => alice.mock.put(any(), any()));
+      expect(server.keyCount, 0);
+    });
+
+    test('A create with the id "A1" returns the item with the id "a1"',
+        () async {
+      final todos = await open();
+
+      final item = await todos.create({'t': 1}, id: 'A1');
+
+      expect(item['id'], 'a1');
+      expect(server.hasKey('a1.$_ns@alice'), isTrue);
+    });
+
+    test('A get with the id "A1" returns the item created as "a1"', () async {
+      final todos = await open();
+      await todos.create({'t': 1}, id: 'a1');
+
+      final item = await todos.get(mine('A1'));
+
+      expect(item?['id'], 'a1');
+      expect(item?['data'], {'t': 1});
+    });
+
+    test(
+        'A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"',
+        () async {
+      final todos = await open();
+      await todos.create({'t': 1}, id: 'a1');
+
+      await expectLater(todos.create({'t': 2}, id: 'A1'),
+          _rejectsWith(CollectionErrorCodes.alreadyExists, id: 'a1'));
+    });
+
+    test(
+        'An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"',
+        () async {
+      final todos = await open();
+
+      for (final call in <String, Future<Object?> Function()>{
+        'update': () => todos.update(mine('B1'), {'t': 2}),
+        'share': () => todos.share(mine('B1'), ['@bob']),
+        'remove': () => todos.remove(mine('B1')),
+      }.entries) {
+        await expectLater(
+            call.value(), _rejectsWith(CollectionErrorCodes.notFound, id: 'b1'),
+            reason: call.key);
+      }
+    });
+
+    test(
+        'An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"',
+        () async {
+      final todos = await open();
+
+      await expectLater(todos.update(bobs('B1'), {'t': 2}),
+          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1'));
+    });
+
+    test(
+        'An update, share or remove of the missing id "b1" owned by "@ALICE" rejects with COLLECTION_ITEM_NOT_FOUND and the owner "@alice"',
+        () async {
+      final todos = await open();
+      final address = (id: 'b1', owner: '@ALICE');
+
+      for (final call in <String, Future<Object?> Function()>{
+        'update': () => todos.update(address, {'t': 2}),
+        'share': () => todos.share(address, ['@bob']),
+        'remove': () => todos.remove(address),
+      }.entries) {
+        await expectLater(
+            call.value(),
+            _rejectsWith(CollectionErrorCodes.notFound,
+                id: 'b1', owner: '@alice'),
+            reason: call.key);
+      }
+    });
+
+    test('A get addresses an item already stored under a 65-character id',
+        () async {
+      server.putRaw(
+          '$long.$_ns@alice',
+          jsonEncode({
+            'type': 'Todo',
+            'obj': {'t': 1}
+          }));
+      final todos = await open();
+
+      final item = await todos.get(mine(long));
+
+      expect(item?['id'], long);
+      expect(item?['owner'], '@alice');
+      expect(item?['data'], {'t': 1});
     });
 
     test('An item id of 64 allowed characters round-trips', () async {

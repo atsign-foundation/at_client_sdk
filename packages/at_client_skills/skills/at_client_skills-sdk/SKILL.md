@@ -262,7 +262,7 @@ Read [references/03-query-api.md](references/03-query-api.md) for all terminals
 // Create a sub-collection — NEVER call atClient.collection(composedNamespace)
 final notes = todos.subCollection<TodoNote>(
   parent: todo,
-  subName: 'notes',                           // must NOT contain '.'
+  subName: 'notes',                           // no '.', ':', '@' or whitespace
   defaultExpiration: const Duration(days: 30),
   fromJson: TodoNote.fromJson,
   typeTag: 'TodoNote',

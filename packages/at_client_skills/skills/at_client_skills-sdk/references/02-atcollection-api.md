@@ -73,7 +73,9 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 Builds an in-memory item without persisting. Use `create` to persist.
 
 - `id` — auto-generates 8-character `[a-z0-9]` id if omitted; **no uniqueness
-  check**
+  check**. A supplied `id` is folded to lower case; `ArgumentError` if it is
+  empty, starts with `_`, or contains `.`, `:`, `@`, whitespace or a control
+  character
 - `expiresAt` — defaults to `now + defaultExpiration`
 - `availableAt` — `null` = visible immediately
 
@@ -87,6 +89,9 @@ Creates and persists a new item. On `EventSource.data` / `EventSource.both`,
 awaits local emission so `watch()` listeners see the update before
 `await create(...)` returns.
 
+- A supplied `id` is folded to lower case and must then be 1 to 64
+  characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit;
+  otherwise `ArgumentError` before any read or write
 - Throws `StateError` if `id` is supplied and already exists on the atServer
 - If `id` omitted: retries on collision (astronomically unlikely); throws
   `StateError` after 10 attempts
@@ -107,6 +112,11 @@ awaits local emission so `watch()` listeners see the update before
 
 Idempotent write. Creates if not exists, rewrites if it does.
 Use for re-runnable publishers that may restart within the TTL window.
+
+- `id` is checked and folded as for `draft`; when neither local storage nor
+  the atServer holds an item with it, it must also meet `create`'s rule for a
+  new id; a local item that cannot be read counts as one that exists, and an
+  atServer that cannot be reached counts as holding none
 
 ### `Future<void> update(CItem<T> item, {bool unshareWithOthers = true})`
 
@@ -147,6 +157,11 @@ theirs in place. (`self` / `atSign` is the ownership test.)
 
 ## Read Methods
 
+Each read that takes an `id` folds it to lower case and throws
+`ArgumentError`, before anything is read, when it is empty or contains `.`,
+`:`, `@`, whitespace or a control character. An id starting with `_` is
+accepted.
+
 ### `Future<CItem<T>> get(String id, Atsign owner)`
 
 Throws `AtKeyNotFoundException` if not found.
@@ -184,10 +199,11 @@ parent's `eventSource`.
 
 **Constraints:**
 
-- `subName` must NOT contain `.`
-- `parent.id` must NOT contain `.`
-- `ArgumentError` thrown if composed namespace would exceed 255-char atServer
-  key limit (max ~11 levels)
+- `subName` is folded to lower case, must be non-empty, and must NOT contain
+  `.`, `:`, `@`, whitespace, a control character or a character a key's name
+  cannot hold
+- `ArgumentError` thrown if the composed namespace would exceed 128 chars, the
+  cap that keeps keys inside the atServer key length (max ~11 levels)
 
 ### `Future<CItem<U>?> getDescendant<U>({required List<CAncestor> ancestry, required String id, required Atsign owner, required Duration leafExpiration, Duration? intermediateExpiration, U Function(Map<String,dynamic>)? leafFromJson, String? leafTypeTag})`
 
