@@ -21,9 +21,9 @@
   `MlKem768FfiAlgo.fromLib` and `XWingFfiAlgo.fromLib` throw an
   `UnsupportedError` on an earlier release. On 3.5.0, `AtPqc.xWing` uses the
   pure-Dart backend.
-- perf: AES-256-GCM `encrypt` is faster on large plaintexts, with
-  `AesGcm256FfiAlgo` and `AesGcm256EncryptionAlgo` alike. The output is
-  unchanged.
+- perf: `AesGcm256FfiAlgo.encrypt` and `AesGcm256EncryptionAlgo.encrypt` build
+  the ciphertext and tag in one buffer, which is faster for a 1.1 MB
+  plaintext. The output is unchanged.
 
 ## 3.7.1
 
