@@ -14,6 +14,8 @@ import 'dart:typed_data';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/preference/at_client_preference.dart'
+    show RemoteLocalPref;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
@@ -1083,14 +1085,16 @@ interface class AtCollection<T> {
   /// or write when [id] is empty, starts with `_`, or contains `.`, `:`,
   /// `@`, whitespace or a control character. When neither local storage
   /// nor the atServer holds an item with the id, throws [ArgumentError]
-  /// before any write unless it meets [create]'s rule for a new item's id.
-  /// Whether an item is held is decided from its metadata, never its value,
-  /// so an item this client cannot decrypt counts as held. A stopped client
-  /// throws [StoppedException] from either lookup rather than counting as
-  /// held; otherwise a local lookup that fails for any reason but the item's
-  /// absence counts as held, and an atServer lookup that fails for any reason
-  /// but the item's absence keeps the refusal, whose message says the
-  /// atServer could not be checked.
+  /// before any write unless it meets [create]'s rule for a new item's id;
+  /// a client whose `remoteLocalPref` is [RemoteLocalPref.remoteOnly] asks
+  /// only the atServer, so an item held in local storage alone does not
+  /// count. Whether an item is held is decided from its metadata, never its
+  /// value, so an item this client cannot decrypt counts as held. A stopped
+  /// client throws [StoppedException] from any lookup rather than counting
+  /// as held; otherwise a local lookup that fails for any reason but the
+  /// item's absence counts as held, and an atServer lookup that fails for
+  /// any reason but the item's absence keeps the refusal, whose message says
+  /// the atServer could not be checked.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -3278,16 +3282,19 @@ interface class AtCollection<T> {
   /// Whether this atSign's own item [id], past the seen-id cache, is held,
   /// judged from its metadata alone: [AtClient.getMeta] never reads a value.
   ///
-  /// A [StoppedException] from either lookup is rethrown. The first lookup
-  /// asks local storage explicitly, so it stays on the device whatever the
-  /// client's `remoteLocalPref` says, and one that fails for any reason but
-  /// the item's absence counts as held. When local storage holds nothing, the
-  /// atServer is asked too, so an item that sync has not yet brought to this
-  /// device is still held. There only metadata counts: a lookup that fails
-  /// for any reason but the item's absence leaves the item unchecked.
+  /// A [StoppedException] from any lookup is rethrown. A client whose
+  /// `remoteLocalPref` is [RemoteLocalPref.remoteOnly] asks the atServer
+  /// alone. Any other client, or one with no preference, asks local storage
+  /// first, where a lookup that fails for any reason but the item's absence
+  /// counts as held; when local storage holds nothing, it asks the atServer
+  /// too, so an item that sync has not yet brought to this device is still
+  /// held. At the atServer only metadata counts: a lookup that fails for any
+  /// reason but the item's absence leaves the item unchecked.
   Future<_Held> _selfKeyHeld(String id) async {
     final key = '$id.$namespace$atSign';
-    for (final remote in [false, true]) {
+    final atServerOnly = atClient.getPreferences()?.remoteLocalPref ==
+        RemoteLocalPref.remoteOnly;
+    for (final remote in atServerOnly ? [true] : [false, true]) {
       try {
         await atClient.getMeta(AtKey.fromString(key),
             getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);

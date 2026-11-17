@@ -295,6 +295,23 @@ Feature: AtCollection checks every item id before using it in a key
     When upsert is called with that id and a new value
     Then upsert throws ArgumentError naming the new-id rules
     And nothing is written
+    And no lookup reached local storage
+
+  Scenario: Given a client whose preference reads from the atServer only and whose local storage holds an item under a 65-character id that the atServer does not, when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly
+    And local storage holds an item under the id of 65 "a" characters
+    And the atServer answers not found for that id
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And nothing is written
+    And no lookup reached local storage
+
+  Scenario: Given a client whose preference reads from the atServer only and an item under a 65-character id on the atServer, when upsert is called with that id, then the item holds the new value and local storage is not asked
+    Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly
+    And the atServer holds an item under the id of 65 "a" characters
+    When upsert is called with that id and a new value
+    Then get with that id returns the new value
+    And no lookup reached local storage
 
   Scenario: Given a stopped client whose local read throws StoppedException, when upsert is called with a 65-character id, then StoppedException is thrown and nothing is written
     Given a collection "todos.demo" of @alice whose client has stopped, so a local read throws StoppedException

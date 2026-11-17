@@ -704,10 +704,16 @@ void main() {
   test(
       'Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails with an error other than not found, then upsert throws ArgumentError naming the new-id rules and nothing is written',
       () async {
+    atClient.getPreferences().remoteLocalPref = RemoteLocalPref.remoteOnly;
     final c = await todos();
     var atServerLookups = 0;
+    var localLookups = 0;
     stubLookups(
       pref: RemoteLocalPref.remoteOnly,
+      local: (k) {
+        localLookups++;
+        return metaInStore(k);
+      },
       remote: (_) {
         atServerLookups++;
         throw asGetThrows(SecondaryConnectException('cannot reach'));
@@ -716,9 +722,55 @@ void main() {
 
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
     expect(atServerLookups, 1,
-        reason: 'the first lookup stays local under a remoteOnly preference');
+        reason: 'a remoteOnly client makes one lookup, on the atServer');
+    expect(localLookups, 0, reason: 'no lookup reached local storage');
     expectNothingWritten();
     expect(store, isEmpty);
+  });
+
+  test(
+      'Given a client whose preference reads from the atServer only and whose local storage holds an item under a 65-character id that the atServer does not, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
+      () async {
+    atClient.getPreferences().remoteLocalPref = RemoteLocalPref.remoteOnly;
+    final c = await todos();
+    final key = '$long.$namespace@alice';
+    seed(key, 'old');
+    var localLookups = 0;
+    stubLookups(
+      pref: RemoteLocalPref.remoteOnly,
+      local: (k) {
+        localLookups++;
+        return metaInStore(k);
+      },
+      remote: (k) =>
+          throw asGetThrows(KeyNotFoundException('no record for $k')),
+    );
+
+    await expectLater(c.upsert(obj: 'new', id: long), refusesNewId(long));
+    expect(localLookups, 0, reason: 'no lookup reached local storage');
+    expectNothingWritten();
+    expect(jsonDecode(store[key]!.value)['obj'], 'old');
+  });
+
+  test(
+      'Given a client whose preference reads from the atServer only and an item under a 65-character id on the atServer, when upsert is called with that id, then the item holds the new value and local storage is not asked',
+      () async {
+    atClient.getPreferences().remoteLocalPref = RemoteLocalPref.remoteOnly;
+    final c = await todos();
+    var localLookups = 0;
+    stubLookups(
+      pref: RemoteLocalPref.remoteOnly,
+      local: (k) {
+        localLookups++;
+        return metaInStore(k);
+      },
+      remote: (_) => Metadata(),
+    );
+
+    await c.upsert(obj: 'new', id: long);
+
+    expect((await c.get(long, alice)).obj, 'new');
+    expect(localLookups, 0, reason: 'no lookup reached local storage');
   });
 
   test(
