@@ -129,11 +129,11 @@ final class AesGcm256FfiAlgo
 
       // 5. Encrypt plaintext.
       final int plainBufLen = plainData.isEmpty ? 1 : plainData.length;
-      final Pointer<Uint8> plainBuf = calloc<Uint8>(plainBufLen);
+      final Pointer<Uint8> plainBuf = malloc<Uint8>(plainBufLen);
       if (plainData.isNotEmpty) {
         plainBuf.asTypedList(plainData.length).setAll(0, plainData);
       }
-      final Pointer<Uint8> outBuf = calloc<Uint8>(plainBufLen);
+      final Pointer<Uint8> outBuf = malloc<Uint8>(plainBufLen + tagLength);
       final Pointer<Int32> outLen = calloc<Int32>();
       try {
         final int encLen;
@@ -146,7 +146,7 @@ final class AesGcm256FfiAlgo
         } finally {
           // Wipe the plaintext copy from native heap before freeing.
           plainBuf.asTypedList(plainBufLen).fillRange(0, plainBufLen, 0);
-          calloc.free(plainBuf);
+          malloc.free(plainBuf);
         }
 
         // 6. Finalise (GCM produces no extra output here, but required).
@@ -157,26 +157,20 @@ final class AesGcm256FfiAlgo
             throw StateError('EVP_EncryptFinal_ex failed');
           }
 
-          // 7. Extract the 16-byte authentication tag.
-          final Pointer<Uint8> tagBuf = calloc<Uint8>(tagLength);
-          try {
-            if (_ctxCtrl(ctx, evpCtrlGcmGetTag, tagLength, tagBuf.cast()) <=
-                0) {
-              throw StateError('EVP_CIPHER_CTX_ctrl (get tag) failed');
-            }
-            return Uint8List(encLen + tagLength)
-              ..setRange(0, encLen, outBuf.asTypedList(encLen))
-              ..setRange(
-                  encLen, encLen + tagLength, tagBuf.asTypedList(tagLength));
-          } finally {
-            calloc.free(tagBuf);
+          // 7. Extract the 16-byte authentication tag, straight after the
+          // ciphertext.
+          if (_ctxCtrl(
+                  ctx, evpCtrlGcmGetTag, tagLength, (outBuf + encLen).cast()) <=
+              0) {
+            throw StateError('EVP_CIPHER_CTX_ctrl (get tag) failed');
           }
+          return Uint8List.fromList(outBuf.asTypedList(encLen + tagLength));
         } finally {
           calloc.free(finalBuf);
           calloc.free(finalLen);
         }
       } finally {
-        calloc.free(outBuf);
+        malloc.free(outBuf);
         calloc.free(outLen);
       }
     } finally {
