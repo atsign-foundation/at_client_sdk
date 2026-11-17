@@ -1,6 +1,6 @@
 # Browser onboarding — problem definition and solution flow
 
-**Status:** model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; K-5 re-ruled and K-12 (passkey-derived PKAM key) ruled 2026-10-27, its fallbacks ruled 2026-10-28 as K-13 · derivation in [atkeys-derivation.md](atkeys-derivation.md) · build not started (bd `5vf.1`–`5vf.7`); `user.id` ruled 2026-11-05 as K-18 · open: Q-4, Q-5, Q-10 (passphrase fallback hardening)
+**Status:** ruled, and built (passkey onboarding and login; see §7). Model decided 2026-10-15 as K-1..K-9, storage layout re-ruled 2026-10-27 as K-10 (pointer) and K-11 (document) in [`decisions.md`](decisions.md); K-6 and K-8 superseded; K-5 re-ruled and K-12 (passkey-derived PKAM key) ruled 2026-10-27, its fallbacks ruled 2026-10-28 as K-13 · derivation in [atkeys-derivation.md](atkeys-derivation.md) · `user.id` ruled 2026-11-05 as K-18 · open: Q-4, Q-5, Q-10 (passphrase fallback hardening)
 **Supersedes:** the shared `public:_atkeys.<app>@<atSign>` server copy with an `unlocks[]` array (PB-5 H/J, live-tested in L step 0a)
 **Resolves:** OQ-19 (prf unlocks accumulate on the server copy)
 
@@ -38,10 +38,10 @@ An app client running in a browser must:
 |---|---|
 | PRF salt | **constant** per RP: `SHA-256("atsign:keys:lookup:v1")` — see BO-2 |
 | PRF output `P` | one WebAuthn `get()` with `prf.eval.first = salt` |
-| Lookup key | `HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id\|<atSign>")`, 64 lowercase hex |
-| Blob key (kek) | `HKDF-SHA256(P, salt = ∅, info = "atkeys-kek\|<atSign>")` — no stored salt (BO-1) |
+| Lookup key | `HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/record-id/v1\|<atSign>")`, 64 lowercase hex |
+| Blob key (kek) | `HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/kek/v1\|<atSign>")` — no stored salt (BO-1) |
 | Codec | `{ v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv, ct }`, AAD = canonical JSON of the record without `ct` — **no atSign, no credential ID**. `typ` is `"eid"` (pointer) or `"atkeys"` (document) |
-| Pointer (K-10, K-17) | `public:_<lookupHex>.<ns>@<atSign>`, where `<ns>` is the passkey's own namespace (`atkeys-ns`, K-17); plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by the enrollment holding `<ns>:rw`, the only one that can (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.<ns>@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
+| Pointer (K-10, K-17) | `public:_<lookupHex>.<ns>@<atSign>`, where `<ns>` is the passkey's own namespace (`at_auth/custody/ns/v1`, K-17); plaintext = the `enrollmentId`. **No TTL and no `ttr`**, written once at enroll by the enrollment holding `<ns>:rw`, the only one that can (`update:public:…`). Read: unauthenticated `lookup:_<lookupHex>.<ns>@<atSign>` on the atSign's own atServer; miss → `AT0015` or `data:null`. The leading `_` keeps it out of every scan, `showhidden` included, and out of the commit log; because it has no `ttr`, `plookup` from another atServer leaves no cached copy (any other `ttr` would make it cache one). Existing verbs, no server change (at_server trunk `acd5a4ba`) |
 | Document (K-11) | `atkeys.<enrollmentId>.a.__e@<atSign>`, private, plaintext = the @keys JSON **without the APKAM private key**. Read and written over PKAM (`llookup:` / `update:`) by that enrollment only; opening it needs the kek, no private key. CRAM can read it but not write it. Not `_`-prefixed, so own-enrollment and CRAM scans list it. Probed P9, 2026-10-20 |
 | Passkey `user.id` | 64 random bytes (WebAuthn L3 §14.6.1); `user.name` = atSign; `user.displayName` = `<enrollment time> · <deviceName>`, the time UTC to the minute, cut to 64 bytes (K-18). Not mapped back: the atSign comes from the hint or, with no hint, from the user. Re-enrolling an atSign adds a passkey; it does not replace one |
 | IndexedDB | hint only (K-13 c1, amended by K-18): `atSign`, `credentialId`, `enrollmentId` — nothing secret. The atSign is the output of at_commons' `toAtsign()` (lowercase, `@` included, dots removed after the `@`, so `@ali.ce` is `@alice`), as UTF-8 bytes. Caching the derived key (c2) is rejected; no document replica is kept (K-14) |
@@ -75,7 +75,7 @@ sequenceDiagram
         B->>A: get(allowCredentials = [id], prf.eval.first = salt)
         A-->>B: P
     end
-    B->>B: lookup = HKDF(P,"atkeys-record-id|atSign"); kek = HKDF(P,"atkeys-kek|atSign")
+    B->>B: lookup = HKDF(P,"at_auth/custody/record-id/v1|atSign"); kek = HKDF(P,"at_auth/custody/kek/v1|atSign")
     B->>B: apkamKey = ML-DSA-65(seed = HKDF(P,"at_auth/custody/auth-seed/v1|atSign")), never stored
     B->>S: enroll:request (namespaces + ns:rw, OTP minted for both) → pending until approved
     B->>S: PKAM auth as the approved enrollment; keys:get
@@ -115,7 +115,7 @@ sequenceDiagram
     U->>B: types the atSign once → toAtsign() (K-18)
     B->>A: get(no allowCredentials, prf.eval.first = salt)
     A-->>B: P, credential ID
-    B->>S: lookup(HKDF(P,"atkeys-record-id|atSign")) on atSign's atServer — unauthenticated, no from:
+    B->>S: lookup(HKDF(P,"at_auth/custody/record-id/v1|atSign")) on atSign's atServer — unauthenticated, no from:
     alt no pointer
         S-->>B: not found → wrong atSign, or a passkey from a denied or abandoned enrollment
         B->>U: pick another passkey or type another atSign
@@ -187,6 +187,8 @@ The record is public, so it can be attacked offline: passphrase strength and KDF
 
 ### 3.6 Lost or wiped passkey (K-13 b, d)
 
+This applies once the user has chosen to reset (3.8). A failed or cancelled prompt alone does not mean the passkey is gone.
+
 | Step | Action |
 |---|---|
 | 1 | The old enrollment cannot be restored: passkey gone = enrollment gone |
@@ -194,6 +196,35 @@ The record is public, so it can be attacked offline: passphrase strength and KDF
 | 3 | An approver revokes the old enrollment |
 
 A second passkey on another device is its own enrollment the same way (3.1): PRF output differs per credential, so it derives a different PKAM key and is not a backup of the first.
+
+### 3.7 In the client
+
+| Piece | Behaviour |
+|---|---|
+| `PasskeyCustody` | `onboard` and `open` each return an `AtClient`, PKAM'd before return and running as the enrollment. The passkey's vault (auth seed and sealer) goes to that client, which holds it for its session |
+| @keys document | sealed on the atServer at `atkeys.<enrollmentId>.a.__e` through `AtServerAtKeysIo`. A write builds on a fresh read of the stored document, not the copy read at login, so a second tab's update after another tab's write lands; it refuses a change that drops stored material, then reads the write back; after a refusal the store accepts no more writes. Material another session writes to the same enrollment is seen on the next update or reopen. Nothing is merged or retried |
+| Stop | the client's `stop()` closes the vault: the sealer is closed and the auth seed buffer is zeroed (already zeroed as soon as PKAM succeeded, unless a pending onboarding was still open). The key store holds the APKAM pair for the session: the private half as bytes zeroed when the store closes, reads served from memory with the pair filed, and the stored document never holding the APKAM private key or the enrollment's own public authentication key (a write carrying other private authentication material is refused). The authenticator's `String` copy and the @keys private keys cannot be wiped in Dart. A write running when `stop()` closes the store finishes whole; one queued behind it is refused without an atServer call |
+| Entry points | `onboardNewAtSign` and `passkeyLogin` take an optional `SessionTransportOptions`: a root for the atDirectory, or a proxy host and port for every connection. The pointer reader, the enrollment calls and the clients share it; the default is direct to the production root |
+
+### 3.8 App guidance: a failed or cancelled passkey prompt
+
+WebAuthn reports a cancelled prompt and a missing passkey the same way, so `PasskeyLostException` with a `PasskeyCeremonyException` cause (from `passkeyLogin`, `PasskeyCustody.open`, or `onboard` resuming a pending record) may be a plain cancel. The library never deletes, revokes or clears anything after a failed or cancelled prompt: the pending record, the device hints and the enrollment all stay as they were.
+
+An app that gets this error must:
+
+| Rule | Why |
+|---|---|
+| Let the user choose between **Try again** and **Reset** (a lost passkey on an enrolled atSign), or between **Try again** and **Discard** (an unfinished onboarding) | Only the user knows whether they cancelled or lost the passkey |
+| Never reset automatically | A cancel would otherwise cost the user their enrollment |
+| Put a short explanation of each option in an info box behind an (i) icon next to its button | The consequences differ and the user decides on them |
+
+| Option | Info box says | What happens |
+|---|---|---|
+| Try again | Nothing changes; you are prompted for your passkey again. | The app calls `passkeyLogin` (or `onboardNewAtSign`) again. |
+| Try again / Discard (unfinished onboarding) | Try again: "Nothing changes; you are prompted again." Discard: "Deletes this browser's unfinished onboarding. If it held the only copy of the keys, the atSign must be reset with a new CRAM." | Try again: the app calls `onboardNewAtSign` or `passkeyLogin` again. Discard: the app calls `discardPendingOnboarding(atSign)`; a second call does nothing. |
+| Reset | This starts a new enrollment. It needs a one-time passcode (OTP) and approval from another device, and the old enrollment is revoked. | The app runs the enrollment flow (3.1); an approver revokes the old enrollment (3.6). |
+
+`discardPendingOnboarding(atSign)` (`PasskeyCustody.discardPendingOnboarding` in `at_client`) is the user's **Discard** choice for an unfinished onboarding. It takes the setup lock and deletes the pending record. When no @keys document was written, that record held the only copy of the new keys, so deleting it destroys them and the atSign must be reset with a new CRAM. The library never calls it on its own. A pending record is dropped automatically only when the atServer explicitly refuses PKAM for that record's enrollment (see section 7); a failed or cancelled prompt, a network error, a timeout or a setup-lock timeout keeps it until the user chooses.
 
 ---
 
@@ -235,3 +266,45 @@ A second passkey on another device is its own enrollment the same way (3.1): PRF
 | Q-8 | **Credential-store record — open, input from the 2026-10-27 call.** Keep `enrollmentId` + `credentialId` in a durable credential store rather than browser storage? K-10 already holds the sealed `enrollmentId` server-side and the credential hint is recoverable (K-12); the question is whether a credential-store record is added beside the K-10 pointer or K-10 alone stands | me |
 | Q-9 | **List and revoke enrollments in the browser — open, input from the 2026-10-27 call.** The call asked that a user can list and revoke enrollments (Flutter widgets exist). Revocation is ruled; a list/revoke UI is not planned for the wasm lane. Scope call | me |
 | Q-10 | **Passphrase fallback hardening — open, from K-13.** A public blob can be attacked offline. Not ruled: the passphrase entropy floor, the Argon2id parameters, and how the record's lookup key is derived | me |
+
+---
+
+## 7. What is built and v1 limitations
+
+### Built
+
+| Item | Behaviour |
+|---|---|
+| `onboardNewAtSign` | Registers a passkey, activates the atSign with CRAM and the derived APKAM key, files the document, then the pointer. Returns a PKAM'd `AtClient`. Takes an optional `SessionTransportOptions` |
+| `passkeyLogin` | `atSign` required: the passkey proves it, a wrong one finds no pointer. A known device goes straight to PKAM; any other asserts a discoverable passkey and reads the pointer. Takes an optional `SessionTransportOptions` |
+| `prfSupported` | Whether the browser reports passkey PRF. `onboardNewAtSign` checks it and refuses before any ceremony |
+| Setup lock | Web Lock per canonical atSign, held across the whole of onboarding, including resuming an interrupted one. A second tab waits, up to two minutes, then gets `SetupLockTimeoutException`. Login takes the same lock only when a pending record is present, when no saved hints are present, and for the stale-hints retry; a login with saved hints and no pending record takes none. An obsolete pending record is removed only while the lock is held |
+| Write order | Document first, read back, pointer second. A pointer never names a missing document |
+| APKAM key | Derived from the passkey's auth seed (K-12). Never stored, not in the document, not in IndexedDB |
+| Key lifetime | The client holds the passkey vault (`PasskeyVault`: auth seed and sealer) for its session; the seed is zeroed as soon as PKAM succeeds (an unfinished pending onboarding keeps it until its session opens), and `stop()` zeroes what it can and closes the sealer (D-30). The key store holds the APKAM pair for the session: the private half as bytes zeroed when the store closes, reads served from memory with the pair filed, and the stored document never holding the APKAM private key or the enrollment's own public authentication key (a write carrying other private authentication material is refused). The authenticator's `String` copy and the @keys private keys cannot be wiped in Dart. A write running when `stop()` closes the store finishes whole; one queued behind it is refused without an atServer call |
+| `user.id` | 64 random bytes. The atSign is never in it (K-18) |
+
+| Exception | Raised when |
+|---|---|
+| `PrfUnavailableException` | No passkey PRF; refused before any ceremony |
+| `PasskeyLostException` | No credential, no pointer, a malformed enrollment id, or PKAM refused. When its cause is a `PasskeyCeremonyException` the prompt failed and the user may simply have cancelled it (WebAuthn reports a cancel and a missing passkey alike); see 3.8 |
+| `PublicKeyMismatchException` | Restored public keys differ from the published ones (K-5) |
+| `MissingAtKeysDocumentException` | The enrollment has no document |
+| `PkamRefusedException` | The atServer explicitly refused PKAM for the enrollment (a bad signature always; a denied, revoked or unknown or expired enrollment when the reply names it). `passkeyLogin` and a resume surface it as `PasskeyLostException` with the `PkamRefusedException` kept as its cause; `PrfUnavailableException` and `SetupLockTimeoutException` are not wrapped |
+| `OnboardingIncompleteException` | The atSign is activated but its document, pointer or device hints were not all written; carries the pending onboarding to resume or abandon. Not raised when only the client's open fails: that comes after the records are written, so the open's own error propagates and the atSign is ready for `passkeyLogin` |
+| `SetupLockTimeoutException` | The atSign's setup lock was not granted in time (`onboardNewAtSign` and `passkeyLogin`) |
+| Pending record that cannot finish | The record is dropped automatically only when the atServer explicitly refuses PKAM for its enrollment (bad signature always; denied, revoked or unknown or expired enrollment when the reply names that enrollment), never on a network error, timeout, closed socket, setup-lock timeout, or server error or throttling reply (that error reaches the caller unchanged, record and hints kept). The record is deleted only after the client opens; a failed open keeps it and the retry resumes it with no new passkey or CRAM. `onboardNewAtSign` with a new CRAM tries the record first and, on such a refusal, drops it and continues with the new CRAM. A refusal during an explicit resume surfaces as `PasskeyLostException`; `passkeyLogin` and `PasskeyCustody.open` drop the record and log in through the pointer. Any other failure keeps it until the user chooses Discard (`discardPendingOnboarding`) or a later login proves it obsolete, always under the setup lock |
+
+### v1 limitations
+
+| Limitation | What v1 does |
+|---|---|
+| Encryption keys | Enrollment mints RSA encryption keys beside the ML-DSA-65 APKAM key |
+| K-5 check | Compares the encryption public key (the RSA one) in the restored @keys with the one published at `publickey@<atSign>` |
+| Pointer namespace | Each passkey has its own namespace `<ns>`, derived from it (K-17); the pointer is `public:_<lookupHex>.<ns>@<atSign>` |
+| Pointer integrity | The passkey's enrollment is the onboarding enrollment, activated by CRAM; it holds the root grant, which includes `<ns>:rw`, and writes the pointer (K-17) |
+| Root domain | The atDirectory is the production root unless `SessionTransportOptions` names another root or a proxy |
+| No PRF | Refused. v1 has no passphrase fallback (K-13 a is not built) |
+| Lost passkey | No recovery: the user enrolls afresh (K-13 b). A failed or cancelled prompt is not a lost passkey; the library deletes, revokes and clears nothing after one (3.8) |
+| Leftover passkey | When onboarding fails after the passkey is registered and before any activation is recorded (a wrong CRAM secret, an activation the atServer refuses), the passkey belongs to no atSign. The client tells the browser through `PublicKeyCredential.signalUnknownCredential` where the browser has it; elsewhere, or when the browser ignores the signal, the passkey stays in the user's passkey manager until the user deletes it. It is harmless and unused. An onboarding that is resumable keeps its passkey and is never signalled |
+| Writers | Concurrent writers are expected (synced devices share one enrollment; two tabs can write at once). A write that would drop stored material is refused and the key store then accepts no more writes (D-28) |

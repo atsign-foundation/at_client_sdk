@@ -404,6 +404,8 @@ be converted to compact hex. A pin test still guards it
 | at_server | a conditional update (compare-and-swap) on a record, a prerequisite for the server-backed store ([section 8](#8-opening-a-session)); a pin test that ecc PKAM signatures are compact hex |
 | docs | a trusted-devices decision record that separates APKAM custody from the device-assertion credential, which must never be a PKAM key, and holds the tier rule: chosen once at enrollment, recorded, never run below |
 
+`PasskeyVault` in at_auth is the passkey core. It does not implement `CustodySession`: `prf()` returns raw bytes, which would put kek material in Dart memory.
+
 The order that keeps each step shippable: at_chops primitives, then the at_auth
 seam with only the software platform (no behaviour change), then the server
 store and session in at_client, then Apple (the first hw-kem), the browser,
