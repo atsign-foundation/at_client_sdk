@@ -113,9 +113,10 @@ awaits local emission so `watch()` listeners see the update before
 Idempotent write. Creates if not exists, rewrites if it does.
 Use for re-runnable publishers that may restart within the TTL window.
 
-- `id` is checked and folded as for `draft`; when a read finds no item with
-  it, it must also meet `create`'s rule for a new id, and an item that cannot
-  be read counts as one that exists
+- `id` is checked and folded as for `draft`; when neither local storage nor
+  the atServer holds an item with it, it must also meet `create`'s rule for a
+  new id; a local item that cannot be read counts as one that exists, and an
+  atServer that cannot be reached counts as holding none
 
 ### `Future<void> update(CItem<T> item, {bool unshareWithOthers = true})`
 

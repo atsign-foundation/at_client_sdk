@@ -34,7 +34,8 @@ Feature: AtCollection checks every item id before using it in a key
   DoS: whoever supplies an id to the app, any Atsign that shares an item into
   the namespace, and any Atsign that can notify this one. create refuses an id
   longer than 64 characters before any read or write, and upsert refuses one
-  once a read finds no item under it; reads accept an id of any length, and
+  once neither local storage nor the atServer holds an item under it (an
+  atServer that cannot be reached keeps the refusal); reads accept an id of any length, and
   the check is linear in the id's length, an item another Atsign shares under
   an id starting with "_" can still be read by that id, and an event whose ids
   the check refuses is not emitted, so no event hands the app an id its reads
@@ -239,6 +240,33 @@ Feature: AtCollection checks every item id before using it in a key
     Then ArgumentError is thrown
     And nothing is written
 
+  Scenario: Given no item with a 65-character id and an atServer that cannot be reached (AtConnectException), when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And a read sent to the atServer fails with an AtConnectException
+    When upsert is called with that id and a new value
+    Then ArgumentError is thrown
+    And nothing is written
+
+  Scenario: Given no item with a 65-character id and an atServer that cannot be reached (AtClientException wrapping a socket failure), when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And a read sent to the atServer fails with an AtClientException whose text names a socket failure
+    When upsert is called with that id and a new value
+    Then ArgumentError is thrown
+    And nothing is written
+
+  Scenario: Given no item with a 65-character id and an atServer that refuses the session, when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And a read sent to the atServer fails with an UnAuthenticatedException
+    When upsert is called with that id and a new value
+    Then ArgumentError is thrown
+    And nothing is written
+
+  Scenario: Given no local item with a 65-character id and an atServer read that fails to decrypt, when upsert is called with that id, then the item holds the new value
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And a read sent to the atServer fails with an AtDecryptionException
+    When upsert is called with that id and a new value
+    Then get with that id returns the new value
+
   Scenario: Given no id, when create is called, then the item's id is 8 characters of a-z and 0-9
     Given a collection "todos.demo" of @alice
     When create is called with no id
@@ -275,6 +303,11 @@ Feature: AtCollection checks every item id before using it in a key
 
   Scenario: Given a stored item whose id contains "*", when upsert is called with that id, then the item holds the new value
     Given a collection "todos.demo" of @alice holding a stored item with the id "a*b"
+    When upsert is called with the id "a*b" and a new value
+    Then get with that id returns the new value
+
+  Scenario: Given an item whose id contains "*" that the atServer holds and local storage does not yet, when upsert is called with that id, then the item holds the new value
+    Given a collection "todos.demo" of @alice whose atServer holds an item with the id "a*b" that local storage does not
     When upsert is called with the id "a*b" and a new value
     Then get with that id returns the new value
 
