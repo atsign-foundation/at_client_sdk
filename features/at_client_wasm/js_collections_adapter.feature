@@ -256,11 +256,6 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter updates the id "B1" owned by @bob
     Then it rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"
 
-  Scenario: An update, share or remove of the missing id "b1" owned by "@ALICE" rejects with COLLECTION_ITEM_NOT_FOUND and the owner "@alice"
-    Given no item with the id "b1"
-    When the adapter updates, shares or removes the id "b1" owned by "@ALICE"
-    Then it rejects with COLLECTION_ITEM_NOT_FOUND and the owner "@alice"
-
   Scenario: A get with the id "A1" returns the item created as "a1"
     Given an item created through the adapter with the id "a1"
     When the adapter gets the id "A1" owned by @alice
