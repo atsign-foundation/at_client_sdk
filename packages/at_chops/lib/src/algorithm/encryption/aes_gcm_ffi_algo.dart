@@ -129,24 +129,29 @@ final class AesGcm256FfiAlgo
 
       // 5. Encrypt plaintext.
       final int plainBufLen = plainData.isEmpty ? 1 : plainData.length;
-      final Pointer<Uint8> plainBuf = malloc<Uint8>(plainBufLen);
-      if (plainData.isNotEmpty) {
-        plainBuf.asTypedList(plainData.length).setAll(0, plainData);
-      }
       final Pointer<Uint8> outBuf = malloc<Uint8>(plainBufLen + tagLength);
-      final Pointer<Int32> outLen = calloc<Int32>();
       try {
         final int encLen;
+        final Pointer<Int32> outLen = calloc<Int32>();
         try {
-          if (_encryptUpdate(ctx, outBuf, outLen, plainBuf, plainData.length) <=
-              0) {
-            throw StateError('EVP_EncryptUpdate (plaintext) failed');
+          final Pointer<Uint8> plainBuf = malloc<Uint8>(plainBufLen);
+          try {
+            if (plainData.isNotEmpty) {
+              plainBuf.asTypedList(plainData.length).setAll(0, plainData);
+            }
+            if (_encryptUpdate(
+                    ctx, outBuf, outLen, plainBuf, plainData.length) <=
+                0) {
+              throw StateError('EVP_EncryptUpdate (plaintext) failed');
+            }
+            encLen = outLen.value;
+          } finally {
+            // Wipe the plaintext copy from native heap before freeing.
+            plainBuf.asTypedList(plainBufLen).fillRange(0, plainBufLen, 0);
+            malloc.free(plainBuf);
           }
-          encLen = outLen.value;
         } finally {
-          // Wipe the plaintext copy from native heap before freeing.
-          plainBuf.asTypedList(plainBufLen).fillRange(0, plainBufLen, 0);
-          malloc.free(plainBuf);
+          calloc.free(outLen);
         }
 
         // 6. Finalise (GCM produces no extra output here, but required).
@@ -171,7 +176,6 @@ final class AesGcm256FfiAlgo
         }
       } finally {
         malloc.free(outBuf);
-        calloc.free(outLen);
       }
     } finally {
       _ctxFree(ctx);
