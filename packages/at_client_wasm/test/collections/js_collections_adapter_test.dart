@@ -89,8 +89,8 @@ void main() {
       JsCollectionsAdapter.open(alice.mock,
           namespace: _ns, type: type, expirationMs: _day.inMilliseconds);
 
-  JsItemAddress mine(String id) => (id: id, owner: '@alice');
-  JsItemAddress bobs(String id) => (id: id, owner: '@bob');
+  JsItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
+  JsItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
 
   List<String> ids(List<JsItem> items) =>
       [for (final item in items) item['id'] as String];
@@ -242,7 +242,7 @@ void main() {
         'An update, share or remove of the missing id "b1" owned by "@ALICE" rejects with COLLECTION_ITEM_NOT_FOUND and the owner "@alice"',
         () async {
       final todos = await open();
-      final address = (id: 'b1', owner: '@ALICE');
+      final address = (id: 'b1', owner: '@ALICE'.toAtsign());
 
       for (final call in <String, Future<Object?> Function()>{
         'update': () => todos.update(address, {'t': 2}),
@@ -253,28 +253,6 @@ void main() {
             call.value(),
             _rejectsWith(CollectionErrorCodes.notFound,
                 id: 'b1', owner: '@alice'),
-            reason: call.key);
-      }
-    });
-
-    test(
-        'An update, share or remove of the id "b1" owned by "a b", which is not an atSign, rejects with COLLECTION_INVALID_ARGUMENT and the owner "a b"',
-        () async {
-      final todos = await open();
-      final address = (id: 'b1', owner: 'a b');
-
-      for (final call in <String, Future<Object?> Function()>{
-        'update': () => todos.update(address, {'t': 2}),
-        'share': () => todos.share(address, ['@bob']),
-        'remove': () => todos.remove(address),
-      }.entries) {
-        late Future<Object?> pending;
-        expect(() => pending = call.value(), returnsNormally,
-            reason: '${call.key} returns a Future');
-        await expectLater(
-            pending,
-            _rejectsWith(CollectionErrorCodes.invalidArgument,
-                id: 'b1', owner: 'a b', kind: 'InvalidAtSignException'),
             reason: call.key);
       }
     });
@@ -543,7 +521,8 @@ void main() {
       expect(ids(listed), ['f1']);
       expect(listed.single['owner'], '@bob');
       expect(await todos.get(mine('f1')), isNull);
-      await expectLater(todos.update((id: 'f1', owner: '@carol'), {'x': 1}),
+      await expectLater(
+          todos.update((id: 'f1', owner: '@carol'.toAtsign()), {'x': 1}),
           _rejectsWith(CollectionErrorCodes.notOwner, owner: '@carol'));
     });
 

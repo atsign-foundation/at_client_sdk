@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 
-/// An item address: the item's id and the atSign that owns it.
-typedef JsItemAddress = ({String id, String owner});
+/// An item address: the item's id and the Atsign that owns it.
+typedef JsItemAddress = ({String id, Atsign owner});
 
 /// One `where` clause: a dotted path into the item's data, an operator and
 /// a value.
@@ -170,8 +170,7 @@ final class JsCollectionsAdapter {
 
   /// The item at [address], or null when there is none.
   Future<JsItem?> get(JsItemAddress address) => _guard(() async {
-        final item =
-            await _collection.getOrNull(address.id, address.owner.toAtsign());
+        final item = await _collection.getOrNull(address.id, address.owner);
         return item == null ? null : _item(item);
       });
 
@@ -263,7 +262,7 @@ final class JsCollectionsAdapter {
   }) =>
       _guard(
         () async {
-          final owner = address.owner.toAtsign();
+          final owner = address.owner;
           if (owner != _collection.atSign) {
             throw JsCollectionsError(CollectionErrorCodes.notOwner,
                 'item ${address.id} is owned by $owner, not ${_collection.atSign}',
@@ -273,7 +272,7 @@ final class JsCollectionsAdapter {
           return _item(await write(current));
         },
         id: _errorId(address.id),
-        owner: _errorOwner(address.owner),
+        owner: address.owner,
         stateError: stateError,
       );
 
@@ -434,18 +433,6 @@ final class JsCollectionsAdapter {
   /// The id an error reports for the caller's [id]: folded to lower case, as
   /// AtCollection folds it, so it matches the id of the item listed.
   static String? _errorId(String? id) => id?.toLowerCase();
-
-  /// The owner an error reports for the caller's [owner]: in `@name` form, as
-  /// AtCollection normalizes it, so it matches the owner of the item listed.
-  /// An owner that is not an atSign stays as given.
-  static String? _errorOwner(String? owner) {
-    if (owner == null) return null;
-    try {
-      return owner.toAtsign();
-    } on InvalidAtSignException {
-      return owner;
-    }
-  }
 
   /// Runs [body], turning anything it throws into a [JsCollectionsError].
   /// [stateError] is the code for a StateError from the operation, which

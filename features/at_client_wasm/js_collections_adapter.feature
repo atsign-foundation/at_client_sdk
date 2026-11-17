@@ -261,10 +261,6 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter updates, shares or removes the id "b1" owned by "@ALICE"
     Then it rejects with COLLECTION_ITEM_NOT_FOUND and the owner "@alice"
 
-  Scenario: An update, share or remove of the id "b1" owned by "a b", which is not an atSign, rejects with COLLECTION_INVALID_ARGUMENT and the owner "a b"
-    When the adapter updates, shares or removes the id "b1" owned by "a b"
-    Then each call returns a Future that rejects with COLLECTION_INVALID_ARGUMENT, the id "b1" and the owner "a b"
-
   Scenario: A get with the id "A1" returns the item created as "a1"
     Given an item created through the adapter with the id "a1"
     When the adapter gets the id "A1" owned by @alice
