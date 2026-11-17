@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show useRemoteAtServerIfSet;
+import 'package:at_client/src/client/verb_builder_manager.dart'
+    show SecondaryManager;
 import 'package:at_client/src/storage/memory/memory_at_key_value_store.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -500,12 +504,40 @@ void main() {
     expectNothingReadOrWritten();
   });
 
+  /// Stubs every read, routed as `AtClientImpl` routes it under [pref]: a read
+  /// that reaches the atServer takes [remote], and any other takes [local],
+  /// which reads [store] when not given.
+  void stubReads({
+    AtValue Function(AtKey k)? local,
+    required AtValue Function(AtKey k) remote,
+    RemoteLocalPref pref = RemoteLocalPref.localOnly,
+  }) {
+    Future<AtValue> read(Invocation inv) async {
+      final k = inv.positionalArguments.first as AtKey;
+      final options =
+          inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+      final routing = SecondaryManager.getRemoteLocalPrefForOp(
+          useRemoteAtServerIfSet(options), pref);
+      return routing == RemoteLocalPref.remoteOnly
+          ? remote(k)
+          : (local ?? readStore)(k);
+    }
+
+    when(() => atClient.get(any())).thenAnswer(read);
+    when(() => atClient.get(any(),
+        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer(read);
+  }
+
   test(
       'Given no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
       () async {
     final c = await todos();
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
-    verify(() => atClient.get(any())).called(1);
+    verify(() => atClient.get(any(),
+        getRequestOptions: any(
+            named: 'getRequestOptions',
+            that: isA<GetRequestOptions>().having(useRemoteAtServerIfSet,
+                'useRemoteAtServer as set', isFalse)))).called(1);
     verify(() => atClient.get(any(),
             getRequestOptions: any(
                 named: 'getRequestOptions',
@@ -520,12 +552,8 @@ void main() {
       'Given an AtClient whose reads throw a raw KeyNotFoundException and no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
       () async {
     final c = await todos();
-    Future<AtValue> missing(Invocation inv) async => throw KeyNotFoundException(
-        'no value for ${inv.positionalArguments[0]}');
-    when(() => atClient.get(any(),
-            getRequestOptions: any(named: 'getRequestOptions')))
-        .thenAnswer(missing);
-    when(() => atClient.get(any())).thenAnswer(missing);
+    AtValue missing(AtKey k) => throw KeyNotFoundException('no value for $k');
+    stubReads(local: missing, remote: missing);
 
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long),
         reason: 'a raw KeyNotFoundException is what an AtClient other than '
@@ -543,14 +571,7 @@ void main() {
   /// Makes every read sent to the atServer fail with [error], as
   /// `AtClient.get` rethrows it; a local read still reads [store].
   void remoteReadsFailWith(Object error) {
-    when(() => atClient.get(any(),
-            getRequestOptions: any(named: 'getRequestOptions')))
-        .thenAnswer((inv) async {
-      final options =
-          inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
-      if (options?.useRemoteAtServer == true) throw asGetThrows(error);
-      return readStore(inv.positionalArguments.first as AtKey);
-    });
+    stubReads(remote: (_) => throw asGetThrows(error));
   }
 
   for (final failure in <String, Exception>{
@@ -625,11 +646,33 @@ void main() {
   });
 
   test(
+      'Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails without an answer, then upsert throws ArgumentError naming the new-id rules and nothing is written',
+      () async {
+    final c = await todos();
+    var atServerReads = 0;
+    stubReads(
+      pref: RemoteLocalPref.remoteOnly,
+      remote: (_) {
+        atServerReads++;
+        throw asGetThrows(AtConnectException('cannot reach the atServer'));
+      },
+    );
+
+    await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
+    expect(atServerReads, 1,
+        reason: 'the first read stays local under a remoteOnly preference');
+    expectNothingWritten();
+    expect(store, isEmpty);
+  });
+
+  test(
       'Given a stopped client whose local read throws StoppedException, when upsert is called with a 65-character id, then StoppedException is thrown and nothing is written',
       () async {
     final c = await todos();
-    when(() => atClient.get(any())).thenAnswer(
-        (_) async => throw StoppedException('the client has stopped'));
+    stubReads(
+      local: (_) => throw StoppedException('the client has stopped'),
+      remote: readStore,
+    );
 
     await expectLater(
         c.upsert(obj: 'v', id: long), throwsA(isA<StoppedException>()));
@@ -791,9 +834,11 @@ void main() {
     expect(await c.exists(long, alice), isTrue);
     store.remove('$long.$namespace@alice');
     // NOTE: the client's local read reports an expired key this way.
-    when(() => atClient.get(any())).thenAnswer((inv) async =>
-        throw AtKeyNotFoundException('${inv.positionalArguments.first} '
-            'does not exist in keystore'));
+    stubReads(
+      local: (k) =>
+          throw AtKeyNotFoundException('$k does not exist in keystore'),
+      remote: readStore,
+    );
     clearInteractions(atClient);
 
     await expectLater(c.upsert(obj: 'new', id: long), refusesNewId(long));
@@ -806,13 +851,15 @@ void main() {
     seed('$long.$namespace@alice', 'old');
     final c = await todos();
     final unreadable = AtKey.fromString('$long.$namespace@alice').toString();
-    when(() => atClient.get(any())).thenAnswer((inv) async {
-      final k = inv.positionalArguments.first as AtKey;
-      if (k.toString() == unreadable) {
-        throw AtDecryptionException('cannot decrypt $k');
-      }
-      return readStore(k);
-    });
+    stubReads(
+      local: (k) {
+        if (k.toString() == unreadable) {
+          throw AtDecryptionException('cannot decrypt $k');
+        }
+        return readStore(k);
+      },
+      remote: readStore,
+    );
 
     await c.upsert(obj: 'new', id: long);
 
@@ -824,11 +871,12 @@ void main() {
       () async {
     seed('$long.$namespace@alice', 'old');
     final c = await todos();
-    remoteReadsFailWith(UnAuthenticatedException('session refused'));
-    // NOTE: stubbed last, so that the local read, which passes no request
-    // options, takes this stub rather than remoteReadsFailWith's.
-    when(() => atClient.get(any())).thenAnswer((_) async =>
-        throw asGetThrows(AtValueException('cannot parse the stored value')));
+    stubReads(
+      local: (_) =>
+          throw asGetThrows(AtValueException('cannot parse the stored value')),
+      remote: (_) =>
+          throw asGetThrows(UnAuthenticatedException('session refused')),
+    );
 
     await c.upsert(obj: 'new', id: long);
 

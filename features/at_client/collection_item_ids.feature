@@ -288,6 +288,13 @@ Feature: AtCollection checks every item id before using it in a key
     Then upsert throws ArgumentError naming the new-id rules
     And nothing is written
 
+  Scenario: Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails without an answer, then upsert throws ArgumentError naming the new-id rules and nothing is written
+    Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly, holding no item with the id of 65 "a" characters
+    And a read sent to the atServer fails with an error that does not show the atServer answered, rethrown as `AtClientImpl.get` rethrows it
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And nothing is written
+
   Scenario: Given a stopped client whose local read throws StoppedException, when upsert is called with a 65-character id, then StoppedException is thrown and nothing is written
     Given a collection "todos.demo" of @alice whose client has stopped, so a local read throws StoppedException
     When upsert is called with an id of 65 "a" characters

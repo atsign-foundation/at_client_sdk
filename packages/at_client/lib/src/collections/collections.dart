@@ -3267,21 +3267,19 @@ interface class AtCollection<T> {
   /// Whether this atSign's own copy of [id], past the seen-id cache, is found
   /// or is held but cannot be read.
   ///
-  /// A local read that fails for any reason but the item's absence counts as
-  /// found. When the local read finds nothing, the atServer is asked too, so
-  /// an item that sync has not yet brought to this device still counts as
-  /// found. On that read only a value or an [AtDecryptionException] counts as
-  /// found; any other failure counts as not found.
+  /// The first read asks for local storage explicitly, so it stays on the
+  /// device whatever the client's `remoteLocalPref` says, and one that fails
+  /// for any reason but the item's absence counts as found. When the local
+  /// read finds nothing, the atServer is asked too, so an item that sync has
+  /// not yet brought to this device still counts as found. On that read only
+  /// a value or an [AtDecryptionException] counts as found; any other failure
+  /// counts as not found.
   Future<bool> _selfKeyFoundOrUnreadable(String id) async {
     final key = '$id.$namespace$atSign';
     for (final remote in [false, true]) {
       try {
-        if (remote) {
-          await atClient.get(AtKey.fromString(key),
-              getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
-        } else {
-          await atClient.get(AtKey.fromString(key));
-        }
+        await atClient.get(AtKey.fromString(key),
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);
         return true;
       } catch (e) {
         if (e is StoppedException) rethrow;
