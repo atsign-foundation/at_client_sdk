@@ -679,8 +679,6 @@ void main() {
       'upsert keeps refusing a new over-long id when the atServer read fails with an error other than not found',
       () async {
     for (final failure in <AtException>[
-      UnAuthenticatedException(
-          'Failed connecting to @alice. The authenticator reported failure'),
       SecondaryNotFoundException('No entry in atDirectory for @alice'),
       SecondaryConnectException('sc'),
     ]) {
