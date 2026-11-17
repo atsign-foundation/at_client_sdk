@@ -37,9 +37,10 @@
   names the id and its owner; `getItems` and `getItemsAsStream` leave out an
   item stored under such an id, with the same warning. `AtCollection` matches
   a namespace or `subName` literally when it lists keys.
-  `upsert` reads the atServer for an id that breaks the new-id rule and that
-  local storage lacks; only a value or an `AtDecryptionException` counts as
-  stored.
+  `upsert` looks up the metadata of an id that breaks the new-id rule, in local
+  storage and then on the atServer, without decrypting; an item either holds
+  counts as stored, and when the atServer lookup fails without an answer the
+  refusal stands and says so.
 - feat: `AtClient.getMeta` reads a key's metadata without its value, so it no
   longer decrypts and answers for a record this client cannot open; it takes
   `getRequestOptions`, as `get` does, to choose between local storage and the

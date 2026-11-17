@@ -7,6 +7,8 @@ import 'package:at_client/src/client/request_options.dart'
 import 'package:at_client/src/client/verb_builder_manager.dart'
     show SecondaryManager;
 import 'package:at_client/src/storage/memory/memory_at_key_value_store.dart';
+import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
+    show DataStoreException;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -34,13 +36,14 @@ void main() {
   late Map<String, ({AtKey key, String value})> store;
 
   /// Keys @alice's atServer holds that sync has not yet brought to [store];
-  /// only a get sent to the atServer finds them.
+  /// only a metadata lookup sent to the atServer finds them.
   late Set<String> serverOnly;
 
   String envelope(String obj) => jsonEncode({'type': 'n/a', 'obj': obj});
 
-  /// [error] as `AtClient.get` rethrows it: an [AtException] rebuilt by
-  /// [AtExceptionManager.createException], anything else as it is.
+  /// [error] as `AtClient.get` and `AtClient.getMeta` rethrow it: an
+  /// [AtException] rebuilt by [AtExceptionManager.createException], anything
+  /// else as it is.
   Object asGetThrows(Object error) =>
       error is AtException ? AtExceptionManager.createException(error) : error;
 
@@ -54,6 +57,16 @@ void main() {
     return AtValue()
       ..value = stored.value
       ..metadata = stored.key.metadata;
+  }
+
+  /// [k]'s metadata in [store], or the not-found error, as `AtClient.getMeta`
+  /// returns or throws them.
+  Metadata metaInStore(AtKey k) {
+    final stored = store[k.toString()];
+    if (stored == null) {
+      throw asGetThrows(KeyNotFoundException('no record for $k'));
+    }
+    return stored.key.metadata;
   }
 
   /// Writes a record directly, as another client writes it; a `cached:` key
@@ -91,13 +104,19 @@ void main() {
             getRequestOptions: any(named: 'getRequestOptions')))
         .thenAnswer((inv) async {
       final k = inv.positionalArguments.first as AtKey;
+      return readStore(k);
+    });
+    when(() => atClient.getMeta(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
+      final k = inv.positionalArguments.first as AtKey;
       final options =
           inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
-      if (options?.useRemoteAtServer != true) return readStore(k);
-      if (serverOnly.contains(k.toString())) {
-        return AtValue()..value = envelope('on the atServer');
+      if (options?.useRemoteAtServer == true &&
+          serverOnly.contains(k.toString())) {
+        return Metadata();
       }
-      return readStore(k);
+      return metaInStore(k);
     });
     when(() => atClient.put(any(), any())).thenAnswer((inv) async {
       final k = inv.positionalArguments[0] as AtKey;
@@ -146,8 +165,21 @@ void main() {
     verifyNever(() => atClient.get(any()));
     verifyNever(() => atClient.get(any(),
         getRequestOptions: any(named: 'getRequestOptions')));
+    verifyNever(() => atClient.getMeta(any(),
+        getRequestOptions: any(named: 'getRequestOptions')));
     verifyNever(() => atClient.getAtKeys(regex: any(named: 'regex')));
   }
+
+  /// That no value was read, so nothing was decrypted.
+  void expectNoValueRead() {
+    verifyNever(() => atClient.get(any()));
+    verifyNever(() => atClient.get(any(),
+        getRequestOptions: any(named: 'getRequestOptions')));
+  }
+
+  /// Matches request options that send a lookup to the atServer.
+  Matcher atServerOptions() => isA<GetRequestOptions>()
+      .having((o) => o.useRemoteAtServer, 'useRemoteAtServer', isTrue);
 
   void expectNothingReadOrWritten() {
     expectNothingRead();
@@ -504,15 +536,17 @@ void main() {
     expectNothingReadOrWritten();
   });
 
-  /// Stubs every read, routed as `AtClientImpl` routes it under [pref]: a read
-  /// that reaches the atServer takes [remote], and any other takes [local],
-  /// which reads [store] when not given.
-  void stubReads({
-    AtValue Function(AtKey k)? local,
-    required AtValue Function(AtKey k) remote,
+  /// Stubs every metadata lookup, routed as `AtClientImpl` routes it under
+  /// [pref]: a lookup that reaches the atServer takes [remote], and any other
+  /// takes [local], which reads [store] when not given.
+  void stubLookups({
+    Metadata? Function(AtKey k)? local,
+    required Metadata? Function(AtKey k) remote,
     RemoteLocalPref pref = RemoteLocalPref.localOnly,
   }) {
-    Future<AtValue> read(Invocation inv) async {
+    when(() => atClient.getMeta(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
       final k = inv.positionalArguments.first as AtKey;
       final options =
           inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
@@ -520,70 +554,89 @@ void main() {
           useRemoteAtServerIfSet(options), pref);
       return routing == RemoteLocalPref.remoteOnly
           ? remote(k)
-          : (local ?? readStore)(k);
-    }
-
-    when(() => atClient.get(any())).thenAnswer(read);
-    when(() => atClient.get(any(),
-        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer(read);
+          : (local ?? metaInStore)(k);
+    });
   }
+
+  /// Makes every metadata lookup sent to the atServer fail with [error], as
+  /// `AtClient.getMeta` rethrows it; a local lookup still reads [store].
+  void remoteLookupsFailWith(Object error) {
+    stubLookups(remote: (_) => throw asGetThrows(error));
+  }
+
+  /// Makes a value read of [key] sent where [atServer] says fail with
+  /// [error], as `AtClient.get` rethrows it.
+  void valueReadFailsWith(String key, Object error, {required bool atServer}) {
+    when(() => atClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
+      final k = inv.positionalArguments.first as AtKey;
+      final options =
+          inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+      if (k.toString() == key &&
+          (options?.useRemoteAtServer == true) == atServer) {
+        throw asGetThrows(error);
+      }
+      return readStore(k);
+    });
+  }
+
+  const newIdMessage = 'a new item id must be 1 to 64 characters of a-z, '
+      '0-9, "-" and "_", starting with a letter or digit';
+  const uncheckedMessage =
+      '$newIdMessage; the atServer could not be checked for an item with this id';
 
   test(
       'Given no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
       () async {
     final c = await todos();
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
-    verify(() => atClient.get(any(),
+    verify(() => atClient.getMeta(any(),
         getRequestOptions: any(
             named: 'getRequestOptions',
             that: isA<GetRequestOptions>().having(useRemoteAtServerIfSet,
                 'useRemoteAtServer as set', isFalse)))).called(1);
-    verify(() => atClient.get(any(),
-            getRequestOptions: any(
-                named: 'getRequestOptions',
-                that: isA<GetRequestOptions>().having(
-                    (o) => o.useRemoteAtServer, 'useRemoteAtServer', isTrue))))
+    verify(() => atClient.getMeta(any(),
+            getRequestOptions:
+                any(named: 'getRequestOptions', that: atServerOptions())))
         .called(1);
+    expectNoValueRead();
     expectNothingWritten();
     expect(store, isEmpty);
   });
 
   test(
-      'Given an AtClient whose reads throw a raw KeyNotFoundException and no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
+      'Given an AtClient other than AtClientImpl whose getMeta throws a raw KeyNotFoundException and no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
       () async {
     final c = await todos();
-    AtValue missing(AtKey k) => throw KeyNotFoundException('no value for $k');
-    stubReads(local: missing, remote: missing);
+    Metadata? missing(AtKey k) => throw KeyNotFoundException('no value for $k');
+    stubLookups(local: missing, remote: missing);
 
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long),
         reason: 'a raw KeyNotFoundException is what an AtClient other than '
             'AtClientImpl may throw for a missing key');
-    verify(() => atClient.get(any(),
-            getRequestOptions: any(
-                named: 'getRequestOptions',
-                that: isA<GetRequestOptions>().having(
-                    (o) => o.useRemoteAtServer, 'useRemoteAtServer', isTrue))))
+    verify(() => atClient.getMeta(any(),
+            getRequestOptions:
+                any(named: 'getRequestOptions', that: atServerOptions())))
         .called(1);
     expectNothingWritten();
     expect(store, isEmpty);
   });
 
-  /// Makes every read sent to the atServer fail with [error], as
-  /// `AtClient.get` rethrows it; a local read still reads [store].
-  void remoteReadsFailWith(Object error) {
-    stubReads(remote: (_) => throw asGetThrows(error));
-  }
-
-  for (final failure in <String, Exception>{
-    'AtConnectException': AtConnectException('cannot reach the atServer'),
-    'AtClientException wrapping a socket failure':
-        AtClientException.message('SocketException: Connection refused'),
+  const unreachableOutline =
+      'Given no item with a 65-character id and an atServer that cannot be reached, when upsert is called with that id, then ArgumentError is thrown and nothing is written';
+  for (final row in <String, AtException>{
+    "the atServer's address refuses the connection": SecondaryConnectException(
+        '@alice: unable to connect to atServer on 127.0.0.1:53942 - '
+        'SocketException: Connection refused'),
+    'the atDirectory refuses the connection': AtException(
+        'Connecting to 127.0.0.1:53942 : SocketException: Connection refused'),
+    'the atServer does not answer in time':
+        AtExceptionUtils.get('AT0014', 'Request timed out'),
   }.entries) {
-    test(
-        'Given no item with a 65-character id and an atServer that cannot be reached (${failure.key}), when upsert is called with that id, then ArgumentError is thrown and nothing is written',
-        () async {
+    test('$unreachableOutline: ${row.key}', () async {
       final c = await todos();
-      remoteReadsFailWith(failure.value);
+      remoteLookupsFailWith(row.value);
 
       await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
       expectNothingWritten();
@@ -595,7 +648,7 @@ void main() {
       'Given no item with a 65-character id and an atServer that refuses the session, when upsert is called with that id, then ArgumentError is thrown and nothing is written',
       () async {
     final c = await todos();
-    remoteReadsFailWith(UnAuthenticatedException('session refused'));
+    remoteLookupsFailWith(UnAuthenticatedException('session refused'));
 
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
     expectNothingWritten();
@@ -603,28 +656,36 @@ void main() {
   });
 
   test(
-      'Given no local item with a 65-character id and an atServer read that fails to decrypt, when upsert is called with that id, then the item holds the new value',
+      'Given no local item with a 65-character id and a record under it on the atServer that this client cannot open, when upsert is called with that id, then the item holds the new value',
       () async {
     final c = await todos();
-    remoteReadsFailWith(AtDecryptionException('cannot decrypt'));
+    final key = '$long.$namespace@alice';
+    stubLookups(remote: (_) => Metadata()..isEncrypted = true);
+    valueReadFailsWith(key, AtDecryptionException('cannot decrypt'),
+        atServer: true);
 
     await c.upsert(obj: 'new', id: long);
 
-    expect(jsonDecode(store['$long.$namespace@alice']!.value)['obj'], 'new');
+    expect(jsonDecode(store[key]!.value)['obj'], 'new');
+    verify(() => atClient.getMeta(
+            any(that: isA<AtKey>().having((k) => '$k', 'key', key)),
+            getRequestOptions:
+                any(named: 'getRequestOptions', that: atServerOptions())))
+        .called(1);
+    expectNoValueRead();
   });
 
   test(
       'upsert keeps refusing a new over-long id when the atServer read fails without an answer',
       () async {
     for (final failure in <AtException>[
-      UnAuthenticatedException('session refused'),
       UnAuthenticatedException(
           'Failed connecting to @alice. The authenticator reported failure'),
       SecondaryNotFoundException('No entry in atDirectory for @alice'),
       SecondaryConnectException('sc'),
     ]) {
       final shape = '${failure.runtimeType}(${failure.message})';
-      remoteReadsFailWith(failure);
+      remoteLookupsFailWith(failure);
       final c = await todos();
 
       await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long),
@@ -638,7 +699,10 @@ void main() {
       'Given no local item with a 65-character id and an atServer read that answers that this enrollment may not read it, when upsert is called with that id, then upsert throws ArgumentError naming the new-id rules and nothing is written',
       () async {
     final c = await todos();
-    remoteReadsFailWith(AtExceptionUtils.get('AT0009', 'not authorized'));
+    remoteLookupsFailWith(AtExceptionUtils.get(
+        'AT0009',
+        'Connection with enrollment ID e1 is not authorized to llookup key: '
+            '$long.$namespace@alice'));
 
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
     expectNothingWritten();
@@ -649,18 +713,18 @@ void main() {
       'Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails without an answer, then upsert throws ArgumentError naming the new-id rules and nothing is written',
       () async {
     final c = await todos();
-    var atServerReads = 0;
-    stubReads(
+    var atServerLookups = 0;
+    stubLookups(
       pref: RemoteLocalPref.remoteOnly,
       remote: (_) {
-        atServerReads++;
-        throw asGetThrows(AtConnectException('cannot reach the atServer'));
+        atServerLookups++;
+        throw asGetThrows(SecondaryConnectException('cannot reach'));
       },
     );
 
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
-    expect(atServerReads, 1,
-        reason: 'the first read stays local under a remoteOnly preference');
+    expect(atServerLookups, 1,
+        reason: 'the first lookup stays local under a remoteOnly preference');
     expectNothingWritten();
     expect(store, isEmpty);
   });
@@ -669,9 +733,9 @@ void main() {
       'Given a stopped client whose local read throws StoppedException, when upsert is called with a 65-character id, then StoppedException is thrown and nothing is written',
       () async {
     final c = await todos();
-    stubReads(
+    stubLookups(
       local: (_) => throw StoppedException('the client has stopped'),
-      remote: readStore,
+      remote: metaInStore,
     );
 
     await expectLater(
@@ -683,12 +747,74 @@ void main() {
       'Given no local item with a 65-character id and a stopped client whose atServer read throws StoppedException, when upsert is called with that id, then StoppedException is thrown and nothing is written',
       () async {
     final c = await todos();
-    remoteReadsFailWith(StoppedException('the client has stopped'));
+    remoteLookupsFailWith(StoppedException('the client has stopped'));
 
     await expectLater(
         c.upsert(obj: 'v', id: long), throwsA(isA<StoppedException>()));
     expectNothingWritten();
     expect(store, isEmpty);
+  });
+
+  test(
+      'Given no local item with a 65-character id and a record under it on the atServer whose value fails to decrypt with a CryptoProviderNotRegistered or a FormatException, when upsert is called with that id, then the item holds the new value',
+      () async {
+    final key = '$long.$namespace@alice';
+    for (final failure in <Object>[
+      CryptoProviderNotRegistered('no provider is registered for "pq-1"'),
+      const FormatException('Invalid length, must be multiple of four'),
+    ]) {
+      final shape = '${failure.runtimeType}';
+      store.clear();
+      stubLookups(remote: (_) => Metadata()..isEncrypted = true);
+      valueReadFailsWith(key, failure, atServer: true);
+      final c = await todos();
+
+      await c.upsert(obj: 'new', id: long);
+
+      expect(jsonDecode(store[key]!.value)['obj'], 'new', reason: shape);
+      expectNoValueRead();
+    }
+  });
+
+  test(
+      'Given an item with a 65-character id that the atServer holds but has not yet made available, when upsert is called with that id, then the item holds the new value',
+      () async {
+    final c = await todos();
+    stubLookups(remote: (_) => null);
+
+    await c.upsert(obj: 'new', id: long);
+
+    expect(jsonDecode(store['$long.$namespace@alice']!.value)['obj'], 'new');
+  });
+
+  test(
+      'Given no local item with a 65-character id and an atServer lookup that fails without an answer, when upsert is called with that id, then the ArgumentError says the atServer could not be checked',
+      () async {
+    final c = await todos();
+    remoteLookupsFailWith(SecondaryConnectException('cannot reach'));
+
+    await expectLater(
+        c.upsert(obj: 'v', id: long),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.invalidValue, 'invalidValue', long)
+            .having((e) => '${e.message}', 'message', uncheckedMessage)));
+    expectNothingWritten();
+    expect(store, isEmpty);
+  });
+
+  test(
+      'Given no item with a 65-character id, when upsert is called with that id, then the ArgumentError does not say the atServer could not be checked',
+      () async {
+    final c = await todos();
+
+    await expectLater(
+        c.upsert(obj: 'v', id: long),
+        throwsA(isA<ArgumentError>()
+            .having((e) => '${e.message}', 'message', newIdMessage)));
+    verify(() => atClient.getMeta(any(),
+            getRequestOptions:
+                any(named: 'getRequestOptions', that: atServerOptions())))
+        .called(1);
   });
 
   test(
@@ -833,12 +959,6 @@ void main() {
     final c = await todos();
     expect(await c.exists(long, alice), isTrue);
     store.remove('$long.$namespace@alice');
-    // NOTE: the client's local read reports an expired key this way.
-    stubReads(
-      local: (k) =>
-          throw AtKeyNotFoundException('$k does not exist in keystore'),
-      remote: readStore,
-    );
     clearInteractions(atClient);
 
     await expectLater(c.upsert(obj: 'new', id: long), refusesNewId(long));
@@ -846,19 +966,19 @@ void main() {
   });
 
   test(
-      'Given a stored item with a 65-character id that cannot be read, when upsert is called with that id, then the item holds the new value',
+      'Given a stored item with a 65-character id whose local lookup fails with an error other than not found, when upsert is called with that id, then the item holds the new value',
       () async {
     seed('$long.$namespace@alice', 'old');
     final c = await todos();
     final unreadable = AtKey.fromString('$long.$namespace@alice').toString();
-    stubReads(
+    stubLookups(
       local: (k) {
         if (k.toString() == unreadable) {
-          throw AtDecryptionException('cannot decrypt $k');
+          throw DataStoreException('exception in get: the box is unreadable');
         }
-        return readStore(k);
+        return metaInStore(k);
       },
-      remote: readStore,
+      remote: metaInStore,
     );
 
     await c.upsert(obj: 'new', id: long);
@@ -871,9 +991,9 @@ void main() {
       () async {
     seed('$long.$namespace@alice', 'old');
     final c = await todos();
-    stubReads(
+    stubLookups(
       local: (_) =>
-          throw asGetThrows(AtValueException('cannot parse the stored value')),
+          throw DataStoreException('exception in get: the box is unreadable'),
       remote: (_) =>
           throw asGetThrows(UnAuthenticatedException('session refused')),
     );
@@ -881,6 +1001,25 @@ void main() {
     await c.upsert(obj: 'new', id: long);
 
     expect(jsonDecode(store['$long.$namespace@alice']!.value)['obj'], 'new');
+  });
+
+  test(
+      'Given local storage holds a record under a 65-character id whose value this client cannot open, when upsert is called with that id, then the item holds the new value and the atServer is not asked',
+      () async {
+    final key = '$long.$namespace@alice';
+    seed(key, 'old');
+    valueReadFailsWith(key,
+        KeyNotFoundException('privatekey:self_encryption_key does not exist'),
+        atServer: false);
+    final c = await todos();
+
+    await c.upsert(obj: 'new', id: long);
+
+    expect(jsonDecode(store[key]!.value)['obj'], 'new');
+    verifyNever(() => atClient.getMeta(any(),
+        getRequestOptions:
+            any(named: 'getRequestOptions', that: atServerOptions())));
+    expectNoValueRead();
   });
 
   // Sub-collection names

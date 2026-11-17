@@ -1083,10 +1083,14 @@ interface class AtCollection<T> {
   /// or write when [id] is empty, starts with `_`, or contains `.`, `:`,
   /// `@`, whitespace or a control character. When neither local storage
   /// nor the atServer holds an item with the id, throws [ArgumentError]
-  /// before any write unless it meets [create]'s rule for a new item's id;
-  /// a local item that cannot be read counts as one that exists, and an
-  /// atServer read counts the item as held only on a value or an
-  /// [AtDecryptionException].
+  /// before any write unless it meets [create]'s rule for a new item's id.
+  /// Whether an item is held is decided from its metadata, never its value,
+  /// so an item this client cannot decrypt counts as held. A stopped client
+  /// throws [StoppedException] from either lookup rather than counting as
+  /// held; otherwise a local lookup that fails for any reason but the item's
+  /// absence counts as held, and an atServer lookup that fails without an
+  /// answer keeps the refusal, whose message says the atServer could not be
+  /// checked.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -1112,9 +1116,11 @@ interface class AtCollection<T> {
       expiresAt: expiresAt,
       availableAt: availableAt,
     );
-    if (!_newIdPattern.hasMatch(draft.id) &&
-        !await _selfKeyFoundOrUnreadable(draft.id)) {
-      _checkNewId(draft.id, id);
+    if (!_newIdPattern.hasMatch(draft.id)) {
+      final held = await _selfKeyHeld(draft.id);
+      if (held != _Held.yes) {
+        _checkNewId(draft.id, id, atServerChecked: held == _Held.no);
+      }
     }
     final results = await _put(draft);
     if (results.any((r) => r is OpFailure)) {
@@ -3237,11 +3243,16 @@ interface class AtCollection<T> {
   }
 
   /// Throws [ArgumentError], naming the [given] id, when [folded] is not a
-  /// valid id for a new item.
-  static void _checkNewId(String folded, String given) {
+  /// valid id for a new item; unless [atServerChecked], the message says the
+  /// atServer could not be checked for an item with the id.
+  static void _checkNewId(String folded, String given,
+      {bool atServerChecked = true}) {
     if (!_newIdPattern.hasMatch(folded)) {
-      throw _IdArgumentError(given, 'id',
-          'a new item id must be 1 to 64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit');
+      throw _IdArgumentError(
+          given,
+          'id',
+          'a new item id must be 1 to 64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit'
+              '${atServerChecked ? '' : '; the atServer could not be checked for an item with this id'}');
     }
   }
 
@@ -3264,33 +3275,33 @@ interface class AtCollection<T> {
     );
   }
 
-  /// Whether this atSign's own copy of [id], past the seen-id cache, is found
-  /// or is held but cannot be read.
+  /// Whether this atSign's own item [id], past the seen-id cache, is held,
+  /// judged from its metadata alone: [AtClient.getMeta] never reads a value.
   ///
-  /// The first read asks for local storage explicitly, so it stays on the
-  /// device whatever the client's `remoteLocalPref` says, and one that fails
-  /// for any reason but the item's absence counts as found. When the local
-  /// read finds nothing, the atServer is asked too, so an item that sync has
-  /// not yet brought to this device still counts as found. On that read only
-  /// a value or an [AtDecryptionException] counts as found; any other failure
-  /// counts as not found.
-  Future<bool> _selfKeyFoundOrUnreadable(String id) async {
+  /// A [StoppedException] from either lookup is rethrown. The first lookup
+  /// asks local storage explicitly, so it stays on the device whatever the
+  /// client's `remoteLocalPref` says, and one that fails for any reason but
+  /// the item's absence counts as held. When local storage holds nothing, the
+  /// atServer is asked too, so an item that sync has not yet brought to this
+  /// device is still held. There only an answer counts: a lookup that fails
+  /// without one leaves the item unchecked.
+  Future<_Held> _selfKeyHeld(String id) async {
     final key = '$id.$namespace$atSign';
     for (final remote in [false, true]) {
       try {
-        await atClient.get(AtKey.fromString(key),
+        await atClient.getMeta(AtKey.fromString(key),
             getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);
-        return true;
+        return _Held.yes;
       } catch (e) {
         if (e is StoppedException) rethrow;
         if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
-        if (!remote) return true;
-        // NOTE: on the atServer read, the only failure that counts as found
-        // is an AtDecryptionException.
-        if (e is AtDecryptionException) return true;
+        if (!remote) return _Held.yes;
+        // NOTE: a failed atServer lookup that is not an answer says nothing
+        // about the item, so the refusal holds.
+        return _Held.unchecked;
       }
     }
-    return false;
+    return _Held.no;
   }
 
   Future<bool> _selfKeyExists(String id) async {
@@ -5693,6 +5704,11 @@ final class CSubItemDeleted extends CEvent {
   /// item — equivalent to `ancestry.last.subName`.
   String get subName => ancestry.last.subName;
 }
+
+/// What [AtCollection]'s lookups of its own item's metadata found: an answer
+/// that the item is held, an answer that it is not, or no answer from the
+/// atServer.
+enum _Held { yes, no, unchecked }
 
 /// An [ArgumentError] for an item id or subName whose text shows the value
 /// escaped onto one line, as AtCollection's warnings show it.
