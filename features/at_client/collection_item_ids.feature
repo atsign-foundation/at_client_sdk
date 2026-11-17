@@ -424,6 +424,13 @@ Feature: AtCollection checks every item id before using it in a key
     Then upsert does not throw the new-id ArgumentError
     And no lookup reached the atServer
 
+  Scenario: Given a client without its self encryption key whose local storage holds a record under a 65-character id, when upsert is called with that id, then it refuses and the record keeps its value
+    Given a client of @alice without its self encryption key
+    And local storage and the atServer hold a record under the id of 65 "a" characters, written by a client of @alice that had every key
+    When upsert is called with that id and a new value
+    Then CollectionOpException is thrown
+    And the atServer's record keeps its old value
+
   # Sub-collection names
 
   Scenario: Given a subName containing ":", when subCollection is called, then ArgumentError is thrown
