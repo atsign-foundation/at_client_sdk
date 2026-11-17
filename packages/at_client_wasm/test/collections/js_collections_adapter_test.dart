@@ -203,6 +203,41 @@ void main() {
       expect(item?['data'], {'t': 1});
     });
 
+    test(
+        'A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"',
+        () async {
+      final todos = await open();
+      await todos.create({'t': 1}, id: 'a1');
+
+      await expectLater(todos.create({'t': 2}, id: 'A1'),
+          _rejectsWith(CollectionErrorCodes.alreadyExists, id: 'a1'));
+    });
+
+    test(
+        'An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"',
+        () async {
+      final todos = await open();
+
+      for (final call in <String, Future<Object?> Function()>{
+        'update': () => todos.update(mine('B1'), {'t': 2}),
+        'share': () => todos.share(mine('B1'), ['@bob']),
+        'remove': () => todos.remove(mine('B1')),
+      }.entries) {
+        await expectLater(call.value(),
+            _rejectsWith(CollectionErrorCodes.notFound, id: 'b1'),
+            reason: call.key);
+      }
+    });
+
+    test(
+        'An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"',
+        () async {
+      final todos = await open();
+
+      await expectLater(todos.update(bobs('B1'), {'t': 2}),
+          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1'));
+    });
+
     test('A get addresses an item already stored under a 65-character id',
         () async {
       server.putRaw(

@@ -13,6 +13,7 @@ import 'dart:typed_data';
 // API) can use `StringBuffer` with its standard Dart semantics.
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
@@ -1080,10 +1081,10 @@ interface class AtCollection<T> {
   ///
   /// [id] is folded to lower case. Throws [ArgumentError] before any read
   /// or write when [id] is empty, starts with `_`, or contains `.`, `:`,
-  /// `@`, whitespace or a control character. When a read finds no item
-  /// with the id, throws [ArgumentError] before any write unless it meets
-  /// [create]'s rule for a new item's id; an item that cannot be read
-  /// counts as one that exists.
+  /// `@`, whitespace or a control character. When neither local storage
+  /// nor the atServer holds an item with the id, throws [ArgumentError]
+  /// before any write unless it meets [create]'s rule for a new item's id;
+  /// an item that cannot be read counts as one that exists.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -3263,14 +3264,28 @@ interface class AtCollection<T> {
 
   /// Whether a read of this atSign's own copy of [id], past the seen-id
   /// cache, finds it or fails for a reason other than its absence.
+  ///
+  /// When the local read finds nothing, the atServer is asked too, so an item
+  /// that sync has not yet brought to this device still counts as found.
   Future<bool> _selfKeyFoundOrUnreadable(String id) async {
-    try {
-      await atClient.get(AtKey.fromString('$id.$namespace$atSign'));
-      return true;
-    } catch (e) {
-      if (e is StoppedException) rethrow;
-      return e is! AtKeyNotFoundException && e is! KeyNotFoundException;
+    final key = '$id.$namespace$atSign';
+    for (final remote in [false, true]) {
+      try {
+        if (remote) {
+          await atClient.get(AtKey.fromString(key),
+              getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+        } else {
+          await atClient.get(AtKey.fromString(key));
+        }
+        return true;
+      } catch (e) {
+        if (e is StoppedException) rethrow;
+        if (e is! AtKeyNotFoundException && e is! KeyNotFoundException) {
+          return true;
+        }
+      }
     }
+    return false;
   }
 
   Future<bool> _selfKeyExists(String id) async {

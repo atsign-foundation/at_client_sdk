@@ -29,7 +29,20 @@ void main() {
   /// @alice's local keystore: each key's string form, its key and its value.
   late Map<String, ({AtKey key, String value})> store;
 
+  /// Keys @alice's atServer holds that sync has not yet brought to [store];
+  /// only a get sent to the atServer finds them.
+  late Set<String> serverOnly;
+
   String envelope(String obj) => jsonEncode({'type': 'n/a', 'obj': obj});
+
+  /// [k]'s value in [store], as a local read returns it.
+  AtValue readStore(AtKey k) {
+    final stored = store[k.toString()];
+    if (stored == null) throw KeyNotFoundException('no value for $k');
+    return AtValue()
+      ..value = stored.value
+      ..metadata = stored.key.metadata;
+  }
 
   /// Writes a record directly, as another client writes it; a `cached:` key
   /// keeps its prefix, as a received copy does.
@@ -48,6 +61,7 @@ void main() {
     atClient = MockAtClient();
     notifications = StreamController<AtNotification>.broadcast();
     store = {};
+    serverOnly = {};
     when(() => atClient.atSign).thenReturn(alice);
     when(() => atClient.getAtKeys(regex: any(named: 'regex')))
         .thenAnswer((inv) async {
@@ -59,11 +73,19 @@ void main() {
     });
     when(() => atClient.get(any())).thenAnswer((inv) async {
       final k = inv.positionalArguments.first as AtKey;
-      final stored = store[k.toString()];
-      if (stored == null) throw KeyNotFoundException('no value for $k');
-      return AtValue()
-        ..value = stored.value
-        ..metadata = stored.key.metadata;
+      return readStore(k);
+    });
+    when(() => atClient.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
+      final k = inv.positionalArguments.first as AtKey;
+      final options =
+          inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+      if (options?.useRemoteAtServer == true &&
+          serverOnly.contains(k.toString())) {
+        return AtValue()..value = envelope('on the atServer');
+      }
+      return readStore(k);
     });
     when(() => atClient.put(any(), any())).thenAnswer((inv) async {
       final k = inv.positionalArguments[0] as AtKey;
@@ -476,6 +498,11 @@ void main() {
     final c = await todos();
     await expectLater(c.upsert(obj: 'v', id: long), refusesNewId(long));
     verify(() => atClient.get(any())).called(1);
+    verify(() => atClient.get(any(),
+        getRequestOptions: any(
+            named: 'getRequestOptions',
+            that: isA<GetRequestOptions>().having((o) => o.useRemoteAtServer,
+                'useRemoteAtServer', isTrue)))).called(1);
     expectNothingWritten();
     expect(store, isEmpty);
   });
@@ -561,6 +588,17 @@ void main() {
   });
 
   test(
+      'Given an item whose id contains "*" that the atServer holds and local storage does not yet, when upsert is called with that id, then the item holds the new value',
+      () async {
+    serverOnly.add(AtKey.fromString('a*b.$namespace@alice').toString());
+    final c = await todos();
+
+    await c.upsert(obj: 'new', id: 'a*b');
+
+    expect(jsonDecode(store['a*b.$namespace@alice']!.value)['obj'], 'new');
+  });
+
+  test(
       'Given a stored item whose id starts with "-", when updateSharedWith adds @bob, then a copy for @bob is written',
       () async {
     seed('-a.$namespace@alice', 'old');
@@ -632,11 +670,7 @@ void main() {
       if (k.toString() == unreadable) {
         throw AtDecryptionException('cannot decrypt $k');
       }
-      final stored = store[k.toString()];
-      if (stored == null) throw KeyNotFoundException('no value for $k');
-      return AtValue()
-        ..value = stored.value
-        ..metadata = stored.key.metadata;
+      return readStore(k);
     });
 
     await c.upsert(obj: 'new', id: long);

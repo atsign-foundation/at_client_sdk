@@ -163,7 +163,7 @@ final class JsCollectionsAdapter {
             sharedWith: {for (final a in sharedWith) a.toAtsign()},
           ));
         },
-        id: id,
+        id: _errorId(id),
         owner: _collection.atSign,
         stateError: id == null ? null : CollectionErrorCodes.alreadyExists,
       );
@@ -267,12 +267,12 @@ final class JsCollectionsAdapter {
           if (owner != _collection.atSign) {
             throw JsCollectionsError(CollectionErrorCodes.notOwner,
                 'item ${address.id} is owned by $owner, not ${_collection.atSign}',
-                id: address.id, owner: owner);
+                id: _errorId(address.id), owner: owner);
           }
           final current = await _collection.get(address.id, owner);
           return _item(await write(current));
         },
-        id: address.id,
+        id: _errorId(address.id),
         owner: address.owner,
         stateError: stateError,
       );
@@ -430,6 +430,10 @@ final class JsCollectionsAdapter {
       _ => {'type': 'unknown', ...head},
     };
   }
+
+  /// The id an error reports for the caller's [id]: folded to lower case, as
+  /// AtCollection folds it, so it matches the id of the item listed.
+  static String? _errorId(String? id) => id?.toLowerCase();
 
   /// Runs [body], turning anything it throws into a [JsCollectionsError].
   /// [stateError] is the code for a StateError from the operation, which
