@@ -121,7 +121,8 @@ collection layer. Typical use: a stateless agent instance that pairs
 
 A request-options object overrides the preference only when it sets
 `useRemoteAtServer`. Left unset, the operation follows `remoteLocalPref`; set
-to `false`, it runs locally even on a `remoteOnly` client.
+to `false`, it runs locally even on a `remoteOnly` client. A `local:` key
+never leaves the device, whatever the preference or option says.
 
 ---
 
