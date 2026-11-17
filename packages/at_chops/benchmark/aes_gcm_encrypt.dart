@@ -7,10 +7,12 @@
 /// ```
 ///
 /// Samples alternate between the implementations, and which goes first
-/// alternates too. Each implementation's line prints the median, minimum and
-/// maximum time per call, and the SHA-256 every sample's output shares, so two
-/// builds can be compared for both time and bytes. A sample whose output
-/// differs from the first sample's stops the run with a [StateError].
+/// alternates too. Every timed sample's output, from either implementation,
+/// must have the same SHA-256 as the run's first timed output, and the first
+/// that differs stops the run with a [StateError]; warmup calls are not
+/// checked. Each implementation's line prints the median, minimum and maximum
+/// time per call and that SHA-256, so two builds can be compared for both time
+/// and bytes.
 library;
 
 import 'dart:convert';
@@ -49,7 +51,7 @@ Future<void> main(List<String> args) async {
   };
   final List<String> names = algos.keys.toList();
   final Map<String, List<int>> micros = {for (final n in names) n: <int>[]};
-  final Map<String, String> digests = {};
+  String? reference;
 
   for (final String name in names) {
     for (int i = 0; i < warmupCalls; i++) {
@@ -67,10 +69,10 @@ Future<void> main(List<String> args) async {
       sw.stop();
       micros[name]!.add(sw.elapsedMicroseconds);
       final String digest = sha256.convert(out).toString();
-      final String first = digests.putIfAbsent(name, () => digest);
-      if (digest != first) {
+      reference ??= digest;
+      if (digest != reference) {
         throw StateError('impl=$name sample $i output SHA-256 $digest differs '
-            "from the first sample's $first");
+            "from the run's first output's $reference");
       }
     }
   }
@@ -83,7 +85,7 @@ Future<void> main(List<String> args) async {
     stdout.writeln('aes_gcm_encrypt impl=$name bytes=$chunkLength '
         'n=${sorted.length} median_us=${_median(sorted)} '
         'min_us=${sorted.first} max_us=${sorted.last} '
-        'output_sha256=${digests[name]}');
+        'output_sha256=$reference');
   }
 }
 
