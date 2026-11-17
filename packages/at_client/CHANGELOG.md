@@ -37,6 +37,7 @@
   names the id and its owner; `getItems` and `getItemsAsStream` leave out an
   item stored under such an id, with the same warning. `AtCollection` matches
   a namespace or `subName` literally when it lists keys.
+  `upsert` counts an item only the atServer holds so far as stored.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
