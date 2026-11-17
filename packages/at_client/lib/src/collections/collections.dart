@@ -116,7 +116,8 @@ enum EventSource { data, notifs, both }
 /// either [Query.get] (one-shot `Future<List<CItem<T>>>`) or
 /// [Query.watch] (live reactive `Stream<List<CItem<T>>>`). Queries
 /// are immutable values — build once, pass around, reuse. Execution
-/// is always on-device against the local synced store.
+/// is always on-device, over the records the client reads: its local
+/// synced store by default.
 ///
 /// ```dart
 /// final overdue = todos.query()
@@ -1396,13 +1397,15 @@ interface class AtCollection<T> {
   /// `getOrNull(id, owner) != null` when you only care whether the
   /// item is there.
   ///
-  /// Both paths issue a single [AtClient.get] probe against the LOCAL
-  /// store. For self-owned items the call short-circuits on the seen-id
-  /// cache populated by every successful read/write in this process and
-  /// only probes on a miss. For items owned by other atSigns it probes the
-  /// received copy `cached:<self>:<id>.<namespace><owner>` — the same
-  /// locally-stored key shape [getOrNull] reads — so `exists` and
-  /// `getOrNull(id, owner) != null` agree, including offline.
+  /// Both paths issue a single [AtClient.get] probe, routed by the client's
+  /// preference: local storage by default, the atServer under
+  /// [RemoteLocalPref.remoteOnly]. For self-owned items the call
+  /// short-circuits on the seen-id cache populated by every successful
+  /// read/write in this process and only probes on a miss. For items owned
+  /// by other atSigns it probes the received copy
+  /// `cached:<self>:<id>.<namespace><owner>` — the same key shape
+  /// [getOrNull] reads — so `exists` and `getOrNull(id, owner) != null`
+  /// agree, offline too on a client that reads local storage.
   ///
   /// [id] is folded to lower case. Throws [ArgumentError] before any read
   /// when [id] is empty or contains `.`, `:`, `@`, whitespace or a control
@@ -1412,10 +1415,11 @@ interface class AtCollection<T> {
     if (owner == atSign) {
       return _selfKeyExists(id);
     }
-    // Build the cached shape (leading `cached:` sets isCached, which routes
-    // the get to the LOCAL secondary). Omitting it yields `@self:id.ns@owner`
-    // with isCached=false — an other-owner key the verb-builder routes to a
-    // REMOTE lookup, which would diverge from getOrNull and fail offline.
+    // Build the cached shape (leading `cached:` sets isCached, so the get is
+    // routed like a read of this atSign's own storage). Omitting it yields
+    // `@self:id.ns@owner` with isCached=false — an other-owner key the
+    // verb-builder routes to a REMOTE lookup, which would diverge from
+    // getOrNull and fail offline.
     try {
       await atClient
           .get(AtKey.fromString('cached:$atSign:$id.$namespace$owner'));
@@ -2186,10 +2190,14 @@ interface class AtCollection<T> {
   /// after an offline period during which a parent may have been
   /// deleted on another atSign.
   ///
+  /// Every read and delete it makes is routed by the client's preference:
+  /// local storage by default, the atServer under
+  /// [RemoteLocalPref.remoteOnly].
+  ///
   /// Behaviour depends on the collection instance:
   ///
   /// - **Sub-collection** (instance returned by [subCollection]): if
-  ///   its bound parent no longer exists locally, delete every
+  ///   its bound parent no longer exists, delete every
   ///   self-owned item that matches this sub-collection's ancestor-
   ///   owner chain. Cross-owner same-id chains are spared.
   ///
@@ -2197,7 +2205,7 @@ interface class AtCollection<T> {
   ///   descendant (any sub-collection, any depth) under this
   ///   collection's namespace; for each, walk the full ancestor chain
   ///   (ids from the key + owners from the envelope `parents` field)
-  ///   and delete if any level is missing locally. Legacy items with
+  ///   and delete if any level is missing. Legacy items with
   ///   no `parents` envelope fall back to a root-ancestor-only check.
   ///
   /// The cleanest place to invoke this is implicitly via
@@ -2391,7 +2399,8 @@ interface class AtCollection<T> {
   }
 
   /// Returns the set of ids that exist as direct items at the given
-  /// [composedNs] locally, across any owner. Used by the legacy
+  /// [composedNs], where the client's preference routes a scan, across any
+  /// owner. Used by the legacy
   /// (`parents`-less) chain-walker in [_cleanupOrphansFromRoot] to
   /// verify each ancestor level on items that pre-date the
   /// envelope-`parents` convention. Cached in [cache] so repeated
@@ -3830,7 +3839,8 @@ final class WithChildren<P, C> {
 /// Queries are **immutable**: each modifier returns a new [Query].
 /// Reuse a built query anywhere; there's no shared mutable state.
 ///
-/// Execution is **on-device**, over the local synced store. Under
+/// Execution is **on-device**, over the records the client reads: its local
+/// synced store by default. Under
 /// end-to-end encryption the atServer cannot decrypt the records it
 /// holds on your behalf, so on-device is the only correct model —
 /// not a performance compromise. See the [AtCollection] class doc for
@@ -3938,7 +3948,7 @@ final class Query<T> {
     return Query<T>._(_collection, _spec._withSkip(n));
   }
 
-  /// One-shot fetch. Reads the local store once, applies the spec,
+  /// One-shot fetch. Reads the collection once, applies the spec,
   /// returns a list. For a live reactive variant, see [watch].
   ///
   /// Propagates any error from the underlying [AtCollection.getItems]
