@@ -277,7 +277,7 @@ Feature: AtCollection checks every item id before using it in a key
 
   Scenario: upsert keeps refusing a new over-long id when the atServer read fails with an error other than not found
     Given local storage holds no item under a 65-character id
-    And looking that id up on the atServer fails with an error that does not show the atServer answered
+    And looking that id up on the atServer fails with an error other than not found
     When the app calls `upsert` with that id
     Then `upsert` throws `ArgumentError` naming the new-id rules
     And nothing is written
@@ -291,7 +291,7 @@ Feature: AtCollection checks every item id before using it in a key
 
   Scenario: Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails with an error other than not found, then upsert throws ArgumentError naming the new-id rules and nothing is written
     Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly, holding no item with the id of 65 "a" characters
-    And a lookup sent to the atServer fails with an error that does not show the atServer answered
+    And a lookup sent to the atServer fails with an error other than not found
     When upsert is called with that id and a new value
     Then upsert throws ArgumentError naming the new-id rules
     And nothing is written
@@ -413,7 +413,7 @@ Feature: AtCollection checks every item id before using it in a key
   Scenario: Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails with an error other than not found, when upsert is called with that id, then the item holds the new value
     Given a collection "todos.demo" of @alice holding a stored item whose id is 65 "a" characters
     And looking that item up locally fails with an error other than not found
-    And looking it up on the atServer fails with an error that does not show the atServer answered
+    And looking it up on the atServer fails with an error other than not found
     When upsert is called with that id and a new value
     Then the item holds the new value
 
