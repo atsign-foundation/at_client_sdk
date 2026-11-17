@@ -14,12 +14,15 @@ import 'package:at_commons/at_builders.dart';
 class LookUpBuilderManager {
   ///Returns a [VerbBuilder] for the given AtKey instance
   ///
+  /// [operation] is the lookup's operation: `all` for the value and its
+  /// metadata, `meta` for the metadata alone.
+  ///
   /// A lookup of an nskey advertisement or an `_apsk` record always bypasses
   /// the cache, whatever [getRequestOptions] asks, so a cached copy that some
   /// writer gave a `ttr` is never served in place of the owner's record.
   static VerbBuilder get(
       AtKey atKey, String currentAtSign, AtClientPreference atClientPreference,
-      {GetRequestOptions? getRequestOptions}) {
+      {GetRequestOptions? getRequestOptions, String operation = 'all'}) {
     // If isPublic is true in metadata, the key is a public key, return PLookupVerbHandler.
     if (atKey.sharedBy != currentAtSign &&
         (atKey.metadata.isPublic && !atKey.metadata.isCached)) {
@@ -27,7 +30,7 @@ class LookUpBuilderManager {
         ..atKey = (AtKey()
           ..key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
           ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy))
-        ..operation = 'all';
+        ..operation = operation;
       if (_bypassesCache(plookUpVerbBuilder.atKey.key, getRequestOptions)) {
         plookUpVerbBuilder.bypassCache = true;
       }
@@ -41,7 +44,7 @@ class LookUpBuilderManager {
           ..key = AtClientUtil.getKeyWithNameSpace(atKey, atClientPreference)
           ..sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy))
         ..auth = true
-        ..operation = 'all';
+        ..operation = operation;
       if (_bypassesCache(lookupVerbBuilder.atKey.key, getRequestOptions)) {
         lookupVerbBuilder.bypassCache = true;
       }
@@ -56,7 +59,7 @@ class LookUpBuilderManager {
           ..isPublic = atKey.metadata.isPublic
           ..isCached = atKey.metadata.isCached)
         ..isLocal = atKey.isLocal)
-      ..operation = 'all';
+      ..operation = operation;
   }
 }
 

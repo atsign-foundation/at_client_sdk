@@ -69,6 +69,17 @@ The two are independent: `useRemoteAtServer` chooses _which secondary_ answers
 for keys that resolve locally; `bypassCache` chooses _whether a remote lookup
 may be served from cache_.
 
+```dart
+// The same options on getMeta: metadata only, nothing decrypted
+final meta = await atClient.getMeta(
+  key,
+  getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+);
+```
+
+`getMeta` takes the same options as `get` and returns null for a record that
+is held but not visible now.
+
 ## `DeleteRequestOptions.useRemoteAtServer`
 
 ```dart

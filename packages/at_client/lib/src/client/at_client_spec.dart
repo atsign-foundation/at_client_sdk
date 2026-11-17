@@ -357,7 +357,23 @@ abstract class AtClient {
   ///
   Future<AtValue> get(AtKey key, {GetRequestOptions? getRequestOptions});
 
-  /// Gets the metadata of [AtKey.key]
+  /// Gets the metadata of [key] without its value: nothing is decrypted, so a
+  /// record this client cannot open still answers.
+  ///
+  /// [getRequestOptions] chooses where the lookup goes, as it does for [get]:
+  /// [GetRequestOptions.useRemoteAtServer] set to true asks the atServer, set
+  /// to false asks local storage, and left unset follows
+  /// [AtClientPreference.remoteLocalPref]. A key another Atsign owns is always
+  /// looked up on the atServer, and [GetRequestOptions.bypassCache] skips the
+  /// atServer's cached copy of it.
+  ///
+  /// Returns null when the record is held but not visible now: not yet
+  /// available, or expired and not yet removed.
+  ///
+  /// Throws [AtKeyNotFoundException] when no record is held under [key],
+  /// [AtKeyException] for an invalid [key], [AtClientException] when the lookup
+  /// fails any other way, including an answer that is not metadata, and
+  /// [StoppedException] after [stop].
   /// ```
   /// e.g alice is current atsign
   /// llookup:phone@alice
@@ -375,7 +391,7 @@ abstract class AtClient {
   ///   getMeta(atKey);
   ///
   /// ```
-  Future<Metadata?> getMeta(AtKey key);
+  Future<Metadata?> getMeta(AtKey key, {GetRequestOptions? getRequestOptions});
 
   /// Deletes [key] from local storage, and sync later pushes the removal to
   /// the atServer; [DeleteRequestOptions.useRemoteAtServer] sends it to the

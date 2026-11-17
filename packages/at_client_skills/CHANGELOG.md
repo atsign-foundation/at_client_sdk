@@ -11,6 +11,8 @@
   an `AtDecryptionException`; a `subName` is folded too and must hold only
   characters a key's name can hold; no event or listed item carries a refused
   id, and event ids arrive folded (`SKILL.md`; `references/02`, `07`).
+- `getMeta` reads a key's metadata without decrypting its value, and takes
+  `getRequestOptions` as `get` does (`references/12`).
 - On a `remoteOnly` client, request options that leave `useRemoteAtServer`
   unset follow the preference; only an explicit value overrides it
   (`references/12`).

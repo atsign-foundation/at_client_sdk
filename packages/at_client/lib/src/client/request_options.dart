@@ -16,7 +16,8 @@ class GetRequestOptions extends RequestOptions {
   /// it whatever this says.
   bool bypassCache = false;
 
-  /// Whether to send this get request directly to the remote atServer.
+  /// Whether to send this `get` or `getMeta` request directly to the remote
+  /// atServer.
   ///
   /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
   /// is enforced. It reads false while unset, so copying it into another

@@ -40,6 +40,13 @@
   `upsert` reads the atServer for an id that breaks the new-id rule and that
   local storage lacks; only a value or an `AtDecryptionException` counts as
   stored.
+- feat: `AtClient.getMeta` reads a key's metadata without its value, so it no
+  longer decrypts and answers for a record this client cannot open; it takes
+  `getRequestOptions`, as `get` does, to choose between local storage and the
+  atServer. `AtClient` implementers must add the parameter. It returns null for
+  a record that is held but not visible now, no longer rewrites the metadata of
+  the key it is given, and reports `isCached` from the key asked for, not from
+  whether the atServer served it from its cache.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
