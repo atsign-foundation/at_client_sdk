@@ -602,6 +602,30 @@ void main() {
   });
 
   test(
+      'Given a stopped client whose local read throws StoppedException, when upsert is called with a 65-character id, then StoppedException is thrown and nothing is written',
+      () async {
+    final c = await todos();
+    when(() => atClient.get(any())).thenAnswer(
+        (_) async => throw StoppedException('the client has stopped'));
+
+    await expectLater(
+        c.upsert(obj: 'v', id: long), throwsA(isA<StoppedException>()));
+    expectNothingWritten();
+  });
+
+  test(
+      'Given no local item with a 65-character id and a stopped client whose atServer read throws StoppedException, when upsert is called with that id, then StoppedException is thrown and nothing is written',
+      () async {
+    final c = await todos();
+    remoteReadsFailWith(StoppedException('the client has stopped'));
+
+    await expectLater(
+        c.upsert(obj: 'v', id: long), throwsA(isA<StoppedException>()));
+    expectNothingWritten();
+    expect(store, isEmpty);
+  });
+
+  test(
       "Given no id, when create is called, then the item's id is 8 characters of a-z and 0-9",
       () async {
     final c = await todos();
