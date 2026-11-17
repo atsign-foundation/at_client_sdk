@@ -36,14 +36,14 @@ Feature: AtCollection checks every item id before using it in a key
   longer than 64 characters before any read or write, and upsert refuses one
   once neither local storage nor the atServer holds an item under it, judged
   from the item's metadata without decrypting it (an atServer lookup that
-  fails without an answer keeps the refusal, and the error says the atServer
-  could not be checked); reads accept an id of any length, and the check is
-  linear in the id's length, an item another Atsign shares under an id
-  starting with "_" can still be read by that id, and an event whose ids the
-  check refuses is not emitted, so no event hands the app an id its reads
-  refuse; each such event costs one warning and writes nothing to the local
-  keystore, while each other notification costs a log line and a local write
-  (the scenarios tagged @dos).
+  fails with an error other than not found keeps the refusal, and the error
+  says the atServer could not be checked); reads accept an id of any length,
+  and the check is linear in the id's length, an item another Atsign shares
+  under an id starting with "_" can still be read by that id, and an event
+  whose ids the check refuses is not emitted, so no event hands the app an id
+  its reads refuse; each such event costs one warning and writes nothing to
+  the local keystore, while each other notification costs a log line and a
+  local write (the scenarios tagged @dos).
   Forgery: the app's own code supplies every id, and it holds this Atsign's
   keys and could write any key directly; the check matters when an app builds
   an id from input it did not write. Every call refuses an id containing ".",
@@ -275,7 +275,7 @@ Feature: AtCollection checks every item id before using it in a key
     Then get with that id returns the new value
     And upsert called getMeta for the id and never called get before writing
 
-  Scenario: upsert keeps refusing a new over-long id when the atServer read fails without an answer
+  Scenario: upsert keeps refusing a new over-long id when the atServer read fails with an error other than not found
     Given local storage holds no item under a 65-character id
     And looking that id up on the atServer fails with an error that does not show the atServer answered
     When the app calls `upsert` with that id
@@ -289,7 +289,7 @@ Feature: AtCollection checks every item id before using it in a key
     Then upsert throws ArgumentError naming the new-id rules
     And nothing is written
 
-  Scenario: Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails without an answer, then upsert throws ArgumentError naming the new-id rules and nothing is written
+  Scenario: Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails with an error other than not found, then upsert throws ArgumentError naming the new-id rules and nothing is written
     Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly, holding no item with the id of 65 "a" characters
     And a lookup sent to the atServer fails with an error that does not show the atServer answered
     When upsert is called with that id and a new value
@@ -321,7 +321,7 @@ Feature: AtCollection checks every item id before using it in a key
     When upsert is called with that id and a new value
     Then the item holds the new value
 
-  Scenario: Given no local item with a 65-character id and an atServer lookup that fails without an answer, when upsert is called with that id, then the ArgumentError says the atServer could not be checked
+  Scenario: Given no local item with a 65-character id and an atServer lookup that fails with an error other than not found, when upsert is called with that id, then the ArgumentError says the atServer could not be checked
     Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
     And getMeta, asked for that id on the atServer, throws an AtClientException
     When upsert is called with that id and a new value
@@ -410,7 +410,7 @@ Feature: AtCollection checks every item id before using it in a key
     When upsert is called with that id and a new value
     Then the item holds the new value
 
-  Scenario: Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails without an answer, when upsert is called with that id, then the item holds the new value
+  Scenario: Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails with an error other than not found, when upsert is called with that id, then the item holds the new value
     Given a collection "todos.demo" of @alice holding a stored item whose id is 65 "a" characters
     And looking that item up locally fails with an error other than not found
     And looking it up on the atServer fails with an error that does not show the atServer answered

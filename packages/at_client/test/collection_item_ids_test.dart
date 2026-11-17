@@ -676,7 +676,7 @@ void main() {
   });
 
   test(
-      'upsert keeps refusing a new over-long id when the atServer read fails without an answer',
+      'upsert keeps refusing a new over-long id when the atServer read fails with an error other than not found',
       () async {
     for (final failure in <AtException>[
       UnAuthenticatedException(
@@ -710,7 +710,7 @@ void main() {
   });
 
   test(
-      'Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails without an answer, then upsert throws ArgumentError naming the new-id rules and nothing is written',
+      'Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails with an error other than not found, then upsert throws ArgumentError naming the new-id rules and nothing is written',
       () async {
     final c = await todos();
     var atServerLookups = 0;
@@ -788,7 +788,7 @@ void main() {
   });
 
   test(
-      'Given no local item with a 65-character id and an atServer lookup that fails without an answer, when upsert is called with that id, then the ArgumentError says the atServer could not be checked',
+      'Given no local item with a 65-character id and an atServer lookup that fails with an error other than not found, when upsert is called with that id, then the ArgumentError says the atServer could not be checked',
       () async {
     final c = await todos();
     remoteLookupsFailWith(SecondaryConnectException('cannot reach'));
@@ -987,7 +987,7 @@ void main() {
   });
 
   test(
-      'Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails without an answer, when upsert is called with that id, then the item holds the new value',
+      'Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails with an error other than not found, when upsert is called with that id, then the item holds the new value',
       () async {
     seed('$long.$namespace@alice', 'old');
     final c = await todos();
