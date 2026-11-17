@@ -30,16 +30,57 @@ final class AesGcm256EncryptionAlgo
 
   static final crypto.AesGcm _aesGcm = crypto.AesGcm.with256bits();
 
-  final AESKey _aesKey;
+  // Exactly one of these is set: the AESKey path decodes and validates
+  // lazily at encrypt/decrypt time; the bytes path is validated and copied
+  // at construction.
+  final AESKey? _aesKey;
+  final Uint8List? _keyBytes;
 
-  AesGcm256EncryptionAlgo(this._aesKey);
+  AesGcm256EncryptionAlgo(AESKey aesKey)
+      : _aesKey = aesKey,
+        _keyBytes = null;
+
+  /// Creates the algorithm from a raw 32-byte AES-256 key.
+  ///
+  /// The bytes are copied, so later changes to [keyBytes] do not affect this
+  /// instance. For callers that hold the key as bytes rather than as an
+  /// [AESKey]. Throws [AtEncryptionException] if [keyBytes] is not 32 bytes.
+  ///
+  /// The copy this instance keeps lives until [close] zeroes it. This
+  /// constructor is for tests and the Dart VM. Browser production code keeps
+  /// its keys in the WebCrypto sealer instead (D-29).
+  AesGcm256EncryptionAlgo.fromKeyBytes(Uint8List keyBytes)
+      : _aesKey = null,
+        _keyBytes = _checkedCopy(keyBytes);
+
+  /// Zeroes the key copy made by [AesGcm256EncryptionAlgo.fromKeyBytes]; the
+  /// instance then refuses [encrypt] and [decrypt] with a [StateError]. A
+  /// no-op for the [AESKey] constructor, whose key is decoded per call.
+  void close() {
+    final Uint8List? stored = _keyBytes;
+    if (stored == null) return;
+    stored.fillRange(0, stored.length, 0);
+    _closed = true;
+  }
+
+  bool _closed = false;
+
+  static Uint8List _checkedCopy(Uint8List keyBytes) {
+    if (keyBytes.length != _keyLength) {
+      throw AtEncryptionException(
+          'AES-256-GCM requires a 256-bit key; got ${keyBytes.length * 8} bits');
+    }
+    return Uint8List.fromList(keyBytes);
+  }
+
+  static const int _keyLength = 32;
 
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
       {InitialisationVector? iv, List<int> aad = const []}) async {
     final crypto.SecretBox box = await _aesGcm.encrypt(
       plainData,
-      secretKey: crypto.SecretKey(_keyBytesForEncrypt()),
+      secretKey: crypto.SecretKey(_keyBytesFor(encrypting: true)),
       nonce: _nonceBytesForEncrypt(iv),
       aad: aad,
     );
@@ -61,7 +102,7 @@ final class AesGcm256EncryptionAlgo
       final List<int> plain = await _aesGcm.decrypt(
         crypto.SecretBox(cipherText,
             nonce: _nonceBytesForDecrypt(iv), mac: crypto.Mac(tag)),
-        secretKey: crypto.SecretKey(_keyBytesForDecrypt()),
+        secretKey: crypto.SecretKey(_keyBytesFor(encrypting: false)),
         aad: aad,
       );
       return Uint8List.fromList(plain);
@@ -72,21 +113,20 @@ final class AesGcm256EncryptionAlgo
     }
   }
 
-  Uint8List _keyBytesForEncrypt() {
-    // AESKey carries its material base64-encoded, per the at_chops contract.
-    final Uint8List keyBytes = base64Decode(_aesKey.key);
-    if (keyBytes.length != 32) {
-      throw AtEncryptionException(
-          'AES-256-GCM requires a 256-bit key; got ${keyBytes.length * 8} bits');
+  Uint8List _keyBytesFor({required bool encrypting}) {
+    final Uint8List? stored = _keyBytes;
+    if (stored != null) {
+      if (_closed) throw StateError('AesGcm256EncryptionAlgo is closed');
+      return stored;
     }
-    return keyBytes;
-  }
-
-  Uint8List _keyBytesForDecrypt() {
-    final Uint8List keyBytes = base64Decode(_aesKey.key);
-    if (keyBytes.length != 32) {
-      throw AtDecryptionException(
-          'AES-256-GCM requires a 256-bit key; got ${keyBytes.length * 8} bits');
+    // AESKey carries its material base64-encoded, per the at_chops contract.
+    final Uint8List keyBytes = base64Decode(_aesKey!.key);
+    if (keyBytes.length != _keyLength) {
+      final String message =
+          'AES-256-GCM requires a 256-bit key; got ${keyBytes.length * 8} bits';
+      throw encrypting
+          ? AtEncryptionException(message)
+          : AtDecryptionException(message);
     }
     return keyBytes;
   }
