@@ -1,19 +1,19 @@
 import 'package:meta/meta.dart' show internal;
 
 /// Parameters that application code can optionally provide when calling
-/// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
+/// `AtClient.get`, `AtClient.getMeta`, `AtClient.put` and `AtClient.delete`
 abstract class RequestOptions {
   bool? _useRemoteAtServer;
 }
 
 /// Parameters that application code can optionally provide when calling
-/// `AtClient.get`
+/// `AtClient.get` or `AtClient.getMeta`
 class GetRequestOptions extends RequestOptions {
-  /// Whether the `get` request should bypass this atSign's cache of data owned
-  /// by another atSign
+  /// Whether a `get` or `getMeta` lookup of data owned by another atSign
+  /// should bypass this atSign's cache of it
   ///
-  /// A get of another atSign's nskey advertisement or `_apsk` record bypasses
-  /// it whatever this says.
+  /// A `get` or `getMeta` of another atSign's nskey advertisement or `_apsk`
+  /// record bypasses it whatever this says.
   bool bypassCache = false;
 
   /// Whether to send this `get` or `getMeta` request directly to the remote
