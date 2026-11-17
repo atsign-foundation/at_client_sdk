@@ -22,6 +22,13 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
 
+/// An empty in-memory key store for a step that files keys the caller then
+/// reads back out, such as an enrollment request or an activation. Nothing in
+/// it outlives the process, so a client never runs on it.
+WrittenAtKeysIo scratchKeysIo() =>
+    // ignore: invalid_use_of_visible_for_testing_member
+    InMemoryAtKeysIo();
+
 /// The verbs an application reaches a working client through, on the atSign
 /// it holds keys for.
 ///
@@ -335,10 +342,7 @@ extension AtsignLifecycle on Atsign {
         await mintAdvertisedSigningKey(preference.dataSigningKeyAlgorithms);
     // NOTE: a scratch store; the enrollment's keys are filed into [keys].
     final session = AtAuthSession(
-        atSign: this,
-        rootDomain: rootDomain,
-        // ignore: invalid_use_of_visible_for_testing_member
-        atKeysIo: InMemoryAtKeysIo());
+        atSign: this, rootDomain: rootDomain, atKeysIo: scratchKeysIo());
     final AtEnrollmentRequest request;
     if (mode == EnrollmentKeyExchangeMode.pq) {
       request = AtEnrollmentRequest.pq(

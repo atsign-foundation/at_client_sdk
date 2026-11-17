@@ -21,9 +21,11 @@ export 'package:at_client/src/crypto/crypto.dart';
 export 'package:at_client/src/crypto/crypto_runtime.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_client/src/lifecycle/at_connection.dart';
-export 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+export 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
+    hide scratchKeysIo;
 export 'package:at_client/src/lifecycle/enrollments.dart';
-export 'package:at_client/src/lifecycle/pending_enrollment.dart';
+export 'package:at_client/src/lifecycle/pending_enrollment.dart'
+    hide handshakeKeysIo;
 export 'package:at_client/src/listener/at_sign_change_listener.dart';
 export 'package:at_client/src/listener/switch_at_sign_event.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
@@ -36,6 +38,7 @@ export 'package:at_auth/at_auth.dart'
         AtKeys,
         AtKeysFormatException,
         AtKeysIo,
+        ClosableAtKeysIo,
         EnrollmentKeyExchangeMode,
         InMemoryAtKeysIo,
         KeyEntryStatus,

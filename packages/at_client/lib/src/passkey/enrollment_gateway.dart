@@ -1,0 +1,377 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
+import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+import 'package:at_client/src/lifecycle/pending_enrollment.dart'
+    show handshakeKeysIo;
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_commons/at_builders.dart'
+    show DeleteVerbBuilder, UpdateVerbBuilder;
+import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:at_lookup/at_lookup.dart';
+
+import 'at_keys_document.dart';
+import 'enrollment_document_store.dart';
+import 'enrollment_pointer_store.dart';
+import 'passkey_custody.dart';
+import 'public_lookup.dart';
+
+/// An ML-DSA-65 APKAM key pair as base64 text, the form at_auth takes.
+typedef ApkamKeyPair = ({String publicKey, String privateKey});
+
+/// The ML-DSA-65 key pair [authSeed] derives, as base64 text.
+Future<ApkamKeyPair> apkamKeyPairFromSeed(Uint8List authSeed) async {
+  final pair = await MlDsa65PureDartAlgo().keyPairFromSeed(authSeed);
+  return (
+    publicKey: base64Encode(pair.publicKey),
+    privateKey: base64Encode(pair.secretKey)
+  );
+}
+
+/// [keys] with [pair] filed as the APKAM material of [enrollmentId].
+AtKeys withApkamKey(AtKeys keys, String enrollmentId, ApkamKeyPair pair) => keys
+  ..fileApkamMaterial(
+      enrollmentId: enrollmentId,
+      algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+      publicKey: pair.publicKey,
+      privateKey: pair.privateKey);
+
+/// Runs a first-time activation with [cram] and [apkamKeyPair] as the
+/// enrollment's APKAM key, and returns the keys it filed. It files them in
+/// [keysIo] when one is given, otherwise in a store of its own.
+typedef Activator = Future<AtKeys> Function(
+    {required String atSign,
+    required String cram,
+    required ApkamKeyPair apkamKeyPair,
+    WrittenAtKeysIo? keysIo});
+
+/// Opens the client that runs as [enrollmentId] on [lookUp]: the connection
+/// that already authenticated as it. The client reads its @keys from [keysIo]
+/// and persists every change through it. It takes over [lookUp] and stops it
+/// when the client stops; a [keysIo] flagged `closedByClient` is closed then
+/// too. If this throws, [lookUp] is still the caller's to release.
+typedef ClientOpener = Future<AtClient> Function(
+    {required AtLookupMuxable lookUp,
+    required String atSign,
+    required String enrollmentId,
+    required WrittenAtKeysIo keysIo});
+
+/// The production [EnrollmentGateway]: at_auth enrollment and at_client
+/// activation, with the APKAM key derived from the auth seed.
+///
+/// Each call derives the APKAM key pair from the auth seed as base64 text,
+/// which is not overwritten afterwards. A session from [activate] keeps the
+/// @keys the activation filed, which can include the APKAM private key, until
+/// the session is dropped; [EnrollmentSession.atKeys] returns them without it.
+class AtAuthEnrollmentGateway implements EnrollmentGateway {
+  /// [activator] is the at_client activation seam; [clientOpener] is what
+  /// [EnrollmentSession.openClient] runs to build the client.
+  AtAuthEnrollmentGateway(
+      {required this.lookUps,
+      required this.finder,
+      required this.root,
+      required this.app,
+      required this.device,
+      required this.clientOpener,
+      Activator? activator}) {
+    _activator = activator ?? _activateWithAtClient;
+  }
+
+  /// Builds each connection a session makes.
+  final AtLookUpFactory lookUps;
+
+  /// Resolves an atSign to its atServer.
+  final SecondaryAddressFinder finder;
+
+  final AtRootDomain root;
+  final String app;
+  @override
+  final String device;
+  final ClientOpener clientOpener;
+  late final Activator _activator;
+
+  @override
+  Future<EnrollmentSession> authenticate(
+          {required String atSign,
+          required String enrollmentId,
+          required Uint8List authSeed}) async =>
+      _authenticated(atSign, enrollmentId, await apkamKeyPairFromSeed(authSeed),
+          keys: null);
+
+  @override
+  Future<EnrollmentSession> activate(
+      {required String atSign,
+      required Uint8List authSeed,
+      required String cram,
+      WrittenAtKeysIo? keysIo}) async {
+    final pair = await apkamKeyPairFromSeed(authSeed);
+    final keys = await _activator(
+        atSign: atSign, cram: cram, apkamKeyPair: pair, keysIo: keysIo);
+    final enrollmentId = keys.enrollmentToAuthenticateAs();
+    try {
+      return await _authenticated(atSign, enrollmentId, pair, keys: keys);
+    } on Object catch (e) {
+      throw ActivationUnfinishedException(enrollmentId,
+          atKeys: atKeysDocument(keys, atSign), cause: e);
+    }
+  }
+
+  AtLookupMuxable _lookUp(String atSign) => lookUps(
+      atSign: atSign,
+      rootDomain: root,
+      authenticator: null,
+      secondaryAddressFinder: finder);
+
+  /// Whether [e] carries the atServer's reply to the `pkam:` command saying it
+  /// refuses [enrollmentId]: `error:AT0401` (the signature did not verify), or
+  /// `error:AT0025`, `AT0027` or `AT0028` (the enrollment is denied, revoked,
+  /// or expired or unknown) naming `enrollment_id: ID`. The atServer
+  /// replies `error:CODE:MESSAGE` and at_auth wraps it as `Failed
+  /// connecting to ATSIGN. REPLY`. AT0028 also stands for a throttled
+  /// client, so a code without this enrollment's id is not a refusal; nor is
+  /// AT0026 (pending). Any other failed handshake (a server error, a throttled
+  /// or empty reply, an authenticator that reports failure) says nothing about
+  /// the enrollment and is not a refusal.
+  static bool _isPkamRefusal(UnAuthenticatedException e, String enrollmentId) {
+    final reply = RegExp(r'\. error:(AT\d{4})\b(.*)$', dotAll: true)
+        .firstMatch(e.message);
+    if (reply == null) return false;
+    switch (reply.group(1)) {
+      case 'AT0401':
+        return true;
+      case 'AT0025' || 'AT0027' || 'AT0028':
+        return RegExp('enrollment_id: ${RegExp.escape(enrollmentId)}(\\s|\$)')
+            .hasMatch(reply.group(2)!);
+      default:
+        return false;
+    }
+  }
+
+  /// PKAM as [enrollmentId] with [pair] on a connection of its own.
+  ///
+  /// Throws [PkamRefusedException] only when the atServer explicitly refuses
+  /// the signature; other failures propagate as they are.
+  Future<EnrollmentSession> _authenticated(
+      String atSign, String enrollmentId, ApkamKeyPair pair,
+      {required AtKeys? keys}) async {
+    final lookUp = _lookUp(atSign);
+    try {
+      final signingKeys =
+          withApkamKey(AtKeys(atsign: Atsign(atSign)), enrollmentId, pair);
+      lookUp.authenticator = authenticatorFor(
+          handshakeKeysIo(atSign, signingKeys), atSign,
+          enrollmentId: enrollmentId);
+      if (!await lookUp.pkamAuthenticate()) {
+        throw UnAuthenticatedException('Failed connecting to $atSign. The '
+            'authenticator reported failure');
+      }
+    } on UnAuthenticatedException catch (e) {
+      await _closeQuietly(lookUp);
+      if (_isPkamRefusal(e, enrollmentId)) {
+        throw PkamRefusedException(enrollmentId);
+      }
+      rethrow;
+    } catch (_) {
+      await _closeQuietly(lookUp);
+      rethrow;
+    }
+    return _PkamSession(this, lookUp, atSign, enrollmentId, keys);
+  }
+
+  Future<AtKeys> _activateWithAtClient(
+      {required String atSign,
+      required String cram,
+      required ApkamKeyPair apkamKeyPair,
+      WrittenAtKeysIo? keysIo}) async {
+    final filing = keysIo ?? scratchKeysIo();
+    return activateKeepingKeys(
+        filing,
+        atSign,
+        () => Atsign(atSign).activate(
+            cramSecret: cram,
+            keys: filing,
+            preference: AtClientPreference()
+              ..namespace = app
+              ..rootDomain = root.rootDomain
+              ..rootPort = root.rootPort,
+            namespace: app,
+            storage: InMemoryAtClientStorage(atSign: atSign),
+            app: app,
+            device: device,
+            mintLegacyMaterial: true,
+            signingAlgo: SigningAlgoType.mldsa65,
+            apkamKeyPair: apkamKeyPair,
+            lookUps: lookUps,
+            secondaryAddressFinder: finder));
+  }
+}
+
+/// Runs [activate] and returns the keys it filed in [keysIo], stopping the
+/// client it returns.
+///
+/// An [activate] that fails after filing keys with an enrollment to
+/// authenticate as throws [ActivationUnfinishedException] carrying them; one
+/// that filed none rethrows its own error.
+Future<AtKeys> activateKeepingKeys(AtKeysIo keysIo, String atSign,
+    Future<AtClient> Function() activate) async {
+  final AtClient client;
+  try {
+    client = await activate();
+  } on Object catch (error, stackTrace) {
+    final AtKeys keys;
+    final String? enrollmentId;
+    try {
+      keys = await keysIo.read(atSign);
+      enrollmentId = keys.resolveAuthenticatingEnrollment();
+    } on Object {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    if (enrollmentId == null) Error.throwWithStackTrace(error, stackTrace);
+    throw ActivationUnfinishedException(enrollmentId,
+        atKeys: atKeysDocument(keys, atSign), cause: error);
+  }
+  return readKeysThenStop(keysIo, atSign, client.stop);
+}
+
+/// Reads [atSign]'s activated keys from [keysIo], then calls [stop]; a
+/// failing [stop] does not lose the keys.
+Future<AtKeys> readKeysThenStop(
+    AtKeysIo keysIo, String atSign, Future<void> Function() stop) async {
+  final keys = await keysIo.read(atSign);
+  try {
+    await stop();
+  } on Object catch (e, st) {
+    // A failed stop is logged, not rethrown: the keys are already read.
+    AtSignLogger('enrollmentGateway')
+        .severe('stopping the activation client of $atSign failed', e, st);
+  }
+  return keys;
+}
+
+Future<void> _closeQuietly(AtLookupMuxable lookUp) async {
+  try {
+    await lookUp.close();
+  } catch (e, st) {
+    // The refusal being reported is the error that matters.
+    AtSignLogger('enrollmentGateway').warning('closing a lookUp failed', e, st);
+  }
+}
+
+class _PkamSession implements EnrollmentSession {
+  _PkamSession(
+      this._gateway, this._lookUp, this._atSign, this.enrollmentId, this._keys)
+      : _remote = RemoteSecondary(_atSign, AtClientPreference(),
+            atLookUp: _lookUp,
+            lookUps: _gateway.lookUps,
+            secondaryAddressFinder: _gateway.finder);
+
+  final AtAuthEnrollmentGateway _gateway;
+  final AtLookupMuxable _lookUp;
+  final String _atSign;
+  final RemoteSecondary _remote;
+  final AtKeys? _keys;
+
+  @override
+  final String enrollmentId;
+
+  @override
+  late final EnrollmentDocumentStore documents =
+      RemoteEnrollmentDocumentStore(_remote);
+
+  @override
+  late final EnrollmentPointerStore pointers = RemoteEnrollmentPointerStore(
+      LookupEnrollmentPointerReader(
+          lookUps: _gateway.lookUps,
+          rootDomain: _gateway.root,
+          secondaryAddressFinder: _gateway.finder),
+      _remote);
+
+  /// The enrollment's @keys as a document, without any APKAM private key:
+  /// the flat field and every typed `privateAuthentication` material.
+  @override
+  Future<Map<String, dynamic>> atKeys() async {
+    final keys = _keys;
+    if (keys == null) {
+      throw StateError('this session was authenticated, not enrolled: it '
+          'holds no @keys');
+    }
+    return atKeysDocument(keys, _atSign);
+  }
+
+  /// Whether the encryption public key in [atKeys] is the one published at
+  /// `publickey@<atSign>`; false when either is missing.
+  @override
+  Future<bool> publicKeysMatch(Map<String, dynamic> atKeys) async {
+    final restored = atKeys[_encryptPublicKey];
+    if (restored is! String) return false;
+    return await _published() == restored;
+  }
+
+  /// The `publickey` the atServer publishes for this atSign, or null.
+  Future<String?> _published() => publicLookup(
+      lookUps: _gateway.lookUps,
+      rootDomain: _gateway.root,
+      secondaryAddressFinder: _gateway.finder,
+      atSign: _atSign,
+      key: 'publickey');
+
+  /// Publishes the encryption public key of [atKeys] as `publickey` when none
+  /// is published, refuses when a different one is, then deletes the CRAM
+  /// secret; a CRAM secret already gone counts as deleted. Throws
+  /// [ArgumentError], before any command, when the public key holds a carriage
+  /// return or a line feed.
+  @override
+  Future<void> completeActivation(Map<String, dynamic> atKeys) async {
+    final key = atKeys[_encryptPublicKey];
+    if (key is String) {
+      if (key.contains('\r') || key.contains('\n')) {
+        throw ArgumentError.value(
+            key, _encryptPublicKey, 'must not contain newlines');
+      }
+      final published = await _published();
+      if (published == null) {
+        await _remote.executeCommand(
+            (UpdateVerbBuilder()
+                  ..atKey = (AtKey()
+                    ..key = 'publickey'
+                    ..sharedBy = _atSign
+                    ..metadata = (Metadata()
+                      ..isPublic = true
+                      ..ttr = -1))
+                  ..value = key)
+                .buildCommand(),
+            auth: true);
+      } else if (published != key) {
+        throw PublicKeyMismatchException();
+      }
+    }
+    try {
+      await _remote.executeCommand(
+          (DeleteVerbBuilder()
+                ..atKey = (AtKey()..key = AtConstants.atCramSecret))
+              .buildCommand(),
+          auth: true);
+    } on KeyNotFoundException {
+      // Already deleted.
+    }
+  }
+
+  @override
+  Future<AtClient> openClient(WrittenAtKeysIo keysIo) => _gateway.clientOpener(
+      lookUp: _lookUp,
+      atSign: _atSign,
+      enrollmentId: enrollmentId,
+      keysIo: keysIo);
+
+  @override
+  Future<void> close() => _lookUp.close();
+}
+
+const _encryptPublicKey = 'aesEncryptPublicKey';

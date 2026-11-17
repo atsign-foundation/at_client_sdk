@@ -164,7 +164,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: atsign-foundation/at_server
-          ref: trunk
+          # Pinned to a commit (trunk on 2026-11-18); bump deliberately.
+          ref: a158b700d4b6aaaeb7e3d8ba56df8948157f0b1d
           path: at_server
           persist-credentials: false
           sparse-checkout: tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
