@@ -104,7 +104,6 @@ void main() {
       );
     });
 
-    // Uri.https accepts an empty authority, as 4.0.0's request building did.
     test('accepts an empty registrarUrl, as Uri.https does', () {
       expect(
         () => RegistrarAdminService(
@@ -207,8 +206,6 @@ void main() {
       );
     });
 
-    // Uri.https percent-encodes a trailing space rather than rejecting it,
-    // as 4.0.0's request building did.
     test('accepts registrarUrl trailing whitespace, as Uri.https does', () {
       expect(
         () => RegistrarAdminService(
@@ -338,11 +335,6 @@ void main() {
       });
     }
 
-    // Each registrarUrl below is a shape that worked under 4.0.0's request
-    // building (whatever Uri.https made of it), so it is accepted rather
-    // than refused, per docs/registrar/decisions.md. "+443", " 443" and
-    // "0x1BB" all parse as valid decimal ports via int.parse, coincidentally
-    // all landing on 443.
     final acceptedRegistrarUrls = <String, ({String host, int port})>{
       'registrar_api:8443': (host: 'registrar_api', port: 8443),
       '[::1]:8443': (host: '::1', port: 8443),
