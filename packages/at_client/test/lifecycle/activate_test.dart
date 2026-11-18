@@ -18,6 +18,7 @@ import 'package:at_lookup/at_lookup.dart'
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/key_package_filing.dart';
@@ -457,6 +458,48 @@ void main() {
         reason: 'nothing was minted for a secret the atServer refused');
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
+  });
+
+  test(
+      'Given an app named in its particulars, when Atsign.activate '
+      'authenticates with CRAM and then PKAM, then each from: names the app '
+      'and at_client', () async {
+    final server = atServer();
+    final named = (await preference())
+      ..atClientParticulars.appName = 'acme_chat'
+      ..atClientParticulars.appVersion = '2.3.1';
+
+    final client = await Atsign(atSign).activate(
+        cramSecret: cramSecret,
+        keys: InMemoryAtKeysIo(),
+        preference: named,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        storage: hiveStoreFor(Atsign(atSign), named));
+    addTearDown(client.stop);
+
+    final installed = verify(() => server.lookUp.authenticator = captureAny())
+        .captured
+        .whereType<AtAuthenticator>()
+        .toList();
+    expect(installed.length, greaterThanOrEqualTo(3),
+        reason: 'the control: the CRAM login, the new keys, and the new keys '
+            'again once the atServer names the enrollment');
+    final atClientVersion = pubspecVersion();
+    for (final authenticator in installed) {
+      final recorder = FromRecorder();
+      await authenticator(recorder);
+      const prefix = 'from:$atSign:clientConfig:';
+      expect(recorder.from, startsWith(prefix));
+      final config = jsonDecode(recorder.from!.substring(prefix.length).trim())
+          as Map<String, dynamic>;
+      expect(config['appName'], 'acme_chat');
+      expect(config['appVersion'], '2.3.1');
+      expect(config['sdkName'], 'atsign.dart.at_client');
+      expect(config['sdkVersion'], atClientVersion);
+      expect(config['version'], atClientVersion);
+    }
   });
 }
 

@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 
-/// An item address: the item's id and the atSign that owns it.
-typedef JsItemAddress = ({String id, String owner});
+/// An item address: the item's id and the Atsign that owns it.
+typedef JsItemAddress = ({String id, Atsign owner});
 
 /// One `where` clause: a dotted path into the item's data, an operator and
 /// a value.
@@ -16,7 +17,7 @@ typedef JsItem = Map<String, Object?>;
 
 /// A record this device cannot read: its id, its owner and the code
 /// [CollectionErrorCodes.unreadable].
-typedef JsUnreadable = ({String id, String owner, String code});
+typedef JsUnreadable = ({String id, Atsign owner, String code});
 
 /// What [JsCollectionsAdapter.list] and [JsCollectionsAdapter.query]
 /// resolve with: the readable items in upstream order, and one entry per
@@ -108,6 +109,8 @@ final class JsCollectionsAdapter {
 
   final AtCollection<Map<String, dynamic>> _collection;
 
+  static final _logger = AtSignLogger('jsCollectionsAdapter');
+
   static const _eventSources = {
     'data': EventSource.data,
     'notifs': EventSource.notifs,
@@ -170,14 +173,13 @@ final class JsCollectionsAdapter {
 
   /// The item at [address], or null when there is none.
   Future<JsItem?> get(JsItemAddress address) => _guard(() async {
-        final item =
-            await _collection.getOrNull(address.id, address.owner.toAtsign());
+        final item = await _collection.getOrNull(address.id, address.owner);
         return item == null ? null : _item(item);
       });
 
   /// Every readable item, in the order AtCollection returns them, and the
   /// records that could not be read. An unreadable record does not fail the
-  /// listing.
+  /// listing; one whose key names no Atsign is left out, with a warning.
   Future<JsListing> list() => _guard(() => _read(const []));
 
   /// The readable items matching every clause, in the order AtCollection
@@ -263,7 +265,7 @@ final class JsCollectionsAdapter {
   }) =>
       _guard(
         () async {
-          final owner = address.owner.toAtsign();
+          final owner = address.owner;
           if (owner != _collection.atSign) {
             throw JsCollectionsError(CollectionErrorCodes.notOwner,
                 'item ${address.id} is owned by $owner, not ${_collection.atSign}',
@@ -273,13 +275,15 @@ final class JsCollectionsAdapter {
           return _item(await write(current));
         },
         id: _errorId(address.id),
-        owner: _errorOwner(address.owner),
+        owner: address.owner,
         stateError: stateError,
       );
 
   /// Reads every item through [AtCollection.getItemsAsStream], collecting a
   /// [CItemReadException] per unreadable record instead of stopping at it,
-  /// and keeps the items that satisfy every one of [predicates].
+  /// and keeps the items that satisfy every one of [predicates]. An
+  /// unreadable record whose key names no Atsign is left out, and a warning
+  /// names its key.
   Future<JsListing> _read(List<Predicate> predicates) async {
     final readable = <CItem<Map<String, dynamic>>>[];
     final unreadable = <JsUnreadable>[];
@@ -288,7 +292,14 @@ final class JsCollectionsAdapter {
       readable.add,
       onError: (Object error, StackTrace stack) {
         if (error is CItemReadException) {
-          unreadable.add(_unreadable(error));
+          final entry = _unreadable(error);
+          if (entry != null) {
+            unreadable.add(entry);
+          } else {
+            _logger.warning('Left out the stored record '
+                '${jsonEncode('${error.key}')} from a listing: its key names '
+                'no Atsign');
+          }
         } else if (!done.isCompleted) {
           done.completeError(error, stack);
         }
@@ -322,11 +333,24 @@ final class JsCollectionsAdapter {
     );
   }
 
-  static JsUnreadable _unreadable(CItemReadException error) => (
-        id: error.key.key.split('.').first,
-        owner: error.key.sharedBy ?? '',
+  /// The entry for a record this device cannot read, owned by the Atsign its
+  /// key names, or null when the key names no Atsign.
+  static JsUnreadable? _unreadable(CItemReadException error) {
+    final sharedBy = error.key.sharedBy;
+    if (sharedBy == null) return null;
+    try {
+      return (
+        id: _idOf(error.key),
+        owner: sharedBy.toAtsign(),
         code: CollectionErrorCodes.unreadable,
       );
+    } on InvalidAtSignException {
+      return null;
+    }
+  }
+
+  /// The item id [key] is stored under.
+  static String _idOf(AtKey key) => key.key.split('.').first;
 
   static Predicate _predicate(JsWhereClause clause) {
     final segments = clause.path.split('.');
@@ -435,18 +459,6 @@ final class JsCollectionsAdapter {
   /// AtCollection folds it, so it matches the id of the item listed.
   static String? _errorId(String? id) => id?.toLowerCase();
 
-  /// The owner an error reports for the caller's [owner]: in `@name` form, as
-  /// AtCollection normalizes it, so it matches the owner of the item listed.
-  /// An owner that is not an atSign stays as given.
-  static String? _errorOwner(String? owner) {
-    if (owner == null) return null;
-    try {
-      return owner.toAtsign();
-    } on InvalidAtSignException {
-      return owner;
-    }
-  }
-
   /// Runs [body], turning anything it throws into a [JsCollectionsError].
   /// [stateError] is the code for a StateError from the operation, which
   /// AtCollection uses for a missing, existing or still-parent item.
@@ -488,10 +500,16 @@ final class JsCollectionsAdapter {
         return error;
       case CItemReadException():
         // The cause can carry record content; it stays on the Dart side.
-        final (:id, :owner, code: _) = _unreadable(error);
-        return JsCollectionsError(CollectionErrorCodes.unreadable,
-            'item $id owned by $owner could not be read',
-            id: id, owner: owner, kind: 'CItemReadException');
+        final id = _idOf(error.key);
+        final owner = _unreadable(error)?.owner;
+        return JsCollectionsError(
+            CollectionErrorCodes.unreadable,
+            owner == null
+                ? 'item $id could not be read'
+                : 'item $id owned by $owner could not be read',
+            id: id,
+            owner: owner,
+            kind: 'CItemReadException');
       case CollectionOpException(:final failures, :final item):
         // A create without an id learns it here: the item that landed.
         return JsCollectionsError(CollectionErrorCodes.partialFailure,

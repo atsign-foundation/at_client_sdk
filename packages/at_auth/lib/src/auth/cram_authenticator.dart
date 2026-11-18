@@ -22,10 +22,14 @@ class CramAuthenticator {
   /// The CRAM login serves the commands that need no authentication, such as
   /// a first enrollment request; the next command that needs authentication
   /// logs in afresh with the authenticator then installed.
+  ///
+  /// The `from:` carries [clientConfig], as [authenticatorForCramSecret]
+  /// completes it.
   Future<bool> authenticate(
     String atSign,
     String cramSecret,
     AtLookUp atLookUp, {
+    required Map<String, dynamic> clientConfig,
     Duration retryInterval = const Duration(seconds: 2),
     Duration timeout = const Duration(seconds: 30),
     int maxRetries = 10,
@@ -36,7 +40,8 @@ class CramAuthenticator {
     }
     _running[atLookUp] = true;
     final previous = atLookUp.authenticator;
-    final cram = authenticatorForCramSecret(atSign, cramSecret);
+    final cram = authenticatorForCramSecret(atSign, cramSecret,
+        clientConfig: clientConfig);
     atLookUp.authenticator = cram;
     try {
       return await atLookUp.pkamAuthenticate();

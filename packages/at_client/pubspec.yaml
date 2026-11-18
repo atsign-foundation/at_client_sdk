@@ -27,7 +27,9 @@ dependencies:
   at_commons: ^5.26.0
   at_utils: ^4.0.0
   at_chops: ^3.8.0-rc.1
-  at_lookup: ^4.0.0
+  # An error:<code>:<text> reply read as its code, which RemoteSecondary and
+  # classifyConnectionFailure rely on, needs 4.1.0-rc.1.
+  at_lookup: ^4.1.0-rc.1
   # apskSigningKeys skipping an entry whose status is not a string, which
   # every _apsk and signing-root reader here relies on, needs 4.1.0-rc.1.
   # Activating with a supplied APKAM key pair (apkamKeyPair) needs 4.1.0-rc.1.

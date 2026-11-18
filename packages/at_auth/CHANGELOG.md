@@ -22,6 +22,18 @@
   caller, and `recordPrfSalt()` is synchronous. The four HKDF labels (record id,
   pointer namespace, seal key, auth seed) share the form
   `at_auth/custody/<name>/v1`.
+- feat: every `from:` at_auth sends names the program and the SDK in its
+  clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
+  caller's values win; absent or blank ones are the program file's name,
+  `unknown`, `atsign.dart.at_auth` and at_auth's version. Every string value,
+  nested ones included, is sent on one line and cut to 64 UTF-16 code units,
+  and every key is sent on one line.
+- feat: `clientConfigFor` builds that clientConfig, with `version` only when
+  its caller gives one, and `activateAtSign` and `AtEnrollment.create` take a
+  `clientConfig` for their `from:`.
+- fix: an enrollment's wait for approval reads an atServer's refusal the
+  same whether it arrives as plain text or as JSON, so it keeps waiting or
+  ends as the refusal says.
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
   private half does not sign for its public half is refused with

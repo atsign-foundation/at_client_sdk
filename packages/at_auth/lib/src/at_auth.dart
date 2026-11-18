@@ -14,16 +14,20 @@ abstract interface class AtAuth {
   AtLookupMuxable get atLookUp;
   Stream<ProgressEvent> get progressStream;
 
+  /// An activation over [atLookUp] whose every `from:` carries
+  /// [clientConfig], as `clientConfigFor` fills and cuts it.
   factory AtAuth.create(
       {required AtLookupMuxable atLookUp,
       CramAuthenticator? cramAuthenticator,
       PkamAuthenticator? pkamAuthenticator,
-      AtEnrollment? atEnrollmentBase}) {
+      AtEnrollment? atEnrollmentBase,
+      Map<String, dynamic> clientConfig = const {}}) {
     return AtAuthImpl(
         atLookUp: atLookUp,
         cramAuthenticator: cramAuthenticator,
         pkamAuthenticator: pkamAuthenticator,
-        atEnrollment: atEnrollmentBase);
+        atEnrollment: atEnrollmentBase,
+        clientConfig: clientConfig);
   }
 
   /// Onboard method is invoked when an atsign is activated for the first time from a client app.

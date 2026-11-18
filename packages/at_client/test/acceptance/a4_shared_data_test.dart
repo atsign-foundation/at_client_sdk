@@ -112,7 +112,7 @@ void main() {
         'a value only the atServer holds is told from its metadata alone',
         proves: 'the "without decrypting it": a value and a conveyance only '
             'the atServer holds are each read with one lookup:meta, and a '
-            'read of either value (getMeta, which is a get) fails the test',
+            'read of either value (a get) fails the test',
         clauses: ['tell how each value was shared with him'],
       );
     });
