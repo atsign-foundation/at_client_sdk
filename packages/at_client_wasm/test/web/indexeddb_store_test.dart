@@ -39,6 +39,20 @@ Future<void> _rawPut(
   return done.future;
 }
 
+/// The bytes under [key] in [storeName] of [db], or null.
+Future<List<int>?> _rawGet(IDBDatabase db, String storeName, String key) {
+  final done = Completer<List<int>?>();
+  final request =
+      db.transaction(storeName.toJS).objectStore(storeName).get(key.toJS);
+  request.onsuccess = (Event e) {
+    done.complete((request.result as JSUint8Array?)?.toDart);
+  }.toJS;
+  request.onerror = (Event e) {
+    done.completeError(Exception('raw get failed'));
+  }.toJS;
+  return done.future;
+}
+
 void main() {
   String generateDbName() =>
       'test_db_${DateTime.now().millisecondsSinceEpoch}_${(1000 + DateTime.now().microsecond).toString()}';
@@ -346,8 +360,7 @@ void main() {
         }
       }
 
-      test(
-          'deletes a version 3 database\'s pending records and keeps its hints',
+      test('keeps a version 3 database\'s pending records and its hints',
           () async {
         final old = await _rawOpen(currentDbName!, 3, upgrade: (db) {
           db.createObjectStore('at_client_wasm_credentials');
@@ -367,8 +380,18 @@ void main() {
 
         expect(
             await storeNames(),
-            unorderedEquals(
-                ['at_client_wasm_credentials', 'at_client_wasm_enrollments']));
+            unorderedEquals([
+              'at_client_wasm_credentials',
+              'at_client_wasm_enrollments',
+              'at_client_wasm_pending',
+            ]));
+        final raw = await _rawOpen(currentDbName!, 4);
+        try {
+          expect(await _rawGet(raw, 'at_client_wasm_pending', '@alice'),
+              [1, 2, 3]);
+        } finally {
+          raw.close();
+        }
       });
 
       test('deletes a version 1 database\'s keys store', () async {

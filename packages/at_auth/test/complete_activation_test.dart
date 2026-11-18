@@ -8,9 +8,13 @@ import 'package:test/test.dart';
 class _RecordingLookUp extends Fake implements AtLookUp {
   final sent = <String>[];
 
+  /// Makes every `update` verb throw this once it is recorded.
+  Object? updateError;
+
   @override
   Future<String?> executeVerb(VerbBuilder builder, {bool sync = false}) async {
     sent.add(builder.buildCommand());
+    if (updateError case final e? when builder is UpdateVerbBuilder) throw e;
     return 'data:1';
   }
 }
@@ -35,6 +39,17 @@ void main() {
       await completeActivationOf(
           atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: null);
       expect(lookUp.sent, ['delete:privatekey:at_secret\n']);
+    });
+
+    test('a failed publish keeps the CRAM secret and propagates', () async {
+      final error = StateError('publish failed');
+      final lookUp = _RecordingLookUp()..updateError = error;
+      await expectLater(
+          completeActivationOf(
+              atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: 'cHVi'),
+          throwsA(same(error)));
+      expect(lookUp.sent,
+          ['update:ttr:-1:isEncrypted:false:public:publickey@alice cHVi\n']);
     });
   });
 }

@@ -39,10 +39,11 @@ class IndexedDbHintStore implements PasskeyHintStore {
 
   /// The object stores earlier versions created, which an upgrade deletes
   /// with whatever they hold.
-  static const _retiredStores = [
-    'at_client_wasm_pending',
-    'at_client_wasm_keys'
-  ];
+  ///
+  /// The `at_client_wasm_pending` store version 3 created is not among them:
+  /// a record there can be the only copy of an activated atSign's keys, so an
+  /// upgrade keeps it, and what it holds, untouched.
+  static const _retiredStores = ['at_client_wasm_keys'];
 
   /// The schema version this code creates; a database already at a higher
   /// version is opened as it is.

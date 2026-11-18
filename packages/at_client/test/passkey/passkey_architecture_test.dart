@@ -98,11 +98,14 @@ void main() {
                   .readAsStringSync(),
               'Future<void> revokeOtherEnrollments()'),
           contains('EnrollOperationEnum.revoke'));
-      expect('.revokeOtherEnrollments()'.allMatches(all), hasLength(1));
-      expect(
-          _member(
-              File('lib/src/passkey/passkey_custody.dart').readAsStringSync(),
-              'Future<_Written> _activateAndWrite('),
+      // NOTE: onboarding revokes, and so does a login that finishes an
+      // onboarding which stopped before its revoke.
+      expect('.revokeOtherEnrollments()'.allMatches(all), hasLength(2));
+      final custody =
+          File('lib/src/passkey/passkey_custody.dart').readAsStringSync();
+      expect(_member(custody, 'Future<_Written> _activateAndWrite('),
+          contains('.revokeOtherEnrollments()'));
+      expect(_member(custody, 'Future<PasskeySession> _attempt('),
           contains('.revokeOtherEnrollments()'));
     });
 
