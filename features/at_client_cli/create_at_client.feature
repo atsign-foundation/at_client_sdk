@@ -3,9 +3,10 @@ Feature: createAtClient opens a command's client from its keyfile
   A command-line program that reads or administers an atSign, as
   at_activate's otp, list and approve do, opens its client with
   createAtClient: from the keyfile, syncing nothing, on a store of its own,
-  and made the manager's current client. Its parameters are
-  at_onboarding_cli 2.0.0-rc8's, so a program written against that release
-  compiles unchanged.
+  and made the manager's current client. It takes at_onboarding_cli
+  2.0.0-rc8's parameters, so a program written against that release
+  compiles unchanged, and also optional appName and appVersion, which name
+  the calling program on its from:.
 
   Races: each call opens its own client on a store of its own; the manager's
   current client is the one opened last, as before.

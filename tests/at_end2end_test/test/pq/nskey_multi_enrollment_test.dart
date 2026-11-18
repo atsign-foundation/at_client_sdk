@@ -139,10 +139,10 @@ void main() {
     // enrollment or key package.
     final conveyanceKid = asWritten.metadata?.appMetadata?.additional?['ckKid'];
     expect(conveyanceKid, isNotNull);
-    // Read off the wire rather than through get()/getMeta(), both of which
-    // decrypt — and alice cannot open this conveyance, correctly: it is sealed
-    // to @bob's namespace key, not hers. The metadata being inspected is
-    // atServer-visible plaintext by design.
+    // Read off the wire rather than through get(), which decrypts — and alice
+    // cannot open this conveyance, correctly: it is sealed to @bob's namespace
+    // key, not hers. The metadata being inspected is atServer-visible
+    // plaintext by design.
     final metaResponse = await aliceClient.getRemoteSecondary()!.executeCommand(
         'llookup:meta:$bob:$conveyanceKid.__ck.$sharedNamespace$alice\n',
         auth: true);

@@ -12,7 +12,9 @@ import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
@@ -141,11 +143,15 @@ extension AtsignLifecycle on Atsign {
   ///
   /// [lookUps] builds the connection, which finds the atServer through
   /// [secondaryAddressFinder].
+  ///
+  /// [particulars] name the app on the connection's `from:`, as a client's
+  /// `AtClientPreference.atClientParticulars` do.
   Future<String> authenticatesAs({
     required AtKeysIo keys,
     required AtRootDomain rootDomain,
     required AtLookUpFactory lookUps,
     required SecondaryAddressFinder secondaryAddressFinder,
+    AtClientParticulars? particulars,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
     final AtLookUp lookUp;
@@ -153,7 +159,8 @@ extension AtsignLifecycle on Atsign {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
           enrollmentId: enrollmentId,
           lookUps: lookUps,
-          secondaryAddressFinder: secondaryAddressFinder);
+          secondaryAddressFinder: secondaryAddressFinder,
+          clientConfig: clientConfigOf(particulars));
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {
@@ -180,6 +187,15 @@ extension AtsignLifecycle on Atsign {
   /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
   /// encryption private key. [onProgress] hears each step of the activation.
   ///
+  /// [apkamKeyPair] is an APKAM keypair the caller already holds, enrolled
+  /// instead of a minted one. It must sign under the activation's algorithm,
+  /// or the activation throws `AtSigningException` before enrolling.
+  /// If the activation fails after the enrollment is accepted (the PKAM login or
+  /// the keyfile write), retrying with the same pair is refused by the atServer
+  /// while that enrollment's record exists: retry with a different pair, or with
+  /// none so one is minted. The CRAM secret stays valid until an activation
+  /// completes.
+  ///
   /// A newly registered atSign can take minutes to be provisioned: the
   /// activation polls every [provisioningPollInterval] until the atServer
   /// answers or [provisioningBudget] is spent, five minutes with none, and
@@ -201,6 +217,7 @@ extension AtsignLifecycle on Atsign {
     String device = firstEnrollmentDeviceName,
     bool? mintLegacyMaterial,
     SigningAlgoType? signingAlgo,
+    ({String publicKey, String privateKey})? apkamKeyPair,
     Duration? provisioningBudget,
     Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
     void Function(ProgressEvent event)? onProgress,
@@ -240,6 +257,7 @@ extension AtsignLifecycle on Atsign {
           cramSecret: cramSecret,
           keys: keys,
           signingAlgo: algo,
+          apkamKeyPair: apkamKeyPair,
           rootDomain: rootDomain,
           appName: app,
           deviceName: device,
@@ -253,7 +271,8 @@ extension AtsignLifecycle on Atsign {
               overallTimeout: provisioningBudget),
           onProgress: onProgress,
           atLookUp: connection,
-          awaitProvisioning: atLookUp == null);
+          awaitProvisioning: atLookUp == null,
+          clientConfig: clientConfigOf(preference.atClientParticulars));
     } finally {
       if (atLookUp == null) await connection.close();
     }
@@ -364,7 +383,8 @@ extension AtsignLifecycle on Atsign {
             secondaryAddressFinder: secondaryAddressFinder);
     final AtEnrollmentResponse response;
     try {
-      response = await AtEnrollment.create().submit(request, lookUp);
+      response = await enrollmentFor(preference.atClientParticulars)
+          .submit(request, lookUp);
     } finally {
       if (atLookUp == null) await lookUp.close();
     }
@@ -389,6 +409,7 @@ extension AtsignLifecycle on Atsign {
         signingAlgo: algo,
         keyExchangeMode: mode,
         atLookUp: atLookUp,
+        particulars: preference.atClientParticulars,
         lookUps: lookUps,
         secondaryAddressFinder: secondaryAddressFinder);
   }
@@ -458,6 +479,7 @@ extension AtsignLifecycle on Atsign {
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
           atLookUp: atLookUp,
+          particulars: preference.atClientParticulars,
           lookUps: lookUps,
           secondaryAddressFinder: secondaryAddressFinder);
     }
