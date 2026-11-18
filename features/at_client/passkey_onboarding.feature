@@ -10,12 +10,14 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   with the same CRAM secret, and that retry revokes every other approved
   enrollment of the Atsign, including those earlier attempts left; once it
   is deleted, logging in with the passkey finishes the onboarding. A login
-  also finishes an activation that an onboarding left half done: it
-  publishes the @keys document's encryption public key when none is
-  published, and deletes the CRAM secret; a different published key is
-  refused. The device keeps nothing about an unfinished onboarding:
-  IndexedDB holds only the passkey hints, written once the CRAM secret is
-  deleted.
+  on a device with no saved hints for the Atsign also finishes an
+  activation that an onboarding left half done: it publishes the @keys
+  document's encryption public key when none is published, and deletes the
+  CRAM secret. A login that uses saved hints sends neither, since a device
+  saves them only once the activation is finished. Every login refuses a
+  different published key. The device keeps nothing about an unfinished
+  onboarding: IndexedDB holds only the passkey hints, written once the CRAM
+  secret is deleted.
 
   Races: tabs of one origin onboarding one Atsign wait on its setup lock.
   Two devices onboarding one Atsign with the same CRAM secret at once can
@@ -92,6 +94,11 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     When the app logs in with that passkey
     Then the login publishes the document's encryption public key
     And it deletes the CRAM secret
+
+  Scenario: A login with saved hints sends no activation completion
+    Given @alice🛠 was onboarded on this device, which saved its passkey hints
+    When the app logs in to @alice🛠 with that passkey
+    Then the login publishes no encryption public key and sends no CRAM secret delete
 
   Scenario: The device keeps nothing about an onboarding that did not complete
     Given an onboarding of @alice🛠 in this browser was interrupted after its enrollment was approved

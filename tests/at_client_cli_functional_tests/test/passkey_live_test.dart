@@ -426,6 +426,36 @@ void main() {
     print('LIVE cram: after the login: $cram');
     expect(cram, startsWith('refused'));
   }, timeout: _timeout);
+
+  test('A login with saved hints sends no activation completion', () async {
+    const atSign = '@egcreditbureau🛠';
+    final rig = PasskeyRig(salt: 57);
+    final device = MemoryHints();
+    await (await rig
+            .custody(hints: device)
+            .onboard(atSign: atSign, cram: cramKeyMap[atSign]!))
+        .stop();
+    expect(device.ids[atSign], isNotNull,
+        reason: 'the control: the onboarding saved its hints');
+    expect(rig.tap.indexOfSent(_isCramDelete), isNot(-1),
+        reason: 'the control: the onboarding sent a CRAM secret delete');
+    expect(rig.tap.indexOfSent((c) => _publishes(c, atSign)), isNot(-1),
+        reason: 'the control: the onboarding published its encryption '
+            'public key');
+    final mark = rig.tap.lines.length;
+
+    final session = await rig.custody(hints: device).open(atSign: atSign);
+    addTearDown(session.stop);
+
+    expect(session.client.connection.current.isOnline, isTrue);
+    expect(rig.tap.indexOfSent((c) => c.startsWith('pkam:'), from: mark),
+        isNot(-1),
+        reason: 'the control: the login authenticated through the tap');
+    expect(rig.tap.indexOfSent(_isCramDelete, from: mark), -1,
+        reason: 'a login with saved hints sends no CRAM secret delete');
+    expect(rig.tap.indexOfSent((c) => _publishes(c, atSign), from: mark), -1,
+        reason: 'a login with saved hints publishes no encryption public key');
+  }, timeout: _timeout);
 }
 
 const _timeout = Timeout(Duration(minutes: 3));

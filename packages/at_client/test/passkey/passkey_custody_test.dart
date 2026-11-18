@@ -526,6 +526,40 @@ void main() {
       expect(server.publishedKey, 'cm90YXRlZA==');
     });
 
+    test('A login with saved hints sends no activation completion', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(hints.ids, {_atSign: 'eid1'},
+          reason: 'the control: the onboarding saved its hints');
+      expect(server.timeline.where((step) => step == 'complete-activation'),
+          hasLength(1),
+          reason: 'the control: the onboarding completed the activation');
+
+      final session = await custody().open(atSign: _atSign);
+
+      expect(gateway.authenticated, ['eid1'],
+          reason: 'the login authenticated the saved enrollment');
+      expect(gateway.lastSession!.completed, isEmpty,
+          reason: 'a login with saved hints sends no activation completion');
+      expect(server.timeline.where((step) => step == 'complete-activation'),
+          hasLength(1));
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'a login with saved hints that finds another encryption public key '
+        'published is refused', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      server.publishedKey = 'cm90YXRlZA==';
+
+      await expectLater(custody().open(atSign: _atSign),
+          throwsA(isA<PublicKeyMismatchException>()));
+
+      expect(gateway.authenticated, ['eid1'],
+          reason: 'the control: the login used the saved enrollment');
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(server.publishedKey, 'cm90YXRlZA==');
+    });
+
     test('an interrupted onboarding leaves no hints on the device', () async {
       server.documentPutFailures = 99;
       await expectLater(

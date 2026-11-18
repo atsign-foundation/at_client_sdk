@@ -407,12 +407,15 @@ class PasskeyCustody {
   /// A remembered or pointed enrollment id outside the id alphabet is a lost
   /// passkey, refused before any PKAM.
   ///
-  /// Once the document is read, the open finishes the activation an
-  /// onboarding may have left unfinished, before it remembers anything or
-  /// opens the client: when the atServer publishes no encryption public key it
-  /// publishes the document's, and either way it deletes the atSign's CRAM
-  /// secret. A published key other than the document's is refused before
-  /// anything is sent. When finishing the activation fails, the open fails,
+  /// Once the document is read, an open without remembered ids, including
+  /// the retry without them, finishes the activation an onboarding may have
+  /// left unfinished, before it remembers anything or opens the client: when
+  /// the atServer publishes no encryption public key it publishes the
+  /// document's, and either way it deletes the atSign's CRAM secret. An open
+  /// that uses remembered ids sends neither, since a device remembers them
+  /// only once the activation is finished. On every open, a published key
+  /// other than the document's is refused before anything is sent. When
+  /// finishing the activation fails, the open fails,
   /// and the next open finishes it.
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
@@ -481,7 +484,8 @@ class PasskeyCustody {
   /// remembered credential and the remembered enrollment is authenticated; a
   /// ceremony that yields no credential, or a PKAM the atServer refuses, then
   /// throws [_StaleHints] so the caller can try again without them. Without
-  /// hints either is a lost passkey.
+  /// hints either is a lost passkey. Only an open without hints finishes the
+  /// activation.
   Future<PasskeySession> _attempt(String canonical, _Hints? hints) async {
     final PasskeyUnlock unlocked;
     try {
@@ -516,8 +520,10 @@ class PasskeyCustody {
       final store = _keysIo(canonical, session, vault, pair);
       try {
         final unpublished = await _restore(canonical, store, session, pair);
-        await session.completeActivation(
-            {if (unpublished != null) _encryptPublicKey: unpublished});
+        if (hints == null) {
+          await session.completeActivation(
+              {if (unpublished != null) _encryptPublicKey: unpublished});
+        }
         await _remember(canonical, unlocked.credentialId, enrollmentId);
       } on Object {
         store.close();
