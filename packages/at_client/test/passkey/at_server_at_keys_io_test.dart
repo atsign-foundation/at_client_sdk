@@ -467,9 +467,11 @@ void main() {
       await seedRecord(_base());
       final io = await flagged();
       expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
+      expect(io.holdsPrivateKey, isTrue);
 
       io.close();
 
+      expect(io.holdsPrivateKey, isFalse);
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
       await expectLater(
           derived.vault.withAuthSeed((_) async {}), throwsStateError);
@@ -497,11 +499,13 @@ void main() {
       // Past the point of no return: the vault is still open for the
       // read-back.
       await derived.vault.withAuthSeed((_) async {});
+      expect(io.holdsPrivateKey, isTrue);
       server.holdUpdate!.complete();
 
       await running;
       await queuedOutcome;
       expect(server.updates, hasLength(1));
+      expect(io.holdsPrivateKey, isFalse);
       await expectLater(
           derived.vault.withAuthSeed((_) async {}), throwsStateError);
       await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
