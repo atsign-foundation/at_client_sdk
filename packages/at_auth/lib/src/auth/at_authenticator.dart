@@ -161,9 +161,10 @@ Future<bool> _pkam(
 /// Sends `from:` for [atSign] and returns the challenge the atServer answers
 /// with, or null when it answers nothing.
 ///
-/// An `error:` answer is thrown as the atServer wrote it, as a refused
-/// `pkam:` is; any other answer that is not a challenge issued to [atSign]
-/// is refused by [validatedFromChallenge]. Either way nothing is signed.
+/// An `error:` answer is thrown in an [UnAuthenticatedException] carrying
+/// the atServer's reply, as a refused `pkam:` is; any other answer that is
+/// not a challenge issued to [atSign] is refused by
+/// [validatedFromChallenge]. Either way nothing is signed.
 Future<String?> _pkamChallenge(AtCommandExecutor executor, String atSign,
     Map<String, dynamic> clientConfig) async {
   final fromResponse = await executor.sendSync((FromVerbBuilder()
@@ -183,10 +184,9 @@ Future<String?> _pkamChallenge(AtCommandExecutor executor, String atSign,
 /// the SHA-512 digest of [cramSecret] and the challenge.
 ///
 /// The challenge is digested as it arrives: unlike PKAM's, it does not pass
-/// through [validatedFromChallenge]. An `error:` answer to `from:` is thrown
-/// as the atServer wrote it, and nothing is digested. Either that or a
-/// refusal throws an [UnAuthenticatedException] naming [atSign] and the
-/// atServer's response.
+/// through [validatedFromChallenge]. An `error:` answer to `from:`, or a
+/// refused `cram:`, throws an [UnAuthenticatedException] naming [atSign]
+/// and carrying the atServer's reply; nothing is digested for the first.
 Future<bool> _cram(
   AtCommandExecutor executor,
   String atSign,

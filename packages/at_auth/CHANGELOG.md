@@ -1,8 +1,8 @@
 ## 4.1.0-rc.1
 
 - fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation is
-  thrown as the atServer wrote it, so its code can be read. Nothing is
-  signed or digested.
+  thrown as an `UnAuthenticatedException` carrying the atServer's reply, so
+  its code can be read. Nothing is signed or digested.
 - feat: an enrollment's wait for approval ends at once with
   `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
   `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
