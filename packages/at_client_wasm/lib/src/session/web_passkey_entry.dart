@@ -43,8 +43,12 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
-/// lock too long, and the atServer's own errors when activation is refused. An
-/// [OnboardingIncompleteException] carries the pending onboarding to resume.
+/// lock too long, [IndexedDbException] when a failure of this browser's
+/// IndexedDB stops the onboarding before it registers a passkey, and the
+/// atServer's own errors when activation is refused. An
+/// [OnboardingIncompleteException] carries the pending onboarding to resume;
+/// when writing the device's passkey hints fails after this call activates
+/// the atSign, its cause is an [IndexedDbException].
 /// A client that fails to open after the records are written ends the
 /// onboarding: its own error propagates, the IndexedDB store is closed and
 /// the atSign is ready for [passkeyLogin].
@@ -88,8 +92,10 @@ Future<AtClient> onboardNewAtSign(
 /// Throws [PasskeyLostException] when the passkey cannot open [atSign] (no
 /// credential, no pointer, PKAM refused), [PublicKeyMismatchException] when
 /// the restored public keys are not the published ones,
-/// [MissingAtKeysDocumentException] when the enrollment has no document, and
-/// [SetupLockTimeoutException] when another tab holds the setup lock too long.
+/// [MissingAtKeysDocumentException] when the enrollment has no document,
+/// [SetupLockTimeoutException] when another tab holds the setup lock too long,
+/// and [IndexedDbException] when a failure of this browser's IndexedDB stops
+/// the login.
 ///
 /// A pending onboarding the atServer explicitly refuses is dropped and the
 /// login carries on; any other failure to resume it keeps its record.
@@ -125,12 +131,14 @@ Future<AtClient> passkeyLogin(
 /// a no-op: nothing is deleted and the hints stay. Otherwise it deletes the
 /// record, and deletes the atSign's remembered passkey and enrollment hints
 /// only when the stored enrollment id equals the record's enrollment id;
-/// hints naming another enrollment stay. If no @keys document was written,
+/// hints naming another enrollment stay. A record this build cannot read, such
+/// as one a newer build wrote, is deleted and the hints stay. If no @keys
+/// document was written,
 /// the record held the only copy of the keys and the atSign must be reset
 /// with a new CRAM. Never call it without the user's choice.
 ///
 /// Throws [SetupLockTimeoutException] when another tab holds the setup lock
-/// too long.
+/// too long, and [IndexedDbException] when this browser's IndexedDB fails.
 Future<void> discardPendingOnboarding(String atSign) async =>
     discardPendingOnboardingIn(await IndexedDbHintStore.open(), atSign);
 
@@ -143,7 +151,15 @@ Future<void> discardPendingOnboardingIn(
       final canonical = canonicalPasskeyAtSign(atSign);
       return WebSetupLock()
           .run(setupLockName(WebSetupLock.namePrefix, canonical), () async {
-        final record = await store.get(canonical);
+        final PendingOnboardingRecord? record;
+        try {
+          record = await store.get(canonical);
+        } on UnsupportedPasskeyRecordException {
+          // The record does not decode, so no enrollment id says whose the
+          // hints are: delete only the record, which is what blocks the atSign.
+          await store.delete(canonical);
+          return;
+        }
         if (record == null) return;
         await store.delete(canonical);
         if (await store.enrollmentId(canonical) == record.enrollmentId) {

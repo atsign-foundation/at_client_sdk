@@ -1,8 +1,5 @@
 ## 3.8.0
 
-- feat: `AesGcm256EncryptionAlgo.fromKeyBytes` builds the cipher from 32 raw
-  key bytes. It checks the length at construction and keeps its own copy of
-  the key.
 - feat: `MlDsa65PureDartAlgo.keyPairFromSeed` and `MlDsa65FfiAlgo.keyPairFromSeed`
   derive the same ML-DSA-65 key pair from a 32-byte FIPS 204 seed
   (`MlDsa65Sizes.seedBytes`). The seed is the private key; see the README's

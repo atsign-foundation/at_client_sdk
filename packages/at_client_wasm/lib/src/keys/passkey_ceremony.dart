@@ -1,8 +1,9 @@
 import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
 
 import 'package:at_auth/passkey.dart' show PasskeyCeremonyException;
 import 'package:web/web.dart';
+
+import 'dom_exception_name.dart';
 
 /// The `DOMException` names WebAuthn rejects with when a ceremony yields no
 /// credential: cancelled, timed out, or no matching passkey.
@@ -16,7 +17,7 @@ Future<PublicKeyCredential> passkeyCeremony(
   try {
     credential = await request.toDart;
   } catch (e) {
-    final name = _errorName(e);
+    final name = domExceptionName(e);
     if (_noCredential.contains(name)) throw PasskeyCeremonyException(name!);
     rethrow;
   }
@@ -24,14 +25,4 @@ Future<PublicKeyCredential> passkeyCeremony(
     throw PasskeyCeremonyException('no credential returned');
   }
   return credential as PublicKeyCredential;
-}
-
-String? _errorName(Object error) {
-  try {
-    final name = (error as JSObject).getProperty<JSAny?>('name'.toJS);
-    return name.isA<JSString>() ? (name as JSString).toDart : null;
-  } on Object {
-    // A rejection without a readable name yields null; the caller rethrows it.
-    return null;
-  }
 }

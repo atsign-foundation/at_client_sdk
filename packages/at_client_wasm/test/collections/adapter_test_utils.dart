@@ -37,10 +37,13 @@ class MockAtCollection extends Mock
     implements AtCollection<Map<String, dynamic>> {}
 
 class _StoredKey {
-  _StoredKey(this.key, this.value);
+  _StoredKey(this.key, this.value, this.name);
 
   final AtKey key;
   final String value;
+
+  /// The name a listing's regex is matched against.
+  final String name;
 }
 
 /// An in-memory atServer shared by the clients of one test.
@@ -52,8 +55,18 @@ class FakeAtServer {
   FakeAtClient client(String atSign) => _clients.putIfAbsent(
       atSign, () => FakeAtClient._(this, atSign.toAtsign()));
 
-  bool _visibleTo(AtKey key, Atsign me) =>
-      key.sharedBy?.toAtsign() == me || key.sharedWith?.toAtsign() == me;
+  /// Whether [me] may see [key]: it owns the key or the key is shared with
+  /// it. A key that names no atSign as its owner, as a malformed record in
+  /// device storage would, is visible to every client.
+  bool _visibleTo(AtKey key, Atsign me) {
+    final Atsign? owner;
+    try {
+      owner = key.sharedBy?.toAtsign();
+    } on InvalidAtSignException {
+      return true;
+    }
+    return owner == null || owner == me || key.sharedWith?.toAtsign() == me;
+  }
 
   AtValue _get(Atsign me, AtKey key) {
     final stored = _store[key.toString()];
@@ -74,14 +87,17 @@ class FakeAtServer {
   /// The stored value of the key named [key], or null.
   String? storedValue(String key) => _store[key]?.value;
 
-  /// Stores [value] under [key] as it is, as another device's write would.
-  void putRaw(String key, String value) => _put(AtKey.fromString(key), value);
+  /// Stores [value] under [key] as it is, as another device's write would. A
+  /// listing matches [key] as written and returns it as `AtKey.fromString`
+  /// parses it, as `AtClient.getAtKeys` does.
+  void putRaw(String key, String value) =>
+      _put(AtKey.fromString(key), value, name: key);
 
-  bool _put(AtKey key, String value) {
+  bool _put(AtKey key, String value, {String? name}) {
     final metadata = key.metadata;
     metadata.createdAt ??= DateTime.now().toUtc();
     metadata.expiresAt ??= DateTime.now().toUtc().add(testExpiration);
-    _store[key.toString()] = _StoredKey(key, value);
+    _store[key.toString()] = _StoredKey(key, value, name ?? key.toString());
     return true;
   }
 
@@ -95,7 +111,8 @@ class FakeAtServer {
   void overwriteValues(bool Function(AtKey key) match, String value) {
     for (final entry in _store.entries.toList()) {
       if (match(entry.value.key)) {
-        _store[entry.key] = _StoredKey(entry.value.key, value);
+        _store[entry.key] =
+            _StoredKey(entry.value.key, value, entry.value.name);
       }
     }
   }
@@ -104,8 +121,7 @@ class FakeAtServer {
     final pattern = RegExp(regex ?? '.*');
     return [
       for (final stored in _store.values)
-        if (_visibleTo(stored.key, me) &&
-            pattern.hasMatch(stored.key.toString()))
+        if (_visibleTo(stored.key, me) && pattern.hasMatch(stored.name))
           stored.key,
     ];
   }

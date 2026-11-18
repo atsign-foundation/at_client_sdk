@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/src/collections/js_collections_adapter.dart';
+import 'package:at_utils/at_utils.dart' show LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -23,6 +24,17 @@ final class _LaterEvent extends CEvent {
 /// An error type the adapter has no name for, standing in for one a later
 /// at_client throws.
 final class _LaterError {}
+
+/// Collects each log record as `LEVEL|logger|message`.
+final class _Collect implements LoggingHandler {
+  _Collect(this.lines);
+
+  final List<String> lines;
+
+  @override
+  void call(record) =>
+      lines.add('${record.level.name}|${record.loggerName}|${record.message}');
+}
 
 Matcher _rejectsWith(String code, {String? id, String? owner, String? kind}) =>
     throwsA(isA<JsCollectionsError>()
@@ -89,8 +101,8 @@ void main() {
       JsCollectionsAdapter.open(alice.mock,
           namespace: _ns, type: type, expirationMs: _day.inMilliseconds);
 
-  JsItemAddress mine(String id) => (id: id, owner: '@alice');
-  JsItemAddress bobs(String id) => (id: id, owner: '@bob');
+  JsItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
+  JsItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
 
   List<String> ids(List<JsItem> items) =>
       [for (final item in items) item['id'] as String];
@@ -236,25 +248,6 @@ void main() {
 
       await expectLater(todos.update(bobs('B1'), {'t': 2}),
           _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1'));
-    });
-
-    test(
-        'An update, share or remove of the missing id "b1" owned by "@ALICE" rejects with COLLECTION_ITEM_NOT_FOUND and the owner "@alice"',
-        () async {
-      final todos = await open();
-      final address = (id: 'b1', owner: '@ALICE');
-
-      for (final call in <String, Future<Object?> Function()>{
-        'update': () => todos.update(address, {'t': 2}),
-        'share': () => todos.share(address, ['@bob']),
-        'remove': () => todos.remove(address),
-      }.entries) {
-        await expectLater(
-            call.value(),
-            _rejectsWith(CollectionErrorCodes.notFound,
-                id: 'b1', owner: '@alice'),
-            reason: call.key);
-      }
     });
 
     test('A get addresses an item already stored under a 65-character id',
@@ -521,7 +514,8 @@ void main() {
       expect(ids(listed), ['f1']);
       expect(listed.single['owner'], '@bob');
       expect(await todos.get(mine('f1')), isNull);
-      await expectLater(todos.update((id: 'f1', owner: '@carol'), {'x': 1}),
+      await expectLater(
+          todos.update((id: 'f1', owner: '@carol'.toAtsign()), {'x': 1}),
           _rejectsWith(CollectionErrorCodes.notOwner, owner: '@carol'));
     });
 
@@ -537,6 +531,41 @@ void main() {
         todos.get(bobs('b1')),
         _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
       );
+    });
+
+    test(
+        'A list leaves out a stored record whose key names no Atsign, and logs a warning naming the key',
+        () async {
+      final records = <String>[];
+      final previous = AtSignLogger.defaultLoggingHandler;
+      AtSignLogger.defaultLoggingHandler = _Collect(records);
+      addTearDown(() => AtSignLogger.defaultLoggingHandler = previous);
+      final todos = await open();
+      await todos.create({'title': 'a'}, id: 'a1');
+      const ownedByAt = 'b1.$_ns@';
+      const unowned = '@bob:b2.$_ns@alice@x';
+      expect(AtKey.fromString(ownedByAt).sharedBy, '@',
+          reason: 'the first record names "@" as its owner');
+      expect(AtKey.fromString(unowned).sharedBy, isNull,
+          reason: 'the second record names no owner at all');
+      final envelope = jsonEncode({
+        'type': 'Todo',
+        'obj': {'t': 1}
+      });
+      server.putRaw(ownedByAt, envelope);
+      server.putRaw(unowned, envelope);
+
+      final listing = await todos.list();
+
+      expect(ids(listing.items), ['a1']);
+      expect(listing.unreadable, isEmpty);
+      for (final stored in [ownedByAt, unowned]) {
+        final key = '${AtKey.fromString(stored)}';
+        expect(
+            records.where((r) => r.startsWith('WARNING|') && r.contains(key)),
+            isNotEmpty,
+            reason: 'a warning names the key $key; logged: $records');
+      }
     });
 
     test('A list keeps the upstream order of items and recipients', () async {
