@@ -74,6 +74,11 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// stored material is still refused, and each write is read back and
 /// compared with what was written.
 ///
+/// The lock needs an atServer from p3.13.0, the first to parse `:nc`. An
+/// expired lock stops blocking at once from p3.16.5. Another enrollment of
+/// the atSign cannot create or delete the lock record from p3.15.0, and a
+/// connection with the atSign's legacy keys cannot from p3.19.0.
+///
 /// The document never holds the enrollment's APKAM private key: a passkey
 /// enrollment derives the pair from the passkey and the atServer must not
 /// keep it. This store is given that derived pair instead. Every document it
@@ -104,6 +109,9 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
   /// sealed by [seal] and opened by [open], holding [apkamKeyPair]; a
   /// [restored] document is served by [read] without I/O. Each take of the
   /// lock lasts [lockTtl], and a write waits up to [lockWait] to take it.
+  ///
+  /// Throws [ArgumentError] for a [lockTtl] under a millisecond or over
+  /// [maxServerMutexTtl], or a [lockWait] that is not positive.
   AtServerAtKeysIo(
       {required EnrollmentDocumentStore documents,
       required String atSign,
@@ -119,8 +127,11 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
         _seal = seal,
         _open = open,
         _enrollmentId = enrollmentId,
-        _lockTtl = lockTtl,
-        _lockWait = lockWait,
+        _lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
+        _lockWait = lockWait > Duration.zero
+            ? lockWait
+            : throw ArgumentError.value(
+                lockWait, 'lockWait', 'must be positive'),
         _publicKey = apkamKeyPair.publicKey,
         _private = base64Decode(apkamKeyPair.privateKey) {
     final seed = restored;

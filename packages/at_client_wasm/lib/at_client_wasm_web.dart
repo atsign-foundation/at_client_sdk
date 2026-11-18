@@ -1,5 +1,7 @@
 library;
 
+export 'package:at_client/passkey.dart' show PasskeySession;
+
 export 'at_client_wasm.dart';
 export 'src/session/session_transport.dart';
 export 'src/session/web_passkey_entry.dart'

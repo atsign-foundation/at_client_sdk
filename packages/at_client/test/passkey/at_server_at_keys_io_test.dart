@@ -146,6 +146,51 @@ void main() {
     expect(coreOf(read), coreOf(written));
   }
 
+  group('construction', () {
+    AtServerAtKeysIo build(
+            {Duration lockTtl = const Duration(seconds: 10),
+            Duration lockWait = const Duration(seconds: 15)}) =>
+        AtServerAtKeysIo(
+            documents: documents(),
+            atSign: _atSign,
+            seal: (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
+            open: (r) => derived.vault.open(PasskeyRecordType.atkeys, r),
+            enrollmentId: _eid,
+            apkamKeyPair: pair,
+            lockTtl: lockTtl,
+            lockWait: lockWait);
+    Matcher naming(String name) =>
+        throwsA(isA<ArgumentError>().having((e) => e.name, 'name', name));
+
+    test('refuses a lockTtl under a millisecond', () {
+      expect(() => build(lockTtl: Duration.zero), naming('lockTtl'),
+          reason: 'a lock record with ttl 0 never expires');
+    });
+
+    test('refuses a lockTtl over the server mutex cap', () {
+      expect(
+          () => build(
+              lockTtl: maxServerMutexTtl + const Duration(milliseconds: 1)),
+          naming('lockTtl'),
+          reason: 'a lock longer than the cap is not one a server mutex takes');
+    });
+
+    test('refuses a lockWait that is not positive', () {
+      expect(() => build(lockWait: Duration.zero), naming('lockWait'),
+          reason: 'a write that may not wait cannot take the lock');
+      expect(() => build(lockWait: const Duration(milliseconds: -1)),
+          naming('lockWait'));
+    });
+
+    test('accepts a lockTtl of the cap and a lockWait of a millisecond', () {
+      expect(
+          build(
+              lockTtl: maxServerMutexTtl,
+              lockWait: const Duration(milliseconds: 1)),
+          isA<AtServerAtKeysIo>());
+    });
+  });
+
   test('write then reload then read round-trips at the enrollment key',
       () async {
     final keys = _base();
