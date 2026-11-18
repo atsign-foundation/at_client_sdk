@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_commons/atsign.dart';
@@ -48,10 +49,11 @@ class PasskeyPrf {
   /// to be unsupported, and after both ceremonies when the PRF output that
   /// came back is missing, not 32 bytes, or all zeroes. When the assertion
   /// after a successful create throws or yields no usable PRF output, the
-  /// created passkey is reported through [signalUnknownCredential] before the
-  /// failure propagates. A miss is recorded only when the create ceremony did
-  /// not report PRF enabled and the assertion returned no PRF output; a failed
-  /// ceremony records nothing.
+  /// created passkey is reported through [signalUnknownCredential] and the
+  /// failure propagates at once, without waiting for the platform to take the
+  /// report. A miss is recorded only when the create ceremony did not report
+  /// PRF enabled and the assertion returned no PRF output; a failed ceremony
+  /// records nothing.
   Future<PasskeyRegistration> register(String atSign,
       {required DateTime enrolledAt, required String deviceName}) async {
     await prfSupport?.require();
@@ -70,7 +72,7 @@ class PasskeyPrf {
         secret: _secretFrom(assertion.prfFirst)
       );
     } on Object {
-      await signalUnknownCredential(creation.credentialId);
+      unawaited(signalUnknownCredential(creation.credentialId));
       rethrow;
     }
   }

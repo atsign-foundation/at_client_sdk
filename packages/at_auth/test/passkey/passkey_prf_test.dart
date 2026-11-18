@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
@@ -291,6 +292,20 @@ void main() {
       await expectLater(register(), throwsA(same(cancelled)));
       expect(port.signalled, hasLength(1));
     });
+
+    test('a report the platform never answers does not hold back the failure',
+        () async {
+      port
+        ..unanswered = Completer<void>()
+        ..resultPrfFirst = null;
+      Object? failure;
+      unawaited(register().then<void>((_) {}, onError: (Object e) {
+        failure = e;
+      }));
+      await pumpEventQueue();
+      expect(port.signalled, [port.resultCredentialId]);
+      expect(failure, isA<PrfUnavailableException>());
+    });
   });
 }
 
@@ -321,6 +336,9 @@ class _SignallingPort extends FakePasskeyPort
   /// When set, the assertion alone throws it.
   Object? getFailure;
 
+  /// When set, a report waits on it, as a platform that never answers does.
+  Completer<void>? unanswered;
+
   @override
   Future<PasskeyAssertion> get(
       {required Uint8List evalInput, Uint8List? allowCredential}) async {
@@ -335,5 +353,6 @@ class _SignallingPort extends FakePasskeyPort
   Future<void> signalUnknownCredential(Uint8List credentialId) async {
     signalled.add(credentialId);
     if (fails) throw StateError('platform refused');
+    await unanswered?.future;
   }
 }
