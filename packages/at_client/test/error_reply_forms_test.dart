@@ -33,6 +33,7 @@ void main() {
     'AT0401': AtConnectionCause.unauthenticated,
     'AT0027': AtConnectionCause.revoked,
     'AT0029': AtConnectionCause.invalidEnrollment,
+    'AT0028': AtConnectionCause.invalidEnrollment,
     'AT0025': AtConnectionCause.enrollmentDenied,
     'AT0026': AtConnectionCause.enrollmentNotApproved,
   };

@@ -144,6 +144,10 @@ class FakeAtServer {
   /// an answer.
   String? Function(AtLookUp? lookUp)? refuseClientAuth;
 
+  /// What the client authenticator's `from:` is answered with in place of
+  /// a challenge, when it returns an answer.
+  String? Function()? answerClientFrom;
+
   /// `monitor:` commands answered with an error instead of accepted.
   int rejectMonitors = 0;
 
@@ -210,8 +214,11 @@ class FakeAtServer {
 
   void _onWrite(FakeAtServerSocket socket, String command) {
     if (runsClientAuthenticator && command.startsWith('from:')) {
-      unawaited(socket.serverSends('data:_9e8169dc-5618-44ec-ab43-1a5b2144c581'
-          '$atSign:c3d345fc-5691-4f90-bc34-17cba31f060f\n@'));
+      final answer = answerClientFrom?.call();
+      unawaited(socket.serverSends(answer != null
+          ? '$answer\n@'
+          : 'data:_9e8169dc-5618-44ec-ab43-1a5b2144c581'
+              '$atSign:c3d345fc-5691-4f90-bc34-17cba31f060f\n@'));
       return;
     }
     if (runsClientAuthenticator &&
