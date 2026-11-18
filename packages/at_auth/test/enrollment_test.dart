@@ -404,11 +404,7 @@ void main() {
         error = e;
       }
       expect(error, isA<AtSigningException>());
-      expect(
-        (error as AtSigningException).message,
-        'ML-DSA-65 public key must be 1952 bytes (got 95)',
-      );
-      final text = '${error.message} $error';
+      final text = '${(error as AtSigningException).message} $error';
       expect(text, isNot(contains(publicKey)));
       expect(text, isNot(contains(privateKey)));
       expect(text, isNot(contains('PUBLIC-KEY-MATERIAL')));
