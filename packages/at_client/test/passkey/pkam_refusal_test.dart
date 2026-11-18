@@ -2,12 +2,14 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart' show AtKeys;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart';
 import 'package:at_client/src/passkey/passkey_custody.dart';
+import 'package:at_client/src/version.dart';
 import 'package:at_commons/at_commons.dart'
     show
         AtRootDomain,
@@ -330,6 +332,45 @@ void main() {
           reason: 'the device keeps its credential hint');
       expect(hints.ids[_atSign], _eid,
           reason: 'the device keeps its enrollment hint');
+    });
+  }
+
+  const outline5 =
+      'The from: on the passkey\'s PKAM connection names at_client as the SDK';
+  for (final (moment, authenticates) in [
+    (
+      'at a login',
+      (AtAuthEnrollmentGateway gateway, ApkamKeyPair pair) => gateway
+          .authenticate(atSign: _atSign, enrollmentId: _eid, apkamKeyPair: pair)
+    ),
+    (
+      'when an onboarding activates the Atsign',
+      (AtAuthEnrollmentGateway gateway, ApkamKeyPair pair) => gateway.activate(
+          atSign: _atSign, apkamKeyPair: pair, cram: 'cram-secret')
+    ),
+  ]) {
+    test('$outline5 ($moment)', () async {
+      final atServer = _PkamServer();
+      final pair = await apkamKeyPairFromSeed(_prf());
+
+      final session = await authenticates(gateway(atServer.lookUps), pair);
+      await session.close();
+
+      expect(session.enrollmentId, _eid,
+          reason: 'the control: the PKAM authenticated the enrollment');
+      expect(atServer.froms, hasLength(1), reason: 'one from: began the PKAM');
+      const prefix = 'from:$_atSign:clientConfig:';
+      expect(atServer.froms.single, startsWith(prefix),
+          reason: 'the from: carries a clientConfig');
+      final config =
+          jsonDecode(atServer.froms.single.substring(prefix.length).trim())
+              as Map<String, dynamic>;
+      expect(config['sdkName'], 'atsign.dart.at_client',
+          reason: 'the from: names at_client as the SDK');
+      expect(config['sdkVersion'], packageVersion,
+          reason: 'the from: carries at_client\'s version as the sdk version');
+      expect(config['version'], packageVersion,
+          reason: 'the from: carries at_client\'s version as version');
     });
   }
 }

@@ -131,7 +131,8 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
     AtConnectionCause.invalidEnrollment,
   };
 
-  /// PKAM as [enrollmentId] with [pair] on a connection of its own.
+  /// PKAM as [enrollmentId] with [pair] on a connection of its own, whose
+  /// `from:` carries at_client's clientConfig.
   ///
   /// Throws [PkamRefusedException] when the run of the authenticator that
   /// failed sent a `pkam:` and [classifyConnectionFailure] reads the failure
@@ -150,7 +151,7 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
           withApkamKey(AtKeys(atsign: Atsign(atSign)), enrollmentId, pair);
       final authenticate = authenticatorFor(
           handshakeKeysIo(atSign, signingKeys), atSign,
-          enrollmentId: enrollmentId);
+          enrollmentId: enrollmentId, clientConfig: clientConfigOf(null));
       // NOTE: only a reply to the pkam: can be a refusal.
       lookUp.authenticator = (executor) {
         pkamSent = false;
