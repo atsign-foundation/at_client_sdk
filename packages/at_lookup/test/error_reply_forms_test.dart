@@ -248,4 +248,33 @@ void main() {
             .having((e) => e.errorCode, 'errorCode', 'AT0401')
             .having((e) => e.cause, 'cause', same(refusal))));
   });
+
+  test(
+      'Given an authenticator that throws a subtype of '
+      'UnAuthenticatedException, when executeVerb wraps it, then the wrapper '
+      'carries the code of a failed authentication', () async {
+    final refusal = _RefusalWithCode('Failed connecting to @alice. '
+        'error:AT0027:enrollment_id: e-1 is revoked');
+    final atLookup = AtLookUp.withTransport(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain('127.0.0.1', 64),
+      authenticator: (_) async => throw refusal,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transports),
+    );
+    addTearDown(atLookup.close);
+
+    await expectLater(
+        atLookup.executeVerb(LLookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@alice')),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0401')
+            .having((e) => e.cause, 'cause', same(refusal))));
+  });
+}
+
+class _RefusalWithCode extends UnAuthenticatedException {
+  _RefusalWithCode(super.message);
 }

@@ -174,6 +174,8 @@ abstract interface class AtLookUp {
 
   /// Runs [builder]'s command on the atServer, authenticating the connection
   /// first when the verb needs it, and returns the atServer's response.
+  /// An authenticator's failure is thrown as an [AtLookUpException] whose
+  /// [AtLookUpException.cause] is that failure.
   Future<String?> executeVerb(VerbBuilder builder);
 
   /// Sends [command] as written and returns the atServer's response; [auth]

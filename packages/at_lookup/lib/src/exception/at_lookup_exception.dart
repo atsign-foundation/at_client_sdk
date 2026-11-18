@@ -23,10 +23,14 @@ class AtLookUpExceptionUtil {
   ///
   /// An [AtIOException], which a transport's failed write is, and a
   /// [ConnectionInvalidException], which a lost connection is, take the code
-  /// of a socket error.
+  /// of a socket error, and an [UnAuthenticatedException] of any subtype the
+  /// code of a failed authentication.
   static String getErrorCode(Exception exception) {
     if (exception is AtIOException || exception is ConnectionInvalidException) {
       return error_codes['SocketException']!;
+    }
+    if (exception is UnAuthenticatedException) {
+      return error_codes['UnAuthenticatedException']!;
     }
     var errorCode = error_codes[exception.runtimeType.toString()];
     errorCode ??= 'AT0014';

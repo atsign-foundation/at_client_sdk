@@ -101,9 +101,12 @@ void main() {
 
             expect(
                 failure,
-                isA<AtLookUpException>().having(
-                    (e) => e.cause, 'cause', isA<AtAuthErrorReplyException>()),
-                reason: 'the control: executeVerb wrapped the refusal');
+                isA<AtLookUpException>()
+                    .having((e) => e.cause, 'cause',
+                        isA<AtAuthErrorReplyException>())
+                    .having((e) => e.errorCode, 'errorCode', 'AT0401'),
+                reason: 'the control: executeVerb wrapped the refusal as a '
+                    'failed authentication');
             expect(classifyConnectionFailure(failure!)?.cause, cause);
           });
         });
