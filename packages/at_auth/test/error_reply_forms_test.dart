@@ -306,6 +306,19 @@ void main() {
       });
     });
 
+    test(
+        'Given AT0401 in the JSON form followed by other text on more '
+        'consecutive polls than its retry budget, when it waits, then it keeps '
+        'waiting and is approved', () async {
+      final server = await atServer(List.filled(
+          maxRetries + 2, '${forms['JSON']!('AT0401', 'not approved')} extra'));
+
+      await waitOver(server);
+
+      expect(polls(server), maxRetries + 3,
+          reason: 'the code is read though text follows the JSON');
+    });
+
     /// The enrollment-state refusals, which an atServer writes as
     /// `error:<code>:<text>` whatever the `from:` named.
     final enrollmentStates = {
@@ -356,7 +369,8 @@ void main() {
     /// Refusals whose code cannot be read where an atServer writes it.
     final unreadable = {
       'a refusal with no error: in it': 'data:refused',
-      'a JSON body that does not parse': 'error:{"errorCode":"AT0401"',
+      'a JSON body that does not parse, with no leading errorCode':
+          'error:{"errorDescription":"x","errorCode":"AT0401"',
       'a JSON body that is not an object': 'error:["AT0401"]',
       'a JSON code that is a number': 'error:{"errorCode":401}',
       'a JSON code that is a list': 'error:{"errorCode":["AT0401"]}',

@@ -11,10 +11,13 @@ import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/util/error_reply.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart'
-    show AtLookUpFactory, AtLookupMuxable, SecondaryAddressFinder;
+    show
+        AtLookUpFactory,
+        AtLookupMuxable,
+        SecondaryAddressFinder,
+        atServerErrorCodeIn;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 

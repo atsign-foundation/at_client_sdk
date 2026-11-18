@@ -7,7 +7,8 @@ Feature: A lookup reads an atServer's error reply as its code, in every form
 
   Races: none arise; one reply is read where it arrived.
   Replay: none arise; an error reply carries no secret and no freshness.
-  DoS: the reply is already read and bounded; taking its code is one match.
+  DoS: the reply is already read and bounded; taking its code is one match,
+       or one anchored match where a JSON reply is cut short.
   Forgery and impersonation: the reply comes from the client's own atServer
   over its TLS connection; taking the code it wrote grants nothing.
 
@@ -25,3 +26,13 @@ Feature: A lookup reads an atServer's error reply as its code, in every form
     Given an atServer that answers a verb with an error: reply that does not start with a code
     When a lookup executes that verb
     Then it throws an AtLookUpException with code AT0014 whose text holds the reply
+
+  Scenario: A code is read only where a dash, a colon or the end of the reply follows it
+    Given a message holding error:AT00271-x, or error:AT0027 followed by a space, or error:AT0027 alone
+    When the code in the message is read
+    Then the first two read as no code, and the last reads as AT0027
+
+  Scenario: A JSON reply followed by other text is read as its code
+    Given a message holding error:{"errorCode":"AT0401","errorDescription":"x"} and then other text
+    When the code in the message is read
+    Then it reads as AT0401, and a code that appears only in an errorDescription, or with no string errorCode, is never read

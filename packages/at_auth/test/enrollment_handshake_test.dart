@@ -106,7 +106,7 @@ void main() {
       polled.add(outcome);
       switch (outcome) {
         case Poll.pending:
-          throw UnAuthenticatedException('error:AT0401 enrollment is pending');
+          throw UnAuthenticatedException('error:AT0401-enrollment is pending');
         case Poll.unreachable:
           throw AtLookUpException('AT0021', 'the atServer is unreachable');
         case Poll.refused:
