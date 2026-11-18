@@ -36,18 +36,20 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 /// every other approved enrollment of the atSign, the failed run's included;
 /// the passkey that failed is reported to the browser as unknown when the
 /// failure came before the activation was being completed. Once the CRAM
-/// secret is deleted, [passkeyLogin] finishes the onboarding, including when
-/// the client failed to open; it also finishes one that stopped after
-/// writing the document and pointer but before deleting the CRAM secret.
-/// Nothing is kept in this browser until the CRAM secret is deleted.
+/// secret is deleted the atSign is onboarded: when writing the passkey hints
+/// or opening the client fails after that, [passkeyLogin] logs in with the
+/// passkey, and saves the hints when the onboarding could not. [passkeyLogin]
+/// also finishes an onboarding that stopped after writing the document and
+/// pointer but before deleting the CRAM secret. Nothing is kept in this
+/// browser until the CRAM secret is deleted.
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
 /// lock too long, [IndexedDbException] when a failure of this browser's
 /// IndexedDB stops the onboarding, and the atServer's own errors when
 /// activation is refused. IndexedDB stops it either before it registers a
-/// passkey or, while it writes the passkey hints, after the CRAM secret is
-/// deleted, when [passkeyLogin] finishes the onboarding.
+/// passkey, or while it writes the passkey hints after the CRAM secret is
+/// deleted, which leaves the atSign onboarded for [passkeyLogin] to log in.
 ///
 /// Stopping the session, or its client, closes the passkey vault it holds.
 Future<PasskeySession> onboardNewAtSign(
