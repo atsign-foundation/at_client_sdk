@@ -9,10 +9,11 @@ import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show ApkamKeyPair, apkamKeyPairFromSeed;
-import 'package:mocktail/mocktail.dart' show Fake;
+import 'package:mocktail/mocktail.dart' show Fake, Mock;
 import 'package:test/test.dart';
 
 import '../support/custody_fakes.dart' show DerivedKeys;
+import '../test_utils/recorded_logs.dart';
 
 const _atSign = '@alice';
 const _eid = 'e1d2c3';
@@ -107,13 +108,20 @@ class _Clock extends Fake implements Stopwatch {
   Duration elapsed = Duration.zero;
 }
 
+/// A client the signing root holds and never calls while it files a private.
+class _Client extends Mock implements AtClient {}
+
 void main() {
   late _AtServer server;
   late DerivedKeys derived;
   late ApkamKeyPair pair;
+  final logs = RecordedLogs();
 
-  setUpAll(() async => pair = await apkamKeyPairFromSeed(
-      Uint8List.fromList(List.generate(32, (i) => i + 100))));
+  setUpAll(() async {
+    logs.installOn();
+    pair = await apkamKeyPairFromSeed(
+        Uint8List.fromList(List.generate(32, (i) => i + 100)));
+  });
 
   setUp(() async {
     server = _AtServer();
@@ -275,6 +283,55 @@ void main() {
     await addSymmetric(io);
     expect((await stored()).enrollmentSymmetricKey, isNotNull,
         reason: 'the store accepts a later write');
+  });
+
+  test(
+      'a signing root filed while its lease runs out logs each retirement '
+      'once', () async {
+    final held = [
+      for (var i = 1; i <= 2; i++)
+        '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}$i'
+    ];
+    final seeded = (await stored())..atsign = _atSign.toAtsign();
+    for (final slot in held) {
+      seeded.addKey(CryptographicMaterial(
+          keyId: slot,
+          role: CryptographicMaterialRole.privateSigning,
+          algorithm: PqSigningRoot.rootKeyAlgoToken,
+          bytes: AtBytes(Uint8List.fromList(utf8.encode('held $slot'))),
+          createdAt: DateTime.now().toUtc()));
+    }
+    server.document =
+        await derived.vault.seal(PasskeyRecordType.atkeys, seeded.toJson());
+    final clocks = <_Clock>[];
+    server.leaseOf = (key, ttl) {
+      final clock = _Clock();
+      clocks.add(clock);
+      return ServerMutexLease.timed(key, DateTime.now().add(ttl), clock, ttl);
+    };
+    server.onEvent = (e) {
+      if (e == 'self get' && clocks.length == 1) {
+        clocks.single.elapsed = const Duration(milliseconds: 200);
+      }
+    };
+    final root = PqSigningRoot(_Client(),
+        keysIo: storeOf('self', lockTtl: const Duration(milliseconds: 200)));
+    logs.records.clear();
+
+    expect(
+        await root.store(_atSign, Uint8List.fromList(utf8.encode('fresh')),
+            heldCorrespondence: const {}),
+        isTrue);
+
+    expect(server.of('self').where((e) => e == 'lock'), hasLength(2),
+        reason: 'the lease ran out once, so the update ran twice');
+    for (final slot in held) {
+      expect(
+          logs.records.where((r) => r.message
+              .startsWith('Retired the signing root private in $slot for')),
+          hasLength(1),
+          reason: slot);
+    }
   });
 
   test('a lease serves the writes that follow it while it lasts', () async {
