@@ -189,7 +189,7 @@ class RemoteSecondary implements Secondary {
       rethrow;
     } on AtLookUpException catch (e) {
       _reportFailure(e);
-      final exception = _thrownFor(e);
+      final exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(Intent.fetchData,
             ExceptionScenario.remoteVerbExecutionFailed, exception.message));
