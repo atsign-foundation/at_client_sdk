@@ -410,11 +410,13 @@ class AtClientPreference {
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
-  /// Set this to [RemoteLocalPref.remoteOnly]
-  /// if you require all data operations (get / put / delete) to be performed
-  /// on the remote atServer rather than on local storage. (When operations are
-  /// performed locally, we depend on sync to get eventual consistency between
-  /// local and remote.
+  /// Where a get, getMeta, put, putMeta, delete or key scan goes when the
+  /// call leaves `useRemoteAtServer` unset: local storage, which sync keeps in
+  /// step with the atServer, or the atServer itself.
+  ///
+  /// A `local:` key always stays on the device, an uncached key another
+  /// Atsign owns is always looked up on the atServer, and a notification
+  /// always goes to the atServer, whatever this says.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
 
   /// Configures the crypto providers used for encrypted puts and reads.
@@ -473,20 +475,16 @@ class AtClientPreference {
   final List<String> keyEstablishmentAlgorithms;
 }
 
-/// Default preference on how to handle get, put and delete requests with
-/// regards to use of local storage vs the remote atServer.
+/// Where an operation goes when the call leaves `useRemoteAtServer` unset;
+/// see [AtClientPreference.remoteLocalPref].
 enum RemoteLocalPref {
   /// The default - operate on local storage, and rely on the background
   /// sync processing to push changes to the remote atServer.
   localOnly,
 
-  // /// Operate on remote first. If there is an exception, rethrow it back to
-  // /// application code. If remote operation was successful, then perform the
-  // /// operation on local storage.
-  // remoteFirst,
-  //
-  /// Operate on remote only - i.e. do not interact with local storage at all.
-  /// Note that if the application is syncing, then the change will be pulled
-  /// to local from remote as part of the sync process.
+  /// Send the operation to the atServer, without reading or writing local
+  /// storage for it; sync, when it runs, still pulls the change into local
+  /// storage. A call that sets `useRemoteAtServer` to false still uses local
+  /// storage.
   remoteOnly,
 }

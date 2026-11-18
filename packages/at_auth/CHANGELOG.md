@@ -1,15 +1,12 @@
 ## 4.1.0-rc.1
 
+- docs: `WrittenAtKeysIo.update` says an implementation may run its mutate more than once, each time on a fresh read, keeping only the last run's changes.
+- feat: `completeActivationOf` finishes an activation started with `completeActivation: false`, on a connection the caller holds: it publishes the encryption public key it is given, when it is given one, and deletes the CRAM secret.
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
+- fix: `PasskeyVault` holds its Atsign in canonical form, so a record sealed for `@Alice` opens for `@alice`.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
 - fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening.
 - feat: `UnknownCredentialSignal` is a capability interface in `package:at_auth/passkey.dart` for a `PasskeyPort` that can tell the platform a passkey no longer belongs to an account. `PasskeyPrf.signalUnknownCredential` calls it when the port implements it, does nothing otherwise, and ignores a failing signal.
-- feat: `PendingOnboardingStore` is a new port in `package:at_auth/passkey.dart`
-  for the one sealed record per atSign that an activation in progress keeps,
-  with `PendingOnboardingRecord` (credential id, enrollment id, the minted
-  public encryption key and the sealed body). Its sealed body uses the new
-  `PasskeyRecordType.pending`. A record that cannot be read back throws
-  `UnsupportedPasskeyRecordException`.
 - feat: `package:at_auth/passkey.dart` is a new library for passkey-held keys.
   It runs the passkey PRF ceremonies (register, then unlock) and keeps a
   PRF-unavailable flag, which is set only when the platform definitely reports
@@ -25,12 +22,25 @@
   caller, and `recordPrfSalt()` is synchronous. The four HKDF labels (record id,
   pointer namespace, seal key, auth seed) share the form
   `at_auth/custody/<name>/v1`.
-- feat: `ClosableAtKeysIo` is a new interface, exported with `AtKeysIo`, for a
-  key store that holds something to release. It declares `closedByClient` and
-  `close()`; `AtKeysIo` and its subclasses gain no members, so a class that
-  implements them compiles as before. A client closes a key store only when it
-  is a `ClosableAtKeysIo` flagged `closedByClient`; any other store is lent to
-  it.
+- fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation is
+  thrown as an `UnAuthenticatedException` carrying the atServer's reply, so
+  its code can be read. Nothing is signed or digested.
+- feat: an enrollment's wait for approval ends at once with
+  `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
+  `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
+  AT0028 or AT0029, in any form.
+- feat: every `from:` at_auth sends names the program and the SDK in its
+  clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
+  caller's values win; absent or blank ones are the program file's name,
+  `unknown`, `atsign.dart.at_auth` and at_auth's version. Every string value,
+  nested ones included, is sent on one line and cut to 64 UTF-16 code units,
+  and every key is sent on one line.
+- feat: `clientConfigFor` builds that clientConfig, with `version` only when
+  its caller gives one, and `activateAtSign` and `AtEnrollment.create` take a
+  `clientConfig` for their `from:`.
+- fix: an enrollment's wait for approval reads an atServer's refusal the
+  same whether it arrives as plain text or as JSON, so it keeps waiting or
+  ends as the refusal says.
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
   private half does not sign for its public half is refused with

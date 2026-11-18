@@ -196,9 +196,12 @@ connection and am fully functional and (2) I've not made a remote connection
 but am fully functional for offline behaviour."* There are three outcomes,
 not two: **online** (connected and PKAM accepted, readable today from
 at_lookup's `AtConnection.isAuthenticated`), **offline** (no atServer
-reached: no network, atDirectory or atServer unreachable), and **refused**
-(atServer reached, credentials rejected: revoked AT0027, unauthenticated
-AT0401, invalid enrollment AT0029). The state is a current value plus a
+accepted or refused the credentials: no network, atDirectory or atServer
+unreachable, or an atServer that answered with neither a challenge to sign
+nor a decision on the credentials), and **refused** (atServer reached,
+credentials rejected: revoked AT0027, unauthenticated AT0401, invalid
+enrollment AT0029, or AT0028 in reply to a PKAM). The state is a current
+value plus a
 stream on the client, since the network arrives after open and revocation
 lands mid-life. On refusal: **the first open of a principal on a device must
 be online**, so with no local store yet for that (atSign, enrollment) a

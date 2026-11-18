@@ -46,6 +46,13 @@ class _Docs implements EnrollmentDocumentStore {
   Future<void> put(String atSign, String enrollmentId, String document) async {
     records[enrollmentDocumentKey(enrollmentId, atSign)] = document;
   }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) async =>
+      ServerMutexLease(
+          AtKey.fromString(enrollmentLockKey(enrollmentId, atSign)),
+          DateTime.now().add(ttl));
 }
 
 String _b(String s) => base64Encode(utf8.encode(s));
@@ -107,10 +114,11 @@ void main() {
         enrollmentId: _eid,
         keysIo: AtServerAtKeysIo(
             documents: docs,
-            vault: vault,
+            atSign: _atSign,
+            seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
+            open: (r) => vault.open(PasskeyRecordType.atkeys, r),
             enrollmentId: _eid,
-            apkamKeyPair: pair,
-            closedByClient: true),
+            apkamKeyPair: pair),
         app: 'wavi',
         transport: (
           lookUps: wire.lookUps,

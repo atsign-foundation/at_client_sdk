@@ -242,11 +242,18 @@ needs types at_client doesn't export, so raise a
 for it.
 
 `Atsign.authenticatesAs(keys: ..., rootDomain: ..., lookUps: ...,
-secondaryAddressFinder: ...)` answers which enrollment a keys store
-authenticates as without building a client.
+secondaryAddressFinder: ..., particulars: ...)` answers which enrollment a
+keys store authenticates as without building a client.
 Flutter apps get the same verbs behind dialogs in
 [`at_client_flutter`](../at_client_flutter); CLI apps get them behind
 [`at_client_cli`](../at_client_cli)'s `CLIBase` and `at_activate` commands.
+
+Every connection that authenticates names the app to its atServer; one that
+does not, such as a public lookup or a proxy's preamble, sends no
+clientConfig. Set `AtClientPreference.atClientParticulars.appName` and
+`appVersion`; a client whose preference sets no `appName` is named after its
+program file, or "unknown" where there is none, and logs a warning when it
+starts.
 
 `AtClientManager.setCurrentAtSign` and `fromAuthSession`, which built the
 current client for the caller, are removed in 4.0: build the client with a

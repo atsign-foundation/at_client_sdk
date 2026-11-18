@@ -330,24 +330,6 @@ class PqClientBootstrap {
     ring.startUpAsked();
   }
 
-  /// Waits up to [within] for the step in flight to finish, so a caller about
-  /// to close the key store does not close it under a write that step is
-  /// still to make. Meant for after [stop], when no further step starts.
-  ///
-  /// Returns at once when no startup began. A step still running when [within]
-  /// elapses is logged and left to finish or fail on its own.
-  Future<void> settleStartup(Duration within) async {
-    if (!_started) return;
-    try {
-      await startupComplete.timeout(within);
-    } on TimeoutException {
-      _logger.warning(
-          'PQ startup for $_atSign was still running ${within.inMilliseconds} '
-          'ms after it was stopped, so the key store is closed under it: a '
-          'write it had still to make is refused, and the next start makes it.');
-    }
-  }
-
   /// Whether the `seedNamespaceKeys` step will seed anything.
   bool get _seedsNamespaceKeys =>
       _gates.seedNamespaceKeys &&
@@ -785,7 +767,11 @@ class PqClientBootstrap {
       if (record == null) return;
 
       final namespaces = _namespaceGrantsOf(record.namespace);
+      Map<String, String>? replaced;
       await keysIo.update(_atSign.toAtsign(), (keys) {
+        // NOTE: update may run this again on a fresh read; only the last run
+        // counts.
+        replaced = null;
         if (!keys.enrollmentIds.contains(enrollmentId)) {
           _logger.finer('Not recording an enrollment snapshot for '
               '$enrollmentId: this keyfile holds no material for it, and '
@@ -800,10 +786,7 @@ class PqClientBootstrap {
         if (held?.namespaces != null &&
             namespaces != null &&
             !_sameGrants(held!.namespaces!, namespaces)) {
-          _logger.warning(
-              'The grants on enrollment $enrollmentId have changed: this '
-              'keyfile recorded ${held.namespaces}, and the atServer now '
-              'says $namespaces');
+          replaced = held.namespaces;
         }
         keys.recordEnrollmentSnapshot(
           enrollmentId,
@@ -813,6 +796,11 @@ class PqClientBootstrap {
         );
         return true;
       });
+      if (replaced != null) {
+        _logger.warning('The grants on enrollment $enrollmentId have changed: '
+            'this keyfile recorded $replaced, and the atServer now says '
+            '$namespaces');
+      }
     } catch (e, st) {
       if (_causedByStop(e)) rethrow;
       _logger.warning('Could not reconcile the enrollment snapshot for '

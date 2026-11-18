@@ -69,9 +69,12 @@ void main() {
       if (metadata == null) throw AtKeyNotFoundException(meta.group(1)!);
       return 'data:${jsonEncode(metadata.toJson())}';
     });
-    when(() => client.getMeta(any())).thenAnswer((inv) async =>
-        throw StateError(
-            'getMeta reads the value: ${inv.positionalArguments[0]}'));
+    when(() => client.get(any())).thenAnswer((inv) async =>
+        throw StateError('get reads the value: ${inv.positionalArguments[0]}'));
+    when(() => client.get(any(),
+        getRequestOptions:
+            any(named: 'getRequestOptions'))).thenAnswer((inv) async =>
+        throw StateError('get reads the value: ${inv.positionalArguments[0]}'));
     return client;
   }
 

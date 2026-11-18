@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
@@ -31,13 +30,17 @@ AtKeys _base() => AtKeys.legacy(
     selfEncryptionKey: _b('self-1'))
   ..atsign = _atSign.toAtsign();
 
-/// An atServer holding documents by key, with a log of every command.
+/// An atServer holding documents by key, with a log of every command. It
+/// grants every create of a document's lock.
 class _FakeAtServer {
   final records = <String, String>{};
   final commands = <String>[];
 
   /// Accepts updates without storing them.
   var dropUpdates = false;
+
+  /// Fails the next update with an error reply, storing nothing.
+  var failNextUpdate = false;
 
   /// Answers every lookup after the first update with a document that does not
   /// open.
@@ -64,7 +67,14 @@ class _FakeAtServer {
       if (value == null) throw AtLookUpException('AT0015', 'key not found');
       return 'data:$value';
     }
+    if (line.startsWith('update:') && line.contains('atkeys-lock.')) {
+      return 'data:-1';
+    }
     if (line.startsWith('update:')) {
+      if (failNextUpdate) {
+        failNextUpdate = false;
+        throw AtLookUpException('AT0011', 'internal server error');
+      }
       if (!updateArrived.isCompleted) updateArrived.complete();
       await holdUpdate?.future;
       final body = line.substring('update:'.length);
@@ -77,8 +87,10 @@ class _FakeAtServer {
     throw StateError('unexpected command $command');
   }
 
-  List<String> get updates =>
-      commands.where((c) => c.startsWith('update:')).toList();
+  /// Every update of a document, leaving out lock creates.
+  List<String> get updates => commands
+      .where((c) => c.startsWith('update:') && !c.contains('atkeys-lock.'))
+      .toList();
 }
 
 void main() {
@@ -96,7 +108,9 @@ void main() {
     final k = keys ?? derived;
     return AtServerAtKeysIo(
         documents: documents(),
-        vault: k.vault,
+        atSign: _atSign,
+        seal: (d) => k.vault.seal(PasskeyRecordType.atkeys, d),
+        open: (r) => k.vault.open(PasskeyRecordType.atkeys, r),
         enrollmentId: _eid,
         apkamKeyPair: pair);
   }
@@ -131,6 +145,51 @@ void main() {
     expect(read.enrollmentToAuthenticateAs(), _eid);
     expect(coreOf(read), coreOf(written));
   }
+
+  group('construction', () {
+    AtServerAtKeysIo build(
+            {Duration lockTtl = const Duration(seconds: 10),
+            Duration lockWait = const Duration(seconds: 15)}) =>
+        AtServerAtKeysIo(
+            documents: documents(),
+            atSign: _atSign,
+            seal: (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
+            open: (r) => derived.vault.open(PasskeyRecordType.atkeys, r),
+            enrollmentId: _eid,
+            apkamKeyPair: pair,
+            lockTtl: lockTtl,
+            lockWait: lockWait);
+    Matcher naming(String name) =>
+        throwsA(isA<ArgumentError>().having((e) => e.name, 'name', name));
+
+    test('refuses a lockTtl under a millisecond', () {
+      expect(() => build(lockTtl: Duration.zero), naming('lockTtl'),
+          reason: 'a lock record with ttl 0 never expires');
+    });
+
+    test('refuses a lockTtl over the server mutex cap', () {
+      expect(
+          () => build(
+              lockTtl: maxServerMutexTtl + const Duration(milliseconds: 1)),
+          naming('lockTtl'),
+          reason: 'a lock longer than the cap is not one a server mutex takes');
+    });
+
+    test('refuses a lockWait that is not positive', () {
+      expect(() => build(lockWait: Duration.zero), naming('lockWait'),
+          reason: 'a write that may not wait cannot take the lock');
+      expect(() => build(lockWait: const Duration(milliseconds: -1)),
+          naming('lockWait'));
+    });
+
+    test('accepts a lockTtl of the cap and a lockWait of a millisecond', () {
+      expect(
+          build(
+              lockTtl: maxServerMutexTtl,
+              lockWait: const Duration(milliseconds: 1)),
+          isA<AtServerAtKeysIo>());
+    });
+  });
 
   test('write then reload then read round-trips at the enrollment key',
       () async {
@@ -359,14 +418,20 @@ void main() {
       'two stores that restored the same login snapshot: both updates land, '
       'neither is latched, and a later read is fresh', () async {
     await seedRecord(_base());
-    Future<AtServerAtKeysIo> login() async => AtServerAtKeysIo(
-        documents: documents(),
-        vault: (await DerivedKeys.derive(
-                Uint8List.fromList(List.generate(32, (i) => i + 1)), _atSign))
-            .vault,
-        enrollmentId: _eid,
-        apkamKeyPair: pair,
-        restored: _base());
+    Future<AtServerAtKeysIo> login() async {
+      final vault = (await DerivedKeys.derive(
+              Uint8List.fromList(List.generate(32, (i) => i + 1)), _atSign))
+          .vault;
+      return AtServerAtKeysIo(
+          documents: documents(),
+          atSign: _atSign,
+          seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
+          open: (r) => vault.open(PasskeyRecordType.atkeys, r),
+          enrollmentId: _eid,
+          apkamKeyPair: pair,
+          restored: _base());
+    }
+
     final a = await login();
     final b = await login();
     await a.update(_atSign.toAtsign(), (keys) {
@@ -428,30 +493,219 @@ void main() {
         return i == 0;
       });
       if (i == 0) {
+        final documentCommands =
+            server.commands.where((c) => !c.contains('atkeys-lock.')).toList();
         final firstUpdate =
-            server.commands.indexWhere((c) => c.startsWith('update:'));
+            documentCommands.indexWhere((c) => c.startsWith('update:'));
         expect(firstUpdate, greaterThan(0));
-        expect(server.commands.first, startsWith('llookup:'));
+        expect(documentCommands.first, startsWith('llookup:'));
       }
     }
   });
 
-  group('close', () {
-    Future<AtServerAtKeysIo> flagged() async => AtServerAtKeysIo(
-        documents: documents(),
-        vault: derived.vault,
-        enrollmentId: _eid,
-        apkamKeyPair: pair,
-        closedByClient: true);
+  group('another atSign', () {
+    test('a read naming another atSign is refused and the store stays usable',
+        () async {
+      await seedRecord(_base());
+      final io = await open();
+      await io.read(_atSign);
+      server.commands.clear();
 
-    test('is lent to the client unless it is flagged', () async {
-      expect((await open()).closedByClient, isFalse);
-      expect((await flagged()).closedByClient, isTrue);
+      await expectLater(
+          Future.sync(() => io.read('@bob')), throwsA(isA<ArgumentError>()));
+
+      expect(server.commands, isEmpty);
+      expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
     });
 
-    test('closes the vault, after which a flush or update throws', () async {
+    test(
+        'a write, flush, update or check naming another atSign is refused '
+        'before any command', () async {
       await seedRecord(_base());
-      final io = await flagged();
+      final io = await open();
+      final bob = '@bob'.toAtsign();
+      final bobs = _base()..atsign = bob;
+
+      await expectLater(io.write('@bob', bobs), throwsA(isA<ArgumentError>()));
+      await expectLater(io.flush(bob, bobs), throwsA(isA<ArgumentError>()));
+      await expectLater(
+          io.update(bob, (keys) => true), throwsA(isA<ArgumentError>()));
+      await expectLater(
+          io.keepsAllOf('@bob', bobs), throwsA(isA<ArgumentError>()));
+
+      expect(server.commands, isEmpty);
+      await io.update(_atSign.toAtsign(), (keys) {
+        keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
+        return true;
+      });
+      expect((await stored(derived)).enrollmentSymmetricKey, isNotNull);
+    });
+
+    test('the atSign is compared in canonical form', () async {
+      await seedRecord(_base());
+
+      expect((await (await open()).read('@ALICE')).atsign, _atSign.toAtsign());
+    });
+  });
+
+  group('an absent document', () {
+    test('flush creates it', () async {
+      final io = await open();
+
+      await io.flush(_atSign.toAtsign(), _base());
+
+      expect(coreOf(await stored(derived)), coreOf(_base()));
+      await expectOverlaid(await io.read(_atSign), _base());
+    });
+
+    test('update throws and writes nothing', () async {
+      await expectLater(
+          (await open()).update(_atSign.toAtsign(), (keys) => true),
+          throwsA(isA<MissingAtKeysDocumentException>()));
+      expect(server.updates, isEmpty);
+    });
+  });
+
+  group('failures that leave the store usable', () {
+    test('a write over an existing document', () async {
+      final io = await open();
+      await io.write(_atSign, _base());
+      await expectLater(io.write(_atSign, _base()),
+          throwsA(isA<AtKeysFileOverwriteException>()));
+
+      await io.update(_atSign.toAtsign(), (keys) {
+        keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
+        return true;
+      });
+
+      expect((await stored(derived)).enrollmentSymmetricKey, isNotNull);
+    });
+
+    test('a put that throws', () async {
+      await seedRecord(_base());
+      final io = await open();
+      server.failNextUpdate = true;
+      await expectLater(
+          io.update(_atSign.toAtsign(), (keys) {
+            keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
+            return true;
+          }),
+          throwsA(isA<AtException>()));
+
+      await io.update(_atSign.toAtsign(), (keys) {
+        keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-y'));
+        return true;
+      });
+
+      expect((await stored(derived)).enrollmentSymmetricKey?.key, _b('sym-y'));
+    });
+  });
+
+  group('material of another enrollment', () {
+    const other = 'f0other';
+    final keyId =
+        '${AtKeys.keyIdPrefix('auth', CryptographicMaterialAlgorithm.mlDsa65)}1';
+
+    /// Every material [eid] holds in the stored document, as `role:bytes`.
+    Future<List<String>> storedMaterialOf(String eid) async => [
+          for (final e
+              in ((await stored(derived)).toJson()['enrollments'] as List)
+                  .cast<Map<String, dynamic>>())
+            if (e['enrollmentId'] == eid)
+              for (final k in e['keys'] as List)
+                for (final m in (k as Map)['material'] as List)
+                  '${(m as Map)['role']}:${m['bytes']}'
+        ];
+
+    test(
+        'its public authentication key is kept, and this enrollment\'s own '
+        'is not', () async {
+      final keys = withApkamKey(_base(), _eid, pair)
+        ..addKey(CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: other,
+            role: CryptographicMaterialRole.publicAuthentication,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            bytes: AtBytes.fromString(_b('other-auth-pub')),
+            createdAt: DateTime.now().toUtc()));
+
+      await (await open()).write(_atSign, keys);
+
+      expect(await storedMaterialOf(other),
+          ['publicAuthentication:${_b('other-auth-pub')}'],
+          reason: 'only the pair this store derives is left out');
+      expect(await storedMaterialOf(_eid), isEmpty);
+    });
+
+    test(
+        'its private authentication key, no longer active, is stripped and '
+        'not refused', () async {
+      final keys = _base()
+        ..fileApkamMaterial(
+            enrollmentId: other,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: _b('other-auth-pub'),
+            privateKey: _b('other-auth-priv'))
+        ..retireKey(other, keyId);
+      withApkamKey(keys, _eid, pair);
+
+      await (await open()).write(_atSign, keys);
+
+      expect(await storedMaterialOf(other),
+          ['publicAuthentication:${_b('other-auth-pub')}'],
+          reason: 'only active private authentication material other than '
+              'the pair is refused');
+    });
+  });
+
+  group('enrollment entries', () {
+    AtKeys withOwnSnapshot() => _base()
+      ..recordEnrollmentSnapshot(_eid,
+          namespaces: {'wavi': 'rw'}, appName: 'wavi', deviceName: 'browser');
+
+    test(
+        'an entry left with no keys keeps its namespaces, app and device names '
+        'across a restart', () async {
+      final keys = withOwnSnapshot();
+      withApkamKey(keys, _eid, pair);
+      await (await open()).write(_atSign, keys);
+
+      final restarted = await (await open()).read(_atSign);
+
+      final entry = (restarted.toJson()['enrollments'] as List)
+          .cast<Map<String, dynamic>>()
+          .singleWhere((e) => e['enrollmentId'] == _eid);
+      expect(entry['namespaces'], {'wavi': 'rw'});
+      expect(entry['appName'], 'wavi');
+      expect(entry['deviceName'], 'browser');
+    });
+
+    test('a document whose first entry has no keys left reads back as written',
+        () async {
+      final keys = withOwnSnapshot();
+      withApkamKey(keys, _eid, pair);
+      keys.fileSigningMaterial(
+          enrollmentId: 'f0other',
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+          publicKey: _b('other-sign-pub'),
+          privateKey: _b('other-sign-priv'));
+      final io = await open();
+
+      await io.write(_atSign, keys);
+      await io.update(_atSign.toAtsign(), (keys) {
+        keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
+        return true;
+      });
+
+      expect((await stored(derived)).enrollmentSymmetricKey?.key, _b('sym-x'));
+    });
+  });
+
+  group('close', () {
+    test('after close a write, flush, update or read throws without I/O',
+        () async {
+      await seedRecord(_base());
+      final io = await open();
 
       io.close();
 
@@ -465,21 +719,28 @@ void main() {
 
     test('zeroes the private key, so a read after close throws', () async {
       await seedRecord(_base());
-      final io = await flagged();
+      final io = await open();
       expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
 
       io.close();
 
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
-      await expectLater(
-          derived.vault.withAuthSeed((_) async {}), throwsStateError);
+    });
+
+    test('leaves the vault it seals with open', () async {
+      final io = await open();
+
+      io.close();
+
+      await derived.vault.withAuthSeed((_) async {});
+      await derived.vault.seal(PasskeyRecordType.atkeys, {'a': 1});
     });
 
     test(
-        'an update in flight finishes whole before the vault closes; one '
-        'queued behind it is refused with no I/O', () async {
+        'an update in flight finishes whole after close; one queued behind it '
+        'is refused with no I/O', () async {
       await seedRecord(_base());
-      final io = await flagged();
+      final io = await open();
       server.holdUpdate = Completer<void>();
       final running = io.update(_atSign.toAtsign(), (keys) {
         keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
@@ -491,30 +752,53 @@ void main() {
           expectLater(queued, throwsA(isA<AtServerAtKeysWriteException>()));
 
       io.close();
-      for (var i = 0; i < 10; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      // Past the point of no return: the vault is still open for the
-      // read-back.
-      await derived.vault.withAuthSeed((_) async {});
       server.holdUpdate!.complete();
 
       await running;
       await queuedOutcome;
       expect(server.updates, hasLength(1));
-      await expectLater(
-          derived.vault.withAuthSeed((_) async {}), throwsStateError);
       await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
     test('is idempotent', () async {
-      final io = await flagged();
+      final io = await open();
 
       io.close();
       io.close();
 
-      await expectLater(
-          derived.vault.withAuthSeed((_) async {}), throwsStateError);
+      await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
+    });
+  });
+
+  group('settled', () {
+    test('completes once every write queued so far has ended', () async {
+      await seedRecord(_base());
+      final io = await open();
+      server.holdUpdate = Completer<void>();
+      final running = io.update(_atSign.toAtsign(), (keys) {
+        keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-y'));
+        return true;
+      });
+      await server.updateArrived.future;
+      var settled = false;
+      unawaited(io.settled.then((_) => settled = true));
+      await pumpEventQueue();
+      expect(settled, isFalse);
+
+      server.holdUpdate!.complete();
+      await running;
+      await pumpEventQueue();
+
+      expect(settled, isTrue);
+    });
+
+    test('completes when the write queued last failed', () async {
+      final io = await open();
+      final failing = expectLater(io.update(_atSign.toAtsign(), (keys) => true),
+          throwsA(isA<MissingAtKeysDocumentException>()));
+
+      await io.settled;
+      await failing;
     });
   });
 
@@ -570,17 +854,5 @@ void main() {
       await expectLater((await open()).keepsAllOf(_atSign, _base()),
           throwsA(isA<MissingAtKeysDocumentException>()));
     });
-  });
-
-  test('is a WrittenAtKeysIo that declares its own update', () {
-    final source = Directory('lib/src/passkey')
-        .listSync()
-        .whereType<File>()
-        .map((f) => f.readAsStringSync())
-        .firstWhere((s) => s.contains('class AtServerAtKeysIo'));
-    expect(source, contains('extends WrittenAtKeysIo'));
-    expect(source, contains('Future<void> update('));
-    expect(source, isNot(contains('InMemoryAtKeysIo')));
-    expect(AtServerAtKeysIo, isNotNull);
   });
 }

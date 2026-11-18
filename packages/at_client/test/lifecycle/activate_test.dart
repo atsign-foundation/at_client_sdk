@@ -1,17 +1,26 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
+import 'package:at_client/passkey.dart' show AtAuthEnrollmentGateway;
+import 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
+    show activateWithoutClient;
+import 'package:at_client/src/preference/client_config.dart'
+    show clientConfigOf;
+import 'package:at_client/src/passkey/enrollment_gateway.dart'
+    show apkamKeyPairFromSeed;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart'
-    show AtAuthenticator, AtCommandExecutor;
+    show AtAuthenticator, AtCommandExecutor, SecondaryAddress;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/key_package_filing.dart';
@@ -78,6 +87,7 @@ void main() {
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
       sent.add(command);
+      if (command.startsWith('lookup:publickey')) return 'data:null';
       if (command.startsWith('enroll:')) {
         return 'data:${jsonEncode({
               'enrollmentId': enrollmentId,
@@ -105,6 +115,7 @@ void main() {
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
+    when(() => lookUp.secondaryAddressFinder).thenReturn(_FoundAtDirectory());
     return (lookUp: lookUp, sent: sent);
   }
 
@@ -216,6 +227,162 @@ void main() {
     final request = server.sent.where((c) => c.startsWith('enroll:')).single;
     expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
         kid: advertisedKid(request));
+  });
+
+  test(
+      'an activation without a client and with completion deferred files the '
+      'first keys, publishes no encryption public key and keeps the CRAM '
+      'secret', () async {
+    final store = InMemoryAtKeysIo();
+    final server = atServer();
+
+    final enrolled = await activateWithoutClient(Atsign(atSign),
+        cramSecret: cramSecret,
+        keys: store,
+        preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        completeActivation: false,
+        clientConfig: clientConfigOf(null));
+
+    expect(enrolled, enrollmentId);
+    expect(
+        (await store.read(atSign)).enrollmentToAuthenticateAs(), enrollmentId);
+    expect(server.sent.where((c) => c.contains('public:publickey$atSign')),
+        isEmpty);
+    expect(server.sent.where((c) => c.contains(AtConstants.atCramSecret)),
+        isEmpty);
+    expect(server.sent.where((c) => c.startsWith('enroll:')), hasLength(1));
+    expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
+  });
+
+  test('an activation without a client leaves a supplied connection open',
+      () async {
+    final server = atServer();
+
+    await activateWithoutClient(Atsign(atSign),
+        cramSecret: cramSecret,
+        keys: InMemoryAtKeysIo(),
+        preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        completeActivation: false,
+        clientConfig: clientConfigOf(null));
+
+    verifyNever(() => server.lookUp.close());
+  });
+
+  test(
+      'the passkey gateway activates with completion deferred: it publishes '
+      'no encryption public key and keeps the CRAM secret', () async {
+    final server = atServer();
+    final gateway = AtAuthEnrollmentGateway(
+        lookUps: (
+                {required atSign,
+                required rootDomain,
+                required authenticator,
+                secondaryAddressFinder}) =>
+            server.lookUp,
+        finder: await refusingAtDirectory(),
+        root: AtRootDomain(
+            InternetAddress.loopbackIPv4.address, await refusedPort()),
+        app: 'lifecycle',
+        device: 'gateway',
+        clientOpener: (
+                {required lookUp,
+                required atSign,
+                required enrollmentId,
+                required keysIo}) =>
+            throw StateError('the activation opens no client'));
+
+    final session = await gateway.activate(
+        atSign: atSign,
+        apkamKeyPair: await apkamKeyPairFromSeed(
+            Uint8List.fromList(List.generate(32, (i) => i + 7))),
+        cram: cramSecret);
+
+    expect(session.enrollmentId, enrollmentId);
+    expect(server.sent.where((c) => c.startsWith('enroll:')), hasLength(1));
+    expect(server.sent.where((c) => c.contains('public:publickey$atSign')),
+        isEmpty,
+        reason: 'the activation publishes no encryption public key');
+    expect(
+        server.sent.where((c) => c.contains(AtConstants.atCramSecret)), isEmpty,
+        reason: 'the activation keeps the CRAM secret');
+    await session.close();
+  });
+
+  test(
+      "the passkey gateway's activation sends each from: naming at_client as "
+      'the SDK, with its version', () async {
+    final activation = atServer();
+    final installed = <AtAuthenticator>[];
+    when(() => activation.lookUp.authenticator = any()).thenAnswer((call) {
+      final authenticator = call.positionalArguments.first as AtAuthenticator?;
+      if (authenticator != null) installed.add(authenticator);
+      return null;
+    });
+    // NOTE: each leg's from: is read as the leg runs, while the keys it reads
+    // are the ones the activation holds at that moment.
+    final froms = <String?>[];
+    when(() => activation.lookUp.pkamAuthenticate()).thenAnswer((_) async {
+      final authenticator = installed.last;
+      final recorder = FromRecorder();
+      await authenticator(recorder);
+      froms.add(recorder.from);
+      return froms.length == 1
+          ? authenticator(_CramAtServer(cramSecret))
+          : true;
+    });
+    final pkamLeg = atServer();
+    when(() => pkamLeg.lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
+    final connections = [activation.lookUp, pkamLeg.lookUp];
+    var made = 0;
+    final gateway = AtAuthEnrollmentGateway(
+        lookUps: (
+                {required atSign,
+                required rootDomain,
+                required authenticator,
+                secondaryAddressFinder}) =>
+            connections[made++],
+        finder: await refusingAtDirectory(),
+        root: AtRootDomain(
+            InternetAddress.loopbackIPv4.address, await refusedPort()),
+        app: 'lifecycle',
+        device: 'gateway',
+        clientOpener: (
+                {required lookUp,
+                required atSign,
+                required enrollmentId,
+                required keysIo}) =>
+            throw StateError('the activation opens no client'));
+
+    final session = await gateway.activate(
+        atSign: atSign,
+        apkamKeyPair: await apkamKeyPairFromSeed(
+            Uint8List.fromList(List.generate(32, (i) => i + 7))),
+        cram: cramSecret);
+    addTearDown(session.close);
+
+    expect(made, 2,
+        reason: 'the control: one connection for the activation and one for '
+            "the gateway's own PKAM");
+    expect(froms, hasLength(2),
+        reason: "the control: the CRAM login and the new keys' PKAM, both on "
+            "the activation's connection");
+    final atClientVersion = pubspecVersion();
+    for (final from in froms) {
+      const prefix = 'from:$atSign:clientConfig:';
+      expect(from, startsWith(prefix));
+      final config = jsonDecode(from!.substring(prefix.length).trim())
+          as Map<String, dynamic>;
+      expect(config['sdkName'], 'atsign.dart.at_client',
+          reason: 'the activation names at_client as the SDK');
+      expect(config['sdkVersion'], atClientVersion);
+      expect(config['version'], atClientVersion);
+    }
   });
 
   group('a supplied APKAM keypair', () {
@@ -367,6 +534,56 @@ void main() {
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
   });
+
+  test(
+      'Given an app named in its particulars, when Atsign.activate '
+      'authenticates with CRAM and then PKAM, then each from: names the app '
+      'and at_client', () async {
+    final server = atServer();
+    final named = (await preference())
+      ..atClientParticulars.appName = 'acme_chat'
+      ..atClientParticulars.appVersion = '2.3.1';
+
+    final client = await Atsign(atSign).activate(
+        cramSecret: cramSecret,
+        keys: InMemoryAtKeysIo(),
+        preference: named,
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        storage: hiveStoreFor(Atsign(atSign), named));
+    addTearDown(client.stop);
+
+    final installed = verify(() => server.lookUp.authenticator = captureAny())
+        .captured
+        .whereType<AtAuthenticator>()
+        .toList();
+    expect(installed.length, greaterThanOrEqualTo(3),
+        reason: 'the control: the CRAM login, the new keys, and the new keys '
+            'again once the atServer names the enrollment');
+    final atClientVersion = pubspecVersion();
+    for (final authenticator in installed) {
+      final recorder = FromRecorder();
+      await authenticator(recorder);
+      const prefix = 'from:$atSign:clientConfig:';
+      expect(recorder.from, startsWith(prefix));
+      final config = jsonDecode(recorder.from!.substring(prefix.length).trim())
+          as Map<String, dynamic>;
+      expect(config['appName'], 'acme_chat');
+      expect(config['appVersion'], '2.3.1');
+      expect(config['sdkName'], 'atsign.dart.at_client');
+      expect(config['sdkVersion'], atClientVersion);
+      expect(config['version'], atClientVersion);
+    }
+  });
+}
+
+/// An atDirectory that finds every atSign.
+class _FoundAtDirectory implements SecondaryAddressFinder {
+  @override
+  Future<SecondaryAddress> findSecondary(String atSign,
+          {Duration? timeout}) async =>
+      SecondaryAddress('localhost', 1);
 }
 
 /// Answers `from:` with a challenge, and `cram:` with success only for the

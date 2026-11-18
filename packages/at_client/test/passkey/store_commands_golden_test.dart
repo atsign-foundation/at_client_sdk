@@ -37,6 +37,18 @@ void main() {
         auth: true
       ));
     });
+
+    test('lock', () async {
+      await RemoteEnrollmentDocumentStore(secondary())
+          .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10));
+      final sent = remote.commands.single;
+      expect(sent.auth, isTrue);
+      expect(
+          sent.command,
+          matches(RegExp(
+              r'^update:nc:ttl:10000:isEncrypted:false:immutable:true:'
+              r'atkeys-lock\.e1d2c3\.a\.__e@alice e1d2c3:[0-9a-f]{32}\n$')));
+    });
   });
 
   group('pointer store commands', () {

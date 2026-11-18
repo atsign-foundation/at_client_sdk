@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart'
-    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys, ClosableAtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtAuthSession, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_client/src/enroll/first_enrollment.dart'
@@ -29,6 +28,7 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeedOutcome, NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/preference/posture_floor.dart';
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
@@ -44,6 +44,7 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -62,9 +63,9 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
-/// A failure met while stopping a client, paired with the stack of where it
-/// was raised so the step that raised it stays identifiable after the rethrow.
-typedef _HeldDefect = ({Object error, StackTrace stack});
+/// A defect met while stopping a client, paired with the stack of where it was
+/// raised so the step that raised it stays identifiable after the rethrow.
+typedef _HeldDefect = ({Error error, StackTrace stack});
 
 /// Implementation of the [AtClient] interface.
 class AtClientImpl implements AtClient {
@@ -971,6 +972,12 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
+    if ((_preference!.atClientParticulars.appName ?? '').trim().isEmpty) {
+      _logger.warning('AtClientPreference.atClientParticulars sets no '
+          'appName, so this client names itself to its atServer after its '
+          'program file, or "unknown" where there is none. Set '
+          'atClientParticulars.appName and appVersion to name the app');
+    }
     // NOTE: resolved before anything signs, so nothing signs with the
     // rsa2048 fallback under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
@@ -1047,11 +1054,12 @@ class AtClientImpl implements AtClient {
       createsSigningRoot:
           _configuredPreference?.posture.configuresPqProviders ?? true,
       privilege: EnrollmentRecordPrivilegeResolver(this,
-          listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
+          listEnrollments: EnrollmentServiceImpl(
+                  this, enrollmentFor(_preference?.atClientParticulars))
               .fetchEnrollmentRequests),
-      sweepUnanchoredEnrollments: () =>
-          EnrollmentServiceImpl(this, AtEnrollment.create())
-              .sweepUnanchoredEnrollments(),
+      sweepUnanchoredEnrollments: () => EnrollmentServiceImpl(
+              this, enrollmentFor(_preference?.atClientParticulars))
+          .sweepUnanchoredEnrollments(),
     );
 
     _adoptEraCryptoDefault();
@@ -1290,12 +1298,6 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  /// The longest [stop] waits for the PQ startup step in flight to finish
-  /// before it closes a key store the client owns. A step that is still
-  /// running then is abandoned: it is logged and teardown continues.
-  @visibleForTesting
-  Duration pqStartupStopGrace = const Duration(seconds: 10);
-
   bool _isStopped = false;
 
   @override
@@ -1354,13 +1356,12 @@ class AtClientImpl implements AtClient {
     final serviceDefect = await _stopBackgroundProcesses();
     final storageDefect = await _releaseStorage();
     await localSecondary?.release();
-    final keysDefect = await _releaseKeysIo();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
     atClientInstanceMap.removeWhere((_, client) => identical(client, this));
 
-    final defect = serviceDefect ?? storageDefect ?? keysDefect;
+    final defect = serviceDefect ?? storageDefect;
     if (defect != null) {
       // NOTE: rethrown with the stack of where it was RAISED. A bare `throw`
       // here restacks it onto this line, which names every teardown step
@@ -1387,30 +1388,6 @@ class AtClientImpl implements AtClient {
       defect = (error: e, stack: stack);
     }
     _storage = null;
-    return defect;
-  }
-
-  /// Closes the key store when it is a [ClosableAtKeysIo] flagged
-  /// [ClosableAtKeysIo.closedByClient]; a store that was lent is left open. Runs after the connections have
-  /// stopped, so nothing is still reading through it.
-  Future<_HeldDefect?> _releaseKeysIo() async {
-    _HeldDefect? defect;
-    try {
-      final keysIo = _atKeysIo;
-      if (keysIo is ClosableAtKeysIo && keysIo.closedByClient) {
-        await _pqBootstrap?.settleStartup(pqStartupStopGrace);
-        await keysIo.close();
-      }
-    } on Exception catch (e, stack) {
-      // Held, like a defect, so stop() does not report a key store that did
-      // not close as stopped cleanly; the remaining teardown still runs.
-      _logger.warning('Error while closing the key store: $e');
-      defect = (error: e, stack: stack);
-    } on Error catch (e, stack) {
-      _logger.severe('Defect while closing the key store, which names a bug '
-          'rather than a passing condition: $e');
-      defect = (error: e, stack: stack);
-    }
     return defect;
   }
 
@@ -1677,16 +1654,38 @@ class AtClientImpl implements AtClient {
   Future<AtValue> get(
     AtKey atKey, {
     GetRequestOptions? getRequestOptions,
-  }) async {
+  }) =>
+      _lookUp(atKey, getRequestOptions, 'all', (response) async {
+        if (_heldButNotVisible(response)) return AtValue();
+        return await GetResponseTransformer(this)
+            .transform(Tuple<AtKey, String>()
+              ..one = atKey
+              ..two = response!);
+      });
+
+  @override
+  Future<Metadata?> getMeta(AtKey atKey,
+          {GetRequestOptions? getRequestOptions}) =>
+      _lookUp(
+          atKey,
+          getRequestOptions,
+          'meta',
+          (response) async => _heldButNotVisible(response)
+              ? null
+              : _metadataFrom(response!, atKey));
+
+  /// Looks [atKey] up with [operation], where [getRequestOptions] and the
+  /// preference route it, and returns what [answer] makes of the response.
+  ///
+  /// Every [AtException] on the way, [answer]'s included, is rethrown as
+  /// [AtExceptionManager.createException] rebuilds it.
+  Future<T> _lookUp<T>(AtKey atKey, GetRequestOptions? getRequestOptions,
+      String operation, Future<T> Function(String? response) answer) async {
     Secondary? secondary;
     try {
-      // validate the get request.
       await AtClientValidation().validateAtKey(atKey);
-      // Get the verb builder for the atKey
-      var verbBuilder = GetRequestTransformer(
-        this,
-      ).transform(atKey, requestOptions: getRequestOptions);
-      // Execute the verb.
+      final verbBuilder = GetRequestTransformer(this, operation: operation)
+          .transform(atKey, requestOptions: getRequestOptions);
       final routing =
           _routingFor(atKey, useRemoteAtServerIfSet(getRequestOptions));
       // NOTE: getSecondary sends any lookup to the atServer, and a `local:` key
@@ -1694,22 +1693,7 @@ class AtClientImpl implements AtClient {
       secondary = atKey.isLocal
           ? getLocalSecondary()!
           : SecondaryManager.getSecondary(this, verbBuilder, routing);
-      var getResponse = await secondary.executeVerb(verbBuilder);
-      // Return empty value if getResponse is null.
-      if (getResponse == null ||
-          getResponse.isEmpty ||
-          getResponse == 'data:null') {
-        return AtValue();
-      }
-      // Send AtKey and AtResponse to transform the response to AtValue.
-      var getResponseTuple = Tuple<AtKey, String>()
-        ..one = atKey
-        ..two = (getResponse);
-      // Transform the response and return
-      var atValue = await GetResponseTransformer(
-        this,
-      ).transform(getResponseTuple);
-      return atValue;
+      return await answer(await secondary.executeVerb(verbBuilder));
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
           ? ExceptionScenario.localVerbExecutionFailed
@@ -1721,10 +1705,29 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  @override
-  Future<Metadata?> getMeta(AtKey atKey) async {
-    var atValue = await get(atKey);
-    return atValue.metadata;
+  /// Whether [response] is a lookup's answer for a record that is held but
+  /// not visible now: not yet available, or expired and not yet removed.
+  static bool _heldButNotVisible(String? response) =>
+      response == null || response.isEmpty || response == 'data:null';
+
+  /// The metadata in [response] to a `meta` lookup of [atKey], or an
+  /// [InvalidResponseException] when it is not metadata.
+  ///
+  /// The response names no key, so `isPublic` and `isCached` come from
+  /// [atKey].
+  static Metadata _metadataFrom(String response, AtKey atKey) {
+    try {
+      final body = jsonDecode(DefaultResponseParser().parse(response).response)
+          as Map<String, dynamic>;
+      return AtClientUtil.prepareMetadata(body, atKey.metadata.isPublic,
+          isCached: atKey.metadata.isCached)!;
+    } on FormatException catch (e) {
+      throw InvalidResponseException('The metadata lookup of $atKey was '
+          'answered with text that does not parse: ${e.message}');
+    } on TypeError catch (e) {
+      throw InvalidResponseException('The metadata lookup of $atKey was '
+          'answered with something that is not metadata: $e');
+    }
   }
 
   @override

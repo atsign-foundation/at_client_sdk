@@ -54,7 +54,7 @@ class _PkamServer {
 
   void _onWrite(FakeAtServerSocket socket, String command) {
     if (command.startsWith('from:')) {
-      final atSign = command.substring('from:'.length).trim();
+      final atSign = command.substring('from:'.length).trim().split(':').first;
       unawaited(socket.serverSends('data:_$_uuid$atSign:$_uuid\n@'));
     } else if (command.startsWith('pkam:')) {
       pkams.add(command);
@@ -113,7 +113,6 @@ void main() {
                   throw StateError('no client opens after a failed PKAM')),
           credentials: hints,
           enrollmentIds: hints,
-          pendingStore: FakePendingStore(),
           setupLock: FakeSetupLock(),
           setupLockPrefix: 'test:setup',
           retryDelay: Duration.zero);

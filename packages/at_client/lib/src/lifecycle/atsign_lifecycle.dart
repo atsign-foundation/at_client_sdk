@@ -12,7 +12,9 @@ import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
@@ -28,6 +30,87 @@ import 'package:at_utils/at_progress.dart';
 WrittenAtKeysIo scratchKeysIo() =>
     // ignore: invalid_use_of_visible_for_testing_member
     InMemoryAtKeysIo();
+
+/// Runs [atSign]'s activation, as [AtsignLifecycle.activate] does, without
+/// opening a client: files the minted keys in [keys] and returns the new
+/// enrollment's id.
+///
+/// With [completeActivation] false the encryption public key is not
+/// published and the CRAM secret is not deleted, so the caller completes the
+/// activation later with `completeActivationOf`. Every `from:` the activation
+/// sends carries [clientConfig], as [activateAtSign] takes it. See
+/// [AtsignLifecycle.activate] for every other parameter.
+Future<String> activateWithoutClient(
+  Atsign atSign, {
+  required String cramSecret,
+  required WrittenAtKeysIo keys,
+  required AtClientPreference preference,
+  String app = firstEnrollmentAppName,
+  String device = firstEnrollmentDeviceName,
+  bool? mintLegacyMaterial,
+  SigningAlgoType? signingAlgo,
+  ({String publicKey, String privateKey})? apkamKeyPair,
+  Duration? provisioningBudget,
+  Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
+  void Function(ProgressEvent event)? onProgress,
+  AtLookupMuxable? atLookUp,
+  required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
+  required bool completeActivation,
+  required Map<String, dynamic> clientConfig,
+}) async {
+  final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
+  final pqNative = algo == SigningAlgoType.mldsa65;
+  final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
+  ({
+    SigningAlgoType algorithm,
+    String publicKey,
+    String privateKey
+  })? advertisedSigningKey;
+  FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? metadataBuilder;
+  if (pqNative) {
+    final material = await pqNativeActivationMaterial(
+        atSign: atSign,
+        dataSigningKeyAlgorithms: preference.dataSigningKeyAlgorithms,
+        keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first);
+    advertisedSigningKey = material.advertisedSigningKey;
+    metadataBuilder = material.metadataBuilder;
+  }
+  // The activation's own connection, built the way the application chose
+  // and closed when it is done; a supplied one is the caller's to close.
+  final connection = atLookUp ??
+      lookUps(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: null,
+          secondaryAddressFinder: secondaryAddressFinder);
+  try {
+    return await activateAtSign(
+        atSign: atSign,
+        cramSecret: cramSecret,
+        keys: keys,
+        signingAlgo: algo,
+        apkamKeyPair: apkamKeyPair,
+        rootDomain: rootDomain,
+        appName: app,
+        deviceName: device,
+        mintLegacyMaterial:
+            mintLegacyMaterial ?? preference.posture.mintLegacyMaterial,
+        metadataBuilder: metadataBuilder,
+        advertisedSigningKey: advertisedSigningKey,
+        retryOptions: RetryOptions(
+            maxRetries: RetryOptions.defaultMaxRetries,
+            retryDelay: provisioningPollInterval,
+            overallTimeout: provisioningBudget),
+        onProgress: onProgress,
+        completeActivation: completeActivation,
+        atLookUp: connection,
+        awaitProvisioning: atLookUp == null,
+        clientConfig: clientConfig);
+  } finally {
+    if (atLookUp == null) await connection.close();
+  }
+}
 
 /// The verbs an application reaches a working client through, on the atSign
 /// it holds keys for.
@@ -148,11 +231,15 @@ extension AtsignLifecycle on Atsign {
   ///
   /// [lookUps] builds the connection, which finds the atServer through
   /// [secondaryAddressFinder].
+  ///
+  /// [particulars] name the app on the connection's `from:`, as a client's
+  /// `AtClientPreference.atClientParticulars` do.
   Future<String> authenticatesAs({
     required AtKeysIo keys,
     required AtRootDomain rootDomain,
     required AtLookUpFactory lookUps,
     required SecondaryAddressFinder secondaryAddressFinder,
+    AtClientParticulars? particulars,
   }) async {
     final enrollmentId = (await keys.read(this)).enrollmentToAuthenticateAs();
     final AtLookUp lookUp;
@@ -160,7 +247,8 @@ extension AtsignLifecycle on Atsign {
       lookUp = await authenticatedLookUp(this, keys, rootDomain,
           enrollmentId: enrollmentId,
           lookUps: lookUps,
-          secondaryAddressFinder: secondaryAddressFinder);
+          secondaryAddressFinder: secondaryAddressFinder,
+          clientConfig: clientConfigOf(particulars));
     } catch (e) {
       final state = classifyConnectionFailure(e);
       if (state != null && state.isRefused) {
@@ -226,55 +314,25 @@ extension AtsignLifecycle on Atsign {
     required SecondaryAddressFinder secondaryAddressFinder,
     Duration connectBudget = AtConnection.defaultBudget,
   }) async {
-    final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
-    final pqNative = algo == SigningAlgoType.mldsa65;
-    final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
-    ({
-      SigningAlgoType algorithm,
-      String publicKey,
-      String privateKey
-    })? advertisedSigningKey;
-    FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? metadataBuilder;
-    if (pqNative) {
-      final material = await pqNativeActivationMaterial(
-          atSign: this,
-          dataSigningKeyAlgorithms: preference.dataSigningKeyAlgorithms,
-          keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first);
-      advertisedSigningKey = material.advertisedSigningKey;
-      metadataBuilder = material.metadataBuilder;
-    }
-    // The activation's own connection, built the way the application chose
-    // and closed when it is done; a supplied one is the caller's to close.
-    final connection = atLookUp ??
-        lookUps(
-            atSign: this,
-            rootDomain: rootDomain,
-            authenticator: null,
-            secondaryAddressFinder: secondaryAddressFinder);
-    try {
-      await activateAtSign(
-          atSign: this,
-          cramSecret: cramSecret,
-          keys: keys,
-          signingAlgo: algo,
-          apkamKeyPair: apkamKeyPair,
-          rootDomain: rootDomain,
-          appName: app,
-          deviceName: device,
-          mintLegacyMaterial:
-              mintLegacyMaterial ?? preference.posture.mintLegacyMaterial,
-          metadataBuilder: metadataBuilder,
-          advertisedSigningKey: advertisedSigningKey,
-          retryOptions: RetryOptions(
-              maxRetries: RetryOptions.defaultMaxRetries,
-              retryDelay: provisioningPollInterval,
-              overallTimeout: provisioningBudget),
-          onProgress: onProgress,
-          atLookUp: connection,
-          awaitProvisioning: atLookUp == null);
-    } finally {
-      if (atLookUp == null) await connection.close();
-    }
+    await activateWithoutClient(this,
+        cramSecret: cramSecret,
+        keys: keys,
+        preference: preference,
+        app: app,
+        device: device,
+        mintLegacyMaterial: mintLegacyMaterial,
+        signingAlgo: signingAlgo,
+        apkamKeyPair: apkamKeyPair,
+        provisioningBudget: provisioningBudget,
+        provisioningPollInterval: provisioningPollInterval,
+        onProgress: onProgress,
+        atLookUp: atLookUp,
+        lookUps: lookUps,
+        secondaryAddressFinder: secondaryAddressFinder,
+        completeActivation: true,
+        clientConfig: clientConfigOf(preference.atClientParticulars));
+    final pqNative = (signingAlgo ?? preference.authenticationKeyAlgorithm) ==
+        SigningAlgoType.mldsa65;
 
     final client = await open(
         keys: keys,
@@ -379,7 +437,8 @@ extension AtsignLifecycle on Atsign {
             secondaryAddressFinder: secondaryAddressFinder);
     final AtEnrollmentResponse response;
     try {
-      response = await AtEnrollment.create().submit(request, lookUp);
+      response = await enrollmentFor(preference.atClientParticulars)
+          .submit(request, lookUp);
     } finally {
       if (atLookUp == null) await lookUp.close();
     }
@@ -404,6 +463,7 @@ extension AtsignLifecycle on Atsign {
         signingAlgo: algo,
         keyExchangeMode: mode,
         atLookUp: atLookUp,
+        particulars: preference.atClientParticulars,
         lookUps: lookUps,
         secondaryAddressFinder: secondaryAddressFinder);
   }
@@ -473,6 +533,7 @@ extension AtsignLifecycle on Atsign {
               ? EnrollmentKeyExchangeMode.pq
               : EnrollmentKeyExchangeMode.legacy,
           atLookUp: atLookUp,
+          particulars: preference.atClientParticulars,
           lookUps: lookUps,
           secondaryAddressFinder: secondaryAddressFinder);
     }

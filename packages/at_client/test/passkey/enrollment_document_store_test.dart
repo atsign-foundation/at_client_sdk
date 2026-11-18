@@ -89,6 +89,37 @@ void main() {
         (command: 'update:atkeys.$_eid.a.__e@alice $_document\n', auth: true));
   });
 
+  test('enrollmentLockKey is atkeys-lock.<eid>.a.__e@<atSign> canonical', () {
+    expect(enrollmentLockKey(_eid, 'Alice'), 'atkeys-lock.$_eid.a.__e@alice');
+    expect(() => enrollmentLockKey('E1d2c3', _atSign), throwsArgumentError);
+  });
+
+  test('tryLock leases the lock record it creates, for the ttl', () async {
+    final lease = await storeOver(ScriptedAtLookUp((_) async => 'data:-1'))
+        .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10));
+    expect('${lease!.key}', 'atkeys-lock.$_eid.a.__e@alice');
+    expect(lease.isSpent, isFalse);
+    expect(lease.expiresAt.isAfter(DateTime.now()), isTrue);
+  });
+
+  test('tryLock is null while the lock record exists', () async {
+    final held = ScriptedAtLookUp((_) async => throw AtLookUpException(
+        'AT0032', 'Immutable records may not be updated'));
+    expect(
+        await storeOver(held)
+            .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10)),
+        isNull);
+  });
+
+  test('tryLock propagates other errors', () async {
+    final failing = ScriptedAtLookUp(
+        (_) async => throw AtLookUpException('AT0014', 'timed out'));
+    await expectLater(
+        storeOver(failing)
+            .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10)),
+        throwsA(isA<AtException>()));
+  });
+
   test('put rejects a document with a newline', () {
     expect(store.put(_atSign, _eid, '{\n}'), throwsArgumentError);
     expect(remoteLookUp.commands, isEmpty);

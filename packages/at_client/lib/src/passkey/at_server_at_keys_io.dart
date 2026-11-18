@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/passkey.dart';
+import 'package:at_client/src/client/server_mutex.dart';
 import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:at_commons/atsign.dart';
 
@@ -23,28 +24,60 @@ class AtServerAtKeysWriteException extends AtException {
   String toString() => 'AtServerAtKeysWriteException: $message';
 }
 
+/// Thrown when a write could not take the enrollment's @keys lock within the
+/// store's bound, or kept losing it before the put. Nothing was put, and the
+/// store stays usable.
+class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
+  AtServerAtKeysLockedException(super.message);
+
+  @override
+  String toString() => 'AtServerAtKeysLockedException: $message';
+}
+
 /// An enrollment's @keys, held as one sealed document on the atServer.
 ///
 /// [write] creates the document and refuses when one exists. [flush] and
 /// [update] replace it: each re-reads the stored document just before writing
 /// and refuses a candidate that drops anything stored; they then write, read
-/// the document back and compare it with what was written. A mismatch throws
-/// and nothing further is written. After any refusal this store accepts no
-/// more writes. Nothing is merged and no write is retried.
+/// the document back and compare it with what was written. [flush] creates
+/// the document when there is none; [update] never does. Nothing is merged
+/// and no put is retried.
+///
+/// Three refusals stop the store, after which it accepts no more writes: a
+/// candidate that drops stored material, a candidate holding private
+/// authentication material other than the pair, and a read-back that is
+/// absent, cannot be opened or differs from what was written. Any other
+/// failure leaves it usable: a document that already exists for [write],
+/// keys or an atSign other than the store's, a closed store, a lock it could
+/// not take or keep, and a lock take, get or put that throws.
 ///
 /// Writes on one instance run one at a time: [write], [flush] and [update]
-/// each hold this instance's lock across the re-read, the put and the read
-/// back, so overlapping calls queue instead of interleaving, and a call that
-/// throws does not stop the ones queued behind it. The lock is per instance
-/// and in-process; it does not reach another instance or process.
+/// each run whole, from the lock to the read back, before the next starts, so
+/// overlapping calls queue instead of interleaving, and a call that throws
+/// does not stop the ones queued behind it.
 ///
-/// Several writers may share an enrollment. Every [update] re-reads the stored
-/// document and builds its candidate on it, so it keeps what another writer
-/// filed since this store last read. A write that would drop stored material is
-/// refused, and the store then accepts no more writes this session. Each write
-/// is read back and compared with what was written. Two writes that land
-/// between one writer's re-read and its own write can still replace each
-/// other: the server has no conditional update yet, so nothing detects it.
+/// Several writers may share an enrollment, so every write holds the
+/// enrollment's lock on the atServer, taken through
+/// [EnrollmentDocumentStore.tryLock], from before it reads the stored document
+/// until it puts. A writer that finds the lock held tries again after a pause
+/// of a quarter to one second, chosen at random, until it takes it or its
+/// wait bound runs out, which throws [AtServerAtKeysLockedException]. A put
+/// needs at least half the lock's ttl left on its lease, measured by the
+/// lease's own stopwatch, and a lease serves this store's later writes only
+/// while that much is left. When less is left by the time the document is
+/// sealed, nothing is put: the write takes the lock again and starts over
+/// from a fresh read, running an [update]'s mutate again, with at most three
+/// leases in all. Every [update] builds its candidate on the document it read
+/// under the lock, so it keeps what another writer filed. The lock is not a
+/// fence: the margin leaves a put half the ttl to land, but one sent within
+/// it can still land after the lock expired, so a write that would drop
+/// stored material is still refused, and each write is read back and
+/// compared with what was written.
+///
+/// The lock needs an atServer from p3.13.0, the first to parse `:nc`. An
+/// expired lock stops blocking at once from p3.16.5. Another enrollment of
+/// the atSign cannot create or delete the lock record from p3.15.0, and a
+/// connection with the atSign's legacy keys cannot from p3.19.0.
 ///
 /// The document never holds the enrollment's APKAM private key: a passkey
 /// enrollment derives the pair from the passkey and the atServer must not
@@ -54,7 +87,7 @@ class AtServerAtKeysWriteException extends AtException {
 /// read back and compared is the stripped form. A candidate that holds active
 /// private authentication material other than the pair (a rotation, a
 /// retrofit) is refused with [AtServerAtKeysWriteException], never stripped
-/// silently, and the store then accepts no more writes.
+/// silently.
 ///
 /// Once the first document is held, [read] does no I/O: it serves the last
 /// document this store decoded or wrote, as fresh keys each call, with the
@@ -65,29 +98,64 @@ class AtServerAtKeysWriteException extends AtException {
 /// another writer's change shows on the next [update] or reopen. The pair is
 /// held as bytes, encoded on each read and zeroed by [close]; a [read] after
 /// [close] throws [StateError].
-class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
+///
+/// The store holds [atSign]'s document only: every call naming another atSign
+/// throws [ArgumentError].
+///
+/// The store seals and opens through the two functions it is given, and
+/// reaches nothing else of whatever holds the sealing key.
+class AtServerAtKeysIo extends WrittenAtKeysIo {
+  /// The store of [enrollmentId]'s document for [atSign] through [documents],
+  /// sealed by [seal] and opened by [open], holding [apkamKeyPair]; a
+  /// [restored] document is served by [read] without I/O. Each take of the
+  /// lock lasts [lockTtl], and a write waits up to [lockWait] to take it.
+  ///
+  /// Throws [ArgumentError] for a [lockTtl] under a millisecond or over
+  /// [maxServerMutexTtl], or a [lockWait] that is not positive.
   AtServerAtKeysIo(
       {required EnrollmentDocumentStore documents,
-      required PasskeyVault vault,
+      required String atSign,
+      required Future<String> Function(Map<String, dynamic> document) seal,
+      required Future<Map<String, dynamic>> Function(String record) open,
       required String enrollmentId,
       required ApkamKeyPair apkamKeyPair,
-      this.closedByClient = false,
-      AtKeys? restored})
+      AtKeys? restored,
+      Duration lockTtl = const Duration(seconds: 10),
+      Duration lockWait = const Duration(seconds: 15)})
       : _documents = documents,
-        _vault = vault,
+        _atSign = atSign.toAtsign(),
+        _seal = seal,
+        _open = open,
         _enrollmentId = enrollmentId,
+        _lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
+        _lockWait = lockWait > Duration.zero
+            ? lockWait
+            : throw ArgumentError.value(
+                lockWait, 'lockWait', 'must be positive'),
         _publicKey = apkamKeyPair.publicKey,
         _private = base64Decode(apkamKeyPair.privateKey) {
     final seed = restored;
     if (seed != null && seed.atsign != null) {
+      _requireStoreAtsign(seed.atsign.toString());
       _cache = jsonEncode(_stripped(seed));
     }
   }
 
   final EnrollmentDocumentStore _documents;
-  final PasskeyVault _vault;
+  final Atsign _atSign;
+  final Future<String> Function(Map<String, dynamic> document) _seal;
+  final Future<Map<String, dynamic>> Function(String record) _open;
   final String _enrollmentId;
   final String _publicKey;
+  final Duration _lockTtl;
+  final Duration _lockWait;
+  final _random = Random();
+
+  /// How many leases one write may take before it gives up.
+  static const _leaseTakes = 3;
+
+  /// The lease on the enrollment's lock this store last took.
+  ServerMutexLease? _lease;
 
   /// The APKAM private key of the derived pair, zeroed by [close].
   final Uint8List _private;
@@ -110,8 +178,8 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
   ///
   /// A call that has not started when [close] runs fails with
   /// [AtServerAtKeysWriteException] before any I/O. A call already running
-  /// finishes whole, with the vault and the pair still open: [close] releases
-  /// them only when the last call on the chain has settled.
+  /// finishes whole, with the pair still held: [close] zeroes it only when the
+  /// last call on the chain has settled.
   Future<T> _serialized<T>(Future<T> Function() body) {
     _pending++;
     final result = _tail.then((_) {
@@ -128,24 +196,17 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     return result;
   }
 
-  /// Whether the client that runs on this store closes it when it stops.
-  ///
-  /// False by default: the store is lent, and whoever lent it closes the
-  /// [PasskeyVault] it was given. True hands the vault's lifetime to the
-  /// client, whose stop then calls [close].
-  @override
-  final bool closedByClient;
+  /// Completes when every write queued on this store so far has ended,
+  /// whether it succeeded or failed. Never fails.
+  Future<void> get settled => _tail;
 
-  /// Closes the vault this store was given, which overwrites the auth seed
-  /// with zeroes and closes its sealer, and zeroes the APKAM private key it
-  /// holds. Idempotent. A later read throws [StateError]; a later or queued
-  /// write, flush or update throws [AtServerAtKeysWriteException] without
-  /// touching the atServer.
+  /// Zeroes the APKAM private key this store holds. Idempotent. A later read
+  /// throws [StateError]; a later or queued write, flush or update throws
+  /// [AtServerAtKeysWriteException] without touching the atServer.
   ///
-  /// A write already running is not cut off: it finishes, and the vault and
-  /// the key are released right after it. Never waits, so a write that hangs
-  /// cannot hold a stop; it holds the key in memory until it settles.
-  @override
+  /// A write already running is not cut off: it finishes, and the key is
+  /// zeroed right after it. Never waits, so a write that hangs cannot hold a
+  /// stop; it holds the key in memory until it settles.
   void close() {
     _closed = true;
     _cache = null;
@@ -157,7 +218,6 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     _released = true;
     _private.fillRange(0, _private.length, 0);
     _cache = null;
-    _vault.close();
   }
 
   /// The keys of [atsign]'s document with the derived APKAM pair filed. The
@@ -165,6 +225,7 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
   /// later one is served from memory, as keys the caller may change.
   @override
   Future<AtKeys> read(String atsign) async {
+    _requireStoreAtsign(atsign);
     _requireLive();
     var cache = _cache;
     if (cache == null) {
@@ -178,7 +239,7 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
   /// [document], a stripped document, as keys with the pair filed.
   ///
   /// The private key is encoded once per read, straight into the keys. That
-  /// String is an immutable copy of the key that cannot be wiped (D-30).
+  /// String is an immutable copy of the key that cannot be wiped.
   AtKeys _withPair(Map<String, dynamic> document, String atsign) {
     final keys = AtKeys.fromJson(document);
     keys.atsign ??= atsign.toAtsign();
@@ -191,14 +252,18 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
       _serialized(() => _write(atsign, atKeys));
 
   Future<void> _write(String atsign, AtKeys atKeys) async {
+    _requireStoreAtsign(atsign);
     _requireOpen();
     _requireOwnAtsign(atsign, atKeys);
-    if (await _documents.get(atsign, _enrollmentId) != null) {
-      throw AtKeysFileOverwriteException(
-          'enrollment $_enrollmentId already has a @keys document; '
-          'write only creates it');
-    }
-    await _putVerified(atsign, atKeys);
+    atKeys.atsign ??= atsign.toAtsign();
+    await _putLocked(atsign, () async {
+      if (await _documents.get(atsign, _enrollmentId) != null) {
+        throw AtKeysFileOverwriteException(
+            'enrollment $_enrollmentId already has a @keys document; '
+            'write only creates it');
+      }
+      return _document(atKeys);
+    });
   }
 
   @override
@@ -206,19 +271,30 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
       _serialized(() => _flush(atsign, atKeys));
 
   Future<void> _flush(Atsign atsign, AtKeys atKeys) async {
-    _requireOpen();
     final name = atsign.toString();
+    _requireStoreAtsign(name);
+    _requireOpen();
     _requireOwnAtsign(name, atKeys);
-    final existing = _stripped(await _decode(name, await _stored(name)));
     atKeys.atsign ??= atsign;
-    try {
-      assurance.validateMapUpdate(
-          existing: existing, candidate: _document(atKeys), atsign: atsign);
-    } on Object {
-      _refused = true;
-      rethrow;
+    await _putLocked(name, () => _replacing(atsign, atKeys));
+  }
+
+  /// [atKeys] as the document to put in place of the stored one, refused when
+  /// it drops anything stored.
+  Future<Map<String, dynamic>> _replacing(Atsign atsign, AtKeys atKeys) async {
+    final name = atsign.toString();
+    final stored = await _documents.get(name, _enrollmentId);
+    if (stored != null) {
+      final existing = _stripped(await _decode(name, stored));
+      try {
+        assurance.validateMapUpdate(
+            existing: existing, candidate: _document(atKeys), atsign: atsign);
+      } on Object {
+        _refused = true;
+        rethrow;
+      }
     }
-    await _putVerified(name, atKeys);
+    return _document(atKeys);
   }
 
   @override
@@ -228,19 +304,25 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
 
   Future<void> _update(
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
-    _requireOpen();
     final name = atsign.toString();
-    final keys =
-        _withPair(_stripped(await _decode(name, await _stored(name))), name);
-    if (await mutate(keys) == false) return;
-    await _flush(atsign, keys);
+    _requireStoreAtsign(name);
+    _requireOpen();
+    await _putLocked(name, () async {
+      final keys =
+          _withPair(_stripped(await _decode(name, await _stored(name))), name);
+      if (await mutate(keys) == false) return null;
+      _requireOwnAtsign(name, keys);
+      keys.atsign ??= atsign;
+      return _replacing(atsign, keys);
+    });
   }
 
-  /// Whether the stored document holds everything [atKeys] holds, so that
-  /// filing [atKeys] would lose nothing. False when it drops any of it; the
-  /// store stays usable either way. Throws when there is no document or it
-  /// cannot be opened.
+  /// Whether the stored document holds everything [atKeys] holds. False when
+  /// [atKeys] holds anything the stored document lacks; the store stays
+  /// usable either way. Throws when there is no document or it cannot be
+  /// opened.
   Future<bool> keepsAllOf(String atsign, AtKeys atKeys) async {
+    _requireStoreAtsign(atsign);
     _requireLive();
     final stored = await _decode(atsign, await _stored(atsign));
     atKeys.atsign ??= atsign.toAtsign();
@@ -260,8 +342,7 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
       (throw MissingAtKeysDocumentException(_enrollmentId));
 
   Future<AtKeys> _decode(String atsign, String document) async {
-    final keys =
-        AtKeys.fromJson(await _vault.open(PasskeyRecordType.atkeys, document));
+    final keys = AtKeys.fromJson(await _open(document));
     keys.atsign ??= atsign.toAtsign();
     return keys;
   }
@@ -271,7 +352,7 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
   /// without the APKAM private key or the pair's public half.
   ///
   /// Never strips private authentication material that is not the pair: that
-  /// refuses, and the store accepts no more writes.
+  /// refuses, and stops the store.
   Map<String, dynamic> _document(AtKeys keys) {
     if (_holdsForeignPrivateKey(keys)) {
       _refused = true;
@@ -330,8 +411,11 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
 
   /// [keys] as a document without any APKAM private key and without this
   /// enrollment's public authentication key (the read overlay files the
-  /// pair's, and a second one would make the keys refuse), and without the empty groups
-  /// that leaves, so that stripping a stripped document changes nothing.
+  /// pair's, and a second one would make the keys refuse), and without the
+  /// empty key groups that leaves. Every enrollment entry is kept, with its
+  /// namespaces, app and device names, even with no keys left, and the entries
+  /// are ordered by enrollment id, so that stripping a stripped document, or
+  /// one parsed back, changes nothing.
   Map<String, dynamic> _stripped(AtKeys keys) {
     final atsign = keys.atsign.toString();
     final json = atKeysDocument(keys, atsign);
@@ -349,8 +433,10 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
           ];
           if (material.isNotEmpty) groups.add({...key, 'material': material});
         }
-        if (groups.isNotEmpty) kept.add({...enrollment, 'keys': groups});
+        kept.add({...enrollment, 'keys': groups});
       }
+      kept.sort((a, b) =>
+          (a['enrollmentId'] as String).compareTo(b['enrollmentId'] as String));
       if (kept.isEmpty) {
         json.remove('enrollments');
       } else {
@@ -376,6 +462,15 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     }
   }
 
+  /// Refuses [atsign] when it is not the atSign whose document this store
+  /// holds. The store stays usable.
+  void _requireStoreAtsign(String atsign) {
+    if (atsign.toAtsign() != _atSign) {
+      throw ArgumentError.value(atsign, 'atsign',
+          'this key store holds the document of $_atSign only');
+    }
+  }
+
   void _requireLive() {
     if (_closed) throw StateError('this key store is closed');
   }
@@ -390,12 +485,62 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     }
   }
 
-  /// Seals and puts [atKeys], then reads the document back and compares it.
-  Future<void> _putVerified(String atsign, AtKeys atKeys) async {
-    atKeys.atsign ??= atsign.toAtsign();
-    final written = _document(atKeys);
-    await _documents.put(atsign, _enrollmentId,
-        await _vault.seal(PasskeyRecordType.atkeys, written));
+  /// Under a lease on the enrollment's lock, builds the document with
+  /// [candidate], seals it and, while the lease leaves enough for a put, puts
+  /// it and reads it back. A null candidate puts nothing.
+  ///
+  /// When the lease leaves too little by the time the document is sealed,
+  /// puts nothing and starts again from a new lease, up to [_leaseTakes]
+  /// leases.
+  Future<void> _putLocked(
+      String atsign, Future<Map<String, dynamic>?> Function() candidate) async {
+    for (var takes = 1;; takes++) {
+      final lease = await _leased(atsign);
+      final written = await candidate();
+      if (written == null) return;
+      final sealed = await _seal(written);
+      if (_leaves(lease)) {
+        await _documents.put(atsign, _enrollmentId, sealed);
+        return _verify(atsign, written);
+      }
+      if (takes == _leaseTakes) {
+        throw AtServerAtKeysLockedException(
+            'enrollment $_enrollmentId: the @keys lock '
+            '${enrollmentLockKey(_enrollmentId, atsign)} had less than half '
+            'its ttl left when the document was ready to put, $takes times, '
+            'so nothing was put');
+      }
+    }
+  }
+
+  /// Whether [lease] has at least half the lock's ttl left, enough for a put.
+  bool _leaves(ServerMutexLease lease) => lease.remaining >= _lockTtl ~/ 2;
+
+  /// The lease this store holds while it leaves enough for a put, or a new
+  /// one, taken as soon as no other writer holds the lock and within
+  /// [_lockWait].
+  Future<ServerMutexLease> _leased(String atsign) async {
+    final held = _lease;
+    if (held != null && _leaves(held)) return held;
+    final waited = Stopwatch()..start();
+    while (true) {
+      final lease =
+          await _documents.tryLock(atsign, _enrollmentId, ttl: _lockTtl);
+      if (lease != null) return _lease = lease;
+      final left = _lockWait - waited.elapsed;
+      if (left <= Duration.zero) {
+        throw AtServerAtKeysLockedException(
+            'enrollment $_enrollmentId: the @keys lock '
+            '${enrollmentLockKey(_enrollmentId, atsign)} stayed held for '
+            '$_lockWait, so nothing was put');
+      }
+      final pause = Duration(milliseconds: 250 + _random.nextInt(751));
+      await Future<void>.delayed(pause < left ? pause : left);
+    }
+  }
+
+  /// Reads back the document [written] was put as, and compares it.
+  Future<void> _verify(String atsign, Map<String, dynamic> written) async {
     final stored = await _documents.get(atsign, _enrollmentId);
     AtKeys? back;
     try {

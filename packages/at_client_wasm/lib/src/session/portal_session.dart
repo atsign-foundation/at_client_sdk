@@ -107,7 +107,7 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// put or delete goes to the atServer under [RemoteLocalPref.remoteOnly]
 /// unless its request options set `useRemoteAtServer = false` explicitly.
 /// Only that keeps a write local, queued for sync; options that leave it
-/// unset do not.
+/// unset do not. A `local:` key's write always stays on the device.
 /// Keys that carry ML-DSA-65 signing or namespace key material throw
 /// [UnsupportedKeyMaterialException] before any connection is made. The
 /// storage is always fresh, so every open is a first open on the device, and

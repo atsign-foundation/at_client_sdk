@@ -3,15 +3,15 @@ import 'dart:convert';
 
 import 'package:at_auth/passkey.dart';
 import 'package:at_chops/at_chops.dart'
-    show AesGcm256EncryptionAlgo, HkdfSha256, InitialisationVector;
+    show AESKey, AesGcm256EncryptionAlgo, HkdfSha256, InitialisationVector;
 import 'package:at_commons/atsign.dart';
 import 'package:at_commons/at_commons.dart' show AtDecryptionException;
 
 /// A [RecordSealer] over a raw 32-byte key held in memory. Test support only:
 /// no library under lib/ ships a sealer.
 class BytesRecordSealer implements RecordSealer {
-  /// Takes ownership of [key]: [close] zeroes it. The at_chops algo is built
-  /// per call from this buffer, so no copy of the key outlives a call.
+  /// Takes ownership of [key]: [close] zeroes it. Each call builds the
+  /// at_chops algo from the key's base64, a `String` nothing can zero.
   BytesRecordSealer(Uint8List key) : _key = key;
 
   final Uint8List _key;
@@ -22,30 +22,24 @@ class BytesRecordSealer implements RecordSealer {
   /// Whether [close] was called.
   bool closed = false;
 
-  /// Runs [use] on a fresh algo over a copy of the key, zeroing that copy
-  /// when [use] settles.
-  Future<Uint8List> _withAlgo(
-      Future<Uint8List> Function(AesGcm256EncryptionAlgo algo) use) async {
+  AesGcm256EncryptionAlgo get _algo {
     if (closed) throw StateError('BytesRecordSealer is closed');
-    final algo = AesGcm256EncryptionAlgo.fromKeyBytes(_key);
-    try {
-      return await use(algo);
-    } finally {
-      algo.close();
-    }
+    return AesGcm256EncryptionAlgo(AESKey(base64Encode(_key)));
   }
 
   @override
-  Future<Uint8List> seal(Uint8List iv, List<int> plaintext, List<int> aad) =>
-      _withAlgo((algo) => algo.encrypt(Uint8List.fromList(plaintext),
-          iv: InitialisationVector(iv), aad: aad));
+  Future<Uint8List> seal(
+          Uint8List iv, List<int> plaintext, List<int> aad) async =>
+      _algo.encrypt(Uint8List.fromList(plaintext),
+          iv: InitialisationVector(iv), aad: aad);
 
   @override
   Future<Uint8List> open(
       Uint8List iv, Uint8List ciphertext, List<int> aad) async {
+    final algo = _algo;
     try {
-      return await _withAlgo((algo) =>
-          algo.decrypt(ciphertext, iv: InitialisationVector(iv), aad: aad));
+      return await algo.decrypt(ciphertext,
+          iv: InitialisationVector(iv), aad: aad);
     } on AtDecryptionException {
       throw PasskeyRecordAuthenticationException();
     }

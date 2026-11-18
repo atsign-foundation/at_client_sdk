@@ -14,8 +14,8 @@ import 'dart:typed_data';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart';
-import 'package:at_client/src/lifecycle/at_connection.dart'
-    show classifyConnectionFailure;
+import 'package:at_client/src/preference/at_client_preference.dart'
+    show RemoteLocalPref;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
@@ -116,7 +116,8 @@ enum EventSource { data, notifs, both }
 /// either [Query.get] (one-shot `Future<List<CItem<T>>>`) or
 /// [Query.watch] (live reactive `Stream<List<CItem<T>>>`). Queries
 /// are immutable values — build once, pass around, reuse. Execution
-/// is always on-device against the local synced store.
+/// is always on-device, over the records the client reads: its local
+/// synced store by default.
 ///
 /// ```dart
 /// final overdue = todos.query()
@@ -1086,8 +1087,15 @@ interface class AtCollection<T> {
   /// `@`, whitespace or a control character. When neither local storage
   /// nor the atServer holds an item with the id, throws [ArgumentError]
   /// before any write unless it meets [create]'s rule for a new item's id;
-  /// a local item that cannot be read counts as one that exists, and an
-  /// atServer that cannot be reached counts as holding none.
+  /// a client whose `remoteLocalPref` is [RemoteLocalPref.remoteOnly] asks
+  /// only the atServer, so an item held in local storage alone does not
+  /// count. Whether an item is held is decided from its metadata, never its
+  /// value, so an item this client cannot decrypt counts as held. A stopped
+  /// client throws [StoppedException] from any lookup rather than counting
+  /// as held; otherwise a local lookup that fails for any reason but the
+  /// item's absence counts as held, and an atServer lookup that fails for
+  /// any reason but the item's absence keeps the refusal, whose message says
+  /// the atServer could not be checked.
   ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
@@ -1113,9 +1121,11 @@ interface class AtCollection<T> {
       expiresAt: expiresAt,
       availableAt: availableAt,
     );
-    if (!_newIdPattern.hasMatch(draft.id) &&
-        !await _selfKeyFoundOrUnreadable(draft.id)) {
-      _checkNewId(draft.id, id);
+    if (!_newIdPattern.hasMatch(draft.id)) {
+      final held = await _selfKeyHeld(draft.id);
+      if (held != _Held.yes) {
+        _checkNewId(draft.id, id, atServerChecked: held == _Held.no);
+      }
     }
     final results = await _put(draft);
     if (results.any((r) => r is OpFailure)) {
@@ -1387,13 +1397,15 @@ interface class AtCollection<T> {
   /// `getOrNull(id, owner) != null` when you only care whether the
   /// item is there.
   ///
-  /// Both paths issue a single [AtClient.get] probe against the LOCAL
-  /// store. For self-owned items the call short-circuits on the seen-id
-  /// cache populated by every successful read/write in this process and
-  /// only probes on a miss. For items owned by other atSigns it probes the
-  /// received copy `cached:<self>:<id>.<namespace><owner>` — the same
-  /// locally-stored key shape [getOrNull] reads — so `exists` and
-  /// `getOrNull(id, owner) != null` agree, including offline.
+  /// Both paths issue a single [AtClient.get] probe, routed by the client's
+  /// preference: local storage by default, the atServer under
+  /// [RemoteLocalPref.remoteOnly]. For self-owned items the call
+  /// short-circuits on the seen-id cache populated by every successful
+  /// read/write in this process and only probes on a miss. For items owned
+  /// by other atSigns it probes the received copy
+  /// `cached:<self>:<id>.<namespace><owner>` — the same key shape
+  /// [getOrNull] reads — so `exists` and `getOrNull(id, owner) != null`
+  /// agree, offline too on a client that reads local storage.
   ///
   /// [id] is folded to lower case. Throws [ArgumentError] before any read
   /// when [id] is empty or contains `.`, `:`, `@`, whitespace or a control
@@ -1403,10 +1415,11 @@ interface class AtCollection<T> {
     if (owner == atSign) {
       return _selfKeyExists(id);
     }
-    // Build the cached shape (leading `cached:` sets isCached, which routes
-    // the get to the LOCAL secondary). Omitting it yields `@self:id.ns@owner`
-    // with isCached=false — an other-owner key the verb-builder routes to a
-    // REMOTE lookup, which would diverge from getOrNull and fail offline.
+    // Build the cached shape (leading `cached:` sets isCached, so the get is
+    // routed like a read of this atSign's own storage). Omitting it yields
+    // `@self:id.ns@owner` with isCached=false — an other-owner key the
+    // verb-builder routes to a REMOTE lookup, which would diverge from
+    // getOrNull and fail offline.
     try {
       await atClient
           .get(AtKey.fromString('cached:$atSign:$id.$namespace$owner'));
@@ -2177,10 +2190,14 @@ interface class AtCollection<T> {
   /// after an offline period during which a parent may have been
   /// deleted on another atSign.
   ///
+  /// Every read and delete it makes is routed by the client's preference:
+  /// local storage by default, the atServer under
+  /// [RemoteLocalPref.remoteOnly].
+  ///
   /// Behaviour depends on the collection instance:
   ///
   /// - **Sub-collection** (instance returned by [subCollection]): if
-  ///   its bound parent no longer exists locally, delete every
+  ///   its bound parent no longer exists, delete every
   ///   self-owned item that matches this sub-collection's ancestor-
   ///   owner chain. Cross-owner same-id chains are spared.
   ///
@@ -2188,7 +2205,7 @@ interface class AtCollection<T> {
   ///   descendant (any sub-collection, any depth) under this
   ///   collection's namespace; for each, walk the full ancestor chain
   ///   (ids from the key + owners from the envelope `parents` field)
-  ///   and delete if any level is missing locally. Legacy items with
+  ///   and delete if any level is missing. Legacy items with
   ///   no `parents` envelope fall back to a root-ancestor-only check.
   ///
   /// The cleanest place to invoke this is implicitly via
@@ -2382,7 +2399,8 @@ interface class AtCollection<T> {
   }
 
   /// Returns the set of ids that exist as direct items at the given
-  /// [composedNs] locally, across any owner. Used by the legacy
+  /// [composedNs], where the client's preference routes a scan, across any
+  /// owner. Used by the legacy
   /// (`parents`-less) chain-walker in [_cleanupOrphansFromRoot] to
   /// verify each ancestor level on items that pre-date the
   /// envelope-`parents` convention. Cached in [cache] so repeated
@@ -3238,11 +3256,16 @@ interface class AtCollection<T> {
   }
 
   /// Throws [ArgumentError], naming the [given] id, when [folded] is not a
-  /// valid id for a new item.
-  static void _checkNewId(String folded, String given) {
+  /// valid id for a new item; unless [atServerChecked], the message says the
+  /// atServer could not be checked for an item with the id.
+  static void _checkNewId(String folded, String given,
+      {bool atServerChecked = true}) {
     if (!_newIdPattern.hasMatch(folded)) {
-      throw _IdArgumentError(given, 'id',
-          'a new item id must be 1 to 64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit');
+      throw _IdArgumentError(
+          given,
+          'id',
+          'a new item id must be 1 to 64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit'
+              '${atServerChecked ? '' : '; the atServer could not be checked for an item with this id'}');
     }
   }
 
@@ -3265,37 +3288,36 @@ interface class AtCollection<T> {
     );
   }
 
-  /// Whether a read of this atSign's own copy of [id], past the seen-id
-  /// cache, finds it or fails for a reason other than its absence.
+  /// Whether this atSign's own item [id], past the seen-id cache, is held,
+  /// judged from its metadata alone: [AtClient.getMeta] never reads a value.
   ///
-  /// When the local read finds nothing, the atServer is asked too, so an item
-  /// that sync has not yet brought to this device still counts as found. On
-  /// that pass only an answer from the atServer counts: a failure to reach it
-  /// or to be accepted by it says nothing about the item, so it counts as
-  /// not found, while any other failure (a value that cannot be decrypted,
-  /// say) means the atServer answered and counts as found.
-  Future<bool> _selfKeyFoundOrUnreadable(String id) async {
+  /// A [StoppedException] from any lookup is rethrown. A client whose
+  /// `remoteLocalPref` is [RemoteLocalPref.remoteOnly] asks the atServer
+  /// alone. Any other client, or one with no preference, asks local storage
+  /// first, where a lookup that fails for any reason but the item's absence
+  /// counts as held; when local storage holds nothing, it asks the atServer
+  /// too, so an item that sync has not yet brought to this device is still
+  /// held. At the atServer only metadata counts: a lookup that fails for any
+  /// reason but the item's absence leaves the item unchecked.
+  Future<_Held> _selfKeyHeld(String id) async {
     final key = '$id.$namespace$atSign';
-    for (final remote in [false, true]) {
+    final atServerOnly = atClient.getPreferences()?.remoteLocalPref ==
+        RemoteLocalPref.remoteOnly;
+    for (final remote in atServerOnly ? [true] : [false, true]) {
       try {
-        if (remote) {
-          await atClient.get(AtKey.fromString(key),
-              getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
-        } else {
-          await atClient.get(AtKey.fromString(key));
-        }
-        return true;
+        await atClient.getMeta(AtKey.fromString(key),
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);
+        return _Held.yes;
       } catch (e) {
         if (e is StoppedException) rethrow;
         if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
-        if (remote) {
-          final state = classifyConnectionFailure(e);
-          if (state != null && !state.isOnline) continue;
-        }
-        return true;
+        if (!remote) return _Held.yes;
+        // NOTE: an atServer lookup that fails for any reason but the item's
+        // absence leaves the item unchecked.
+        return _Held.unchecked;
       }
     }
-    return false;
+    return _Held.no;
   }
 
   Future<bool> _selfKeyExists(String id) async {
@@ -3817,7 +3839,8 @@ final class WithChildren<P, C> {
 /// Queries are **immutable**: each modifier returns a new [Query].
 /// Reuse a built query anywhere; there's no shared mutable state.
 ///
-/// Execution is **on-device**, over the local synced store. Under
+/// Execution is **on-device**, over the records the client reads: its local
+/// synced store by default. Under
 /// end-to-end encryption the atServer cannot decrypt the records it
 /// holds on your behalf, so on-device is the only correct model —
 /// not a performance compromise. See the [AtCollection] class doc for
@@ -3925,7 +3948,7 @@ final class Query<T> {
     return Query<T>._(_collection, _spec._withSkip(n));
   }
 
-  /// One-shot fetch. Reads the local store once, applies the spec,
+  /// One-shot fetch. Reads the collection once, applies the spec,
   /// returns a list. For a live reactive variant, see [watch].
   ///
   /// Propagates any error from the underlying [AtCollection.getItems]
@@ -5698,6 +5721,10 @@ final class CSubItemDeleted extends CEvent {
   /// item — equivalent to `ancestry.last.subName`.
   String get subName => ancestry.last.subName;
 }
+
+/// What [AtCollection]'s lookups of its own item's metadata found: the item
+/// is held, it is absent, or the atServer lookup failed for any other reason.
+enum _Held { yes, no, unchecked }
 
 /// An [ArgumentError] for an item id or subName whose text shows the value
 /// escaped onto one line, as AtCollection's warnings show it.

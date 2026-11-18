@@ -6,14 +6,17 @@
   `@`, whitespace or a control character is refused; a new item's id is 1 to
   64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit;
   `upsert` applies that rule only when neither local storage nor the atServer
-  holds an item with the id, counts a local item it cannot read as one that
-  exists, and keeps the refusal while the atServer cannot be reached; a
-  `subName` is folded too and must hold only characters a key's name can hold;
-  no event or listed item carries a refused id, and event ids arrive folded (`SKILL.md`;
-  `references/02`, `07`).
+  holds an item with the id (a `remoteOnly` client asks the atServer alone),
+  judges that from the item's metadata without decrypting it, and keeps the
+  refusal when its atServer lookup fails for any reason but the item's absence
+  or the client being stopped; a `subName` is folded too and must hold only
+  characters a key's name can hold; no event or listed item carries a refused
+  id, and event ids arrive folded (`SKILL.md`; `references/02`, `07`).
+- `getMeta` reads a key's metadata without decrypting its value, and takes
+  `getRequestOptions` as `get` does (`references/12`).
 - On a `remoteOnly` client, request options that leave `useRemoteAtServer`
-  unset follow the preference; only an explicit value overrides it
-  (`references/12`).
+  unset follow the preference; only an explicit value overrides it, and a
+  `local:` key never leaves the device (`references/12`).
 - A `CLIBase` program whose keyfile holds only an enrollment request waits
   for its approval rather than throwing (`SKILL.md`; `references/14`).
 - A screen that only closes calls `pending.stop()`, which keeps the request

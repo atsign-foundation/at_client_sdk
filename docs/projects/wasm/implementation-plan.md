@@ -597,13 +597,24 @@ D-12. Independent of the P series, which is `at_server`-side.
     add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
     `dart analyze` and `flutter analyze --no-fatal-infos`.
   **Raised while building X6, tracked nowhere else:**
-  - **The monitor connection advertises nothing.** `RemoteSecondary`'s authenticator
-    sends `_getClientConfig()` — version, clientId, appName, appVersion, platform — in its
-    `from:`, and the one `NotificationServiceImpl` builds for the monitor carries none.
-    `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
-    connection only. Whether that is deliberate is unknown: the socket-owning Monitor built
-    its own connection, so there was nothing to inherit. Worth settling if the atServer logs
-    or branches on client version per connection.
+  - **Every at_client connection sends `version`.** Every authenticating `from:` names
+    the app and the SDK (`appName`, `appVersion`, `sdkName`, `sdkVersion`), the monitor's
+    included, and at_client sends its own version as `version` on every `from:` it sends
+    to authenticate: `clientConfigOf` adds it, so the verb connection, sync's, the
+    monitor's, the enrollment handshake's and the start-up key check's all carry it.
+    `RemoteSecondary`'s alone adds `clientId` and `platform`. A program using at_auth
+    without at_client sends no `version`. Settled (plan-d3q, 2026-11-16): on a connection
+    whose `from:` named a version above 3.0.37, the atServer's global exception handler
+    writes its error replies as JSON, while a refusal a verb handler sets on its response,
+    the PKAM handler's enrollment refusals among them, stays `error:<code>:<text>`.
+    at_lookup reads the code of
+    every `error:` reply to `executeVerb`, `executeCommand` or a proxy root's `from:` in
+    the plain, colon and JSON forms, and so do the readers that match a refusal's code as
+    text: the enrollment wait in at_auth, and at_client's expired-request cleanup and
+    connection-failure classification, through one internal reader in each package.
+    `DefaultResponseParser` reads only `<code>-<text>`, but no atServer `error:` reply
+    reaches it: every remote path to it goes through at_lookup's `executeVerb`, which
+    throws on such a reply first.
   - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
     has exactly one consumer, and that consumer uses five members — `currentState`,
     `targetState`, `currentStateStream`, `start()`, `stop()`. What is left in it is

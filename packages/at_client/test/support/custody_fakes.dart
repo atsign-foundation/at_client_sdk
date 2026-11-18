@@ -2,23 +2,28 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart'
-    show AtKeys, ClosableAtKeysIo, WrittenAtKeysIo;
+import 'package:at_auth/at_auth.dart' show WrittenAtKeysIo;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/client/server_mutex.dart' show ServerMutexLease;
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
-    show ApkamKeyPair, apkamKeyPairFromSeed, withApkamKey;
+    show ApkamKeyPair;
 import 'package:at_client/src/passkey/enrollment_pointer_store.dart';
 import 'package:at_client/src/passkey/passkey_custody.dart';
 
-import 'package:at_commons/atsign.dart';
+import 'package:at_commons/at_commons.dart' show AtKey;
 import 'package:mocktail/mocktail.dart' show Fake;
 
 import 'bytes_passkey_sealer.dart';
 
 /// The base64 of the encryption private key the fake atServer holds.
 const fakeEncryptPrivateKey = 'ZW5jLXByaXZhdGU=';
+
+/// The encryption public key the activation of [enrollmentId] mints.
+String encryptionPublicKeyOf(String enrollmentId) =>
+    base64Encode(utf8.encode('enc-pub-$enrollmentId'));
 
 /// The atServer as the custody flows see it: pointers by lookup id, each
 /// enrollment's own document, and an ordered log of every write.
@@ -28,14 +33,26 @@ class FakeServer implements EnrollmentPointerReader {
   /// The namespace each pointer was written in, by lookup id.
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
-  final seedByEnrollment = <String, String>{};
+
+  /// The APKAM public key each enrollment authenticates with.
+  final pairByEnrollment = <String, String>{};
+
+  /// The atSign of each approved enrollment, by enrollment id.
+  final approved = <String, String>{};
   final revoked = <String>{};
   final log = <String>[];
 
   /// Every step of an onboarding in the order it happened: the server's
-  /// writes (as in [log]), the pending record's puts and deletes, the keys the
-  /// activation filed, the CRAM being spent and the client opening.
+  /// writes (as in [log]), the activation, its completion and the client
+  /// opening.
   final timeline = <String>[];
+
+  /// The atSigns whose CRAM secret is deleted; an activation of one of them
+  /// is refused.
+  final cramDeleted = <String>{};
+
+  /// The encryption public key published for the atSign, once one is.
+  String? publishedKey;
   var pointerReads = 0;
   var documentReads = 0;
   var publishedTag = 'v1';
@@ -43,6 +60,10 @@ class FakeServer implements EnrollmentPointerReader {
 
   /// Document puts that throw before one is accepted.
   var documentPutFailures = 0;
+
+  /// Document puts that store the document and then throw, as a put whose
+  /// reply is lost does.
+  var documentPutRepliesLost = 0;
 
   /// Pointer puts that throw before one is accepted.
   var pointerPutFailures = 0;
@@ -74,9 +95,10 @@ class FakeServer implements EnrollmentPointerReader {
 }
 
 class FakeSession implements EnrollmentSession {
-  FakeSession(this.server, this.enrollmentId);
+  FakeSession(this.server, this.atSign, this.enrollmentId);
 
   final FakeServer server;
+  final String atSign;
   @override
   final String enrollmentId;
   var closed = false;
@@ -85,24 +107,65 @@ class FakeSession implements EnrollmentSession {
   /// Makes [close] throw this after marking the session closed.
   Object? closeError;
 
+  /// [FakeServer.keys] with an encryption public key of this enrollment's
+  /// own, as each activation mints one.
   @override
-  Future<Map<String, dynamic>> atKeys() async => server.keys;
+  Future<Map<String, dynamic>> atKeys() async => {
+        ...server.keys,
+        'aesEncryptPublicKey': encryptionPublicKeyOf(enrollmentId)
+      };
 
   @override
-  Future<bool> publicKeysMatch(Map<String, dynamic> atKeys) async =>
-      server.publishes(atKeys);
+  Future<PublishedEncryptionKey> publishedEncryptionKey(
+      Map<String, dynamic> atKeys) async {
+    if (!server.publishes(atKeys)) return PublishedEncryptionKey.different;
+    final held = atKeys['aesEncryptPublicKey'];
+    if (held is! String) return PublishedEncryptionKey.same;
+    return switch (server.publishedKey) {
+      null => PublishedEncryptionKey.none,
+      final published when published == held => PublishedEncryptionKey.same,
+      _ => PublishedEncryptionKey.different,
+    };
+  }
 
   /// The @keys every [completeActivation] call was given.
   final completed = <Map<String, dynamic>>[];
 
-  /// Makes [completeActivation] throw this.
+  /// Makes [completeActivation] throw this before it publishes anything.
   Object? completeError;
+
+  /// Makes [completeActivation] throw this once it has published the
+  /// encryption public key, before it deletes the CRAM secret.
+  Object? completeErrorAfterPublish;
+
+  /// Makes [revokeOtherEnrollments] throw this before it revokes anything.
+  Object? revokeError;
+
+  @override
+  Future<void> revokeOtherEnrollments() async {
+    if (revokeError case final e?) throw e;
+    final others = [
+      for (final MapEntry(key: eid, value: owner) in server.approved.entries)
+        if (owner == atSign && eid != enrollmentId) eid
+    ];
+    for (final eid in others) {
+      server.approved.remove(eid);
+      server.revoked.add(eid);
+      server.timeline.add('revoke:$eid');
+    }
+  }
 
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
     server.timeline.add('complete-activation');
     completed.add(atKeys);
     if (completeError case final e?) throw e;
+    if (atKeys['aesEncryptPublicKey'] case final String key) {
+      server.publishedKey = key;
+    }
+    if (completeErrorAfterPublish case final e?) throw e;
+    server.cramDeleted.add(atSign);
+    server.timeline.add('cram-deleted');
   }
 
   @override
@@ -154,29 +217,37 @@ class FakeSession implements EnrollmentSession {
   }
 }
 
-/// The client a [FakeSession] opens: it knows the keys IO it was opened with
-/// stops the session, then closes the keys IO when that is flagged
-/// `closedByClient`, as a client's stop does.
+/// The client a [FakeSession] opens, on the keys IO it was opened with. Its
+/// stop, shared by every caller, reports `stopped` on its connection, then
+/// stops the session, as a client's stop does; it never closes the keys IO.
 class FakeAtClient extends Fake implements AtClient {
   FakeAtClient(this.session, this.keysIo);
 
   final FakeSession session;
   final WrittenAtKeysIo keysIo;
+  Future<void>? _stopping;
+
+  @override
+  final connection = AtConnection(
+      atSign: '@fake', attempt: (_) async => AtConnectionState.online());
 
   @override
   String? get enrollmentId => session.enrollmentId;
 
   @override
-  Future<void> stop() async {
-    try {
-      await session.close();
-    } finally {
-      if (keysIo case final ClosableAtKeysIo io when io.closedByClient) {
-        await io.close();
-      }
-    }
+  Future<void> stop() => _stopping ??= _stop();
+
+  Future<void> _stop() async {
+    await connection.close();
+    await session.close();
   }
 }
+
+/// A lease on the lock of [enrollmentId]'s document for [ttl], as an
+/// atServer where no other writer holds it grants.
+ServerMutexLease freeLease(String atSign, String enrollmentId, Duration ttl) =>
+    ServerMutexLease(AtKey.fromString(enrollmentLockKey(enrollmentId, atSign)),
+        DateTime.now().add(ttl));
 
 class _Documents implements EnrollmentDocumentStore {
   _Documents(this.session);
@@ -206,6 +277,17 @@ class _Documents implements EnrollmentDocumentStore {
     if (!session.server.dropDocumentWrites) {
       session.server.documents[eid] = document;
     }
+    if (session.server.documentPutRepliesLost > 0) {
+      session.server.documentPutRepliesLost--;
+      throw StateError('the reply to a document put was lost');
+    }
+  }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String eid,
+      {required Duration ttl}) async {
+    _own(eid);
+    return freeLease(atSign, eid, ttl);
   }
 }
 
@@ -242,11 +324,8 @@ class FakeGateway implements EnrollmentGateway {
   final device = 'Test Device';
 
   final FakeServer server;
-  final activated = <({String atSign, Uint8List authSeed, String cram})>[];
-
-  /// Every auth seed buffer handed in, by reference, so a test can see
-  /// whether the caller wiped it.
-  final seedBuffers = <Uint8List>[];
+  final activated =
+      <({String atSign, ApkamKeyPair apkamKeyPair, String cram})>[];
   FakeSession? lastSession;
 
   /// How many upcoming [authenticate] calls fail before any session exists.
@@ -270,27 +349,27 @@ class FakeGateway implements EnrollmentGateway {
   /// Whether that session stops a client it built before throwing.
   var openStopsFirstForNext = false;
 
-  FakeSession _session(String eid) => FakeSession(server, eid)
-    ..closeError = closeErrorForNext
-    ..openClientError = openErrorForNext
-    ..openClientStopsFirst = openStopsFirstForNext;
+  FakeSession _session(String atSign, String eid) =>
+      FakeSession(server, atSign, eid)
+        ..closeError = closeErrorForNext
+        ..openClientError = openErrorForNext
+        ..openClientStopsFirst = openStopsFirstForNext;
 
   @override
   Future<EnrollmentSession> authenticate(
       {required String atSign,
       required String enrollmentId,
-      required Uint8List authSeed}) async {
-    seedBuffers.add(authSeed);
+      required ApkamKeyPair apkamKeyPair}) async {
     authenticated.add(enrollmentId);
     if (authenticateFailures > 0) {
       authenticateFailures--;
       throw authenticateError ?? StateError('authenticate failed');
     }
     if (server.revoked.contains(enrollmentId) ||
-        server.seedByEnrollment[enrollmentId] != authSeed.join(',')) {
+        server.pairByEnrollment[enrollmentId] != apkamKeyPair.publicKey) {
       throw PkamRefusedException(enrollmentId);
     }
-    final session = lastSession = _session(enrollmentId);
+    final session = lastSession = _session(atSign, enrollmentId);
     onAuthenticate?.call(session);
     return session;
   }
@@ -298,64 +377,31 @@ class FakeGateway implements EnrollmentGateway {
   /// Runs on each session [authenticate] hands out.
   void Function(FakeSession session)? onAuthenticate;
 
-  /// The exception the last unfinished [activate] threw.
-  ActivationUnfinishedException? unfinished;
-
-  /// Makes [activate] spend the CRAM, then fail its PKAM.
-  var activationUnfinished = false;
-
-  /// When set, [activate] throws it before anything is filed or spent, as an
-  /// atServer that refuses the CRAM secret does.
+  /// When set, [activate] throws it before anything is minted, as an atServer
+  /// that refuses the CRAM secret does.
   Object? activateRefusal;
 
-  /// Runs inside [activate], once the CRAM is spent.
+  /// Runs inside [activate], once the enrollment is approved.
   FutureOr<void> Function()? onActivate;
-
-  /// The keys [activate] files in the keys IO it is given, as a real
-  /// activation does before it deletes the CRAM.
-  AtKeys keysFor(String atSign, String eid, [ApkamKeyPair? pair]) =>
-      withApkamKey(
-          AtKeys.legacy(
-              encryptionPublicKey: base64Encode(utf8.encode('enc-pub-$eid')),
-              encryptionPrivateKey: base64Encode(utf8.encode('enc-priv-$eid')),
-              selfEncryptionKey: base64Encode(utf8.encode('self-$eid')))
-            ..atsign = Atsign(atSign),
-          eid,
-          pair ??
-              (
-                publicKey: base64Encode(utf8.encode('apkam-pub-$eid')),
-                privateKey: base64Encode(utf8.encode('apkam-priv-$eid'))
-              ));
-
-  /// The keys the last [activate] filed.
-  AtKeys? filed;
 
   @override
   Future<EnrollmentSession> activate(
       {required String atSign,
-      required Uint8List authSeed,
-      required String cram,
-      WrittenAtKeysIo? keysIo}) async {
-    seedBuffers.add(authSeed);
-    activated.add(
-        (atSign: atSign, authSeed: Uint8List.fromList(authSeed), cram: cram));
+      required ApkamKeyPair apkamKeyPair,
+      required String cram}) async {
+    activated.add((atSign: atSign, apkamKeyPair: apkamKeyPair, cram: cram));
     await gate?.future;
     final refusal = activateRefusal;
     if (refusal != null) throw refusal;
+    if (server.cramDeleted.contains(atSign)) {
+      throw StateError('the CRAM secret is deleted');
+    }
     final eid = 'eid${++server.enrollments}';
-    server.seedByEnrollment[eid] = authSeed.join(',');
-    if (keysIo != null) {
-      filed = keysFor(atSign, eid, await apkamKeyPairFromSeed(authSeed));
-      await keysIo.write(atSign, filed!);
-    }
-    server.timeline.add('cram-spent');
+    server.pairByEnrollment[eid] = apkamKeyPair.publicKey;
+    server.approved[eid] = atSign;
+    server.timeline.add('activate:$eid');
     await onActivate?.call();
-    if (activationUnfinished) {
-      throw unfinished = ActivationUnfinishedException(eid,
-          atKeys: {...server.keys}..remove('aesPkamPrivateKey'),
-          cause: StateError('pkam failed'));
-    }
-    final session = lastSession = _session(eid);
+    final session = lastSession = _session(atSign, eid);
     onAuthenticate?.call(session);
     return session;
   }
@@ -390,11 +436,15 @@ class FakeAuthenticator implements PasskeyPort, UnknownCredentialSignal {
   /// Makes the signal fail, as a browser without the call does.
   var signalFails = false;
 
+  /// Makes [create] fail as a cancelled ceremony, before any passkey exists.
+  var createFails = false;
+
   @override
   Future<PasskeyCreation> create(
       {required String atSign,
       required DateTime enrolledAt,
       required String deviceName}) async {
+    if (createFails) throw PasskeyCeremonyException('NotAllowedError');
     creates++;
     created
         .add((atSign: atSign, enrolledAt: enrolledAt, deviceName: deviceName));
@@ -497,43 +547,6 @@ class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
   Future<void> putEnrollmentId(String atSign, String id) async {
     singleWrites++;
     ids[atSign] = id;
-  }
-}
-
-/// The pending-onboarding records of one device, in memory.
-class FakePendingStore implements PendingOnboardingStore {
-  FakePendingStore([this.timeline]);
-
-  /// Where each put and delete is noted, in order with the rest of an
-  /// onboarding, when given.
-  final List<String>? timeline;
-  final records = <String, PendingOnboardingRecord>{};
-
-  /// How many records were put.
-  var puts = 0;
-
-  /// Makes every put throw.
-  var failPuts = false;
-
-  /// Makes every delete throw.
-  var failDeletes = false;
-
-  @override
-  Future<PendingOnboardingRecord?> get(String atSign) async => records[atSign];
-
-  @override
-  Future<void> put(String atSign, PendingOnboardingRecord record) async {
-    if (failPuts) throw StateError('pending put failed');
-    puts++;
-    timeline?.add('put-pending');
-    records[atSign] = record;
-  }
-
-  @override
-  Future<void> delete(String atSign) async {
-    if (failDeletes) throw StateError('pending delete failed');
-    timeline?.add('delete-pending');
-    records.remove(atSign);
   }
 }
 

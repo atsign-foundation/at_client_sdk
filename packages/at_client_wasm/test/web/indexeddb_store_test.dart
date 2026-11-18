@@ -7,8 +7,6 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
-import 'package:at_auth/passkey.dart'
-    show PendingOnboardingRecord, UnsupportedPasskeyRecordException;
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart';
@@ -108,10 +106,130 @@ void main() {
       final store = IndexedDbHintStore.forDatabase(raw);
       await expectLater(
           store.putHint('@alice', Uint8List.fromList([1]), 'eid-1'),
-          throwsA(
-              isA<DOMException>().having((e) => e.name, 'name', 'DataError')));
+          throwsA(isA<IndexedDbException>()
+              .having((e) => e.message, 'message', contains('DataError'))));
       expect(await store.credentialId('@alice'), isNull);
       raw.close();
+    });
+
+    test(
+        'every operation on a database without its object stores fails with '
+        'an IndexedDbException naming the error', () async {
+      final raw = await _rawOpen(currentDbName!, 1);
+      addTearDown(() => raw.close());
+      final store = IndexedDbHintStore.forDatabase(raw);
+      final operations = <String, Future<Object?> Function()>{
+        'putCredentialId': () =>
+            store.putCredentialId('@alice', Uint8List.fromList([1])),
+        'credentialId': () => store.credentialId('@alice'),
+        'putEnrollmentId': () => store.putEnrollmentId('@alice', 'eid-1'),
+        'enrollmentId': () => store.enrollmentId('@alice'),
+        'putHint': () =>
+            store.putHint('@alice', Uint8List.fromList([1]), 'eid-1'),
+      };
+      for (final MapEntry(key: name, value: operation) in operations.entries) {
+        await expectLater(
+            operation(),
+            throwsA(isA<IndexedDbException>().having(
+                (e) => e.message, 'message', contains('NotFoundError'))),
+            reason: '$name fails as an IndexedDbException naming the error');
+      }
+    });
+
+    test('a read whose transaction aborts fails naming the error', () async {
+      final raw = await _rawOpen(currentDbName!, 2, upgrade: (db) {
+        db.createObjectStore('at_client_wasm_credentials');
+        db.createObjectStore('at_client_wasm_enrollments');
+      });
+      addTearDown(() => raw.close());
+      final aborting = JSObject()
+        ..setProperty(
+            'transaction'.toJS,
+            ((JSAny? stores, JSAny? mode) {
+              final tx = raw.transaction(stores as JSString, 'readonly');
+              Future.microtask(() => tx.abort());
+              return tx;
+            }).toJS);
+      final store = IndexedDbHintStore.forDatabase(aborting as IDBDatabase);
+
+      await expectLater(
+          store.credentialId('@alice'),
+          throwsA(isA<IndexedDbException>()
+              .having((e) => e.message, 'message', contains('AbortError'))),
+          reason: 'the aborted read request fails as an IndexedDbException '
+              'naming the error');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    /// A store whose credentials index refuses credential [7] for any atSign
+    /// but @bob, whose transactions stop request error events at the
+    /// transaction: the first only, or every one when [all].
+    Future<IndexedDbHintStore> refusingCredential7({required bool all}) async {
+      final raw = await _rawOpen(currentDbName!, 3, upgrade: (db) {
+        db.createObjectStore('at_client_wasm_credentials').createIndex(
+            'one_atsign_per_credential',
+            ''.toJS,
+            IDBIndexParameters(unique: true));
+        db.createObjectStore('at_client_wasm_enrollments');
+      });
+      addTearDown(() => raw.close());
+      await _rawPut(raw, 'at_client_wasm_credentials', '@bob', [7]);
+      final quiet = JSObject()
+        ..setProperty(
+            'transaction'.toJS,
+            ((JSAny? stores, JSAny? mode) {
+              final tx = raw.transaction(stores!, (mode as JSString).toDart);
+              tx.addEventListener(
+                  'error',
+                  ((Event e) => e.stopPropagation()).toJS,
+                  AddEventListenerOptions(capture: true, once: !all));
+              return tx;
+            }).toJS);
+      return IndexedDbHintStore.forDatabase(quiet as IDBDatabase);
+    }
+
+    test(
+        'a transaction aborted with an error names that error, not the '
+        'AbortError of a request it cancelled', () async {
+      final store = await refusingCredential7(all: false);
+
+      await expectLater(
+          store.putHint('@alice', Uint8List.fromList([7]), 'eid-1'),
+          throwsA(isA<IndexedDbException>().having(
+              (e) => e.message, 'message', contains('ConstraintError'))),
+          reason: "the transaction's own error is named, not the AbortError "
+              'of the put it cancelled');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test(
+        'a transaction aborted with an error no request event reported, as '
+        'at commit, names that error', () async {
+      // Only the abort event, carrying the transaction's error, reaches the
+      // store.
+      final store = await refusingCredential7(all: true);
+
+      await expectLater(
+          store.putHint('@alice', Uint8List.fromList([7]), 'eid-1'),
+          throwsA(isA<IndexedDbException>().having((e) => e.message, 'message',
+              allOf(contains('aborted'), contains('ConstraintError')))),
+          reason: "the abort names the transaction's error");
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test('an open the browser refuses outright fails naming the error',
+        () async {
+      final factory = window.indexedDB as JSObject;
+      factory['open'] = globalContext.callMethod<JSFunction>(
+          'Function'.toJS,
+          'throw new DOMException("The operation is insecure.", '
+                  '"SecurityError");'
+              .toJS);
+      addTearDown(() => factory.delete('open'.toJS));
+
+      await expectLater(
+          IndexedDbHintStore.open(dbName: currentDbName!),
+          throwsA(isA<IndexedDbException>()
+              .having((e) => e.message, 'message', contains('SecurityError'))),
+          reason: 'the refused open fails as an IndexedDbException naming '
+              'the error');
     });
 
     test('credentialId round-trips per atSign', () async {
@@ -187,7 +305,7 @@ void main() {
     test('an open store closes for a newer version of the database', () async {
       await open();
 
-      final newer = await _rawOpen(currentDbName!, 4);
+      final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
     }, timeout: const Timeout(Duration(seconds: 5)));
 
@@ -196,7 +314,7 @@ void main() {
       final store = await open();
       await store.putEnrollmentId('@alice', 'e1');
 
-      final newer = await _rawOpen(currentDbName!, 4);
+      final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
 
       expect(await store.enrollmentId('@alice'), 'e1');
@@ -208,84 +326,69 @@ void main() {
         () async {
       final store = await open();
 
-      final newer = await _rawOpen(currentDbName!, 4);
+      final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
 
       await store.putEnrollmentId('@alice', 'e2');
       expect(await store.enrollmentId('@alice'), 'e2');
     }, timeout: const Timeout(Duration(seconds: 5)));
 
-    group('pending onboarding records', () {
-      PendingOnboardingRecord record(int n) => PendingOnboardingRecord(
-          credentialId: Uint8List.fromList([n, n + 1]),
-          enrollmentId: 'eid-$n',
-          encryptionPublicKey: 'pub-$n',
-          sealed: 'sealed-$n');
+    group('an upgrade to version 4', () {
+      /// The object store names of the database, read on a raw connection
+      /// that asks for no upgrade.
+      Future<List<String>> storeNames() async {
+        final raw = await _rawOpen(currentDbName!, 4);
+        try {
+          final names = raw.objectStoreNames;
+          return [for (var i = 0; i < names.length; i++) names.item(i)!];
+        } finally {
+          raw.close();
+        }
+      }
 
-      test('are absent until put', () async {
-        expect(await (await open()).get('@alice'), isNull);
-      });
-
-      test('round-trip, and survive a reopen of the database', () async {
-        final store = await open();
-        await store.put('@alice', record(1));
-        store.close();
-
-        final got = await (await open()).get('@alice');
-        expect(got!.credentialId, [1, 2]);
-        expect(got.enrollmentId, 'eid-1');
-        expect(got.encryptionPublicKey, 'pub-1');
-        expect(got.sealed, 'sealed-1');
-      });
-
-      test('are kept per atSign and replaced by a later put', () async {
-        final store = await open();
-        await store.put('@alice', record(1));
-        await store.put('@bob', record(5));
-        await store.put('@alice', record(3));
-
-        expect((await store.get('@alice'))!.enrollmentId, 'eid-3');
-        expect((await store.get('@bob'))!.enrollmentId, 'eid-5');
-      });
-
-      test('are deleted alone, and deleting none is fine', () async {
-        final store = await open();
-        await store.put('@alice', record(1));
-        await store.put('@bob', record(5));
-
-        await store.delete('@alice');
-        await store.delete('@alice');
-
-        expect(await store.get('@alice'), isNull);
-        expect(await store.get('@bob'), isNotNull);
-      });
-
-      test('are kept apart from the hints', () async {
-        final store = await open();
-        await store.putHint('@alice', Uint8List.fromList([9]), 'eid-9');
-        await store.put('@alice', record(1));
-        await store.delete('@alice');
-
-        expect(await store.credentialId('@alice'), [9]);
-        expect(await store.enrollmentId('@alice'), 'eid-9');
-      });
-
-      test('that are not records fail typed on read', () async {
-        final raw = await _rawOpen(currentDbName!, 3, upgrade: (db) {
+      test(
+          'deletes a version 3 database\'s pending records and keeps its hints',
+          () async {
+        final old = await _rawOpen(currentDbName!, 3, upgrade: (db) {
           db.createObjectStore('at_client_wasm_credentials');
           db.createObjectStore('at_client_wasm_enrollments');
           db.createObjectStore('at_client_wasm_pending');
         });
+        await _rawPut(old, 'at_client_wasm_credentials', '@alice', [4, 2]);
         await _rawPut(
-            raw, 'at_client_wasm_pending', '@alice', utf8.encode('nope'));
-        raw.close();
+            old, 'at_client_wasm_enrollments', '@alice', utf8.encode('e1'));
+        await _rawPut(old, 'at_client_wasm_pending', '@alice', [1, 2, 3]);
+        old.close();
 
-        await expectLater((await open()).get('@alice'),
-            throwsA(isA<UnsupportedPasskeyRecordException>()));
+        final store = await open();
+        expect(await store.credentialId('@alice'), [4, 2]);
+        expect(await store.enrollmentId('@alice'), 'e1');
+        store.close();
+
+        expect(
+            await storeNames(),
+            unorderedEquals(
+                ['at_client_wasm_credentials', 'at_client_wasm_enrollments']));
       });
 
-      test('a database left at version 2 upgrades and keeps its hints',
-          () async {
+      test('deletes a version 1 database\'s keys store', () async {
+        final old = await _rawOpen(currentDbName!, 1, upgrade: (db) {
+          db.createObjectStore('at_client_wasm_keys');
+        });
+        await _rawPut(old, 'at_client_wasm_keys', '@alice', [9, 9]);
+        old.close();
+
+        final store = await open();
+        expect(await store.credentialId('@alice'), isNull);
+        store.close();
+
+        expect(
+            await storeNames(),
+            unorderedEquals(
+                ['at_client_wasm_credentials', 'at_client_wasm_enrollments']));
+      });
+
+      test('keeps a version 2 database\'s hints', () async {
         final old = await _rawOpen(currentDbName!, 2, upgrade: (db) {
           db.createObjectStore('at_client_wasm_credentials');
           db.createObjectStore('at_client_wasm_enrollments');
@@ -296,8 +399,8 @@ void main() {
         final store = await open();
 
         expect(await store.credentialId('@alice'), [4, 2]);
-        await store.put('@alice', record(1));
-        expect((await store.get('@alice'))!.enrollmentId, 'eid-1');
+        await store.putEnrollmentId('@alice', 'e1');
+        expect(await store.enrollmentId('@alice'), 'e1');
       });
     });
 

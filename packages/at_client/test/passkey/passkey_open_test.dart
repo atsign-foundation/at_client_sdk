@@ -41,6 +41,11 @@ class _Docs implements EnrollmentDocumentStore {
   Future<void> put(String atSign, String enrollmentId, String document) async {
     records[enrollmentDocumentKey(enrollmentId, atSign)] = document;
   }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) async =>
+      freeLease(atSign, enrollmentId, ttl);
 }
 
 void _fileSigning(AtKeys keys, String tag, {String eid = _eid}) =>
@@ -78,10 +83,11 @@ void main() {
     });
     return AtServerAtKeysIo(
         documents: docs,
-        vault: derived.vault,
+        atSign: _atSign,
+        seal: (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
+        open: (r) => derived.vault.open(PasskeyRecordType.atkeys, r),
         enrollmentId: _eid,
         apkamKeyPair: pair,
-        closedByClient: true,
         restored: restored);
   }
 
@@ -150,10 +156,7 @@ void main() {
   });
 
   group('T4 recovery of a stranded atSign', () {
-    test('a published document and no pending record: login opens a client',
-        () async {
-      // What custody's restore hands the opener: the stored document, read
-      // back through a store of its own, on a device with no pending record.
+    test('a published document: login opens a client', () async {
       final restored = await (await store()).read(_atSign);
       final client = await open(await store(restored: restored));
       expect(client.connection.current.isOnline, isTrue);
@@ -212,7 +215,9 @@ void main() {
     test('a first write of keys carrying the flat key strips it', () async {
       final io = AtServerAtKeysIo(
           documents: docs,
-          vault: derived.vault,
+          atSign: _atSign,
+          seal: (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
+          open: (r) => derived.vault.open(PasskeyRecordType.atkeys, r),
           enrollmentId: _eid,
           apkamKeyPair: pair);
       final keys = _stripped()

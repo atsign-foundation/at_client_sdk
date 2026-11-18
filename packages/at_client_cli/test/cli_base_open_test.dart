@@ -296,6 +296,7 @@ void main() {
       for (final (code, reason) in [
         ('AT0025', 'Apkam Auth Denied'),
         ('AT0028', 'enrollment expired'),
+        ('AT0029', 'enrollment expired'),
       ]) {
         await submitRequest();
         final server = approvingAtServer(
