@@ -97,6 +97,17 @@ void main() {
           throwsA(isA<PrfUnavailableException>()));
     });
 
+    test('a PRF output of 32 zero bytes is PrfUnavailableException', () async {
+      final port = FakePasskeyPort()..resultPrfFirst = Uint8List(32);
+      final refused = throwsA(isA<PrfUnavailableException>().having(
+          (e) => e.message, 'message', 'PRF output must not be all zeroes'));
+      await expectLater(PasskeyPrf(port).unlock(), refused);
+      await expectLater(
+          PasskeyPrf(port)
+              .register('@alice', enrolledAt: _at, deviceName: _device),
+          refused);
+    });
+
     test('register refuses before any ceremony when PRF is unsupported',
         () async {
       final env = FakePrfEnvironment()..capability = false;

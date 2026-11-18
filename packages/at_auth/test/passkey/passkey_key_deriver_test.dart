@@ -128,8 +128,22 @@ void main() {
   });
 
   test('zeroes the PRF bytes before returning', () async {
+    final bytes = Uint8List.fromList(List.generate(32, (i) => i));
+    await deriver.derive(PrfSecret(bytes), '@alice');
+    expect(bytes, everyElement(0));
+  });
+
+  test('A wiped PRF secret cannot be derived from', () async {
+    final secret = prf()..wipe();
+    await expectLater(
+        deriver.derive(secret, '@alice'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', 'the PRF output was wiped')));
+  });
+
+  test('a second derivation from one secret is refused', () async {
     final secret = prf();
     await deriver.derive(secret, '@alice');
-    expect(secret.output, everyElement(0));
+    await expectLater(deriver.derive(secret, '@alice'), throwsStateError);
   });
 }
