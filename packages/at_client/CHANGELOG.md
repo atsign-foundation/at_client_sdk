@@ -14,10 +14,9 @@
   code. AT0028 in reply to any verb but a PKAM and its `from:` still
   leaves the connection online. `AtEnrollmentExpiredException` is
   exported.
-- refactor: a refusal's code is read with at_lookup's `atServerErrorCodeIn`.
-  No change but this: a code followed by anything but `-`, `:` or the end of
-  the reply, a digit or a space, say, is no longer read as a code, and a
-  JSON reply followed by other text still yields its code.
+- fix: a verb refused when it authenticates throws the exception at_auth
+  raised, carrying the atServer's code, and a refusal's cause is never read
+  from the text of an exception's message.
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file
