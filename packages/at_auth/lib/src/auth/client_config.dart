@@ -50,17 +50,20 @@ Map<String, String> clientConfigFor({
 /// [config] made sendable, with the four values [clientConfigFor] names
 /// filled.
 ///
-/// Every string value, under any key, is made sendable as [clientConfigFor]
-/// makes its values. One of the four that is not a string is sent as its
+/// Every string value, under any key and at any depth of the Maps and Lists
+/// [config] holds, is made sendable as [clientConfigFor] makes its values.
+/// Every key, at any depth, has each line or paragraph separator made a
+/// space, and is not cut. One of the four that is not a string is sent as its
 /// `toString()`, and one that is absent, empty or only whitespace takes
-/// at_auth's. A value of any other key that is not a string is passed through
-/// unchanged. A `version` is sent only when [config] holds one, made sendable
-/// when it is a string and unchanged when it is not; at_auth adds none.
+/// at_auth's. A value of any other key that is neither a string, a Map nor a
+/// List is passed through unchanged. A `version` is sent only when [config]
+/// holds one, made sendable when it is a string and unchanged when it is not;
+/// at_auth adds none.
 Map<String, dynamic> withClientConfigDefaults(Map<String, dynamic> config) {
   String? given(String key) => config[key]?.toString();
   return {
     for (final MapEntry(:key, :value) in config.entries)
-      key: value is String ? _sendable(value) : value,
+      _oneLine(key): _sendableDeep(value),
     ...clientConfigFor(
         appName: given(AtConstants.appName),
         appVersion: given(AtConstants.appVersion),
@@ -72,8 +75,22 @@ Map<String, dynamic> withClientConfigDefaults(Map<String, dynamic> config) {
 String _sendableOr(String? value, String Function() fallback) =>
     _sendable(value == null || value.trim().isEmpty ? fallback() : value);
 
+/// [value] with every string in it, at any depth of its Maps and Lists, made
+/// sendable, and every Map key made one line.
+Object? _sendableDeep(Object? value) => switch (value) {
+      String() => _sendable(value),
+      Map() => {
+          for (final MapEntry(:key, :value) in value.entries)
+            (key is String ? _oneLine(key) : key): _sendableDeep(value),
+        },
+      List() => [for (final item in value) _sendableDeep(item)],
+      _ => value,
+    };
+
+String _oneLine(String value) => value.replaceAll(_lineSeparators, ' ');
+
 String _sendable(String value) {
-  final oneLine = value.replaceAll(_lineSeparators, ' ');
+  final oneLine = _oneLine(value);
   if (oneLine.length <= maxClientConfigValueLength) return oneLine;
   final end =
       _isHighSurrogate(oneLine.codeUnitAt(maxClientConfigValueLength - 1))
