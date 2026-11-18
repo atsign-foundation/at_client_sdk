@@ -366,8 +366,8 @@ void main() {
   }, timeout: _timeout);
 
   test(
-      'An onboarding interrupted after the CRAM secret is deleted is '
-      'finished by logging in', () async {
+      'A login after an onboarding interrupted once the CRAM secret is '
+      'deleted opens its enrollment', () async {
     const atSign = '@gary';
     final rig = PasskeyRig(salt: 54);
     await _interrupted(

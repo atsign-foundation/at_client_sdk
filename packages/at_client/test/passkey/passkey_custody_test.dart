@@ -423,8 +423,8 @@ void main() {
     });
 
     test(
-        'An onboarding interrupted after the CRAM secret is deleted is '
-        'finished by logging in', () async {
+        'A login after an onboarding interrupted once the CRAM secret is '
+        'deleted opens its enrollment', () async {
       gateway.openErrorForNext = StateError('tab closed');
       hints.failPairWrites = true;
       await expectLater(

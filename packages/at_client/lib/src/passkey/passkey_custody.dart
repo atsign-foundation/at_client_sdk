@@ -282,9 +282,12 @@ class PasskeyCustody {
   /// with the same [cram] and a new passkey. The passkey this call registered
   /// is reported to the platform as unknown when the failure comes before
   /// the activation is completed; a failure while completing it, or after,
-  /// reports nothing, and once the CRAM secret is deleted logging in with
-  /// [open] finishes the onboarding. Nothing is kept on the device until the
-  /// CRAM secret is deleted.
+  /// reports nothing. Once the CRAM secret is deleted the atSign is
+  /// onboarded, and a failure after that leaves [open] to log in: without
+  /// saved hints it sends the completion again, which, with the encryption
+  /// public key already published, only deletes the CRAM secret that is
+  /// already gone, and then saves the hints. Nothing is kept on the device
+  /// until the CRAM secret is deleted.
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The returned

@@ -9,8 +9,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   CRAM secret is deleted, an onboarding that was interrupted is run again
   with the same CRAM secret, and that retry revokes every other approved
   enrollment of the Atsign, including those earlier attempts left; once it
-  is deleted, logging in with the passkey finishes the onboarding. A login
-  on a device with no saved hints for the Atsign also finishes an
+  is deleted the Atsign is onboarded, and logging in with the passkey opens
+  its enrollment and saves the passkey hints the onboarding could not. A
+  login on a device with no saved hints for the Atsign finishes an
   activation that an onboarding left half done: it publishes the @keys
   document's encryption public key when none is published, and deletes the
   CRAM secret. A login that uses saved hints sends neither, since a device
@@ -79,7 +80,7 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     When the app logs in to @alice🛠 with the first passkey
     Then it throws a PasskeyLostException
 
-  Scenario: An onboarding interrupted after the CRAM secret is deleted is finished by logging in
+  Scenario: A login after an onboarding interrupted once the CRAM secret is deleted opens its enrollment
     Given an onboarding of @alice🛠 was interrupted after the CRAM secret was deleted and before its client opened
     When the app logs in to @alice🛠 with that passkey
     Then it gets a passkey session whose client is online as the onboarding's enrollment
