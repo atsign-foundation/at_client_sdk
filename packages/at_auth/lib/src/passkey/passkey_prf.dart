@@ -10,15 +10,15 @@ import 'prf_secret.dart';
 
 export 'prf_support.dart' show PrfUnavailableException;
 
+const _unusablePrf = 'The authenticator did not return a usable PRF result';
+
 PrfSecret _secretFrom(Uint8List? prfFirst) {
-  if (prfFirst == null) {
-    throw PrfUnavailableException('Authenticator did not return a PRF result');
-  }
+  if (prfFirst == null) throw PrfUnavailableException(_unusablePrf);
   try {
     return PrfSecret(prfFirst);
-  } on ArgumentError catch (e) {
+  } on ArgumentError {
     prfFirst.fillRange(0, prfFirst.length, 0);
-    throw PrfUnavailableException(e.message);
+    throw PrfUnavailableException(_unusablePrf);
   }
 }
 
