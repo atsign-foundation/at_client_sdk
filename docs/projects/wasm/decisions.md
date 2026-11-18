@@ -1095,7 +1095,7 @@ Concurrent writers are the expected case: synced devices share one enrollment, a
 
 **Proposed.** Not yet ruled; gkc to rule.
 
-The browser seals the @keys document with a WebCrypto key created `extractable: false` and used for encrypt and decrypt only. `at_auth` has no default sealer; the browser injects this one. The bytes-key `AesGcm256EncryptionAlgo` constructor in at_chops is for the Dart VM only.
+The browser seals the @keys document with a WebCrypto key created `extractable: false` and used for encrypt and decrypt only. `at_auth` has no default sealer; the browser injects this one.
 
 ### D-30 — A client closes its key store through `ClosableAtKeysIo` (2026-11-16)
 

@@ -2,14 +2,18 @@ Feature: The browser derives passkey keys with at_chops' HKDF
   The lookup id, pointer namespace, auth seed and seal key of a passkey are
   each HKDF-SHA256 of its PRF output, with an empty salt and the info
   `<label>|<atSign>`, computed by at_chops' HkdfSha256. In the browser the
-  seal key's bytes are imported as a non-extractable AES-GCM key and then
-  overwritten with zeroes: the seal key can't be exported once derived.
+  seal key is imported as a non-extractable AES-GCM key, then the buffers
+  the deriver holds and the one it imports through are overwritten with
+  zeroes; copies made inside HkdfSha256 are left to the garbage collector.
+  The seal key can't be exported once imported.
 
   Forgery and impersonation: the outputs are the ones the derivation
   vectors pin, so every record and pointer sealed before still opens and
-  names the same enrollment; page code able to read Dart memory already
-  holds the PRF output the seal key is derived from. Races, replay and
-  denial of service: none; a derivation is local work on 32 bytes.
+  names the same enrollment. Page code able to read Dart memory already
+  holds the PRF output the seal key is derived from, and for the client's
+  session the APKAM private key and the @keys the seal key protects. Races,
+  replay and denial of service: none; a derivation is local work on 32
+  bytes.
 
   Scenario: The browser's derivation matches the vectors
     Given the passkey derivation vectors
