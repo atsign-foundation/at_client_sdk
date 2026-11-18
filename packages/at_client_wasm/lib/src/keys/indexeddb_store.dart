@@ -158,13 +158,19 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
         await _transactionToFuture(tx);
       });
 
-  Future<Uint8List?> _get(String storeName, String atSign) =>
+  /// The value stored under [atSign] in [storeName], as IndexedDB holds it.
+  Future<JSAny?> _read(String storeName, String atSign) =>
       _guarded('read', () async {
         final db = await _connection();
         final tx = db.transaction(storeName.toJS, 'readonly');
         final store = tx.objectStore(storeName);
         final request = store.get(atSign.toJS);
-        final result = await _requestToFuture<JSAny?>(request);
+        return await _requestToFuture<JSAny?>(request);
+      });
+
+  Future<Uint8List?> _get(String storeName, String atSign) =>
+      _guarded('read', () async {
+        final result = await _read(storeName, atSign);
         if (result == null) return null;
         final jsArray = result as JSUint8Array;
         return Uint8List.fromList(jsArray.toDart);
@@ -240,12 +246,17 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
 
   /// The pending onboarding record of the [atSign], or null when there is none.
   ///
-  /// Throws [UnsupportedPasskeyRecordException] when the stored record is not
-  /// a pending onboarding record.
+  /// Throws [UnsupportedPasskeyRecordException] when the stored value is not
+  /// a pending onboarding record, including when it is not bytes.
   @override
   Future<PendingOnboardingRecord?> get(String atSign) async {
-    final bytes = await _get(_pendingStore, atSign);
-    if (bytes == null) return null;
+    final value = await _read(_pendingStore, atSign);
+    if (value == null) return null;
+    if (!value.isA<JSUint8Array>()) {
+      throw UnsupportedPasskeyRecordException(
+          'pending onboarding record is not bytes');
+    }
+    final bytes = (value as JSUint8Array).toDart;
     Object? json;
     try {
       json = jsonDecode(utf8.decode(bytes));

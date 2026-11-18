@@ -31,13 +31,19 @@ Future<IDBDatabase> _rawOpen(String name, int version,
 
 /// Puts [value] under [key] in [storeName] of [db] and waits for it to commit.
 Future<void> _rawPut(
-    IDBDatabase db, String storeName, String key, List<int> value) {
+        IDBDatabase db, String storeName, String key, List<int> value) =>
+    _rawPutValue(db, storeName, key, Uint8List.fromList(value).toJS);
+
+/// Puts [value] as it is under [key] in [storeName] of [db] and waits for it
+/// to commit.
+Future<void> _rawPutValue(
+    IDBDatabase db, String storeName, String key, JSAny value) {
   final done = Completer<void>();
   final tx = db.transaction(storeName.toJS, 'readwrite');
   tx.oncomplete = (Event e) {
     done.complete();
   }.toJS;
-  tx.objectStore(storeName).put(Uint8List.fromList(value).toJS, key.toJS);
+  tx.objectStore(storeName).put(value, key.toJS);
   return done.future;
 }
 
@@ -171,9 +177,10 @@ void main() {
               'naming the error');
     }, timeout: const Timeout(Duration(seconds: 5)));
 
-    test(
-        'a transaction aborted with an error names that error, not the '
-        'AbortError of a request it cancelled', () async {
+    /// A store whose credentials index refuses credential [7] for any atSign
+    /// but @bob, whose transactions stop request error events at the
+    /// transaction: the first only, or every one when [all].
+    Future<IndexedDbHintStore> refusingCredential7({required bool all}) async {
       final raw = await _rawOpen(currentDbName!, 3, upgrade: (db) {
         db.createObjectStore('at_client_wasm_credentials').createIndex(
             'one_atsign_per_credential',
@@ -192,10 +199,16 @@ void main() {
               tx.addEventListener(
                   'error',
                   ((Event e) => e.stopPropagation()).toJS,
-                  AddEventListenerOptions(capture: true, once: true));
+                  AddEventListenerOptions(capture: true, once: !all));
               return tx;
             }).toJS);
-      final store = IndexedDbHintStore.forDatabase(quiet as IDBDatabase);
+      return IndexedDbHintStore.forDatabase(quiet as IDBDatabase);
+    }
+
+    test(
+        'a transaction aborted with an error names that error, not the '
+        'AbortError of a request it cancelled', () async {
+      final store = await refusingCredential7(all: false);
 
       await expectLater(
           store.putHint('@alice', Uint8List.fromList([7]), 'eid-1'),
@@ -203,6 +216,20 @@ void main() {
               (e) => e.message, 'message', contains('ConstraintError'))),
           reason: "the transaction's own error is named, not the AbortError "
               'of the put it cancelled');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test(
+        'a transaction aborted with an error no request event reported, as '
+        'at commit, names that error', () async {
+      // Only the abort event, carrying the transaction's error, reaches the
+      // store.
+      final store = await refusingCredential7(all: true);
+
+      await expectLater(
+          store.putHint('@alice', Uint8List.fromList([7]), 'eid-1'),
+          throwsA(isA<IndexedDbException>().having((e) => e.message, 'message',
+              allOf(contains('aborted'), contains('ConstraintError')))),
+          reason: "the abort names the transaction's error");
     }, timeout: const Timeout(Duration(seconds: 5)));
 
     test('an open the browser refuses outright fails naming the error',
@@ -387,6 +414,20 @@ void main() {
         });
         await _rawPut(
             raw, 'at_client_wasm_pending', '@alice', utf8.encode('nope'));
+        raw.close();
+
+        await expectLater((await open()).get('@alice'),
+            throwsA(isA<UnsupportedPasskeyRecordException>()));
+      });
+
+      test('that are not bytes fail typed on read', () async {
+        final raw = await _rawOpen(currentDbName!, 3, upgrade: (db) {
+          db.createObjectStore('at_client_wasm_credentials');
+          db.createObjectStore('at_client_wasm_enrollments');
+          db.createObjectStore('at_client_wasm_pending');
+        });
+        await _rawPutValue(
+            raw, 'at_client_wasm_pending', '@alice', 'nope'.toJS);
         raw.close();
 
         await expectLater((await open()).get('@alice'),
