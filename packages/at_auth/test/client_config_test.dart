@@ -314,6 +314,31 @@ void main() {
         });
 
         test(
+            'a separator in a key, or in a string nested in a Map or List, '
+            'still gives a from: that matches the from: syntax', () async {
+          final given = {
+            'a b': 'x',
+            'meta': {
+              'note': 'a b ${'x' * 80}',
+              'c d': ['e f', 4],
+            },
+          };
+          final recorder = FromRecorder();
+          await build(given)(recorder);
+
+          expect(RegExp(VerbSyntax.from).hasMatch(recorder.from!.trim()),
+              isTrue,
+              reason: 'the atServer parses from: with this syntax, whose `.` '
+                  'matches neither separator, and JSON leaves both raw');
+          final config = await sentBy(build(given));
+          expect(config['a b'], 'x');
+          expect(config['meta'], {
+            'note': 'a b ${'x' * 60}',
+            'c d': ['e f', 4],
+          });
+        });
+
+        test(
             'one of the four that is not a string is sent as its text, made '
             'sendable', () async {
           final config = await sentBy(build({
