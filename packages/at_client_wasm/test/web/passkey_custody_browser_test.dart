@@ -377,6 +377,54 @@ Future<Map<String, Map<String, Uint8List>>> _dump(String dbName) async {
   }
 }
 
+/// Completes when [tx] commits, and fails when it aborts.
+Future<void> _committed(IDBTransaction tx) {
+  final done = Completer<void>();
+  tx.oncomplete = (Event _) {
+    done.complete();
+  }.toJS;
+  tx.onabort = (Event _) {
+    if (!done.isCompleted) done.completeError(StateError('aborted'));
+  }.toJS;
+  return done.future;
+}
+
+/// Creates database [dbName] with the passkey hint stores, a unique index over
+/// the credentials store's values, and [holder] holding the credential id the
+/// test authenticator registers, so writing that id for another atSign fails
+/// with a `ConstraintError`.
+Future<void> _seedCredentialHeldBy(String dbName, String holder) async {
+  final request = window.indexedDB.open(dbName);
+  request.onupgradeneeded = (Event _) {
+    final db = request.result as IDBDatabase;
+    db.createObjectStore('at_client_wasm_credentials').createIndex(
+        'one_atsign_per_credential', ''.toJS, IDBIndexParameters(unique: true));
+    db.createObjectStore('at_client_wasm_enrollments');
+  }.toJS;
+  final db = await _settled(request) as IDBDatabase;
+  try {
+    final tx = db.transaction('at_client_wasm_credentials'.toJS, 'readwrite');
+    tx
+        .objectStore('at_client_wasm_credentials')
+        .put(Uint8List.fromList([7]).toJS, holder.toJS);
+    await _committed(tx);
+  } finally {
+    db.close();
+  }
+}
+
+/// Deletes [atSign]'s credential id from database [dbName].
+Future<void> _deleteCredential(String dbName, String atSign) async {
+  final db = await _settled(window.indexedDB.open(dbName)) as IDBDatabase;
+  try {
+    final tx = db.transaction('at_client_wasm_credentials'.toJS, 'readwrite');
+    tx.objectStore('at_client_wasm_credentials').delete(atSign.toJS);
+    await _committed(tx);
+  } finally {
+    db.close();
+  }
+}
+
 Future<List<String>> _databases(String prefix) async {
   final all = (await window.indexedDB.databases().toDart).toDart;
   return [
@@ -470,6 +518,46 @@ void main() {
     final loggedIn = await device.open();
     expect(loggedIn.enrollmentId, onboarded);
     expect(server.enrollments, 1, reason: 'login enrolls nothing');
+    await _expectOnlyHint(device, onboarded);
+  });
+
+  test(
+      'A failed IndexedDB write of the passkey hints during onboarding reaches '
+      'the app as an IndexedDbException, and a login then logs in', () async {
+    await _seedCredentialHeldBy(device.dbName, '@bob');
+    final custody = await device.custody();
+
+    Object? thrown;
+    try {
+      await custody.onboard(atSign: _atSign, cram: _cram);
+    } catch (e) {
+      thrown = e;
+    }
+    device.store.close();
+
+    expect(thrown, isA<IndexedDbException>());
+    final message = (thrown as IndexedDbException).message;
+    expect(message, contains('ConstraintError'),
+        reason: "the exception names the browser's error");
+    final onboarded = device.gateway.lastSession!.enrollmentId;
+    expect(message, isNot(contains(onboarded)),
+        reason: 'the exception never carries the enrollment id being written');
+    expect(message, isNot(contains(_atSign)),
+        reason: 'the exception never carries the atSign');
+    expect(server.cramLive, isFalse,
+        reason: 'the hint write fails after the CRAM secret is deleted');
+    expect(device.gateway.lastSession!.closed, isTrue);
+    final dump = await _dump(device.dbName);
+    expect(dump['at_client_wasm_credentials'], {
+      '@bob': [7]
+    });
+    expect(dump['at_client_wasm_enrollments'], isEmpty,
+        reason: 'the failed write stored neither id');
+
+    await _deleteCredential(device.dbName, '@bob');
+    final loggedIn = await device.open();
+    expect(loggedIn.enrollmentId, onboarded);
+    expect(server.enrollments, 1, reason: 'the login enrolls nothing');
     await _expectOnlyHint(device, onboarded);
   });
 
