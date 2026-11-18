@@ -20,9 +20,10 @@ import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
 import 'pending_keys_journal.dart';
 
-/// Asks the browser not to evict this origin's storage.
+/// Asks the platform to keep this application's stored data rather than
+/// evict it.
 abstract class StoragePersistence {
-  /// Whether the browser granted persistence.
+  /// Whether the platform granted persistence.
   Future<bool> requestPersist();
 }
 
@@ -489,9 +490,10 @@ class PasskeyCustody {
   /// and persists its @keys through an [AtServerAtKeysIo] sealed with it; the
   /// seed is zeroed by then, and the sealer closes when the client stops.
   ///
-  /// When activation fails before any record is sealed, the new passkey is
-  /// reported to the platform as unknown where the platform supports that, so
-  /// it can drop the passkey.
+  /// When the assertion after registering the new passkey fails or yields no
+  /// usable PRF output, or activation fails before any record is sealed, the
+  /// new passkey is reported to the platform as unknown where the platform
+  /// supports that, so it can drop the passkey.
   ///
   /// When the client fails to open after the document, pointer and hints are
   /// written, the session and the vault are closed and that error propagates
