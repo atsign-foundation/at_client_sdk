@@ -14,7 +14,8 @@ class Wire {
   final finders = <SecondaryAddressFinder?>[];
   final lookUpsBuilt = <WireLookUp>[];
 
-  /// What PKAM answers; false is a refusal.
+  /// Whether the authenticator succeeds. False is an authenticator reporting
+  /// failure, which PKAM raises as at_lookup does.
   var pkamAccepted = true;
 
   /// Whether PKAM runs the authenticator the lookUp was built with, as a real
@@ -31,8 +32,9 @@ class Wire {
   /// What a `lookup:` or `llookup:` command answers; null answers nothing.
   String? lookupAnswer;
 
-  /// One entry per PKAM, taken in order: that PKAM waits for it, then answers
-  /// its value. Once empty, PKAM answers [pkamAccepted] at once.
+  /// One entry per PKAM, taken in order: that PKAM waits for it, then goes by
+  /// its value as by [pkamAccepted]. Once empty, PKAM goes by [pkamAccepted]
+  /// at once.
   final pkamScript = Queue<Completer<bool>>();
 
   /// Whether the connection itself fails: PKAM throws instead of answering.
@@ -59,16 +61,17 @@ class Wire {
         dials++;
         onDial?.call(dials);
         finders.add(secondaryAddressFinder);
-        return WireLookUp(this)
+        return WireLookUp(this, atSign)
           ..authenticator = authenticator
           ..also(lookUpsBuilt.add);
       };
 }
 
 class WireLookUp implements AtLookupMuxable {
-  WireLookUp(this._wire);
+  WireLookUp(this._wire, this._atSign);
 
   final Wire _wire;
+  final String _atSign;
 
   @override
   AtAuthenticator? authenticator;
@@ -86,10 +89,20 @@ class WireLookUp implements AtLookupMuxable {
   @override
   Stream<bool> get notificationConnectionUp => const Stream.empty();
 
+  /// Returns true or throws, as at_lookup's PKAM does: an authenticator
+  /// that reports failure is an [UnAuthenticatedException].
   @override
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
     if (_wire.connectFails) throw StateError('connection refused');
+    if (!await _authenticatorSucceeds()) {
+      throw UnAuthenticatedException('Failed connecting to $_atSign.'
+          ' The authenticator reported failure');
+    }
+    return true;
+  }
+
+  Future<bool> _authenticatorSucceeds() async {
     final run = authenticator;
     if (_wire.runsAuthenticator && run != null) {
       return run(_WireExecutor(_wire));

@@ -145,7 +145,9 @@ void main() {
   group('activation key retention', () {
     test('a PKAM refusal after activation carries the activated keys',
         () async {
-      wire.pkamAccepted = false;
+      wire.pkamThrows = UnAuthenticatedException(
+          'Failed connecting to $_atSign. error:AT0401-Client authentication '
+          'failed');
 
       await expectLater(
           activate(),

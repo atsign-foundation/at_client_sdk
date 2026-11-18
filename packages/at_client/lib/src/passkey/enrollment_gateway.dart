@@ -168,10 +168,7 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
       lookUp.authenticator = authenticatorFor(
           handshakeKeysIo(atSign, signingKeys), atSign,
           enrollmentId: enrollmentId);
-      if (!await lookUp.pkamAuthenticate()) {
-        throw UnAuthenticatedException('Failed connecting to $atSign. The '
-            'authenticator reported failure');
-      }
+      await lookUp.pkamAuthenticate();
     } on UnAuthenticatedException catch (e) {
       await _closeQuietly(lookUp);
       if (_isPkamRefusal(e, enrollmentId)) {
