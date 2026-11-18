@@ -19,8 +19,7 @@
   raised, whose `errorCode` is the atServer's code, and the connection state
   takes a refusal's cause from that code, never from the text of an
   exception's message. An authenticator of your own reports a code by
-  throwing that exception; a plain `UnAuthenticatedException` is refused as
-  `unauthenticated`. `AtAuthErrorReplyException` is exported.
+  throwing that exception. `AtAuthErrorReplyException` is exported.
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file
