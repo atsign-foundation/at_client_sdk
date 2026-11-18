@@ -44,7 +44,7 @@ Feature: A refused PKAM is read by the client's one classifier
       | AT0028  | the enrollment has expired, or the atServer no longer holds it |
       | AT0028  | the enrollment has expired, though the reply does not name it  |
       | AT0029  | the enrollment has expired, or the atServer no longer holds it |
-      | no code | the reply is blank                                             |
+      | no code | the reply is a bare prompt                                     |
       | no code | the reply carries no error:                                    |
 
   Scenario Outline: A refusal reads the same in every form the atServer writes it in
@@ -75,6 +75,13 @@ Feature: A refused PKAM is read by the client's one classifier
     And the atServer answers the from: on the passkey enrollment's PKAM connection with error:AT0401
     When the app logs in to @alice🛠
     Then that failure propagates as it is, the passkey is asked for once, and the device's passkey hints are kept
+
+  @race
+  Scenario: A PKAM attempt the connection makes again starts afresh, so a failure at its from: is not a refusal
+    Given the passkey enrollment's first PKAM attempt sent its pkam:, and the connection was lost before the reply
+    And the atServer answers the from: of the attempt the connection makes again with error:AT0401
+    When the app logs in to @alice🛠 on a device that remembers nothing for it
+    Then that failure propagates as it is
 
   Scenario Outline: A PKAM failure that is not a refusal propagates as it is
     Given the atServer <failure> for the passkey enrollment's PKAM

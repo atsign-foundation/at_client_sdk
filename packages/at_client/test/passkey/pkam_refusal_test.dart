@@ -213,7 +213,7 @@ void main() {
       'the enrollment has expired, or the atServer no longer holds it',
       () => _refusing('error:AT0029:enrollment_id: $_eid is expired or invalid')
     ),
-    ('no code', 'the reply is blank', () => _refusing('')),
+    ('no code', 'the reply is a bare prompt', () => _refusing('')),
     ('no code', 'the reply carries no error:', () => _refusing('data:failure')),
   ]) {
     test('$outline1 ($code, $reason)', () async {

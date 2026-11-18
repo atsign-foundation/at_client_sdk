@@ -122,8 +122,8 @@ sequenceDiagram
     end
     S-->>B: pointer → unseal enrollmentId with kek
     B->>S: PKAM auth as enrollmentId (APKAM key derived from P, K-12)
-    alt PKAM refused (AT0027 or AT0028)
-        S-->>B: this passkey's enrollment is revoked, or revoked and then deleted
+    alt PKAM refused (a refusal as the error table in section 7 reads it)
+        S-->>B: this passkey's enrollment no longer serves, or the derived key is not its key
         B->>U: pick another passkey or type another atSign
     end
     B->>S: llookup atkeys.eid.a.__e → open with kek
