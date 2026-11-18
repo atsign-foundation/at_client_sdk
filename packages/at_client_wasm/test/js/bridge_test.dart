@@ -356,7 +356,7 @@ void main() {
       }
     });
 
-    test('rejects with unsupported outside a secure context', () async {
+    test('create rejects with unsupported outside a secure context', () async {
       secure = false;
 
       expect((await _rejected(_call(api, 'create', [_obj(opts())]))).code,
@@ -634,7 +634,7 @@ void main() {
     });
 
     group('subscribe errors', () {
-      test('go to onError as {code, message}', () async {
+      test('subscribe errors go to onError as {code, message}', () async {
         final seen = <Object?>[];
         _call(s, 'subscribe', [
           'x'.toJS,
@@ -649,7 +649,7 @@ void main() {
         ]);
       });
 
-      test('with no onError do not throw', () {
+      test('subscribe with no onError does not throw', () {
         _call(s, 'subscribe', ['x'.toJS, (() {}).toJS]);
 
         session.errorSink!(StateError('x'));
@@ -705,7 +705,7 @@ void main() {
         ])))! as JSObject;
       });
 
-      test('passes name, type, eventSource and expiration', () {
+      test('collection passes name, type, eventSource and expiration', () {
         expect(session.collectionArgs.single, ('tasks', 'task', 'both', 5000));
         for (final op in [
           'create',
@@ -721,7 +721,7 @@ void main() {
         }
       });
 
-      test('eventSource and expiration are optional', () async {
+      test('collection eventSource and expiration are optional', () async {
         await _resolved(_call(s, 'collection', [
           'c'.toJS,
           _obj({'type': 't'})
@@ -730,8 +730,7 @@ void main() {
         expect(session.collectionArgs.last, ('c', 't', null, null));
       });
 
-      test('create maps data, id and sharedWith; the item is plain JS',
-          () async {
+      test('collection create maps data, id and sharedWith', () async {
         final item = (await _resolved(_call(c, 'create', [
           _obj({
             'title': 'a',
@@ -758,7 +757,7 @@ void main() {
         expect((item['data']! as JSObject)['n'].dartify(), 1);
       });
 
-      test('item data is a null-prototype object (T6.3)', () async {
+      test('collection item data is a null-prototype object', () async {
         adapter.item = {
           ...adapter.item,
           'data': <String, Object?>{
@@ -794,7 +793,8 @@ void main() {
         expect(data.keys, containsAll(['__proto__', 'a']));
       });
 
-      test('get defaults the owner to the session and resolves null', () async {
+      test('collection get defaults the owner to the session and resolves null',
+          () async {
         await _resolved(_call(c, 'get', [
           _obj({'id': 'i1'})
         ]));
@@ -805,7 +805,7 @@ void main() {
         expect(adapter.last, ('i1', '@bob'));
       });
 
-      test('list and query return {items, unreadable}', () async {
+      test('collection list and query return {items, unreadable}', () async {
         adapter.listing = (
           items: [adapter.item],
           unreadable: [
@@ -835,7 +835,7 @@ void main() {
         expect(adapter.last, [('a.b', '>=', 3), ('c', 'isNull', null)]);
       });
 
-      test('update, share and remove map their arguments', () async {
+      test('collection update, share and remove map their arguments', () async {
         await _resolved(_call(c, 'update', [
           _obj({'id': 'i1'}),
           _obj({'a': 1})
@@ -861,8 +861,7 @@ void main() {
         expect(adapter.last, ('i1', '@alice', false));
       });
 
-      test('a collection failure rejects with its code and fields (T6.4)',
-          () async {
+      test('a collection failure rejects with its code and fields', () async {
         adapter.failure = JsCollectionsError(
             CollectionErrorCodes.partialFailure, 'some writes failed',
             id: 'i1',
@@ -900,7 +899,7 @@ void main() {
         }
       });
 
-      test('bad arguments reject naming the parameter', () async {
+      test('collection bad arguments reject naming the parameter', () async {
         for (final (promise, name) in [
           (_call(c, 'get', ['i1'.toJS]), 'address'),
           (_call(c, 'create', [5.toJS]), 'data'),
@@ -920,7 +919,7 @@ void main() {
       });
 
       test(
-          'watch delivers events, including unknown, and unsubscribes (T6.5, T6.8)',
+          'collection watch delivers events, including unknown, and unsubscribes',
           () async {
         final events = <Object?>[];
         final errors = <Object?>[];
@@ -945,7 +944,7 @@ void main() {
         expect(adapter.cancelled, 1);
       });
 
-      test('watch needs a function and never throws', () {
+      test('collection watch needs a function and never throws', () {
         final r = _call(c, 'watch', [5.toJS])! as JSObject;
 
         expect(r['code'].dartify(), 'internal');

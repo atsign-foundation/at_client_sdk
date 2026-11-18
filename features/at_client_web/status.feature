@@ -10,3 +10,13 @@ Feature: The connection status is readable and observable
     When the state changes twice and the listener is switched off
     Then the listener saw both states in order
     And the bridge listener was removed once
+
+  Scenario: status() reads the latest value
+    Given an open session
+    When the state changes
+    Then status returns the new state
+
+  Scenario: onStatus after close answers {code: closed}
+    Given a closed session
+    When onStatus is called
+    Then it answers a rejection object with code closed

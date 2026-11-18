@@ -51,3 +51,14 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     When notifications arrive whose sender and key owner differ only in case, spacing or a missing @
     Then they are delivered with from as the canonical atSign
     And a notification with no key owner is not delivered
+
+  Scenario: subscribe errors go to onError as {code, message}
+    Given a subscription with an onError function
+    When the stream reports an error
+    Then onError receives {code: internal, message: 'internal error'}
+    And the subscription survives
+
+  Scenario: subscribe with no onError does not throw
+    Given a subscription with no onError
+    When the stream reports an error
+    Then nothing is thrown
