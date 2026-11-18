@@ -1083,7 +1083,7 @@ as `writeTypeTag`. It is exported from no library under `lib/`.
 
 ### D-28 — Concurrent writers are expected; each @keys write refuses a loss and stops (2026-11-16)
 
-**Proposed.** Not yet ruled; gkc to rule. A write that would drop stored material is refused, and the stored document is re-read before each write.
+**Accepted, amended.** Accepted by: gkc, 2026-11-17: every write of the @keys document holds the enrollment's lock, a `ServerMutex` immutable record with a short ttl, from before it reads the document until it puts; a writer that finds it held waits and re-reads, and refuse-and-stop stays as the backstop. Its row is in [`docs/architecture/decisions.md`](../../architecture/decisions.md). The text below is the proposal as it was filed.
 
 Concurrent writers are the expected case: synced devices share one enrollment, and two tabs can write at once. The behaviour stays refuse-and-stop. Each write of the @keys document re-reads the stored document, refuses any change that would drop stored material, and is read back; a mismatch fails loudly without overwriting, and after a refusal the key store accepts no more writes. Writes from one client run one at a time, so its own overlapping updates each keep the other's change. Material another session writes to the same enrollment is seen on the next update or reopen. Simultaneous writes from two sessions stay refuse-and-stop: neither is merged or retried. This narrows the lost-update window but does not close it; server CAS is required before V2.
 
@@ -1099,7 +1099,7 @@ The browser seals the @keys document with a WebCrypto key created `extractable: 
 
 ### D-30 — A client closes its key store through `ClosableAtKeysIo` (2026-11-16)
 
-**Proposed.** Not yet ruled; gkc to rule. Would amend invariant A17; until it is accepted, A17 keeps its trunk text and a key store handed to a client through `ClosableAtKeysIo` sits outside it.
+**Rejected, replaced.** Ruled by: gkc, 2026-11-17: the client closes no key store; `PasskeySession` owns the passkey's vault and its key store and closes both once the client stops, and `ClosableAtKeysIo` is removed. A17 is unchanged. Its row is in [`docs/architecture/decisions.md`](../../architecture/decisions.md). The text below is the proposal as it was filed.
 
 A key store hands its lifetime to the client by implementing `ClosableAtKeysIo` (`closedByClient` and `close()`), a separate interface that `AtKeysIo` does not carry, so a plain `AtKeysIo` implementation has no lifetime members. `AtClientImpl.stop()` closes a key store only when it is a `ClosableAtKeysIo` and `closedByClient` is true, after its connections, as a teardown step; a closing key store closes the vault. The passkey client's own `AtServerAtKeysIo` is the only flagged instance; the temporaries used to write and read back stay borrowed. Closing the vault zeroes the auth seed and closes the sealer. The seed is zeroed as soon as PKAM succeeds (an unfinished pending onboarding keeps it until its session opens), and `stop()` zeroes what it can. The key store holds the passkey-derived APKAM pair for the session, the private half as bytes zeroed when the store closes, and serves reads from memory with the pair filed; the stored @keys document never holds the APKAM private key or the enrollment's own public authentication key, and a write carrying other private authentication material is refused. The copy the authenticator holds is a Dart `String` and cannot be zeroed, nor can the @keys private keys. The in-memory APKAM key also exists as immutable `String` copies while it is encoded for a read, which cannot be wiped either. A write running when `stop()` closes the store finishes whole; one queued behind it is refused without an atServer call.
 
@@ -1113,7 +1113,7 @@ A key store may read a sealed @keys document through a document store the sessio
 
 ### D-32 — IndexedDB also holds one pending record per atSign until onboarding finishes (2026-11-17)
 
-**Proposed.** Not yet ruled; gkc to rule. Would amend K-14 and X-K19; until it is accepted, both keep their text and the pending record sits outside them.
+**Rejected, replaced.** Ruled by: gkc, 2026-11-18: onboarding writes the @keys document and pointer before it deletes the CRAM secret, and the browser keeps no pending record; K-14 stands. Its row is in [`docs/architecture/decisions.md`](../../architecture/decisions.md). The text below is the proposal as it was filed.
 
 Per atSign, the browser keeps the hint plus at most one sealed pending onboarding record: a plaintext header (`credentialId`, `enrollmentId`, `encryptionPublicKey`) and the @keys without the APKAM private key, sealed by the passkey. The record is deleted when onboarding completes (the @keys document, pointer and hints are written and the client has opened), when it is dropped, or on discard (`discardPendingOnboarding`); a failed open keeps it and the retry resumes it with no new passkey or CRAM.
 

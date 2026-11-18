@@ -468,4 +468,4 @@ atSign-wide encryption keys.
 | Does Chrome support the PRF extension with Google Password Manager passkeys, and give the same output across sessions? | A localhost page in Chrome that creates a passkey with PRF and derives twice              |
 | Does a non-extractable WebCrypto key survive reload, restart and storage pressure in Chrome and Safari?                | The WASM plan's X-K2 to X-K4                                                              |
 | Does a `public:_` record's name reach the owner's other clients through sync, or the commit log?                       | Answered: no. `public:_` gets no commit-log row; `public:__` does, and syncs               |
-| Can the atServer update a record conditionally?                                                                        | Not today; a prerequisite for the server-backed store ([section 8](#8-the-browser))        |
+| Can the atServer update a record conditionally?                                                                        | Not today; the server-backed store holds the enrollment's lock instead ([section 8](#8-the-browser)) |
