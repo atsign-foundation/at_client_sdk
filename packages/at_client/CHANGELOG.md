@@ -11,8 +11,9 @@
 - feat: a PKAM the atServer refuses with AT0028 reports the connection
   refused with cause `invalidEnrollment`, as AT0029 does, and
   `PendingEnrollment` removes an expired request's pending keys on either
-  code. AT0028 in reply to any other verb still leaves the connection
-  online. `AtEnrollmentExpiredException` is exported.
+  code. AT0028 in reply to any verb but a PKAM and its `from:` still
+  leaves the connection online. `AtEnrollmentExpiredException` is
+  exported.
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file
