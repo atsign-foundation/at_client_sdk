@@ -51,6 +51,7 @@ void main() {
     final unreadable = {
       'a message with no error: in it': 'data:refused',
       'a code followed by a digit': 'error:AT00271-x',
+      'a code followed by a space': 'error:AT0027 enrollment revoked',
       'a JSON body that is not an object': 'error:["AT0027"]',
       'a JSON code that is a number': 'error:{"errorCode":27}',
       'a JSON code that is a list': 'error:{"errorCode":["AT0027"]}',
