@@ -105,21 +105,30 @@ void main() {
           polled.length < script.length ? script[polled.length] : Poll.approved;
       polled.add(outcome);
       switch (outcome) {
+        // What the authenticator throws for the atServer's PKAM replies:
+        // callers match on the code and show the atServer's text.
         case Poll.pending:
-          throw UnAuthenticatedException('error:AT0401-enrollment is pending');
+          throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0401-enrollment is '
+              'pending',
+              errorCode: 'AT0401');
         case Poll.unreachable:
           throw AtLookUpException('AT0021', 'the atServer is unreachable');
         case Poll.refused:
-          throw UnAuthenticatedException(
-              'error:AT0027:enrollment_id: 123 is revoked');
-        // These two are the atServer's PKAM replies verbatim, as at_lookup
-        // wraps them: callers match on the code and show the atServer's text.
+          throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0027:enrollment_id: 123 '
+              'is revoked',
+              errorCode: 'AT0027');
         case Poll.denied:
-          throw UnAuthenticatedException(
-              'Failed connecting to $atSign. error:AT0025:enrollment_id: 123 is denied');
+          throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0025:enrollment_id: 123 '
+              'is denied',
+              errorCode: 'AT0025');
         case Poll.expired:
-          throw UnAuthenticatedException(
-              'Failed connecting to $atSign. error:AT0028:enrollment_id: 123 is expired or invalid');
+          throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0028:enrollment_id: 123 '
+              'is expired or invalid',
+              errorCode: 'AT0028');
         case Poll.approved:
           return true;
         case Poll.stopped:

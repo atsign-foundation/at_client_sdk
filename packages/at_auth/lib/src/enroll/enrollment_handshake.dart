@@ -305,7 +305,7 @@ class EnrollmentHandshake {
         // enrollment, so this costs nothing against the budget.
         // Error codes AT0401 and AT0026 indicate authentication failure due to unapproved enrollment. Retry until the enrollment is approved.
         // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
-        final code = atServerErrorCodeIn(e.message);
+        final code = e is AtAuthErrorReplyException ? e.errorCode : null;
         if (code == 'AT0401' || code == 'AT0026') {
           consecutiveUnresolvableRefusals = 0;
           _logger.info('Pkam auth failed: ${e.message}');
