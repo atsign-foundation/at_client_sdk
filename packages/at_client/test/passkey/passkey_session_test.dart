@@ -240,6 +240,40 @@ void main() {
   });
 
   test(
+      'A @keys write queued while the session waits for an earlier write '
+      'ends before the store closes', () async {
+    final first = Completer<void>();
+    rig.docs.hold = first;
+    final session = PasskeySession(rig.client, rig.store, rig.vault);
+    final running = rig.update();
+    await pumpEventQueue();
+    var stopped = false;
+    final stopping = session.stop().whenComplete(() => stopped = true);
+    await pumpEventQueue();
+    expect(rig.client.stops, 1);
+
+    final second = Completer<void>();
+    rig.docs.hold = second;
+    final queued = rig.update();
+    first.complete();
+    await running;
+    await pumpEventQueue();
+
+    expect(rig.store.closes, 0,
+        reason: 'the store closed while a write queued during the wait for '
+            'an earlier write was still running');
+    expect(stopped, isFalse,
+        reason: 'the session stopped while a write queued during the wait '
+            'for an earlier write was still running');
+    expect(await rig.vaultOpen(), isTrue);
+    second.complete();
+    await expectLater(queued, completes);
+    await stopping;
+    expect(rig.store.closes, 1);
+    await rig.expectVaultClosed();
+  });
+
+  test(
       'Stopping the session closes the vault even when stopping the client '
       'fails', () async {
     final error = StateError('stop failed');
