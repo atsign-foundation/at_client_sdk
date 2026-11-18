@@ -32,11 +32,11 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 ///
 /// Registers a passkey (a random WebAuthn `user.id`; [atSign] only in the
 /// user name), derives the atSign's APKAM key, record key and pointer name
-/// from its PRF output, activates the atSign with [cram], writes the sealed
-/// @keys document and a public pointer on the atServer, revokes every other
-/// approved enrollment, and only then publishes the encryption public key and
-/// deletes the CRAM secret. The whole flow holds the atSign's setup lock, so a
-/// second tab waits.
+/// from its PRF output, activates the atSign with [cram], and writes the
+/// sealed @keys document and a public pointer on the atServer. Then it
+/// deletes the CRAM secret, then revokes every other approved enrollment,
+/// then publishes the encryption public key. The whole flow holds the
+/// atSign's setup lock, so a second tab waits.
 ///
 /// [rpId] and [rpName] name the relying party; [app] is the client's
 /// namespace and [device] the enrollment's device name. [transport] says how
@@ -47,12 +47,13 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 /// every other approved enrollment of the atSign, the failed run's included;
 /// the passkey that failed is reported to the browser as unknown when the
 /// failure came before the activation was being completed. Once the CRAM
-/// secret is deleted the atSign is onboarded: when writing the passkey hints
-/// or opening the client fails after that, [passkeyLogin] logs in with the
-/// passkey, and saves the hints when the onboarding could not. [passkeyLogin]
-/// also finishes an onboarding that stopped after writing the document and
-/// pointer but before deleting the CRAM secret. Nothing is kept in this
-/// browser until the CRAM secret is deleted.
+/// secret is deleted the atSign is onboarded: when revoking, publishing,
+/// writing the passkey hints or opening the client fails after that,
+/// [passkeyLogin] logs in with the passkey, and saves the hints when the
+/// onboarding could not. [passkeyLogin] also finishes an onboarding that
+/// stopped after writing the document and pointer but before publishing the
+/// encryption public key. Nothing is kept in this browser until the CRAM
+/// secret is deleted.
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
@@ -92,8 +93,10 @@ Future<PasskeySession> onboardNewAtSign(
 /// the restored public keys are not the published ones,
 /// [MissingAtKeysDocumentException] when the enrollment has no document,
 /// [SetupLockTimeoutException] when another tab holds the setup lock too long,
-/// and [IndexedDbException] when a failure of this browser's IndexedDB stops
-/// the login.
+/// [IndexedDbException] when a failure of this browser's IndexedDB stops
+/// the login, and what finishing an unfinished onboarding throws, such as the
+/// `AtEnrollmentException` of a revoke that leaves another approved
+/// enrollment; the next login tries again.
 ///
 /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException` means
 /// the prompt failed, and the user may simply have cancelled it: WebAuthn

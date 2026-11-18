@@ -43,8 +43,9 @@ class FakeServer implements EnrollmentPointerReader {
   final log = <String>[];
 
   /// Every step of an onboarding in the order it happened: the server's
-  /// writes (as in [log]), the activation, its completion and the client
-  /// opening.
+  /// writes (as in [log]), the activation, each completion with the key it
+  /// published and the CRAM secret's deletion, each revoke request with the
+  /// enrollments it revoked, and the client opening.
   final timeline = <String>[];
 
   /// The atSigns whose CRAM secret is deleted; an activation of one of them
@@ -134,15 +135,20 @@ class FakeSession implements EnrollmentSession {
   /// Makes [completeActivation] throw this before it publishes anything.
   Object? completeError;
 
-  /// Makes [completeActivation] throw this once it has published the
-  /// encryption public key, before it deletes the CRAM secret.
+  /// Makes a [completeActivation] that publishes an encryption public key
+  /// throw this once it has published it, before it deletes the CRAM secret.
   Object? completeErrorAfterPublish;
+
+  /// Makes [completeActivation] throw this once it has deleted the CRAM
+  /// secret, as a call whose reply is lost does.
+  Object? completeErrorAfterDelete;
 
   /// Makes [revokeOtherEnrollments] throw this before it revokes anything.
   Object? revokeError;
 
   @override
   Future<void> revokeOtherEnrollments() async {
+    server.timeline.add('revoke-others');
     if (revokeError case final e?) throw e;
     final others = [
       for (final MapEntry(key: eid, value: owner) in server.approved.entries)
@@ -162,10 +168,12 @@ class FakeSession implements EnrollmentSession {
     if (completeError case final e?) throw e;
     if (atKeys['aesEncryptPublicKey'] case final String key) {
       server.publishedKey = key;
+      server.timeline.add('publish:$key');
+      if (completeErrorAfterPublish case final e?) throw e;
     }
-    if (completeErrorAfterPublish case final e?) throw e;
     server.cramDeleted.add(atSign);
     server.timeline.add('cram-deleted');
+    if (completeErrorAfterDelete case final e?) throw e;
   }
 
   @override

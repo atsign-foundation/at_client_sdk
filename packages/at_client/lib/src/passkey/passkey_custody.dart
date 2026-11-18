@@ -268,14 +268,13 @@ class PasskeyCustody {
   }
 
   /// Onboards a fresh [atSign]: registers a passkey, activates the atSign
-  /// with [cram] and the APKAM key pair derived from the passkey, writes the
-  /// sealed @keys document and the pointer as the new enrollment, revokes
-  /// every other approved enrollment of the atSign, including any an
-  /// interrupted onboarding left, and only then completes the activation,
-  /// which publishes the encryption
-  /// public key and deletes the CRAM secret. It then remembers the passkey on
-  /// the device and returns the session of the client running as the new
-  /// enrollment.
+  /// with [cram] and the APKAM key pair derived from the passkey, and writes
+  /// the sealed @keys document and the pointer as the new enrollment. Then it
+  /// completes the activation: it deletes the CRAM secret, then revokes every
+  /// other approved enrollment of the atSign, including any an interrupted
+  /// onboarding left, then publishes the encryption public key. It then
+  /// remembers the passkey on the device and returns the session of the
+  /// client running as the new enrollment.
   ///
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
@@ -287,10 +286,11 @@ class PasskeyCustody {
   /// for the platform to take the report; a failure while completing it, or
   /// after, reports nothing. Once the CRAM secret is deleted the atSign is
   /// onboarded, and a failure after that leaves [open] to log in: without
-  /// saved hints it sends the completion again, which, with the encryption
-  /// public key already published, only deletes the CRAM secret that is
-  /// already gone, and then saves the hints. Nothing is kept on the device
-  /// until the CRAM secret is deleted.
+  /// saved hints it completes the activation, revoking the other enrollments
+  /// and publishing the encryption public key when none is published, and
+  /// otherwise only deleting the CRAM secret, which is already gone; it then
+  /// saves the hints. Nothing is kept on the device until the CRAM secret is
+  /// deleted.
   ///
   /// When the assertion after registering the new passkey fails or yields no
   /// usable PRF output, the new passkey is reported to the platform as
@@ -327,9 +327,9 @@ class PasskeyCustody {
     });
   }
 
-  /// Activates [canonical] with [cram], completion deferred, writes the new
-  /// enrollment's document and pointer, and revokes every other approved
-  /// enrollment. Everything it built is closed when it throws.
+  /// Activates [canonical] with [cram], completion deferred, and writes the
+  /// new enrollment's document and pointer. Everything it built is closed
+  /// when it throws.
   Future<_Written> _activateAndWrite(
       String canonical, String cram, PrfSecret secret) async {
     final vault = await _deriveAndWipe(secret, canonical);
@@ -347,7 +347,6 @@ class PasskeyCustody {
           PasskeyRecordType.eid, {'enrollmentId': activated.enrollmentId});
       await activated.pointers
           .put(canonical, vault.lookupHex, pointer, ns: vault.ns);
-      await activated.revokeOtherEnrollments();
       return (vault: vault, session: activated, store: keysIo, atKeys: atKeys);
     } on Object {
       store?.close();
@@ -357,14 +356,14 @@ class PasskeyCustody {
     }
   }
 
-  /// Completes the activation [written] holds, remembers the passkey
-  /// [credentialId] for [canonical] and opens the client. Everything is
-  /// closed when it throws.
+  /// Completes the activation [written] holds, as [_completeActivation]
+  /// does, remembers the passkey [credentialId] for [canonical] and opens the
+  /// client. Everything is closed when it throws.
   Future<PasskeySession> _complete(
       String canonical, Uint8List credentialId, _Written written) async {
     final (:vault, :session, :store, :atKeys) = written;
     try {
-      await session.completeActivation(atKeys);
+      await _completeActivation(session, atKeys);
       await _remember(canonical, credentialId, session.enrollmentId);
     } on Object {
       store.close();
@@ -378,6 +377,18 @@ class PasskeyCustody {
       vault.close();
       rethrow;
     }
+  }
+
+  /// Completes the activation [session]'s enrollment was created by: deletes
+  /// the atSign's CRAM secret, then revokes every other approved enrollment,
+  /// then publishes the encryption public key [atKeys] holds.
+  static Future<void> _completeActivation(
+      EnrollmentSession session, Map<String, dynamic> atKeys) async {
+    // NOTE: the CRAM secret is deleted before the revoke, so a published
+    // encryption public key means the revoke ran after it was gone.
+    await session.completeActivation(const {});
+    await session.revokeOtherEnrollments();
+    await session.completeActivation(atKeys);
   }
 
   /// Opens the client of [session] on [store], whose reads are served from
@@ -420,14 +431,14 @@ class PasskeyCustody {
   /// Once the document is read, an open without remembered ids, including
   /// the retry without them, finishes the activation an onboarding may have
   /// left unfinished, before it remembers anything or opens the client: when
-  /// the atServer publishes no encryption public key it revokes every
-  /// approved enrollment other than this one and publishes the document's,
-  /// and either way it deletes the atSign's CRAM secret. An open
-  /// that uses remembered ids sends neither, since a device remembers them
-  /// only once the activation is finished. On every open, a published key
-  /// other than the document's is refused before anything is sent. When
-  /// finishing the activation fails, the open fails,
-  /// and the next open finishes it.
+  /// the atServer publishes no encryption public key it deletes the atSign's
+  /// CRAM secret, then revokes every approved enrollment other than this
+  /// one, then publishes the document's key; when the document's key is
+  /// published it only deletes the CRAM secret. An open that uses remembered
+  /// ids sends none of these, since a device remembers them only once the
+  /// activation is finished. On every open, a published key other than the
+  /// document's is refused before anything is sent. When finishing the
+  /// activation fails, the open fails, and the next open finishes it.
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The vault is
@@ -498,8 +509,8 @@ class PasskeyCustody {
   /// ceremony that yields no credential, or a PKAM the atServer refuses, then
   /// throws [_StaleHints] so the caller can try again without them. Without
   /// hints either is a lost passkey. Only an open without hints finishes the
-  /// activation, revoking the other enrollments first when it publishes the
-  /// encryption key.
+  /// activation, and it revokes the other enrollments and publishes the
+  /// encryption key only when no encryption key is published.
   Future<PasskeySession> _attempt(String canonical, _Hints? hints) async {
     final PasskeyUnlock unlocked;
     try {
@@ -535,12 +546,12 @@ class PasskeyCustody {
       try {
         final unpublished = await _restore(canonical, store, session, pair);
         if (hints == null) {
-          // NOTE: onboarding publishes the encryption key only after it has
-          // revoked every other approved enrollment, so an unpublished key
-          // means that revoke may not have happened.
-          if (unpublished != null) await session.revokeOtherEnrollments();
-          await session.completeActivation(
-              {if (unpublished != null) _encryptPublicKey: unpublished});
+          if (unpublished == null) {
+            await session.completeActivation(const {});
+          } else {
+            await _completeActivation(
+                session, {_encryptPublicKey: unpublished});
+          }
         }
         await _remember(canonical, unlocked.credentialId, enrollmentId);
       } on Object {
