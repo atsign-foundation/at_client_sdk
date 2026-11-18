@@ -286,6 +286,9 @@ void main() {
       expect(server.cramDeleted, {_atSign});
       expect(gateway.lastSession!.closed, isTrue);
       expect(gateway.lastSession!.clients, isEmpty);
+      expect(authenticator.signalled, isEmpty,
+          reason: 'a failure after the activation is completed reports '
+              'nothing to the platform');
     });
   });
 
