@@ -331,6 +331,49 @@ void main() {
       }
     });
 
+    test('The retry revokes the enrollments interrupted attempts left approved',
+        () async {
+      server.documentPutFailures = 99;
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      expect(server.approved, {'eid1': _atSign});
+      server.documentPutFailures = 0;
+
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      final steps = server.timeline;
+      expect(steps, contains('revoke:eid1'));
+      expect(steps.indexOf('revoke:eid1'),
+          lessThan(steps.indexOf('cram-deleted')));
+      expect(server.approved, {'eid2': _atSign});
+    });
+
+    test('A passkey left by an interrupted onboarding is refused as lost',
+        () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      final first = authenticator.current;
+      gateway.onAuthenticate = null;
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      authenticator.current = first;
+
+      await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()));
+      expect(gateway.authenticated, ['eid1']);
+    });
+
+    test('a failed revoke ends the onboarding before the completion', () async {
+      gateway.onAuthenticate =
+          (session) => session.revokeError = StateError('revoke failed');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(server.cramDeleted, isEmpty);
+      expect(authenticator.signalled, hasLength(1));
+    });
+
     test(
         'The retry publishes its own encryption public key over an '
         'interrupted attempt\'s', () async {

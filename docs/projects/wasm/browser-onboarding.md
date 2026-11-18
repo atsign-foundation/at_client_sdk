@@ -223,7 +223,7 @@ An app that gets this error must:
 | Try again | Nothing changes; you are prompted for your passkey again. | The app calls `passkeyLogin` (or `onboardNewAtSign`) again. |
 | Reset | This starts a new enrollment. It needs a one-time passcode (OTP) and approval from another device, and the old enrollment is revoked. | The app runs the enrollment flow (3.1); an approver revokes the old enrollment (3.6). |
 
-An onboarding that fails before the CRAM secret is deleted leaves nothing in the browser, so its **Try again** calls `onboardNewAtSign` again with the same CRAM secret, which registers a new passkey. One that fails after the CRAM secret is deleted is finished by `passkeyLogin`.
+An onboarding that fails before the CRAM secret is deleted leaves nothing in the browser, so its **Try again** calls `onboardNewAtSign` again with the same CRAM secret, which registers a new passkey and revokes the enrollment the failed attempt left. One that fails after the CRAM secret is deleted is finished by `passkeyLogin`.
 
 ---
 
@@ -274,7 +274,7 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 
 | Item | Behaviour |
 |---|---|
-| `onboardNewAtSign` | Registers a passkey, activates the atSign with CRAM and the derived APKAM key, files the document, then the pointer, and only then publishes the encryption public key and deletes the CRAM secret. Returns a PKAM'd `AtClient`. Takes an optional `SessionTransportOptions` |
+| `onboardNewAtSign` | Registers a passkey, activates the atSign with CRAM and the derived APKAM key, files the document, then the pointer, revokes every other approved enrollment, and only then publishes the encryption public key and deletes the CRAM secret. Returns a PKAM'd `AtClient`. Takes an optional `SessionTransportOptions` |
 | `passkeyLogin` | `atSign` required: the passkey proves it, a wrong one finds no pointer. A known device goes straight to PKAM; any other asserts a discoverable passkey and reads the pointer. Takes an optional `SessionTransportOptions` |
 | `prfSupported` | Whether the browser reports passkey PRF. `onboardNewAtSign` checks it and refuses before any ceremony |
 | Setup lock | Web Lock per canonical atSign, held across the whole of onboarding. A second tab waits, up to two minutes, then gets `SetupLockTimeoutException`. Login takes the same lock only when no saved hints are present, and for the stale-hints retry; a login with saved hints takes none |
@@ -303,5 +303,5 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 | Root domain | The atDirectory is the production root unless `SessionTransportOptions` names another root or a proxy |
 | No PRF | Refused. v1 has no passphrase fallback (K-13 a is not built) |
 | Lost passkey | No recovery: the user enrolls afresh (K-13 b). A failed or cancelled prompt is not a lost passkey; the library deletes, revokes and clears nothing after one (3.8) |
-| Leftover passkey | When onboarding fails after the passkey is registered and before it starts completing the activation (a wrong CRAM secret, an activation the atServer refuses, a document or pointer it could not write), nothing on this device leads to the passkey. The client tells the browser through `PublicKeyCredential.signalUnknownCredential` where the browser has it; elsewhere, or when the browser ignores the signal, the passkey stays in the user's passkey manager until the user deletes it. It is harmless and unused. A passkey whose onboarding failed while completing the activation, or after, is never signalled |
+| Leftover passkey | When onboarding fails after the passkey is registered and before it starts completing the activation (a wrong CRAM secret, an activation the atServer refuses, a document or pointer it could not write), nothing on this device leads to the passkey. The client tells the browser through `PublicKeyCredential.signalUnknownCredential` where the browser has it; elsewhere, or when the browser ignores the signal, the passkey stays in the user's passkey manager until the user deletes it. Running the onboarding again revokes the enrollment it was activated for, so it then opens nothing. A passkey whose onboarding failed while completing the activation, or after, is never signalled |
 | Writers | Concurrent writers are expected (synced devices share one enrollment; two tabs can write at once). A write that would drop stored material is refused and the key store then accepts no more writes (D-28) |

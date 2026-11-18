@@ -23,18 +23,20 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 /// Registers a passkey (a random WebAuthn `user.id`; [atSign] only in the
 /// user name), derives the atSign's APKAM key, record key and pointer name
 /// from its PRF output, activates the atSign with [cram], writes the sealed
-/// @keys document and a public pointer on the atServer, and only then
-/// publishes the encryption public key and deletes the CRAM secret. The whole
-/// flow holds the atSign's setup lock, so a second tab waits.
+/// @keys document and a public pointer on the atServer, revokes every other
+/// approved enrollment, and only then publishes the encryption public key and
+/// deletes the CRAM secret. The whole flow holds the atSign's setup lock, so a
+/// second tab waits.
 ///
 /// [rpId] and [rpName] name the relying party; [app] is the client's
 /// namespace and [device] the enrollment's device name. [transport] says how
 /// connections reach atServers, by default directly.
 ///
 /// An onboarding that fails before the CRAM secret is deleted can be run
-/// again with the same [cram], which registers a new passkey; the passkey that
-/// failed is reported to the browser as unknown when the failure came before
-/// the activation was being completed. Once the CRAM secret is deleted,
+/// again with the same [cram], which registers a new passkey and revokes the
+/// enrollment the failed run left; the passkey that failed is reported to the
+/// browser as unknown when the failure came before the activation was being
+/// completed. Once the CRAM secret is deleted,
 /// [passkeyLogin] finishes the onboarding, including when the client failed
 /// to open. Nothing is kept in this browser until the CRAM secret is deleted.
 ///

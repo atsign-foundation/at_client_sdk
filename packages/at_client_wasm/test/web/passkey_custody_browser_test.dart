@@ -33,6 +33,7 @@ class _Server implements EnrollmentPointerReader {
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
   final apkamPublicKeys = <String, String>{};
+  final approved = <String>{};
   var pointerReads = 0;
   var enrollments = 0;
   var clientsOffline = false;
@@ -87,6 +88,11 @@ class _Session implements EnrollmentSession {
   @override
   Future<bool> publicKeysMatch(Map<String, dynamic> atKeys) async =>
       atKeys['aesEncryptPublicKey'] == server.publishedKey;
+
+  @override
+  Future<void> revokeOtherEnrollments() async {
+    server.approved.removeWhere((eid) => eid != enrollmentId);
+  }
 
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
@@ -172,7 +178,8 @@ class _Gateway implements EnrollmentGateway {
       required String enrollmentId,
       required ApkamKeyPair apkamKeyPair}) async {
     pairs.add(apkamKeyPair);
-    if (server.apkamPublicKeys[enrollmentId] != apkamKeyPair.publicKey) {
+    if (!server.approved.contains(enrollmentId) ||
+        server.apkamPublicKeys[enrollmentId] != apkamKeyPair.publicKey) {
       throw PkamRefusedException(enrollmentId);
     }
     return lastSession = _Session(server, enrollmentId);
@@ -188,6 +195,7 @@ class _Gateway implements EnrollmentGateway {
     activations++;
     final eid = 'eid${++server.enrollments}';
     server.apkamPublicKeys[eid] = apkamKeyPair.publicKey;
+    server.approved.add(eid);
     final died = dieAfterActivation;
     if (died != null) throw died;
     return lastSession = _Session(server, eid);

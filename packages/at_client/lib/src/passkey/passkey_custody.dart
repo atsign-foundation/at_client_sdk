@@ -115,6 +115,13 @@ abstract class EnrollmentSession {
   /// publishes; true when [atKeys] holds none.
   Future<bool> publicKeysMatch(Map<String, dynamic> atKeys);
 
+  /// Revokes every approved enrollment of the atSign other than this one.
+  ///
+  /// Throws when an approved enrollment other than this one is still listed
+  /// afterwards; a revoke the atServer refuses for an enrollment that is no
+  /// longer approved is not a failure.
+  Future<void> revokeOtherEnrollments();
+
   /// Completes the activation this session's enrollment was created by:
   /// publishes the encryption public key [atKeys] holds, replacing any that is
   /// published, then deletes the atSign's CRAM secret.
@@ -242,10 +249,11 @@ class PasskeyCustody {
 
   /// Onboards a fresh [atSign]: registers a passkey, activates the atSign
   /// with [cram] and the APKAM key pair derived from the passkey, writes the
-  /// sealed @keys document and the pointer as the new enrollment, and only
-  /// then completes the activation, which publishes the encryption public key
-  /// and deletes the CRAM secret. It then remembers the passkey on the device
-  /// and returns the client running as the new enrollment.
+  /// sealed @keys document and the pointer as the new enrollment, revokes
+  /// every other approved enrollment (those an interrupted onboarding left),
+  /// and only then completes the activation, which publishes the encryption
+  /// public key and deletes the CRAM secret. It then remembers the passkey on
+  /// the device and returns the client running as the new enrollment.
   ///
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
@@ -288,9 +296,9 @@ class PasskeyCustody {
     });
   }
 
-  /// Activates [canonical] with [cram], completion deferred, and writes the
-  /// new enrollment's document and pointer. Everything it built is closed
-  /// when it throws.
+  /// Activates [canonical] with [cram], completion deferred, writes the new
+  /// enrollment's document and pointer, and revokes every other approved
+  /// enrollment. Everything it built is closed when it throws.
   Future<_Written> _activateAndWrite(
       String canonical, String cram, PrfSecret secret) async {
     final vault = await _deriveAndWipe(secret, canonical);
@@ -308,6 +316,7 @@ class PasskeyCustody {
           PasskeyRecordType.eid, {'enrollmentId': activated.enrollmentId});
       await activated.pointers
           .put(canonical, vault.lookupHex, pointer, ns: vault.ns);
+      await activated.revokeOtherEnrollments();
       return (vault: vault, session: activated, store: keysIo, atKeys: atKeys);
     } on Object {
       store?.close();

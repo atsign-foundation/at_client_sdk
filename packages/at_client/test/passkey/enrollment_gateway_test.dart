@@ -423,6 +423,87 @@ void main() {
     });
   });
 
+  group('revokeOtherEnrollments', () {
+    const list = 'enroll:list:{"enrollmentStatusFilter":["approved"]}\n';
+    String revoke(String id) => 'enroll:revoke:{"enrollmentId":"$id"}\n';
+
+    /// An `enroll:list` reply holding [statuses] by enrollment id.
+    String listed(Map<String, String> statuses) => 'data:${jsonEncode({
+              for (final MapEntry(key: id, value: status) in statuses.entries)
+                '$id.new.enrollments.__manage$_atSign': {
+                  'appName': 'wavi',
+                  'deviceName': 'browser',
+                  'namespace': {'__manage': 'rw', '*': 'rw'},
+                  'status': status,
+                }
+            })}';
+
+    /// Answers the first `enroll:list` with [first] and every later one with
+    /// [then], and each revoke with [revoked].
+    void serve(Map<String, String> first, Map<String, String> then,
+        {String? Function(String command)? revoked}) {
+      var lists = 0;
+      wire.answer = (command) {
+        if (command.startsWith('enroll:list')) {
+          return listed(lists++ == 0 ? first : then);
+        }
+        if (command.startsWith('enroll:revoke')) {
+          return revoked?.call(command) ??
+              'data:{"enrollmentId":"x","status":"revoked"}';
+        }
+        return null;
+      };
+    }
+
+    test(
+        'revokes every approved enrollment but its own, on the PKAM '
+        'connection, then lists again', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved', 'eid-9': 'approved'},
+          {_eid: 'approved'});
+
+      await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, revoke('eid-0'), revoke('eid-9'), list]);
+      expect(wire.dials, 1);
+    });
+
+    test('revokes nothing that is listed but not approved', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'pending', 'eid-2': 'revoked'},
+          {_eid: 'approved'});
+
+      await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, list]);
+    });
+
+    test(
+        'a refused revoke of an enrollment no longer approved is not a failure',
+        () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => 'error:AT0011:not approved');
+
+      await session.revokeOtherEnrollments();
+    });
+
+    test('throws when an approved enrollment other than its own remains',
+        () async {
+      final session = await activate();
+      serve({
+        _eid: 'approved',
+        'eid-0': 'approved'
+      }, {
+        _eid: 'approved',
+        'eid-0': 'approved'
+      }, revoked: (_) => 'error:AT0011:refused');
+
+      await expectLater(session.revokeOtherEnrollments(),
+          throwsA(isA<AtEnrollmentException>()));
+    });
+  });
+
   group('a session whose client failed to open', () {
     test('still releases the lookUp when the session closes', () async {
       final gateway = AtAuthEnrollmentGateway(

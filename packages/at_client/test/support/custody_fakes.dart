@@ -33,6 +33,9 @@ class FakeServer implements EnrollmentPointerReader {
 
   /// The APKAM public key each enrollment authenticates with.
   final pairByEnrollment = <String, String>{};
+
+  /// The atSign of each approved enrollment, by enrollment id.
+  final approved = <String, String>{};
   final revoked = <String>{};
   final log = <String>[];
 
@@ -118,6 +121,23 @@ class FakeSession implements EnrollmentSession {
   /// Makes [completeActivation] throw this once it has published the
   /// encryption public key, before it deletes the CRAM secret.
   Object? completeErrorAfterPublish;
+
+  /// Makes [revokeOtherEnrollments] throw this before it revokes anything.
+  Object? revokeError;
+
+  @override
+  Future<void> revokeOtherEnrollments() async {
+    if (revokeError case final e?) throw e;
+    final others = [
+      for (final MapEntry(key: eid, value: owner) in server.approved.entries)
+        if (owner == atSign && eid != enrollmentId) eid
+    ];
+    for (final eid in others) {
+      server.approved.remove(eid);
+      server.revoked.add(eid);
+      server.timeline.add('revoke:$eid');
+    }
+  }
 
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
@@ -341,6 +361,7 @@ class FakeGateway implements EnrollmentGateway {
     }
     final eid = 'eid${++server.enrollments}';
     server.pairByEnrollment[eid] = apkamKeyPair.publicKey;
+    server.approved[eid] = atSign;
     server.timeline.add('activate:$eid');
     await onActivate?.call();
     final session = lastSession = _session(atSign, eid);

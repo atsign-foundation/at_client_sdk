@@ -11,6 +11,19 @@ final _extendsAtException = RegExp(r'^\s*extends\s+AtException\b');
 
 String _all() => _sources().map((f) => f.readAsStringSync()).join('\n');
 
+/// The member of [source] whose declaration starts with [signature], through
+/// its matching closing brace.
+String _member(String source, String signature) {
+  final start = source.indexOf(signature);
+  if (start < 0) throw StateError('no $signature');
+  var depth = 0;
+  for (var i = source.indexOf('{', start); i < source.length; i++) {
+    if (source[i] == '{') depth++;
+    if (source[i] == '}' && --depth == 0) return source.substring(start, i + 1);
+  }
+  throw StateError('$signature never closes');
+}
+
 void main() {
   group('sources', () {
     test('no analyzer suppression of visible-for-testing members', () {
@@ -49,12 +62,24 @@ void main() {
   });
 
   group('flow surface', () {
-    test('the flow offers no enrollment revoke', () {
-      final all = _all().toLowerCase();
-      // The refusal docs may name `enroll:unrevoke` and a revoked enrollment.
-      expect(all, isNot(contains('revoke(')));
-      expect(all.replaceAll('unrevoke', '').replaceAll('revoked', ''),
-          isNot(contains('revoke')));
+    test(
+        'the flow revokes only the other enrollments, while onboarding, and '
+        'offers no revoke', () {
+      final all = _all();
+      expect(all.toLowerCase(), isNot(contains('revoke(')));
+      expect('EnrollOperationEnum.revoke'.allMatches(all), hasLength(1));
+      expect(
+          _member(
+              File('lib/src/passkey/enrollment_gateway.dart')
+                  .readAsStringSync(),
+              'Future<void> revokeOtherEnrollments()'),
+          contains('EnrollOperationEnum.revoke'));
+      expect('.revokeOtherEnrollments()'.allMatches(all), hasLength(1));
+      expect(
+          _member(
+              File('lib/src/passkey/passkey_custody.dart').readAsStringSync(),
+              'Future<_Written> _activateAndWrite('),
+          contains('.revokeOtherEnrollments()'));
     });
 
     test('the flow offers no document or pointer delete', () {

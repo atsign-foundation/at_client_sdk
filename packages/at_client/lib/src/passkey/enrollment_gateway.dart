@@ -10,6 +10,10 @@ import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart'
     show handshakeKeysIo;
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart'
+    show decideEnrollmentOn, listEnrollmentsOn;
+import 'package:at_client/src/util/enroll_list_request_param.dart';
+import 'package:at_commons/at_builders.dart' show EnrollVerbBuilder;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:at_lookup/at_lookup.dart';
@@ -206,6 +210,8 @@ Future<void> _closeQuietly(AtLookupMuxable lookUp) async {
 }
 
 class _PkamSession implements EnrollmentSession {
+  static final _logger = AtSignLogger('enrollmentSession');
+
   _PkamSession(
       this._gateway, this._lookUp, this._atSign, this.enrollmentId, this._keys)
       : _remote = RemoteSecondary(_atSign, AtClientPreference(),
@@ -263,6 +269,38 @@ class _PkamSession implements EnrollmentSession {
       secondaryAddressFinder: _gateway.finder,
       atSign: _atSign,
       key: 'publickey');
+
+  @override
+  Future<void> revokeOtherEnrollments() async {
+    for (final other in await _otherApprovedEnrollments()) {
+      try {
+        await decideEnrollmentOn(
+            _remote,
+            _atSign,
+            EnrollVerbBuilder()
+              ..operation = EnrollOperationEnum.revoke
+              ..enrollmentId = other);
+      } on AtException catch (e) {
+        _logger.info('a revoke was refused (${e.runtimeType}); the list that '
+            'follows decides whether it matters');
+      }
+    }
+    final remaining = await _otherApprovedEnrollments();
+    if (remaining.isNotEmpty) {
+      throw AtEnrollmentException('${remaining.length} approved enrollments '
+          'other than $enrollmentId remain after revoking them');
+    }
+  }
+
+  /// The ids of the atSign's approved enrollments other than this one.
+  Future<List<String>> _otherApprovedEnrollments() async => [
+        for (final enrollment in await listEnrollmentsOn(_remote,
+            params: EnrollmentListRequestParam()
+              ..enrollmentListFilter = [EnrollmentStatus.approved]))
+          if (enrollment.enrollmentStatus == EnrollmentStatus.approved &&
+              enrollment.enrollmentId != enrollmentId)
+            enrollment.enrollmentId!
+      ];
 
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) =>
