@@ -8,7 +8,6 @@ import 'dart:math';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client/memory.dart';
-import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
