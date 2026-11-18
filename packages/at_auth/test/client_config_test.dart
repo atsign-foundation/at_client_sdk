@@ -322,6 +322,9 @@ void main() {
               'note': 'a\u2028b\u2029${'x' * 80}',
               'c\u2029d': ['e\u2028f', 4],
             },
+            'items': [
+              {'g\u2028h': 'i\u2029j'},
+            ],
           };
           final recorder = FromRecorder();
           await build(given)(recorder);
@@ -336,12 +339,15 @@ void main() {
             'note': 'a b ${'x' * 60}',
             'c d': ['e f', 4],
           });
+          expect(config['items'], [
+            {'g h': 'i j'},
+          ]);
         });
 
         test(
             'a key longer than 64 characters, at any depth, is made one line '
             'but not cut', () async {
-          final longKey = 'k ${'k' * 80}';
+          final longKey = 'k\u2028${'k' * 80}';
           final oneLineKey = 'k ${'k' * 80}';
 
           final config = await sentBy(build({
