@@ -1,5 +1,6 @@
 ## 4.1.0-rc.1
 
+- fix: a passkey PRF output of all zeroes is refused with `PrfUnavailableException`, `PrfSecret.output` throws `StateError` once the secret is wiped, and a passkey registered without a usable PRF output is reported to the platform as unknown. `passkeyDisplayName` names a passkey the same way on every platform.
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
 - fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening.
