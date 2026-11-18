@@ -1,7 +1,7 @@
 import 'package:at_auth/passkey.dart';
 import 'package:test/test.dart';
 
-import 'passkey_record_keys_test.dart' show FakePrfEnvironment;
+import '../support/passkey_fakes.dart' show FakePrfEnvironment;
 
 void main() {
   late FakePrfEnvironment env;

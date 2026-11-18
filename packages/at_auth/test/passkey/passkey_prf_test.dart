@@ -97,6 +97,14 @@ void main() {
           throwsA(isA<PrfUnavailableException>()));
     });
 
+    test('a 31-byte PRF output is zeroed before it is refused', () async {
+      final short = Uint8List.fromList(List.filled(31, 9));
+      final port = FakePasskeyPort()..resultPrfFirst = short;
+      await expectLater(
+          PasskeyPrf(port).unlock(), throwsA(isA<PrfUnavailableException>()));
+      expect(short, everyElement(0));
+    });
+
     test('a PRF output of 32 zero bytes is PrfUnavailableException', () async {
       final port = FakePasskeyPort()..resultPrfFirst = Uint8List(32);
       final refused = throwsA(isA<PrfUnavailableException>().having(
