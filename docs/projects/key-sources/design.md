@@ -433,8 +433,9 @@ Updating the document needs the same atomicity `update` has for a file, and
 devices sharing a synced passkey share one document. at_server trunk has no
 conditional update (nothing like a compare-and-swap in its verb handlers),
 and without one two devices updating at once lose a write; a lost
-signing root or nskey private can't be replaced. A conditional update on the
-atServer is a prerequisite for the server-backed store, not an open question.
+signing root or nskey private can't be replaced. So every write of the
+document holds the enrollment's lock, a server mutex with a short ttl, from
+before it reads the document until it puts.
 
 This fits the WASM plan's key-material gates X-K1 to X-K4 in
 [`../wasm/acceptance.md`](../wasm/acceptance.md#9a1-confidentiality--key-material-new-the-existing-key-gates-measure-only-time),

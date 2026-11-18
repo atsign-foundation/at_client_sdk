@@ -9,7 +9,13 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart' show AtKeys, WrittenAtKeysIo;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/at_client.dart'
-    show AtClient, AtConnection, AtConnectionCause, AtConnectionState;
+    show
+        AtClient,
+        AtConnection,
+        AtConnectionCause,
+        AtConnectionState,
+        AtKey,
+        ServerMutexLease;
 import 'package:at_client/passkey.dart';
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
 import 'package:at_client_wasm/src/keys/web_crypto_passkey.dart';
@@ -147,6 +153,12 @@ class _Documents implements EnrollmentDocumentStore {
   @override
   Future<void> put(String atSign, String eid, String document) async =>
       session.server.documents[eid] = document;
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String eid,
+          {required Duration ttl}) async =>
+      ServerMutexLease(
+          AtKey()..key = 'atkeys-lock.$eid.a', DateTime.now().add(ttl));
 }
 
 class _Pointers implements EnrollmentPointerStore {

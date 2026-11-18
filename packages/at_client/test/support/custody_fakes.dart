@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart' show WrittenAtKeysIo;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/client/server_mutex.dart' show ServerMutexLease;
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
@@ -12,6 +13,7 @@ import 'package:at_client/src/passkey/enrollment_gateway.dart'
 import 'package:at_client/src/passkey/enrollment_pointer_store.dart';
 import 'package:at_client/src/passkey/passkey_custody.dart';
 
+import 'package:at_commons/at_commons.dart' show AtKey;
 import 'package:mocktail/mocktail.dart' show Fake;
 
 import 'bytes_passkey_sealer.dart';
@@ -230,6 +232,12 @@ class FakeAtClient extends Fake implements AtClient {
   }
 }
 
+/// A lease on the lock of [enrollmentId]'s document for [ttl], as an
+/// atServer where no other writer holds it grants.
+ServerMutexLease freeLease(String atSign, String enrollmentId, Duration ttl) =>
+    ServerMutexLease(AtKey.fromString(enrollmentLockKey(enrollmentId, atSign)),
+        DateTime.now().add(ttl));
+
 class _Documents implements EnrollmentDocumentStore {
   _Documents(this.session);
 
@@ -262,6 +270,13 @@ class _Documents implements EnrollmentDocumentStore {
       session.server.documentPutRepliesLost--;
       throw StateError('the reply to a document put was lost');
     }
+  }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String eid,
+      {required Duration ttl}) async {
+    _own(eid);
+    return freeLease(atSign, eid, ttl);
   }
 }
 

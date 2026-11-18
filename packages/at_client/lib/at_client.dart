@@ -15,7 +15,7 @@ export 'package:at_client/src/client/data_event.dart';
 export 'package:at_client/src/client/request_options.dart'
     hide useRemoteAtServerIfSet;
 export 'package:at_client/src/client/server_mutex.dart'
-    hide checkedServerMutexTtl;
+    hide checkedServerMutexTtl, takeServerMutex;
 export 'package:at_client/src/storage/at_client_storage.dart';
 export 'package:at_client/src/crypto/crypto.dart';
 export 'package:at_client/src/crypto/crypto_runtime.dart';

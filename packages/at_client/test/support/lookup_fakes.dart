@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:at_lookup/at_lookup.dart';
 
 class ScriptedAtLookUp implements AtLookupMuxable {
@@ -16,6 +17,11 @@ class ScriptedAtLookUp implements AtLookupMuxable {
     commands.add((command: atCommand, auth: auth));
     return respond(atCommand);
   }
+
+  /// Sends what [builder] builds as an authenticated command.
+  @override
+  Future<String?> executeVerb(VerbBuilder builder) =>
+      executeCommand(builder.buildCommand(), auth: true);
 
   @override
   Future<void> close() async => closed = true;

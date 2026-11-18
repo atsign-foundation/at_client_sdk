@@ -46,6 +46,13 @@ class _Docs implements EnrollmentDocumentStore {
   Future<void> put(String atSign, String enrollmentId, String document) async {
     records[enrollmentDocumentKey(enrollmentId, atSign)] = document;
   }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) async =>
+      ServerMutexLease(
+          AtKey.fromString(enrollmentLockKey(enrollmentId, atSign)),
+          DateTime.now().add(ttl));
 }
 
 String _b(String s) => base64Encode(utf8.encode(s));

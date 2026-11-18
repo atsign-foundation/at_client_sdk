@@ -9,7 +9,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_client/passkey.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
-    show withApkamKey;
+    show apkamKeyPairFromSeed, withApkamKey;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
@@ -30,6 +30,20 @@ const _root = AtRootDomain('root.test', 64);
 /// and answers `llookup:`, `lookup:` and `delete:` from it.
 class _AtServer implements AtTransportFactory {
   final records = <String, String>{};
+
+  /// When each entry of [commands] arrived.
+  final arrived = <DateTime>[];
+
+  /// Whether a create of an immutable record is refused while an earlier
+  /// create of it is within its ttl, as an atServer refuses it.
+  var immutableHolds = false;
+  final _immutableUntil = <String, DateTime>{};
+
+  /// Makes the next @keys document update wait, before it is stored, until
+  /// another connection sends a command about a @keys document or its lock.
+  var holdDocumentPut = false;
+  int? _heldOn;
+  Completer<void>? _held;
 
   /// The APKAM public key of each enrollment.
   final apkamKeys = <String, String>{};
@@ -74,7 +88,22 @@ class _AtServer implements AtTransportFactory {
 
   void _answer(FakeAtServerSocket socket, String command) {
     final line = command.trimRight();
-    commands.add('${sockets.indexOf(socket)}: $line');
+    final connection = sockets.indexOf(socket);
+    commands.add('$connection: $line');
+    arrived.add(DateTime.now());
+    final held = _held;
+    if (held != null && connection != _heldOn && line.contains('atkeys')) {
+      _held = null;
+      held.complete();
+    }
+    if (holdDocumentPut && line.startsWith('update:atkeys.')) {
+      holdDocumentPut = false;
+      _heldOn = connection;
+      final hold = _held = Completer<void>();
+      unawaited(
+          hold.future.then((_) => socket.serverSends(_reply(socket, line))));
+      return;
+    }
     unawaited(socket.serverSends(_reply(socket, line)));
   }
 
@@ -96,7 +125,19 @@ class _AtServer implements AtTransportFactory {
     if (line.startsWith('update:')) {
       final body = line.substring('update:'.length);
       final split = body.indexOf(' ');
-      records[_keyOf(body.substring(0, split))] = body.substring(split + 1);
+      final spec = body.substring(0, split);
+      final key = _keyOf(spec);
+      if (immutableHolds && spec.contains(':immutable:true:')) {
+        final until = _immutableUntil[key];
+        final now = DateTime.now();
+        if (until != null && now.isBefore(until)) {
+          return 'error:{"errorCode":"AT0032","errorDescription":"Immutable '
+              'records may not be updated"}$prompt';
+        }
+        final ttl = int.parse(RegExp(r'ttl:(\d+):').firstMatch(spec)![1]!);
+        _immutableUntil[key] = now.add(Duration(milliseconds: ttl));
+      }
+      records[key] = body.substring(split + 1);
       return 'data:1$prompt';
     }
     if (line.startsWith('llookup:')) {
@@ -192,6 +233,15 @@ void main() {
           lookUps: server.lookUps,
           secondaryAddressFinder: server.finder);
 
+  AtAuthEnrollmentGateway gateway() => AtAuthEnrollmentGateway(
+      lookUps: server.lookUps,
+      finder: server.finder,
+      root: _root,
+      app: 'wavi',
+      device: 'browser',
+      clientOpener: openClient,
+      activator: activate);
+
   PasskeyCustody custody(FakeHints hints) => PasskeyCustody(
       prf: PasskeyPrf(authenticator),
       deriver: const BytesPasskeyKeyDeriver(),
@@ -199,14 +249,7 @@ void main() {
           lookUps: server.lookUps,
           rootDomain: _root,
           secondaryAddressFinder: server.finder),
-      gateway: AtAuthEnrollmentGateway(
-          lookUps: server.lookUps,
-          finder: server.finder,
-          root: _root,
-          app: 'wavi',
-          device: 'browser',
-          clientOpener: openClient,
-          activator: activate),
+      gateway: gateway(),
       credentials: hints,
       enrollmentIds: hints,
       retryDelay: Duration.zero,
@@ -299,6 +342,85 @@ void main() {
     expect(put, greaterThan(pkam));
     expect(reconnected.sublist(from, pkam),
         everyElement(isNot(startsWith('llookup:atkeys.'))));
+  });
+
+  test(
+      'a client and another writer of its enrollment, each on its own '
+      'connection, add key material at once, and both additions survive',
+      () async {
+    server.immutableHolds = true;
+    final session = await onboard();
+    final enrollmentId = session.client.enrollmentId!;
+    final keys = await DerivedKeys.derive(
+        Uint8List.fromList(List.generate(32, (i) => i)), _atSign);
+    addTearDown(keys.vault.close);
+    final pair = await apkamKeyPairFromSeed(keys.authSeed);
+    final other = await gateway().authenticate(
+        atSign: _atSign, enrollmentId: enrollmentId, apkamKeyPair: pair);
+    addTearDown(other.close);
+    final otherStore = AtServerAtKeysIo(
+        documents: other.documents,
+        atSign: _atSign,
+        seal: (d) => keys.vault.seal(PasskeyRecordType.atkeys, d),
+        open: (r) => keys.vault.open(PasskeyRecordType.atkeys, r),
+        enrollmentId: enrollmentId,
+        apkamKeyPair: pair);
+    addTearDown(otherStore.close);
+    server.holdDocumentPut = true;
+
+    await Future.wait([
+      (session.client.atKeysIo as WrittenAtKeysIo).update(_atSign.toAtsign(),
+          (keys) {
+        keys.fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: base64Encode(utf8.encode('one-pub')),
+            privateKey: base64Encode(utf8.encode('one-priv')));
+        return true;
+      }),
+      otherStore.update(_atSign.toAtsign(), (keys) {
+        keys.fileLegacyMaterial(
+            apkamSymmetricKey: base64Encode(utf8.encode('two-sym')));
+        return true;
+      }),
+    ]);
+
+    final raw = jsonEncode(await documentOf(enrollmentId));
+    expect(raw, contains(base64Encode(utf8.encode('one-priv'))));
+    expect(raw, contains(base64Encode(utf8.encode('two-sym'))));
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  test("Every @keys write holds the enrollment's lock", () async {
+    final session = await onboard();
+    final enrollmentId = session.client.enrollmentId!;
+    await (session.client.atKeysIo as WrittenAtKeysIo)
+        .update(_atSign.toAtsign(), (keys) {
+      keys.fileLegacyMaterial(
+          apkamSymmetricKey: base64Encode(utf8.encode('sym')));
+      return true;
+    });
+
+    String command(int i) =>
+        server.commands[i].substring(server.commands[i].indexOf(': ') + 2);
+    final lock = 'atkeys-lock.$enrollmentId.a.__e$_atSign ';
+    final writes = [
+      for (var i = 0; i < server.commands.length; i++)
+        if (command(i).startsWith('update:atkeys.$enrollmentId.a.__e')) i
+    ];
+    expect(writes, hasLength(greaterThanOrEqualTo(2)),
+        reason: 'the onboarding write and the client\'s');
+    for (final write in writes) {
+      final taken = [
+        for (var i = 0; i < write; i++)
+          if (command(i).startsWith('update:') && command(i).contains(lock)) i
+      ];
+      expect(taken, isNotEmpty, reason: 'write $write held no lock');
+      expect(command(taken.last),
+          startsWith('update:nc:ttl:10000:isEncrypted:false:immutable:true:'));
+      expect(server.arrived[write].difference(server.arrived[taken.last]),
+          lessThan(const Duration(seconds: 10)),
+          reason: 'the lease was unexpired when the document was put');
+    }
   });
 
   test('A @keys document a passkey client writes holds no APKAM private key',

@@ -53,8 +53,17 @@ void main() {
       final decl = RegExp(r'class\s+(\w+(?:Exception|Error))\b([^{]*)\{');
       final found = decl.allMatches(_all()).toList();
       expect(found, isNotEmpty);
+      final heads = {for (final m in found) m.group(1)!: m.group(2)!};
       for (final m in found) {
-        expect(m.group(2), matches(_extendsAtException),
+        var root = m.group(1)!;
+        for (final seen = {root};;) {
+          final parent =
+              RegExp(r'^\s*extends\s+(\w+)').firstMatch(heads[root]!)?.group(1);
+          if (parent == null || !heads.containsKey(parent)) break;
+          if (!seen.add(parent)) break;
+          root = parent;
+        }
+        expect(heads[root], matches(_extendsAtException),
             reason: '${m.group(1)} must extend AtException');
         expect(m.group(2), isNot(contains('implements Exception')));
       }

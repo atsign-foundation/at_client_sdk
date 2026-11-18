@@ -9,7 +9,7 @@ import 'package:at_client/src/passkey/enrollment_gateway.dart'
 import 'package:mocktail/mocktail.dart' show Fake;
 import 'package:test/test.dart';
 
-import '../support/custody_fakes.dart' show DerivedKeys;
+import '../support/custody_fakes.dart' show DerivedKeys, freeLease;
 
 const _atSign = '@alice';
 const _eid = 'eid1';
@@ -28,6 +28,11 @@ class _Docs implements EnrollmentDocumentStore {
     await hold?.future;
     records[enrollmentId] = document;
   }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) async =>
+      freeLease(atSign, enrollmentId, ttl);
 }
 
 /// A client whose stop, shared by every caller as a real client's is, reports

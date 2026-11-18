@@ -31,7 +31,8 @@ AtKeys _base() => AtKeys.legacy(
     selfEncryptionKey: _b('self-1'))
   ..atsign = _atSign.toAtsign();
 
-/// An atServer holding documents by key, with a log of every command.
+/// An atServer holding documents by key, with a log of every command. It
+/// grants every create of a document's lock.
 class _FakeAtServer {
   final records = <String, String>{};
   final commands = <String>[];
@@ -67,6 +68,9 @@ class _FakeAtServer {
       if (value == null) throw AtLookUpException('AT0015', 'key not found');
       return 'data:$value';
     }
+    if (line.startsWith('update:') && line.contains('atkeys-lock.')) {
+      return 'data:-1';
+    }
     if (line.startsWith('update:')) {
       if (failNextUpdate) {
         failNextUpdate = false;
@@ -84,8 +88,10 @@ class _FakeAtServer {
     throw StateError('unexpected command $command');
   }
 
-  List<String> get updates =>
-      commands.where((c) => c.startsWith('update:')).toList();
+  /// Every update of a document, leaving out lock creates.
+  List<String> get updates => commands
+      .where((c) => c.startsWith('update:') && !c.contains('atkeys-lock.'))
+      .toList();
 }
 
 void main() {
@@ -443,10 +449,12 @@ void main() {
         return i == 0;
       });
       if (i == 0) {
+        final documentCommands =
+            server.commands.where((c) => !c.contains('atkeys-lock.')).toList();
         final firstUpdate =
-            server.commands.indexWhere((c) => c.startsWith('update:'));
+            documentCommands.indexWhere((c) => c.startsWith('update:'));
         expect(firstUpdate, greaterThan(0));
-        expect(server.commands.first, startsWith('llookup:'));
+        expect(documentCommands.first, startsWith('llookup:'));
       }
     }
   });

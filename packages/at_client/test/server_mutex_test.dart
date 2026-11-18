@@ -11,6 +11,8 @@ import 'dart:isolate';
 
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/client/server_mutex.dart' show takeServerMutex;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_commons/at_builders.dart';
@@ -302,6 +304,52 @@ void main() {
       await atClient.put(control, 'a value',
           putRequestOptions: PutRequestOptions()..shouldEncrypt = false);
       expect((await atClient.get(control)).value, 'a value');
+    });
+  });
+
+  group('the take over a connection', () {
+    RemoteSecondary remoteOf(List<String> sent) {
+      final remote = MockRemoteSecondary();
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
+        sent.add((inv.positionalArguments[0] as VerbBuilder).buildCommand());
+        return 'data:-1';
+      });
+      return remote;
+    }
+
+    test('sends what the extension sends for the same atSign and enrollment',
+        () async {
+      final viaClient = <String>[];
+      final viaRemote = <String>[];
+      await clientOf(viaClient).tryAcquireServerMutex(lockKey, ttl: ttl);
+      final lease = await takeServerMutex(remoteOf(viaRemote),
+          atSign: '@alice'.toAtsign(),
+          enrollmentId: 'e-1',
+          key: lockKey,
+          ttl: ttl);
+      expect(viaRemote, viaClient);
+      expect(lease!.isSpent, isFalse);
+    });
+
+    test(
+        'refuses a key of another atSign, or a ttl out of bounds, before '
+        'anything is sent', () async {
+      final sent = <String>[];
+      await expectLater(
+          takeServerMutex(remoteOf(sent),
+              atSign: '@alice'.toAtsign(),
+              enrollmentId: 'e-1',
+              key: AtKey.fromString('s1.session_mutexes.sshnp@bob'),
+              ttl: ttl),
+          throwsA(refusedNaming('key')));
+      await expectLater(
+          takeServerMutex(remoteOf(sent),
+              atSign: '@alice'.toAtsign(),
+              enrollmentId: 'e-1',
+              key: lockKey,
+              ttl: Duration.zero),
+          throwsA(refusedNaming('ttl')));
+      expect(sent, isEmpty);
     });
   });
 

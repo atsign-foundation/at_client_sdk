@@ -180,13 +180,14 @@ root) survive the page. `InMemoryAtKeysIo` is for tests and handshakes, never
 this store: a root minted into page memory would be lost with the tab, and a
 root whose private is lost cannot be replaced.
 
-**Prerequisite: a conditional update on the atServer.** Devices that share a
-synced passkey share one record, so two of them can write it at once, and with
-a plain `update` the later write drops what the earlier one filed. A dropped
-signing root or nskey private can't be replaced. at_server trunk has no
-compare-and-swap today, so the
-server-backed store does not ship until every atServer it runs against has
-one.
+**Every write holds the enrollment's lock.** Devices that share a synced
+passkey share one record, so two of them can write it at once, and with a plain
+`update` the later write drops what the earlier one filed. A dropped signing
+root or nskey private can't be replaced. at_server trunk has no
+compare-and-swap, so the server-backed store takes a server mutex on
+`atkeys-lock.<enrollmentId>.a.__e@<atSign>` from before it reads the record
+until it puts, and still refuses a write that would drop stored material and
+reads each write back.
 
 ## Decisions
 
@@ -244,7 +245,7 @@ From an adversarial review of the first draft of this doc (33 findings).
 | PRF output differs with and without user verification | Pin UV to `required`; never auto-recreate on failure |
 | Same construction across platforms | Version byte and test vectors |
 | recordId in atServer logs: `LookupVerbHandler` logs the key at `finer` | Stop logging `public:_` names, or log a hash; until then a log reader can fetch the bootstrap record and learn the enrollment id. Rotation means moving the record |
-| Concurrent writers lose updates | Conditional update on the atServer; a prerequisite, not optional (see [Handing the restored keys to a client](#handing-the-restored-keys-to-a-client)) |
+| Concurrent writers lose updates | Every write holds the enrollment's lock, a server mutex, from before it reads the record until it puts (see [Handing the restored keys to a client](#handing-the-restored-keys-to-a-client)) |
 
 ### Better than today
 

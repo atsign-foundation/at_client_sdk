@@ -151,6 +151,7 @@ void main() {
         PasskeyLostException('@alice', 'no passkey'),
         MissingAtKeysDocumentException('eid1'),
         PublicKeyMismatchException(),
+        AtServerAtKeysLockedException('locked'),
       ];
       for (final e in exceptions) {
         expect(e.message, isNotEmpty, reason: '${e.runtimeType}');
@@ -159,6 +160,7 @@ void main() {
       expect((exceptions[3] as MissingAtKeysDocumentException).enrollmentId,
           'eid1');
       expect((exceptions[2] as PasskeyLostException).atSign, '@alice');
+      expect(exceptions[5], isA<AtServerAtKeysWriteException>());
     });
   });
 }

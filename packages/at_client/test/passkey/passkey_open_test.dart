@@ -41,6 +41,11 @@ class _Docs implements EnrollmentDocumentStore {
   Future<void> put(String atSign, String enrollmentId, String document) async {
     records[enrollmentDocumentKey(enrollmentId, atSign)] = document;
   }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) async =>
+      freeLease(atSign, enrollmentId, ttl);
 }
 
 void _fileSigning(AtKeys keys, String tag, {String eid = _eid}) =>
