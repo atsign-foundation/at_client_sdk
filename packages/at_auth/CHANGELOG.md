@@ -1,5 +1,12 @@
 ## 4.1.0-rc.1
 
+- fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation is
+  thrown as an `UnAuthenticatedException` carrying the atServer's reply, so
+  its code can be read. Nothing is signed or digested.
+- feat: an enrollment's wait for approval ends at once with
+  `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
+  `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
+  AT0028 or AT0029, in any form.
 - feat: every `from:` at_auth sends names the program and the SDK in its
   clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
   caller's values win; absent or blank ones are the program file's name,
