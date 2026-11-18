@@ -108,10 +108,85 @@ void main() {
       final store = IndexedDbHintStore.forDatabase(raw);
       await expectLater(
           store.putHint('@alice', Uint8List.fromList([1]), 'eid-1'),
-          throwsA(
-              isA<DOMException>().having((e) => e.name, 'name', 'DataError')));
+          throwsA(isA<IndexedDbException>()
+              .having((e) => e.message, 'message', contains('DataError'))));
       expect(await store.credentialId('@alice'), isNull);
       raw.close();
+    });
+
+    test(
+        'every operation on a database without its object stores fails with '
+        'an IndexedDbException naming the error', () async {
+      final raw = await _rawOpen(currentDbName!, 1);
+      addTearDown(() => raw.close());
+      final store = IndexedDbHintStore.forDatabase(raw);
+      final record = PendingOnboardingRecord(
+          credentialId: Uint8List.fromList([1]),
+          enrollmentId: 'eid-1',
+          encryptionPublicKey: 'pub-1',
+          sealed: 'sealed-1');
+      final operations = <String, Future<Object?> Function()>{
+        'putCredentialId': () =>
+            store.putCredentialId('@alice', Uint8List.fromList([1])),
+        'credentialId': () => store.credentialId('@alice'),
+        'putEnrollmentId': () => store.putEnrollmentId('@alice', 'eid-1'),
+        'enrollmentId': () => store.enrollmentId('@alice'),
+        'putHint': () =>
+            store.putHint('@alice', Uint8List.fromList([1]), 'eid-1'),
+        'deleteHints': () => store.deleteHints('@alice'),
+        'put': () => store.put('@alice', record),
+        'get': () => store.get('@alice'),
+        'delete': () => store.delete('@alice'),
+      };
+      for (final MapEntry(key: name, value: operation) in operations.entries) {
+        await expectLater(
+            operation(),
+            throwsA(isA<IndexedDbException>().having(
+                (e) => e.message, 'message', contains('NotFoundError'))),
+            reason: '$name fails as an IndexedDbException naming the error');
+      }
+    });
+
+    test('a read whose transaction aborts fails naming the error', () async {
+      final raw = await _rawOpen(currentDbName!, 2, upgrade: (db) {
+        db.createObjectStore('at_client_wasm_credentials');
+        db.createObjectStore('at_client_wasm_enrollments');
+      });
+      addTearDown(() => raw.close());
+      final aborting = JSObject()
+        ..setProperty(
+            'transaction'.toJS,
+            ((JSAny? stores, JSAny? mode) {
+              final tx = raw.transaction(stores as JSString, 'readonly');
+              Future.microtask(() => tx.abort());
+              return tx;
+            }).toJS);
+      final store = IndexedDbHintStore.forDatabase(aborting as IDBDatabase);
+
+      await expectLater(
+          store.credentialId('@alice'),
+          throwsA(isA<IndexedDbException>()
+              .having((e) => e.message, 'message', contains('AbortError'))),
+          reason: 'the aborted read request fails as an IndexedDbException '
+              'naming the error');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test('an open the browser refuses outright fails naming the error',
+        () async {
+      final factory = window.indexedDB as JSObject;
+      factory['open'] = globalContext.callMethod<JSFunction>(
+          'Function'.toJS,
+          'throw new DOMException("The operation is insecure.", '
+                  '"SecurityError");'
+              .toJS);
+      addTearDown(() => factory.delete('open'.toJS));
+
+      await expectLater(
+          IndexedDbHintStore.open(dbName: currentDbName!),
+          throwsA(isA<IndexedDbException>()
+              .having((e) => e.message, 'message', contains('SecurityError'))),
+          reason: 'the refused open fails as an IndexedDbException naming '
+              'the error');
     });
 
     test('credentialId round-trips per atSign', () async {

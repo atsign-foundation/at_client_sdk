@@ -32,8 +32,10 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
-/// lock too long, and the atServer's own errors when activation is refused. An
-/// [OnboardingIncompleteException] carries the pending onboarding to resume.
+/// lock too long, [IndexedDbException] when this browser's IndexedDB fails,
+/// and the atServer's own errors when activation is refused. An
+/// [OnboardingIncompleteException] carries the pending onboarding to resume;
+/// an IndexedDB failure after this call activates the atSign is its cause.
 /// A client that fails to open after the records are written ends the
 /// onboarding: its own error propagates, the IndexedDB store is closed and
 /// the atSign is ready for [passkeyLogin].
@@ -77,8 +79,9 @@ Future<AtClient> onboardNewAtSign(
 /// Throws [PasskeyLostException] when the passkey cannot open [atSign] (no
 /// credential, no pointer, PKAM refused), [PublicKeyMismatchException] when
 /// the restored public keys are not the published ones,
-/// [MissingAtKeysDocumentException] when the enrollment has no document, and
-/// [SetupLockTimeoutException] when another tab holds the setup lock too long.
+/// [MissingAtKeysDocumentException] when the enrollment has no document,
+/// [SetupLockTimeoutException] when another tab holds the setup lock too long,
+/// and [IndexedDbException] when this browser's IndexedDB fails.
 ///
 /// A pending onboarding the atServer explicitly refuses is dropped and the
 /// login carries on; any other failure to resume it keeps its record.
@@ -119,7 +122,7 @@ Future<AtClient> passkeyLogin(
 /// with a new CRAM. Never call it without the user's choice.
 ///
 /// Throws [SetupLockTimeoutException] when another tab holds the setup lock
-/// too long.
+/// too long, and [IndexedDbException] when this browser's IndexedDB fails.
 Future<void> discardPendingOnboarding(String atSign) async =>
     discardPendingOnboardingIn(await IndexedDbHintStore.open(), atSign);
 
