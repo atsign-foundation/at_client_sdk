@@ -27,12 +27,14 @@ export 'package:at_client/src/lifecycle/pending_enrollment.dart';
 export 'package:at_client/src/listener/at_sign_change_listener.dart';
 export 'package:at_client/src/listener/switch_at_sign_event.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
+export 'package:at_client/src/preference/at_client_particulars.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/preference/notification_replay.dart';
 export 'package:at_client/src/preference/pq_posture.dart';
 export 'package:at_auth/at_auth.dart'
     show
         ApskSigningKey,
+        AtEnrollmentExpiredException,
         AtKeys,
         AtKeysFormatException,
         AtKeysIo,

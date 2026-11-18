@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/src/collections/js_collections_adapter.dart';
+import 'package:at_utils/at_utils.dart' show LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -23,6 +24,17 @@ final class _LaterEvent extends CEvent {
 /// An error type the adapter has no name for, standing in for one a later
 /// at_client throws.
 final class _LaterError {}
+
+/// Collects each log record as `LEVEL|logger|message`.
+final class _Collect implements LoggingHandler {
+  _Collect(this.lines);
+
+  final List<String> lines;
+
+  @override
+  void call(record) =>
+      lines.add('${record.level.name}|${record.loggerName}|${record.message}');
+}
 
 Matcher _rejectsWith(String code, {String? id, String? owner, String? kind}) =>
     throwsA(isA<JsCollectionsError>()
@@ -89,8 +101,8 @@ void main() {
       JsCollectionsAdapter.open(alice.mock,
           namespace: _ns, type: type, expirationMs: _day.inMilliseconds);
 
-  JsItemAddress mine(String id) => (id: id, owner: '@alice');
-  JsItemAddress bobs(String id) => (id: id, owner: '@bob');
+  JsItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
+  JsItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
 
   List<String> ids(List<JsItem> items) =>
       [for (final item in items) item['id'] as String];
@@ -129,23 +141,14 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('item ids', () {
-    final badIds = [
-      'public:x',
-      '@bob:x',
-      '',
-      'A1',
-      'a.b',
-      'x y',
-      'a' * 65,
-      '_x',
-    ];
+    final long = 'a' * 65;
 
     test(
-        'An item id outside the allowed set rejects with COLLECTION_INVALID_ARGUMENT',
+        'An item id AtCollection refuses rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await open();
 
-      for (final id in badIds) {
+      for (final id in ['a:b', 'a@b', '', 'a.b', 'a b']) {
         for (final call in <String, Future<Object?> Function()>{
           'create': () => todos.create({'t': 1}, id: id),
           'get': () => todos.get(mine(id)),
@@ -154,11 +157,114 @@ void main() {
           'remove': () => todos.remove(mine(id)),
         }.entries) {
           await expectLater(
-              call.value(), _rejectsWith(CollectionErrorCodes.invalidArgument),
+              call.value(),
+              _rejectsWith(CollectionErrorCodes.invalidArgument,
+                  kind: 'ArgumentError'),
               reason: '${call.key} of "$id"');
         }
       }
+      verifyNever(() => alice.mock.put(any(), any()));
       expect(server.keyCount, 0);
+    });
+
+    test(
+        'A create with an id starting with "_" rejects with COLLECTION_INVALID_ARGUMENT',
+        () async {
+      final todos = await open();
+
+      await expectLater(
+          todos.create({'t': 1}, id: '_a'),
+          _rejectsWith(CollectionErrorCodes.invalidArgument,
+              kind: 'ArgumentError'));
+
+      verifyNever(() => alice.mock.put(any(), any()));
+      expect(server.keyCount, 0);
+    });
+
+    test(
+        'A create with an id of 65 characters rejects with COLLECTION_INVALID_ARGUMENT',
+        () async {
+      final todos = await open();
+
+      await expectLater(
+          todos.create({'t': 1}, id: long),
+          _rejectsWith(CollectionErrorCodes.invalidArgument,
+              kind: 'ArgumentError'));
+
+      verifyNever(() => alice.mock.put(any(), any()));
+      expect(server.keyCount, 0);
+    });
+
+    test('A create with the id "A1" returns the item with the id "a1"',
+        () async {
+      final todos = await open();
+
+      final item = await todos.create({'t': 1}, id: 'A1');
+
+      expect(item['id'], 'a1');
+      expect(server.hasKey('a1.$_ns@alice'), isTrue);
+    });
+
+    test('A get with the id "A1" returns the item created as "a1"', () async {
+      final todos = await open();
+      await todos.create({'t': 1}, id: 'a1');
+
+      final item = await todos.get(mine('A1'));
+
+      expect(item?['id'], 'a1');
+      expect(item?['data'], {'t': 1});
+    });
+
+    test(
+        'A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"',
+        () async {
+      final todos = await open();
+      await todos.create({'t': 1}, id: 'a1');
+
+      await expectLater(todos.create({'t': 2}, id: 'A1'),
+          _rejectsWith(CollectionErrorCodes.alreadyExists, id: 'a1'));
+    });
+
+    test(
+        'An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"',
+        () async {
+      final todos = await open();
+
+      for (final call in <String, Future<Object?> Function()>{
+        'update': () => todos.update(mine('B1'), {'t': 2}),
+        'share': () => todos.share(mine('B1'), ['@bob']),
+        'remove': () => todos.remove(mine('B1')),
+      }.entries) {
+        await expectLater(
+            call.value(), _rejectsWith(CollectionErrorCodes.notFound, id: 'b1'),
+            reason: call.key);
+      }
+    });
+
+    test(
+        'An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"',
+        () async {
+      final todos = await open();
+
+      await expectLater(todos.update(bobs('B1'), {'t': 2}),
+          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1'));
+    });
+
+    test('A get addresses an item already stored under a 65-character id',
+        () async {
+      server.putRaw(
+          '$long.$_ns@alice',
+          jsonEncode({
+            'type': 'Todo',
+            'obj': {'t': 1}
+          }));
+      final todos = await open();
+
+      final item = await todos.get(mine(long));
+
+      expect(item?['id'], long);
+      expect(item?['owner'], '@alice');
+      expect(item?['data'], {'t': 1});
     });
 
     test('An item id of 64 allowed characters round-trips', () async {
@@ -408,7 +514,8 @@ void main() {
       expect(ids(listed), ['f1']);
       expect(listed.single['owner'], '@bob');
       expect(await todos.get(mine('f1')), isNull);
-      await expectLater(todos.update((id: 'f1', owner: '@carol'), {'x': 1}),
+      await expectLater(
+          todos.update((id: 'f1', owner: '@carol'.toAtsign()), {'x': 1}),
           _rejectsWith(CollectionErrorCodes.notOwner, owner: '@carol'));
     });
 
@@ -424,6 +531,41 @@ void main() {
         todos.get(bobs('b1')),
         _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
       );
+    });
+
+    test(
+        'A list leaves out a stored record whose key names no Atsign, and logs a warning naming the key',
+        () async {
+      final records = <String>[];
+      final previous = AtSignLogger.defaultLoggingHandler;
+      AtSignLogger.defaultLoggingHandler = _Collect(records);
+      addTearDown(() => AtSignLogger.defaultLoggingHandler = previous);
+      final todos = await open();
+      await todos.create({'title': 'a'}, id: 'a1');
+      const ownedByAt = 'b1.$_ns@';
+      const unowned = '@bob:b2.$_ns@alice@x';
+      expect(AtKey.fromString(ownedByAt).sharedBy, '@',
+          reason: 'the first record names "@" as its owner');
+      expect(AtKey.fromString(unowned).sharedBy, isNull,
+          reason: 'the second record names no owner at all');
+      final envelope = jsonEncode({
+        'type': 'Todo',
+        'obj': {'t': 1}
+      });
+      server.putRaw(ownedByAt, envelope);
+      server.putRaw(unowned, envelope);
+
+      final listing = await todos.list();
+
+      expect(ids(listing.items), ['a1']);
+      expect(listing.unreadable, isEmpty);
+      for (final stored in [ownedByAt, unowned]) {
+        final key = '${AtKey.fromString(stored)}';
+        expect(
+            records.where((r) => r.startsWith('WARNING|') && r.contains(key)),
+            isNotEmpty,
+            reason: 'a warning names the key $key; logged: $records');
+      }
     });
 
     test('A list keeps the upstream order of items and recipients', () async {

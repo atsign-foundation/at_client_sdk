@@ -19,10 +19,11 @@ Feature: The JS collections adapter translates onto AtCollection
   # Replay: a replayed notification only makes the collection re-read the stored,
   #   signed record. It creates no item and changes no item's type or owner:
   #   "Each upstream event is delivered once and cancel stops delivery".
-  # DoS: an item id is bounded to 64 characters from a fixed set ("An item id
-  #   outside the allowed set rejects ..."), and an unreadable record is reported
-  #   beside the readable items instead of failing the listing ("A list returns
-  #   readable items and reports unreadable ones").
+  # DoS: AtCollection refuses a new item id longer than 64 characters ("A
+  #   create with an id of 65 characters rejects with
+  #   COLLECTION_INVALID_ARGUMENT"), and an unreadable record is reported
+  #   beside the readable items instead of failing the listing ("A list
+  #   returns readable items and reports unreadable ones").
   # Forgery: an item's owner is the sharedBy of its key and never a field of its
   #   data or envelope: "An item's owner comes from the key's sharedBy, never from its data".
   # Impersonation: a write to an item another atSign owns is refused before any
@@ -98,6 +99,13 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter lists the collection
     Then the list resolves with the readable item in items
     And unreadable holds one entry with id "b1", owner "@bob" and code COLLECTION_ITEM_UNREADABLE
+
+  Scenario: A list leaves out a stored record whose key names no Atsign, and logs a warning naming the key
+    Given a readable item and a stored record in the collection whose key names no Atsign
+    When the adapter lists the collection
+    Then items holds the readable item
+    And unreadable holds no entry for that record
+    And a warning naming the record's key is logged
 
   Scenario: A list keeps the upstream order of items and recipients
     Given items created in an unsorted order with recipients in an unsorted order
@@ -222,10 +230,48 @@ Feature: The JS collections adapter translates onto AtCollection
     Then items holds the matching readable items in the order AtCollection returns them
     And unreadable holds the unreadable record
 
-  Scenario: An item id outside the allowed set rejects with COLLECTION_INVALID_ARGUMENT
-    When the adapter creates, gets, updates, shares or removes with the id "public:x", "@bob:x", "", "A1", "a.b", "x y", a 65-character id or "_x"
+  Scenario: An item id AtCollection refuses rejects with COLLECTION_INVALID_ARGUMENT
+    When the adapter creates, gets, updates, shares or removes with the id "a:b", "a@b", "", "a.b" or "a b"
     Then each rejects with COLLECTION_INVALID_ARGUMENT
     And nothing is written
+
+  Scenario: A create with an id starting with "_" rejects with COLLECTION_INVALID_ARGUMENT
+    When the adapter creates an item with the id "_a"
+    Then it rejects with COLLECTION_INVALID_ARGUMENT
+    And nothing is written
+
+  Scenario: A create with an id of 65 characters rejects with COLLECTION_INVALID_ARGUMENT
+    When the adapter creates an item with an id of 65 "a" characters
+    Then it rejects with COLLECTION_INVALID_ARGUMENT
+    And nothing is written
+
+  Scenario: A create with the id "A1" returns the item with the id "a1"
+    When the adapter creates an item with the id "A1"
+    Then the returned item's id is "a1"
+
+  Scenario: A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"
+    Given an item created through the adapter with the id "a1"
+    When the adapter creates an item with the id "A1"
+    Then it rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"
+
+  Scenario: An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"
+    Given no item with the id "b1"
+    When the adapter updates, shares or removes the id "B1" owned by @alice
+    Then it rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"
+
+  Scenario: An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"
+    When the adapter updates the id "B1" owned by @bob
+    Then it rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"
+
+  Scenario: A get with the id "A1" returns the item created as "a1"
+    Given an item created through the adapter with the id "a1"
+    When the adapter gets the id "A1" owned by @alice
+    Then it returns the item whose id is "a1"
+
+  Scenario: A get addresses an item already stored under a 65-character id
+    Given an item of @alice stored under an id of 65 "a" characters
+    When the adapter gets that id owned by @alice
+    Then it returns the item
 
   Scenario: An item id of 64 allowed characters round-trips
     When the adapter creates an item with a 64-character id of lowercase letters, digits, "_" and "-"

@@ -19,6 +19,7 @@ import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/preference/notification_replay.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -454,7 +455,8 @@ class NotificationServiceImpl extends NotificationService {
             authenticator: clientAuthenticator(atSign,
                 atKeysIo: atClient.atKeysIo,
                 cramSecret: preference.cramSecret,
-                enrollmentId: atClient.enrollmentId),
+                enrollmentId: atClient.enrollmentId,
+                clientConfig: clientConfigOf(preference.atClientParticulars)),
             secondaryAddressFinder: secondaryAddressFinder,
           )
             // The muxable heartbeats now, so the preference has to reach it or
