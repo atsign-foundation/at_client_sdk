@@ -47,8 +47,8 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
   - ns `10781e72da94f814194f90c4c40d75d7b0b029d06253d40a610b0ad977b2d620`
   - kek `926e411c042496d783b7c01687562cc76b11cfe6fd683ddeeb285b7adfab83ce`
   - authSeed `b0e85850ef5407a914408bc6ccdc6a32baeb6446127275414199179a2cf79fc6`
-  - Pinned by `packages/at_auth/test/passkey/passkey_key_deriver_test.dart` (`lookupHex and ns match the golden vectors for @alice and @bob`).
-- All four labels have the form `at_auth/custody/<name>/v1` (`record-id`, `kek`, `auth-seed`, `ns`). The Dart (`at_auth`) and WebCrypto (`at_client_wasm`) derivations both take them from the `at_auth` constants, so they cannot drift. These label strings are canonical. They replace the unversioned `atkeys-record-id`, `atkeys-kek` and `atkeys-ns` and, before them, `atkeys/lookup` and `atkeys/blob`; only the auth-seed label is unchanged, so its vector is too. A record sealed or pointer written under an unversioned label does not open under these.
+  - Pinned by `packages/at_auth/test/passkey/passkey_key_deriver_test.dart` (`lookupHex and ns match the golden vectors for @alice and @bob`) and, in the browser under dart2js and dart2wasm, by `packages/at_client_wasm/test/web/web_crypto_passkey_test.dart` (`The browser's derivation matches the vectors`).
+- All four labels have the form `at_auth/custody/<name>/v1` (`record-id`, `kek`, `auth-seed`, `ns`). The browser's deriver (`at_client_wasm`) and `at_auth`'s test deriver both take them from the `at_auth` constants and compute every output with at_chops' `HkdfSha256`, so they cannot drift. The browser imports the kek's bytes as a non-extractable WebCrypto AES-GCM key and then overwrites them with zeroes. These label strings are canonical. They replace the unversioned `atkeys-record-id`, `atkeys-kek` and `atkeys-ns` and, before them, `atkeys/lookup` and `atkeys/blob`; only the auth-seed label is unchanged, so its vector is too. A record sealed or pointer written under an unversioned label does not open under these.
 
 ## Why
 
