@@ -5,7 +5,11 @@ class AtLookUpException implements Exception {
   String errorCode;
   String errorMessage;
 
-  AtLookUpException(this.errorCode, this.errorMessage);
+  /// The failure [AtLookUp.executeVerb] caught and threw as this exception;
+  /// null for an atServer's `error:` reply.
+  final Object? cause;
+
+  AtLookUpException(this.errorCode, this.errorMessage, {this.cause});
 
   @override
   String toString() {

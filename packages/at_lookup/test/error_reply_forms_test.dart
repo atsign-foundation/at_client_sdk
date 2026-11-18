@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/util/error_response.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -156,5 +155,66 @@ void main() {
                 .having((e) => e.errorMessage, 'errorMessage', contains(body)));
       });
     });
+
+    group('Given a body that names no code', () {
+      unknown.forEach((shape, body) {
+        test('when it is $shape, then errorResponseCode reads none', () {
+          expect(errorResponseCode('error:$body'), isNull);
+        });
+      });
+    });
+
+    test(
+        'Given each form an atServer writes, when errorResponseCode reads '
+        'it, then it reads the code errorResponseException throws', () {
+      const replies = {
+        'error:AT0027:enrollment_id: e-1 is revoked': 'AT0027',
+        'error:AT0015-key not found': 'AT0015',
+        'error:AT0015': 'AT0015',
+        'error:{"errorCode":"AT0401","errorDescription":"refused"}': 'AT0401',
+        'error:{"errorCode":"AT0015"}': 'AT0015',
+      };
+      replies.forEach((reply, code) {
+        expect(errorResponseCode(reply), code, reason: reply);
+        expect(errorResponseException(reply).errorCode, code, reason: reply);
+      });
+    });
+
+    test(
+        'Given a reply that is not an error: reply, when errorResponseCode '
+        'reads it, then it reads none', () {
+      for (final reply in [
+        'data:AT0015-key not found',
+        'AT0015-key not found',
+        ' error:AT0015-key not found',
+      ]) {
+        expect(errorResponseCode(reply), isNull, reason: reply);
+      }
+    });
+  });
+
+  test(
+      'Given an authenticator that throws, when executeVerb wraps what it '
+      'threw, then the wrapper keeps it as its cause', () async {
+    final refusal = UnAuthenticatedException(
+        'Failed connecting to @alice. error:AT0027:enrollment_id: e-1 is '
+        'revoked');
+    final atLookup = AtLookUp.withTransport(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain('127.0.0.1', 64),
+      authenticator: (_) async => throw refusal,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transports),
+    );
+    addTearDown(atLookup.close);
+
+    await expectLater(
+        atLookup.executeVerb(LLookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@alice')),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0401')
+            .having((e) => e.cause, 'cause', same(refusal))));
   });
 }
