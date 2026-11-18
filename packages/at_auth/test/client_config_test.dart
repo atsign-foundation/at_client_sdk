@@ -173,7 +173,9 @@ void main() {
   });
 
   group('withClientConfigDefaults', () {
-    test('a version that is null, empty or only whitespace is not sent', () {
+    test(
+        'a version the caller gives that is null, empty or only whitespace is '
+        'not sent', () {
       for (final version in [null, '', '  ', ' \t\u2028']) {
         expect(withClientConfigDefaults({'version': version, 'clientId': '42'}),
             allOf(isNot(contains('version')), containsPair('clientId', '42')),

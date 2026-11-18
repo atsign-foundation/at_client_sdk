@@ -1,4 +1,5 @@
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -25,6 +26,27 @@ void main() {
             throwsA(isA<KeyNotFoundException>()
                 .having((e) => e.message, 'message', 'key not found')),
             reason: reply);
+      }
+    });
+
+    test(
+        'Given an atServer error reply in the dash, colon or JSON form, when '
+        'parseFailureResponse reads it, then the response carries its code '
+        'and text', () {
+      const replies = [
+        'error:AT0015-key not found',
+        'error:AT0015:key not found',
+        'error:{"errorCode":"AT0015","errorDescription":"key not found"}',
+      ];
+      for (final reply in replies) {
+        final response = AtResponse();
+        expect(
+            () => DefaultResponseParser().parseFailureResponse(reply, response),
+            throwsA(isA<KeyNotFoundException>()),
+            reason: reply);
+        expect(response.isError, isTrue, reason: reply);
+        expect(response.errorCode, 'AT0015', reason: reply);
+        expect(response.errorDescription, 'key not found', reason: reply);
       }
     });
 

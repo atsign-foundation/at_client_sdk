@@ -82,7 +82,7 @@ void main() {
       pkamAuthenticators.forEach((name, build) {
         test(
             'when $name\'s pkam: is refused, then it throws an '
-            'UnAuthenticatedException naming the code', () async {
+            'AtAuthErrorReplyException naming the code', () async {
           final executor = _ScriptedExecutor(
               ['data:$pkamPinChallenge', refusal('AT0401', pkamRefused)]);
 
@@ -108,7 +108,7 @@ void main() {
       cramAuthenticators.forEach((name, build) {
         test(
             'when $name\'s cram: is refused, then it throws an '
-            'UnAuthenticatedException naming the code', () async {
+            'AtAuthErrorReplyException naming the code', () async {
           final executor = _ScriptedExecutor([
             'data:$pkamPinChallenge',
             refusal('AT0401', 'Exception: Authentication Failed')
@@ -122,7 +122,7 @@ void main() {
 
       test(
           'when CramAuthenticator\'s cram: is refused, then it throws an '
-          'UnAuthenticatedException saying CRAM failed and naming the code',
+          'AtAuthErrorReplyException saying CRAM failed and naming the code',
           () async {
         final atServer = FakeCramAtServer(atSign,
             cramReply: refusal('AT0401', 'Exception: Authentication Failed'));
@@ -188,7 +188,7 @@ void main() {
         });
 
         test(
-            'then a refused cram: throws an UnAuthenticatedException naming '
+            'then a refused cram: throws an AtAuthErrorReplyException naming '
             'the code', () async {
           await expectLater(
               activateOver(FakeCramAtServer(atSign,

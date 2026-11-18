@@ -273,6 +273,29 @@ void main() {
             .having((e) => e.errorCode, 'errorCode', 'AT0401')
             .having((e) => e.cause, 'cause', same(refusal))));
   });
+
+  test(
+      'Given an authenticator whose connection is lost, when executeVerb wraps '
+      'the ConnectionInvalidException, then the wrapper keeps it as its cause',
+      () async {
+    final lost = ConnectionInvalidException('the connection was closed');
+    final atLookup = AtLookUp.withTransport(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain('127.0.0.1', 64),
+      authenticator: (_) async => throw lost,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transports),
+    );
+    addTearDown(atLookup.close);
+
+    await expectLater(
+        atLookup.executeVerb(LLookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@alice')),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.cause, 'cause', same(lost))));
+  });
 }
 
 class _RefusalWithCode extends UnAuthenticatedException {
