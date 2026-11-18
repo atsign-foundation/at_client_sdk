@@ -7,6 +7,7 @@ import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
+import 'package:at_client_wasm/src/keys/dom_exception_name.dart';
 import 'package:at_client_wasm/src/keys/web_crypto_passkey.dart';
 import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:test/test.dart';
@@ -371,6 +372,28 @@ void main() {
       sealed[0] ^= 1;
       await expectLater(s.open(iv, sealed, utf8.encode('a')),
           throwsA(isA<PasskeyRecordAuthenticationException>()));
+    });
+
+    test('a rejection other than a failed tag check propagates as itself',
+        () async {
+      final encryptOnly = await window.crypto.subtle
+          .generateKey(_params({'name': 'AES-GCM'.toJS, 'length': 256.toJS}),
+              false, ['encrypt'.toJS].toJS)
+          .toDart as CryptoKey;
+      final s = WebCryptoRecordSealer(window.crypto.subtle, encryptOnly);
+      final sealed = await s.seal(iv, utf8.encode('hello'), utf8.encode('a'));
+      Object? rejection;
+      try {
+        await s.open(iv, sealed, utf8.encode('a'));
+      } catch (e) {
+        rejection = e;
+      }
+      expect(rejection, isNotNull,
+          reason: 'a key without decrypt usage must not open a record');
+      expect(rejection, isNot(isA<PasskeyRecordAuthenticationException>()),
+          reason: 'only a failed tag check is an authentication failure');
+      expect(domExceptionName(rejection!), 'InvalidAccessError',
+          reason: 'the WebCrypto rejection must reach the caller as itself');
     });
 
     test('use after close throws a StateError', () async {

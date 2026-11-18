@@ -7,8 +7,14 @@ import 'package:at_auth/passkey.dart';
 import 'package:at_commons/atsign.dart';
 import 'package:web/web.dart';
 
+import 'dom_exception_name.dart';
+
 const _hkdfBits = 256;
 const _tagBits = 128;
+
+/// The `DOMException` name WebCrypto rejects an AES-GCM decrypt with when the
+/// tag does not verify.
+const _failedTagCheck = 'OperationError';
 
 JSObject _params(Map<String, JSAny> fields) {
   final params = JSObject();
@@ -34,8 +40,9 @@ Uint8List _bytesOf(JSAny? buffer) {
 /// A [RecordSealer] over a non-extractable WebCrypto AES-GCM-256 key.
 ///
 /// The key is a handle the page cannot read back. A ciphertext is the
-/// encrypted bytes followed by the 16-byte tag, and a record that does not
-/// open throws a [PasskeyRecordAuthenticationException].
+/// encrypted bytes followed by the 16-byte tag. A record whose tag check fails
+/// throws a [PasskeyRecordAuthenticationException]; any other rejection from
+/// WebCrypto propagates as itself.
 class WebCryptoRecordSealer implements RecordSealer {
   /// A sealer over [key], run on [subtle].
   WebCryptoRecordSealer(this._subtle, this._key);
@@ -70,16 +77,17 @@ class WebCryptoRecordSealer implements RecordSealer {
   @override
   Future<Uint8List> open(
       Uint8List iv, Uint8List ciphertext, List<int> aad) async {
+    final key = _live;
     final JSAny? plain;
     try {
       plain = await _subtle
-          .decrypt(_algorithm(iv, aad), _live, ciphertext.toJS)
+          .decrypt(_algorithm(iv, aad), key, ciphertext.toJS)
           .toDart;
-    } on StateError {
+    } catch (e) {
+      if (domExceptionName(e) == _failedTagCheck) {
+        throw PasskeyRecordAuthenticationException();
+      }
       rethrow;
-    } on Object {
-      // WebCrypto reports a failed tag check as an opaque rejection.
-      throw PasskeyRecordAuthenticationException();
     }
     return _bytesOf(plain);
   }
