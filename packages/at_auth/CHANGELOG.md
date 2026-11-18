@@ -1,5 +1,8 @@
 ## 4.1.0-rc.1
 
+- feat: an enrollment's wait for approval ends on AT0025 with
+  `AtEnrollmentDeniedException`, an `AtEnrollmentException`, so a denial is
+  told apart by type from a refusal whose text merely says "denied".
 - fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation is
   thrown as an `UnAuthenticatedException` carrying the atServer's reply, so
   its code can be read. Nothing is signed or digested.

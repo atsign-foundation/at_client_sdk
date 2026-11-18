@@ -98,9 +98,10 @@ class PendingEnrollment {
   ///
   /// The wait for a decision has no bound: somebody decides on their own
   /// schedule. [maxRetries] budgets consecutive failures to reach the
-  /// atServer, and [retryInterval] is the pause between polls. A denial, or
-  /// the request's expiry, removes this enrollment from [keys] and throws
-  /// [AtEnrollmentException].
+  /// atServer, and [retryInterval] is the pause between polls. A denial
+  /// ([AtEnrollmentDeniedException]), or the request's expiry
+  /// ([AtEnrollmentExpiredException]), removes this enrollment from [keys]
+  /// and throws; any other [AtEnrollmentException] leaves it pending.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
@@ -156,7 +157,7 @@ class PendingEnrollment {
       if (_ended.isCompleted) throw await _endedOnceCancelled();
       final decided = e is AtEnrollmentExpiredException
           ? 'expired'
-          : e is AtEnrollmentException && e.message.contains('denied')
+          : e is AtEnrollmentDeniedException
               ? 'denied'
               : null;
       if (decided != null) {

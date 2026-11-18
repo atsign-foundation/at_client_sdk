@@ -1,5 +1,10 @@
 ## 4.1.0-rc.1
 
+- fix: `PendingEnrollment` removes a request's pending keys as denied only
+  on the atServer's AT0025 denial, `AtEnrollmentDeniedException`, not on
+  any refusal whose text says "denied"; such a refusal ends the wait and
+  leaves the keys for a later wait. `AtEnrollmentDeniedException` is
+  exported.
 - fix: an atServer whose answer to `from:` holds no challenge to sign
   leaves the connection offline with cause `unreachable`, not refused,
   and a first open hands back its client. The client still signs
