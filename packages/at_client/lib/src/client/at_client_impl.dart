@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart'
-    show AtAuthSession, AtKeysIo, AtKeys;
+import 'package:at_auth/at_auth.dart' show AtAuthSession, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_client/src/enroll/first_enrollment.dart'
