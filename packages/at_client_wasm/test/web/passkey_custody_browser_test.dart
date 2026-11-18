@@ -364,6 +364,20 @@ Future<Map<String, Map<String, Uint8List>>> _dump(String dbName) async {
   }
 }
 
+/// Puts [value] as it is under [key] in [storeName] of database [dbName].
+Future<void> _rawPut(
+    String dbName, String storeName, String key, JSAny value) async {
+  final db = await _settled(window.indexedDB.open(dbName)) as IDBDatabase;
+  try {
+    await _settled(db
+        .transaction(storeName.toJS, 'readwrite')
+        .objectStore(storeName)
+        .put(value, key.toJS));
+  } finally {
+    db.close();
+  }
+}
+
 Future<List<String>> _databases(String prefix) async {
   final all = (await window.indexedDB.databases().toDart).toDart;
   return [
@@ -680,6 +694,31 @@ void main() {
       expect(dump['at_client_wasm_pending'], isEmpty);
       expect(dump['at_client_wasm_credentials']!.keys, [_atSign]);
       expect(dump['at_client_wasm_enrollments']!.keys, [_atSign]);
+    });
+
+    test(
+        'discarding deletes a pending record that will not decode, of any '
+        'stored type, and keeps the hints', () async {
+      for (final value in <JSAny>[
+        Uint8List.fromList(utf8.encode('not json')).toJS,
+        Uint8List.fromList(utf8.encode('{"renamed":"by a newer build"}')).toJS,
+        'not bytes'.toJS,
+      ]) {
+        device.store = await IndexedDbHintStore.open(dbName: device.dbName);
+        await device.store.putHint(_atSign, Uint8List.fromList([1, 2]), 'eid1');
+        await _rawPut(device.dbName, 'at_client_wasm_pending', _atSign, value);
+        await expectLater(device.store.get(_atSign),
+            throwsA(isA<UnsupportedPasskeyRecordException>()));
+
+        await discardPendingOnboardingIn(device.store, _atSign);
+
+        device.store = await IndexedDbHintStore.open(dbName: device.dbName);
+        expect(await device.store.get(_atSign), isNull,
+            reason: 'the record is gone');
+        expect(await device.store.enrollmentId(_atSign), 'eid1');
+        expect(await device.store.credentialId(_atSign), [1, 2]);
+        device.store.close();
+      }
     });
 
     test('a discard of an atSign not in canonical form is refused', () async {

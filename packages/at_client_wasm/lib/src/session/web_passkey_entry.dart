@@ -120,7 +120,9 @@ Future<AtClient> passkeyLogin(
 /// a no-op: nothing is deleted and the hints stay. Otherwise it deletes the
 /// record, and deletes the atSign's remembered passkey and enrollment hints
 /// only when the stored enrollment id equals the record's enrollment id;
-/// hints naming another enrollment stay. If no @keys document was written,
+/// hints naming another enrollment stay. A record this build cannot read, such
+/// as one a newer build wrote, is deleted and the hints stay. If no @keys
+/// document was written,
 /// the record held the only copy of the keys and the atSign must be reset
 /// with a new CRAM. Never call it without the user's choice.
 ///
@@ -138,7 +140,15 @@ Future<void> discardPendingOnboardingIn(
       final canonical = canonicalPasskeyAtSign(atSign);
       return WebSetupLock()
           .run(setupLockName(WebSetupLock.namePrefix, canonical), () async {
-        final record = await store.get(canonical);
+        final PendingOnboardingRecord? record;
+        try {
+          record = await store.get(canonical);
+        } on UnsupportedPasskeyRecordException {
+          // The record does not decode, so no enrollment id says whose the
+          // hints are: delete only the record, which is what blocks the atSign.
+          await store.delete(canonical);
+          return;
+        }
         if (record == null) return;
         await store.delete(canonical);
         if (await store.enrollmentId(canonical) == record.enrollmentId) {
