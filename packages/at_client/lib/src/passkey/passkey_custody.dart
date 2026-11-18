@@ -19,9 +19,10 @@ import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
 import 'passkey_session.dart';
 
-/// Asks the browser not to evict this origin's storage.
+/// Asks the platform to keep this application's stored data rather than
+/// evict it.
 abstract class StoragePersistence {
-  /// Whether the browser granted persistence.
+  /// Whether the platform granted persistence.
   Future<bool> requestPersist();
 }
 
@@ -288,6 +289,10 @@ class PasskeyCustody {
   /// public key already published, only deletes the CRAM secret that is
   /// already gone, and then saves the hints. Nothing is kept on the device
   /// until the CRAM secret is deleted.
+  ///
+  /// When the assertion after registering the new passkey fails or yields no
+  /// usable PRF output, the new passkey is reported to the platform as
+  /// unknown where the platform supports that, so it can drop the passkey.
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The returned

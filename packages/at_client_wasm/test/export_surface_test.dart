@@ -37,6 +37,16 @@ void main() {
             multiLine: true)));
   });
 
+  test('exports the call that clears a recorded PRF miss', () {
+    final barrel = File('lib/at_client_wasm_web.dart').readAsStringSync();
+    expect(
+        barrel,
+        matches(RegExp(
+            r"^export '[^']*web_passkey_entry\.dart'\s+show[^;]*"
+            r'\bclearPrfMiss\b',
+            multiLine: true)));
+  });
+
   test('exports the setup lock timeout', () {
     final barrel = File('lib/at_client_wasm_web.dart').readAsStringSync();
     expect(

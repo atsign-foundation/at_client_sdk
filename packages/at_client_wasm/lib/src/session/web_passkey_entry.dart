@@ -13,8 +13,19 @@ import 'web_storage_persistence.dart';
 /// Whether this browser can evaluate passkey PRF, as far as it tells.
 ///
 /// [onboardNewAtSign] refuses with a [PrfUnavailableException] before any
-/// ceremony when this is false.
+/// ceremony when this is false. In a browser that cannot report PRF support,
+/// it is false for [prfMissTtl] after a registration recorded a PRF miss,
+/// until [clearPrfMiss] clears it.
 Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
+
+/// Forgets a recorded PRF miss, so the next [onboardNewAtSign] runs the
+/// passkey ceremonies again instead of refusing for the rest of
+/// [prfMissTtl].
+///
+/// For the user's "Try again", for example with another authenticator. Does
+/// nothing when no miss is recorded. A browser that reports PRF support
+/// decides by that report, recorded miss or not.
+void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 
 /// Onboards a fresh [atSign] in this browser and returns its passkey session,
 /// whose client is PKAM'd before return.

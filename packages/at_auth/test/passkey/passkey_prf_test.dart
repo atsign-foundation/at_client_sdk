@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
@@ -96,6 +97,40 @@ void main() {
               .register('@alice', enrolledAt: _at, deviceName: _device),
           throwsA(isA<PrfUnavailableException>()));
     });
+
+    test('a 31-byte PRF output is zeroed before it is refused', () async {
+      final short = Uint8List.fromList(List.filled(31, 9));
+      final port = FakePasskeyPort()..resultPrfFirst = short;
+      await expectLater(
+          PasskeyPrf(port).unlock(), throwsA(isA<PrfUnavailableException>()));
+      expect(short, everyElement(0));
+    });
+
+    test('a PRF output of 32 zero bytes is PrfUnavailableException', () async {
+      final port = FakePasskeyPort()..resultPrfFirst = Uint8List(32);
+      await expectLater(
+          PasskeyPrf(port).unlock(), throwsA(isA<PrfUnavailableException>()));
+      await expectLater(
+          PasskeyPrf(port)
+              .register('@alice', enrolledAt: _at, deviceName: _device),
+          throwsA(isA<PrfUnavailableException>()));
+    });
+
+    for (final (output, bytes) in [
+      ('no', null),
+      ('a 31-byte', Uint8List.fromList(List.filled(31, 1))),
+      ('an all-zero', Uint8List(32)),
+    ]) {
+      test('$output PRF output is refused with one plain message', () async {
+        final port = FakePasskeyPort()..resultPrfFirst = bytes;
+        await expectLater(
+            PasskeyPrf(port).unlock(),
+            throwsA(isA<PrfUnavailableException>().having(
+                (e) => e.message,
+                'message',
+                'The authenticator did not return a usable PRF result')));
+      });
+    }
 
     test('register refuses before any ceremony when PRF is unsupported',
         () async {
@@ -211,6 +246,120 @@ void main() {
       expect(await support.supported(), isTrue);
     });
   });
+
+  group('a registered passkey without a usable PRF output', () {
+    late _SignallingPort port;
+
+    setUp(() => port = _SignallingPort()..resultPrfFirst = prf);
+
+    Future<PasskeyRegistration> register() => PasskeyPrf(port)
+        .register('@alice', enrolledAt: _at, deviceName: _device);
+
+    for (final (outcome, fail, failure) in [
+      (
+        'an assertion that throws',
+        (_SignallingPort p) => p.getFailure = PasskeyCeremonyException('x'),
+        isA<PasskeyCeremonyException>()
+      ),
+      (
+        'an assertion with no PRF output',
+        (_SignallingPort p) => p.resultPrfFirst = null,
+        isA<PrfUnavailableException>()
+      ),
+      (
+        'an assertion with a 31-byte PRF output',
+        (_SignallingPort p) =>
+            p.resultPrfFirst = Uint8List.fromList(List.filled(31, 1)),
+        isA<PrfUnavailableException>()
+      ),
+      (
+        'an assertion with 32 zero bytes',
+        (_SignallingPort p) => p.resultPrfFirst = Uint8List(32),
+        isA<PrfUnavailableException>()
+      ),
+    ]) {
+      test('is reported as unknown after $outcome', () async {
+        fail(port);
+        await expectLater(register(), throwsA(failure));
+        expect(port.calls, ['create', 'get']);
+        expect(port.signalled, [port.resultCredentialId]);
+      });
+    }
+
+    test('a usable PRF output reports nothing', () async {
+      await register();
+      expect(port.signalled, isEmpty);
+    });
+
+    test('a failed create reports nothing', () async {
+      port.failure = PasskeyCeremonyException('x');
+      await expectLater(register(), throwsA(isA<PasskeyCeremonyException>()));
+      expect(port.calls, ['create']);
+      expect(port.signalled, isEmpty);
+    });
+
+    test('a refused report leaves the registration failure as it was',
+        () async {
+      final cancelled = PasskeyCeremonyException('cancelled');
+      port
+        ..fails = true
+        ..getFailure = cancelled;
+      await expectLater(register(), throwsA(same(cancelled)));
+      expect(port.signalled, hasLength(1));
+    });
+
+    test('a report the platform never answers does not hold back the failure',
+        () async {
+      port
+        ..unanswered = Completer<void>()
+        ..resultPrfFirst = null;
+      Object? failure;
+      unawaited(register().then<void>((_) {}, onError: (Object e) {
+        failure = e;
+      }));
+      await pumpEventQueue();
+      expect(port.signalled, [port.resultCredentialId]);
+      expect(failure, isA<PrfUnavailableException>());
+    });
+  });
+
+  group('an unlocked passkey without a usable PRF output', () {
+    late _SignallingPort port;
+
+    setUp(() => port = _SignallingPort()..resultPrfFirst = prf);
+
+    for (final (outcome, fail, failure) in [
+      (
+        'an assertion that throws',
+        (_SignallingPort p) => p.getFailure = PasskeyCeremonyException('x'),
+        isA<PasskeyCeremonyException>()
+      ),
+      (
+        'an assertion with no PRF output',
+        (_SignallingPort p) => p.resultPrfFirst = null,
+        isA<PrfUnavailableException>()
+      ),
+      (
+        'an assertion with a 31-byte PRF output',
+        (_SignallingPort p) =>
+            p.resultPrfFirst = Uint8List.fromList(List.filled(31, 1)),
+        isA<PrfUnavailableException>()
+      ),
+      (
+        'an assertion with 32 zero bytes',
+        (_SignallingPort p) => p.resultPrfFirst = Uint8List(32),
+        isA<PrfUnavailableException>()
+      ),
+    ]) {
+      test('is not reported as unknown after $outcome', () async {
+        fail(port);
+        await expectLater(PasskeyPrf(port).unlock(), throwsA(failure));
+        await pumpEventQueue();
+        expect(port.calls, ['get']);
+        expect(port.signalled, isEmpty);
+      });
+    }
+  });
 }
 
 class _FailsOnGet implements PasskeyPort {
@@ -237,9 +386,26 @@ class _SignallingPort extends FakePasskeyPort
   final signalled = <Uint8List>[];
   var fails = false;
 
+  /// When set, the assertion alone throws it.
+  Object? getFailure;
+
+  /// When set, a report waits on it, as a platform that never answers does.
+  Completer<void>? unanswered;
+
+  @override
+  Future<PasskeyAssertion> get(
+      {required Uint8List evalInput, Uint8List? allowCredential}) async {
+    if (getFailure case final failure?) {
+      calls.add('get');
+      throw failure;
+    }
+    return super.get(evalInput: evalInput, allowCredential: allowCredential);
+  }
+
   @override
   Future<void> signalUnknownCredential(Uint8List credentialId) async {
     signalled.add(credentialId);
     if (fails) throw StateError('platform refused');
+    await unanswered?.future;
   }
 }
