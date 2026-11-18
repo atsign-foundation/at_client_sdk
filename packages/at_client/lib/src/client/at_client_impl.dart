@@ -44,6 +44,7 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -1653,16 +1654,38 @@ class AtClientImpl implements AtClient {
   Future<AtValue> get(
     AtKey atKey, {
     GetRequestOptions? getRequestOptions,
-  }) async {
+  }) =>
+      _lookUp(atKey, getRequestOptions, 'all', (response) async {
+        if (_heldButNotVisible(response)) return AtValue();
+        return await GetResponseTransformer(this)
+            .transform(Tuple<AtKey, String>()
+              ..one = atKey
+              ..two = response!);
+      });
+
+  @override
+  Future<Metadata?> getMeta(AtKey atKey,
+          {GetRequestOptions? getRequestOptions}) =>
+      _lookUp(
+          atKey,
+          getRequestOptions,
+          'meta',
+          (response) async => _heldButNotVisible(response)
+              ? null
+              : _metadataFrom(response!, atKey));
+
+  /// Looks [atKey] up with [operation], where [getRequestOptions] and the
+  /// preference route it, and returns what [answer] makes of the response.
+  ///
+  /// Every [AtException] on the way, [answer]'s included, is rethrown as
+  /// [AtExceptionManager.createException] rebuilds it.
+  Future<T> _lookUp<T>(AtKey atKey, GetRequestOptions? getRequestOptions,
+      String operation, Future<T> Function(String? response) answer) async {
     Secondary? secondary;
     try {
-      // validate the get request.
       await AtClientValidation().validateAtKey(atKey);
-      // Get the verb builder for the atKey
-      var verbBuilder = GetRequestTransformer(
-        this,
-      ).transform(atKey, requestOptions: getRequestOptions);
-      // Execute the verb.
+      final verbBuilder = GetRequestTransformer(this, operation: operation)
+          .transform(atKey, requestOptions: getRequestOptions);
       final routing =
           _routingFor(atKey, useRemoteAtServerIfSet(getRequestOptions));
       // NOTE: getSecondary sends any lookup to the atServer, and a `local:` key
@@ -1670,22 +1693,7 @@ class AtClientImpl implements AtClient {
       secondary = atKey.isLocal
           ? getLocalSecondary()!
           : SecondaryManager.getSecondary(this, verbBuilder, routing);
-      var getResponse = await secondary.executeVerb(verbBuilder);
-      // Return empty value if getResponse is null.
-      if (getResponse == null ||
-          getResponse.isEmpty ||
-          getResponse == 'data:null') {
-        return AtValue();
-      }
-      // Send AtKey and AtResponse to transform the response to AtValue.
-      var getResponseTuple = Tuple<AtKey, String>()
-        ..one = atKey
-        ..two = (getResponse);
-      // Transform the response and return
-      var atValue = await GetResponseTransformer(
-        this,
-      ).transform(getResponseTuple);
-      return atValue;
+      return await answer(await secondary.executeVerb(verbBuilder));
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
           ? ExceptionScenario.localVerbExecutionFailed
@@ -1697,10 +1705,29 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  @override
-  Future<Metadata?> getMeta(AtKey atKey) async {
-    var atValue = await get(atKey);
-    return atValue.metadata;
+  /// Whether [response] is a lookup's answer for a record that is held but
+  /// not visible now: not yet available, or expired and not yet removed.
+  static bool _heldButNotVisible(String? response) =>
+      response == null || response.isEmpty || response == 'data:null';
+
+  /// The metadata in [response] to a `meta` lookup of [atKey], or an
+  /// [InvalidResponseException] when it is not metadata.
+  ///
+  /// The response names no key, so `isPublic` and `isCached` come from
+  /// [atKey].
+  static Metadata _metadataFrom(String response, AtKey atKey) {
+    try {
+      final body = jsonDecode(DefaultResponseParser().parse(response).response)
+          as Map<String, dynamic>;
+      return AtClientUtil.prepareMetadata(body, atKey.metadata.isPublic,
+          isCached: atKey.metadata.isCached)!;
+    } on FormatException catch (e) {
+      throw InvalidResponseException('The metadata lookup of $atKey was '
+          'answered with text that does not parse: ${e.message}');
+    } on TypeError catch (e) {
+      throw InvalidResponseException('The metadata lookup of $atKey was '
+          'answered with something that is not metadata: $e');
+    }
   }
 
   @override

@@ -34,14 +34,16 @@ Feature: AtCollection checks every item id before using it in a key
   DoS: whoever supplies an id to the app, any Atsign that shares an item into
   the namespace, and any Atsign that can notify this one. create refuses an id
   longer than 64 characters before any read or write, and upsert refuses one
-  once neither local storage nor the atServer holds an item under it (an
-  atServer that cannot be reached keeps the refusal); reads accept an id of any length, and
-  the check is linear in the id's length, an item another Atsign shares under
-  an id starting with "_" can still be read by that id, and an event whose ids
-  the check refuses is not emitted, so no event hands the app an id its reads
-  refuse; each such event costs one warning and writes nothing to the local
-  keystore, while each other notification costs a log line and a local write
-  (the scenarios tagged @dos).
+  once neither local storage nor the atServer holds an item under it, judged
+  from the item's metadata without decrypting it (an atServer lookup that
+  fails with an error other than not found keeps the refusal, and the error
+  says the atServer could not be checked); reads accept an id of any length,
+  and the check is linear in the id's length, an item another Atsign shares
+  under an id starting with "_" can still be read by that id, and an event
+  whose ids the check refuses is not emitted, so no event hands the app an id
+  its reads refuse; each such event costs one warning and writes nothing to
+  the local keystore, while each other notification costs a log line and a
+  local write (the scenarios tagged @dos).
   Forgery: the app's own code supplies every id, and it holds this Atsign's
   keys and could write any key directly; the check matters when an app builds
   an id from input it did not write. Every call refuses an id containing ".",
@@ -240,32 +242,116 @@ Feature: AtCollection checks every item id before using it in a key
     Then ArgumentError is thrown
     And nothing is written
 
-  Scenario: Given no item with a 65-character id and an atServer that cannot be reached (AtConnectException), when upsert is called with that id, then ArgumentError is thrown and nothing is written
-    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
-    And a read sent to the atServer fails with an AtConnectException
-    When upsert is called with that id and a new value
+  Scenario: Given an AtClient other than AtClientImpl whose getMeta throws a raw KeyNotFoundException and no item with a 65-character id, when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice over an AtClient other than AtClientImpl, whose getMeta throws a raw KeyNotFoundException for a missing key, locally and on the atServer
+    And no item with the id of 65 "a" characters
+    When upsert is called with that id
     Then ArgumentError is thrown
     And nothing is written
 
-  Scenario: Given no item with a 65-character id and an atServer that cannot be reached (AtClientException wrapping a socket failure), when upsert is called with that id, then ArgumentError is thrown and nothing is written
+  Scenario Outline: Given no item with a 65-character id and an atServer that cannot be reached, when upsert is called with that id, then ArgumentError is thrown and nothing is written
     Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
-    And a read sent to the atServer fails with an AtClientException whose text names a socket failure
+    And getMeta, asked for that id on the atServer, throws an AtClientException, as it does when <cause>
     When upsert is called with that id and a new value
     Then ArgumentError is thrown
     And nothing is written
+    Examples:
+      | cause                                                      |
+      | the atServer's address refuses the connection              |
+      | the atDirectory refuses the connection                     |
+      | the atServer does not answer in time                       |
 
   Scenario: Given no item with a 65-character id and an atServer that refuses the session, when upsert is called with that id, then ArgumentError is thrown and nothing is written
     Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
-    And a read sent to the atServer fails with an UnAuthenticatedException
+    And getMeta, asked for that id on the atServer, throws an AtClientException, as it does when the atServer refuses the session
     When upsert is called with that id and a new value
     Then ArgumentError is thrown
     And nothing is written
 
-  Scenario: Given no local item with a 65-character id and an atServer read that fails to decrypt, when upsert is called with that id, then the item holds the new value
+  Scenario: Given no local item with a 65-character id and a record under it on the atServer that this client cannot open, when upsert is called with that id, then the item holds the new value
     Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
-    And a read sent to the atServer fails with an AtDecryptionException
+    And the atServer holds a record under that id whose value fails to decrypt with an AtDecryptionException
     When upsert is called with that id and a new value
     Then get with that id returns the new value
+    And upsert called getMeta for the id and never called get before writing
+
+  Scenario: upsert keeps refusing a new over-long id when the atServer read fails with an error other than not found
+    Given local storage holds no item under a 65-character id
+    And looking that id up on the atServer fails with an error other than not found
+    When the app calls `upsert` with that id
+    Then `upsert` throws `ArgumentError` naming the new-id rules
+    And nothing is written
+
+  Scenario: Given no local item with a 65-character id and an atServer read that answers that this enrollment may not read it, when upsert is called with that id, then upsert throws ArgumentError naming the new-id rules and nothing is written
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And a lookup sent to the atServer is answered with AT0009, as the atServer answers an enrollment without access to the namespace
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And nothing is written
+
+  Scenario: Given a client whose preference reads from the atServer only, when upsert is called with a 65-character id and the atServer read fails with an error other than not found, then upsert throws ArgumentError naming the new-id rules and nothing is written
+    Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly, holding no item with the id of 65 "a" characters
+    And a lookup sent to the atServer fails with an error other than not found
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And nothing is written
+    And no lookup reached local storage
+
+  Scenario: Given a client whose preference reads from the atServer only and whose local storage holds an item under a 65-character id that the atServer does not, when upsert is called with that id, then ArgumentError is thrown and nothing is written
+    Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly
+    And local storage holds an item under the id of 65 "a" characters
+    And the atServer answers not found for that id
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And nothing is written
+    And no lookup reached local storage
+
+  Scenario: Given a client whose preference reads from the atServer only and an item under a 65-character id on the atServer, when upsert is called with that id, then the item holds the new value and local storage is not asked
+    Given a collection "todos.demo" of @alice whose client's remoteLocalPref is remoteOnly
+    And the atServer holds an item under the id of 65 "a" characters
+    When upsert is called with that id and a new value
+    Then get with that id returns the new value
+    And no lookup reached local storage
+
+  Scenario: Given a stopped client whose local read throws StoppedException, when upsert is called with a 65-character id, then StoppedException is thrown and nothing is written
+    Given a collection "todos.demo" of @alice whose client has stopped, so a local read throws StoppedException
+    When upsert is called with an id of 65 "a" characters
+    Then StoppedException is thrown
+    And nothing is written
+
+  Scenario: Given no local item with a 65-character id and a stopped client whose atServer read throws StoppedException, when upsert is called with that id, then StoppedException is thrown and nothing is written
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And its client has stopped, so a read sent to the atServer throws StoppedException
+    When upsert is called with that id and a new value
+    Then StoppedException is thrown
+    And nothing is written
+
+  Scenario: Given no local item with a 65-character id and a record under it on the atServer whose value fails to decrypt with a CryptoProviderNotRegistered or a FormatException, when upsert is called with that id, then the item holds the new value
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And the atServer holds a record under that id, and reading its value fails with a CryptoProviderNotRegistered, or with a FormatException because the value is not base64
+    When upsert is called with that id and a new value
+    Then get with that id returns the new value
+
+  Scenario: Given an item with a 65-character id that the atServer holds but has not yet made available, when upsert is called with that id, then the item holds the new value
+    Given a collection "todos.demo" of @alice holding no local item with the id of 65 "a" characters
+    And the atServer holds an item under that id whose availableAt is still to come, so its lookup answers with no metadata
+    When upsert is called with that id and a new value
+    Then the item holds the new value
+
+  Scenario: Given no local item with a 65-character id and an atServer lookup that fails with an error other than not found, when upsert is called with that id, then the ArgumentError says the atServer could not be checked
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And getMeta, asked for that id on the atServer, throws an AtClientException
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And its message says the atServer could not be checked
+    And nothing is written
+
+  Scenario: Given no item with a 65-character id, when upsert is called with that id, then the ArgumentError does not say the atServer could not be checked
+    Given a collection "todos.demo" of @alice holding no item with the id of 65 "a" characters
+    And the atServer answers that it holds no item under that id
+    When upsert is called with that id and a new value
+    Then upsert throws ArgumentError naming the new-id rules
+    And its message does not say the atServer could not be checked
 
   Scenario: Given no id, when create is called, then the item's id is 8 characters of a-z and 0-9
     Given a collection "todos.demo" of @alice
@@ -330,16 +416,37 @@ Feature: AtCollection checks every item id before using it in a key
 
   Scenario: Given a stored item with a 65-character id that this collection has found and that then expires, when upsert is called with that id, then ArgumentError is thrown and nothing is written
     Given a collection "todos.demo" of @alice for which exists has returned true for a stored item whose id is 65 "a" characters
-    And that item expires
+    And that item expires, and local storage and the atServer remove it
     When upsert is called with that id and a new value
     Then ArgumentError is thrown
     And nothing is written
 
-  Scenario: Given a stored item with a 65-character id that cannot be read, when upsert is called with that id, then the item holds the new value
+  Scenario: Given a stored item with a 65-character id whose local lookup fails with an error other than not found, when upsert is called with that id, then the item holds the new value
     Given a collection "todos.demo" of @alice holding a stored item whose id is 65 "a" characters
-    And reading that item fails with an error other than not found
+    And looking that item up locally fails with an error other than not found
     When upsert is called with that id and a new value
     Then the item holds the new value
+
+  Scenario: Given a stored item with a 65-character id whose local read fails with an error other than not found and whose atServer read fails with an error other than not found, when upsert is called with that id, then the item holds the new value
+    Given a collection "todos.demo" of @alice holding a stored item whose id is 65 "a" characters
+    And looking that item up locally fails with an error other than not found
+    And looking it up on the atServer fails with an error other than not found
+    When upsert is called with that id and a new value
+    Then the item holds the new value
+
+  Scenario: Given local storage holds a record under a 65-character id whose value this client cannot open, when upsert is called with that id, then the new-id rules do not refuse it and the atServer is not asked
+    Given a collection "todos.demo" of @alice whose local storage holds a record under the id of 65 "a" characters
+    And that record's value fails to decrypt, so get with that id throws AtKeyNotFoundException
+    When upsert is called with that id and a new value
+    Then upsert does not throw the new-id ArgumentError
+    And no lookup reached the atServer
+
+  Scenario: Given a client without its self encryption key whose local storage holds a record under a 65-character id, when upsert is called with that id, then it refuses and the record keeps its value
+    Given a client of @alice without its self encryption key
+    And local storage and the atServer hold a record under the id of 65 "a" characters, written by a client of @alice that had every key
+    When upsert is called with that id and a new value
+    Then CollectionOpException is thrown
+    And the atServer's record keeps its old value
 
   # Sub-collection names
 
