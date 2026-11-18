@@ -17,7 +17,7 @@ Future<void> main(List<String> args) async {
     ..namespace = 'buzz'
     ..rootDomain = 'vip.ve.atsign.zone';
   final keys = CliKeys.fileFor(atSign, path: argResults['atKeysPath']);
-  final lookUps = lookUpsFor(preference.rootDomain);
+  final lookUps = secureSocketLookUps();
   final secondaryAddressFinder = CacheableSecondaryAddressFinder(
       preference.rootDomain, preference.rootPort);
 
@@ -42,8 +42,8 @@ Future<void> main(List<String> args) async {
   pending.progress.listen((event) => print('${event.group}: ${event.msg}'));
 
   final client = await pending.client(preference,
-      storage: CliKeys.storageFor(atSign,
-          program: 'buzz', id: pending.enrollmentId),
+      storage:
+          CliKeys.storageFor(atSign, program: 'buzz', id: pending.enrollmentId),
       retryInterval: Duration(seconds: 10));
   print('approved: this device runs as enrollment ${client.enrollmentId}');
   await client.stop();

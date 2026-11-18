@@ -104,28 +104,38 @@ final todos = await atClient.collection<Todo>(
 
 ---
 
-## 6. Dots in `subName` or `parent.id`
+## 6. Item ids and sub-collection names
 
-**Problem:** Sub-collection key composition uses `.` as a separator. A
-`subName` or item id containing `.` breaks key parsing and produces
-`ArgumentError` at runtime (or, worse, silently routes to the wrong
-namespace).
+**Problem:** An item id is the first segment of every key `AtCollection`
+writes or reads for the item. `create`, `upsert`, `draft`, `get`, `getOrNull`,
+`exists`, `getItems` and `getItemsAsStream` throw `ArgumentError`, before any
+read or write, for an id that is empty or contains `.`, `:`, `@`, whitespace
+or a control character; `create`, `upsert` and `draft` also refuse one
+starting with `_`. A new item's id must be 1 to 64 characters of `a-z`, `0-9`,
+`-` and `_`, starting with a letter or digit. Every id is folded to lower
+case, so `Todo-1` and `todo-1` name the same item. `subCollection` folds a
+`subName` to lower case and throws `ArgumentError` for one that is empty,
+contains `.`, `:`, `@`, whitespace or a control character, or holds a
+character a key's name cannot. An id that arrives in an event or a listing is
+folded to lower case, is never empty and holds no `.`, `:`, `@`, whitespace or
+control character: no event is emitted for a key whose id, ancestor id or
+subName is empty or holds one, and `getItems` leaves out an item stored under
+such an id, each with a warning.
 
-**Fix:** Use dot-free identifiers. Generate item ids with
-alphanumeric characters only:
+**Fix:** Omit `id` to get a generated 8-character one, or build ids from
+lower-case letters, digits, `-` and `_` only:
 
 ```dart
 // ✓ OK
+await todos.create(obj: todo, id: 'todo-42');
 final sub = parentCollection.subCollection<Reply>(
   parent: comment, subName: 'replies', ...
 );
 
-// ✗ Wrong — 'sub.replies' has a dot
+// ✗ Wrong — ':' in an id and '.' in a subName are refused
+// await todos.create(obj: todo, id: 'user:42');
 // subName: 'sub.replies'
 ```
-
-The `AtCollection` constructor validates this and throws `ArgumentError`
-before any I/O.
 
 ---
 

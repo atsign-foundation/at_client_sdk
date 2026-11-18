@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeys, AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysIo;
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -27,12 +28,6 @@ import 'package:at_lookup/at_lookup.dart';
 /// reaches, the client remembering its answer in [storage] for a start with
 /// the atDirectory unreachable. The platform package supplies both.
 ///
-/// [notificationLookUps], when given, builds the monitor's connection instead
-/// of [lookUps]; the client's own requests still go through [lookUps]. A
-/// browser client can pass a factory that shares a single notification monitor
-/// across multiple tabs via BroadcastChannel or SharedWorker, while each tab
-/// keeps a connection of its own for request-response operations.
-///
 /// With [atKeysIo] the enrollment is the keys' own answer,
 /// `AtKeys.enrollmentToAuthenticateAs`; an [enrollmentId] that disagrees is
 /// logged at shout level and ignored.
@@ -53,7 +48,6 @@ Future<AtClient> buildAtClient({
   String? enrollmentId,
   AtLookUp? atLookUp,
   required AtLookUpFactory lookUps,
-  AtLookUpFactory? notificationLookUps,
   required SecondaryAddressFinder secondaryAddressFinder,
   FutureOr<NotificationService> Function(AtClient)? notificationServiceBuilder,
   FutureOr<SyncService> Function(AtClient)? syncServiceBuilder,
@@ -93,13 +87,14 @@ Future<AtClient> buildAtClient({
         ? await NotificationServiceImpl.create(client,
             secondaryAddressFinder: client.secondaryAddressFinder,
             connection: client.connection,
-            lookUps: notificationLookUps ?? client.lookUps)
+            lookUps: client.lookUps)
         : await notificationServiceBuilder(client);
     client.syncService = syncServiceBuilder == null
         ? await SyncServiceImpl.create(client)
         : await syncServiceBuilder(client);
     client.enrollmentService = enrollmentServiceBuilder == null
-        ? EnrollmentServiceImpl(client, AtEnrollment.create())
+        ? EnrollmentServiceImpl(
+            client, enrollmentFor(preference.atClientParticulars))
         : await enrollmentServiceBuilder(client);
   } catch (_) {
     await client.stop();

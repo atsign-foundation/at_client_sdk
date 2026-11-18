@@ -13,8 +13,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
-import 'package:at_client/src/preference/at_client_particulars.dart'
-    show AtClientParticulars;
 import 'package:at_client/src/preference/posture_floor.dart';
 import 'package:test/test.dart';
 

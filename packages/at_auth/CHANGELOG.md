@@ -1,5 +1,24 @@
-## 4.1.0
+## 4.1.0-rc.1
 
+- fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation is
+  thrown as an `UnAuthenticatedException` carrying the atServer's reply, so
+  its code can be read. Nothing is signed or digested.
+- feat: an enrollment's wait for approval ends at once with
+  `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
+  `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
+  AT0028 or AT0029, in any form.
+- feat: every `from:` at_auth sends names the program and the SDK in its
+  clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
+  caller's values win; absent or blank ones are the program file's name,
+  `unknown`, `atsign.dart.at_auth` and at_auth's version. Every string value,
+  nested ones included, is sent on one line and cut to 64 UTF-16 code units,
+  and every key is sent on one line.
+- feat: `clientConfigFor` builds that clientConfig, with `version` only when
+  its caller gives one, and `activateAtSign` and `AtEnrollment.create` take a
+  `clientConfig` for their `from:`.
+- fix: an enrollment's wait for approval reads an atServer's refusal the
+  same whether it arrives as plain text or as JSON, so it keeps waiting or
+  ends as the refusal says.
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
   private half does not sign for its public half is refused with
@@ -23,6 +42,16 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
+  activation enrolls in place of a freshly minted APKAM keypair, as
+  `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
+  is not of `signingAlgoType`, is refused with `AtSigningException` before the
+  enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
+  A supplied pair is checked before the atServer is contacted. If activation
+  fails after the enrollment is accepted (the PKAM login or the keyfile
+  write), retrying with the same pair is refused by the atServer while that
+  enrollment's record exists: retry with a different pair, or with none so one
+  is minted. The CRAM secret stays valid until an activation completes.
 
 ## 4.0.0
 

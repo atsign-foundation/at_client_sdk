@@ -45,12 +45,18 @@ class AtAuthImpl implements AtAuth {
   @override
   final AtLookupMuxable atLookUp;
 
+  /// What every `from:` this activation sends carries, as
+  /// `authenticatorFor` completes it.
+  final Map<String, dynamic> clientConfig;
+
   AtAuthImpl(
       {required this.atLookUp,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      AtEnrollment? atEnrollment,
+      required this.clientConfig})
+      : atEnrollment =
+            atEnrollment ?? AtEnrollment.create(clientConfig: clientConfig);
 
   /// The keystore the authenticator should read, matching the precedence
   /// [authenticate] itself uses.
@@ -110,6 +116,15 @@ class AtAuthImpl implements AtAuth {
       );
     }
 
+    // A supplied pair is judged before the atServer is contacted, so a bad
+    // one costs no connection and no CRAM login. The canonical pair the check
+    // returns is the one minted from.
+    final suppliedApkam = atOnboardingRequest.apkamKeyPair;
+    final checkedApkam = suppliedApkam == null
+        ? null
+        : await checkApkamKeyPair(
+            atOnboardingRequest.signingAlgoType, suppliedApkam);
+
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
     cramAuthenticator ??= CramAuthenticator();
@@ -117,6 +132,7 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.atSign,
       cramSecret,
       atLookUp,
+      clientConfig: clientConfig,
     );
     if (!cramAuthResult) {
       _addProgress(
@@ -147,6 +163,7 @@ class AtAuthImpl implements AtAuth {
     }
     final OnboardingMint mint = await mintOnboardingKeys(
         signingAlgo: atOnboardingRequest.signingAlgoType,
+        apkamKeyPair: checkedApkam,
         // Null resolves to the release default, not to false: legacy
         // material is retained until the ecosystem is PQ, not until this
         // atSign is.
@@ -156,6 +173,7 @@ class AtAuthImpl implements AtAuth {
     atLookUp.authenticator = authenticatorFor(
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
+      clientConfig: clientConfig,
     );
 
     //3. send onboarding enrollment
@@ -176,6 +194,7 @@ class AtAuthImpl implements AtAuth {
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
       enrollmentId: enrollmentIdFromServer,
+      clientConfig: clientConfig,
     );
 
     //4. Drop the CRAM-authenticated connection; the PKAM below opens another

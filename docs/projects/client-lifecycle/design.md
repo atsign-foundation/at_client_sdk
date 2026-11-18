@@ -196,9 +196,12 @@ connection and am fully functional and (2) I've not made a remote connection
 but am fully functional for offline behaviour."* There are three outcomes,
 not two: **online** (connected and PKAM accepted, readable today from
 at_lookup's `AtConnection.isAuthenticated`), **offline** (no atServer
-reached: no network, atDirectory or atServer unreachable), and **refused**
-(atServer reached, credentials rejected: revoked AT0027, unauthenticated
-AT0401, invalid enrollment AT0029). The state is a current value plus a
+accepted or refused the credentials: no network, atDirectory or atServer
+unreachable, or an atServer that answered with neither a challenge to sign
+nor a decision on the credentials), and **refused** (atServer reached,
+credentials rejected: revoked AT0027, unauthenticated AT0401, invalid
+enrollment AT0029, or AT0028 in reply to a PKAM). The state is a current
+value plus a
 stream on the client, since the network arrives after open and revocation
 lands mid-life. On refusal: **the first open of a principal on a device must
 be online**, so with no local store yet for that (atSign, enrollment) a
@@ -299,7 +302,7 @@ and the `AtOnboardingService` adapter ends with it
 ([client-cli ruling 5](../client-cli/decisions.md#5-atonboardingservice-ends)).
 A command-line program picks its transport with at_client_cli's
 `lookUpsFor(rootDomain)`: `proxyLookUps()` when the root domain names a proxy,
-TLS otherwise. This section used to read:
+TLS otherwise. (Update 2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root, so a program passes `secureSocketLookUps()` for every root; `lookUpsFor` and `proxyLookUps()` are deprecated and equal it.) This section used to read:
 
 > Keeps `at_activate`, `at_register` and the `auth_cli` sub-commands, thin
 > over at_client and at_auth's registrar; keeps the three-member
@@ -308,13 +311,16 @@ TLS otherwise. This section used to read:
 > `AtOnboardingPreference.lookUps` is `proxyLookUps()` when the root domain
 > names a proxy and TLS otherwise, and every command passes it to the verbs.
 
+_Note 2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root; `proxyLookUps()` is deprecated and equals `secureSocketLookUps()`._
+
 ### at_cli_commons
 
-**Corrected 2026-10-29:** with no `lookUps:`, `CLIBase` takes at_client_cli's
-`lookUpsFor(rootDomain)`, where the sentence below used to read "takes
+**Corrected 2026-10-29:** with no `lookUps:`, `CLIBase` takes
+`secureSocketLookUps()` (at_client_cli's `lookUpsFor(rootDomain)` before
+2026-11-15), where the sentence below used to read "takes
 `lookUps:` (the preference's with none)".
 
-`CLIBase` builds on `open`, takes `lookUps:` (`lookUpsFor(rootDomain)` with
+`CLIBase` builds on `open`, takes `lookUps:` (`secureSocketLookUps()` with
 none) and awaits the connection state with a budget
 instead of looping on a bool. sshnoports' `admin_api` and `sshnoports` go
 through it; `noports_core` and `sshnoports` also name the service directly.

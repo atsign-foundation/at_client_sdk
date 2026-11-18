@@ -9,6 +9,7 @@ import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_client/src/service/enrollment_service_impl.dart'
@@ -143,7 +144,8 @@ Future<AtClient> selfRetrofit({
       connectBudget: connectBudget);
 
   try {
-    final granted = (await EnrollmentServiceImpl(client, AtEnrollment.create())
+    final granted = (await EnrollmentServiceImpl(
+                client, enrollmentFor(preference.atClientParticulars))
             .fetchEnrollmentRequests())
         .where((e) => e.enrollmentId == newSession.enrollmentId)
         .firstOrNull
@@ -204,7 +206,8 @@ Future<AtAuthSession> retrofitIdentity({
           session.atSign, session.atKeysIo, session.rootDomain,
           enrollmentId: session.enrollmentId,
           lookUps: lookUps,
-          secondaryAddressFinder: secondaryAddressFinder);
+          secondaryAddressFinder: secondaryAddressFinder,
+          clientConfig: clientConfigOf(preference.atClientParticulars));
 
   // NOTE: the preference's value, not the posture's — an app may set
   // `authenticationKeyAlgorithm` beside a posture, and reading
@@ -225,7 +228,7 @@ Future<AtAuthSession> retrofitIdentity({
 
   final AtEnrollmentResponse response;
   try {
-    response = await AtEnrollment.create().submit(
+    response = await enrollmentFor(preference.atClientParticulars).submit(
         AtSelfEnrollmentRequest(
             session: session,
             appName: appName,
