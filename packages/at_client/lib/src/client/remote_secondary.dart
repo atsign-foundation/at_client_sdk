@@ -145,7 +145,7 @@ class RemoteSecondary implements Secondary {
   }
 
   /// What [e] is thrown to this secondary's callers as: the
-  /// [UnAuthenticatedException] it wraps, which keeps an atServer's code, or
+  /// [UnAuthenticatedException] it wraps, as the authenticator threw it, or
   /// the exception [e]'s code stands for.
   AtException _thrownFor(AtLookUpException e) {
     final cause = e.cause;

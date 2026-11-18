@@ -2,7 +2,8 @@
 
 - feat: an atServer's `error:` reply to a `from:`, `pkam:` or `cram:` throws
   `AtAuthErrorReplyException`, an `UnAuthenticatedException` whose
-  `errorCode` is the reply's code. Requires at_lookup 4.1.0-rc.1.
+  `errorCode` is the reply's code. `AtAuth.onboard` still reports a failed
+  PKAM as `AtAuthenticationException`. Requires at_lookup 4.1.0-rc.1.
 - fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation ends
   it with that exception, and nothing is signed or digested.
 - fix: a failed PKAM during onboarding says what failed, with no stack

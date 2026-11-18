@@ -5,8 +5,8 @@ class AtLookUpException implements Exception {
   String errorCode;
   String errorMessage;
 
-  /// The failure [AtLookUp.executeVerb] caught and threw as this exception;
-  /// null for an atServer's `error:` reply.
+  /// The failure [AtLookUp.executeVerb] caught and threw as this exception,
+  /// or null when it wraps none, as for an atServer's `error:` reply.
   final Object? cause;
 
   AtLookUpException(this.errorCode, this.errorMessage, {this.cause});
