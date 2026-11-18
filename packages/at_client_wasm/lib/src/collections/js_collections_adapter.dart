@@ -104,7 +104,7 @@ final class JsCollectionsError extends AtException {
 /// recipient it did not read, so a recipient another device added is kept.
 /// Every operation returns a Future that rejects with a
 /// [JsCollectionsError].
-final class JsCollectionsAdapter {
+class JsCollectionsAdapter {
   JsCollectionsAdapter(this._collection);
 
   final AtCollection<Map<String, dynamic>> _collection;
