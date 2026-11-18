@@ -230,6 +230,36 @@ void main() {
       expect(server.log, isNot(contains('put-document:eid1')));
     });
 
+    test('an existing different document is refused on the first attempt',
+        () async {
+      final keys = await keysOf(0);
+      final other = AtKeys.legacy(encryptionPrivateKey: 'b3RoZXI=')
+        ..atsign = _atSign.toAtsign();
+      server.documents['eid1'] =
+          await keys.vault.seal(PasskeyRecordType.atkeys, other.toJson());
+
+      expect(await failure(), isA<AtKeysFileOverwriteException>());
+
+      expect(server.documentReads, 2,
+          reason: 'one attempt: the existence check and the comparison');
+    });
+
+    test(
+        'a document put whose reply is lost counts as written, and the client '
+        'is handed a store that reads it from memory', () async {
+      server.documentPutRepliesLost = 1;
+
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      expect(server.log.where((e) => e == 'put-document:eid1'), hasLength(1),
+          reason: 'the retry finds the document and does not put it again');
+      final reads = server.documentReads;
+      final client = session.client as FakeAtClient;
+      expect((await client.keysIo.read(_atSign)).atsign, _atSign.toAtsign());
+      expect(server.documentReads, reads);
+      await session.stop();
+    });
+
     test('a document put failing past the bound ends the onboarding', () async {
       server.documentPutFailures = 99;
       expect(await failure(), isA<StateError>());

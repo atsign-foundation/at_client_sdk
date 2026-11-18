@@ -60,7 +60,9 @@ class _Client extends Fake implements AtClient {
 class _Store extends AtServerAtKeysIo {
   _Store(
       {required super.documents,
-      required super.vault,
+      required super.atSign,
+      required super.seal,
+      required super.open,
       required super.enrollmentId,
       required super.apkamKeyPair});
 
@@ -86,7 +88,12 @@ class _Rig {
     await vault.withAuthSeed((seed) async => heldSeed = seed);
     final docs = _Docs();
     final store = _Store(
-        documents: docs, vault: vault, enrollmentId: _eid, apkamKeyPair: pair);
+        documents: docs,
+        atSign: _atSign,
+        seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
+        open: (r) => vault.open(PasskeyRecordType.atkeys, r),
+        enrollmentId: _eid,
+        apkamKeyPair: pair);
     await store.write(
         _atSign,
         AtKeys.legacy(

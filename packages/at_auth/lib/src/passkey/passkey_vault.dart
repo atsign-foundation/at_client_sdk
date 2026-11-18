@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:at_commons/atsign.dart';
+
 import 'passkey_derivation.dart';
 import 'passkey_record.dart';
 
@@ -13,12 +15,13 @@ import 'passkey_record.dart';
 /// running, so a use that began before [close] finishes with the intact seed.
 /// Only the buffers the vault holds are wiped.
 class PasskeyVault {
-  /// Takes ownership of [derivation]'s auth seed and sealer, for the canonical
-  /// [atSign] it was derived for.
+  /// Takes ownership of [derivation]'s auth seed and sealer, for the [atSign]
+  /// it was derived for, which the vault holds in canonical form.
   ///
   /// Throws [ArgumentError] when the auth seed is not exactly 32 bytes.
-  PasskeyVault(PasskeyDerivation derivation, {required this.atSign})
-      : lookupHex = derivation.lookupHex,
+  PasskeyVault(PasskeyDerivation derivation, {required String atSign})
+      : atSign = atSign.toAtsign(),
+        lookupHex = derivation.lookupHex,
         ns = derivation.ns,
         _authSeed = _checkedSeed(derivation.authSeed),
         _sealer = derivation.sealer;

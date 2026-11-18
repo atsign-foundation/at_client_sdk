@@ -4,6 +4,7 @@
 - fix: the passkey vault's auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and stopping the passkey session zeroes what it can. The APKAM private key (an immutable `String` in the authenticator) and the @keys private keys stay in memory for the session and cannot be wiped in Dart.
 - fix: `AtServerAtKeysIo.update` builds on a fresh read of the stored document, not the copy read at login, so a second tab's update after another tab's write lands.
 - fix: `AtServerAtKeysIo` runs `write`, `flush` and `update` on one instance one at a time, so overlapping updates from one client each keep the other's change.
+- fix: `AtServerAtKeysIo` takes `atSign`, `seal` and `open` in place of the passkey vault, and throws `ArgumentError` for a call naming another atSign. An enrollment whose keys it strips keeps its namespaces, app and device names.
 - docs: `PasskeyLostException`, `PasskeyCustody.open` and `PasskeyCustody.onboard` say that a failed prompt (a `PasskeyCeremonyException` cause) may be a plain cancel, because WebAuthn reports a cancel and a missing passkey alike, and that nothing is deleted, revoked or cleared after a failed or cancelled prompt. An app offers "Try again" and "Reset" and never resets on its own.
 - feat: when `PasskeyCustody.onboard` fails before it starts completing the activation, the newly registered passkey is reported to the platform as unknown (where the port supports it) and the error propagates unchanged. A failure while completing the activation, or after it, reports nothing.
 - feat: `PasskeyCustody.onboard` writes the sealed @keys document and pointer before it deletes the CRAM secret, so an interrupted onboarding can be run again with the same CRAM secret, or finished by `open` once the secret is deleted. Nothing is kept on the device until then, and onboarding asks for persistent storage before it activates.
@@ -21,8 +22,9 @@
   `AtServerAtKeysIo` keeps the sealed
   @keys document on the atServer: it creates the document, reads each write
   back, and refuses as follows: `write` refuses when a document exists; `flush`
-  refuses a change that drops stored material; after any refusal it accepts no
-  further writes. The library also
+  creates a missing document and refuses a change that drops stored material;
+  after that refusal, a foreign private authentication key or a read-back that
+  differs, it accepts no further writes. The library also
   exports the enrollment gateway, session and document and pointer stores that
   onboarding and open run on.
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,

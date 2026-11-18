@@ -107,7 +107,9 @@ void main() {
         enrollmentId: _eid,
         keysIo: AtServerAtKeysIo(
             documents: docs,
-            vault: vault,
+            atSign: _atSign,
+            seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
+            open: (r) => vault.open(PasskeyRecordType.atkeys, r),
             enrollmentId: _eid,
             apkamKeyPair: pair),
         app: 'wavi',

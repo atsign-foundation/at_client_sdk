@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/passkey.dart' show PasskeyRecordType;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
@@ -527,7 +528,9 @@ void main() {
       await expectLater(
           session.openClient(AtServerAtKeysIo(
               documents: session.documents,
-              vault: vault,
+              atSign: _atSign,
+              seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
+              open: (r) => vault.open(PasskeyRecordType.atkeys, r),
               enrollmentId: _eid,
               apkamKeyPair: await _derived())),
           throwsStateError);

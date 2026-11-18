@@ -59,6 +59,10 @@ class FakeServer implements EnrollmentPointerReader {
   /// Document puts that throw before one is accepted.
   var documentPutFailures = 0;
 
+  /// Document puts that store the document and then throw, as a put whose
+  /// reply is lost does.
+  var documentPutRepliesLost = 0;
+
   /// Pointer puts that throw before one is accepted.
   var pointerPutFailures = 0;
 
@@ -253,6 +257,10 @@ class _Documents implements EnrollmentDocumentStore {
     }
     if (!session.server.dropDocumentWrites) {
       session.server.documents[eid] = document;
+    }
+    if (session.server.documentPutRepliesLost > 0) {
+      session.server.documentPutRepliesLost--;
+      throw StateError('the reply to a document put was lost');
     }
   }
 }

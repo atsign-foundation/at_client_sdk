@@ -312,7 +312,7 @@ class PasskeyCustody {
       final activated = session = await gateway.activate(
           atSign: canonical, apkamKeyPair: pair, cram: cram);
       final atKeys = {...await activated.atKeys()}..remove(_apkamPrivateKey);
-      final keysIo = store = _keysIo(activated, vault, pair);
+      final keysIo = store = _keysIo(canonical, activated, vault, pair);
       await _putDocument(canonical, keysIo, atKeys);
       final pointer = await vault.seal(
           PasskeyRecordType.eid, {'enrollmentId': activated.enrollmentId});
@@ -486,7 +486,7 @@ class PasskeyCustody {
         if (hints != null) throw _StaleHints();
         throw PasskeyLostException(canonical, 'PKAM refused', cause: e);
       }
-      final store = _keysIo(session, vault, pair);
+      final store = _keysIo(canonical, session, vault, pair);
       try {
         await _restore(canonical, store, session, pair);
         await _remember(canonical, unlocked.credentialId, enrollmentId);
@@ -514,13 +514,16 @@ class PasskeyCustody {
     }
   }
 
-  /// The sealed @keys document of [session]'s enrollment, which the custody
-  /// writes and reads through and then hands to the client.
-  AtServerAtKeysIo _keysIo(
-          EnrollmentSession session, PasskeyVault vault, ApkamKeyPair pair) =>
+  /// The sealed @keys document of [session]'s enrollment of [atSign], which
+  /// the custody writes and reads through and then hands to the client. The
+  /// store reaches the vault only to seal and open that document.
+  AtServerAtKeysIo _keysIo(String atSign, EnrollmentSession session,
+          PasskeyVault vault, ApkamKeyPair pair) =>
       AtServerAtKeysIo(
           documents: session.documents,
-          vault: vault,
+          atSign: atSign,
+          seal: (document) => vault.seal(PasskeyRecordType.atkeys, document),
+          open: (record) => vault.open(PasskeyRecordType.atkeys, record),
           enrollmentId: session.enrollmentId,
           apkamKeyPair: pair);
 

@@ -36,6 +36,19 @@ void main() {
         '10781e72da94f814194f90c4c40d75d7b0b029d06253d40a610b0ad977b2d620');
   });
 
+  test('holds its atSign in canonical form, and seals for it', () async {
+    final derived = await const BytesPasskeyKeyDeriver().derive(
+        PrfSecret(Uint8List.fromList(List.generate(32, (i) => i))), '@alice');
+    final spelt = PasskeyVault(derived, atSign: '@Alice');
+    addTearDown(spelt.close);
+
+    expect(spelt.atSign, '@alice');
+    expect(
+        await vault.open(PasskeyRecordType.atkeys,
+            await spelt.seal(PasskeyRecordType.atkeys, _doc)),
+        _doc);
+  });
+
   test('seals and opens records through its sealer', () async {
     final record = await vault.seal(PasskeyRecordType.atkeys, _doc);
     expect(spy.sealCalls, 1);

@@ -78,7 +78,9 @@ void main() {
     });
     return AtServerAtKeysIo(
         documents: docs,
-        vault: derived.vault,
+        atSign: _atSign,
+        seal: (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
+        open: (r) => derived.vault.open(PasskeyRecordType.atkeys, r),
         enrollmentId: _eid,
         apkamKeyPair: pair,
         restored: restored);
@@ -208,7 +210,9 @@ void main() {
     test('a first write of keys carrying the flat key strips it', () async {
       final io = AtServerAtKeysIo(
           documents: docs,
-          vault: derived.vault,
+          atSign: _atSign,
+          seal: (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
+          open: (r) => derived.vault.open(PasskeyRecordType.atkeys, r),
           enrollmentId: _eid,
           apkamKeyPair: pair);
       final keys = _stripped()
