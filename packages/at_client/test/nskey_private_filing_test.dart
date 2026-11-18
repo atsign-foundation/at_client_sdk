@@ -125,6 +125,38 @@ void main() {
     expect(announced, isEmpty);
   });
 
+  test(
+      'a rotation owed is reported only when the last run of the update holds '
+      'the private', () async {
+    final io = RerunningAtKeysIo();
+    await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+    final generation = await nskeyGeneration();
+    await filer.store(
+        namespace: namespace,
+        nskeyKid: generation.kid,
+        seed: NskeySeed(generation.seed));
+    var otherWrote = false;
+    io
+      ..rerunning = true
+      ..between = (_) async {
+        if (otherWrote) return;
+        otherWrote = true;
+        await io.flush(atSign.toAtsign(), AtKeys(atsign: atSign.toAtsign()));
+      };
+
+    final owed = await filer.markRotationOwed(
+        namespace, [generation.kid], DateTime.utc(2026, 11, 18));
+
+    expect(otherWrote, isTrue,
+        reason: 'the control: the first run held the private and marked it');
+    expect(await filer.readSeed(namespace, generation.kid), isNull,
+        reason: 'the other writer left a keyfile without the private');
+    expect(owed, isFalse,
+        reason: 'the last run held no private to owe a rotation for');
+    expect(await filer.rotationOwed(namespace, [generation.kid]), isFalse);
+  });
+
   test('the same kid in two namespaces files as two keys', () async {
     final (io, filer) = await filing();
     final generation = await nskeyGeneration();

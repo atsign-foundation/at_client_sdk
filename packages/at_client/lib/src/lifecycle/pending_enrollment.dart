@@ -433,6 +433,9 @@ class PendingEnrollment {
   Future<void> _discard(String why) async {
     var removed = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      removed = false;
       if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
       stored
         ..discardEnrollment(enrollmentId)

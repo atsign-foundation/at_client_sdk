@@ -1561,6 +1561,42 @@ void main() {
       }
 
       test(
+          'when another writer removes the pending keys while the removal '
+          'runs again, then the cancel does not report removing them',
+          () async {
+        final store = RerunningAtKeysIo();
+        final pending =
+            await submit(store, atServer(decide: (_) async => true));
+        var otherRemoved = false;
+        store
+          ..rerunning = true
+          ..between = (_) async {
+            if (otherRemoved) return;
+            otherRemoved = true;
+            store.rerunning = false;
+            await store.update(Atsign(atSign), (keys) {
+              keys
+                ..discardEnrollment(enrollmentId)
+                ..unfileLegacyEnrollment(enrollmentId);
+              return true;
+            });
+            store.rerunning = true;
+          };
+
+        await pending.cancel();
+
+        expect(otherRemoved, isTrue,
+            reason: 'the control: the first run found the pending keys');
+        expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+        expect(
+            logs
+                .at('INFO')
+                .where((m) => m.contains('pending keys are removed')),
+            isEmpty,
+            reason: "the cancel's last run found nothing to remove");
+      });
+
+      test(
           'when cancel lands as the denial is answered, then the wait throws '
           'AtEnrollmentCancelledException and the pending keys are removed '
           'once', () async {
