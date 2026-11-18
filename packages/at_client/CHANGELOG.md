@@ -1,5 +1,9 @@
 ## 4.1.0-rc.1
 
+- fix: an atServer whose answer to `from:` holds no challenge to sign
+  leaves the connection offline with cause `unreachable`, not refused,
+  and a first open hands back its client. The client still signs
+  nothing.
 - fix: a code other than a refusal in reply to a PKAM, such as AT0011
   when the atServer fails to process it, no longer reads as a refusal: the
   connection is offline carrying the error, a first open hands back its

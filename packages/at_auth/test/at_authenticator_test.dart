@@ -267,6 +267,46 @@ void main() {
     });
   });
 
+  group('Given an atServer that answers from: with an error: reply', () {
+    final replies = {
+      'dash': 'error:AT0011-Internal server exception',
+      'colon': 'error:AT0011:Internal server exception',
+      'JSON': 'error:{"errorCode":"AT0011",'
+          '"errorDescription":"Internal server exception"}',
+    };
+    replies.forEach((form, reply) {
+      test(
+          'when the keys authenticate, then the $form reply is raised as '
+          'the atServer wrote it, and nothing is signed', () async {
+        final io = InMemoryAtKeysIo();
+        await io.write(atSign, signingKeys());
+        final executor = RecordingExecutor([reply]);
+
+        await expectLater(
+            () => authenticatorFor(io, atSign)(executor),
+            throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+                'message', 'Failed connecting to $atSign. $reply')));
+        expect(executor.sent, hasLength(1),
+            reason: 'it must refuse before sending any signature');
+      });
+
+      test(
+          'when the legacy credential authenticates, then the $form reply '
+          'is raised as the atServer wrote it, and nothing is signed',
+          () async {
+        final executor = RecordingExecutor([reply]);
+
+        await expectLater(
+            () => authenticatorForPrivateKey(
+                atSign, demo.pkamPrivateKeyMap[atSign]!)(executor),
+            throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+                'message', 'Failed connecting to $atSign. $reply')));
+        expect(executor.sent, hasLength(1),
+            reason: 'it must refuse before sending any signature');
+      });
+    });
+  });
+
   group('Given an atSign and its CRAM secret', () {
     test(
         'when the atServer refuses CRAM authentication, then the exception '

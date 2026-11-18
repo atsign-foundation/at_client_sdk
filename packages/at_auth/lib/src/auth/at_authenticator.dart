@@ -97,17 +97,10 @@ AtAuthenticator authenticatorForPrivateKey(
   final config = withClientConfigDefaults(clientConfig);
   return (executor) async {
     _logger.finer('authenticating $atSign with a bare private key');
-    var fromResponse = await executor.sendSync((FromVerbBuilder()
-          ..atSign = atSign
-          ..clientConfig = Map<String, dynamic>.from(config))
-        .buildCommand());
-    if (fromResponse.isEmpty) {
-      return false;
-    }
-    fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-    fromResponse = validatedFromChallenge(fromResponse, atSign);
+    final challenge = await _pkamChallenge(executor, atSign, config);
+    if (challenge == null) return false;
 
-    final signature = _signRsaPkamChallenge(fromResponse, privateKey);
+    final signature = _signRsaPkamChallenge(challenge, privateKey);
 
     final pkamResponse = await executor.sendSync((PkamVerbBuilder()
           ..signingAlgo = SigningAlgoType.rsa2048.name
@@ -145,19 +138,12 @@ Future<bool> _pkam(
   final signingAlgo = keyPair.algorithm;
   const hashingAlgo = HashingAlgoType.sha256;
 
-  var fromResponse = await executor.sendSync((FromVerbBuilder()
-        ..atSign = atSign
-        ..clientConfig = Map<String, dynamic>.from(clientConfig))
-      .buildCommand());
-  if (fromResponse.isEmpty) {
-    return false;
-  }
-  fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-  fromResponse = validatedFromChallenge(fromResponse, atSign);
+  final challenge = await _pkamChallenge(executor, atSign, clientConfig);
+  if (challenge == null) return false;
 
   final signature = keyPair.algorithm == SigningAlgoType.rsa2048
-      ? _signRsaPkamChallenge(fromResponse, keyPair.privateKey)
-      : signPkamChallenge(keyPair, fromResponse);
+      ? _signRsaPkamChallenge(challenge, keyPair.privateKey)
+      : signPkamChallenge(keyPair, challenge);
 
   final pkamResponse = await executor.sendSync((PkamVerbBuilder()
         ..signingAlgo = signingAlgo.name
@@ -170,6 +156,27 @@ Future<bool> _pkam(
     return true;
   }
   throw UnAuthenticatedException('Failed connecting to $atSign. $pkamResponse');
+}
+
+/// Sends `from:` for [atSign] and returns the challenge the atServer answers
+/// with, or null when it answers nothing.
+///
+/// An `error:` answer is thrown as the atServer wrote it, as a refused
+/// `pkam:` is; any other answer that is not a challenge issued to [atSign]
+/// is refused by [validatedFromChallenge]. Either way nothing is signed.
+Future<String?> _pkamChallenge(AtCommandExecutor executor, String atSign,
+    Map<String, dynamic> clientConfig) async {
+  final fromResponse = await executor.sendSync((FromVerbBuilder()
+        ..atSign = atSign
+        ..clientConfig = Map<String, dynamic>.from(clientConfig))
+      .buildCommand());
+  if (fromResponse.isEmpty) return null;
+  final answer = fromResponse.trim();
+  if (answer.startsWith('error:')) {
+    throw UnAuthenticatedException('Failed connecting to $atSign. $answer');
+  }
+  return validatedFromChallenge(
+      answer.replaceFirst(RegExp(r'^data:'), ''), atSign);
 }
 
 /// Authenticates [atSign] by answering the atServer's `from:` challenge with

@@ -1,5 +1,8 @@
 ## 4.1.0-rc.1
 
+- fix: an `error:` answer to the `from:` of a PKAM is thrown as the
+  atServer wrote it, as a refused `pkam:` is, so its code can be read.
+  Nothing is signed.
 - feat: an enrollment's wait for approval ends with
   `AtEnrollmentExpiredException`, an `AtEnrollmentException`, when the
   atServer refuses its PKAM with AT0028 or AT0029, in any form. AT0029
