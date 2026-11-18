@@ -339,6 +339,21 @@ void main() {
         });
 
         test(
+            'a key longer than 64 characters, at any depth, is made one line '
+            'but not cut', () async {
+          final longKey = 'k ${'k' * 80}';
+          final oneLineKey = 'k ${'k' * 80}';
+
+          final config = await sentBy(build({
+            longKey: 'x',
+            'meta': {longKey: 'y'},
+          }));
+
+          expect(config[oneLineKey], 'x');
+          expect(config['meta'], {oneLineKey: 'y'});
+        });
+
+        test(
             'one of the four that is not a string is sent as its text, made '
             'sendable', () async {
           final config = await sentBy(build({
