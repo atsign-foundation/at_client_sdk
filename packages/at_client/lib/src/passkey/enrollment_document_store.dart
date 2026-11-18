@@ -7,6 +7,8 @@ import 'package:at_commons/atsign.dart';
 
 import 'package:at_client/src/client/remote_secondary.dart';
 
+import 'line_breaks.dart';
+
 /// Reads and writes an enrollment's sealed @keys document over that
 /// enrollment's authenticated connection.
 abstract class EnrollmentDocumentStore {
@@ -77,10 +79,7 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
 
   @override
   Future<void> put(String atSign, String enrollmentId, String document) async {
-    if (document.contains('\n')) {
-      throw ArgumentError.value(
-          document, 'document', 'must not contain newlines');
-    }
+    refuseLineBreaks(document, 'document');
     final command = (UpdateVerbBuilder()
           ..omitMetadata = true
           ..atKey = _documentKey(enrollmentId, atSign)

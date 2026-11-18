@@ -116,6 +116,23 @@ class _CountingSealer implements RecordSealer {
   }
 }
 
+/// A lent key store that counts its [close] calls.
+class _RecordedStore extends AtServerAtKeysIo {
+  _RecordedStore(
+      {required super.documents,
+      required super.vault,
+      required super.enrollmentId,
+      required super.apkamKeyPair});
+
+  var closes = 0;
+
+  @override
+  void close() {
+    closes++;
+    super.close();
+  }
+}
+
 void main() {
   final logs = RecordedLogs();
   setUpAll(logs.installOn);
@@ -1337,6 +1354,68 @@ void main() {
       server.documentPutFailures = 0;
       final client = await incomplete.pending.resume();
       await expectPersists(client as FakeAtClient);
+      await client.stop();
+    });
+  });
+
+  group('the temporary key stores', () {
+    final stores = <_RecordedStore>[];
+
+    PasskeyCustody recording() => PasskeyCustody(
+        prf: PasskeyPrf(authenticator),
+        deriver: const BytesPasskeyKeyDeriver(),
+        pointerReader: server,
+        gateway: gateway,
+        credentials: hints,
+        enrollmentIds: hints,
+        persistence: persistence,
+        pendingStore: pending,
+        now: () => _enrolledAt,
+        retryDelay: Duration.zero,
+        setupLock: setupLock,
+        setupLockPrefix: _lockPrefix,
+        lentStoreFactory: (
+            {required documents,
+            required vault,
+            required enrollmentId,
+            required apkamKeyPair}) {
+          final store = _RecordedStore(
+              documents: documents,
+              vault: vault,
+              enrollmentId: enrollmentId,
+              apkamKeyPair: apkamKeyPair);
+          stores.add(store);
+          return store;
+        });
+
+    setUp(stores.clear);
+
+    void expectAllClosedOnce() {
+      expect(stores, isNotEmpty);
+      for (final store in stores) {
+        expect(store.closes, 1);
+        expect(store.read(_atSign), throwsStateError);
+      }
+    }
+
+    test('onboarding closes the store that wrote the document', () async {
+      final client = await recording().onboard(atSign: _atSign, cram: 'cram');
+      expectAllClosedOnce();
+      await client.stop();
+    });
+
+    test('opening closes the store that read the document', () async {
+      await (await custody().onboard(atSign: _atSign, cram: 'cram')).stop();
+      final client = await recording().open(atSign: _atSign);
+      expectAllClosedOnce();
+      await client.stop();
+    });
+
+    test('a failed put attempt still closes its store', () async {
+      server.documentPutFailures = 1;
+      final client = await recording().onboard(atSign: _atSign, cram: 'cram');
+      expect(stores.length, greaterThanOrEqualTo(2));
+      expectAllClosedOnce();
       await client.stop();
     });
   });

@@ -6,6 +6,7 @@ import 'package:at_lookup/at_lookup.dart'
 
 import 'package:at_client/src/client/remote_secondary.dart';
 
+import 'line_breaks.dart';
 import 'public_lookup.dart';
 
 /// Reads a passkey's enrollment pointer by its lookup id and namespace.
@@ -94,9 +95,7 @@ class RemoteEnrollmentPointerStore implements EnrollmentPointerStore {
   @override
   Future<void> put(String atSign, String lookupHex, String record,
       {required String ns}) async {
-    if (record.contains('\n')) {
-      throw ArgumentError.value(record, 'record', 'must not contain newlines');
-    }
+    refuseLineBreaks(record, 'record');
     final command = (UpdateVerbBuilder()
           ..omitMetadata = true
           ..atKey = _pointerKey(atSign, lookupHex, ns)

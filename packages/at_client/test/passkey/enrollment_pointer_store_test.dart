@@ -116,6 +116,11 @@ void main() {
           'public:_$_hex.$_ns@alice');
     });
 
+    test('put rejects a record with a carriage return', () {
+      expect(store.put(_atSign, _hex, '{\r}', ns: _ns), throwsArgumentError);
+      expect(remoteLookUp.commands, isEmpty);
+    });
+
     test('put rejects a record with a newline', () {
       expect(store.put(_atSign, _hex, '{\n}', ns: _ns), throwsArgumentError);
       expect(remoteLookUp.commands, isEmpty);

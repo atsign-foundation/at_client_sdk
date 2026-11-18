@@ -398,6 +398,46 @@ void main() {
     expect(server.records[key], before);
   });
 
+  for (final status in ['active', 'pending', 'retired']) {
+    test('a flush carrying a $status foreign private auth key is refused',
+        () async {
+      await seedRecord(_base());
+      final before = server.records[key];
+      final foreign = AtKeys.fromJson({
+        ...atKeysDocument(_base()..atsign = _atSign.toAtsign(), _atSign),
+        'enrollments': [
+          {
+            'enrollmentId': 'other',
+            'keys': [
+              {
+                'keyId': 'auth:rsa2048:1',
+                'material': [
+                  {
+                    'role': 'privateAuthentication',
+                    'algorithm': 'rsa2048',
+                    'createdAt': '2026-08-14T00:00:00.000Z',
+                    'status': status,
+                    'bytes': _b('not-this-stores-pair'),
+                  }
+                ],
+              }
+            ],
+          }
+        ],
+      });
+      final io = await open();
+
+      await expectLater(io.flush(_atSign.toAtsign(), foreign),
+          throwsA(isA<AtServerAtKeysWriteException>()));
+
+      expect(server.records[key], before, reason: 'nothing was written');
+      await expectLater(
+          Future.sync(() => io.flush(_atSign.toAtsign(), _base())),
+          throwsA(isA<AtServerAtKeysWriteException>()),
+          reason: 'the store accepts no more writes');
+    });
+  }
+
   test('after a refusal further writes throw', () async {
     await seedRecord(_base());
     final io = await open();
@@ -505,6 +545,21 @@ void main() {
       await expectLater(
           derived.vault.withAuthSeed((_) async {}), throwsStateError);
       await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
+    });
+
+    test(
+        'a store that is lent zeroes its key and refuses writes, and leaves '
+        'the vault it was given open', () async {
+      await seedRecord(_base());
+      final io = await open();
+      expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
+
+      io.close();
+
+      await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
+      await expectLater(io.flush(_atSign.toAtsign(), _base()),
+          throwsA(isA<AtServerAtKeysWriteException>()));
+      await derived.vault.withAuthSeed((_) async {});
     });
 
     test('is idempotent', () async {

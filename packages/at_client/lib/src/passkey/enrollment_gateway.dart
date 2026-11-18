@@ -21,6 +21,7 @@ import 'at_keys_document.dart';
 import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
 import 'passkey_custody.dart';
+import 'line_breaks.dart';
 import 'public_lookup.dart';
 
 /// An ML-DSA-65 APKAM key pair as base64 text, the form at_auth takes.
@@ -129,8 +130,15 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
       authenticator: null,
       secondaryAddressFinder: finder);
 
+  static const _pkamRefusalTexts = [
+    'pkam publickey not found',
+    'pkam authentication failed',
+  ];
+
   /// Whether [e] carries the atServer's reply to the `pkam:` command saying it
-  /// refuses [enrollmentId]: `error:AT0401` (the signature did not verify), or
+  /// refuses [enrollmentId]: `error:AT0401` whose text says `pkam publickey
+  /// not found` or `pkam authentication failed` (the signature did not
+  /// verify; any other AT0401 text is not a refusal), or
   /// `error:AT0025`, `AT0027` or `AT0028` (the enrollment is denied, revoked,
   /// or expired or unknown) naming `enrollment_id: ID`. The atServer
   /// replies `error:CODE:MESSAGE` and at_auth wraps it as `Failed
@@ -145,7 +153,7 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
     if (reply == null) return false;
     switch (reply.group(1)) {
       case 'AT0401':
-        return true;
+        return _pkamRefusalTexts.any(reply.group(2)!.contains);
       case 'AT0025' || 'AT0027' || 'AT0028':
         return RegExp('enrollment_id: ${RegExp.escape(enrollmentId)}(\\s|\$)')
             .hasMatch(reply.group(2)!);
@@ -331,10 +339,7 @@ class _PkamSession implements EnrollmentSession {
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
     final key = atKeys[_encryptPublicKey];
     if (key is String) {
-      if (key.contains('\r') || key.contains('\n')) {
-        throw ArgumentError.value(
-            key, _encryptPublicKey, 'must not contain newlines');
-      }
+      refuseLineBreaks(key, _encryptPublicKey);
       final published = await _published();
       if (published == null) {
         await _remote.executeCommand(

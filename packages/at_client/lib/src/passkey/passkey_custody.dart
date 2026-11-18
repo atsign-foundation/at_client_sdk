@@ -11,6 +11,7 @@ import 'package:at_commons/at_commons.dart'
     show AtException, InvalidAtSignException;
 import 'package:at_commons/atsign.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../client/at_client_spec.dart' show AtClient;
 import '../lifecycle/atsign_lifecycle.dart' show scratchKeysIo;
@@ -409,6 +410,15 @@ class _PendingRefused extends AtException {
 
 const _documentAttempts = 3;
 
+/// Builds the temporary, lent key store [PasskeyCustody] writes and reads its
+/// document through.
+@visibleForTesting
+typedef LentStoreFactory = AtServerAtKeysIo Function(
+    {required EnrollmentDocumentStore documents,
+    required PasskeyVault vault,
+    required String enrollmentId,
+    required ApkamKeyPair apkamKeyPair});
+
 /// Onboards and opens the passkey-held @keys of an atSign.
 ///
 /// The enrollment's APKAM key is derived from the passkey, so the document
@@ -427,7 +437,19 @@ class PasskeyCustody {
       this.persistence,
       this.now = DateTime.now,
       this.retryDelay = const Duration(milliseconds: 250),
+      @visibleForTesting this.lentStoreFactory = _lentStore,
       required this.deriver});
+
+  static AtServerAtKeysIo _lentStore(
+          {required EnrollmentDocumentStore documents,
+          required PasskeyVault vault,
+          required String enrollmentId,
+          required ApkamKeyPair apkamKeyPair}) =>
+      AtServerAtKeysIo(
+          documents: documents,
+          vault: vault,
+          enrollmentId: enrollmentId,
+          apkamKeyPair: apkamKeyPair);
 
   final PasskeyPrf prf;
   final EnrollmentPointerReader pointerReader;
@@ -453,6 +475,10 @@ class PasskeyCustody {
 
   /// Derives the vault's keys from a passkey's PRF output.
   final PasskeyKeyDeriver deriver;
+
+  /// Builds the temporary stores of [_withLentStore].
+  @visibleForTesting
+  final LentStoreFactory lentStoreFactory;
 
   /// The vault [deriver] derives from [secret], which is overwritten with
   /// zeroes once the vault is derived or the derivation fails.
@@ -821,7 +847,7 @@ class PasskeyCustody {
         await pendingStore.delete(canonical);
       }
     } on Object catch (e) {
-      _logger.warning('deleting the pending record of enrollment '
+      _logger.severe('deleting the pending record of enrollment '
           '$enrollmentId failed: ${e.runtimeType}');
     }
   }
@@ -841,7 +867,7 @@ class PasskeyCustody {
       }
     } on Object catch (e) {
       // The record is cleared by a later open.
-      _logger.warning('dropping the obsolete pending record of enrollment '
+      _logger.severe('dropping the obsolete pending record of enrollment '
           '$enrollmentId failed: ${e.runtimeType}');
     }
   }
@@ -873,6 +899,27 @@ class PasskeyCustody {
           apkamKeyPair: pair,
           closedByClient: true,
           restored: restored);
+
+  /// Runs [body] on a temporary store of [session]'s document, lent [vault]:
+  /// closing it zeroes only the store's copy of the APKAM key, and the store is
+  /// closed however [body] ends.
+  Future<T> _withLentStore<T>(
+      EnrollmentSession session,
+      PasskeyVault vault,
+      String enrollmentId,
+      ApkamKeyPair pair,
+      Future<T> Function(AtServerAtKeysIo io) body) async {
+    final io = lentStoreFactory(
+        documents: session.documents,
+        vault: vault,
+        enrollmentId: enrollmentId,
+        apkamKeyPair: pair);
+    try {
+      return await body(io);
+    } finally {
+      io.close();
+    }
+  }
 
   /// Writes the document and pointer for [session]'s enrollment: the @keys
   /// without the APKAM private key.
@@ -906,17 +953,15 @@ class PasskeyCustody {
       ApkamKeyPair pair) async {
     final candidate = AtKeys.fromJson(atKeys)..atsign = atSign.toAtsign();
     for (var attempt = 1;; attempt++) {
-      final io = AtServerAtKeysIo(
-          documents: session.documents,
-          vault: vault,
-          enrollmentId: session.enrollmentId,
-          apkamKeyPair: pair);
       try {
-        try {
-          await io.write(atSign, candidate);
-        } on AtKeysFileOverwriteException {
-          if (!await io.keepsAllOf(atSign, candidate)) rethrow;
-        }
+        await _withLentStore(session, vault, session.enrollmentId, pair,
+            (io) async {
+          try {
+            await io.write(atSign, candidate);
+          } on AtKeysFileOverwriteException {
+            if (!await io.keepsAllOf(atSign, candidate)) rethrow;
+          }
+        });
         return;
       } on AtServerAtKeysWriteException {
         rethrow;
@@ -955,12 +1000,8 @@ class PasskeyCustody {
   /// here rather than reading them again.
   Future<AtKeys> _restore(String atSign, String enrollmentId,
       PasskeyVault vault, EnrollmentSession session, ApkamKeyPair pair) async {
-    final stored = await AtServerAtKeysIo(
-            documents: session.documents,
-            vault: vault,
-            enrollmentId: enrollmentId,
-            apkamKeyPair: pair)
-        .read(atSign);
+    final stored = await _withLentStore(
+        session, vault, enrollmentId, pair, (io) => io.read(atSign));
     final atKeys = stored.toJson()..remove(_apkamPrivateKey);
     if (!await session.publicKeysMatch(atKeys) ||
         !_holdsApkamPublicKeyOf(stored, pair)) {

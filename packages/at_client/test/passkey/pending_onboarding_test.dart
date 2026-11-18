@@ -46,6 +46,20 @@ class _LockTimeout extends AtException {
   _LockTimeout(String name) : super('$name was not granted');
 }
 
+/// A pending store that answers its first [healthyReads] reads from its
+/// records and throws on every later one, as a store that fails once the open
+/// has taken the setup lock and resumed the record.
+class _FailingLateStore extends FakePendingStore {
+  _FailingLateStore(super.timeline, {required this.healthyReads});
+  final int healthyReads;
+  var reads = 0;
+
+  @override
+  Future<PendingOnboardingRecord?> get(String atSign) => reads++ < healthyReads
+      ? super.get(atSign)
+      : Future.error(StateError('pending get failed'));
+}
+
 void main() {
   final logs = RecordedLogs();
   setUpAll(logs.installOn);
@@ -712,10 +726,25 @@ void main() {
       logs.records.clear();
       final client = await custody().open(atSign: _atSign);
       expect(client.enrollmentId, 'eid1');
-      final lines = logs.at('WARNING').where((m) => m.contains('StateError'));
+      final lines = logs.at('SEVERE').where((m) => m.contains('StateError'));
       expect(lines, hasLength(1));
       expect(lines.single, contains('eid1'));
       expect(lines.single, isNot(contains('pending delete failed')));
+    });
+
+    test('a failing read of the record is logged and does not fail the open',
+        () async {
+      final record = await matching();
+      final store = _FailingLateStore(server.timeline, healthyReads: 2);
+      store.records[_atSign] = record;
+      pending = store;
+      logs.records.clear();
+      final client = await custody().open(atSign: _atSign);
+      expect(client.enrollmentId, 'eid1');
+      final lines = logs.at('SEVERE').where((m) => m.contains('StateError'));
+      expect(lines, hasLength(1));
+      expect(lines.single, contains('eid1'));
+      expect(lines.single, isNot(contains('pending get failed')));
     });
   });
 

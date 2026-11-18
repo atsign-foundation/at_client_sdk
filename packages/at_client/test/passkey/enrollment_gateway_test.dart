@@ -261,7 +261,7 @@ void main() {
       wire
         ..pkamThrows = UnAuthenticatedException(
             'Failed connecting to $_atSign. error:AT0401-Client '
-            'authentication failed')
+            'authentication failed : pkam authentication failed')
         ..stopThrows = true;
 
       final logs = await _warnings(() async {
@@ -293,7 +293,7 @@ void main() {
     test('the atServer\'s PKAM refusal is a PkamRefusedException', () async {
       wire.pkamThrows = UnAuthenticatedException(
           'Failed connecting to $_atSign. error:AT0401-Client authentication '
-          'failed');
+          'failed : pkam authentication failed');
 
       await expectLater(
           authenticate(),
@@ -315,6 +315,42 @@ void main() {
       ''
     ]) {
       test('a failed handshake reply "$reply" is not a refusal', () async {
+        wire.pkamThrows =
+            UnAuthenticatedException('Failed connecting to $_atSign. $reply');
+
+        await expectLater(
+            authenticate(), throwsA(isA<UnAuthenticatedException>()));
+      });
+    }
+
+    // The atServer's PKAM handler replies AT0401 only as `pkam publickey not
+    // found` or `pkam authentication failed`; either separator may follow the
+    // code and the text may be prefixed by the code's description.
+    for (final reply in [
+      'error:AT0401-Client authentication failed : pkam authentication failed',
+      'error:AT0401:pkam authentication failed',
+      'error:AT0401-UnAuthenticatedException: pkam publickey not found',
+      'error:AT0401:Client authentication failed : pkam publickey not found',
+    ]) {
+      test('an AT0401 reply "$reply" is a refusal', () async {
+        wire.pkamThrows =
+            UnAuthenticatedException('Failed connecting to $_atSign. $reply');
+
+        await expectLater(
+            authenticate(),
+            throwsA(isA<PkamRefusedException>()
+                .having((e) => e.enrollmentId, 'enrollmentId', _eid)));
+      });
+    }
+
+    for (final reply in [
+      'error:AT0401-Client authentication failed',
+      'error:AT0401:Client authentication failed : cram authentication failed',
+      'error:AT0401-',
+      'error:AT0401',
+    ]) {
+      test('an AT0401 reply "$reply" without a PKAM text is not a refusal',
+          () async {
         wire.pkamThrows =
             UnAuthenticatedException('Failed connecting to $_atSign. $reply');
 

@@ -101,6 +101,11 @@ void main() {
         'atkeys.$_eid.a.__e@alice');
   });
 
+  test('put rejects a document with a carriage return', () {
+    expect(store.put(_atSign, _eid, '{\r}'), throwsArgumentError);
+    expect(remoteLookUp.commands, isEmpty);
+  });
+
   test('put rejects a document with a newline', () {
     expect(store.put(_atSign, _eid, '{\n}'), throwsArgumentError);
     expect(remoteLookUp.commands, isEmpty);
