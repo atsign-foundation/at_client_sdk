@@ -237,6 +237,17 @@ const Map<String, AtConnectionCause> _refusalCodes = {
   'AT0026': AtConnectionCause.enrollmentNotApproved,
 };
 
+/// The codes an atServer refuses a `pkam:` or `cram:` with: [_refusalCodes],
+/// and AT0028, which in reply to one names an expired enrollment and in
+/// reply to any other verb a throttle or another enrollment.
+const Map<String, AtConnectionCause> _authenticationRefusalCodes = {
+  ..._refusalCodes,
+  'AT0028': AtConnectionCause.invalidEnrollment,
+};
+
+/// The code at_lookup assigns to an [UnAuthenticatedException] it wraps.
+const String _authenticationFailedCode = 'AT0401';
+
 /// The codes at_lookup assigns when it wraps a failure to reach the atServer.
 const Set<String> _unreachableCodes = {
   'AT0004', // a socket error, AtIOException among them
@@ -287,7 +298,8 @@ AtConnectionState? classifyConnectionFailure(Object error) {
   }
   if (error is UnAuthenticatedException) {
     return AtConnectionState.refused(
-        _refusalCauseIn(error.message) ?? AtConnectionCause.unauthenticated,
+        _authenticationRefusalCauseIn(error.message) ??
+            AtConnectionCause.unauthenticated,
         error: error);
   }
   if (error is AtInvalidEnrollmentException) {
@@ -323,6 +335,12 @@ AtConnectionState? classifyConnectionFailure(Object error) {
 }
 
 AtConnectionState? _classifyCode(String code, String message, Object error) {
+  if (code == _authenticationFailedCode) {
+    return AtConnectionState.refused(
+        _authenticationRefusalCauseIn(message) ??
+            AtConnectionCause.unauthenticated,
+        error: error);
+  }
   final refusal = _refusalCodes[code];
   if (refusal != null) {
     // The wrapped message carries the atServer's own code, which is finer
@@ -352,6 +370,9 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
   // Any other code is the atServer answering.
   return AtConnectionState.online();
 }
+
+AtConnectionCause? _authenticationRefusalCauseIn(String message) =>
+    _authenticationRefusalCodes[atServerErrorCodeIn(message)];
 
 AtConnectionCause? _refusalCauseIn(String message) =>
     _refusalCodes[atServerErrorCodeIn(message)];

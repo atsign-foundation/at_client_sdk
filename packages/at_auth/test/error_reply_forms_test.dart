@@ -45,6 +45,8 @@ final Map<String, String Function(String code, String description)> forms = {
 };
 
 /// Each reader of an atServer's refusal reads it the same in either form.
+///
+/// Catalogue: features/enrollment/expired_enrollment_codes.feature
 void main() {
   const atSign = pkamPinAtSign;
   const pkamRefused = 'Exception: pkam authentication failed';
@@ -349,6 +351,36 @@ void main() {
               throwsA(isA<AtEnrollmentException>().having((e) => e.message,
                   'message', contains('has expired or does not exist'))));
           expect(polls(server), 1);
+        });
+      });
+    });
+
+    group('The enrollment wait ends as expired on <code>', () {
+      const expired = 'enrollment_id: $enrollmentId is expired or invalid';
+      final rows = {
+        'AT0028, in the colon form': 'error:AT0028:$expired',
+        'AT0029, in the colon form': 'error:AT0029:$expired',
+        'AT0029, in the JSON form': 'error:${jsonEncode({
+              'errorCode': 'AT0029',
+              'errorDescription': expired,
+            })}',
+      };
+      rows.forEach((row, reply) {
+        test(row, () async {
+          final server = await atServer([reply]);
+
+          Object? caught;
+          try {
+            await waitOver(server);
+          } on AtEnrollmentException catch (e) {
+            caught = e;
+          }
+
+          expect(
+              caught,
+              isA<AtEnrollmentExpiredException>()
+                  .having((e) => e.message, 'message', contains(reply)));
+          expect(polls(server), 1, reason: 'an expiry is not polled again');
         });
       });
     });

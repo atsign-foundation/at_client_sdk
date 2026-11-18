@@ -4,6 +4,12 @@ class AtAuthenticationException extends AtException {
   AtAuthenticationException(super.message);
 }
 
+/// The enrollment an enrollment wait was waiting on has expired, or its
+/// atServer no longer holds it, so no approval can follow.
+class AtEnrollmentExpiredException extends AtEnrollmentException {
+  AtEnrollmentExpiredException(super.message);
+}
+
 class AtKeysFileOverwriteException extends AtException {
   AtKeysFileOverwriteException(super.message);
 }

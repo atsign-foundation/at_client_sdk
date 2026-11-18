@@ -1,5 +1,9 @@
 ## 4.1.0-rc.1
 
+- feat: an enrollment's wait for approval ends with
+  `AtEnrollmentExpiredException`, an `AtEnrollmentException`, when the
+  atServer refuses its PKAM with AT0028 or AT0029, in any form. AT0029
+  used to keep it polling until its retry budget was spent.
 - feat: every `from:` at_auth sends names the program and the SDK in its
   clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
   caller's values win; absent or blank ones are the program file's name,

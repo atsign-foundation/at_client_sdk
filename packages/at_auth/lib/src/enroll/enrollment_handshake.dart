@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/auth/at_authenticator.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
@@ -316,13 +317,13 @@ class EnrollmentHandshake {
         }
         // NOTE AT0028 also names a throttled request, but the atServer
         // throttles enrollment requests, never PKAM, so here it means the
-        // enrollment expired or never existed.
-        else if (code == 'AT0028') {
+        // enrollment expired or never existed, as AT0029 does.
+        else if (code == 'AT0028' || code == 'AT0029') {
           final refusal = 'Enrollment $enrollmentIdFromServer has expired or '
               'does not exist: ${e.message}';
           _logger.severe(refusal);
           _progress.add('PKAM', refusal, ProgressEventType.error);
-          throw AtEnrollmentException(refusal);
+          throw AtEnrollmentExpiredException(refusal);
         } else {
           // Neither "not yet decided" nor "denied", so waiting cannot turn it
           // into an approval — an enrollment revoked mid-wait answers here,
