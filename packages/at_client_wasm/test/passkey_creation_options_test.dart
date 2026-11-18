@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_auth/passkey.dart' show passkeyDisplayName;
 import 'package:at_client_wasm/src/keys/passkey_creation_options.dart';
 import 'package:test/test.dart';
 
@@ -56,12 +57,18 @@ void main() {
   });
 
   group('displayName', () {
+    test('is the core rule of the enrollment time and device name', () {
+      for (final device in ['Alice Mac', '\u{1F600}' * 30]) {
+        expect(_displayName(_at, device), passkeyDisplayName(_at, device));
+      }
+    });
+
     test('is the UTC minute, a middle dot and the device name', () {
       expect(
           _displayName(_at, 'Alice Mac'), '2026-11-06 14:05Z \u00b7 Alice Mac');
     });
 
-    test('converts a non-UTC time to UTC and pads fields', () {
+    test('a time parsed with an offset names its UTC minute', () {
       final local = DateTime.parse('2026-01-02T03:04:59+05:30');
       expect(_displayName(local, 'Mac'), '2026-01-01 21:34Z \u00b7 Mac');
     });

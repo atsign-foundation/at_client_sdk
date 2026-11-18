@@ -107,6 +107,11 @@ void main() {
     expect(recordPrfSalt().length, 32);
   });
 
+  test('passkeyDisplayName and passkeyDisplayNameMaxBytes', () {
+    expect(passkeyDisplayName(DateTime.utc(2026), 'd'), isNotEmpty);
+    expect(passkeyDisplayNameMaxBytes, 64);
+  });
+
   test('exceptions', () {
     expect(PasskeyCeremonyException('x').message, 'x');
     expect(PrfUnavailableException('x').message, 'x');
