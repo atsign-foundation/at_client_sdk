@@ -183,8 +183,10 @@ Future<String?> _pkamChallenge(AtCommandExecutor executor, String atSign,
 /// the SHA-512 digest of [cramSecret] and the challenge.
 ///
 /// The challenge is digested as it arrives: unlike PKAM's, it does not pass
-/// through [validatedFromChallenge]. A refusal throws an
-/// [UnAuthenticatedException] naming [atSign] and the atServer's response.
+/// through [validatedFromChallenge]. An `error:` answer to `from:` is thrown
+/// as the atServer wrote it, and nothing is digested. Either that or a
+/// refusal throws an [UnAuthenticatedException] naming [atSign] and the
+/// atServer's response.
 Future<bool> _cram(
   AtCommandExecutor executor,
   String atSign,
@@ -201,7 +203,12 @@ Future<bool> _cram(
   if (fromResponse.isEmpty) {
     return false;
   }
-  fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
+  fromResponse = fromResponse.trim();
+  if (fromResponse.startsWith('error:')) {
+    throw UnAuthenticatedException(
+        'Cram authentication failed for $atSign: $fromResponse');
+  }
+  fromResponse = fromResponse.replaceFirst(RegExp(r'^data:'), '');
 
   final digest =
       SHA512HashingAlgo().hash(utf8.encode('$cramSecret$fromResponse'));

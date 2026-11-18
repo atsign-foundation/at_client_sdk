@@ -334,6 +334,21 @@ void main() {
     });
   });
 
+  /// Catalogue: features/at_client/pkam_no_challenge.feature
+  test(
+      'An error: answer to an activation\'s from: is raised as the '
+      'atServer wrote it', () async {
+    const reply = 'error:AT0011-Internal server exception';
+    final executor = RecordingExecutor([reply]);
+
+    await expectLater(
+        () => authenticatorForCramSecret(atSign, cramSecret)(executor),
+        throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+            'message', 'Cram authentication failed for $atSign: $reply')));
+    expect(executor.sent, hasLength(1),
+        reason: 'no cram: is sent for an error: answer');
+  });
+
   group('Given an atSign and its CRAM secret', () {
     test(
         'when the atServer refuses CRAM authentication, then the exception '

@@ -48,3 +48,8 @@ Feature: An atServer that gives no challenge to sign leaves the connection offli
     Given a client of @alice🛠 whose connection state is online
     When a verb's from: on a new connection is answered with data: and nothing else
     Then the verb throws, and the connection state is offline with cause unreachable
+
+  Scenario: An error: answer to an activation's from: is raised as the atServer wrote it
+    Given an atSign being activated with its CRAM secret
+    When the atServer answers the from: with error:AT0011-<text>
+    Then the activation fails carrying that reply, and no cram: is sent
