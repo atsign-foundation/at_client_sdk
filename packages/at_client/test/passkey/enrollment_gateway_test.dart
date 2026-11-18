@@ -205,8 +205,6 @@ void main() {
     for (final reply in [
       'error:AT0011-Internal server exception',
       'error:AT0003-Invalid syntax',
-      'throttled',
-      ''
     ]) {
       test('a failed handshake reply "$reply" is not a refusal', () async {
         wire.pkamThrows =
@@ -216,6 +214,17 @@ void main() {
             authenticate(), throwsA(isA<UnAuthenticatedException>()));
       });
     }
+
+    test('a PKAM reply naming no atServer code is a refusal', () async {
+      wire.pkamThrows = UnAuthenticatedException(
+          'Failed connecting to $_atSign. error:Client authentication failed');
+
+      await expectLater(
+          authenticate(),
+          throwsA(isA<PkamRefusedException>()
+              .having((e) => e.enrollmentId, 'enrollmentId', _eid)),
+          reason: 'an error: reply with no code is read as unauthenticated');
+    });
 
     // The atServer rejects a denied, revoked or unknown enrollment before it
     // checks the signature, replying `error:<code>:enrollment_id: <id> is
@@ -238,22 +247,21 @@ void main() {
             throwsA(isA<PkamRefusedException>()
                 .having((e) => e.enrollmentId, 'enrollmentId', _eid)));
       });
-
-      test('$code naming another enrollment is not a refusal', () async {
-        wire.pkamThrows = UnAuthenticatedException(message('${_eid}9'));
-
-        await expectLater(
-            authenticate(), throwsA(isA<UnAuthenticatedException>()));
-      });
-
-      test('$code naming no enrollment is not a refusal', () async {
-        wire.pkamThrows = UnAuthenticatedException(
-            'Failed connecting to $_atSign. error:$code:${reply.value}');
-
-        await expectLater(
-            authenticate(), throwsA(isA<UnAuthenticatedException>()));
-      });
     }
+
+    test('a failure the classifier reads as an invalid enrollment is a refusal',
+        () async {
+      wire.pkamThrows = UnAuthenticatedException(
+          'Failed connecting to $_atSign. error:AT0029:Apkam Enrollment '
+          'Expired');
+
+      await expectLater(
+          authenticate(),
+          throwsA(isA<PkamRefusedException>()
+              .having((e) => e.enrollmentId, 'enrollmentId', _eid)),
+          reason: 'AT0029 is classified invalidEnrollment, which ends the '
+              'enrollment');
+    });
 
     test('a pending enrollment (AT0026) is not a refusal', () async {
       wire.pkamThrows =
