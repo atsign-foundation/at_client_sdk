@@ -297,10 +297,7 @@ AtConnectionState? classifyConnectionFailure(Object error) {
     return _classifyCode(error.errorCode, error.errorMessage, error);
   }
   if (error is UnAuthenticatedException) {
-    return AtConnectionState.refused(
-        _authenticationRefusalCauseIn(error.message) ??
-            AtConnectionCause.unauthenticated,
-        error: error);
+    return _classifyAuthentication(error.message, error);
   }
   if (error is AtInvalidEnrollmentException) {
     return AtConnectionState.refused(AtConnectionCause.invalidEnrollment,
@@ -336,10 +333,7 @@ AtConnectionState? classifyConnectionFailure(Object error) {
 
 AtConnectionState? _classifyCode(String code, String message, Object error) {
   if (code == _authenticationFailedCode) {
-    return AtConnectionState.refused(
-        _authenticationRefusalCauseIn(message) ??
-            AtConnectionCause.unauthenticated,
-        error: error);
+    return _classifyAuthentication(message, error);
   }
   final refusal = _refusalCodes[code];
   if (refusal != null) {
@@ -371,8 +365,21 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
   return AtConnectionState.online();
 }
 
-AtConnectionCause? _authenticationRefusalCauseIn(String message) =>
-    _authenticationRefusalCodes[atServerErrorCodeIn(message)];
+/// What a failed `pkam:` or `cram:` says about the connection, from the
+/// [message] that carries the atServer's reply: a refusal code refuses
+/// with its cause, any other code says nothing, and a reply with no code
+/// is refused as unauthenticated.
+AtConnectionState? _classifyAuthentication(String message, Object error) {
+  final code = atServerErrorCodeIn(message);
+  if (code == null) {
+    return AtConnectionState.refused(AtConnectionCause.unauthenticated,
+        error: error);
+  }
+  final refusal = _authenticationRefusalCodes[code];
+  return refusal == null
+      ? null
+      : AtConnectionState.refused(refusal, error: error);
+}
 
 AtConnectionCause? _refusalCauseIn(String message) =>
     _refusalCodes[atServerErrorCodeIn(message)];
