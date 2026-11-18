@@ -1174,12 +1174,24 @@ void main() {
       expect(server.pointers.keys,
           unorderedEquals([firstKeys.lookupHex, secondKeys.lookupHex]));
 
+      // The second onboarding revoked the first enrollment, so the pairs are
+      // compared on the second, live one: only its own passkey's pair
+      // authenticates as it.
+      expect(server.revoked, contains(first.client.enrollmentId));
       await expectLater(
           gateway.authenticate(
               atSign: _atSign,
-              enrollmentId: first.client.enrollmentId!,
-              apkamKeyPair: await apkamKeyPairFromSeed(secondKeys.authSeed)),
+              enrollmentId: second.client.enrollmentId!,
+              apkamKeyPair: await apkamKeyPairFromSeed(firstKeys.authSeed)),
           throwsA(isA<PkamRefusedException>()));
+      expect(
+          (await gateway.authenticate(
+                  atSign: _atSign,
+                  enrollmentId: second.client.enrollmentId!,
+                  apkamKeyPair:
+                      await apkamKeyPairFromSeed(secondKeys.authSeed)))
+              .enrollmentId,
+          second.client.enrollmentId);
       await expectLater(
           secondKeys.vault.open(PasskeyRecordType.atkeys,
               server.documents[first.client.enrollmentId]!),

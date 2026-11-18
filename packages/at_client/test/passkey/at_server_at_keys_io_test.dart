@@ -55,10 +55,21 @@ class _FakeAtServer {
   Completer<void>? holdUpdate;
   final updateArrived = Completer<void>();
 
+  /// When set, the next lookup waits for it after it is logged and signals
+  /// [lookupArrived], so a test can act while a write reads.
+  Completer<void>? holdLookup;
+  final lookupArrived = Completer<void>();
+
   Future<String?> respond(String command) async {
     commands.add(command);
     final line = command.substring(0, command.length - 1);
     if (line.startsWith('llookup:')) {
+      final hold = holdLookup;
+      if (hold != null) {
+        holdLookup = null;
+        lookupArrived.complete();
+        await hold.future;
+      }
       if (corruptAfterUpdate && updates.isNotEmpty) {
         return 'data:not-a-sealed-doc';
       }
@@ -182,10 +193,32 @@ void main() {
           naming('lockWait'));
     });
 
-    test('accepts a lockTtl of the cap and a lockWait of a millisecond', () {
+    test('refuses a lockWait not longer than half the lockTtl', () {
+      expect(
+          () => build(
+              lockTtl: const Duration(minutes: 1),
+              lockWait: const Duration(seconds: 15)),
+          naming('lockWait'),
+          reason: 'a lease too short to reuse holds the lock against the '
+              "store's own next take for up to half the ttl");
+      expect(
+          () => build(
+              lockTtl: const Duration(seconds: 10),
+              lockWait: const Duration(seconds: 5)),
+          naming('lockWait'));
+    });
+
+    test('accepts a lockTtl of the cap with a lockWait just over half of it',
+        () {
       expect(
           build(
               lockTtl: maxServerMutexTtl,
+              lockWait:
+                  maxServerMutexTtl ~/ 2 + const Duration(milliseconds: 1)),
+          isA<AtServerAtKeysIo>());
+      expect(
+          build(
+              lockTtl: const Duration(milliseconds: 1),
               lockWait: const Duration(milliseconds: 1)),
           isA<AtServerAtKeysIo>());
     });
@@ -741,22 +774,26 @@ void main() {
         'is refused with no I/O', () async {
       await seedRecord(_base());
       final io = await open();
-      server.holdUpdate = Completer<void>();
+      final hold = Completer<void>();
       final running = io.update(_atSign.toAtsign(), (keys) {
         keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
+        // Holds the re-read before the candidate is checked against the
+        // stored document, a step that still reads the pair's private key.
+        server.holdLookup = hold;
         return true;
       });
-      await server.updateArrived.future;
+      await server.lookupArrived.future;
       final queued = io.update(_atSign.toAtsign(), (keys) => true);
       final queuedOutcome =
           expectLater(queued, throwsA(isA<AtServerAtKeysWriteException>()));
 
       io.close();
-      server.holdUpdate!.complete();
+      hold.complete();
 
       await running;
       await queuedOutcome;
       expect(server.updates, hasLength(1));
+      expect((await stored(derived)).enrollmentSymmetricKey?.key, _b('sym-x'));
       await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
