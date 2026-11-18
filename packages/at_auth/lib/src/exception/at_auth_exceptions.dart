@@ -6,7 +6,11 @@ class AtAuthenticationException extends AtException {
 
 /// The enrollment an enrollment wait was waiting on has expired, or its
 /// atServer no longer holds it, so no approval can follow.
-class AtEnrollmentExpiredException extends AtEnrollmentException {
+///
+/// It is also an [AtInvalidEnrollmentException], the type at_commons gives
+/// AT0029, so a catch of either type catches it.
+class AtEnrollmentExpiredException extends AtEnrollmentException
+    implements AtInvalidEnrollmentException {
   AtEnrollmentExpiredException(super.message);
 }
 

@@ -1,13 +1,13 @@
 Feature: A client reads AT0028 and AT0029 alike as its own enrollment expired
 
   An atServer refuses a PKAM for an enrollment that has expired, or that it
-  no longer holds, with AT0028 today, and with AT0029 once it knows the client
-  reads it. The client takes either code, in any form, as expiry wherever it
-  meets a PKAM refusal: at_auth's enrollment wait throws
-  AtEnrollmentExpiredException, an AtEnrollmentException that at_client
-  re-exports, PendingEnrollment removes the request's pending keys, and a
-  running client reports its connection refused with cause invalidEnrollment.
-  AT0028 in reply to any other verb is a throttle, or names another
+  no longer holds, with AT0028 or AT0029. The client takes either code, in
+  any form, as expiry wherever it meets a PKAM refusal: at_auth's enrollment
+  wait throws AtEnrollmentExpiredException, which at_client re-exports and
+  which is both an AtEnrollmentException and an AtInvalidEnrollmentException,
+  PendingEnrollment removes the request's pending keys, and a running client
+  reports its connection refused with cause invalidEnrollment. AT0028 in
+  reply to any verb but a PKAM and its from: is a throttle, or names another
   enrollment, and changes nothing about the connection.
 
   Races: the wait polls one PKAM at a time; an expiry racing a stop or a

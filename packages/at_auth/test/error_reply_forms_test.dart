@@ -386,6 +386,8 @@ void main() {
               caught,
               isA<AtEnrollmentExpiredException>()
                   .having((e) => e.message, 'message', contains(reply)));
+          expect(caught, isA<AtInvalidEnrollmentException>(),
+              reason: 'a catch of either type catches it');
           expect(polls(server), 1, reason: 'an expiry is not polled again');
         });
       });
