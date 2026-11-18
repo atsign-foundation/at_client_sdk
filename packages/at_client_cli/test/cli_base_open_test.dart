@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtAuthErrorReplyException;
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:at_lookup/at_lookup.dart';

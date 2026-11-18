@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show AtAuthErrorReplyException;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpException;
