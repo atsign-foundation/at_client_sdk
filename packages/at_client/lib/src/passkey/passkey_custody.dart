@@ -506,6 +506,9 @@ class PasskeyCustody {
   /// [PasskeyLostException] whose cause is a `PasskeyCeremonyException`: the
   /// user may simply have cancelled, so an app offers "Try again" and
   /// "Discard" ([discardPendingOnboarding]), and never discards on its own.
+  /// When that record's passkey yields no usable PRF output, the record is
+  /// kept too and the failure is a [PasskeyLostException] whose cause is the
+  /// `PrfUnavailableException`.
   ///
   /// The setup lock is always taken, so this can also throw what the lock
   /// throws when it cannot be taken (for example a

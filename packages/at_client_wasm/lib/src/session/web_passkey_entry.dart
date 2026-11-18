@@ -63,8 +63,9 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 /// offers "Try again" and "Discard" ([discardPendingOnboarding]) and never
 /// discards on its own; see `docs/projects/wasm/browser-onboarding.md`.
 ///
-/// [PrfUnavailableException] and [SetupLockTimeoutException] are thrown as
-/// they are, not wrapped in [PasskeyLostException].
+/// [SetupLockTimeoutException] is thrown as it is, and so is
+/// [PrfUnavailableException], except from the passkey of a pending
+/// onboarding, where it is the cause of a [PasskeyLostException].
 Future<AtClient> onboardNewAtSign(
         {required String atSign,
         required String cram,
