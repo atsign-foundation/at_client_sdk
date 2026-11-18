@@ -3,8 +3,8 @@ import 'dart:convert';
 
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
-import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/auth/at_authenticator.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/src/keys/at_keys.dart';

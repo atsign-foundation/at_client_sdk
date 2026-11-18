@@ -4,10 +4,10 @@
   leaves the connection offline with cause `unreachable`, not refused,
   and a first open hands back its client. The client still signs
   nothing.
-- fix: a code other than a refusal in reply to a PKAM, such as AT0011
-  when the atServer fails to process it, no longer reads as a refusal: the
-  connection is offline carrying the error, a first open hands back its
-  client, and `Atsign.authenticatesAs` throws the error as it is.
+- fix: a code other than a refusal in reply to a PKAM, such as AT0011, no
+  longer reads as a refusal: connecting reports offline carrying the error,
+  a verb that meets it leaves the connection state as it was, a first open
+  hands back its client, and `Atsign.authenticatesAs` throws the error.
 - feat: a PKAM the atServer refuses with AT0028 reports the connection
   refused with cause `invalidEnrollment`, as AT0029 does, and
   `PendingEnrollment` removes an expired request's pending keys on either

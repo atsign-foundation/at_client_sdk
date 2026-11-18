@@ -351,8 +351,6 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
   }
   final refusal = _refusalCodes[code];
   if (refusal != null) {
-    // The wrapped message carries the atServer's own code, which is finer
-    // than the AT0401 the wrapper gave the exception type.
     return AtConnectionState.refused(_refusalCauseIn(message) ?? refusal,
         error: error);
   }
@@ -379,11 +377,12 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
   return AtConnectionState.online();
 }
 
-/// What a failed `pkam:` or `cram:` says about the connection, from the
-/// [message] that carries the atServer's reply: a `from:` answer with no
-/// challenge to sign is unreachable, a refusal code refuses with its cause,
-/// any other code says nothing, and a reply with no code is refused as
-/// unauthenticated.
+/// What a failed authentication says about the connection, from the
+/// [message] that carries the atServer's reply to a `pkam:` or `cram:`, to
+/// the `from:` before a `pkam:`, or a verb's own `AT0401`: a `from:` answer
+/// with no challenge to sign is unreachable, a refusal code refuses with
+/// its cause, any other code says nothing, and a reply with no code is
+/// refused as unauthenticated.
 AtConnectionState? _classifyAuthentication(String message, Object error) {
   if (_noChallengeText.any((text) => text.hasMatch(message))) {
     return AtConnectionState.offline(AtConnectionCause.unreachable,
