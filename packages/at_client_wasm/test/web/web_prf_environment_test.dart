@@ -1,6 +1,9 @@
 @TestOn('browser')
 library;
 
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+
 import 'package:at_auth/passkey.dart';
 import 'package:at_client_wasm/src/keys/web_prf_environment.dart';
 import 'package:test/test.dart';
@@ -53,6 +56,52 @@ void main() {
 
   test('the clock reads UTC', () {
     expect(WebPrfEnvironment().now().isUtc, isTrue);
+  });
+
+  group('the PRF capability probe', () {
+    late JSAny? original;
+
+    setUp(() => original = globalContext['PublicKeyCredential']);
+    tearDown(() => globalContext['PublicKeyCredential'] = original);
+
+    /// Replaces PublicKeyCredential with the object literal whose members are
+    /// [body].
+    void stubWith(String body) {
+      final make = globalContext.callMethod<JSFunction>(
+          'Function'.toJS, 'return {$body};'.toJS);
+      globalContext['PublicKeyCredential'] = make.callAsFunction(null);
+    }
+
+    test('answers the extension:prf boolean the browser reports', () async {
+      stubWith('getClientCapabilities() {'
+          ' return Promise.resolve({"extension:prf": true}); }');
+      expect(await WebPrfEnvironment().clientCapabilityPrf(), isTrue);
+      stubWith('getClientCapabilities() {'
+          ' return Promise.resolve({"extension:prf": false}); }');
+      expect(await WebPrfEnvironment().clientCapabilityPrf(), isFalse);
+    });
+
+    test('is unknown when the capabilities name no extension:prf', () async {
+      stubWith('getClientCapabilities() { return Promise.resolve({}); }');
+      expect(await WebPrfEnvironment().clientCapabilityPrf(), isNull);
+    });
+
+    test('is unknown when extension:prf is not a boolean', () async {
+      stubWith('getClientCapabilities() {'
+          ' return Promise.resolve({"extension:prf": "yes"}); }');
+      expect(await WebPrfEnvironment().clientCapabilityPrf(), isNull);
+    });
+
+    test('is unknown without getClientCapabilities', () async {
+      stubWith('x: 1');
+      expect(await WebPrfEnvironment().clientCapabilityPrf(), isNull);
+    });
+
+    test('is unknown when getClientCapabilities rejects', () async {
+      stubWith('getClientCapabilities() {'
+          ' return Promise.reject(new Error("no")); }');
+      expect(await WebPrfEnvironment().clientCapabilityPrf(), isNull);
+    });
   });
 
   group('PrfSupport over the page environment', () {
