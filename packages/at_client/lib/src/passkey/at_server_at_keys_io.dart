@@ -317,10 +317,10 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
     });
   }
 
-  /// Whether the stored document holds everything [atKeys] holds, so that
-  /// filing [atKeys] would lose nothing. False when it drops any of it; the
-  /// store stays usable either way. Throws when there is no document or it
-  /// cannot be opened.
+  /// Whether the stored document holds everything [atKeys] holds. False when
+  /// [atKeys] holds anything the stored document lacks; the store stays
+  /// usable either way. Throws when there is no document or it cannot be
+  /// opened.
   Future<bool> keepsAllOf(String atsign, AtKeys atKeys) async {
     _requireStoreAtsign(atsign);
     _requireLive();
