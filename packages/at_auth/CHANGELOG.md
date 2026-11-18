@@ -1,5 +1,10 @@
 ## 4.1.0-rc.1
 
+- fix: a clientConfig given to an authenticator, `activateAtSign` or
+  `AtEnrollment.create` whose top-level `version` is null, empty or only
+  whitespace sends no `version`, as `clientConfigFor` already did. Two keys
+  that differ only by a line or paragraph separator are sent as one key, the
+  later entry winning.
 - refactor: the enrollment wait reads a refusal's code with at_lookup's
   `atServerErrorCodeIn`, so at_auth needs `at_lookup: ^4.1.0-rc.1`. No
   change but this: a code followed by anything but `-`, `:` or the end of

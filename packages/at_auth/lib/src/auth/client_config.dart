@@ -56,13 +56,17 @@ Map<String, String> clientConfigFor({
 /// space, and is not cut. One of the four that is not a string is sent as its
 /// `toString()`, and one that is absent, empty or only whitespace takes
 /// at_auth's. A value of any other key that is neither a string, a Map nor a
-/// List is passed through unchanged. A `version` is sent only when [config]
-/// holds one, made sendable as any other key's value is; at_auth adds none.
+/// List is passed through unchanged. A top-level `version` is sent only when
+/// [config] holds one that is not null, empty or only whitespace, as
+/// [clientConfigFor] sends it, made sendable as any other key's value is;
+/// at_auth adds none. Two keys that differ only by a line or paragraph
+/// separator become one key, the later entry winning; none is rejected.
 Map<String, dynamic> withClientConfigDefaults(Map<String, dynamic> config) {
   String? given(String key) => config[key]?.toString();
   return {
     for (final MapEntry(:key, :value) in config.entries)
-      _oneLine(key): _sendableDeep(value),
+      if (key != AtConstants.version || !_isBlank(value))
+        _oneLine(key): _sendableDeep(value),
     ...clientConfigFor(
         appName: given(AtConstants.appName),
         appVersion: given(AtConstants.appVersion),
@@ -70,6 +74,9 @@ Map<String, dynamic> withClientConfigDefaults(Map<String, dynamic> config) {
         sdkVersion: given(sdkVersionKey)),
   };
 }
+
+bool _isBlank(Object? value) =>
+    value == null || value.toString().trim().isEmpty;
 
 String _sendableOr(String? value, String Function() fallback) =>
     _sendable(value == null || value.trim().isEmpty ? fallback() : value);
