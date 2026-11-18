@@ -1,6 +1,5 @@
 ## 0.1.0
 
-- `package:at_client_wasm/at_client_wasm_web.dart` exports `PasskeySession`, the type `onboardNewAtSign` and `passkeyLogin` return.
 - `passkeyLogin` finishes an onboarding that stopped before deleting the CRAM secret: it publishes the encryption public key if none is published, deletes the CRAM secret, and fails if it cannot. A retried `onboardNewAtSign` revokes every other approved enrollment of the atSign.
 - An update to the stored @keys document builds on a fresh read of it, so a second tab's update after another tab's write lands.
 - The auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and stopping the passkey session zeroes what it can. The client's key store holds the APKAM key pair for the session (private half as bytes, zeroed when the session closes the store; the authenticator's copy cannot be wiped), never writes the APKAM private key to the stored document, and a write running when the client stops finishes whole.
