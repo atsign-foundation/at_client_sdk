@@ -57,7 +57,7 @@ Future<String> activateWithoutClient(
   required AtLookUpFactory lookUps,
   required SecondaryAddressFinder secondaryAddressFinder,
   required bool completeActivation,
-  Map<String, dynamic> clientConfig = const {},
+  required Map<String, dynamic> clientConfig,
 }) async {
   final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
   final pqNative = algo == SigningAlgoType.mldsa65;

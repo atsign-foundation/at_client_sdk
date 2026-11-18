@@ -8,6 +8,8 @@ import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
 import 'package:at_client/passkey.dart' show AtAuthEnrollmentGateway;
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
     show activateWithoutClient;
+import 'package:at_client/src/preference/client_config.dart'
+    show clientConfigOf;
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show apkamKeyPairFromSeed;
 import 'package:at_chops/at_chops.dart'
@@ -241,7 +243,8 @@ void main() {
         lookUps: secureSocketLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server.lookUp,
-        completeActivation: false);
+        completeActivation: false,
+        clientConfig: clientConfigOf(null));
 
     expect(enrolled, enrollmentId);
     expect(
@@ -265,7 +268,8 @@ void main() {
         lookUps: secureSocketLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server.lookUp,
-        completeActivation: false);
+        completeActivation: false,
+        clientConfig: clientConfigOf(null));
 
     verifyNever(() => server.lookUp.close());
   });
@@ -308,6 +312,77 @@ void main() {
         server.sent.where((c) => c.contains(AtConstants.atCramSecret)), isEmpty,
         reason: 'the activation keeps the CRAM secret');
     await session.close();
+  });
+
+  test(
+      "the passkey gateway's activation sends each from: naming at_client as "
+      'the SDK, with its version', () async {
+    final activation = atServer();
+    final installed = <AtAuthenticator>[];
+    when(() => activation.lookUp.authenticator = any()).thenAnswer((call) {
+      final authenticator = call.positionalArguments.first as AtAuthenticator?;
+      if (authenticator != null) installed.add(authenticator);
+      return null;
+    });
+    // NOTE: each leg's from: is read as the leg runs, while the keys it reads
+    // are the ones the activation holds at that moment.
+    final froms = <String?>[];
+    when(() => activation.lookUp.pkamAuthenticate()).thenAnswer((_) async {
+      final authenticator = installed.last;
+      final recorder = FromRecorder();
+      await authenticator(recorder);
+      froms.add(recorder.from);
+      return froms.length == 1
+          ? authenticator(_CramAtServer(cramSecret))
+          : true;
+    });
+    final pkamLeg = atServer();
+    when(() => pkamLeg.lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
+    final connections = [activation.lookUp, pkamLeg.lookUp];
+    var made = 0;
+    final gateway = AtAuthEnrollmentGateway(
+        lookUps: (
+                {required atSign,
+                required rootDomain,
+                required authenticator,
+                secondaryAddressFinder}) =>
+            connections[made++],
+        finder: await refusingAtDirectory(),
+        root: AtRootDomain(
+            InternetAddress.loopbackIPv4.address, await refusedPort()),
+        app: 'lifecycle',
+        device: 'gateway',
+        clientOpener: (
+                {required lookUp,
+                required atSign,
+                required enrollmentId,
+                required keysIo}) =>
+            throw StateError('the activation opens no client'));
+
+    final session = await gateway.activate(
+        atSign: atSign,
+        apkamKeyPair: await apkamKeyPairFromSeed(
+            Uint8List.fromList(List.generate(32, (i) => i + 7))),
+        cram: cramSecret);
+    addTearDown(session.close);
+
+    expect(made, 2,
+        reason: 'the control: one connection for the activation and one for '
+            "the gateway's own PKAM");
+    expect(froms, hasLength(2),
+        reason: "the control: the CRAM login and the new keys' PKAM, both on "
+            "the activation's connection");
+    final atClientVersion = pubspecVersion();
+    for (final from in froms) {
+      const prefix = 'from:$atSign:clientConfig:';
+      expect(from, startsWith(prefix));
+      final config = jsonDecode(from!.substring(prefix.length).trim())
+          as Map<String, dynamic>;
+      expect(config['sdkName'], 'atsign.dart.at_client',
+          reason: 'the activation names at_client as the SDK');
+      expect(config['sdkVersion'], atClientVersion);
+      expect(config['version'], atClientVersion);
+    }
   });
 
   group('a supplied APKAM keypair', () {

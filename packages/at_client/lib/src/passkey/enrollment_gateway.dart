@@ -10,6 +10,7 @@ import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart'
     show handshakeKeysIo;
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart'
     show decideEnrollmentOn, listEnrollmentsOn;
 import 'package:at_client/src/util/enroll_list_request_param.dart';
@@ -182,13 +183,14 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
       required String cram,
       required ApkamKeyPair apkamKeyPair}) async {
     final filing = scratchKeysIo();
+    final preference = AtClientPreference()
+      ..namespace = app
+      ..rootDomain = root.rootDomain
+      ..rootPort = root.rootPort;
     await activateWithoutClient(Atsign(atSign),
         cramSecret: cram,
         keys: filing,
-        preference: AtClientPreference()
-          ..namespace = app
-          ..rootDomain = root.rootDomain
-          ..rootPort = root.rootPort,
+        preference: preference,
         app: app,
         device: device,
         mintLegacyMaterial: true,
@@ -196,7 +198,8 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
         apkamKeyPair: apkamKeyPair,
         lookUps: lookUps,
         secondaryAddressFinder: finder,
-        completeActivation: false);
+        completeActivation: false,
+        clientConfig: clientConfigOf(preference.atClientParticulars));
     return filing.read(atSign);
   }
 }
