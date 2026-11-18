@@ -155,6 +155,10 @@ jobs:
       - name: Run at_client_wasm VM tests
         run: dart test --concurrency=1
 
+      - name: Check that every at_client_web scenario has a proving test
+        working-directory: .
+        run: test -z "$(features/at_client_web/check_scenarios.sh)"
+
   at_client_wasm_browser:
     runs-on: ubuntu-latest
     steps:
