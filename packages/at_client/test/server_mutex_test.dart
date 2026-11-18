@@ -387,6 +387,19 @@ void main() {
           Duration.zero);
       expect(spent.remaining, Duration.zero);
     });
+
+    test('has none left, never less than none, once it has run past its length',
+        () {
+      final overrun = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().add(const Duration(minutes: 1)),
+          _Clock()..elapsed = const Duration(seconds: 90),
+          const Duration(minutes: 1));
+      expect(overrun.isSpent, isTrue,
+          reason: 'the control: the lease ran 30 seconds past its length');
+      expect(overrun.remaining, Duration.zero,
+          reason: 'what a spent lease has left is zero, never negative');
+    });
   });
 }
 
@@ -412,4 +425,10 @@ Future<String> _lockValueInThisIsolate() async {
       AtKey.fromString('s1.session_mutexes.sshnp@alice'),
       ttl: const Duration(seconds: 30));
   return value!;
+}
+
+/// A stopwatch that reads the elapsed time the test sets.
+class _Clock extends Fake implements Stopwatch {
+  @override
+  Duration elapsed = Duration.zero;
 }
