@@ -32,12 +32,14 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 /// connections reach atServers, by default directly.
 ///
 /// An onboarding that fails before the CRAM secret is deleted can be run
-/// again with the same [cram], which registers a new passkey and revokes the
-/// enrollment the failed run left; the passkey that failed is reported to the
-/// browser as unknown when the failure came before the activation was being
-/// completed. Once the CRAM secret is deleted,
-/// [passkeyLogin] finishes the onboarding, including when the client failed
-/// to open. Nothing is kept in this browser until the CRAM secret is deleted.
+/// again with the same [cram], which registers a new passkey and revokes
+/// every other approved enrollment of the atSign, the failed run's included;
+/// the passkey that failed is reported to the browser as unknown when the
+/// failure came before the activation was being completed. Once the CRAM
+/// secret is deleted, [passkeyLogin] finishes the onboarding, including when
+/// the client failed to open; it also finishes one that stopped after
+/// writing the document and pointer but before deleting the CRAM secret.
+/// Nothing is kept in this browser until the CRAM secret is deleted.
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup

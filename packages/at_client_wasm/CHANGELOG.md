@@ -1,5 +1,6 @@
 ## 0.1.0
 
+- `passkeyLogin` finishes an onboarding that stopped before deleting the CRAM secret: it publishes the encryption public key if none is published, deletes the CRAM secret, and fails if it cannot. A retried `onboardNewAtSign` revokes every other approved enrollment of the atSign.
 - An update to the stored @keys document builds on a fresh read of it, so a second tab's update after another tab's write lands.
 - The auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and stopping the passkey session zeroes what it can. The client's key store holds the APKAM key pair for the session (private half as bytes, zeroed when the session closes the store; the authenticator's copy cannot be wiped), never writes the APKAM private key to the stored document, and a write running when the client stops finishes whole.
 - `onboardNewAtSign` and `passkeyLogin` document that a `PasskeyLostException` caused by a failed prompt may be a plain cancel, and that nothing is deleted, revoked or cleared after one. `docs/projects/wasm/browser-onboarding.md` has the app guidance ("Try again" and "Reset", each with an info box; never reset automatically).

@@ -11,7 +11,7 @@
 - feat: `PasskeyCustody.onboard` writes the sealed @keys document and pointer before it deletes the CRAM secret, so an interrupted onboarding can be run again with the same CRAM secret, or finished by `open` once the secret is deleted. Nothing is kept on the device until then, and onboarding asks for persistent storage before it activates.
 - fix: `PasskeyCustody.open` finishes an onboarding that stopped before deleting the CRAM secret: it publishes the encryption public key if none is published, deletes the CRAM secret, and fails the open if it cannot. `EnrollmentSession.publicKeysMatch` is now `publishedEncryptionKey`.
 - feat: `AtServerAtKeysIo.keepsAllOf` reports whether filing keys would drop anything the stored document holds.
-- feat: a retried onboarding revokes the enrollments earlier attempts left approved before it deletes the CRAM secret, so a passkey from an interrupted attempt is refused as lost.
+- feat: a retried onboarding revokes every other approved enrollment of the atSign before it deletes the CRAM secret, so a passkey from an interrupted attempt is refused as lost.
 - fix: `PasskeyCustody.open` takes the saved hints only when it has both ids; one alone is treated as none. When the narrowed ceremony fails or the atServer refuses PKAM for the saved enrollment, it retries once as a device with no hints, under the setup lock, and a success replaces the saved ids. A cancelled ceremony cannot be told from a deleted passkey and is retried too. A store that is a `PasskeyHintStore` receives both ids in one write.
 - feat: `package:at_client/passkey.dart` is a new library for onboarding and
   opening an atSign with a passkey. `PasskeyCustody.onboard` and `open` each

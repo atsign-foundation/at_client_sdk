@@ -268,8 +268,9 @@ class PasskeyCustody {
   /// Onboards a fresh [atSign]: registers a passkey, activates the atSign
   /// with [cram] and the APKAM key pair derived from the passkey, writes the
   /// sealed @keys document and the pointer as the new enrollment, revokes
-  /// every other approved enrollment (those an interrupted onboarding left),
-  /// and only then completes the activation, which publishes the encryption
+  /// every other approved enrollment of the atSign, including any an
+  /// interrupted onboarding left, and only then completes the activation,
+  /// which publishes the encryption
   /// public key and deletes the CRAM secret. It then remembers the passkey on
   /// the device and returns the session of the client running as the new
   /// enrollment.

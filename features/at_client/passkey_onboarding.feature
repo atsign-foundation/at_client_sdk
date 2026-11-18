@@ -4,11 +4,12 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   enrollment, then completes the activation: it publishes the encryption
   public key and deletes the CRAM secret. Only then does it remember the
   passkey on the device and open the client, which, under a posture that
-  creates a signing root, mints the Atsign's signing root, filing the
-  root's private key in the @keys document before publishing the root. Until the CRAM secret is deleted, an onboarding that
-  was interrupted is run again with the same CRAM secret, and that retry
-  revokes the enrollments earlier attempts left approved; once it is
-  deleted, logging in with the passkey finishes the onboarding. A login
+  creates a signing root, mints the Atsign's signing root, filing the root's
+  private key in the @keys document before publishing the root. Until the
+  CRAM secret is deleted, an onboarding that was interrupted is run again
+  with the same CRAM secret, and that retry revokes every other approved
+  enrollment of the Atsign, including those earlier attempts left; once it
+  is deleted, logging in with the passkey finishes the onboarding. A login
   also finishes an activation that an onboarding left half done: it
   publishes the @keys document's encryption public key when none is
   published, and deletes the CRAM secret; a different published key is

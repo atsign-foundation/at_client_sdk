@@ -223,7 +223,7 @@ An app that gets this error must:
 | Try again | Nothing changes; you are prompted for your passkey again. | The app calls `passkeyLogin` (or `onboardNewAtSign`) again. |
 | Reset | This starts a new enrollment. It needs a one-time passcode (OTP) and approval from another device, and the old enrollment is revoked. | The app runs the enrollment flow (3.1); an approver revokes the old enrollment (3.6). |
 
-An onboarding that fails before the CRAM secret is deleted leaves nothing in the browser, so its **Try again** calls `onboardNewAtSign` again with the same CRAM secret, which registers a new passkey and revokes the enrollment the failed attempt left. One that fails after the CRAM secret is deleted is finished by `passkeyLogin`.
+An onboarding that fails before the CRAM secret is deleted leaves nothing in the browser, so its **Try again** calls `onboardNewAtSign` again with the same CRAM secret, which registers a new passkey and revokes every other approved enrollment of the atSign, the failed attempt's included. One that fails after the CRAM secret is deleted is finished by `passkeyLogin`, and so is one that wrote the document and pointer but stopped before deleting the CRAM secret: the login publishes the document's encryption public key if none is published, then deletes the CRAM secret.
 
 ---
 
