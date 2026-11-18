@@ -42,6 +42,18 @@ AtLookupMuxable _idleLookUps({
   return lookUp;
 }
 
+/// An authenticator whose report of an unknown credential never settles, as
+/// a browser promise that never resolves.
+class _UnsettledSignalAuthenticator extends FakeAuthenticator {
+  final _settles = Completer<void>();
+
+  @override
+  Future<void> signalUnknownCredential(Uint8List credentialId) {
+    signalled.add(credentialId);
+    return _settles.future;
+  }
+}
+
 void main() {
   final logs = RecordedLogs();
   setUpAll(logs.installOn);
@@ -621,6 +633,26 @@ void main() {
         await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
             throwsA(same(refusal)));
         expect(authenticator.signalled, hasLength(1));
+      });
+
+      test(
+          'A failed activation is thrown without waiting for the platform to '
+          'take the unknown passkey report', () async {
+        final unsettled = _UnsettledSignalAuthenticator();
+        authenticator = unsettled;
+        final refusal = StateError('CRAM refused');
+        gateway.activateRefusal = refusal;
+        final thrown = await custody()
+            .onboard(atSign: _atSign, cram: 'cram')
+            .then<Object?>((_) => null, onError: (Object e) => e)
+            .timeout(const Duration(seconds: 2),
+                onTimeout: () =>
+                    fail('onboard waited for the platform report'));
+        expect(thrown, same(refusal));
+        expect(unsettled.signalled, [unsettled.current],
+            reason: 'the new credential is reported once');
+        expect(setupLock.held, isEmpty,
+            reason: 'the setup lock is released while the report is pending');
       });
 
       test('a failed registration reports nothing', () async {

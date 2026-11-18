@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
@@ -282,8 +283,9 @@ class PasskeyCustody {
   /// An onboarding that fails before the CRAM secret is deleted is run again
   /// with the same [cram] and a new passkey. The passkey this call registered
   /// is reported to the platform as unknown when the failure comes before
-  /// the activation is completed; a failure while completing it, or after,
-  /// reports nothing. Once the CRAM secret is deleted the atSign is
+  /// the activation is completed, and the failure is thrown without waiting
+  /// for the platform to take the report; a failure while completing it, or
+  /// after, reports nothing. Once the CRAM secret is deleted the atSign is
   /// onboarded, and a failure after that leaves [open] to log in: without
   /// saved hints it sends the completion again, which, with the encryption
   /// public key already published, only deletes the CRAM secret that is
@@ -318,7 +320,7 @@ class PasskeyCustody {
       try {
         written = await _activateAndWrite(canonical, cram, passkey.secret);
       } on Object {
-        await prf.signalUnknownCredential(passkey.credentialId);
+        unawaited(prf.signalUnknownCredential(passkey.credentialId));
         rethrow;
       }
       return _complete(canonical, passkey.credentialId, written);
