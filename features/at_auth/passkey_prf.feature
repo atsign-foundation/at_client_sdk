@@ -7,12 +7,12 @@ Feature: Passkey PRF outputs are checked, and a recorded miss can be cleared
   onboarding for 30 days unless the app clears it. Every platform names a
   passkey by one display-name rule, kept in core.
 
-  Forgery and impersonation: a PRF output of all zeroes would give an auth
-  seed and a seal key anyone can compute, so it is refused. Races: none;
-  each ceremony is the user's own, one at a time. Replay: the PRF input is
-  fixed per passkey, and nothing here is sent. Denial of service: a miss is
-  cleared by the app, and each failed registration's passkey is reported as
-  unknown rather than left in the platform's list.
+  Forgery and impersonation: an all-zero PRF output carries no secret, so it
+  is refused. Races: none; each ceremony is the user's own, one at a time.
+  Replay: the PRF input is fixed per passkey, and nothing here is sent.
+  Denial of service: a miss is cleared by the app, and each failed
+  registration's passkey is reported as unknown rather than left in the
+  platform's list.
 
   @forgery
   Scenario: A PRF output of all zeroes is refused before any key is derived
