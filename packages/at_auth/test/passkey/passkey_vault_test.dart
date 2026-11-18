@@ -193,4 +193,43 @@ void main() {
       expect(spy.closeCalls, 1);
     });
   });
+
+  group('wipeAuthSeed while withAuthSeed is in flight', () {
+    test('leaves the seed whole for the running use, then zeroes it', () async {
+      final expected = Uint8List.fromList(authSeed);
+      final started = Completer<void>();
+      final release = Completer<void>();
+      Uint8List? seenAfterWipe;
+      final use = vault.withAuthSeed((seed) async {
+        started.complete();
+        await release.future;
+        seenAfterWipe = Uint8List.fromList(seed);
+        return 5;
+      });
+      await started.future;
+
+      vault.wipeAuthSeed();
+      expect(authSeed, expected);
+      await expectLater(vault.withAuthSeed((_) async => 1), throwsStateError);
+
+      release.complete();
+      expect(await use, 5);
+      expect(seenAfterWipe, expected);
+      expect(authSeed, everyElement(0));
+      expect(spy.closeCalls, 0);
+    });
+
+    test('zeroes the seed when a use that throws ends', () async {
+      final release = Completer<void>();
+      final use = vault.withAuthSeed((_) async {
+        await release.future;
+        throw FormatException('boom');
+      });
+      vault.wipeAuthSeed();
+      expect(authSeed, isNot(everyElement(0)));
+      release.complete();
+      await expectLater(use, throwsFormatException);
+      expect(authSeed, everyElement(0));
+    });
+  });
 }
