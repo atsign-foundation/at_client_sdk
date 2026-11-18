@@ -112,19 +112,30 @@ Future<PasskeySession> _withCustody(
     required SessionTransportOptions? options,
     required Future<PasskeySession> Function(PasskeyCustody) run}) async {
   final server = passkeyServerSide(options: options, app: app, device: device);
-  final store = await IndexedDbHintStore.open();
+  return runClosingStore(
+      IndexedDbHintStore.open,
+      (store) => run(PasskeyCustody(
+          prf: PasskeyPrf(WebPasskeyPort(rpId: rpId, rpName: rpName),
+              prfSupport: PrfSupport(WebPrfEnvironment())),
+          pointerReader: server.pointerReader,
+          gateway: server.gateway,
+          credentials: store,
+          enrollmentIds: store,
+          setupLock: WebSetupLock(),
+          setupLockPrefix: WebSetupLock.namePrefix,
+          persistence: WebStoragePersistence(),
+          deriver: WebCryptoKeyDeriver())));
+}
+
+/// Runs [run] on the hint store [openStore] opens, and closes that store once
+/// [run] has returned or thrown; what [run] throws propagates.
+///
+/// Public only so that tests reach it; the package does not export it.
+Future<T> runClosingStore<T>(Future<IndexedDbHintStore> Function() openStore,
+    Future<T> Function(IndexedDbHintStore store) run) async {
+  final store = await openStore();
   try {
-    return await run(PasskeyCustody(
-        prf: PasskeyPrf(WebPasskeyPort(rpId: rpId, rpName: rpName),
-            prfSupport: PrfSupport(WebPrfEnvironment())),
-        pointerReader: server.pointerReader,
-        gateway: server.gateway,
-        credentials: store,
-        enrollmentIds: store,
-        setupLock: WebSetupLock(),
-        setupLockPrefix: WebSetupLock.namePrefix,
-        persistence: WebStoragePersistence(),
-        deriver: WebCryptoKeyDeriver()));
+    return await run(store);
   } finally {
     store.close();
   }

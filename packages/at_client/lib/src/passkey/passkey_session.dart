@@ -14,7 +14,8 @@ import 'at_server_at_keys_io.dart';
 /// stopped, whether through [stop] or by the client's own `stop()`. It learns
 /// of a stop from the client's connection changes ending, which they do as
 /// the stop begins, and then waits, up to its bound, for that stop to finish
-/// and for a @keys write already queued on the store to end.
+/// and then for every @keys write queued on the store, including one queued
+/// while the stop ran, to end.
 class PasskeySession {
   /// The session of [client], running on [store], which seals with [vault].
   ///
@@ -71,14 +72,23 @@ class PasskeySession {
 
   Future<void> _release() => _releasing ??= _releaseOnce();
 
+  /// Waits for the client's stop, then for every @keys write queued on the
+  /// store, including one queued while the stop ran or while an earlier
+  /// write was being waited for.
+  Future<void> _settle() async {
+    // NOTE: a client's stop is shared, so this waits for the stop in flight.
+    await client.stop().then((_) {}, onError: (Object _) {});
+    Future<void> tail;
+    do {
+      tail = _store.settled;
+      await tail;
+    } while (!identical(tail, _store.settled));
+  }
+
   Future<void> _releaseOnce() async {
     unawaited(_changes.cancel());
     try {
-      // NOTE: a client's stop is shared, so this waits for the stop in flight.
-      await Future.wait([
-        client.stop().then((_) {}, onError: (Object _) {}),
-        _store.settled,
-      ]).timeout(_settleWithin);
+      await _settle().timeout(_settleWithin);
     } on TimeoutException {
       _logger.warning('the client\'s stop or a @keys write was still running '
           '${_settleWithin.inMilliseconds} ms after the client began to stop; '

@@ -410,8 +410,9 @@ class PasskeyCustody {
   /// Once the document is read, an open without remembered ids, including
   /// the retry without them, finishes the activation an onboarding may have
   /// left unfinished, before it remembers anything or opens the client: when
-  /// the atServer publishes no encryption public key it publishes the
-  /// document's, and either way it deletes the atSign's CRAM secret. An open
+  /// the atServer publishes no encryption public key it revokes every
+  /// approved enrollment other than this one and publishes the document's,
+  /// and either way it deletes the atSign's CRAM secret. An open
   /// that uses remembered ids sends neither, since a device remembers them
   /// only once the activation is finished. On every open, a published key
   /// other than the document's is refused before anything is sent. When
@@ -425,7 +426,8 @@ class PasskeyCustody {
   /// and the session closes the store and the vault once the client stops.
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
-  /// [PublicKeyMismatchException] or what finishing the activation throws;
+  /// [PublicKeyMismatchException] or what revoking the other enrollments or
+  /// finishing the activation throws;
   /// none leaves a session open or the device's hints rewritten.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
@@ -485,7 +487,8 @@ class PasskeyCustody {
   /// ceremony that yields no credential, or a PKAM the atServer refuses, then
   /// throws [_StaleHints] so the caller can try again without them. Without
   /// hints either is a lost passkey. Only an open without hints finishes the
-  /// activation.
+  /// activation, revoking the other enrollments first when it publishes the
+  /// encryption key.
   Future<PasskeySession> _attempt(String canonical, _Hints? hints) async {
     final PasskeyUnlock unlocked;
     try {
@@ -521,6 +524,10 @@ class PasskeyCustody {
       try {
         final unpublished = await _restore(canonical, store, session, pair);
         if (hints == null) {
+          // NOTE: onboarding publishes the encryption key only after it has
+          // revoked every other approved enrollment, so an unpublished key
+          // means that revoke may not have happened.
+          if (unpublished != null) await session.revokeOtherEnrollments();
           await session.completeActivation(
               {if (unpublished != null) _encryptPublicKey: unpublished});
         }

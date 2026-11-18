@@ -405,6 +405,45 @@ void main() {
     });
 
     test(
+        'A login that finishes an onboarding whose revoke failed revokes the '
+        'other enrollments before deleting the CRAM secret', () async {
+      server.documentPutFailures = 99;
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      server.documentPutFailures = 0;
+      gateway.onAuthenticate =
+          (session) => session.revokeError = StateError('revoke failed');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.approved, {'eid1': _atSign, 'eid2': _atSign});
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(session.client.enrollmentId, 'eid2');
+      expect(server.approved, {'eid2': _atSign});
+      final steps = server.timeline;
+      expect(steps.indexOf('revoke:eid1'),
+          inInclusiveRange(0, steps.indexOf('cram-deleted')));
+    });
+
+    test(
+        'a login that cannot revoke the other enrollments keeps the CRAM '
+        'secret', () async {
+      gateway.onAuthenticate =
+          (session) => session.revokeError = StateError('revoke failed');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+
+      await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsStateError);
+
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(server.cramDeleted, isEmpty);
+    });
+
+    test(
         'The retry publishes its own encryption public key over an '
         'interrupted attempt\'s', () async {
       gateway.onAuthenticate = (session) =>
@@ -1171,10 +1210,19 @@ void main() {
       expect(server.pointers.keys,
           unorderedEquals([firstKeys.lookupHex, secondKeys.lookupHex]));
 
+      // NOTE: the second onboarding revoked the first enrollment; it is
+      // approved again so that only the keys decide the PKAM below.
+      final firstEid = first.client.enrollmentId!;
+      server.revoked.remove(firstEid);
+      server.approved[firstEid] = _atSign;
+      await gateway.authenticate(
+          atSign: _atSign,
+          enrollmentId: firstEid,
+          apkamKeyPair: await apkamKeyPairFromSeed(firstKeys.authSeed));
       await expectLater(
           gateway.authenticate(
               atSign: _atSign,
-              enrollmentId: first.client.enrollmentId!,
+              enrollmentId: firstEid,
               apkamKeyPair: await apkamKeyPairFromSeed(secondKeys.authSeed)),
           throwsA(isA<PkamRefusedException>()));
       await expectLater(
