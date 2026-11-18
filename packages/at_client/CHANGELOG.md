@@ -14,6 +14,8 @@
 - fix: `AtServerAtKeysIo` throws `ArgumentError` when built with a `lockTtl` under a millisecond or over 15 minutes, or a `lockWait` that is not positive, instead of failing at its first write.
 - feat: an onboarding revokes every other approved enrollment of the Atsign before it deletes the CRAM secret, so a passkey from an interrupted attempt is refused as lost.
 - fix: `PasskeyCustody.open` takes the saved hints only when it has both ids; one alone is treated as none. When the narrowed ceremony fails or the atServer refuses PKAM for the saved enrollment, it retries once as a device with no hints, under the setup lock, and a success replaces the saved ids. A cancelled ceremony cannot be told from a deleted passkey and is retried too. A store that is a `PasskeyHintStore` receives both ids in one write.
+- fix: a passkey login reads the atServer's refusal of its PKAM in any form the atServer writes it, so AT0029, AT0028 whether or not it names the enrollment, and a reply with no code report a lost passkey too. A failure before the `pkam:` is sent, such as an error answer to its `from:`, is never a lost passkey and keeps the device's saved hints.
+- fix: the `from:` of a passkey login's PKAM, and of the PKAM that follows an onboarding's activation, names at_client as the SDK, with its version.
 - feat: `package:at_client/passkey.dart` is a new library for onboarding and
   opening an atSign with a passkey. `PasskeyCustody.onboard` and `open` each
   return a `PasskeySession`: the `AtClient` running as the Atsign's enrollment,
