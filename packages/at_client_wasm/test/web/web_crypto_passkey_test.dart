@@ -66,8 +66,9 @@ void main() {
 
     test('the PRF bytes are zeroed once derived', () async {
       final secret = prf();
+      final bytes = secret.output;
       await deriver.derive(secret, '@alice');
-      expect(secret.output, everyElement(0));
+      expect(bytes, everyElement(0));
     });
 
     test('the sealer opens a record sealed by a raw-bytes sealer', () async {
