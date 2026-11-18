@@ -146,6 +146,14 @@
 - An agent approves only the enrollment it expects and denies the rest, a
   subscriber keeps only the sender it trusts, and the receive sample matches
   what the send sample sends (`SKILL.md` §13; `references/05`, `10`, `14`).
+- A connect attempt the atServer answers with a server error such as
+  AT0011, or with no challenge, reads as offline (`unreachable`), not
+  refused, and `CLIBase` reports it as an outage when it opens (`SKILL.md`;
+  `references/01`, `05`, `14`, `15`).
+- An expired enrollment request throws `AtEnrollmentExpiredException`, and
+  one the atServer keeps answering without a decision, a server error
+  included, stays pending for `resumeEnrollment` (`SKILL.md`;
+  `references/14`, `15`).
 
 ## 1.3.0 — 2026-07-31
 
