@@ -3,28 +3,6 @@ import 'dart:typed_data';
 import 'package:at_auth/passkey.dart';
 import 'package:test/test.dart';
 
-/// A [PrfEnvironment] with a settable clock, capability answer and miss flag.
-class FakePrfEnvironment implements PrfEnvironment {
-  bool? capability;
-  DateTime? missAt;
-  var clock = DateTime.utc(2026, 11, 13);
-
-  @override
-  Future<bool?> clientCapabilityPrf() async => capability;
-
-  @override
-  void clearMiss() => missAt = null;
-
-  @override
-  DateTime? missRecordedAt() => missAt;
-
-  @override
-  void recordMiss(DateTime at) => missAt = at;
-
-  @override
-  DateTime now() => clock;
-}
-
 /// SHA-256 of `atsign:keys:lookup:v1`; changing it re-keys every passkey.
 final _pinnedPrfSalt = Uint8List.fromList(const [
   0xe5,

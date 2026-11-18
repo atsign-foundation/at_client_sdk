@@ -64,5 +64,8 @@ abstract class PasskeyKeyDeriver {
   /// salt and the info `<label>|<atSign>` for each label above; zeroes
   /// the bytes of [prf] before returning. The sealer's key stays behind the
   /// [RecordSealer] port; this library never holds it as bytes.
+  ///
+  /// Throws [StateError] before deriving anything when [prf] was wiped, as
+  /// reading [PrfSecret.output] does.
   Future<PasskeyDerivation> derive(PrfSecret prf, String atSign);
 }

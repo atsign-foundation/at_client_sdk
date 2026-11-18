@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_commons/atsign.dart';
@@ -9,15 +10,15 @@ import 'prf_secret.dart';
 
 export 'prf_support.dart' show PrfUnavailableException;
 
+const _unusablePrf = 'The authenticator did not return a usable PRF result';
+
 PrfSecret _secretFrom(Uint8List? prfFirst) {
-  if (prfFirst == null) {
-    throw PrfUnavailableException('Authenticator did not return a PRF result');
-  }
+  if (prfFirst == null) throw PrfUnavailableException(_unusablePrf);
   try {
     return PrfSecret(prfFirst);
-  } on ArgumentError catch (e) {
+  } on ArgumentError {
     prfFirst.fillRange(0, prfFirst.length, 0);
-    throw PrfUnavailableException(e.message);
+    throw PrfUnavailableException(_unusablePrf);
   }
 }
 
@@ -45,9 +46,13 @@ class PasskeyPrf {
   /// and the PRF output of an assertion with it.
   ///
   /// Throws [PrfUnavailableException] before any ceremony when PRF is known
-  /// to be unsupported, and after both ceremonies when no PRF output came
-  /// back. A miss is recorded only when the create ceremony did not report PRF
-  /// enabled and the assertion returned no PRF output; a failed ceremony
+  /// to be unsupported, and after both ceremonies when the PRF output that
+  /// came back is missing, not 32 bytes, or all zeroes. When the assertion
+  /// after a successful create throws or yields no usable PRF output, the
+  /// created passkey is reported through [signalUnknownCredential] and the
+  /// failure propagates at once, without waiting for the platform to take the
+  /// report. A miss is recorded only when the create ceremony did not report
+  /// PRF enabled and the assertion returned no PRF output; a failed ceremony
   /// records nothing.
   Future<PasskeyRegistration> register(String atSign,
       {required DateTime enrolledAt, required String deviceName}) async {
@@ -56,15 +61,20 @@ class PasskeyPrf {
         atSign: atSign.toAtsign(),
         enrolledAt: enrolledAt,
         deviceName: deviceName);
-    final assertion = await port.get(
-        evalInput: recordPrfSalt(), allowCredential: creation.credentialId);
-    if (assertion.prfFirst == null && creation.prfEnabled != true) {
-      prfSupport?.recordMiss();
+    try {
+      final assertion = await port.get(
+          evalInput: recordPrfSalt(), allowCredential: creation.credentialId);
+      if (assertion.prfFirst == null && creation.prfEnabled != true) {
+        prfSupport?.recordMiss();
+      }
+      return (
+        credentialId: creation.credentialId,
+        secret: _secretFrom(assertion.prfFirst)
+      );
+    } on Object {
+      unawaited(signalUnknownCredential(creation.credentialId));
+      rethrow;
     }
-    return (
-      credentialId: creation.credentialId,
-      secret: _secretFrom(assertion.prfFirst)
-    );
   }
 
   /// Asserts and returns the PRF output; [credentialId] narrows the allowed

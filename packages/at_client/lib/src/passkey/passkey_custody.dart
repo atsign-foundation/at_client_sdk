@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
@@ -19,9 +20,10 @@ import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
 import 'passkey_session.dart';
 
-/// Asks the browser not to evict this origin's storage.
+/// Asks the platform to keep this application's stored data rather than
+/// evict it.
 abstract class StoragePersistence {
-  /// Whether the browser granted persistence.
+  /// Whether the platform granted persistence.
   Future<bool> requestPersist();
 }
 
@@ -289,13 +291,18 @@ class PasskeyCustody {
   /// An onboarding that fails before the CRAM secret is deleted is run again
   /// with the same [cram] and a new passkey. The passkey this call registered
   /// is reported to the platform as unknown when the failure comes before
-  /// the activation is completed; a failure while completing it, or after,
-  /// reports nothing. Once the CRAM secret is deleted the atSign is
+  /// the activation is completed, and the failure is thrown without waiting
+  /// for the platform to take the report; a failure while completing it, or
+  /// after, reports nothing. Once the CRAM secret is deleted the atSign is
   /// onboarded, and a failure after that leaves [open] to log in: without
   /// saved hints it sends the completion again, which, with the encryption
   /// public key already published, only deletes the CRAM secret that is
   /// already gone, and then saves the hints. Nothing is kept on the device
   /// until the CRAM secret is deleted.
+  ///
+  /// When the assertion after registering the new passkey fails or yields no
+  /// usable PRF output, the new passkey is reported to the platform as
+  /// unknown where the platform supports that, so it can drop the passkey.
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The returned
@@ -321,7 +328,7 @@ class PasskeyCustody {
       try {
         written = await _activateAndWrite(canonical, cram, passkey.secret);
       } on Object {
-        await prf.signalUnknownCredential(passkey.credentialId);
+        unawaited(prf.signalUnknownCredential(passkey.credentialId));
         rethrow;
       }
       return _complete(canonical, passkey.credentialId, written);
@@ -436,8 +443,9 @@ class PasskeyCustody {
   /// and the session closes the store and the vault once the client stops.
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
-  /// [PublicKeyMismatchException] or what finishing the activation throws;
-  /// none leaves a session open or the device's hints rewritten.
+  /// [PublicKeyMismatchException], a `PrfUnavailableException` when the
+  /// passkey gives no usable PRF output, or what finishing the activation
+  /// throws; none leaves a session open or the device's hints rewritten.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
