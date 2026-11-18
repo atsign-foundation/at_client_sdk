@@ -136,11 +136,12 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
   @override
   final bool closedByClient;
 
-  /// Closes the vault this store was given, which overwrites the auth seed
-  /// with zeroes and closes its sealer, and zeroes the APKAM private key it
-  /// holds. Idempotent. A later read throws [StateError]; a later or queued
-  /// write, flush or update throws [AtServerAtKeysWriteException] without
-  /// touching the atServer.
+  /// Zeroes the APKAM private key this store holds and, when
+  /// [closedByClient], closes the vault it was given, which overwrites the
+  /// auth seed with zeroes and closes its sealer. A lent store leaves the
+  /// vault open for whoever lent it. Idempotent. A later read throws
+  /// [StateError]; a later or queued write, flush or update throws
+  /// [AtServerAtKeysWriteException] without touching the atServer.
   ///
   /// A write already running is not cut off: it finishes, and the vault and
   /// the key are released right after it. Never waits, so a write that hangs
@@ -157,7 +158,7 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     _released = true;
     _private.fillRange(0, _private.length, 0);
     _cache = null;
-    _vault.close();
+    if (closedByClient) _vault.close();
   }
 
   /// The keys of [atsign]'s document with the derived APKAM pair filed. The
@@ -270,8 +271,8 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
   /// atSign, so what is read back is the keys written, atSign included, and
   /// without the APKAM private key or the pair's public half.
   ///
-  /// Never strips private authentication material that is not the pair: that
-  /// refuses, and the store accepts no more writes.
+  /// Never strips private authentication material that is not the pair, in
+  /// whatever status: that refuses, and the store accepts no more writes.
   Map<String, dynamic> _document(AtKeys keys) {
     if (_holdsForeignPrivateKey(keys)) {
       _refused = true;
@@ -283,8 +284,8 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     return _stripped(keys);
   }
 
-  /// Whether [keys] hold an APKAM private key, flat or active typed, other
-  /// than the pair this store was given.
+  /// Whether [keys] hold an APKAM private key, flat or typed in any status,
+  /// other than the pair this store was given.
   bool _holdsForeignPrivateKey(AtKeys keys) {
     final json = keys.toJson();
     final flat = json[apkamPrivateKey];
@@ -295,7 +296,6 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
       for (final key in (e as Map)['keys'] as List) {
         for (final m in (key as Map)['material'] as List) {
           if (m['role'] == 'privateAuthentication' &&
-              m['status'] == 'active' &&
               !_isOwnPrivateKey(m['bytes'])) {
             return true;
           }

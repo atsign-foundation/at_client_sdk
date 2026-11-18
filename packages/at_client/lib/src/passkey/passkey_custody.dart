@@ -821,7 +821,7 @@ class PasskeyCustody {
         await pendingStore.delete(canonical);
       }
     } on Object catch (e) {
-      _logger.warning('deleting the pending record of enrollment '
+      _logger.severe('deleting the pending record of enrollment '
           '$enrollmentId failed: ${e.runtimeType}');
     }
   }
@@ -841,7 +841,7 @@ class PasskeyCustody {
       }
     } on Object catch (e) {
       // The record is cleared by a later open.
-      _logger.warning('dropping the obsolete pending record of enrollment '
+      _logger.severe('dropping the obsolete pending record of enrollment '
           '$enrollmentId failed: ${e.runtimeType}');
     }
   }
@@ -906,6 +906,7 @@ class PasskeyCustody {
       ApkamKeyPair pair) async {
     final candidate = AtKeys.fromJson(atKeys)..atsign = atSign.toAtsign();
     for (var attempt = 1;; attempt++) {
+      // Lent the vault: closing it zeroes only this store's copy of the key.
       final io = AtServerAtKeysIo(
           documents: session.documents,
           vault: vault,
@@ -928,6 +929,8 @@ class PasskeyCustody {
         // A failed put or get is retried; the last attempt's error propagates.
         if (attempt == _documentAttempts) rethrow;
         await Future<void>.delayed(retryDelay);
+      } finally {
+        io.close();
       }
     }
   }
@@ -955,12 +958,18 @@ class PasskeyCustody {
   /// here rather than reading them again.
   Future<AtKeys> _restore(String atSign, String enrollmentId,
       PasskeyVault vault, EnrollmentSession session, ApkamKeyPair pair) async {
-    final stored = await AtServerAtKeysIo(
-            documents: session.documents,
-            vault: vault,
-            enrollmentId: enrollmentId,
-            apkamKeyPair: pair)
-        .read(atSign);
+    // Lent the vault: closing it zeroes only this store's copy of the key.
+    final io = AtServerAtKeysIo(
+        documents: session.documents,
+        vault: vault,
+        enrollmentId: enrollmentId,
+        apkamKeyPair: pair);
+    final AtKeys stored;
+    try {
+      stored = await io.read(atSign);
+    } finally {
+      io.close();
+    }
     final atKeys = stored.toJson()..remove(_apkamPrivateKey);
     if (!await session.publicKeysMatch(atKeys) ||
         !_holdsApkamPublicKeyOf(stored, pair)) {

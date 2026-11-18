@@ -77,7 +77,7 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
 
   @override
   Future<void> put(String atSign, String enrollmentId, String document) async {
-    if (document.contains('\n')) {
+    if (document.contains('\r') || document.contains('\n')) {
       throw ArgumentError.value(
           document, 'document', 'must not contain newlines');
     }

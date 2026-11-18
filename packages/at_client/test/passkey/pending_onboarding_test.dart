@@ -658,7 +658,7 @@ void main() {
       logs.records.clear();
       final client = await custody().open(atSign: _atSign);
       expect(client.enrollmentId, 'eid1');
-      final lines = logs.at('WARNING').where((m) => m.contains('StateError'));
+      final lines = logs.at('SEVERE').where((m) => m.contains('StateError'));
       expect(lines, hasLength(1));
       expect(lines.single, contains('eid1'));
       expect(lines.single, isNot(contains('pending delete failed')));
