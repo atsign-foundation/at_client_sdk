@@ -179,7 +179,10 @@ void main() {
         ]);
 
         await expectLater(
-            onboard(args, atLookUp: server.lookUp),
+            onboard(args,
+                program: 'at_activate',
+                programVersion: null,
+                atLookUp: server.lookUp),
             throwsA(isA<AtKeysUnusableException>()
                 .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
                 .having((e) => e.source, 'source', keysPath)));

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
@@ -8,6 +7,7 @@ import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -158,7 +158,7 @@ class DefaultAtServiceFactory implements AtServiceFactory {
 
   @override
   EnrollmentService enrollmentService(AtClient atClient) {
-    AtEnrollment atEnrollment = AtEnrollment.create();
-    return EnrollmentServiceImpl(atClient, atEnrollment);
+    return EnrollmentServiceImpl(atClient,
+        enrollmentFor(atClient.getPreferences()?.atClientParticulars));
   }
 }

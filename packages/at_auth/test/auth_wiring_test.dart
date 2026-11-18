@@ -97,7 +97,8 @@ void main() {
     return AtAuthImpl(
         atLookUp: lookUp,
         pkamAuthenticator: pkam,
-        atEnrollment: enrollment);
+        atEnrollment: enrollment,
+        clientConfig: const {});
   }
 
   /// A legacy-shaped keyfile holding [owner]'s demo material, in memory.

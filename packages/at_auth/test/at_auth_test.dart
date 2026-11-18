@@ -87,7 +87,8 @@ void main() {
       atAuth = AtAuthImpl(
           atLookUp: mockAtLookUp,
           pkamAuthenticator: mockPkamAuthenticator,
-          atEnrollment: mockAtEnrollment);
+          atEnrollment: mockAtEnrollment,
+          clientConfig: const {});
     });
     var testCramSecret = 'cram123';
 

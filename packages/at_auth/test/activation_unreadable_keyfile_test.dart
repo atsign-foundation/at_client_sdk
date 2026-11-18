@@ -121,7 +121,10 @@ void main() {
     when(() => enrollment.submit(any(), lookUp)).thenAnswer(
         (_) async => AtEnrollmentResponse('abc123', EnrollmentStatus.approved));
     atAuth = AtAuthImpl(
-        atLookUp: lookUp, pkamAuthenticator: pkam, atEnrollment: enrollment);
+        atLookUp: lookUp,
+        pkamAuthenticator: pkam,
+        atEnrollment: enrollment,
+        clientConfig: const {});
   });
 
   tearDown(() async {

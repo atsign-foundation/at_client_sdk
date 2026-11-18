@@ -446,23 +446,21 @@ does not exist yet.
 | `remove({id, owner}, {cascade})` | re-read `get`, then `delete` | |
 | `watch(onEvent, {onError}) → cancel` | `watch().listen` | callbacks (D-9); `cancel()` returns a Future that completes once the subscription is cancelled |
 
-**Item ids.** An id given to `create`, or in the address of `get`, `update`, `share` and
-`remove`, must match `^[a-z0-9][a-z0-9_-]{0,63}$`, else the call rejects with
-`COLLECTION_INVALID_ARGUMENT` before any `AtCollection` call. When `create` is given no id,
-`AtCollection` generates one.
+**Item ids.** AtCollection checks every id. It folds the id to lower case, and the call
+rejects with `COLLECTION_INVALID_ARGUMENT` before any write when the id is empty or contains
+`.`, `:`, `@`, whitespace or a control character. `create` and `update` also refuse an id
+starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When
+`create` is given no id, `AtCollection` generates one.
 
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
 `unreadable` holds one `{id, owner, code}` per record this device cannot read, where `code`
-is `COLLECTION_ITEM_UNREADABLE`; an unreadable record does not fail the call. `get()` of such an item
+is `COLLECTION_ITEM_UNREADABLE`; an unreadable record does not fail the call. A record whose key
+names no Atsign is left out of both, and a warning names its key. `get()` of such an item
 still rejects with `COLLECTION_ITEM_UNREADABLE`.
 
 **Known limits.**
 
-- Items that Dart apps wrote with ids outside the id rule appear in `list()` and `query()`
-  but cannot be addressed from JS. This includes a peer's item: `list()` can return an item
-  whose id `get()` refuses with `COLLECTION_INVALID_ARGUMENT`. It happens only when a writer
-  other than this adapter used a non-conforming id; the adapter's own `create` never does.
 - Await each write on an item before starting the next. Two writes to one item that
   overlap can overwrite each other, as upstream (last writer wins).
 
@@ -541,12 +539,12 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid atSign, or an item id outside `^[a-z0-9][a-z0-9_-]{0,63}$` | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid Atsign, or an item id AtCollection refuses | `ArgumentError`, `InvalidAtSignException`, adapter checks |
 | `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
 | `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
 | `COLLECTION_ITEM_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
-| `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing | `CItemReadException`. The message names the id and owner, not the cause |
+| `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing, or leave it out with a warning naming its key when the key names no Atsign | `CItemReadException`. The message names the id and, when the key names one, the owner, not the cause |
 | `COLLECTION_ITEM_WRONG_TYPE` | update of an item whose stored type tag is another type's. An untagged (`n/a`) item is adopted. Share and remove work on an item of any type | adapter check on the item as just re-read |
 | `COLLECTION_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
 | `COLLECTION_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |

@@ -52,6 +52,10 @@ import 'package:at_utils/at_progress.dart';
 /// provisioning wait is skipped, unless [awaitProvisioning] is set: for a
 /// caller that has not yet reached the atServer on it, which is where a newly
 /// registered atSign may still be starting.
+///
+/// Every `from:` the activation sends carries [clientConfig], its four values
+/// as `clientConfigFor` fills and cuts them; empty, it names this program and
+/// at_auth.
 Future<String> activateAtSign({
   required String atSign,
   required String cramSecret,
@@ -73,6 +77,7 @@ Future<String> activateAtSign({
   void Function(ProgressEvent event)? onProgress,
   required AtLookupMuxable atLookUp,
   bool awaitProvisioning = false,
+  Map<String, dynamic> clientConfig = const {},
 }) async {
   final request = AtOnboardingRequest(atSign,
       signingAlgoType: signingAlgo,
@@ -87,8 +92,8 @@ Future<String> activateAtSign({
     ..advertisedSigningKey = advertisedSigningKey;
 
   final auth = awaitProvisioning
-      ? AtAuthImpl(atLookUp: atLookUp)
-      : _ConnectedActivation(atLookUp: atLookUp);
+      ? AtAuthImpl(atLookUp: atLookUp, clientConfig: clientConfig)
+      : _ConnectedActivation(atLookUp: atLookUp, clientConfig: clientConfig);
   final forward =
       onProgress == null ? null : auth.progressStream.listen(onProgress);
   try {
@@ -115,7 +120,7 @@ Future<String> activateAtSign({
 /// reached the atServer: the provisioning wait, whose job is to find out
 /// whether it can be reached, has nothing to wait for.
 class _ConnectedActivation extends AtAuthImpl {
-  _ConnectedActivation({required super.atLookUp});
+  _ConnectedActivation({required super.atLookUp, required super.clientConfig});
 
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {}

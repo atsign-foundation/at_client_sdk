@@ -1,5 +1,11 @@
 ## 1.1.0
 
+- feat: `at_activate` and `at_register` name themselves, at at_client_cli's
+  version, on every `from:` their clients send to authenticate, and
+  `createAtClient` takes optional `appName` and `appVersion` to name yours.
+- feat: `AtActivate.main` takes optional `program` and `programVersion`, so a
+  program that runs at_activate names itself and its version on every
+  `from:` in place of at_activate's.
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - chore: requires at_client 4.1.0 and at_auth 4.1.0.
@@ -7,6 +13,10 @@
 - fix: `at_activate status` asks the atDirectory once, prints no posture
   notice, and says a refused atServer connection is unreachable rather than
   an unexpected failure (it still returns 2).
+- fix: a `CLIBase` program whose atServer answers its PKAM with a server
+  error, such as AT0011, or with no challenge to sign, retries as it does
+  for an atServer not reached, and ends with
+  `SecondaryServerConnectivityException`, not `AtCredentialRefusedException`.
 - fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
   it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
   `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that
