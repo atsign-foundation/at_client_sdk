@@ -41,16 +41,12 @@ enum PasskeyRecordType {
 
   /// The @keys document.
   atkeys,
-
-  /// The record of an activation whose document is not yet filed:
-  /// `{enrollmentId, atKeys}`.
-  pending,
 }
 
 /// Seals and opens the `v: 2` per-passkey record:
 ///
 /// ```
-/// { v: 2, alg: A256GCM, kdf: HKDF-SHA256, typ: eid|atkeys|pending, iv, ct }
+/// { v: 2, alg: A256GCM, kdf: HKDF-SHA256, typ: eid|atkeys, iv, ct }
 /// ```
 ///
 /// `ct` is a JSON object sealed by a [RecordSealer] with a random 96-bit `iv`;

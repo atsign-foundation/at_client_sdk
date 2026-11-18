@@ -91,10 +91,7 @@ void main() {
               required keysIo}) async =>
           throw UnimplementedError('no client in this test'),
       activator: (
-          {required atSign,
-          required cram,
-          required apkamKeyPair,
-          keysIo}) async {
+          {required atSign, required cram, required apkamKeyPair}) async {
         activations.add((atSign: atSign, cram: cram, pair: apkamKeyPair));
         return AtKeys(atsign: Atsign(atSign))
           ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.publicKey)
@@ -110,12 +107,20 @@ void main() {
               privateKey: apkamKeyPair.privateKey);
       });
 
-  Future<EnrollmentSession> activate() =>
-      gateway().activate(atSign: _atSign, authSeed: _seed, cram: 'cram-secret');
+  Future<EnrollmentSession> activate() => gateway()
+      .activate(atSign: _atSign, apkamKeyPair: derived, cram: 'cram-secret');
+
+  group('apkamKeyPairFromSeed', () {
+    test('derives the ML-DSA-65 key pair of the seed as base64', () async {
+      final pair = await apkamKeyPairFromSeed(_seed);
+
+      expect(pair.publicKey, derived.publicKey);
+      expect(pair.privateKey, derived.privateKey);
+    });
+  });
 
   group('activate', () {
-    test('activates with the derived key and the CRAM secret, minting none',
-        () async {
+    test('activates with the given key pair and the CRAM secret', () async {
       await activate();
 
       expect(activations, hasLength(1));
@@ -140,122 +145,19 @@ void main() {
       expect(keys, isNot(contains(derived.privateKey)));
       expect(keys, contains(_encPrivate));
     });
-  });
 
-  group('activation key retention', () {
-    test('a PKAM refusal after activation carries the activated keys',
-        () async {
+    test('a PKAM failure after activation is rethrown as it is', () async {
       wire.pkamAccepted = false;
 
-      await expectLater(
-          activate(),
-          throwsA(isA<ActivationUnfinishedException>()
-              .having((e) => e.enrollmentId, 'enrollmentId', _eid)
-              .having(
-                  (e) => jsonEncode(e.takeAtKeys()),
-                  'atKeys',
-                  allOf(contains(_encPrivate),
-                      isNot(contains(derived.privateKey))))
-              .having((e) => e.toString(), 'toString',
-                  isNot(contains(_encPrivate)))));
+      await expectLater(activate(), throwsA(isA<UnAuthenticatedException>()));
+      expect(activations, hasLength(1));
+      expect(wire.lookUpsBuilt.single.closed, isTrue);
     });
+  });
 
-    test('an activation that fails after filing keys keeps them resumable',
-        () async {
-      final cause = StateError('open failed');
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo();
-
-      await expectLater(
-          activateKeepingKeys(keysIo, _atSign, () async {
-            await keysIo.write(
-                _atSign,
-                withApkamKey(
-                    AtKeys(atsign: Atsign(_atSign))
-                      ..defaultEncryptionPrivateKey =
-                          AtBytes.fromString(_encPrivate),
-                    _eid,
-                    derived));
-            throw cause;
-          }),
-          throwsA(isA<ActivationUnfinishedException>()
-              .having((e) => e.enrollmentId, 'enrollmentId', _eid)
-              .having((e) => e.cause, 'cause', same(cause))
-              .having(
-                  (e) => jsonEncode(e.takeAtKeys()),
-                  'atKeys',
-                  allOf(contains(_encPrivate),
-                      isNot(contains(derived.privateKey))))));
-    });
-
-    test('T7 the exception hands its keys over once and forgets them', () {
-      final keys = {'aesEncryptPrivateKey': _encPrivate};
-      final e = ActivationUnfinishedException(_eid,
-          atKeys: keys, cause: StateError('pkam failed'));
-
-      expect(e.takeAtKeys(), same(keys));
-      expect(e.takeAtKeys, throwsStateError);
-      expect(e.toString(), isNot(contains(_encPrivate)));
-    });
-
-    test('an activation that fails before filing keys rethrows its error',
-        () async {
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo();
-      final cause = StateError('cram refused');
-
-      await expectLater(
-          activateKeepingKeys(keysIo, _atSign, () async => throw cause),
-          throwsA(same(cause)));
-    });
-
-    test('a successful activation returns its keys and stops the client',
-        () async {
-      final held = AtKeys(atsign: Atsign(_atSign))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
-      var stopped = false;
-
-      final keys = await activateKeepingKeys(
-          keysIo, _atSign, () async => _StoppableClient(() => stopped = true));
-
-      expect(stopped, isTrue);
-      expect(keys.defaultEncryptionPrivateKey, AtBytes.fromString(_encPrivate));
-    });
-
-    test('a stop that throws still returns the keys read before it', () async {
-      final held = AtKeys(atsign: Atsign(_atSign))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
-      var stopped = false;
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
-
-      final keys = await readKeysThenStop(keysIo, _atSign, () async {
-        stopped = true;
-        throw StateError('stop failed');
-      });
-
-      expect(stopped, isTrue);
-      expect(keys.defaultEncryptionPrivateKey, AtBytes.fromString(_encPrivate));
-    });
-
-    test('a stop that throws is logged with its error and no key material',
-        () async {
-      final held = AtKeys(atsign: Atsign(_atSign))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
-
-      final logs = await _warnings(() async {
-        await readKeysThenStop(
-            keysIo, _atSign, () async => throw StateError('stop failed'));
-      });
-
-      expect(logs, hasLength(1));
-      expect(logs.single, contains('stop failed'));
-      expect(logs.single, isNot(contains(_encPrivate)));
-    });
+  group('authenticate', () {
+    Future<EnrollmentSession> authenticate() => gateway().authenticate(
+        atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
 
     test('a lookUp that fails to close after a refusal is logged', () async {
       wire
@@ -265,22 +167,14 @@ void main() {
         ..stopThrows = true;
 
       final logs = await _warnings(() async {
-        await expectLater(
-            gateway().authenticate(
-                atSign: _atSign, enrollmentId: _eid, authSeed: _seed),
-            throwsA(isA<PkamRefusedException>()));
+        await expectLater(authenticate(), throwsA(isA<PkamRefusedException>()));
       });
 
       expect(logs, hasLength(1));
       expect(logs.single, contains('close failed'));
     });
-  });
 
-  group('authenticate', () {
-    Future<EnrollmentSession> authenticate() => gateway()
-        .authenticate(atSign: _atSign, enrollmentId: _eid, authSeed: _seed);
-
-    test('runs PKAM on a fresh connection with the derived key', () async {
+    test('runs PKAM on a fresh connection with the given key pair', () async {
       final session = await authenticate();
 
       expect(session.enrollmentId, _eid);
@@ -485,84 +379,47 @@ void main() {
           isFalse);
     });
 
-    test('is false when the restored keys carry no public key to compare',
+    test('is true when the restored keys carry no public key to compare',
         () async {
       final session =
           await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
 
-      expect(await session.publicKeysMatch({}), isFalse);
+      expect(await session.publicKeysMatch({}), isTrue);
     });
   });
 
   group('completeActivation', () {
-    Future<EnrollmentSession> sessionOver(Wire w) async {
-      wire = w;
-      return activate();
-    }
-
-    final keys = {'aesEncryptPublicKey': _encPublic};
-
     test(
-        'publishes the public key when none is published, then deletes the CRAM',
-        () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
+        'publishes the encryption public key with ttr -1, then deletes the '
+        'CRAM secret, on the PKAM connection', () async {
+      final session = await activate();
 
-      await session.completeActivation(keys);
+      await session.completeActivation({'aesEncryptPublicKey': _encPublic});
 
-      final updates = wire.commands.where((c) => c.startsWith('update'));
-      expect(updates, hasLength(1));
-      expect(updates.single, contains('publickey$_atSign'));
-      expect(updates.single, endsWith('$_encPublic\n'));
-      expect(wire.commands.last, startsWith('delete:'));
-      expect(wire.commands.last, contains(AtConstants.atCramSecret));
+      expect(wire.commands, [
+        'update:ttr:-1:isEncrypted:false:public:publickey$_atSign $_encPublic\n',
+        'delete:privatekey:at_secret\n',
+      ]);
+      expect(wire.dials, 1);
     });
 
-    test('keeps the published public key when it is the restored one',
-        () async {
-      final session =
-          await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
+    test('publishes without looking up the key already published', () async {
+      wire.lookupAnswer = 'data:other';
+      final session = await activate();
 
-      await session.completeActivation(keys);
+      await session.completeActivation({'aesEncryptPublicKey': _encPublic});
 
-      expect(wire.wroteToServer, isFalse);
-      expect(wire.commands.last, startsWith('delete:'));
+      expect(wire.commands.where((c) => c.contains('lookup:')), isEmpty);
+      expect(wire.commands.first, endsWith(' $_encPublic\n'));
     });
 
-    test('refuses a different published public key and keeps the CRAM',
+    test('with no encryption public key, deletes the CRAM secret only',
         () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:other');
+      final session = await activate();
 
-      await expectLater(session.completeActivation(keys),
-          throwsA(isA<PublicKeyMismatchException>()));
+      await session.completeActivation({});
 
-      expect(wire.wroteToServer, isFalse);
-      expect(wire.commands.where((c) => c.startsWith('delete:')), isEmpty);
-    });
-
-    for (final (name, value) in [
-      ('a line feed', 'MIIB\nXYZ'),
-      ('a carriage return', 'MIIB\rXYZ'),
-    ]) {
-      test('refuses a public key with $name before any command', () async {
-        final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
-        final sent = wire.commands.length;
-
-        await expectLater(
-            session.completeActivation({'aesEncryptPublicKey': value}),
-            throwsArgumentError);
-
-        expect(wire.commands, hasLength(sent));
-      });
-    }
-
-    test('counts a CRAM secret that is already gone as deleted', () async {
-      final session = await sessionOver(Wire()
-        ..lookupAnswer = 'data:$_encPublic'
-        ..answer = (c) => c.startsWith('delete:')
-            ? throw KeyNotFoundException('gone')
-            : null);
-
-      await session.completeActivation(keys);
+      expect(wire.commands, ['delete:privatekey:at_secret\n']);
     });
   });
 
@@ -581,7 +438,7 @@ void main() {
                   required keysIo}) async =>
               throw StateError('client failed to open'));
       final session = await gateway.authenticate(
-          atSign: _atSign, enrollmentId: _eid, authSeed: _seed);
+          atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
       final vault = (await DerivedKeys.derive(
               Uint8List.fromList(List.generate(32, (i) => i + 7)), _atSign))
           .vault;
@@ -626,7 +483,7 @@ void main() {
                   required keysIo}) async =>
               _KeysClosingClient(lookUp.close, keysIo));
       session = await gateway.authenticate(
-          atSign: _atSign, enrollmentId: _eid, authSeed: _seed);
+          atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
       final client = await session.openClient(AtServerAtKeysIo(
           documents: session.documents,
           vault: vault,
@@ -670,19 +527,6 @@ void main() {
       expect(heldSeed.every((b) => b == 0), isTrue);
     });
   });
-}
-
-/// An [AtClient] whose only working member is [stop].
-class _StoppableClient implements AtClient {
-  _StoppableClient(this._onStop);
-
-  final void Function() _onStop;
-
-  @override
-  Future<void> stop() async => _onStop();
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// An [AtClient] that stops its lookUp, then closes a keys store flagged

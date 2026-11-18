@@ -61,7 +61,6 @@ void main() {
       credentials: withHints ?? hints,
       enrollmentIds: withHints ?? hints,
       persistence: FakePersistence(),
-      pendingStore: FakePendingStore(),
       retryDelay: Duration.zero,
       setupLock: FakeSetupLock(),
       setupLockPrefix: 'test:setup',
@@ -70,11 +69,9 @@ void main() {
   void forgetCaptured() {
     derived.clear();
     authenticator.issuedPrf.clear();
-    gateway.seedBuffers.clear();
   }
 
-  /// Every PRF output, kek and auth seed the flow touched is all zeroes
-  /// except [alive], which the flow handed to a still-open session.
+  /// Every PRF output, kek and auth seed the flow touched is all zeroes.
   void expectWiped() {
     expect(authenticator.issuedPrf, isNotEmpty);
     expect(derived, isNotEmpty);
@@ -84,11 +81,6 @@ void main() {
     for (final keys in derived) {
       expect(_sealerClosed(keys), isTrue, reason: 'kek');
       expect(_zeroed(keys.authSeed), isTrue, reason: 'auth seed');
-    }
-    for (final seed in gateway.seedBuffers) {
-      {
-        expect(_zeroed(seed), isTrue, reason: 'auth seed given to gateway');
-      }
     }
   }
 
@@ -176,6 +168,15 @@ void main() {
           custody(withHints: fresh).open(atSign: _atSign), throwsStateError);
       expectWiped();
     });
+
+    test('wipes the auth seed before it authenticates', () async {
+      bool? seedZeroed;
+      gateway.onAuthenticate =
+          (_) => seedZeroed = _zeroed(derived.single.authSeed);
+      await (await custody(withHints: FakeHints()).open(atSign: _atSign))
+          .stop();
+      expect(seedZeroed, isTrue);
+    });
   });
 
   group('onboard', () {
@@ -195,60 +196,26 @@ void main() {
       expectWiped();
     });
 
-    test('a resumable handle keeps its keys until the resumed client stops',
+    test('wipes the auth seed before it activates', () async {
+      bool? seedZeroed;
+      gateway.onActivate = () => seedZeroed = _zeroed(derived.single.authSeed);
+      await (await custody().onboard(atSign: _atSign, cram: 'cram')).stop();
+      expect(seedZeroed, isTrue);
+    });
+
+    test('wipes everything when the @keys document cannot be written',
         () async {
-      server.documentPutFailures = 3;
-      late OnboardingIncompleteException incomplete;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        incomplete = e;
-      }
-      expect(_sealerClosed(derived.single), isFalse);
-      final client = await incomplete.pending.resume();
-      expectHeldByClient();
-      await client.stop();
+      server.documentPutFailures = 99;
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       expectWiped();
     });
 
-    test('abandoning a handle wipes its keys', () async {
-      server.documentPutFailures = 3;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        await e.pending.abandon();
-      }
-      expectWiped();
-    });
-
-    test(
-        'an unfinished activation keeps the seed until the resumed client stops',
-        () async {
-      gateway.activationUnfinished = true;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        expect(_zeroed(derived.single.authSeed), isFalse);
-        expect(_sealerClosed(derived.single), isFalse);
-        final client = await e.pending.resume();
-        expectHeldByClient();
-        await client.stop();
-        expectWiped();
-      }
-    });
-
-    test('an unfinished activation wipes the seed when abandoned', () async {
-      gateway.activationUnfinished = true;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        expect(_zeroed(derived.single.authSeed), isFalse);
-        await e.pending.abandon();
-      }
+    test('wipes everything when completing the activation fails', () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       expectWiped();
     });
   });

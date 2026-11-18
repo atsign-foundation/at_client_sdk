@@ -6,23 +6,16 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart'
-    show AtKeys, CryptographicMaterialAlgorithm, WrittenAtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtKeys, WrittenAtKeysIo;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/at_client.dart'
     show AtClient, AtConnectionCause, AtConnectionState;
 import 'package:at_client/passkey.dart';
-import 'package:at_client/src/passkey/at_keys_document.dart'
-    show atKeysDocument;
-import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
-import 'package:at_commons/atsign.dart' show Atsign;
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
 import 'package:at_client_wasm/src/keys/web_crypto_passkey.dart';
 import 'package:at_client_wasm/src/keys/web_prf_environment.dart';
 import 'package:at_client_wasm/src/session/portal_session.dart'
     show PortalSessionOfflineException;
-import 'package:at_client_wasm/src/session/web_passkey_entry.dart'
-    show closingStoreAfter, discardPendingOnboardingIn;
 import 'package:at_client_wasm/src/session/web_setup_lock.dart';
 import 'package:at_client_wasm/src/session/web_storage_persistence.dart';
 import 'package:test/test.dart';
@@ -33,12 +26,13 @@ const _cram = 'cram-secret';
 const _encPublic = 'ZW5jLXB1YmxpYw==';
 
 /// The atServer as the custody flows see it: pointers, each enrollment's
-/// sealed document and the seed each enrollment authenticates with.
+/// sealed document and the APKAM public key each enrollment authenticates
+/// with.
 class _Server implements EnrollmentPointerReader {
   final pointers = <String, String>{};
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
-  final seeds = <String, String>{};
+  final apkamPublicKeys = <String, String>{};
   var pointerReads = 0;
   var enrollments = 0;
   var clientsOffline = false;
@@ -46,15 +40,8 @@ class _Server implements EnrollmentPointerReader {
   /// The encryption public key published for the atSign, once published.
   String? publishedKey;
 
-  /// Whether the CRAM secret was spent by an activation and is not yet
-  /// deleted.
+  /// Whether the CRAM secret is not yet deleted; an activation needs it.
   var cramLive = true;
-  var cramSpent = false;
-
-  /// The document the last activation journalled: what a resume reports as
-  /// the activated keys, so a retry finds the document its failed attempt
-  /// published.
-  Map<String, dynamic>? journalled;
 
   final keys = <String, dynamic>{
     'aesPkamPrivateKey': 'YXBrYW0tcHJpdmF0ZQ==',
@@ -95,8 +82,7 @@ class _Session implements EnrollmentSession {
   var closed = false;
 
   @override
-  Future<Map<String, dynamic>> atKeys() async =>
-      server.journalled ?? server.keys;
+  Future<Map<String, dynamic>> atKeys() async => server.keys;
 
   @override
   Future<bool> publicKeysMatch(Map<String, dynamic> atKeys) async =>
@@ -104,12 +90,7 @@ class _Session implements EnrollmentSession {
 
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
-    final published = server.publishedKey;
-    if (published == null) {
-      server.publishedKey = atKeys['aesEncryptPublicKey'] as String;
-    } else if (published != atKeys['aesEncryptPublicKey']) {
-      throw PublicKeyMismatchException();
-    }
+    server.publishedKey = atKeys['aesEncryptPublicKey'] as String?;
     server.cramLive = false;
   }
 
@@ -178,20 +159,20 @@ class _Gateway implements EnrollmentGateway {
   var activations = 0;
   _Session? lastSession;
 
-  /// Throws this once the CRAM is spent and the keys are filed, as a tab that
-  /// dies there would.
+  /// Throws this once the enrollment is approved, as a tab that dies there
+  /// would.
   Object? dieAfterActivation;
 
-  /// Every auth seed this gateway received, raw.
-  final seeds = <Uint8List>[];
+  /// Every APKAM key pair this gateway received.
+  final pairs = <ApkamKeyPair>[];
 
   @override
   Future<EnrollmentSession> authenticate(
       {required String atSign,
       required String enrollmentId,
-      required Uint8List authSeed}) async {
-    seeds.add(Uint8List.fromList(authSeed));
-    if (server.seeds[enrollmentId] != authSeed.join(',')) {
+      required ApkamKeyPair apkamKeyPair}) async {
+    pairs.add(apkamKeyPair);
+    if (server.apkamPublicKeys[enrollmentId] != apkamKeyPair.publicKey) {
       throw PkamRefusedException(enrollmentId);
     }
     return lastSession = _Session(server, enrollmentId);
@@ -200,35 +181,32 @@ class _Gateway implements EnrollmentGateway {
   @override
   Future<EnrollmentSession> activate(
       {required String atSign,
-      required Uint8List authSeed,
-      required String cram,
-      WrittenAtKeysIo? keysIo}) async {
-    seeds.add(Uint8List.fromList(authSeed));
+      required ApkamKeyPair apkamKeyPair,
+      required String cram}) async {
+    pairs.add(apkamKeyPair);
+    if (!server.cramLive) throw StateError('the CRAM secret is deleted');
     activations++;
-    server.cramSpent = true;
     final eid = 'eid${++server.enrollments}';
-    server.seeds[eid] = authSeed.join(',');
-    final minted = _minted(atSign, eid);
-    server.journalled = atKeysDocument(minted, atSign);
-    await keysIo?.write(atSign, minted);
+    server.apkamPublicKeys[eid] = apkamKeyPair.publicKey;
     final died = dieAfterActivation;
     if (died != null) throw died;
-    server.publishedKey = _encPublic;
-    server.cramLive = false;
     return lastSession = _Session(server, eid);
   }
+}
 
-  /// The keys an activation mints, with the enrollment's APKAM key filed.
-  AtKeys _minted(String atSign, String eid) => AtKeys.legacy(
-      encryptionPublicKey: _encPublic,
-      encryptionPrivateKey: server.keys['aesEncryptPrivateKey'] as String,
-      selfEncryptionKey: 'c2VsZi1rZXk=')
-    ..atsign = Atsign(atSign)
-    ..fileApkamMaterial(
-        enrollmentId: eid,
-        algorithm: CryptographicMaterialAlgorithm.mlDsa65,
-        publicKey: 'YXBrYW0tcHVibGlj',
-        privateKey: server.keys['aesPkamPrivateKey'] as String);
+/// Derives as this browser does, and keeps a copy of each auth seed so a test
+/// can look for it in the browser's stores.
+class _SeedKeepingDeriver implements PasskeyKeyDeriver {
+  _SeedKeepingDeriver(this.seeds);
+
+  final List<Uint8List> seeds;
+
+  @override
+  Future<PasskeyDerivation> derive(PrfSecret prf, String atSign) async {
+    final derivation = await WebCryptoKeyDeriver().derive(prf, atSign);
+    seeds.add(Uint8List.fromList(derivation.authSeed));
+    return derivation;
+  }
 }
 
 /// An authenticator holding one passkey with a fixed PRF output.
@@ -264,6 +242,9 @@ class _Device {
   late _Gateway gateway;
   final clients = <AtClient>[];
 
+  /// A copy of every auth seed this device derived.
+  final seeds = <Uint8List>[];
+
   Future<PasskeyCustody> custody() async {
     store = await IndexedDbHintStore.open(dbName: dbName);
     gateway = _Gateway(server)..dieAfterActivation = dieAfterActivation;
@@ -277,8 +258,7 @@ class _Device {
         setupLock: WebSetupLock(),
         setupLockPrefix: WebSetupLock.namePrefix,
         persistence: WebStoragePersistence(),
-        pendingStore: store,
-        deriver: WebCryptoKeyDeriver());
+        deriver: _SeedKeepingDeriver(seeds));
   }
 
   Future<AtClient> onboard() async {
@@ -286,14 +266,6 @@ class _Device {
         await (await custody()).onboard(atSign: _atSign, cram: _cram);
     clients.add(client);
     return client;
-  }
-
-  /// Onboards as the browser entry point does: the store closes when the
-  /// onboarding ends, however it ends.
-  Future<AtClient> onboardThroughEntry() async {
-    final custody = await this.custody();
-    return closingStoreAfter(
-        store, () => custody.onboard(atSign: _atSign, cram: _cram));
   }
 
   Future<AtClient> open() async {
@@ -443,38 +415,20 @@ void main() {
   });
 
   test(
-      'an onboard whose client open fails offline surfaces that error, closes '
-      'the store and leaves the atSign ready for passkey login', () async {
+      'an onboard whose client open fails offline surfaces that error and '
+      'leaves the atSign ready for passkey login', () async {
     server.clientsOffline = true;
-    await expectLater(device.onboardThroughEntry(),
-        throwsA(isA<PortalSessionOfflineException>()));
-    expect(device.gateway.lastSession!.closed, isTrue);
     await expectLater(
-        device.store.credentialId(_atSign), throwsA(isA<IndexedDbException>()),
-        reason: 'the failed onboard closed its IndexedDB store');
-
-    // The record is deleted only after the client opens, so a failed open
-    // keeps it.
-    Future<bool> recordKept() async {
-      final probe = await IndexedDbHintStore.open(dbName: device.dbName);
-      try {
-        return await probe.get(_atSign) != null;
-      } finally {
-        probe.close();
-      }
-    }
-
-    expect(await recordKept(), isTrue,
-        reason: 'a failed open keeps the pending record');
+        device.onboard(), throwsA(isA<PortalSessionOfflineException>()));
+    expect(device.gateway.lastSession!.closed, isTrue);
+    expect(server.cramLive, isFalse);
 
     server.clientsOffline = false;
-    final failedEnrollment = device.gateway.lastSession!.enrollmentId;
+    final onboarded = device.gateway.lastSession!.enrollmentId;
     final loggedIn = await device.open();
-    expect(loggedIn.enrollmentId, failedEnrollment,
-        reason: 'login resumes the kept enrollment');
-    expect(device.gateway.activations, 0, reason: 'login spends no CRAM');
-    expect(await recordKept(), isFalse,
-        reason: 'the resumed record is spent once the client opens');
+    expect(loggedIn.enrollmentId, onboarded);
+    expect(server.enrollments, 1, reason: 'login enrolls nothing');
+    await _expectOnlyHint(device, onboarded);
   });
 
   test('after onboarding and recovery the browser stores hold only the hint',
@@ -526,130 +480,38 @@ void main() {
     Future<void> dieThenReload() async {
       await expectLater(device.onboard(), throwsA(isA<StateError>()));
       expect(device.gateway.activations, 1);
-      expect(server.cramSpent, isTrue);
+      expect(server.cramLive, isTrue);
       device.store.close();
       device.dieAfterActivation = null;
     }
 
-    Future<void> expectResumed(AtClient client) async {
-      expect(client.enrollmentId, 'eid1');
-      expect(device.gateway.activations, 0, reason: 'resume spends no CRAM');
-      expect(server.publishedKey, _encPublic);
-      expect(server.cramLive, isFalse, reason: 'resume finishes activation');
-      expect(await device.store.credentialId(_atSign), [7]);
-      expect(await device.store.enrollmentId(_atSign), 'eid1');
-      await _expectOnlyHint(device, 'eid1');
-    }
-
-    test('the pending record holds no secret and no new passkey is made',
+    test('The device keeps nothing about an onboarding that did not complete',
         () async {
       await dieThenReload();
       final dump = await _dump(device.dbName);
-      final record = dump['at_client_wasm_pending']![_atSign]!;
-      final text = latin1.decode(record);
-      for (final secret in [
-        server.keys['aesPkamPrivateKey'] as String,
-        base64.encode(device._authenticator.prfOutput),
-      ]) {
-        expect(text, isNot(contains(secret)));
-      }
-      expect(dump['at_client_wasm_credentials'], isEmpty);
-    });
-
-    test(
-        'discarding the pending onboarding deletes its record and closes the '
-        'store; a second discard is a no-op', () async {
-      await dieThenReload();
       expect(
-          (await _dump(device.dbName))['at_client_wasm_pending'], isNotEmpty);
-
-      device.store = await IndexedDbHintStore.open(dbName: device.dbName);
-      final activations = device.gateway.activations;
-      await discardPendingOnboardingIn(device.store, _atSign);
-
-      expect((await _dump(device.dbName))['at_client_wasm_pending'], isEmpty);
-      expect(device.gateway.activations, activations,
-          reason: 'discarding runs no ceremony and no activation');
-      await expectLater(device.store.credentialId(_atSign), throwsA(anything),
-          reason: 'the discard closed its IndexedDB store');
-
-      device.store = await IndexedDbHintStore.open(dbName: device.dbName);
-      await discardPendingOnboardingIn(device.store, _atSign);
-      expect((await _dump(device.dbName))['at_client_wasm_pending'], isEmpty);
-    });
-
-    test('discarding with no pending record keeps the atSign\'s hints',
-        () async {
-      device.store = await IndexedDbHintStore.open(dbName: device.dbName);
-      await device.store.putHint(_atSign, Uint8List.fromList([1, 2]), 'eid1');
-      expect(await device.store.get(_atSign), isNull);
-
-      await discardPendingOnboardingIn(device.store, _atSign);
-
-      final dump = await _dump(device.dbName);
-      expect(dump['at_client_wasm_credentials']!.keys, [_atSign]);
-      expect(dump['at_client_wasm_enrollments']!.keys, [_atSign]);
-    });
-
-    test(
-        'discarding deletes the record and the hints that name its enrollment, '
-        'and no other atSign\'s hints', () async {
-      await dieThenReload();
-      device.store = await IndexedDbHintStore.open(dbName: device.dbName);
-      final enrollmentId = (await device.store.get(_atSign))!.enrollmentId;
-      await device.store
-          .putHint(_atSign, Uint8List.fromList([1, 2]), enrollmentId);
-      await device.store.putHint('@other', Uint8List.fromList([3, 4]), 'eid2');
-
-      await discardPendingOnboardingIn(device.store, _atSign);
-
-      final dump = await _dump(device.dbName);
-      expect(dump['at_client_wasm_pending'], isEmpty);
-      expect(dump['at_client_wasm_credentials']!.keys, ['@other']);
-      expect(dump['at_client_wasm_enrollments']!.keys, ['@other']);
-    });
-
-    test(
-        'discarding deletes the record and keeps hints that name another '
-        'enrollment', () async {
-      await dieThenReload();
-      device.store = await IndexedDbHintStore.open(dbName: device.dbName);
-      final enrollmentId = (await device.store.get(_atSign))!.enrollmentId;
-      final other = '$enrollmentId-other';
-      await device.store.putHint(_atSign, Uint8List.fromList([1, 2]), other);
-
-      await discardPendingOnboardingIn(device.store, _atSign);
-
-      final dump = await _dump(device.dbName);
-      expect(dump['at_client_wasm_pending'], isEmpty);
-      expect(dump['at_client_wasm_credentials']!.keys, [_atSign]);
-      expect(dump['at_client_wasm_enrollments']!.keys, [_atSign]);
-    });
-
-    test('a discard of an atSign not in canonical form is refused', () async {
-      await dieThenReload();
-      for (final bad in ['alice', 'left@right']) {
-        device.store = await IndexedDbHintStore.open(dbName: device.dbName);
-        await expectLater(discardPendingOnboardingIn(device.store, bad),
-            throwsA(isA<InvalidAtSignException>()),
-            reason: bad);
+          dump.keys,
+          unorderedEquals(
+              ['at_client_wasm_credentials', 'at_client_wasm_enrollments']));
+      for (final records in dump.values) {
+        expect(records, isEmpty);
       }
-      expect(
-          (await _dump(device.dbName))['at_client_wasm_pending'], isNotEmpty);
     });
 
-    test('reload then open resumes: keys, pointer and hints are written',
+    test('reload then onboard again with the same CRAM secret completes',
         () async {
-      await dieThenReload();
-      final client = await device.open();
-      await expectResumed(client);
-      expect(server.pointerReads, 0);
-    });
-
-    test('reload then onboard again resumes without the CRAM', () async {
       await dieThenReload();
       final client = await device.onboard();
-      await expectResumed(client);
+      expect(client.enrollmentId, 'eid2');
+      expect(server.cramLive, isFalse);
+      expect(server.publishedKey, _encPublic);
+      await _expectOnlyHint(device, 'eid2');
+    });
+
+    test('reload then log in finds no pointer and is a lost passkey', () async {
+      await dieThenReload();
+      await expectLater(device.open(), throwsA(isA<PasskeyLostException>()));
+      expect(server.enrollments, 1);
     });
   });
 }
@@ -662,13 +524,8 @@ Future<void> _expectOnlyHint(_Device device, String enrollmentId) async {
   final dump = await _dump(device.dbName);
   expect(
       dump.keys,
-      unorderedEquals([
-        'at_client_wasm_credentials',
-        'at_client_wasm_enrollments',
-        'at_client_wasm_pending',
-      ]));
-  expect(dump['at_client_wasm_pending'], isEmpty,
-      reason: 'a finished onboarding leaves no pending record');
+      unorderedEquals(
+          ['at_client_wasm_credentials', 'at_client_wasm_enrollments']));
   expect(dump['at_client_wasm_credentials'], {
     _atSign: [7]
   });
@@ -689,7 +546,8 @@ Future<void> _expectOnlyHint(_Device device, String enrollmentId) async {
   ].join('\u0000');
   final secretBytes = [
     device._authenticator.prfOutput,
-    ...device.gateway.seeds,
+    ...device.seeds,
+    for (final pair in device.gateway.pairs) base64.decode(pair.privateKey),
     for (final value in device.server.keys.values)
       Uint8List.fromList(utf8.encode('$value')),
   ];

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
+import 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
+    show activateWithoutClient;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
@@ -216,6 +218,33 @@ void main() {
     final request = server.sent.where((c) => c.startsWith('enroll:')).single;
     expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
         kid: advertisedKid(request));
+  });
+
+  test(
+      'an activation without a client and with completion deferred files the '
+      'first keys, publishes no encryption public key and keeps the CRAM '
+      'secret', () async {
+    final store = InMemoryAtKeysIo();
+    final server = atServer();
+
+    final enrolled = await activateWithoutClient(Atsign(atSign),
+        cramSecret: cramSecret,
+        keys: store,
+        preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        completeActivation: false);
+
+    expect(enrolled, enrollmentId);
+    expect(
+        (await store.read(atSign)).enrollmentToAuthenticateAs(), enrollmentId);
+    expect(server.sent.where((c) => c.contains('public:publickey$atSign')),
+        isEmpty);
+    expect(server.sent.where((c) => c.contains(AtConstants.atCramSecret)),
+        isEmpty);
+    expect(server.sent.where((c) => c.startsWith('enroll:')), hasLength(1));
+    expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
   });
 
   group('a supplied APKAM keypair', () {

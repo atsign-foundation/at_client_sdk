@@ -7,8 +7,6 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
-import 'package:at_auth/passkey.dart'
-    show PendingOnboardingRecord, UnsupportedPasskeyRecordException;
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart';
@@ -187,7 +185,7 @@ void main() {
     test('an open store closes for a newer version of the database', () async {
       await open();
 
-      final newer = await _rawOpen(currentDbName!, 4);
+      final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
     }, timeout: const Timeout(Duration(seconds: 5)));
 
@@ -196,7 +194,7 @@ void main() {
       final store = await open();
       await store.putEnrollmentId('@alice', 'e1');
 
-      final newer = await _rawOpen(currentDbName!, 4);
+      final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
 
       expect(await store.enrollmentId('@alice'), 'e1');
@@ -208,84 +206,69 @@ void main() {
         () async {
       final store = await open();
 
-      final newer = await _rawOpen(currentDbName!, 4);
+      final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
 
       await store.putEnrollmentId('@alice', 'e2');
       expect(await store.enrollmentId('@alice'), 'e2');
     }, timeout: const Timeout(Duration(seconds: 5)));
 
-    group('pending onboarding records', () {
-      PendingOnboardingRecord record(int n) => PendingOnboardingRecord(
-          credentialId: Uint8List.fromList([n, n + 1]),
-          enrollmentId: 'eid-$n',
-          encryptionPublicKey: 'pub-$n',
-          sealed: 'sealed-$n');
+    group('an upgrade to version 4', () {
+      /// The object store names of the database, read on a raw connection
+      /// that asks for no upgrade.
+      Future<List<String>> storeNames() async {
+        final raw = await _rawOpen(currentDbName!, 4);
+        try {
+          final names = raw.objectStoreNames;
+          return [for (var i = 0; i < names.length; i++) names.item(i)!];
+        } finally {
+          raw.close();
+        }
+      }
 
-      test('are absent until put', () async {
-        expect(await (await open()).get('@alice'), isNull);
-      });
-
-      test('round-trip, and survive a reopen of the database', () async {
-        final store = await open();
-        await store.put('@alice', record(1));
-        store.close();
-
-        final got = await (await open()).get('@alice');
-        expect(got!.credentialId, [1, 2]);
-        expect(got.enrollmentId, 'eid-1');
-        expect(got.encryptionPublicKey, 'pub-1');
-        expect(got.sealed, 'sealed-1');
-      });
-
-      test('are kept per atSign and replaced by a later put', () async {
-        final store = await open();
-        await store.put('@alice', record(1));
-        await store.put('@bob', record(5));
-        await store.put('@alice', record(3));
-
-        expect((await store.get('@alice'))!.enrollmentId, 'eid-3');
-        expect((await store.get('@bob'))!.enrollmentId, 'eid-5');
-      });
-
-      test('are deleted alone, and deleting none is fine', () async {
-        final store = await open();
-        await store.put('@alice', record(1));
-        await store.put('@bob', record(5));
-
-        await store.delete('@alice');
-        await store.delete('@alice');
-
-        expect(await store.get('@alice'), isNull);
-        expect(await store.get('@bob'), isNotNull);
-      });
-
-      test('are kept apart from the hints', () async {
-        final store = await open();
-        await store.putHint('@alice', Uint8List.fromList([9]), 'eid-9');
-        await store.put('@alice', record(1));
-        await store.delete('@alice');
-
-        expect(await store.credentialId('@alice'), [9]);
-        expect(await store.enrollmentId('@alice'), 'eid-9');
-      });
-
-      test('that are not records fail typed on read', () async {
-        final raw = await _rawOpen(currentDbName!, 3, upgrade: (db) {
+      test(
+          'deletes a version 3 database\'s pending records and keeps its hints',
+          () async {
+        final old = await _rawOpen(currentDbName!, 3, upgrade: (db) {
           db.createObjectStore('at_client_wasm_credentials');
           db.createObjectStore('at_client_wasm_enrollments');
           db.createObjectStore('at_client_wasm_pending');
         });
+        await _rawPut(old, 'at_client_wasm_credentials', '@alice', [4, 2]);
         await _rawPut(
-            raw, 'at_client_wasm_pending', '@alice', utf8.encode('nope'));
-        raw.close();
+            old, 'at_client_wasm_enrollments', '@alice', utf8.encode('e1'));
+        await _rawPut(old, 'at_client_wasm_pending', '@alice', [1, 2, 3]);
+        old.close();
 
-        await expectLater((await open()).get('@alice'),
-            throwsA(isA<UnsupportedPasskeyRecordException>()));
+        final store = await open();
+        expect(await store.credentialId('@alice'), [4, 2]);
+        expect(await store.enrollmentId('@alice'), 'e1');
+        store.close();
+
+        expect(
+            await storeNames(),
+            unorderedEquals(
+                ['at_client_wasm_credentials', 'at_client_wasm_enrollments']));
       });
 
-      test('a database left at version 2 upgrades and keeps its hints',
-          () async {
+      test('deletes a version 1 database\'s keys store', () async {
+        final old = await _rawOpen(currentDbName!, 1, upgrade: (db) {
+          db.createObjectStore('at_client_wasm_keys');
+        });
+        await _rawPut(old, 'at_client_wasm_keys', '@alice', [9, 9]);
+        old.close();
+
+        final store = await open();
+        expect(await store.credentialId('@alice'), isNull);
+        store.close();
+
+        expect(
+            await storeNames(),
+            unorderedEquals(
+                ['at_client_wasm_credentials', 'at_client_wasm_enrollments']));
+      });
+
+      test('keeps a version 2 database\'s hints', () async {
         final old = await _rawOpen(currentDbName!, 2, upgrade: (db) {
           db.createObjectStore('at_client_wasm_credentials');
           db.createObjectStore('at_client_wasm_enrollments');
@@ -296,8 +279,8 @@ void main() {
         final store = await open();
 
         expect(await store.credentialId('@alice'), [4, 2]);
-        await store.put('@alice', record(1));
-        expect((await store.get('@alice'))!.enrollmentId, 'eid-1');
+        await store.putEnrollmentId('@alice', 'e1');
+        expect(await store.enrollmentId('@alice'), 'e1');
       });
     });
 

@@ -93,8 +93,8 @@ A separate label keeps the APKAM key independent of the lookup key (which the se
 |---|---|
 | API | `onboardNewAtSign`, `passkeyLogin` (`atSign` required), `prfSupported`, each in `at_client_wasm_web.dart`; `onboardNewAtSign` and `passkeyLogin` take an optional `SessionTransportOptions` |
 | Derivation | `PasskeyPrf` runs the one PRF call; `PasskeyVault` holds the derived record key, pointer lookup, pointer namespace and auth seed, and seals and opens records |
-| Exceptions | `PrfUnavailableException`, `PasskeyLostException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException`, `OnboardingIncompleteException`, `SetupLockTimeoutException`; a refused PKAM is always `PasskeyLostException` with `PkamRefusedException` as its cause |
-| Setup lock | Per canonical atSign, held across onboarding; login takes it only with a pending record, with no saved hints, or for the stale-hints retry |
+| Exceptions | `PrfUnavailableException`, `PasskeyLostException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException`, `SetupLockTimeoutException`; a refused PKAM is always `PasskeyLostException` with `PkamRefusedException` as its cause |
+| Setup lock | Per canonical atSign, held across onboarding; login takes it only with no saved hints, or for the stale-hints retry |
 | Write order | Document first, then the pointer |
 | APKAM key | `authSeed` seeds it on every open; never stored |
 | Key store | `AtServerAtKeysIo` reads and writes the sealed document through the enrollment's own connection |

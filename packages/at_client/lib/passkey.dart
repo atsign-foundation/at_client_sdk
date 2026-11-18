@@ -19,13 +19,10 @@ export 'src/passkey/passkey_custody.dart'
         EnrollmentGateway,
         EnrollmentSession,
         MissingAtKeysDocumentException,
-        OnboardingIncompleteException,
         PasskeyCustody,
         PasskeyLostException,
-        PendingOnboarding,
         PkamRefusedException,
         PublicKeyMismatchException,
         StoragePersistence,
         canonicalPasskeyAtSign;
-export 'src/passkey/pending_keys_journal.dart' show PendingKeysJournal;
 export 'src/passkey/public_lookup.dart' show publicLookup;

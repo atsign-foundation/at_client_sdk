@@ -5,12 +5,6 @@
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
 - fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening.
 - feat: `UnknownCredentialSignal` is a capability interface in `package:at_auth/passkey.dart` for a `PasskeyPort` that can tell the platform a passkey no longer belongs to an account. `PasskeyPrf.signalUnknownCredential` calls it when the port implements it, does nothing otherwise, and ignores a failing signal.
-- feat: `PendingOnboardingStore` is a new port in `package:at_auth/passkey.dart`
-  for the one sealed record per atSign that an activation in progress keeps,
-  with `PendingOnboardingRecord` (credential id, enrollment id, the minted
-  public encryption key and the sealed body). Its sealed body uses the new
-  `PasskeyRecordType.pending`. A record that cannot be read back throws
-  `UnsupportedPasskeyRecordException`.
 - feat: `package:at_auth/passkey.dart` is a new library for passkey-held keys.
   It runs the passkey PRF ceremonies (register, then unlock) and keeps a
   PRF-unavailable flag, which is set only when the platform definitely reports
