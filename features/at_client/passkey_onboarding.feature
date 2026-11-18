@@ -8,22 +8,30 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   publishing the root. Until the CRAM secret is deleted, an onboarding that
   was interrupted is run again with the same CRAM secret, and that retry
   revokes the enrollments earlier attempts left approved; once it is
-  deleted, logging in with the passkey finishes the onboarding. The device
-  keeps nothing about an unfinished onboarding: IndexedDB holds only the
-  passkey hints, written once the CRAM secret is deleted.
+  deleted, logging in with the passkey finishes the onboarding. A login
+  also finishes an activation that an onboarding left half done: it
+  publishes the @keys document's encryption public key when none is
+  published, and deletes the CRAM secret; a different published key is
+  refused. The device keeps nothing about an unfinished onboarding:
+  IndexedDB holds only the passkey hints, written once the CRAM secret is
+  deleted.
 
   Races: tabs of one origin onboarding one Atsign wait on its setup lock.
   Two devices onboarding one Atsign with the same CRAM secret at once can
   revoke each other's enrollments, and in the worst order leave the Atsign
   activated with no usable enrollment until its registrar resets the CRAM
   secret; only the CRAM secret's holder can do that, and that holder can
-  already create or end any enrollment, so nothing guards against it.
+  already create or end any enrollment, so nothing guards against it. Two
+  logins finishing one activation each publish the same key and delete the
+  CRAM secret, so the second changes nothing.
   Replay: a retry sends a new enrollment request with a new key; nothing
   captured is resent. Denial of service: each interrupted attempt leaves
   one approved enrollment until a retry revokes it. Forgery and
   impersonation: only a CRAM secret's holder activates or retries, and that
   holder already holds more than any enrollment; the retry revokes only
-  enrollments of this Atsign, before its activation completes.
+  enrollments of this Atsign, before its activation completes. A login
+  publishes only the key its @keys document holds, which only the passkey
+  opens, and only when none is published.
 
   Scenario: Onboarding writes the @keys document and pointer before it deletes the CRAM secret
     Given @alice🛠 is not yet activated and its CRAM secret is known
@@ -71,6 +79,17 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     Given an onboarding of @alice🛠 was interrupted after the CRAM secret was deleted and before its client opened
     When the app logs in to @alice🛠 with that passkey
     Then it gets a passkey session whose client is online as the onboarding's enrollment
+
+  Scenario: A login after an onboarding that stopped before deleting the CRAM secret deletes it
+    Given an Atsign whose passkey onboarding wrote its @keys document and pointer and published its encryption public key, but did not delete the CRAM secret
+    When the app logs in with that passkey
+    Then the login deletes the CRAM secret
+
+  Scenario: A login after an onboarding that stopped before publishing its encryption public key publishes it and deletes the CRAM secret
+    Given an Atsign whose passkey onboarding wrote its @keys document and pointer, but published no encryption public key and did not delete the CRAM secret
+    When the app logs in with that passkey
+    Then the login publishes the document's encryption public key
+    And it deletes the CRAM secret
 
   Scenario: The device keeps nothing about an onboarding that did not complete
     Given an onboarding of @alice🛠 in this browser was interrupted after its enrollment was approved

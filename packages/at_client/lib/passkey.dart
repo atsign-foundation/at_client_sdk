@@ -27,6 +27,7 @@ export 'src/passkey/passkey_custody.dart'
         PasskeyLostException,
         PkamRefusedException,
         PublicKeyMismatchException,
+        PublishedEncryptionKey,
         StoragePersistence,
         canonicalPasskeyAtSign;
 export 'src/passkey/passkey_session.dart' show PasskeySession;

@@ -350,41 +350,59 @@ void main() {
     });
   });
 
-  group('publicKeysMatch', () {
+  group('publishedEncryptionKey', () {
     Future<EnrollmentSession> sessionOver(Wire w) async {
       wire = w;
       return activate();
     }
 
-    test('is true when the published public key is the restored one', () async {
-      final session =
-          await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
-
-      expect(await session.publicKeysMatch({'aesEncryptPublicKey': _encPublic}),
-          isTrue);
-      expect(wire.commands.last, 'lookup:publickey$_atSign\n');
-    });
-
-    test('is false when the published public key differs', () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:other');
-
-      expect(await session.publicKeysMatch({'aesEncryptPublicKey': _encPublic}),
-          isFalse);
-    });
-
-    test('is false when nothing is published', () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
-
-      expect(await session.publicKeysMatch({'aesEncryptPublicKey': _encPublic}),
-          isFalse);
-    });
-
-    test('is true when the restored keys carry no public key to compare',
+    test('is the same when the published public key is the restored one',
         () async {
       final session =
           await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
 
-      expect(await session.publicKeysMatch({}), isTrue);
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.same);
+      expect(wire.commands.last, 'lookup:publickey$_atSign\n');
+    });
+
+    test('is different when the published public key differs', () async {
+      final session = await sessionOver(Wire()..lookupAnswer = 'data:other');
+
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.different);
+    });
+
+    test('is none when nothing is published', () async {
+      final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
+
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.none);
+    });
+
+    test('throws when the lookup fails other than with the key not found',
+        () async {
+      final session = await sessionOver(
+          Wire()..lookupAnswer = 'error:AT0011-Internal server exception');
+
+      await expectLater(
+          session.publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          throwsA(isA<InvalidResponseException>()));
+    });
+
+    test('is the same when the restored keys carry no public key to compare',
+        () async {
+      final session =
+          await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
+
+      expect(await session.publishedEncryptionKey({}),
+          PublishedEncryptionKey.same);
     });
   });
 

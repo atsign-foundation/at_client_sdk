@@ -17,8 +17,7 @@ Future<void> completeActivationOf(
     {required AtLookUp atLookUp,
     required String atSign,
     required String? encryptionPublicKey}) async {
-  // NOTE: publish nothing rather than "null" when no encryption keypair was
-  // minted.
+  // NOTE: publish nothing rather than "null" when no key is given.
   if (encryptionPublicKey != null) {
     final updateBuilder = UpdateVerbBuilder()
       ..atKey = (AtKey()
@@ -31,9 +30,8 @@ Future<void> completeActivationOf(
     final encryptKeyUpdateResult = await atLookUp.executeVerb(updateBuilder);
     _logger.info('Encryption public key update result $encryptKeyUpdateResult');
   } else {
-    _logger.info('No encryption keypair was minted for $atSign, so '
-        'public:publickey is not published: a legacy peer cannot send to this '
-        'atSign, which is what mintLegacyMaterial:false asks for');
+    _logger.info('No encryption public key was given for $atSign, so '
+        'public:publickey is left as it is');
   }
 
   final deleteBuilder = DeleteVerbBuilder()

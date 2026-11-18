@@ -116,8 +116,17 @@ class FakeSession implements EnrollmentSession {
       };
 
   @override
-  Future<bool> publicKeysMatch(Map<String, dynamic> atKeys) async =>
-      server.publishes(atKeys);
+  Future<PublishedEncryptionKey> publishedEncryptionKey(
+      Map<String, dynamic> atKeys) async {
+    if (!server.publishes(atKeys)) return PublishedEncryptionKey.different;
+    final held = atKeys['aesEncryptPublicKey'];
+    if (held is! String) return PublishedEncryptionKey.same;
+    return switch (server.publishedKey) {
+      null => PublishedEncryptionKey.none,
+      final published when published == held => PublishedEncryptionKey.same,
+      _ => PublishedEncryptionKey.different,
+    };
+  }
 
   /// The @keys every [completeActivation] call was given.
   final completed = <Map<String, dynamic>>[];
@@ -151,7 +160,9 @@ class FakeSession implements EnrollmentSession {
     server.timeline.add('complete-activation');
     completed.add(atKeys);
     if (completeError case final e?) throw e;
-    server.publishedKey = atKeys['aesEncryptPublicKey'] as String?;
+    if (atKeys['aesEncryptPublicKey'] case final String key) {
+      server.publishedKey = key;
+    }
     if (completeErrorAfterPublish case final e?) throw e;
     server.cramDeleted.add(atSign);
     server.timeline.add('cram-deleted');

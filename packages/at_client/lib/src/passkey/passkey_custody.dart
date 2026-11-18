@@ -95,6 +95,19 @@ class PublicKeyMismatchException extends AtException {
       'match the published public keys';
 }
 
+/// How the encryption public key the atServer publishes for an atSign stands
+/// against the one an @keys document holds.
+enum PublishedEncryptionKey {
+  /// The atServer publishes none.
+  none,
+
+  /// The atServer publishes the document's key, or the document holds none.
+  same,
+
+  /// The atServer publishes a key other than the document's.
+  different,
+}
+
 /// A PKAM-authenticated enrollment on the atServer.
 abstract class EnrollmentSession {
   String get enrollmentId;
@@ -112,9 +125,11 @@ abstract class EnrollmentSession {
   /// activated.
   Future<Map<String, dynamic>> atKeys();
 
-  /// Whether the encryption public key [atKeys] holds is the one the atServer
-  /// publishes; true when [atKeys] holds none.
-  Future<bool> publicKeysMatch(Map<String, dynamic> atKeys);
+  /// How the encryption public key the atServer publishes stands against the
+  /// one [atKeys] holds. A lookup that fails other than with the key not
+  /// found throws.
+  Future<PublishedEncryptionKey> publishedEncryptionKey(
+      Map<String, dynamic> atKeys);
 
   /// Revokes every approved enrollment of the atSign other than this one.
   ///
@@ -125,7 +140,9 @@ abstract class EnrollmentSession {
 
   /// Completes the activation this session's enrollment was created by:
   /// publishes the encryption public key [atKeys] holds, replacing any that is
-  /// published, then deletes the atSign's CRAM secret.
+  /// published, then deletes the atSign's CRAM secret. When [atKeys] holds no
+  /// encryption public key it publishes nothing and only deletes the CRAM
+  /// secret.
   Future<void> completeActivation(Map<String, dynamic> atKeys);
 
   /// A client running as this enrollment, reading its @keys from [keysIo] and
@@ -168,6 +185,7 @@ abstract class EnrollmentGateway {
 
 const _apkamPrivateKey = 'aesPkamPrivateKey';
 const _apkamPublicKey = 'aesPkamPublicKey';
+const _encryptPublicKey = 'aesEncryptPublicKey';
 
 /// The ids a device remembers for an atSign.
 typedef _Hints = ({Uint8List credentialId, String enrollmentId});
@@ -388,15 +406,23 @@ class PasskeyCustody {
   /// A remembered or pointed enrollment id outside the id alphabet is a lost
   /// passkey, refused before any PKAM.
   ///
+  /// Once the document is read, the open finishes the activation an
+  /// onboarding may have left unfinished, before it remembers anything or
+  /// opens the client: when the atServer publishes no encryption public key it
+  /// publishes the document's, and either way it deletes the atSign's CRAM
+  /// secret. A published key other than the document's is refused before
+  /// anything is sent. When finishing the activation fails, the open fails,
+  /// and the next open finishes it.
+  ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The vault is
   /// closed when this throws. The returned [PasskeySession]'s client persists
   /// its @keys through an [AtServerAtKeysIo] sealed with the passkey's vault,
   /// and the session closes the store and the vault once the client stops.
   ///
-  /// Throws [PasskeyLostException], [MissingAtKeysDocumentException] or
-  /// [PublicKeyMismatchException]; none leaves a session open or the device's
-  /// hints rewritten.
+  /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
+  /// [PublicKeyMismatchException] or what finishing the activation throws;
+  /// none leaves a session open or the device's hints rewritten.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
@@ -488,7 +514,9 @@ class PasskeyCustody {
       }
       final store = _keysIo(canonical, session, vault, pair);
       try {
-        await _restore(canonical, store, session, pair);
+        final unpublished = await _restore(canonical, store, session, pair);
+        await session.completeActivation(
+            {if (unpublished != null) _encryptPublicKey: unpublished});
         await _remember(canonical, unlocked.credentialId, enrollmentId);
       } on Object {
         store.close();
@@ -579,23 +607,28 @@ class PasskeyCustody {
 
   /// Reads the enrollment's document through [store], which then serves the
   /// client's reads from memory, and checks its public keys against the
-  /// published ones and the passkey's pair.
-  Future<void> _restore(String atSign, AtServerAtKeysIo store,
+  /// published ones and the passkey's pair. Returns the document's encryption
+  /// public key when the atServer publishes none, and otherwise null.
+  Future<String?> _restore(String atSign, AtServerAtKeysIo store,
       EnrollmentSession session, ApkamKeyPair pair) async {
     final stored = await store.read(atSign);
     final atKeys = stored.toJson()..remove(_apkamPrivateKey);
-    if (!await session.publicKeysMatch(atKeys) ||
+    final published = await session.publishedEncryptionKey(atKeys);
+    if (published == PublishedEncryptionKey.different ||
         !_holdsApkamPublicKeyOf(stored, pair)) {
       throw PublicKeyMismatchException();
     }
+    return published == PublishedEncryptionKey.none
+        ? atKeys[_encryptPublicKey] as String?
+        : null;
   }
 
   /// Whether the flat APKAM public key [stored] holds, if any, is the public
   /// key of [pair], which the passkey derives. A document without one does not
   /// mismatch. The encryption public key is the one the atServer publishes,
-  /// checked by [EnrollmentSession.publicKeysMatch]. The document never holds
-  /// this enrollment's typed APKAM public key (the store strips it), and no
-  /// other public key has a second source to compare with.
+  /// checked by [EnrollmentSession.publishedEncryptionKey]. The document never
+  /// holds this enrollment's typed APKAM public key (the store strips it), and
+  /// no other public key has a second source to compare with.
   static bool _holdsApkamPublicKeyOf(AtKeys stored, ApkamKeyPair pair) {
     final flat = stored.toJson()[_apkamPublicKey];
     return flat == null || flat == pair.publicKey;

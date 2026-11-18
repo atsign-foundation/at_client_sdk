@@ -103,8 +103,16 @@ class _Session implements EnrollmentSession {
   Future<Map<String, dynamic>> atKeys() async => server.keys;
 
   @override
-  Future<bool> publicKeysMatch(Map<String, dynamic> atKeys) async =>
-      atKeys['aesEncryptPublicKey'] == server.publishedKey;
+  Future<PublishedEncryptionKey> publishedEncryptionKey(
+      Map<String, dynamic> atKeys) async {
+    final held = atKeys['aesEncryptPublicKey'];
+    if (held is! String) return PublishedEncryptionKey.same;
+    return switch (server.publishedKey) {
+      null => PublishedEncryptionKey.none,
+      final published when published == held => PublishedEncryptionKey.same,
+      _ => PublishedEncryptionKey.different,
+    };
+  }
 
   @override
   Future<void> revokeOtherEnrollments() async {
@@ -113,7 +121,9 @@ class _Session implements EnrollmentSession {
 
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
-    server.publishedKey = atKeys['aesEncryptPublicKey'] as String?;
+    if (atKeys['aesEncryptPublicKey'] case final String key) {
+      server.publishedKey = key;
+    }
     server.cramLive = false;
   }
 

@@ -437,6 +437,95 @@ void main() {
       expect(gateway.activated, hasLength(1));
     });
 
+    test(
+        'A login after an onboarding that stopped before deleting the CRAM '
+        'secret deletes it', () async {
+      gateway.onAuthenticate = (session) =>
+          session.completeErrorAfterPublish = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
+      expect(server.cramDeleted, isEmpty);
+      gateway.onAuthenticate = null;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the login deletes the CRAM secret');
+      expect(gateway.lastSession!.completed.single, isEmpty,
+          reason: 'the published key is the document\'s, so only the CRAM '
+              'secret is deleted');
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
+      final steps = server.timeline;
+      expect(steps.lastIndexOf('cram-deleted'),
+          lessThan(steps.lastIndexOf('open-client')));
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login after an onboarding that stopped before publishing its '
+        'encryption public key publishes it and deletes the CRAM secret',
+        () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      expect(server.publishedKey, isNull);
+      expect(server.cramDeleted, isEmpty);
+      gateway.onAuthenticate = null;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
+          reason: 'the login publishes the document\'s encryption public key');
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the login deletes the CRAM secret');
+      expect(gateway.lastSession!.completed.single,
+          {'aesEncryptPublicKey': encryptionPublicKeyOf('eid1')});
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'a login whose completion fails opens no client and remembers '
+        'nothing, and the next login completes it', () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      final fresh = FakeHints();
+
+      await expectLater(
+          custody(withHints: fresh).open(atSign: _atSign), throwsStateError,
+          reason: 'a login whose completion fails, fails');
+
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(gateway.lastSession!.clients, isEmpty);
+      expect(fresh.ids, isEmpty);
+      expect(server.cramDeleted, isEmpty);
+      gateway.onAuthenticate = null;
+
+      await custody(withHints: fresh).open(atSign: _atSign);
+
+      expect(server.cramDeleted, {_atSign});
+      expect(fresh.ids, {_atSign: 'eid1'});
+    });
+
+    test(
+        'a login that finds another encryption public key published is '
+        'refused and completes nothing', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      server.publishedKey = 'cm90YXRlZA==';
+
+      await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PublicKeyMismatchException>()));
+
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(server.publishedKey, 'cm90YXRlZA==');
+    });
+
     test('an interrupted onboarding leaves no hints on the device', () async {
       server.documentPutFailures = 99;
       await expectLater(

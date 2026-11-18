@@ -252,14 +252,19 @@ class _PkamSession implements EnrollmentSession {
     return atKeysDocument(keys, _atSign);
   }
 
-  /// Whether the encryption public key in [atKeys] is the one published at
-  /// `publickey@<atSign>`; true when [atKeys] holds none, since there is
-  /// nothing to match.
+  /// How the key published at `publickey@<atSign>` stands against the
+  /// encryption public key in [atKeys]: the same when [atKeys] holds none,
+  /// since there is nothing to match, and none when the lookup finds no key.
   @override
-  Future<bool> publicKeysMatch(Map<String, dynamic> atKeys) async {
+  Future<PublishedEncryptionKey> publishedEncryptionKey(
+      Map<String, dynamic> atKeys) async {
     final restored = atKeys[_encryptPublicKey];
-    if (restored is! String) return true;
-    return await _published() == restored;
+    if (restored is! String) return PublishedEncryptionKey.same;
+    return switch (await _published()) {
+      null => PublishedEncryptionKey.none,
+      final published when published == restored => PublishedEncryptionKey.same,
+      _ => PublishedEncryptionKey.different,
+    };
   }
 
   /// The `publickey` the atServer publishes for this atSign, or null.
