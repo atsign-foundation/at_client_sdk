@@ -50,6 +50,7 @@ void main() {
 
         final state = client.connection.current;
         expect(state.isOffline, isTrue, reason: '$state');
+        expect(state.cause, AtConnectionCause.unreachable);
         expect(state.error, carrying(reply));
       });
     });
@@ -65,6 +66,7 @@ void main() {
 
     final state = client.connection.current;
     expect(state.isOffline, isTrue, reason: '$state');
+    expect(state.cause, AtConnectionCause.unreachable);
     expect(state.error, carrying(serverError['dash']!));
     expect(await (client as AtClientImpl).hasBeenOnline(), isFalse,
         reason: 'the control: this device has never held the atSign online');
@@ -101,7 +103,9 @@ void main() {
     server.refuseClientAuth = (_) => serverError['dash'];
     await server.drop();
     await expectLater(
-        remote.executeVerb(llookupOf(atSign)), throwsA(isA<AtException>()));
+        remote.executeVerb(llookupOf(atSign)),
+        throwsA(isA<AtException>().having(
+            (e) => e.message, 'message', contains(serverError['dash']!))));
 
     expect(pkamsSent(server), 2,
         reason: 'the second verb authenticated a new connection');

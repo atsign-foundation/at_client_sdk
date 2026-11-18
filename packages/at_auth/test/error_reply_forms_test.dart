@@ -314,6 +314,7 @@ void main() {
       'AT0026': 'enrollment_id: $enrollmentId is pending',
       'AT0025': 'enrollment_id: $enrollmentId is denied',
       'AT0028': 'enrollment_id: $enrollmentId is expired or invalid',
+      'AT0029': 'enrollment_id: $enrollmentId is expired or invalid',
     };
     final writtenForms = <String, String Function(String, String)>{
       'colon': (code, text) => 'error:$code:$text',
@@ -342,16 +343,21 @@ void main() {
           expect(polls(server), 1);
         });
 
-        test('AT0028 ends the wait on its first poll, as expired', () async {
-          final server =
-              await atServer([refusal('AT0028', enrollmentStates['AT0028']!)]);
+        for (final code in ['AT0028', 'AT0029']) {
+          test('$code ends the wait on its first poll, as expired',
+              () async {
+            final server =
+                await atServer([refusal(code, enrollmentStates[code]!)]);
 
-          await expectLater(
-              waitOver(server),
-              throwsA(isA<AtEnrollmentException>().having((e) => e.message,
-                  'message', contains('has expired or does not exist'))));
-          expect(polls(server), 1);
-        });
+            await expectLater(
+                waitOver(server),
+                throwsA(isA<AtEnrollmentExpiredException>().having(
+                    (e) => e.message,
+                    'message',
+                    contains('has expired or does not exist'))));
+            expect(polls(server), 1);
+          });
+        }
       });
     });
 
@@ -382,6 +388,27 @@ void main() {
                   .having((e) => e.message, 'message', contains(reply)));
           expect(polls(server), 1, reason: 'an expiry is not polled again');
         });
+      });
+
+      test(
+          'Given AT0011 on every poll, when it waits, then it ends as a '
+          'refusal it cannot resolve, not as expired', () async {
+        final server = await atServer(List.filled(
+            maxRetries + 2, 'error:AT0011:Internal server exception'));
+
+        Object? caught;
+        try {
+          await waitOver(server);
+        } on AtEnrollmentException catch (e) {
+          caught = e;
+        }
+
+        expect(caught, isNot(isA<AtEnrollmentExpiredException>()));
+        expect(
+            caught,
+            isA<AtEnrollmentException>().having(
+                (e) => e.message, 'message', contains('cannot resolve')));
+        expect(polls(server), maxRetries + 1);
       });
     });
 

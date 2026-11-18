@@ -307,6 +307,33 @@ void main() {
     });
   });
 
+  group('Given an atServer that answers from: with nothing', () {
+    test(
+        'when the keys authenticate, then it reports failure, and nothing '
+        'is signed', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, signingKeys());
+      final executor = RecordingExecutor(['']);
+
+      expect(await authenticatorFor(io, atSign)(executor), isFalse);
+      expect(executor.sent, hasLength(1),
+          reason: 'it must not answer an empty from: with a signature');
+    });
+
+    test(
+        'when the legacy credential authenticates, then it reports '
+        'failure, and nothing is signed', () async {
+      final executor = RecordingExecutor(['']);
+
+      expect(
+          await authenticatorForPrivateKey(
+              atSign, demo.pkamPrivateKeyMap[atSign]!)(executor),
+          isFalse);
+      expect(executor.sent, hasLength(1),
+          reason: 'it must not answer an empty from: with a signature');
+    });
+  });
+
   group('Given an atSign and its CRAM secret', () {
     test(
         'when the atServer refuses CRAM authentication, then the exception '

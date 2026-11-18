@@ -123,7 +123,9 @@ void main() {
     server.answerClientFrom = () => 'data:';
     await server.drop();
     await expectLater(
-        remote.executeVerb(llookupOf(atSign)), throwsA(isA<AtException>()));
+        remote.executeVerb(llookupOf(atSign)),
+        throwsA(isA<AtException>().having((e) => e.message, 'message',
+            contains('Refusing to sign a malformed from: challenge'))));
 
     expect(server.connectCount, 2,
         reason: 'the second verb asked a new connection for a challenge');
@@ -209,6 +211,7 @@ void main() {
       expect(pkamsSent(server), signedBefore, reason: 'nothing was signed');
       final state = client.connection.current;
       expect(state.isOffline, isTrue, reason: '$state');
+      expect(state.cause, AtConnectionCause.unreachable);
       expect(
           state.error,
           isA<UnAuthenticatedException>().having((e) => e.message, 'message',
