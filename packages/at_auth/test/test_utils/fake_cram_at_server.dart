@@ -8,13 +8,20 @@ import 'package:at_lookup/at_lookup.dart';
 /// An atServer for [atSign] that answers `from:` with a challenge and the
 /// `cram:` that follows with [cramReply], reached through a real
 /// `AtLookupImpl` over an [AtTransport] it scripts.
+///
+/// It accepts the rest of an activation too: a `lookup:publickey` finds no
+/// key, the first enrollment is approved, every `pkam:` succeeds and every
+/// `update:` and `delete:` is done.
 class FakeCramAtServer {
-  FakeCramAtServer(this.atSign, {required this.cramReply});
+  FakeCramAtServer(this.atSign, {required this.cramReply, this.answer});
 
   final String atSign;
 
   /// The atServer's one-line answer to `cram:`.
   final String cramReply;
+
+  /// Answers a command in place of the answers above when it returns one.
+  final String? Function(String command)? answer;
 
   /// Every command the client wrote, in order.
   final List<String> written = <String>[];
@@ -30,15 +37,29 @@ class FakeCramAtServer {
         ),
       );
 
+  /// The `from:` commands the client wrote, in order.
+  Iterable<String> get froms => written.where((c) => c.startsWith('from:'));
+
   String? _replyTo(String command) {
+    final answered = answer?.call(command);
+    if (answered != null) return answered;
     if (command.startsWith('from:')) {
       final random = Random.secure();
-      String hex() => List.generate(32, (_) => random.nextInt(16))
+      String hex(int length) => List.generate(length, (_) => random.nextInt(16))
           .map((n) => n.toRadixString(16))
           .join();
-      return 'data:_${hex()}$atSign:${hex()}';
+      String uuid() => '${hex(8)}-${hex(4)}-${hex(4)}-${hex(4)}-${hex(12)}';
+      return 'data:_${uuid()}$atSign:${uuid()}';
     }
     if (command.startsWith('cram:')) return cramReply;
+    if (command.startsWith('lookup:publickey')) return 'data:null';
+    if (command.startsWith('enroll:request:')) {
+      return 'data:{"enrollmentId":"e-1","status":"approved"}';
+    }
+    if (command.startsWith('pkam:')) return 'data:success';
+    if (command.startsWith('update:') || command.startsWith('delete:')) {
+      return 'data:1';
+    }
     return null;
   }
 }

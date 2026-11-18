@@ -84,7 +84,7 @@ class CurrentCkPointer {
   }
 
   /// Records [ckKid] as the CK this enrollment is writing under for
-  /// `(owner, ckNs)`, on the atServer first, with the destination's generation
+  /// `(owner, ckNs)`, on the atServer, with the destination's generation
   /// [nskeyKid] and the sender's own [ownNskeyKid].
   ///
   /// A failure is logged and swallowed; the CK has already been conveyed and

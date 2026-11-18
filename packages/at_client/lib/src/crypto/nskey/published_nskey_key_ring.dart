@@ -1251,8 +1251,9 @@ class PublishedNskeyKeyRing
   /// Reads [atKey], or null when the atServer says there is none; any other
   /// failure throws.
   ///
-  /// For this client's own atSign, local storage first: [currentPublic] sits on
-  /// the write path, so a round trip by default would break offline writes. The
+  /// For this client's own atSign, first where the client's preference routes
+  /// a read, which is local storage by default: [currentPublic] sits on the
+  /// write path, so a round trip by default would break offline writes. The
   /// fallback to the atServer is what keeps a client that has just minted — or
   /// whose sibling enrollment minted a moment ago — from reading its own
   /// published namespace as a cold start until sync pulls the record down, and

@@ -15,6 +15,9 @@
   `[::1]:8443` gives `[::1]` and `8443`. It used to split on every `:` and
   keep the first two parts, giving `[` and an empty port. `[::1]` with no
   port gives nothing.
+- fix: an `error:<code>:<text>` reply throws an `AtLookUpException` with
+  that code and text, as the dash and JSON forms do; a reply with no code at
+  its head gives `AT0014`.
 
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.

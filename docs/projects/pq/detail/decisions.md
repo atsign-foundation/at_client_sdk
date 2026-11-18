@@ -2980,9 +2980,10 @@ noting for the next cross-atSign test:
    enrollee's symmetric key to its own;
 2. alice cannot `get()` the conveyance — it is sealed to **@bob's** namespace key, and her being
    unable to open it is the correct behaviour, not a bug;
-3. `getMeta()` does not help, because it delegates to `get()` and therefore decrypts. The
-   metadata is atServer-visible plaintext, so `llookup:meta:` reads it without decryption — and
-   returns `appMetadata` already decoded, where the update fragment carries it base64-encoded;
+3. `getMeta()` did not help, because it then delegated to `get()` and therefore decrypted (it
+   has since become a metadata-only lookup). The metadata is atServer-visible plaintext, so
+   `llookup:meta:` reads it without decryption — and returns `appMetadata` already decoded,
+   where the update fragment carries it base64-encoded;
 4. bringing alice up through `AtClientManager.getInstance()` tore @bob's client down, unsetting
    his `syncService`. `ConcurrentClients` exists for exactly this and is the right tool whenever
    two atSigns must be live at once.

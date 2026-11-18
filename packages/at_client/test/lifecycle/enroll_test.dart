@@ -13,9 +13,11 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
+import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/recorded_logs.dart';
@@ -1325,6 +1327,28 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
+    test(
+        "An expired request's keys go, as a denial's do, when the atServer "
+        'writes its refusal as JSON', () async {
+      final store = InMemoryAtKeysIo();
+      final reply = jsonEncode({
+        'errorCode': 'AT0028',
+        'errorDescription': 'enrollment_id: $enrollmentId is expired or invalid'
+      });
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw UnAuthenticatedException(
+                  'Failed connecting to $atSign. error:$reply')));
+
+      await expectLater(
+          pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentException>()
+              .having((e) => e.message, 'message', contains('expired'))));
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
     /// A store holding two pending requests for app `wavi`, from devices named
     /// after their enrollment ids, `e-one` and `e-two`.
     AtKeys twoPending() {
@@ -1549,6 +1573,139 @@ void main() {
 
         await removedOnce(store);
       });
+    });
+  });
+
+  group('the approval handshake names the app and at_client', () {
+    Future<AtClientPreference> named() async => (await preference())
+      ..atClientParticulars.appName = 'acme_chat'
+      ..atClientParticulars.appVersion = '2.3.1';
+
+    /// The clientConfig of the `from:` sent by the one authenticator the
+    /// handshake installed on [server].
+    Future<Map<String, dynamic>> handshakeConfig(
+        MockAtLookupImpl server) async {
+      final installed = verify(() => server.authenticator = captureAny())
+          .captured
+          .whereType<AtAuthenticator>()
+          .toList();
+      expect(installed, hasLength(1),
+          reason: 'the control: the handshake installs one authenticator');
+      final recorder = FromRecorder();
+      await installed.single(recorder);
+      const prefix = 'from:$atSign:clientConfig:';
+      expect(recorder.from, startsWith(prefix));
+      return jsonDecode(recorder.from!.substring(prefix.length).trim())
+          as Map<String, dynamic>;
+    }
+
+    void expectNamesAcmeChatAndAtClient(Map<String, dynamic> config) {
+      expect(config['appName'], 'acme_chat');
+      expect(config['appVersion'], '2.3.1');
+      expect(config['sdkName'], 'atsign.dart.at_client');
+      expect(config['sdkVersion'], pubspecVersion());
+      expect(config['version'], pubspecVersion());
+    }
+
+    test(
+        'Given an app named in its particulars, when its enrollment waits '
+        'for approval, then the handshake\'s from: names the app and at_client',
+        () async {
+      final server = atServer(decide: (_) async => true);
+      final pending = await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'wavi',
+          device: 'phone',
+          namespaces: {'wavi': 'rw'},
+          keys: InMemoryAtKeysIo(),
+          preference: await named(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory(),
+          atLookUp: server);
+
+      await pending.awaitApproval(
+          retryInterval: const Duration(milliseconds: 10));
+
+      expectNamesAcmeChatAndAtClient(await handshakeConfig(server));
+    });
+
+    test(
+        'Given an app named in its particulars, when a resumed enrollment '
+        'waits for approval, then the handshake\'s from: names the app and '
+        'at_client', () async {
+      final store = InMemoryAtKeysIo();
+      // The atServer that took the request, which holds the key it wrapped.
+      final server = atServer(decide: (_) async => true);
+      await submit(store, server);
+      final resumed = await Atsign(atSign).resumeEnrollment(
+          keys: store,
+          preference: await named(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory(),
+          atLookUp: server);
+
+      await resumed!
+          .awaitApproval(retryInterval: const Duration(milliseconds: 10));
+
+      expectNamesAcmeChatAndAtClient(await handshakeConfig(server));
+    });
+
+    test(
+        'Given a PendingEnrollment built with particulars, when it waits for '
+        'approval, then the handshake\'s from: names the app and at_client',
+        () async {
+      final store = InMemoryAtKeysIo();
+      final server = atServer(decide: (_) async => true);
+      final submitted = await submit(store, server);
+      final built = PendingEnrollment(
+          atSign: submitted.atSign,
+          enrollmentId: submitted.enrollmentId,
+          app: submitted.app,
+          device: submitted.device,
+          namespaces: submitted.namespaces,
+          keys: store,
+          rootDomain: submitted.rootDomain,
+          signingAlgo: submitted.signingAlgo,
+          keyExchangeMode: submitted.keyExchangeMode,
+          atLookUp: server,
+          particulars: AtClientParticulars()
+            ..appName = 'acme_chat'
+            ..appVersion = '2.3.1',
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory());
+
+      await built.awaitApproval(
+          retryInterval: const Duration(milliseconds: 10));
+
+      expectNamesAcmeChatAndAtClient(await handshakeConfig(server));
+    });
+
+    test(
+        'Given a PendingEnrollment built with no particulars, when it waits '
+        'for approval, then the handshake\'s from: names at_client', () async {
+      final store = InMemoryAtKeysIo();
+      final server = atServer(decide: (_) async => true);
+      final submitted = await submit(store, server);
+      final built = PendingEnrollment(
+          atSign: submitted.atSign,
+          enrollmentId: submitted.enrollmentId,
+          app: submitted.app,
+          device: submitted.device,
+          namespaces: submitted.namespaces,
+          keys: store,
+          rootDomain: submitted.rootDomain,
+          signingAlgo: submitted.signingAlgo,
+          keyExchangeMode: submitted.keyExchangeMode,
+          atLookUp: server,
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory());
+
+      await built.awaitApproval(
+          retryInterval: const Duration(milliseconds: 10));
+
+      final config = await handshakeConfig(server);
+      expect(config['sdkName'], 'atsign.dart.at_client');
+      expect(config['appVersion'], 'unknown');
     });
   });
 }
