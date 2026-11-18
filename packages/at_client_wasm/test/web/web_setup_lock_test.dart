@@ -39,14 +39,28 @@ void main() {
   test('the timeout does not bound the held section', () async {
     final name = 'lock_${DateTime.now().microsecondsSinceEpoch}';
     const timeout = Duration(milliseconds: 50);
-    final result =
-        await WebSetupLock(acquireTimeout: timeout).run(name, () async {
-      // The wait must outlast the acquire timeout to prove the timeout
-      // does not bound the body.
-      await Future<void>.delayed(timeout * 4);
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final holder = WebSetupLock(acquireTimeout: timeout).run(name, () async {
+      entered.complete();
+      await release.future;
       return 'done';
     });
-    expect(result, 'done');
+    await entered.future;
+
+    // A second run's acquire timeout fires while the holder is still inside
+    // its body: the timeout bounds the wait, not the held section.
+    await expectLater(
+      WebSetupLock(acquireTimeout: timeout).run(name, () async => 1),
+      throwsA(isA<SetupLockTimeoutException>()),
+    );
+
+    release.complete();
+    expect(await holder, 'done');
+  });
+
+  test('the default acquire timeout is two minutes', () {
+    expect(WebSetupLock().acquireTimeout, const Duration(minutes: 2));
   });
 
   test('a body that throws gives the caller that error and nothing uncaught',
