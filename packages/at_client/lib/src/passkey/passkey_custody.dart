@@ -706,6 +706,9 @@ class PasskeyCustody {
       unlocked = await prf.unlock(credentialId: record.credentialId);
     } on PasskeyCeremonyException catch (e) {
       throw _PendingUnopenable(e);
+    } on PrfUnavailableException catch (e) {
+      // The record's passkey gave no usable PRF output; another may.
+      throw _PendingUnopenable(e);
     }
     final vault = await _deriveAndWipe(unlocked.secret, canonical);
     final String enrollmentId;

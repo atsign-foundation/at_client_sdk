@@ -692,6 +692,22 @@ void main() {
       expect(pending.records[_atSign], same(record));
     });
 
+    test('a record whose passkey gives no usable PRF does not stop a login',
+        () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      authenticator.prfByCredential[9] = Uint8List(32);
+      final record = PendingOnboardingRecord(
+          credentialId: Uint8List.fromList([9]),
+          enrollmentId: 'eidX',
+          encryptionPublicKey: 'other-key',
+          sealed: 'junk');
+      pending.records[_atSign] = record;
+      final client = await custody().open(atSign: _atSign);
+      expect(client.enrollmentId, 'eid1');
+      expect(pending.records[_atSign], same(record));
+      expect(authenticator.signalled, isEmpty);
+    });
+
     test('deletes a record for the keys the login restored', () async {
       server.keys['aesEncryptPublicKey'] = base64Encode(utf8.encode('pub'));
       final first = await custody().onboard(atSign: _atSign, cram: 'cram');
