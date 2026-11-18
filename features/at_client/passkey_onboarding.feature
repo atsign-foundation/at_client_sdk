@@ -3,9 +3,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   writes the sealed @keys document and the passkey's pointer as the new
   enrollment, then completes the activation: it publishes the encryption
   public key and deletes the CRAM secret. Only then does it remember the
-  passkey on the device, open the client and mint the Atsign's signing
-  root, filing the root's private key in the @keys document before
-  publishing the root. Until the CRAM secret is deleted, an onboarding that
+  passkey on the device and open the client, which, under a posture that
+  creates a signing root, mints the Atsign's signing root, filing the
+  root's private key in the @keys document before publishing the root. Until the CRAM secret is deleted, an onboarding that
   was interrupted is run again with the same CRAM secret, and that retry
   revokes the enrollments earlier attempts left approved; once it is
   deleted, logging in with the passkey finishes the onboarding. A login
@@ -40,8 +40,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     And the @keys document reads back and opens with the passkey
     And a `cram:` login with that secret is then refused
 
-  Scenario: No signing root is published before the CRAM secret is deleted
+  Scenario: A signing root is published only after the CRAM secret is deleted
     Given @alice🛠 is not yet activated and its CRAM secret is known
+    And the app's passkey client uses a posture that creates a signing root
     When the app onboards @alice🛠 with a new passkey
     Then `public:pq_signing_root@alice🛠` was first published after the CRAM secret was deleted
     And the @keys document held the root's private key before the root was published
