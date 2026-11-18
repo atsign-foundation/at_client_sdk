@@ -5,7 +5,6 @@ import 'package:at_client/at_client.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/enroll/authorised_namespaces.dart'
     show ownGrantsOf;
-import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 
 import '../collections/js_collections_adapter.dart';
 
@@ -80,6 +79,9 @@ class ManageAccessException implements Exception {
 
 /// What the JS bridge exposes of one open client.
 abstract interface class JsSession {
+  /// The atSign this session acts as.
+  String get atSign;
+
   /// Notifies [key]'s `sharedWith` of [value]; true only once the atServer
   /// reports it delivered. Throws a [BadKeyException] without `sharedWith`.
   Future<bool> notify(JsKey key, String value);
@@ -90,8 +92,7 @@ abstract interface class JsSession {
   /// An error on the notification stream goes to [onError] and the
   /// subscription carries on. A notification dropped because its sender is
   /// not the owner of its key is logged, never delivered.
-  void Function() subscribe(
-      String regex, void Function(JsNotification) onEvent,
+  void Function() subscribe(String regex, void Function(JsNotification) onEvent,
       {required void Function(Object error) onError});
 
   /// Where the connection to the atServer is: `connecting`, `connected`,
@@ -188,6 +189,9 @@ class AtClientJsSession implements JsSession {
   }
 
   @override
+  String get atSign => _client.getCurrentAtSign()!;
+
+  @override
   String get status => _status;
 
   @override
@@ -276,8 +280,7 @@ class AtClientJsSession implements JsSession {
   }
 
   @override
-  void Function() subscribe(
-      String regex, void Function(JsNotification) onEvent,
+  void Function() subscribe(String regex, void Function(JsNotification) onEvent,
       {required void Function(Object error) onError}) {
     _open();
     final service = _client.notificationService;
