@@ -6,7 +6,7 @@ Feature: A server error in reply to a PKAM is not a refusal
   credentials, and at_client reads it, in any form, as a failure that is not a
   refusal: the connection is not refused, a first open hands back its client,
   and the error reaches the caller as it is. A reply that carries no code is
-  read as a refusal, as it is today. A cram: reply is read the same way, since
+  read as a refusal. A cram: reply is read the same way, since
   at_auth raises both alike.
 
   Races: none arise; each reply is read on the connection it arrived on.
