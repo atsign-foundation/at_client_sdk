@@ -32,6 +32,20 @@
   differs, it accepts no further writes. The library also
   exports the enrollment gateway, session and document and pointer stores that
   onboarding and open run on.
+- fix: an atServer whose answer to `from:` holds no challenge to sign
+  leaves the connection offline with cause `unreachable`, not refused,
+  and a first open hands back its client. The client still signs
+  nothing.
+- fix: a code other than a refusal in reply to a PKAM, such as AT0011, no
+  longer reads as a refusal: connecting reports offline carrying the error,
+  a verb that meets it leaves the connection state as it was, a first open
+  hands back its client, and `Atsign.authenticatesAs` throws the error.
+- feat: a PKAM the atServer refuses with AT0028 reports the connection
+  refused with cause `invalidEnrollment`, as AT0029 does, and
+  `PendingEnrollment` removes an expired request's pending keys on either
+  code. AT0028 in reply to any verb but a PKAM and its `from:` still
+  leaves the connection online. `AtEnrollmentExpiredException` is
+  exported.
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file

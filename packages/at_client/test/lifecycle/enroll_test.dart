@@ -1338,20 +1338,22 @@ void main() {
     });
 
     test("An expired request's keys go, as a denial's do", () async {
-      final store = InMemoryAtKeysIo();
-      final pending = await submit(
-          store,
-          atServer(
-              decide: (_) async => throw UnAuthenticatedException(
-                  'Failed connecting to $atSign. error:AT0028:enrollment_id: '
-                  '$enrollmentId is expired or invalid')));
+      for (final code in ['AT0028', 'AT0029']) {
+        final store = InMemoryAtKeysIo();
+        final pending = await submit(
+            store,
+            atServer(
+                decide: (_) async => throw UnAuthenticatedException(
+                    'Failed connecting to $atSign. error:$code:enrollment_id: '
+                    '$enrollmentId is expired or invalid')));
 
-      await expectLater(
-          pending.awaitApproval(retryInterval: pollEvery),
-          throwsA(isA<AtEnrollmentException>()
-              .having((e) => e.message, 'message', contains('expired'))));
+        await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+            throwsA(isA<AtEnrollmentExpiredException>()),
+            reason: code);
 
-      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+        expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty,
+            reason: code);
+      }
     });
 
     test(
@@ -1368,10 +1370,8 @@ void main() {
               decide: (_) async => throw UnAuthenticatedException(
                   'Failed connecting to $atSign. error:$reply')));
 
-      await expectLater(
-          pending.awaitApproval(retryInterval: pollEvery),
-          throwsA(isA<AtEnrollmentException>()
-              .having((e) => e.message, 'message', contains('expired'))));
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentExpiredException>()));
 
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
