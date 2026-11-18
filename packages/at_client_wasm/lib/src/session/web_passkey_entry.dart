@@ -32,12 +32,12 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
-/// lock too long, [IndexedDbException] when this browser's IndexedDB fails
-/// before this call activates the atSign, and the atServer's own errors when
-/// activation is refused. An [OnboardingIncompleteException] carries the
-/// pending onboarding to resume; when writing the device's passkey hints
-/// fails after this call activates the atSign, its cause is the
-/// [IndexedDbException].
+/// lock too long, [IndexedDbException] when a failure of this browser's
+/// IndexedDB stops the onboarding before it registers a passkey, and the
+/// atServer's own errors when activation is refused. An
+/// [OnboardingIncompleteException] carries the pending onboarding to resume;
+/// when writing the device's passkey hints fails after this call activates
+/// the atSign, its cause is an [IndexedDbException].
 /// A client that fails to open after the records are written ends the
 /// onboarding: its own error propagates, the IndexedDB store is closed and
 /// the atSign is ready for [passkeyLogin].
@@ -83,7 +83,8 @@ Future<AtClient> onboardNewAtSign(
 /// the restored public keys are not the published ones,
 /// [MissingAtKeysDocumentException] when the enrollment has no document,
 /// [SetupLockTimeoutException] when another tab holds the setup lock too long,
-/// and [IndexedDbException] when this browser's IndexedDB fails.
+/// and [IndexedDbException] when a failure of this browser's IndexedDB stops
+/// the login.
 ///
 /// A pending onboarding the atServer explicitly refuses is dropped and the
 /// login carries on; any other failure to resume it keeps its record.

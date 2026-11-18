@@ -493,10 +493,14 @@ void main() {
       db.createObjectStore('at_client_wasm_pending');
     }.toJS;
     final raw = await _settled(request) as IDBDatabase;
+    addTearDown(() => raw.close());
     final written = Completer<void>();
     final tx = raw.transaction('at_client_wasm_credentials'.toJS, 'readwrite');
     tx.oncomplete = (Event _) {
       written.complete();
+    }.toJS;
+    tx.onabort = (Event _) {
+      if (!written.isCompleted) written.completeError(StateError('put failed'));
     }.toJS;
     tx
         .objectStore('at_client_wasm_credentials')

@@ -171,6 +171,40 @@ void main() {
               'naming the error');
     }, timeout: const Timeout(Duration(seconds: 5)));
 
+    test(
+        'a transaction aborted with an error names that error, not the '
+        'AbortError of a request it cancelled', () async {
+      final raw = await _rawOpen(currentDbName!, 3, upgrade: (db) {
+        db.createObjectStore('at_client_wasm_credentials').createIndex(
+            'one_atsign_per_credential',
+            ''.toJS,
+            IDBIndexParameters(unique: true));
+        db.createObjectStore('at_client_wasm_enrollments');
+        db.createObjectStore('at_client_wasm_pending');
+      });
+      addTearDown(() => raw.close());
+      await _rawPut(raw, 'at_client_wasm_credentials', '@bob', [7]);
+      final quiet = JSObject()
+        ..setProperty(
+            'transaction'.toJS,
+            ((JSAny? stores, JSAny? mode) {
+              final tx = raw.transaction(stores!, (mode as JSString).toDart);
+              tx.addEventListener(
+                  'error',
+                  ((Event e) => e.stopPropagation()).toJS,
+                  AddEventListenerOptions(capture: true, once: true));
+              return tx;
+            }).toJS);
+      final store = IndexedDbHintStore.forDatabase(quiet as IDBDatabase);
+
+      await expectLater(
+          store.putHint('@alice', Uint8List.fromList([7]), 'eid-1'),
+          throwsA(isA<IndexedDbException>().having(
+              (e) => e.message, 'message', contains('ConstraintError'))),
+          reason: "the transaction's own error is named, not the AbortError "
+              'of the put it cancelled');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
     test('an open the browser refuses outright fails naming the error',
         () async {
       final factory = window.indexedDB as JSObject;

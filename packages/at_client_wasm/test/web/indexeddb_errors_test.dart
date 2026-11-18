@@ -55,13 +55,20 @@ Future<IDBDatabase> _rawOpen(String name, int version,
   return _settled<IDBDatabase>(request);
 }
 
-/// Puts [value] under [key] in [storeName] of [db] and waits for it to commit.
+/// Puts [value] under [key] in [storeName] of [db] and waits for it to commit,
+/// failing when the put does not.
 Future<void> _rawPut(
     IDBDatabase db, String storeName, String key, List<int> value) {
   final done = Completer<void>();
   final tx = db.transaction(storeName.toJS, 'readwrite');
   tx.oncomplete = (Event _) {
     done.complete();
+  }.toJS;
+  tx.onerror = (Event _) {
+    if (!done.isCompleted) done.completeError(StateError('put failed'));
+  }.toJS;
+  tx.onabort = (Event _) {
+    if (!done.isCompleted) done.completeError(StateError('put aborted'));
   }.toJS;
   tx.objectStore(storeName).put(Uint8List.fromList(value).toJS, key.toJS);
   return done.future;
@@ -109,6 +116,7 @@ void main() {
       db.createObjectStore('at_client_wasm_pending');
     });
     addTearDown(() => _deleteDb(_entryPointDb));
+    addTearDown(() => newer.close());
     await _rawPut(newer, 'at_client_wasm_credentials', _atSign, credentialId);
     await _rawPut(newer, 'at_client_wasm_enrollments', _atSign,
         utf8.encode('remembered-enrollment'));

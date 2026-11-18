@@ -95,12 +95,12 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
         }.toJS;
         request.onerror = (Event event) {
           if (opened.isCompleted) return;
-          final error = request.error;
-          if (version != null && error?.name == 'VersionError') {
+          final name = _errorName(() => request.error);
+          if (version != null && name == 'VersionError') {
             opened.complete(_openDatabase(dbName, null));
           } else {
-            opened.completeError(
-                IndexedDbException._naming('open failed', error));
+            opened
+                .completeError(IndexedDbException._naming('open failed', name));
           }
         }.toJS;
         request.onblocked = (Event event) {
@@ -301,12 +301,14 @@ Future<void> _transactionToFuture(IDBTransaction tx) {
   tx.onerror = (Event event) {
     if (completer.isCompleted) return;
     completer.completeError(IndexedDbException._naming(
-        'transaction failed', (event.target as IDBRequest?)?.error));
+        'transaction failed',
+        _errorName(() => tx.error) ??
+            _errorName(() => (event.target as IDBRequest?)?.error)));
   }.toJS;
   tx.onabort = (Event event) {
     if (completer.isCompleted) return;
-    completer.completeError(
-        IndexedDbException._naming('transaction aborted', tx.error));
+    completer.completeError(IndexedDbException._naming(
+        'transaction aborted', _errorName(() => tx.error)));
   }.toJS;
   return completer.future;
 }
@@ -319,15 +321,16 @@ Future<T> _guarded<T>(String operation, FutureOr<T> Function() body) async {
   } on IndexedDbException {
     rethrow;
   } on Object catch (e) {
-    throw IndexedDbException._naming('$operation failed', e);
+    throw IndexedDbException._naming('$operation failed', _errorName(() => e));
   }
 }
 
-/// The `name` of [error] when it is a JS error that has one, such as a
-/// `DOMException`'s.
-String? _errorName(Object? error) {
-  if (error == null) return null;
+/// The `name` of the JS error [read] returns, such as a `DOMException`'s, or
+/// null when it returns none or reading it throws.
+String? _errorName(Object? Function() read) {
   try {
+    final error = read();
+    if (error == null) return null;
     final name = (error as JSObject).getProperty<JSAny?>('name'.toJS);
     return name.isA<JSString>() ? (name as JSString).toDart : null;
   } on Object {
@@ -344,12 +347,9 @@ class IndexedDbException extends AtException {
   /// Creates the exception with [message].
   IndexedDbException(super.message);
 
-  /// [what] went wrong with the browser's [error].
-  IndexedDbException._naming(String what, Object? error)
-      : super(switch (_errorName(error)) {
-          final name? => '$what: $name',
-          null => what,
-        });
+  /// [what] went wrong, with the browser's error [name] when it gave one.
+  IndexedDbException._naming(String what, String? name)
+      : super(name == null ? what : '$what: $name');
 
   @override
   String toString() => 'IndexedDbException: $message';
