@@ -19,3 +19,13 @@ Feature: IndexedDB failures reach the app as AtExceptions
     When the app logs in to @alice🛠 with a passkey
     Then the device's passkey hints are read from that database
     And no version error is thrown
+
+  Scenario: A failed IndexedDB write of the passkey hints during onboarding reaches the app as an IndexedDbException, and a login then logs in
+    Given the onboarding of @alice🛠 has deleted its CRAM secret
+    And this origin's IndexedDB refuses the write of the passkey hints
+    When the onboarding writes the passkey hints
+    Then it throws an IndexedDbException that names the browser's error
+    And this browser holds no passkey hints for @alice🛠
+    When the app then logs in to @alice🛠 with the passkey
+    Then it is logged in as the onboarded enrollment
+    And the passkey hints are saved
