@@ -24,40 +24,178 @@ const _aliceRecord =
 const _bobSealed =
     'OuBPH3jARbJUY1QXfqI7/iOyZJaxBd03BlkkrMVVS2EpGWIa2hSQ90BIclc=';
 
+/// The @alice seal key (`at_auth/custody/kek/v1|@alice`) the derivation
+/// vectors give for the PRF output 0..31.
+const _aliceSealKey =
+    '926e411c042496d783b7c01687562cc76b11cfe6fd683ddeeb285b7adfab83ce';
+
 JSObject _params(Map<String, JSAny> fields) {
   final params = JSObject();
   fields.forEach((name, value) => params.setProperty(name.toJS, value));
   return params;
 }
 
+String _hex(List<int> b) =>
+    b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+
+bool _allZero(JSAny? buffer) {
+  final view = buffer.isA<JSArrayBuffer>()
+      ? (buffer as JSArrayBuffer).toDart.asUint8List()
+      : (buffer as JSUint8Array).toDart;
+  return view.every((b) => b == 0);
+}
+
+/// One `importKey` call seen by [_importSpy]: the key data it was handed, a
+/// copy of those bytes taken at the call, and the key it resolved to.
+class _Import {
+  _Import(this.data, this.bytesAtCall);
+
+  final JSAny? data;
+  final List<int> bytesAtCall;
+  CryptoKey? key;
+}
+
+/// A subtle that forwards `importKey`, `encrypt` and `decrypt` to the page's
+/// and records each `importKey` call in [calls].
+SubtleCrypto _importSpy(List<_Import> calls) {
+  final real = window.crypto.subtle as JSObject;
+  JSAny? forward(String method, List<JSAny?> args) =>
+      real.callMethodVarArgs<JSAny?>(method.toJS, args);
+  return (JSObject()
+    ..setProperty(
+        'importKey'.toJS,
+        ((JSAny? f, JSAny? d, JSAny? a, JSAny? e, JSAny? u) {
+          final call = _Import(d, List.of((d as JSUint8Array).toDart));
+          calls.add(call);
+          return (forward('importKey', [f, d, a, e, u]) as JSObject)
+              .callMethod<JSAny?>(
+                  'then'.toJS,
+                  ((JSAny? key) {
+                    call.key = key as CryptoKey;
+                    return key;
+                  }).toJS);
+        }).toJS)
+    ..setProperty('encrypt'.toJS,
+        ((JSAny? a, JSAny? k, JSAny? d) => forward('encrypt', [a, k, d])).toJS)
+    ..setProperty(
+        'decrypt'.toJS,
+        ((JSAny? a, JSAny? k, JSAny? d) => forward('decrypt', [a, k, d]))
+            .toJS)) as SubtleCrypto;
+}
+
+/// Catalogue: features/at_client_wasm/passkey_derivation.feature
 void main() {
   final deriver = WebCryptoKeyDeriver();
-  PrfSecret prf() => PrfSecret(Uint8List.fromList(List.generate(32, (i) => i)));
-  String hex(List<int> b) =>
-      b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+  Uint8List prfBytes() => Uint8List.fromList(List.generate(32, (i) => i));
+  PrfSecret prf() => PrfSecret(prfBytes());
   final iv = Uint8List.fromList(List.generate(12, (i) => i));
 
+  test("The browser's derivation matches the vectors", () async {
+    final alice = await deriver.derive(prf(), '@alice');
+    final bob = await deriver.derive(prf(), '@bob');
+    expect(alice.lookupHex,
+        '562dd8ceae1d04851c10847fea609250dc0c74d92af520a4ab96565bfea6c4b6',
+        reason: 'the @alice lookup id vector');
+    expect(alice.ns,
+        '10781e72da94f814194f90c4c40d75d7b0b029d06253d40a610b0ad977b2d620',
+        reason: 'the @alice namespace vector');
+    expect(_hex(alice.authSeed),
+        'b0e85850ef5407a914408bc6ccdc6a32baeb6446127275414199179a2cf79fc6',
+        reason: 'the @alice auth seed vector');
+    expect(bob.lookupHex,
+        'ac8dabc6a3f6c618517f650bf7de7f34d1f8bc604c100768d9e3418aaa56b5fb',
+        reason: 'the @bob lookup id vector');
+    expect(bob.ns,
+        '50e50b134d591ebbf53d1ebe9d8cbde9654259659520783786cc298dea3f7e07',
+        reason: 'the @bob namespace vector');
+
+    final record = jsonDecode(_aliceRecord) as Map<String, dynamic>;
+    final aad = utf8.encode(jsonEncode({
+      'alg': 'A256GCM',
+      'iv': record['iv'],
+      'kdf': 'HKDF-SHA256',
+      'typ': 'atkeys',
+      'v': 2
+    }));
+    Future<String> opened(Future<Uint8List> open) =>
+        open.then((plain) => utf8.decode(plain),
+            onError: (Object e) => 'refused: $e');
+    final alicePlain = await opened(
+        alice.sealer.open(iv, base64Decode(record['ct'] as String), aad));
+    expect(alicePlain, contains('"selfEncryptionKey":"self"'),
+        reason: 'the @alice record vector opens with the derived seal key');
+    final bobPlain = await opened(
+        bob.sealer.open(iv, base64Decode(_bobSealed), utf8.encode('aad')));
+    expect(bobPlain, '{"selfEncryptionKey":"self"}',
+        reason: 'the @bob sealed vector opens with the derived seal key');
+  });
+
+  test("The seal key can't be exported once derived", () async {
+    final calls = <_Import>[];
+    final alice = await WebCryptoKeyDeriver(subtle: _importSpy(calls))
+        .derive(prf(), '@alice');
+    expect(calls, hasLength(1),
+        reason: 'the seal key is the one key the deriver imports');
+    final key = calls.single.key!;
+    final real = window.crypto.subtle;
+
+    final sealed =
+        await alice.sealer.seal(iv, utf8.encode('hello'), utf8.encode('a'));
+    final opened = await real
+        .decrypt(
+            _params({
+              'name': 'AES-GCM'.toJS,
+              'iv': Uint8List.fromList(iv).toJS,
+              'additionalData': utf8.encode('a').toJS,
+              'tagLength': 128.toJS,
+            }),
+            key,
+            sealed.toJS)
+        .toDart as JSArrayBuffer;
+    expect(utf8.decode(opened.toDart.asUint8List()), 'hello',
+        reason: 'the imported key is the one the sealer seals with');
+
+    for (final format in ['raw', 'jwk']) {
+      Object? refusal;
+      try {
+        await real.exportKey(format, key).toDart;
+      } catch (e) {
+        refusal = e;
+      }
+      expect(refusal, isNotNull,
+          reason: 'exportKey($format) of the seal key must be refused');
+      expect(domExceptionName(refusal!), 'InvalidAccessError',
+          reason: 'exportKey($format) is refused because the key is '
+              'not extractable');
+    }
+    expect(key.extractable, isFalse,
+        reason: 'the seal key must be imported non-extractable');
+    expect(
+        (key.usages as JSArray<JSString>).toDart.map((u) => u.toDart).toList(),
+        unorderedEquals(['encrypt', 'decrypt']),
+        reason: "the seal key's only usages are encrypt and decrypt");
+    final algorithm = key.algorithm;
+    expect(algorithm.getProperty<JSString>('name'.toJS).toDart, 'AES-GCM',
+        reason: 'the seal key is an AES-GCM key');
+    expect(algorithm.getProperty<JSNumber>('length'.toJS).toDartInt, 256,
+        reason: 'the seal key is 256 bits');
+  });
+
+  test("The seal key's bytes are overwritten once imported", () async {
+    final calls = <_Import>[];
+    await WebCryptoKeyDeriver(subtle: _importSpy(calls))
+        .derive(prf(), '@alice');
+    expect(calls, hasLength(1),
+        reason: 'the seal key is the one key the deriver imports');
+    expect(_hex(calls.single.bytesAtCall), _aliceSealKey,
+        reason: 'the bytes handed to importKey are the @alice seal key of '
+            'the derivation vectors');
+    expect(_allZero(calls.single.data), isTrue,
+        reason: 'the seal key bytes handed to WebCrypto must be zeroes once '
+            'imported');
+  });
+
   group('WebCryptoKeyDeriver', () {
-    test('lookupHex and ns match the pinned vectors for @alice and @bob',
-        () async {
-      final alice = await deriver.derive(prf(), '@alice');
-      final bob = await deriver.derive(prf(), '@bob');
-      expect(alice.lookupHex,
-          '562dd8ceae1d04851c10847fea609250dc0c74d92af520a4ab96565bfea6c4b6');
-      expect(alice.ns,
-          '10781e72da94f814194f90c4c40d75d7b0b029d06253d40a610b0ad977b2d620');
-      expect(bob.lookupHex,
-          'ac8dabc6a3f6c618517f650bf7de7f34d1f8bc604c100768d9e3418aaa56b5fb');
-      expect(bob.ns,
-          '50e50b134d591ebbf53d1ebe9d8cbde9654259659520783786cc298dea3f7e07');
-    });
-
-    test('the auth seed matches the pinned vector for @alice', () async {
-      final alice = await deriver.derive(prf(), '@alice');
-      expect(hex(alice.authSeed),
-          'b0e85850ef5407a914408bc6ccdc6a32baeb6446127275414199179a2cf79fc6');
-    });
-
     test('every spelling of the atSign derives the same values', () async {
       final canonical = await deriver.derive(prf(), '@alice');
       final variant = await deriver.derive(prf(), 'ALICE');
@@ -67,42 +205,24 @@ void main() {
     });
 
     test('the PRF bytes are zeroed once derived', () async {
-      final secret = prf();
-      await deriver.derive(secret, '@alice');
-      expect(secret.output, everyElement(0));
+      final bytes = prfBytes();
+      await deriver.derive(PrfSecret(bytes), '@alice');
+      expect(bytes, everyElement(0),
+          reason: 'the PRF bytes must be zeroes once derived');
     });
 
     test('the PRF bytes are zeroed when the atSign is invalid', () async {
-      final secret = prf();
-      await expectLater(deriver.derive(secret, '@al ice'),
+      final bytes = prfBytes();
+      await expectLater(deriver.derive(PrfSecret(bytes), '@al ice'),
           throwsA(isA<InvalidAtSignException>()));
-      expect(secret.output, everyElement(0),
+      expect(bytes, everyElement(0),
           reason: 'an invalid atSign must not leave the PRF bytes unwiped');
     });
 
-    test('the sealer opens a record sealed by a raw-bytes sealer', () async {
+    test('the @alice sealer does not open a @bob record', () async {
       final alice = await deriver.derive(prf(), '@alice');
-      final record = jsonDecode(_aliceRecord) as Map<String, dynamic>;
-      final aad = utf8.encode(jsonEncode({
-        'alg': 'A256GCM',
-        'iv': record['iv'],
-        'kdf': 'HKDF-SHA256',
-        'typ': 'atkeys',
-        'v': 2
-      }));
-      final plain = await alice.sealer
-          .open(iv, base64Decode(record['ct'] as String), aad);
-      expect(jsonDecode(utf8.decode(plain))['selfEncryptionKey'], 'self');
-    });
-
-    test('the @bob sealer opens a @bob record and the @alice sealer does not',
-        () async {
-      final alice = await deriver.derive(prf(), '@alice');
-      final bob = await deriver.derive(prf(), '@bob');
-      final aad = utf8.encode('aad');
-      final plain = await bob.sealer.open(iv, base64Decode(_bobSealed), aad);
-      expect(utf8.decode(plain), '{"selfEncryptionKey":"self"}');
-      await expectLater(alice.sealer.open(iv, base64Decode(_bobSealed), aad),
+      await expectLater(
+          alice.sealer.open(iv, base64Decode(_bobSealed), utf8.encode('aad')),
           throwsA(isA<PasskeyRecordAuthenticationException>()));
     });
 
@@ -115,113 +235,33 @@ void main() {
     });
   });
 
-  group('the derived sealing key', () {
-    test(
-        'is not extractable, carries exactly encrypt and decrypt, and cannot '
-        'be exported', () async {
-      final real = window.crypto.subtle;
-      final keys = <CryptoKey>[];
-      JSAny? forward(String name, List<JSAny?> args) =>
-          (real as JSObject).callMethodVarArgs<JSAny?>(name.toJS, args);
-      final spy = JSObject()
-        ..setProperty(
-            'importKey'.toJS,
-            ((JSAny? f, JSAny? d, JSAny? a, JSAny? e, JSAny? u) =>
-                forward('importKey', [f, d, a, e, u])).toJS)
-        ..setProperty(
-            'deriveBits'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? l) => forward('deriveBits', [a, k, l]))
-                .toJS)
-        ..setProperty(
-            'deriveKey'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? t, JSAny? e, JSAny? u) =>
-                (forward('deriveKey', [a, k, t, e, u]) as JSPromise)
-                    .toDart
-                    .then((key) {
-                  keys.add(key as CryptoKey);
-                  return key;
-                }).toJS).toJS);
-      await WebCryptoKeyDeriver(subtle: spy as SubtleCrypto)
-          .derive(prf(), '@alice');
-
-      expect(keys, hasLength(1));
-      final key = keys.single;
-      expect(key.extractable, isFalse);
-      expect(
-          (key.usages as JSArray<JSString>).toDart.map((u) => u.toDart).toSet(),
-          {'encrypt', 'decrypt'});
-      expect((key.usages as JSArray<JSString>).length, 2);
-      await expectLater(real.exportKey('raw', key).toDart, throwsA(anything));
-    });
-  });
-
-  group('the HKDF master key', () {
-    test('is imported as non-extractable and cannot be exported', () async {
-      final real = window.crypto.subtle;
-      final imports = <({String format, JSAny? extractable, CryptoKey key})>[];
-      JSAny? forward(String name, List<JSAny?> args) =>
-          (real as JSObject).callMethodVarArgs<JSAny?>(name.toJS, args);
-      final spy = JSObject()
-        ..setProperty(
-            'importKey'.toJS,
-            ((JSAny? f, JSAny? d, JSAny? a, JSAny? e, JSAny? u) =>
-                (forward('importKey', [f, d, a, e, u]) as JSPromise)
-                    .toDart
-                    .then((key) {
-                  imports.add((
-                    format: (f as JSString).toDart,
-                    extractable: e,
-                    key: key as CryptoKey
-                  ));
-                  return key;
-                }).toJS).toJS)
-        ..setProperty(
-            'deriveBits'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? l) => forward('deriveBits', [a, k, l]))
-                .toJS)
-        ..setProperty(
-            'deriveKey'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? t, JSAny? e, JSAny? u) =>
-                forward('deriveKey', [a, k, t, e, u])).toJS);
-      await WebCryptoKeyDeriver(subtle: spy as SubtleCrypto)
-          .derive(prf(), '@alice');
-
-      expect(imports, hasLength(1));
-      expect(imports.single.format, 'raw');
-      expect((imports.single.extractable as JSBoolean).toDart, isFalse);
-      expect(imports.single.key.extractable, isFalse);
-      await expectLater(
-          real.exportKey('raw', imports.single.key).toDart, throwsA(anything));
+  group('WebCryptoRecordSealer.importKey', () {
+    test('overwrites the key bytes it was given once imported', () async {
+      final keyBytes = Uint8List.fromList(List.generate(32, (i) => i + 1));
+      final calls = <_Import>[];
+      await WebCryptoRecordSealer.importKey(_importSpy(calls), keyBytes);
+      expect(keyBytes, everyElement(0),
+          reason: 'the Dart key bytes must be zeroes once imported');
+      expect(_allZero(calls.single.data), isTrue,
+          reason: 'the JS key bytes must be zeroes once imported');
     });
 
-    test('the sealing key cannot be exported as a JWK', () async {
-      final keys = <CryptoKey>[];
-      final real = window.crypto.subtle;
-      final spy = JSObject()
-        ..setProperty(
-            'importKey'.toJS,
-            ((JSAny? f, JSAny? d, JSAny? a, JSAny? e, JSAny? u) =>
-                (real as JSObject).callMethodVarArgs<JSAny?>(
-                    'importKey'.toJS, [f, d, a, e, u])).toJS)
-        ..setProperty(
-            'deriveBits'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? l) => (real as JSObject)
-                .callMethodVarArgs<JSAny?>('deriveBits'.toJS, [a, k, l])).toJS)
-        ..setProperty(
-            'deriveKey'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? t, JSAny? e, JSAny? u) =>
-                ((real as JSObject).callMethodVarArgs<JSAny?>(
-                        'deriveKey'.toJS, [a, k, t, e, u]) as JSPromise)
-                    .toDart
-                    .then((key) {
-                  keys.add(key as CryptoKey);
-                  return key;
-                }).toJS).toJS);
-      await WebCryptoKeyDeriver(subtle: spy as SubtleCrypto)
-          .derive(prf(), '@alice');
-
-      await expectLater(
-          real.exportKey('jwk', keys.single).toDart, throwsA(anything));
+    test('overwrites the key bytes it was given when the import fails',
+        () async {
+      final keyBytes = Uint8List.fromList(List.generate(31, (i) => i + 1));
+      final calls = <_Import>[];
+      Object? refusal;
+      try {
+        await WebCryptoRecordSealer.importKey(_importSpy(calls), keyBytes);
+      } catch (e) {
+        refusal = e;
+      }
+      expect(domExceptionName(refusal ?? Object()), 'DataError',
+          reason: 'WebCrypto refuses a 31-byte AES key');
+      expect(keyBytes, everyElement(0),
+          reason: 'the Dart key bytes must be zeroes after a failed import');
+      expect(_allZero(calls.single.data), isTrue,
+          reason: 'the JS key bytes must be zeroes after a failed import');
     });
   });
 
@@ -254,74 +294,6 @@ void main() {
                 }).toJS).toJS)) as SubtleCrypto;
     }
 
-    bool allZero(JSAny? buffer) {
-      final view = buffer.isA<JSArrayBuffer>()
-          ? (buffer as JSArrayBuffer).toDart.asUint8List()
-          : (buffer as JSUint8Array).toDart;
-      return view.every((b) => b == 0);
-    }
-
-    test('every buffer deriveBits returns is zeroed once copied', () async {
-      final real = window.crypto.subtle as JSObject;
-      final results = <JSAny?>[];
-      final spy = JSObject()
-        ..setProperty(
-            'importKey'.toJS,
-            ((JSAny? f, JSAny? d, JSAny? a, JSAny? e, JSAny? u) => real
-                .callMethodVarArgs<JSAny?>(
-                    'importKey'.toJS, [f, d, a, e, u])).toJS)
-        ..setProperty(
-            'deriveKey'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? t, JSAny? e, JSAny? u) => real
-                .callMethodVarArgs<JSAny?>(
-                    'deriveKey'.toJS, [a, k, t, e, u])).toJS)
-        ..setProperty(
-            'deriveBits'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? l) =>
-                (real.callMethodVarArgs<JSAny?>('deriveBits'.toJS, [a, k, l])
-                        as JSPromise)
-                    .toDart
-                    .then((r) {
-                  results.add(r);
-                  return r;
-                }).toJS).toJS);
-      await WebCryptoKeyDeriver(subtle: spy as SubtleCrypto)
-          .derive(prf(), '@alice');
-
-      expect(results, hasLength(3));
-      for (final buffer in results) {
-        expect(allZero(buffer), isTrue);
-      }
-    });
-
-    test('the PRF bytes handed to importKey are zeroed once imported',
-        () async {
-      final real = window.crypto.subtle as JSObject;
-      JSAny? given;
-      final spy = JSObject()
-        ..setProperty(
-            'importKey'.toJS,
-            ((JSAny? f, JSAny? d, JSAny? a, JSAny? e, JSAny? u) {
-              given = d;
-              return real
-                  .callMethodVarArgs<JSAny?>('importKey'.toJS, [f, d, a, e, u]);
-            }).toJS)
-        ..setProperty(
-            'deriveBits'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? l) => real
-                .callMethodVarArgs<JSAny?>('deriveBits'.toJS, [a, k, l])).toJS)
-        ..setProperty(
-            'deriveKey'.toJS,
-            ((JSAny? a, JSAny? k, JSAny? t, JSAny? e, JSAny? u) => real
-                .callMethodVarArgs<JSAny?>(
-                    'deriveKey'.toJS, [a, k, t, e, u])).toJS);
-      await WebCryptoKeyDeriver(subtle: spy as SubtleCrypto)
-          .derive(prf(), '@alice');
-
-      expect(given, isNotNull);
-      expect(allZero(given), isTrue);
-    });
-
     test('the plaintext given to encrypt is zeroed once sealed', () async {
       JSAny? given;
       final s = WebCryptoRecordSealer(
@@ -329,7 +301,7 @@ void main() {
       await s.seal(iv, utf8.encode('secret'), utf8.encode('a'));
 
       expect(given, isNotNull);
-      expect(allZero(given), isTrue);
+      expect(_allZero(given), isTrue);
     });
 
     test('the plaintext decrypt returns is zeroed once opened', () async {
@@ -343,7 +315,7 @@ void main() {
 
       expect(utf8.decode(plain), 'secret');
       expect(returned, isNotNull);
-      expect(allZero(returned), isTrue);
+      expect(_allZero(returned), isTrue);
     });
   });
 
