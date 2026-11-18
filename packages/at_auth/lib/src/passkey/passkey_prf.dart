@@ -45,10 +45,13 @@ class PasskeyPrf {
   /// and the PRF output of an assertion with it.
   ///
   /// Throws [PrfUnavailableException] before any ceremony when PRF is known
-  /// to be unsupported, and after both ceremonies when no PRF output came
-  /// back. A miss is recorded only when the create ceremony did not report PRF
-  /// enabled and the assertion returned no PRF output; a failed ceremony
-  /// records nothing.
+  /// to be unsupported, and after both ceremonies when the PRF output that
+  /// came back is missing, not 32 bytes, or all zeroes. When the assertion
+  /// after a successful create throws or yields no usable PRF output, the
+  /// created passkey is reported through [signalUnknownCredential] before the
+  /// failure propagates. A miss is recorded only when the create ceremony did
+  /// not report PRF enabled and the assertion returned no PRF output; a failed
+  /// ceremony records nothing.
   Future<PasskeyRegistration> register(String atSign,
       {required DateTime enrolledAt, required String deviceName}) async {
     await prfSupport?.require();
@@ -56,15 +59,20 @@ class PasskeyPrf {
         atSign: atSign.toAtsign(),
         enrolledAt: enrolledAt,
         deviceName: deviceName);
-    final assertion = await port.get(
-        evalInput: recordPrfSalt(), allowCredential: creation.credentialId);
-    if (assertion.prfFirst == null && creation.prfEnabled != true) {
-      prfSupport?.recordMiss();
+    try {
+      final assertion = await port.get(
+          evalInput: recordPrfSalt(), allowCredential: creation.credentialId);
+      if (assertion.prfFirst == null && creation.prfEnabled != true) {
+        prfSupport?.recordMiss();
+      }
+      return (
+        credentialId: creation.credentialId,
+        secret: _secretFrom(assertion.prfFirst)
+      );
+    } on Object {
+      await signalUnknownCredential(creation.credentialId);
+      rethrow;
     }
-    return (
-      credentialId: creation.credentialId,
-      secret: _secretFrom(assertion.prfFirst)
-    );
   }
 
   /// Asserts and returns the PRF output; [credentialId] narrows the allowed
