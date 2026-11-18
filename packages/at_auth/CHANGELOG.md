@@ -1,6 +1,6 @@
 ## 4.1.0-rc.1
 
-- fix: passkey registration and unlock refuse a PRF output that is missing, the wrong length or all zeroes, with `PrfUnavailableException` and the one message "The authenticator did not return a usable PRF result". A passkey that registration created but could not use is reported to the platform as unknown, without delaying the error.
+- fix: passkey registration and unlock refuse a PRF output that is missing, the wrong length or all zeroes, with `PrfUnavailableException` and the one message "The authenticator did not return a usable PRF result". A passkey that registration created but could not use is reported to the platform as unknown where the port supports it, without delaying the error.
 - fix: `PrfSecret(...)` throws `ArgumentError` for 32 zero bytes, and `PrfSecret.output` throws `StateError` once `wipe()` has run.
 - fix: `prfUnsupportedMessage` now reads "This platform or authenticator does not support passkey PRF. Use one that does." and no longer names the browser.
 - feat: `passkeyDisplayName` and `passkeyDisplayNameMaxBytes` in `package:at_auth/passkey.dart` give every platform one display name for a passkey: the enrollment time in UTC to the minute, then the device name, within 64 UTF-8 bytes.
