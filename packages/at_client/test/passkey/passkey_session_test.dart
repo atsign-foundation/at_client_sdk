@@ -229,6 +229,20 @@ void main() {
     expect(rig.client.stops, 1);
   });
 
+  test('a client stop that never ends keeps the vault open only to the bound',
+      () async {
+    PasskeySession(rig.client, rig.store, rig.vault,
+        settleWithin: const Duration(milliseconds: 100));
+    rig.client.onStop = () => Completer<void>().future;
+
+    unawaited(rig.client.stop());
+    await pumpEventQueue();
+    expect(await rig.vaultOpen(), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    await rig.expectVaultClosed();
+  });
+
   test('a session over a client already stopped closes its vault at once',
       () async {
     await rig.client.stop();

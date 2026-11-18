@@ -13,13 +13,13 @@ import 'at_server_at_keys_io.dart';
 /// The session closes the store and then the vault once the client has
 /// stopped, whether through [stop] or by the client's own `stop()`. It learns
 /// of a stop from the client's connection changes ending, which they do as
-/// the stop begins, and then waits for that stop to finish and, up to its
-/// bound, for a @keys write already queued on the store to end.
+/// the stop begins, and then waits, up to its bound, for that stop to finish
+/// and for a @keys write already queued on the store to end.
 class PasskeySession {
   /// The session of [client], running on [store], which seals with [vault].
   ///
-  /// [settleWithin] bounds the wait for a queued @keys write once the client
-  /// has stopped; the vault then closes under a write still running.
+  /// [settleWithin] bounds the wait for the client's stop and a queued @keys
+  /// write to end; the vault then closes under whatever is still running.
   PasskeySession(this.client, AtServerAtKeysIo store, PasskeyVault vault,
       {Duration settleWithin = defaultSettleWithin})
       : _store = store,
@@ -28,8 +28,8 @@ class PasskeySession {
     _changes = client.connection.changes.listen(null, onDone: _releaseQuietly);
   }
 
-  /// How long a session waits by default for a queued @keys write once its
-  /// client has stopped.
+  /// How long a session waits by default for its client's stop and a queued
+  /// @keys write to end.
   static const defaultSettleWithin = Duration(seconds: 10);
 
   static final _logger = AtSignLogger('PasskeySession');
@@ -73,14 +73,16 @@ class PasskeySession {
 
   Future<void> _releaseOnce() async {
     unawaited(_changes.cancel());
-    // NOTE: a client's stop is shared, so this waits for the stop in flight.
-    await client.stop().then((_) {}, onError: (Object _) {});
     try {
-      await _store.settled.timeout(_settleWithin);
+      // NOTE: a client's stop is shared, so this waits for the stop in flight.
+      await Future.wait([
+        client.stop().then((_) {}, onError: (Object _) {}),
+        _store.settled,
+      ]).timeout(_settleWithin);
     } on TimeoutException {
-      _logger.warning('a @keys write was still running '
-          '${_settleWithin.inMilliseconds} ms after the client stopped; the '
-          'passkey vault closes under it');
+      _logger.warning('the client\'s stop or a @keys write was still running '
+          '${_settleWithin.inMilliseconds} ms after the client began to stop; '
+          'the passkey vault closes under it');
     }
     try {
       _store.close();
