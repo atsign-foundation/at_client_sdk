@@ -56,6 +56,11 @@ Feature: Every authenticating from: names the program and the SDK that sent it
     When it authenticates with CRAM, then PKAM, and when it enrolls
     Then each from: command's clientConfig has appName "at_activate", appVersion at_client_cli's version, sdkName "atsign.dart.at_client" and sdkVersion at_client's version
 
+  Scenario: a program running at_activate under its own name with no version is sent as unknown
+    Given a program that runs AtActivate.main with program "my_tool" and no programVersion
+    When it onboards an atSign
+    Then each from: command's clientConfig has appName "my_tool" and appVersion "unknown"
+
   Scenario: a program using at_auth alone is named after at_auth
     Given a program that onboards through at_auth and passes no client config
     When at_auth authenticates

@@ -103,8 +103,9 @@ void deleteStorage() {
 
 /// Runs at_activate with [arguments] as [program] at [programVersion], the
 /// app its clients name on every `from:` they send to authenticate, and
-/// answers its exit code; at_client_cli's version when [programVersion] is
-/// null.
+/// answers its exit code. With no [programVersion], at_activate and
+/// at_register name at_client_cli's version and any other program names
+/// `unknown`.
 Future<int> main(List<String> arguments,
     {String program = commandNamespace, String? programVersion}) async {
   AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
@@ -1485,15 +1486,21 @@ class EnrollerSettings {
 /// kept for, and the app they name to their atServer.
 const String commandNamespace = 'at_activate';
 
-/// [preference], naming [program] at [version] as the app on every `from:`
-/// its clients send to authenticate; at at_client_cli's version when
-/// [version] is null.
+/// The programs at_client_cli ships, which name its version when given none.
+const Set<String> _ownPrograms = {commandNamespace, 'at_register'};
+
+/// Changes [preference] to name [program] at [version] as the app on every
+/// `from:` its clients send to authenticate, and returns it.
+///
+/// With no [version], at_activate and at_register name at_client_cli's
+/// version, and any other program names none, so `unknown` is sent.
 @visibleForTesting
 AtClientPreference namedAs(
         String program, String? version, AtClientPreference preference) =>
     preference
       ..atClientParticulars.appName = program
-      ..atClientParticulars.appVersion = version ?? packageVersion;
+      ..atClientParticulars.appVersion =
+          version ?? (_ownPrograms.contains(program) ? packageVersion : null);
 
 /// The atDirectory [preference] names, asked over TLS.
 SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
