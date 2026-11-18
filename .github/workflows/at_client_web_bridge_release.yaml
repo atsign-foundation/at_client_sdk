@@ -1,0 +1,72 @@
+name: at_client_web_bridge_release
+
+# Builds the dart2js bridge (at_client_web.js) from the workspace and attaches it,
+# with its sha256 and a build provenance attestation, to a prerelease named
+# at_client_web-bridge-<sha12>. It is started by hand (workflow_dispatch) from
+# trunk; nothing triggers it automatically.
+# Two jobs: `build` runs the toolchain with read-only permissions and uploads the
+# bundle; `release` has the write scopes, takes no checkout or toolchain, verifies
+# the checksum, attests the bundle and creates the prerelease.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG_PREFIX: at_client_web-bridge-
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Skip when the release exists
+        id: tag
+        run: |
+          tag="${TAG_PREFIX}${GITHUB_SHA::12}"
+          echo "name=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./actions/setup-flutter-and-dart
+        if: steps.tag.outputs.exists != 'true'
+
+      - name: Build the bridge bundle
+        if: steps.tag.outputs.exists != 'true'
+        run: |
+          cp packages/at_client_wasm/dart-workspace.lock pubspec.lock
+          cd packages/at_client_wasm
+          dart pub get --enforce-lockfile
+          tool/build.sh at_client_web_entry
+
+      - name: Write the checksum
+        if: steps.tag.outputs.exists != 'true'
+        working-directory: packages/at_client_wasm/build
+        run: sha256sum at_client_web.js > at_client_web.js.sha256
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: steps.tag.outputs.exists != 'true'
+        with:
+          subject-path: packages/at_client_wasm/build/at_client_web.js
+
+      - name: Create the prerelease
+        if: steps.tag.outputs.exists != 'true'
+        working-directory: packages/at_client_wasm/build
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          gh release create "$TAG" at_client_web.js at_client_web.js.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "at_client_web bridge ${GITHUB_SHA::12}" \
+            --notes "dart2js bridge bundle built from commit ${GITHUB_SHA}. Verify with at_client_web.js.sha256 and the build provenance attestation."
