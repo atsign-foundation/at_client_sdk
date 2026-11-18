@@ -721,9 +721,11 @@ void main() {
       await seedRecord(_base());
       final io = await open();
       expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
+      expect(io.holdsPrivateKey, isTrue);
 
       io.close();
 
+      expect(io.holdsPrivateKey, isFalse);
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
@@ -752,11 +754,13 @@ void main() {
           expectLater(queued, throwsA(isA<AtServerAtKeysWriteException>()));
 
       io.close();
+      expect(io.holdsPrivateKey, isTrue);
       server.holdUpdate!.complete();
 
       await running;
       await queuedOutcome;
       expect(server.updates, hasLength(1));
+      expect(io.holdsPrivateKey, isFalse);
       await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 

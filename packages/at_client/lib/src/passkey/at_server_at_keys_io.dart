@@ -7,6 +7,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/src/client/server_mutex.dart';
 import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:at_commons/atsign.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 import 'at_keys_document.dart';
 import 'enrollment_document_store.dart';
@@ -212,6 +213,12 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
     _cache = null;
     if (_pending == 0) _release();
   }
+
+  /// Whether any byte of the APKAM private key this store holds is non-zero.
+  /// Reveals nothing about the key; tests use it to observe that [close]
+  /// wipes it.
+  @visibleForTesting
+  bool get holdsPrivateKey => _private.any((b) => b != 0);
 
   void _release() {
     if (_released) return;
