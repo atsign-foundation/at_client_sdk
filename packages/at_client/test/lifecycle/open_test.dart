@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart' show AtAuthErrorReplyException;
 import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
@@ -115,8 +116,9 @@ void main() {
       'a refusal on a device that has never been online throws, and leaves '
       'nothing behind', () async {
     const atSign = '@refusedfirst';
-    final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
-        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+    final revoked = lookUpAnswering(() async => throw AtAuthErrorReplyException(
+        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked',
+        errorCode: 'AT0027'));
 
     await expectLater(
         () async => Atsign(atSign).open(
@@ -171,8 +173,9 @@ void main() {
     expect(first.connection.current.isOnline, isTrue);
     await first.stop();
 
-    final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
-        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+    final revoked = lookUpAnswering(() async => throw AtAuthErrorReplyException(
+        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked',
+        errorCode: 'AT0027'));
     final second = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
@@ -217,8 +220,9 @@ void main() {
     }
 
     MockAtLookupImpl revoked(String atSign) =>
-        lookUpAnswering(() async => throw UnAuthenticatedException(
-            'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+        lookUpAnswering(() async => throw AtAuthErrorReplyException(
+            'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked',
+            errorCode: 'AT0027'));
 
     test('comes back as a client in the refused state, and is marked',
         () async {
@@ -403,9 +407,10 @@ void main() {
     var attempts = 0;
     final lookUp = lookUpAnswering(() async {
       attempts++;
-      throw UnAuthenticatedException(
+      throw AtAuthErrorReplyException(
           'Failed connecting to $atSign. error:AT0401:Client authentication '
-          'failed');
+          'failed',
+          errorCode: 'AT0401');
     });
     // Built below open, which would refuse a first open the atServer turns
     // away; the wait is what is under test.

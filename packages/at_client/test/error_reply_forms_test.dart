@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart'
+    show AtAuthErrorReplyException, authenticatorFor;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -80,11 +82,29 @@ void main() {
 
           test(
               'when a verb connection is refused with $code, then the failure '
-              'is classified as ${cause.name}', () {
-            final failure = AtLookUpException('AT0401',
-                'Exception: Failed connecting to $atSign. ${refusal(code, pkamRefused)}');
+              'is classified as ${cause.name}', () async {
+            final server =
+                FakeAtServer(atSign: atSign, runsClientAuthenticator: true)
+                  ..refuseClientAuth = (_) => refusal(code, pkamRefused);
+            final lookUp = server.lookUps(
+                atSign: atSign,
+                rootDomain: const AtRootDomain('127.0.0.1', 64),
+                authenticator: authenticatorFor(keys, atSign));
+            addTearDown(lookUp.close);
 
-            expect(classifyConnectionFailure(failure)?.cause, cause);
+            final failure = await lookUp
+                .executeVerb(LLookupVerbBuilder()
+                  ..atKey = (AtKey()
+                    ..key = 'phone'
+                    ..sharedBy = atSign))
+                .then<Object?>((_) => null, onError: (Object e) => e);
+
+            expect(
+                failure,
+                isA<AtLookUpException>().having(
+                    (e) => e.cause, 'cause', isA<AtAuthErrorReplyException>()),
+                reason: 'the control: executeVerb wrapped the refusal');
+            expect(classifyConnectionFailure(failure!)?.cause, cause);
           });
         });
 

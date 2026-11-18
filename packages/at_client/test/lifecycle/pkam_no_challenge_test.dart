@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_auth/at_auth.dart' show AtAuthErrorReplyException;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookUpException;
@@ -183,9 +184,10 @@ void main() {
 
   group('Given a refusal whose text quotes a refusal to sign a challenge', () {
     test('when it is classified, then it is read by its code', () {
-      final failure = UnAuthenticatedException(
+      final failure = AtAuthErrorReplyException(
           'Failed connecting to $atSign. error:AT0027:Refusing to sign a '
-          'malformed from: challenge for $atSign');
+          'malformed from: challenge for $atSign',
+          errorCode: 'AT0027');
 
       final state = classifyConnectionFailure(failure);
 

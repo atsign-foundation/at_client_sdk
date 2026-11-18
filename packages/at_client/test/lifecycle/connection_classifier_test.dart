@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_auth/at_auth.dart' show AtAuthErrorReplyException;
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
@@ -46,27 +47,27 @@ void main() {
   group('a refusal is read from the atServer\'s code', () {
     test('typed, as the authenticator raises it', () {
       expectClassified(
-          UnAuthenticatedException(revokedText),
+          AtAuthErrorReplyException(revokedText, errorCode: 'AT0027'),
           AtConnectionOutcome.refused,
           AtConnectionCause.revoked,
           'AT0027 is a revoked enrollment');
       expectClassified(
-          UnAuthenticatedException(unauthenticatedText),
+          AtAuthErrorReplyException(unauthenticatedText, errorCode: 'AT0401'),
           AtConnectionOutcome.refused,
           AtConnectionCause.unauthenticated,
           'AT0401 is a credential that did not authenticate');
       expectClassified(
-          UnAuthenticatedException(expiredText),
+          AtAuthErrorReplyException(expiredText, errorCode: 'AT0029'),
           AtConnectionOutcome.refused,
           AtConnectionCause.invalidEnrollment,
           'AT0029 is an expired enrollment');
       expectClassified(
-          UnAuthenticatedException(deniedText),
+          AtAuthErrorReplyException(deniedText, errorCode: 'AT0025'),
           AtConnectionOutcome.refused,
           AtConnectionCause.enrollmentDenied,
           'AT0025 is a denied enrollment');
       expectClassified(
-          UnAuthenticatedException(pendingText),
+          AtAuthErrorReplyException(pendingText, errorCode: 'AT0026'),
           AtConnectionOutcome.refused,
           AtConnectionCause.enrollmentNotApproved,
           'AT0026 is an enrollment not yet approved');
@@ -78,18 +79,43 @@ void main() {
     });
 
     test(
-        'wrapped by executeVerb, whose code names the type and whose message '
-        'keeps the atServer\'s finer one', () {
+        'Given a PKAM refusal, when executeVerb wraps it, then the classifier '
+        'reads the code from what it wrapped', () {
+      expectClassified(
+          AtLookUpException('AT0401', 'Exception: $revokedText',
+              cause:
+                  AtAuthErrorReplyException(revokedText, errorCode: 'AT0027')),
+          AtConnectionOutcome.refused,
+          AtConnectionCause.revoked,
+          'the wrapped refusal\'s AT0027 outranks the wrapper\'s AT0401');
+      expectClassified(
+          AtLookUpException('AT0401', 'Exception: Auth failed',
+              cause: UnAuthenticatedException('Auth failed')),
+          AtConnectionOutcome.refused,
+          AtConnectionCause.unauthenticated,
+          'with no code in what it wrapped the refusal stands');
+    });
+
+    test(
+        'Given an exception whose message merely contains error:AT0027, '
+        'then the classifier reads no code from it', () {
+      expectClassified(
+          UnAuthenticatedException(revokedText),
+          AtConnectionOutcome.refused,
+          AtConnectionCause.unauthenticated,
+          'an authentication failure with no code is refused as such');
       expectClassified(
           AtLookUpException('AT0401', 'Exception: $revokedText'),
           AtConnectionOutcome.refused,
-          AtConnectionCause.revoked,
-          'the message\'s AT0027 outranks the wrapper\'s AT0401');
-      expectClassified(
-          AtLookUpException('AT0401', 'Exception: Auth failed'),
-          AtConnectionOutcome.refused,
           AtConnectionCause.unauthenticated,
-          'with no finer code the wrapper\'s stands');
+          'a wrapper that wraps nothing typed has only its own code');
+      expect(classifyConnectionFailure(AtException(revokedText)), isNull,
+          reason: 'text is not a code');
+      expect(
+          classifyConnectionFailure(AtLookUpException(
+              'AT0014', 'Unknown server error: $revokedText')),
+          isNull,
+          reason: 'text in an unknown error is not a code');
     });
 
     test('as an error response the atServer sent to a verb', () {

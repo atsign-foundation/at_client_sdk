@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_auth/at_auth.dart' show AtAuthErrorReplyException;
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
@@ -127,9 +128,10 @@ Future<List<String>> fileRequest(
     required String namespace}) async {
   final wrapped = <String>[];
   final undecided = approvingAtServer(
-      decide: (_) async => throw UnAuthenticatedException(
+      decide: (_) async => throw AtAuthErrorReplyException(
           'Failed connecting to $approvingAtSign. '
-          'error:AT0026:Apkam Auth Failed'),
+          'error:AT0026:Apkam Auth Failed',
+          errorCode: 'AT0026'),
       wrapped: wrapped);
   await Atsign(approvingAtSign).enroll(
       otp: 'ABC123',
