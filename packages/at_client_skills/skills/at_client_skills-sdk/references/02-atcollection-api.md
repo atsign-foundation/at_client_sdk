@@ -115,8 +115,11 @@ Use for re-runnable publishers that may restart within the TTL window.
 
 - `id` is checked and folded as for `draft`; when neither local storage nor
   the atServer holds an item with it, it must also meet `create`'s rule for a
-  new id; a local item that cannot be read counts as one that exists, and an
-  atServer that cannot be reached counts as holding none
+  new id; a `remoteOnly` client asks the atServer alone, so an item only
+  local storage holds does not count; whether an item is held is decided
+  from its metadata, so one this
+  client cannot decrypt counts as held, and an atServer lookup that fails
+  for any reason but the item's absence counts as holding none
 
 ### `Future<void> update(CItem<T> item, {bool unshareWithOthers = true})`
 

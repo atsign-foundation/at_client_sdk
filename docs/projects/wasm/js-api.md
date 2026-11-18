@@ -455,7 +455,8 @@ starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. 
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
 `unreadable` holds one `{id, owner, code}` per record this device cannot read, where `code`
-is `COLLECTION_ITEM_UNREADABLE`; an unreadable record does not fail the call. `get()` of such an item
+is `COLLECTION_ITEM_UNREADABLE`; an unreadable record does not fail the call. A record whose key
+names no Atsign is left out of both, and a warning names its key. `get()` of such an item
 still rejects with `COLLECTION_ITEM_UNREADABLE`.
 
 **Known limits.**
@@ -543,7 +544,7 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 | `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
 | `COLLECTION_ITEM_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
-| `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing | `CItemReadException`. The message names the id and owner, not the cause |
+| `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing, or leave it out with a warning naming its key when the key names no Atsign | `CItemReadException`. The message names the id and, when the key names one, the owner, not the cause |
 | `COLLECTION_ITEM_WRONG_TYPE` | update of an item whose stored type tag is another type's. An untagged (`n/a`) item is adopted. Share and remove work on an item of any type | adapter check on the item as just re-read |
 | `COLLECTION_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
 | `COLLECTION_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
