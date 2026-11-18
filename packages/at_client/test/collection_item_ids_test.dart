@@ -1015,6 +1015,7 @@ void main() {
     seed('$long.$namespace@alice', 'old');
     final c = await todos();
     final unreadable = AtKey.fromString('$long.$namespace@alice').toString();
+    final remoteLookups = <String>[];
     stubLookups(
       local: (k) {
         if (k.toString() == unreadable) {
@@ -1022,12 +1023,18 @@ void main() {
         }
         return metaInStore(k);
       },
-      remote: metaInStore,
+      // The atServer says the item is absent, so only the local failure
+      // counting as held lets the upsert through.
+      remote: (k) {
+        remoteLookups.add(k.toString());
+        throw asGetThrows(KeyNotFoundException('no record for $k'));
+      },
     );
 
     await c.upsert(obj: 'new', id: long);
 
     expect(jsonDecode(store[unreadable]!.value)['obj'], 'new');
+    expect(remoteLookups, isEmpty);
   });
 
   test(
