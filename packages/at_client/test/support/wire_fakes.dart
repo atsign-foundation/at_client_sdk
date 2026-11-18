@@ -19,15 +19,16 @@ class Wire {
   var pkamAccepted = true;
 
   /// Whether PKAM runs the authenticator the lookUp was built with, as a real
-  /// connection does: it reads the keys, answers `from:` with a challenge and
-  /// records each `pkam:` command in [pkamCommands]. Off, PKAM never calls it.
+  /// connection does: it reads the keys, answers `from:` with a challenge,
+  /// records each `pkam:` command in [pkamCommands] and answers it with
+  /// [pkamReply]. Off, PKAM never calls it.
   var runsAuthenticator = false;
 
   /// Every `pkam:` command an authenticator sent, in order.
   final pkamCommands = <String>[];
 
-  /// When set, PKAM throws it instead of answering.
-  Object? pkamThrows;
+  /// What a `pkam:` an authenticator sends is answered with.
+  var pkamReply = 'data:success';
 
   /// What a `lookup:` or `llookup:` command answers; null answers nothing.
   String? lookupAnswer;
@@ -107,9 +108,6 @@ class WireLookUp implements AtLookupMuxable {
     if (_wire.runsAuthenticator && run != null) {
       return run(_WireExecutor(_wire));
     }
-    final thrown = _wire.pkamThrows;
-    if (thrown != null) throw thrown;
-
     if (_wire.pkamScript.isNotEmpty) {
       return _wire.pkamScript.removeFirst().future;
     }
@@ -164,7 +162,7 @@ class WireLookUp implements AtLookupMuxable {
 }
 
 /// The connection an authenticator sees: answers `from:` with a challenge and
-/// accepts every `pkam:`, recording it.
+/// every `pkam:` with [Wire.pkamReply], recording it.
 class _WireExecutor implements AtCommandExecutor {
   _WireExecutor(this._wire);
 
@@ -181,7 +179,7 @@ class _WireExecutor implements AtCommandExecutor {
     }
     if (command.startsWith('pkam:')) {
       _wire.pkamCommands.add(command);
-      return 'data:success';
+      return _wire.pkamReply;
     }
     return 'error:unexpected $command';
   }

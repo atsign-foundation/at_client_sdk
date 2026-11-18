@@ -163,6 +163,9 @@ void main() {
   Matcher failedWith(String reply) => isA<UnAuthenticatedException>().having(
       (e) => e.message, 'message', 'Failed connecting to $_atSign. $reply');
 
+  final refusedToSign = isA<UnAuthenticatedException>().having((e) => e.message,
+      'message', startsWith('Refusing to sign a malformed from: challenge'));
+
   Future<void> expectLostPasskey(_PkamServer atServer, String why) async {
     await expectLater(
         custody(atServer.lookUps, FakeHints()).open(atSign: _atSign),
@@ -224,6 +227,67 @@ void main() {
       await expectLostPasskey(
           _refusing(reply), 'AT0401 in the $form form is a refusal');
     });
+  });
+
+  const outline3 =
+      'A failure at the from: on the PKAM\'s connection is not a refusal';
+  for (final (answer, reply, propagated) in [
+    for (final MapEntry(key: form, value: reply) in _at0401.entries)
+      ('error:AT0401 in the $form form', reply, failedWith(reply)),
+    ('data: and nothing else', 'data:', refusedToSign),
+  ]) {
+    test('$outline3 ($answer)', () async {
+      final atServer = _PkamServer(onFrom: _replies(reply));
+
+      await expectLater(
+          custody(atServer.lookUps, FakeHints()).open(atSign: _atSign),
+          throwsA(propagated),
+          reason: 'the open throws what the from: failed with');
+      expect(atServer.froms, isNotEmpty,
+          reason: 'the failure answered a from: sent on the wire');
+      expect(atServer.pkams, isEmpty, reason: 'no pkam: was sent');
+    });
+  }
+
+  test('A failure at the from: keeps a device\'s passkey hints', () async {
+    final reply = _at0401['dash']!;
+    final atServer = _PkamServer(onFrom: _replies(reply));
+    final hints = savedHints();
+
+    await expectLater(custody(atServer.lookUps, hints).open(atSign: _atSign),
+        throwsA(failedWith(reply)),
+        reason: 'the open throws what the from: failed with');
+    expect(atServer.pkams, isEmpty, reason: 'no pkam: was sent');
+    expect(passkeys.gets, 1, reason: 'the passkey was asked for once');
+    expect(pointers.pointerReads, 0,
+        reason: 'the hints were not set aside for the pointer');
+    expect(hints.credentials[_atSign], _credential,
+        reason: 'the device keeps its credential hint');
+    expect(hints.ids[_atSign], _eid,
+        reason: 'the device keeps its enrollment hint');
+  });
+
+  test(
+      'A PKAM attempt the connection makes again starts afresh, so a failure '
+      'at its from: is not a refusal', () async {
+    final reply = _at0401['dash']!;
+    late final _PkamServer atServer;
+    atServer = _PkamServer(
+        onFrom: (socket) => atServer.froms.length == 1
+            ? _challenge(socket)
+            : _replies(reply)(socket),
+        onPkam: (socket) => socket.serverCloses());
+
+    await expectLater(
+        custody(atServer.lookUps, FakeHints()).open(atSign: _atSign),
+        throwsA(failedWith(reply)),
+        reason: 'the open throws what the second attempt\'s from: failed '
+            'with');
+    expect(atServer.pkams, hasLength(1),
+        reason: 'the first attempt sent its pkam: before the connection '
+            'was lost');
+    expect(atServer.froms, hasLength(2),
+        reason: 'the connection made the attempt again');
   });
 
   const outline4 = 'A PKAM failure that is not a refusal propagates as it is';

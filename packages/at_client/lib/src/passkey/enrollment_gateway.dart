@@ -133,26 +133,34 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
 
   /// PKAM as [enrollmentId] with [pair] on a connection of its own.
   ///
-  /// Throws [PkamRefusedException] when [classifyConnectionFailure] reads the
-  /// failure as a refusal whose cause is
-  /// [AtConnectionCause.unauthenticated], [AtConnectionCause.revoked],
-  /// [AtConnectionCause.enrollmentDenied] or
-  /// [AtConnectionCause.invalidEnrollment]. Any other failure, a refusal as
-  /// [AtConnectionCause.enrollmentNotApproved] included, propagates as it is.
+  /// Throws [PkamRefusedException] when the run of the authenticator that
+  /// failed sent a `pkam:` and [classifyConnectionFailure] reads the failure
+  /// as a refusal whose cause is [AtConnectionCause.unauthenticated],
+  /// [AtConnectionCause.revoked], [AtConnectionCause.enrollmentDenied] or
+  /// [AtConnectionCause.invalidEnrollment]. Any other failure, one before the
+  /// `pkam:` or a refusal as [AtConnectionCause.enrollmentNotApproved]
+  /// included, propagates as it is.
   Future<EnrollmentSession> _authenticated(
       String atSign, String enrollmentId, ApkamKeyPair pair,
       {required AtKeys? keys}) async {
     final lookUp = _lookUp(atSign);
+    var pkamSent = false;
     try {
       final signingKeys =
           withApkamKey(AtKeys(atsign: Atsign(atSign)), enrollmentId, pair);
-      lookUp.authenticator = authenticatorFor(
+      final authenticate = authenticatorFor(
           handshakeKeysIo(atSign, signingKeys), atSign,
           enrollmentId: enrollmentId);
+      // NOTE: only a reply to the pkam: can be a refusal.
+      lookUp.authenticator = (executor) {
+        pkamSent = false;
+        return authenticate(_NotingPkam(executor, () => pkamSent = true));
+      };
       await lookUp.pkamAuthenticate();
     } catch (e) {
       await _closeQuietly(lookUp);
-      if (_enrollmentRefusals.contains(classifyConnectionFailure(e)?.cause)) {
+      if (pkamSent &&
+          _enrollmentRefusals.contains(classifyConnectionFailure(e)?.cause)) {
         throw PkamRefusedException(enrollmentId);
       }
       rethrow;
@@ -183,6 +191,23 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
         completeActivation: false,
         clientConfig: clientConfigOf(preference.atClientParticulars));
     return filing.read(atSign);
+  }
+}
+
+/// [_executor], calling [_onPkam] as each `pkam:` is sent through it.
+class _NotingPkam implements AtCommandExecutor {
+  _NotingPkam(this._executor, this._onPkam);
+
+  final AtCommandExecutor _executor;
+  final void Function() _onPkam;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) {
+    if (command.startsWith('pkam:')) _onPkam();
+    return _executor.sendSync(command,
+        maxWaitMilliSeconds: maxWaitMilliSeconds,
+        transientWaitTimeMillis: transientWaitTimeMillis);
   }
 }
 

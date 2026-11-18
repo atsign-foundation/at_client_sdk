@@ -25,13 +25,13 @@ abstract class StoragePersistence {
   Future<bool> requestPersist();
 }
 
-/// Thrown when a failed PKAM for an enrollment is, as
+/// Thrown when the atServer's reply to an enrollment's `pkam:` is, as
 /// `classifyConnectionFailure` reads it, a refusal whose cause is
 /// `unauthenticated`, `revoked`, `enrollmentDenied` or `invalidEnrollment`:
 /// the key derived from the passkey is not that enrollment's key, or the
 /// enrollment no longer serves. A pending enrollment
-/// (`enrollmentNotApproved`), and a failure classified any other way or not
-/// at all, is not this.
+/// (`enrollmentNotApproved`), a failure classified any other way or not at
+/// all, and any failure before the `pkam:` is sent are not this.
 ///
 /// Terminal: an approver must `enroll:unrevoke` a revoked enrollment, or
 /// `enroll:delete` it and approve a new one; the device cannot re-enroll
@@ -169,9 +169,10 @@ abstract class EnrollmentGateway {
   /// Authenticates [enrollmentId] with [apkamKeyPair].
   ///
   /// Throws [PkamRefusedException] when `classifyConnectionFailure` reads the
-  /// failed PKAM as a refusal whose cause is `unauthenticated`, `revoked`,
-  /// `enrollmentDenied` or `invalidEnrollment`; any other failure, a pending
-  /// enrollment included, propagates as it is.
+  /// atServer's reply to the `pkam:` as a refusal whose cause is
+  /// `unauthenticated`, `revoked`, `enrollmentDenied` or `invalidEnrollment`;
+  /// any other failure, a pending enrollment or a failure before the `pkam:`
+  /// included, propagates as it is.
   Future<EnrollmentSession> authenticate(
       {required String atSign,
       required String enrollmentId,

@@ -159,12 +159,16 @@ void main() {
     Future<EnrollmentSession> authenticate() => gateway().authenticate(
         atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
 
-    test('a lookUp that fails to close after a refusal is logged', () async {
+    /// The atServer answers the authenticator's `pkam:` with [reply].
+    void pkamAnswers(String reply) {
       wire
-        ..pkamThrows = UnAuthenticatedException(
-            'Failed connecting to $_atSign. error:AT0401-Client '
-            'authentication failed')
-        ..stopThrows = true;
+        ..runsAuthenticator = true
+        ..pkamReply = reply;
+    }
+
+    test('a lookUp that fails to close after a refusal is logged', () async {
+      pkamAnswers('error:AT0401-Client authentication failed');
+      wire.stopThrows = true;
 
       final logs = await _warnings(() async {
         await expectLater(authenticate(), throwsA(isA<PkamRefusedException>()));
@@ -185,9 +189,7 @@ void main() {
     });
 
     test('the atServer\'s PKAM refusal is a PkamRefusedException', () async {
-      wire.pkamThrows = UnAuthenticatedException(
-          'Failed connecting to $_atSign. error:AT0401-Client authentication '
-          'failed');
+      pkamAnswers('error:AT0401-Client authentication failed');
 
       await expectLater(
           authenticate(),
@@ -207,17 +209,19 @@ void main() {
       'error:AT0003-Invalid syntax',
     ]) {
       test('a failed handshake reply "$reply" is not a refusal', () async {
-        wire.pkamThrows =
-            UnAuthenticatedException('Failed connecting to $_atSign. $reply');
+        pkamAnswers(reply);
 
         await expectLater(
-            authenticate(), throwsA(isA<UnAuthenticatedException>()));
+            authenticate(),
+            throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+                'message', 'Failed connecting to $_atSign. $reply')));
+        expect(wire.pkamCommands, hasLength(1),
+            reason: 'the reply answered the pkam:');
       });
     }
 
     test('a PKAM reply naming no atServer code is a refusal', () async {
-      wire.pkamThrows = UnAuthenticatedException(
-          'Failed connecting to $_atSign. error:Client authentication failed');
+      pkamAnswers('error:Client authentication failed');
 
       await expectLater(
           authenticate(),
@@ -236,11 +240,9 @@ void main() {
       'AT0028': 'is expired or invalid',
     }.entries) {
       final code = reply.key;
-      String message(String id) => 'Failed connecting to $_atSign. '
-          'error:$code:enrollment_id: $id ${reply.value}';
 
       test('$code naming the presented enrollment is a refusal', () async {
-        wire.pkamThrows = UnAuthenticatedException(message(_eid));
+        pkamAnswers('error:$code:enrollment_id: $_eid ${reply.value}');
 
         await expectLater(
             authenticate(),
@@ -251,9 +253,7 @@ void main() {
 
     test('a failure the classifier reads as an invalid enrollment is a refusal',
         () async {
-      wire.pkamThrows = UnAuthenticatedException(
-          'Failed connecting to $_atSign. error:AT0029:Apkam Enrollment '
-          'Expired');
+      pkamAnswers('error:AT0029:Apkam Enrollment Expired');
 
       await expectLater(
           authenticate(),
@@ -264,12 +264,12 @@ void main() {
     });
 
     test('a pending enrollment (AT0026) is not a refusal', () async {
-      wire.pkamThrows =
-          UnAuthenticatedException('Failed connecting to $_atSign. '
-              'error:AT0026:enrollment_id: $_eid is pending');
+      pkamAnswers('error:AT0026:enrollment_id: $_eid is pending');
 
       await expectLater(
           authenticate(), throwsA(isA<UnAuthenticatedException>()));
+      expect(wire.pkamCommands, hasLength(1),
+          reason: 'the reply answered the pkam:');
     });
 
     test('an authenticator that reports failure is not a refusal', () async {
