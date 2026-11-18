@@ -520,6 +520,17 @@ void main() {
       await expectLater(session.revokeOtherEnrollments(),
           throwsA(isA<AtEnrollmentException>()));
     });
+
+    test('a revoke that fails other than with an atServer refusal propagates',
+        () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw StateError('the connection was lost'));
+
+      await expectLater(session.revokeOtherEnrollments(), throwsStateError,
+          reason: 'only an atServer refusal of a revoke is tolerated');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
   });
 
   group('a session whose client failed to open', () {

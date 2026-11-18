@@ -601,6 +601,63 @@ void main() {
     });
   });
 
+  group('material of another enrollment', () {
+    const other = 'f0other';
+    final keyId =
+        '${AtKeys.keyIdPrefix('auth', CryptographicMaterialAlgorithm.mlDsa65)}1';
+
+    /// Every material [eid] holds in the stored document, as `role:bytes`.
+    Future<List<String>> storedMaterialOf(String eid) async => [
+          for (final e
+              in ((await stored(derived)).toJson()['enrollments'] as List)
+                  .cast<Map<String, dynamic>>())
+            if (e['enrollmentId'] == eid)
+              for (final k in e['keys'] as List)
+                for (final m in (k as Map)['material'] as List)
+                  '${(m as Map)['role']}:${m['bytes']}'
+        ];
+
+    test(
+        'its public authentication key is kept, and this enrollment\'s own '
+        'is not', () async {
+      final keys = withApkamKey(_base(), _eid, pair)
+        ..addKey(CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: other,
+            role: CryptographicMaterialRole.publicAuthentication,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            bytes: AtBytes.fromString(_b('other-auth-pub')),
+            createdAt: DateTime.now().toUtc()));
+
+      await (await open()).write(_atSign, keys);
+
+      expect(await storedMaterialOf(other),
+          ['publicAuthentication:${_b('other-auth-pub')}'],
+          reason: 'only the pair this store derives is left out');
+      expect(await storedMaterialOf(_eid), isEmpty);
+    });
+
+    test(
+        'its private authentication key, no longer active, is stripped and '
+        'not refused', () async {
+      final keys = _base()
+        ..fileApkamMaterial(
+            enrollmentId: other,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            publicKey: _b('other-auth-pub'),
+            privateKey: _b('other-auth-priv'))
+        ..retireKey(other, keyId);
+      withApkamKey(keys, _eid, pair);
+
+      await (await open()).write(_atSign, keys);
+
+      expect(await storedMaterialOf(other),
+          ['publicAuthentication:${_b('other-auth-pub')}'],
+          reason: 'only active private authentication material other than '
+              'the pair is refused');
+    });
+  });
+
   group('enrollment entries', () {
     AtKeys withOwnSnapshot() => _base()
       ..recordEnrollmentSnapshot(_eid,

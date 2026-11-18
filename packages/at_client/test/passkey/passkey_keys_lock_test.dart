@@ -251,6 +251,21 @@ void main() {
         reason: 'the store accepts a later write');
   });
 
+  test(
+      'a writer whose bound is shorter than a pause between takes gives up '
+      'when its bound ends', () async {
+    server.lockHeld = true;
+    final io = storeOf('self', lockWait: const Duration(milliseconds: 50));
+    final took = Stopwatch()..start();
+
+    await expectLater(
+        addSymmetric(io), throwsA(isA<AtServerAtKeysLockedException>()));
+
+    expect(took.elapsed, lessThan(const Duration(milliseconds: 250)),
+        reason: 'the last pause is cut to what is left of the bound, and a '
+            'pause between takes is at least 250ms');
+  });
+
   test('A write whose read-back differs stops the store', () async {
     final io = storeOf('self');
     server.dropPuts = true;

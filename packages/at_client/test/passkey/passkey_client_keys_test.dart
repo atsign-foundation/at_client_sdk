@@ -345,9 +345,8 @@ void main() {
   });
 
   test(
-      'a client and another writer of its enrollment, each on its own '
-      'connection, add key material at once, and both additions survive',
-      () async {
+      'Two clients of one enrollment add key material at once, and both '
+      'additions survive', () async {
     server.immutableHolds = true;
     final session = await onboard();
     final enrollmentId = session.client.enrollmentId!;

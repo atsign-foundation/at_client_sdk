@@ -1,16 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
+import 'package:at_client/passkey.dart' show AtAuthEnrollmentGateway;
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
     show activateWithoutClient;
+import 'package:at_client/src/passkey/enrollment_gateway.dart'
+    show apkamKeyPairFromSeed;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart'
-    show AtAuthenticator, AtCommandExecutor;
+    show AtAuthenticator, AtCommandExecutor, SecondaryAddress;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -80,6 +84,7 @@ void main() {
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
       sent.add(command);
+      if (command.startsWith('lookup:publickey')) return 'data:null';
       if (command.startsWith('enroll:')) {
         return 'data:${jsonEncode({
               'enrollmentId': enrollmentId,
@@ -107,6 +112,7 @@ void main() {
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
+    when(() => lookUp.secondaryAddressFinder).thenReturn(_FoundAtDirectory());
     return (lookUp: lookUp, sent: sent);
   }
 
@@ -245,6 +251,62 @@ void main() {
         isEmpty);
     expect(server.sent.where((c) => c.startsWith('enroll:')), hasLength(1));
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
+  });
+
+  test('an activation without a client leaves a supplied connection open',
+      () async {
+    final server = atServer();
+
+    await activateWithoutClient(Atsign(atSign),
+        cramSecret: cramSecret,
+        keys: InMemoryAtKeysIo(),
+        preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        completeActivation: false);
+
+    verifyNever(() => server.lookUp.close());
+  });
+
+  test(
+      'the passkey gateway activates with completion deferred: it publishes '
+      'no encryption public key and keeps the CRAM secret', () async {
+    final server = atServer();
+    final gateway = AtAuthEnrollmentGateway(
+        lookUps: (
+                {required atSign,
+                required rootDomain,
+                required authenticator,
+                secondaryAddressFinder}) =>
+            server.lookUp,
+        finder: await refusingAtDirectory(),
+        root: AtRootDomain(
+            InternetAddress.loopbackIPv4.address, await refusedPort()),
+        app: 'lifecycle',
+        device: 'gateway',
+        clientOpener: (
+                {required lookUp,
+                required atSign,
+                required enrollmentId,
+                required keysIo}) =>
+            throw StateError('the activation opens no client'));
+
+    final session = await gateway.activate(
+        atSign: atSign,
+        apkamKeyPair: await apkamKeyPairFromSeed(
+            Uint8List.fromList(List.generate(32, (i) => i + 7))),
+        cram: cramSecret);
+
+    expect(session.enrollmentId, enrollmentId);
+    expect(server.sent.where((c) => c.startsWith('enroll:')), hasLength(1));
+    expect(server.sent.where((c) => c.contains('public:publickey$atSign')),
+        isEmpty,
+        reason: 'the activation publishes no encryption public key');
+    expect(
+        server.sent.where((c) => c.contains(AtConstants.atCramSecret)), isEmpty,
+        reason: 'the activation keeps the CRAM secret');
+    await session.close();
   });
 
   group('a supplied APKAM keypair', () {
@@ -396,6 +458,14 @@ void main() {
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
   });
+}
+
+/// An atDirectory that finds every atSign.
+class _FoundAtDirectory implements SecondaryAddressFinder {
+  @override
+  Future<SecondaryAddress> findSecondary(String atSign,
+          {Duration? timeout}) async =>
+      SecondaryAddress('localhost', 1);
 }
 
 /// Answers `from:` with a challenge, and `cram:` with success only for the
