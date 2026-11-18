@@ -8,10 +8,13 @@ Feature: A passkey session owns its client and its passkey vault
   before the passkey work: it closes no key store, and the `AtKeysIo` type
   hierarchy is unchanged.
 
-  Races: a @keys write already queued when the client stops is waited for,
-  up to a bound, before the vault closes; a write a startup step begins
-  after that fails, and the step's next start makes it. Replay: nothing
-  here is sent. Denial of service: the wait is bounded. Forgery and
+  Races: once the client has stopped, the session waits, up to a bound, for
+  every @keys write queued on the store before it closes the store and then
+  the vault: a write already queued when the client stops, one queued while
+  the client is stopping, and one queued while the session waits for an
+  earlier write. A write that a startup step begins after the session has
+  finished waiting fails, and the step's next start makes it. Replay:
+  nothing here is sent. Denial of service: the wait is bounded. Forgery and
   impersonation: a session adds no credential and no path to one; it only
   ends what the entry point built.
 
@@ -32,6 +35,21 @@ Feature: A passkey session owns its client and its passkey vault
     When the app stops the session
     Then the vault closes only after that write has ended
     And the session stops within its bound even when the write never ends
+
+  @race
+  Scenario: A @keys write queued while the client stops ends before the store closes
+    Given a passkey session's client of @alice🛠 is writing its @keys document
+    When the app stops the session
+    And the client queues a second @keys write while it is stopping
+    Then the second write is made before the store and the vault close
+
+  @race
+  Scenario: A @keys write queued while the session waits for an earlier write ends before the store closes
+    Given a passkey session's client of @alice🛠 is writing its @keys document
+    And the app has stopped the session, which is waiting for that write
+    When a second @keys write is queued before the first one ends
+    Then the store and the vault stay open, and the stop does not finish, until the second write has ended
+    And the second write is made
 
   Scenario: Stopping the session closes the vault even when stopping the client fails
     Given a passkey session whose client's stop throws an Error

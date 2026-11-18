@@ -41,7 +41,11 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   secret, revoke the same enrollments and publish the same key, so the
   second changes nothing. Two logins with passkeys from two attempts,
   after a retry's revoke failed, can revoke each other's enrollment as two
-  onboardings can; both passkeys came from the CRAM secret's holder.
+  onboardings can; both passkeys came from the CRAM secret's holder. A
+  failed onboarding releases the setup lock without waiting for the
+  platform to take its report that the new passkey is unknown; the report
+  names only that passkey, so the onboarding that takes the lock next is
+  untouched by it.
   Replay: a retry sends a new enrollment request with a new key; nothing
   captured is resent. A login's delete, revoke and publish run on its own
   PKAM-authenticated connection, and sending any of them again changes
@@ -50,7 +54,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   revoke that keeps failing fails every login without saved hints; only an
   enrollment that holds `__manage`, which can approve or reinstate
   enrollments as fast as they are revoked, or the atServer can keep it
-  failing, and either already holds more than the login. Forgery and
+  failing, and either already holds more than the login. A platform that
+  never finishes taking a report that a passkey is unknown holds up
+  neither the failed onboarding nor the setup lock. Forgery and
   impersonation: only a CRAM secret's holder activates or retries, and that
   holder already holds more than any enrollment; the retry revokes only
   enrollments of this Atsign, after the CRAM secret is deleted and before
@@ -161,6 +167,15 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     Given the app onboards @alice🛠 with a new passkey
     When the onboarding fails before it starts completing the activation
     Then the new credential is reported to the platform as unknown
+
+  @dos
+  Scenario: A failed activation is thrown without waiting for the platform to take the unknown passkey report
+    Given the app onboards @alice🛠 with a new passkey
+    And the platform never finishes taking a report that a passkey is unknown
+    When the activation fails
+    Then the onboarding throws the activation's failure without waiting for the report
+    And the new credential was reported to the platform as unknown once
+    And @alice🛠's setup lock is released while that report is still pending
 
   Scenario: A passkey whose onboarding fails while completing the activation is not reported
     Given the app onboards @alice🛠 with a new passkey
