@@ -220,7 +220,8 @@ void main() {
 
     test('unsubscribe stops delivery', () async {
       final received = <JsNotification>[];
-      final unsubscribe = session.subscribe('.*', received.add, onError: (_) {});
+      final unsubscribe =
+          session.subscribe('.*', received.add, onError: (_) {});
 
       unsubscribe();
       service.events.add(_event('e1'));
@@ -330,7 +331,8 @@ void main() {
       expect(received.map((n) => n.id), ['e1']);
     });
 
-    test('a notification whose sender is not the key owner is dropped with '
+    test(
+        'a notification whose sender is not the key owner is dropped with '
         'a warning naming its id, never its value', () async {
       final received = <JsNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
@@ -426,8 +428,8 @@ void main() {
       session.onStatus(seen.add);
 
       await session.close();
-      await client.connection.report(AtConnectionState.offline(
-          AtConnectionCause.stopped));
+      await client.connection
+          .report(AtConnectionState.offline(AtConnectionCause.stopped));
       await pumpEventQueue();
 
       expect(seen, isEmpty);
@@ -448,7 +450,8 @@ void main() {
           throwsA(isA<SessionClosedException>()));
     });
 
-    test('qualifies the name with the namespace and rejects a bad expiration '
+    test(
+        'qualifies the name with the namespace and rejects a bad expiration '
         'with the adapter code', () async {
       await expectLater(
           session.collection('todos', type: 'Todo', expirationMs: 0),

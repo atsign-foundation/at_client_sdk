@@ -23,7 +23,7 @@ void main() {
         transport: (
           lookUps: wire.lookUps,
           finder: FixedSecondaryAddressFinder('atserver.test', 1),
-                  root: AtRootDomain.atsignDomain
+          root: AtRootDomain.atsignDomain
         ));
     session = AtClientJsSession(client, namespace: 'wavi');
   });
@@ -99,8 +99,8 @@ void main() {
         serve(verbs: (c) => c.startsWith('otp:get') ? 'data:Z9Y8X7' : null);
 
         expect(await session.otp(), 'Z9Y8X7');
-        expect(wire.commands.where((c) => c.startsWith('otp:get')),
-            hasLength(1));
+        expect(
+            wire.commands.where((c) => c.startsWith('otp:get')), hasLength(1));
       });
 
       for (final MapEntry(key: name, value: grants) in unmanaged.entries) {
