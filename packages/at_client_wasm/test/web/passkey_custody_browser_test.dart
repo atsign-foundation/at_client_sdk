@@ -364,6 +364,20 @@ Future<Map<String, Map<String, Uint8List>>> _dump(String dbName) async {
   }
 }
 
+/// Puts [value] as it is under [key] in [storeName] of database [dbName].
+Future<void> _rawPut(
+    String dbName, String storeName, String key, JSAny value) async {
+  final db = await _settled(window.indexedDB.open(dbName)) as IDBDatabase;
+  try {
+    await _settled(db
+        .transaction(storeName.toJS, 'readwrite')
+        .objectStore(storeName)
+        .put(value, key.toJS));
+  } finally {
+    db.close();
+  }
+}
+
 Future<List<String>> _databases(String prefix) async {
   final all = (await window.indexedDB.databases().toDart).toDart;
   return [
@@ -475,6 +489,62 @@ void main() {
     expect(device.gateway.activations, 0, reason: 'login spends no CRAM');
     expect(await recordKept(), isFalse,
         reason: 'the resumed record is spent once the client opens');
+  });
+
+  // Scenario: features/at_client_wasm/indexeddb_errors.feature
+  test(
+      'A failed IndexedDB request during onboarding is the cause of an '
+      'OnboardingIncompleteException', () async {
+    const atSign = '@alice🛠';
+    final request = window.indexedDB.open(device.dbName, 3);
+    request.onupgradeneeded = (Event _) {
+      final db = request.result as IDBDatabase;
+      db.createObjectStore('at_client_wasm_credentials').createIndex(
+          'one_atsign_per_credential',
+          ''.toJS,
+          IDBIndexParameters(unique: true));
+      db.createObjectStore('at_client_wasm_enrollments');
+      db.createObjectStore('at_client_wasm_pending');
+    }.toJS;
+    final raw = await _settled(request) as IDBDatabase;
+    addTearDown(() => raw.close());
+    final written = Completer<void>();
+    final tx = raw.transaction('at_client_wasm_credentials'.toJS, 'readwrite');
+    tx.oncomplete = (Event _) {
+      written.complete();
+    }.toJS;
+    tx.onabort = (Event _) {
+      if (!written.isCompleted) written.completeError(StateError('put failed'));
+    }.toJS;
+    tx
+        .objectStore('at_client_wasm_credentials')
+        .put(Uint8List.fromList(device._authenticator._id).toJS, '@bob'.toJS);
+    await written.future;
+    raw.close();
+
+    final custody = await device.custody();
+    Object? thrown;
+    try {
+      await closingStoreAfter(
+          device.store, () => custody.onboard(atSign: atSign, cram: _cram));
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown, isA<OnboardingIncompleteException>(),
+        reason: 'the failed hint write after activation leaves the onboarding '
+            'to resume');
+    final incomplete = thrown as OnboardingIncompleteException;
+    addTearDown(incomplete.pending.abandon);
+    expect(incomplete.cause, isA<IndexedDbException>(),
+        reason: 'its cause is an IndexedDbException');
+    final message = (incomplete.cause as IndexedDbException).message;
+    expect(message, contains('ConstraintError'),
+        reason: "the exception names the browser's error");
+    expect(message, isNot(contains(device.gateway.lastSession!.enrollmentId)),
+        reason: 'the exception never carries the enrollment id being written');
+    expect(message, isNot(contains(atSign)),
+        reason: 'the exception never carries the atSign');
   });
 
   test('after onboarding and recovery the browser stores hold only the hint',
@@ -624,6 +694,31 @@ void main() {
       expect(dump['at_client_wasm_pending'], isEmpty);
       expect(dump['at_client_wasm_credentials']!.keys, [_atSign]);
       expect(dump['at_client_wasm_enrollments']!.keys, [_atSign]);
+    });
+
+    test(
+        'discarding deletes a pending record that will not decode, of any '
+        'stored type, and keeps the hints', () async {
+      for (final value in <JSAny>[
+        Uint8List.fromList(utf8.encode('not json')).toJS,
+        Uint8List.fromList(utf8.encode('{"renamed":"by a newer build"}')).toJS,
+        'not bytes'.toJS,
+      ]) {
+        device.store = await IndexedDbHintStore.open(dbName: device.dbName);
+        await device.store.putHint(_atSign, Uint8List.fromList([1, 2]), 'eid1');
+        await _rawPut(device.dbName, 'at_client_wasm_pending', _atSign, value);
+        await expectLater(device.store.get(_atSign),
+            throwsA(isA<UnsupportedPasskeyRecordException>()));
+
+        await discardPendingOnboardingIn(device.store, _atSign);
+
+        device.store = await IndexedDbHintStore.open(dbName: device.dbName);
+        expect(await device.store.get(_atSign), isNull,
+            reason: 'the record is gone');
+        expect(await device.store.enrollmentId(_atSign), 'eid1');
+        expect(await device.store.credentialId(_atSign), [1, 2]);
+        device.store.close();
+      }
     });
 
     test('a discard of an atSign not in canonical form is refused', () async {
