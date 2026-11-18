@@ -317,10 +317,10 @@ void main() {
             'a separator in a key, or in a string nested in a Map or List, '
             'still gives a from: that matches the from: syntax', () async {
           final given = {
-            'a b': 'x',
+            'a\u2028b': 'x',
             'meta': {
-              'note': 'a b ${'x' * 80}',
-              'c d': ['e f', 4],
+              'note': 'a\u2028b\u2029${'x' * 80}',
+              'c\u2029d': ['e\u2028f', 4],
             },
           };
           final recorder = FromRecorder();
