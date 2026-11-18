@@ -322,6 +322,44 @@ void main() {
       expect(failure, isA<PrfUnavailableException>());
     });
   });
+
+  group('an unlocked passkey without a usable PRF output', () {
+    late _SignallingPort port;
+
+    setUp(() => port = _SignallingPort()..resultPrfFirst = prf);
+
+    for (final (outcome, fail, failure) in [
+      (
+        'an assertion that throws',
+        (_SignallingPort p) => p.getFailure = PasskeyCeremonyException('x'),
+        isA<PasskeyCeremonyException>()
+      ),
+      (
+        'an assertion with no PRF output',
+        (_SignallingPort p) => p.resultPrfFirst = null,
+        isA<PrfUnavailableException>()
+      ),
+      (
+        'an assertion with a 31-byte PRF output',
+        (_SignallingPort p) =>
+            p.resultPrfFirst = Uint8List.fromList(List.filled(31, 1)),
+        isA<PrfUnavailableException>()
+      ),
+      (
+        'an assertion with 32 zero bytes',
+        (_SignallingPort p) => p.resultPrfFirst = Uint8List(32),
+        isA<PrfUnavailableException>()
+      ),
+    ]) {
+      test('is not reported as unknown after $outcome', () async {
+        fail(port);
+        await expectLater(PasskeyPrf(port).unlock(), throwsA(failure));
+        await pumpEventQueue();
+        expect(port.calls, ['get']);
+        expect(port.signalled, isEmpty);
+      });
+    }
+  });
 }
 
 class _FailsOnGet implements PasskeyPort {
