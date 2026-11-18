@@ -477,6 +477,58 @@ void main() {
         reason: 'the resumed record is spent once the client opens');
   });
 
+  // Scenario: features/at_client_wasm/indexeddb_errors.feature
+  test(
+      'A failed IndexedDB request during onboarding is the cause of an '
+      'OnboardingIncompleteException', () async {
+    const atSign = '@alice🛠';
+    final request = window.indexedDB.open(device.dbName, 3);
+    request.onupgradeneeded = (Event _) {
+      final db = request.result as IDBDatabase;
+      db.createObjectStore('at_client_wasm_credentials').createIndex(
+          'one_atsign_per_credential',
+          ''.toJS,
+          IDBIndexParameters(unique: true));
+      db.createObjectStore('at_client_wasm_enrollments');
+      db.createObjectStore('at_client_wasm_pending');
+    }.toJS;
+    final raw = await _settled(request) as IDBDatabase;
+    final written = Completer<void>();
+    final tx = raw.transaction('at_client_wasm_credentials'.toJS, 'readwrite');
+    tx.oncomplete = (Event _) {
+      written.complete();
+    }.toJS;
+    tx
+        .objectStore('at_client_wasm_credentials')
+        .put(Uint8List.fromList(device._authenticator._id).toJS, '@bob'.toJS);
+    await written.future;
+    raw.close();
+
+    final custody = await device.custody();
+    Object? thrown;
+    try {
+      await closingStoreAfter(
+          device.store, () => custody.onboard(atSign: atSign, cram: _cram));
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown, isA<OnboardingIncompleteException>(),
+        reason: 'the failed hint write after activation leaves the onboarding '
+            'to resume');
+    final incomplete = thrown as OnboardingIncompleteException;
+    addTearDown(incomplete.pending.abandon);
+    expect(incomplete.cause, isA<IndexedDbException>(),
+        reason: 'its cause is an IndexedDbException');
+    final message = (incomplete.cause as IndexedDbException).message;
+    expect(message, contains('ConstraintError'),
+        reason: "the exception names the browser's error");
+    expect(message, isNot(contains(device.gateway.lastSession!.enrollmentId)),
+        reason: 'the exception never carries the enrollment id being written');
+    expect(message, isNot(contains(atSign)),
+        reason: 'the exception never carries the atSign');
+  });
+
   test('after onboarding and recovery the browser stores hold only the hint',
       () async {
     final enrolled = await device.onboard();

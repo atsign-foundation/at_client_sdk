@@ -1,7 +1,9 @@
 Feature: IndexedDB failures reach the app as AtExceptions
   Every failure of the browser's IndexedDB that reaches a passkey entry
   point is an IndexedDbException, which extends AtException and is exported
-  by package:at_client_wasm, so an app can catch it by type.
+  by package:at_client_wasm, so an app can catch it by type; once onboarding
+  has activated the Atsign, it is the cause of the
+  OnboardingIncompleteException.
 
   Races, replay, forgery and impersonation: only this origin's own pages
   and browser can make IndexedDB fail, and they already hold more than the
@@ -14,10 +16,11 @@ Feature: IndexedDB failures reach the app as AtExceptions
     Then it throws an IndexedDbException
     And that exception is an AtException exported by package:at_client_wasm
 
-  Scenario: A failed IndexedDB request reaches the app as an IndexedDbException
+  Scenario: A failed IndexedDB request during onboarding is the cause of an OnboardingIncompleteException
     Given IndexedDB fails the request that writes the device's passkey hints
     When the app onboards @alice🛠
-    Then it throws an IndexedDbException naming the browser's error
+    Then it throws an OnboardingIncompleteException
+    And its cause is an IndexedDbException naming the browser's error
 
   Scenario: A passkey database a newer build upgraded opens as it is
     Given this origin's passkey database is at a version higher than this build creates

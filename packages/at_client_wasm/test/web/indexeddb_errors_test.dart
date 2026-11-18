@@ -1,5 +1,6 @@
 // Scenarios: features/at_client_wasm/indexeddb_errors.feature. Each test is
-// named after its scenario.
+// named after its scenario; the onboarding one is in
+// passkey_custody_browser_test.dart, beside the fakes it onboards with.
 @TestOn('browser')
 library;
 
@@ -13,8 +14,6 @@ import 'package:at_client/at_client.dart' show AtClient, AtRootDomain;
 import 'package:at_client/passkey.dart' show PasskeyLostException;
 import 'package:at_client_wasm/at_client_wasm_web.dart'
     show IndexedDbException, SessionTransportOptions, passkeyLogin;
-import 'package:at_client_wasm/src/keys/indexeddb_store.dart'
-    show IndexedDbHintStore;
 import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:test/test.dart';
 import 'package:web/web.dart';
@@ -100,44 +99,6 @@ void main() {
         reason: 'an app catches the IndexedDbException as an AtException');
     expect((thrown as IndexedDbException).message, contains('UnknownError'),
         reason: "the exception names the browser's error");
-  });
-
-  test('A failed IndexedDB request reaches the app as an IndexedDbException',
-      () async {
-    final name = 'indexeddb_errors_${DateTime.now().microsecondsSinceEpoch}';
-    addTearDown(() => _deleteDb(name));
-    final credentialId = Uint8List.fromList(utf8.encode('credential-held'));
-    const enrollmentId = 'enrollment-being-written';
-    final raw = await _rawOpen(name, 3, upgrade: (db) {
-      db.createObjectStore('at_client_wasm_credentials').createIndex(
-          'one_atsign_per_credential',
-          ''.toJS,
-          IDBIndexParameters(unique: true));
-      db.createObjectStore('at_client_wasm_enrollments');
-      db.createObjectStore('at_client_wasm_pending');
-    });
-    await _rawPut(raw, 'at_client_wasm_credentials', '@bob', credentialId);
-    raw.close();
-    final store = await IndexedDbHintStore.open(dbName: name);
-    addTearDown(store.close);
-
-    Object? thrown;
-    try {
-      await store.putHint(_atSign, credentialId, enrollmentId);
-    } catch (e) {
-      thrown = e;
-    }
-
-    expect(thrown, isA<IndexedDbException>(),
-        reason: 'the failed hint write reaches the caller as an '
-            'IndexedDbException');
-    final message = (thrown as IndexedDbException).message;
-    expect(message, contains('ConstraintError'),
-        reason: "the exception names the browser's error");
-    expect(message, isNot(contains(enrollmentId)),
-        reason: 'the exception never carries the value being written');
-    expect(message, isNot(contains(_atSign)),
-        reason: 'the exception never carries the atSign');
   });
 
   test('A passkey database a newer build upgraded opens as it is', () async {
