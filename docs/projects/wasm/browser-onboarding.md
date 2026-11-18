@@ -290,7 +290,7 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 |---|---|
 | `PrfUnavailableException` | No passkey PRF: refused before any ceremony when the browser reports none or a miss is recorded, and after registration or login when the PRF output is missing, not 32 bytes or all zeroes |
 | `PasskeyLostException` | No credential, no pointer, a malformed enrollment id, or PKAM refused. When its cause is a `PasskeyCeremonyException` the prompt failed and the user may simply have cancelled it (WebAuthn reports a cancel and a missing passkey alike); see 3.8 |
-| `PublicKeyMismatchException` | Restored public keys differ from the published ones (K-5) |
+| `PublicKeyMismatchException` | Restored public keys differ from the published ones (K-5). Every later login refuses the same way until an enrollment holding `*:rw` and `__manage:rw` publishes the document's key again. An onboarding that stopped after deleting the CRAM secret and before publishing its key, where another activation tool had published a key while the CRAM secret was live, cannot be finished by a login: the Atsign needs a new CRAM secret from its registrar |
 | `MissingAtKeysDocumentException` | The enrollment has no document |
 | `PkamRefusedException` | The atServer explicitly refused PKAM for the enrollment (a bad signature always; a denied, revoked or unknown or expired enrollment when the reply names it). `passkeyLogin` surfaces it as `PasskeyLostException` with the `PkamRefusedException` kept as its cause; `PrfUnavailableException` and `SetupLockTimeoutException` are not wrapped |
 | `SetupLockTimeoutException` | The atSign's setup lock was not granted in time (`onboardNewAtSign` and `passkeyLogin`) |

@@ -29,7 +29,12 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   CRAM holder enrolled before the delete survives it. A login therefore
   revokes only when no key is published. A revoke that fails stops the
   completion before the publish, so the key stays unpublished and the next
-  login without saved hints tries the revoke again.
+  login without saved hints tries the revoke again. One case a login cannot
+  finish: another activation tool published an encryption public key while
+  the CRAM secret was live and stopped before deleting it, and this
+  onboarding then stopped after deleting the CRAM secret and before
+  publishing its own key. Every login refuses the key the document does
+  not hold, and the Atsign needs a new CRAM secret from its registrar.
 
   Races: tabs of one origin onboarding one Atsign wait on its setup lock.
   Two devices onboarding one Atsign with the same CRAM secret at once can
@@ -63,9 +68,11 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   its key is published. A login revokes and publishes only after PKAM as
   the enrollment its passkey's pointer names, and only when no key is
   published; it publishes only the key its @keys document holds, which
-  only the passkey opens. The atServer refuses a delete of `publickey`, so
-  a published key cannot be made absent to make a later login revoke, only
-  replaced, which makes every login refuse it.
+  only the passkey opens. The atServer refuses a `delete:` of `publickey`,
+  so a published key cannot be deleted to make a later login revoke. A key
+  replaced by another enrollment that holds `*:rw` and `__manage:rw` makes
+  every login refuse it, until such an enrollment publishes the document's
+  key again.
 
   Scenario: Onboarding writes the @keys document and pointer before it deletes the CRAM secret
     Given @alice🛠 is not yet activated and its CRAM secret is known
