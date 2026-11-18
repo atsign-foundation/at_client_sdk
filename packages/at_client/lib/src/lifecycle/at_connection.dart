@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_client/src/util/error_reply.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
+import 'package:at_lookup/at_lookup.dart'
+    show AtLookUpException, atServerErrorCodeIn;
 import 'package:at_utils/at_logger.dart';
 
 /// How far a client got towards its atServer.

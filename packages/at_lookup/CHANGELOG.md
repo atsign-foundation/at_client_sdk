@@ -1,4 +1,8 @@
 ## 4.1.0-rc.1
+- feat: `atServerErrorCodeIn` reads the code out of any message carrying an
+  atServer's `error:` reply, in the plain, colon or JSON form. A JSON reply
+  followed by other text still gives its code; a code in an
+  `errorDescription` is never read.
 - feat: a lookup built with a `proxy:<host>` root domain sends
   `from:<atSign>` first on each connection it opens, ahead of any
   `onConnect`, as it already resolves every atSign to the proxy. A caller that

@@ -7,6 +7,16 @@
   `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
   `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
   AT0028 or AT0029, in any form.
+- fix: a clientConfig given to an authenticator, `activateAtSign` or
+  `AtEnrollment.create` whose top-level `version` is null, empty or only
+  whitespace sends no `version`, as `clientConfigFor` already did. Two keys
+  that differ only by a line or paragraph separator are sent as one key, the
+  later entry winning.
+- refactor: the enrollment wait reads a refusal's code with at_lookup's
+  `atServerErrorCodeIn`, so at_auth needs `at_lookup: ^4.1.0-rc.1`. No
+  change but this: a code followed by anything but `-`, `:` or the end of
+  the reply, a digit or a space, say, is no longer read as a code, and a
+  JSON reply followed by other text still yields its code.
 - feat: every `from:` at_auth sends names the program and the SDK in its
   clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
   caller's values win; absent or blank ones are the program file's name,

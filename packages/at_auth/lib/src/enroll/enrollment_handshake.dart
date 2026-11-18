@@ -305,7 +305,7 @@ class EnrollmentHandshake {
         // enrollment, so this costs nothing against the budget.
         // Error codes AT0401 and AT0026 indicate authentication failure due to unapproved enrollment. Retry until the enrollment is approved.
         // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
-        final code = _errorCodeIn(e.message);
+        final code = atServerErrorCodeIn(e.message);
         if (code == 'AT0401' || code == 'AT0026') {
           consecutiveUnresolvableRefusals = 0;
           _logger.info('Pkam auth failed: ${e.message}');
@@ -393,25 +393,5 @@ class EnrollmentHandshake {
         sleeping = null;
       }
     }
-  }
-
-}
-
-final RegExp _leadingErrorCode = RegExp(r'^AT\d{4}');
-
-/// The atServer's error code in [message], which carries its `error:` reply
-/// in any of the forms an atServer writes: `error:<code>-<text>`,
-/// `error:<code>:<text>` or `error:{"errorCode":"<code>",...}`. Null when it
-/// carries none.
-String? _errorCodeIn(String message) {
-  final at = message.indexOf('error:');
-  if (at < 0) return null;
-  final body = message.substring(at + 'error:'.length);
-  if (!body.startsWith('{')) return _leadingErrorCode.stringMatch(body);
-  try {
-    final code = jsonDecode(body)['errorCode'];
-    return code is String ? code : null;
-  } on FormatException {
-    return null;
   }
 }

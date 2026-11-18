@@ -61,6 +61,11 @@ Feature: Every authenticating from: names the program and the SDK that sent it
     When at_auth authenticates
     Then the from: command's clientConfig has the program's derived appName, appVersion "unknown", sdkName "atsign.dart.at_auth" and sdkVersion at_auth's version, and no version
 
+  Scenario: a version the caller gives that is null, empty or only whitespace is not sent
+    Given a program that passes at_auth a client config whose version is null, "" or "  "
+    When at_auth builds the from: command's clientConfig
+    Then the clientConfig has no version, and a version with text in it is kept
+
   Scenario: a proxy root's preamble stays bare
     Given a client whose root is a proxy
     When it opens and authenticates a connection
