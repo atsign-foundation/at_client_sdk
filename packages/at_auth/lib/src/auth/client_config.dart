@@ -43,8 +43,7 @@ Map<String, String> clientConfigFor({
           _sendableOr(appVersion, () => unknownClientConfigValue),
       sdkNameKey: _sendableOr(sdkName, () => atAuthSdkName),
       sdkVersionKey: _sendableOr(sdkVersion, () => packageVersion),
-      if (version != null && version.trim().isNotEmpty)
-        AtConstants.version: _sendable(version),
+      if (!_isBlank(version)) AtConstants.version: _sendable(version!),
     };
 
 /// [config] made sendable, with the four values [clientConfigFor] names
@@ -79,7 +78,7 @@ bool _isBlank(Object? value) =>
     value == null || value.toString().trim().isEmpty;
 
 String _sendableOr(String? value, String Function() fallback) =>
-    _sendable(value == null || value.trim().isEmpty ? fallback() : value);
+    _sendable(_isBlank(value) ? fallback() : value!);
 
 /// [value] with every string in it, at any depth of its Maps and Lists, made
 /// sendable, and every Map key made one line.
