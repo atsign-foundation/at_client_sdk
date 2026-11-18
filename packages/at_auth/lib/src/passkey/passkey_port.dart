@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
 
+import 'passkey_display_name.dart';
+
 /// Thrown by a [PasskeyPort] when a ceremony yields no credential: cancelled,
 /// timed out, or no passkey matched.
 class PasskeyCeremonyException extends AtException {
@@ -30,6 +32,9 @@ abstract class PasskeyPort {
   /// Registers a discoverable passkey for [atSign] and returns its credential
   /// id and the `prf` extension result. No PRF output is taken from
   /// registration: not every authenticator returns one there.
+  ///
+  /// The passkey's display name is [passkeyDisplayName] of [enrolledAt] and
+  /// [deviceName].
   Future<PasskeyCreation> create(
       {required String atSign,
       required DateTime enrolledAt,

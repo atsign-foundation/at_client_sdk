@@ -107,6 +107,11 @@ void main() {
     expect(recordPrfSalt().length, 32);
   });
 
+  test('passkeyDisplayName and passkeyDisplayNameMaxBytes', () {
+    expect(passkeyDisplayName(DateTime.utc(2026), 'd'), isNotEmpty);
+    expect(passkeyDisplayNameMaxBytes, 64);
+  });
+
   test('exceptions', () {
     expect(PasskeyCeremonyException('x').message, 'x');
     expect(PrfUnavailableException('x').message, 'x');
@@ -127,9 +132,9 @@ void main() {
   });
 
   test('PrfSecret wipes its output', () {
-    final secret = PrfSecret(Uint8List(32)..fillRange(0, 32, 1));
-    secret.wipe();
-    expect(secret.output, everyElement(0));
+    final bytes = Uint8List(32)..fillRange(0, 32, 1);
+    PrfSecret(bytes).wipe();
+    expect(bytes, everyElement(0));
   });
 
   test('PrfSupport, PrfEnvironment, prfMissTtl and prfUnsupportedMessage',
@@ -170,7 +175,7 @@ void main() {
       () async {
     final PasskeyKeyDeriver deriver = _Deriver();
     final PasskeyDerivation derivation =
-        await deriver.derive(PrfSecret(Uint8List(32)), '@alice');
+        await deriver.derive(PrfSecret(Uint8List(32)..[0] = 1), '@alice');
     final RecordSealer sealer = derivation.sealer;
     final vault = PasskeyVault(derivation, atSign: '@alice');
     expect(vault.lookupHex, 'a' * 64);

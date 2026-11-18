@@ -1,5 +1,9 @@
 ## 4.1.0-rc.1
 
+- fix: passkey registration and unlock refuse a PRF output that is missing, the wrong length or all zeroes, with `PrfUnavailableException` and the one message "The authenticator did not return a usable PRF result". A passkey that registration created but could not use is reported to the platform as unknown where the port supports it, without delaying the error.
+- fix: `PrfSecret(...)` throws `ArgumentError` for 32 zero bytes, and `PrfSecret.output` throws `StateError` once `wipe()` has run.
+- fix: `prfUnsupportedMessage` now reads "This platform or authenticator does not support passkey PRF. Use one that does." and no longer names the browser.
+- feat: `passkeyDisplayName` and `passkeyDisplayNameMaxBytes` in `package:at_auth/passkey.dart` are the display-name rule for a passkey, which the browser's passkey port uses and another platform's port can: the enrollment time in UTC to the minute, then the device name, within 64 UTF-8 bytes.
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
 - fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening.

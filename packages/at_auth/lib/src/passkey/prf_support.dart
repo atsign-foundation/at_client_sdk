@@ -1,8 +1,8 @@
 import 'package:at_commons/at_commons.dart';
 
 /// The message shown when passkey PRF is unavailable.
-const prfUnsupportedMessage = 'This browser or authenticator does not support '
-    'passkey PRF. Use a supported browser.';
+const prfUnsupportedMessage = 'This platform or authenticator does not '
+    'support passkey PRF. Use one that does.';
 
 /// How long a recorded PRF miss is honoured.
 const prfMissTtl = Duration(days: 30);
@@ -17,10 +17,11 @@ class PrfUnavailableException extends AtException {
   String toString() => 'PrfUnavailableException: $message';
 }
 
-/// The browser facilities [PrfSupport] reads and writes.
+/// The platform facilities [PrfSupport] reads and writes: the platform's own
+/// answer on passkey PRF support, and a recorded PRF miss.
 abstract class PrfEnvironment {
-  /// `PublicKeyCredential.getClientCapabilities()['extension:prf']`, or null
-  /// when that API does not exist.
+  /// Whether the platform reports that its passkeys support PRF, or null when
+  /// it does not say.
   Future<bool?> clientCapabilityPrf();
 
   /// When a PRF miss was recorded, or null when none was.
@@ -36,18 +37,18 @@ abstract class PrfEnvironment {
   DateTime now();
 }
 
-/// Whether this browser can evaluate passkey PRF.
+/// Whether this platform can evaluate passkey PRF.
 ///
-/// The client capabilities API decides when it exists; otherwise a recorded
+/// The platform's own answer decides when it gives one; otherwise a recorded
 /// PRF miss counts against support for [prfMissTtl].
 class PrfSupport {
   /// Initializes the check over [environment].
   PrfSupport(this.environment);
 
-  /// The browser facilities behind the check.
+  /// The platform facilities behind the check.
   final PrfEnvironment environment;
 
-  /// Whether PRF is, as far as the browser tells, supported.
+  /// Whether PRF is, as far as the platform tells, supported.
   Future<bool> supported() async {
     final capability = await environment.clientCapabilityPrf();
     if (capability != null) return capability;
