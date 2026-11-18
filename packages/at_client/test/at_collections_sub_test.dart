@@ -137,7 +137,7 @@ void main() {
           isA<ArgumentError>().having(
             (e) => e.message.toString(),
             'message',
-            contains('exceeds the absolute-worst-case max'),
+            contains('more than the 128 allowed'),
           ),
         ),
       );

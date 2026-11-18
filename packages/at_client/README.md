@@ -464,19 +464,19 @@ For Flutter, the canonical reference app is
 through the mobile / desktop widget stack the way a shipping app
 would use it.
 
-**Key-length note.** atServer keys are capped at 255 chars and
-atSigns at 55. The absolute worst-case wire shape is the
-cached-copy form
-`cached:<other>:<itemId>.<composedNs>@<self>`, which fixes the
-wrapper overhead at 118 chars (`cached:` + 55 + `:` + 55) and
-leaves **137 chars** for everything inside (item id + every
-level of namespace). With 8-char auto-generated ids and 1 char
-for the separator, **`composedNs` is capped at 128 chars** — a
-budget enforced by `subCollection(...)` at construction time
-with a hard `ArgumentError`, so oversized keys never reach the
-wire. Plenty of room: with 1-char collection / sub-collection
-names and a 15-char application namespace, the theoretical
-ceiling is **11 levels (root + 10 nested sub-collections)**.
+**Key-length note.** An atServer key is at most 248 characters, and the
+cached copy a recipient's atServer keeps at most 255. An Atsign is at most
+56 characters including its `@`. The longest shape an item's key takes is
+that cached copy, `cached:<other>:<itemId>.<composedNs>@<self>`, whose
+wrapper is 120 characters when both Atsigns are that long, leaving 135 for
+`<itemId>.<composedNs>`. `subCollection(...)` caps `composedNs` at 128
+characters with an `ArgumentError` at construction, so an 8-character
+generated id fits while each Atsign is at most 55 characters with its `@`.
+An Atsign of emoji takes up to 111 UTF-16 code units, so no fixed cap
+covers every pair; a key that does not fit is refused when it is written.
+Plenty of room in practice: with 1-char collection / sub-collection names
+and a 15-char application namespace, the ceiling is **11 levels (root + 10
+nested sub-collections)**.
 
 ## Verifying a signed envelope offline
 
