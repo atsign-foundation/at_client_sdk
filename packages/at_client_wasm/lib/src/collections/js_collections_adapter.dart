@@ -95,6 +95,24 @@ final class JsCollectionsError extends AtException {
   String toString() => 'JsCollectionsError($code): $message';
 }
 
+/// The eight collection operations on plain values, as the JS bridge uses
+/// them. [JsCollectionsAdapter] is the implementation; tests of the bridge
+/// supply another.
+abstract interface class JsCollection {
+  Future<JsItem> create(Map<String, dynamic> data,
+      {String? id, List<String> sharedWith});
+  Future<JsItem?> get(JsItemAddress address);
+  Future<JsListing> list();
+  Future<JsListing> query(List<JsWhereClause> clauses);
+  Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data);
+  Future<JsItem> share(JsItemAddress address, List<String> atSigns);
+  Future<void> remove(JsItemAddress address, {bool cascade = false});
+  Future<void> Function() watch(
+    void Function(JsEvent event) onEvent, {
+    required void Function(JsCollectionsError error) onError,
+  });
+}
+
 /// Translates plain values into [AtCollection] calls, and results, events
 /// and errors back into plain values, for the JS facade.
 ///
@@ -104,7 +122,7 @@ final class JsCollectionsError extends AtException {
 /// recipient it did not read, so a recipient another device added is kept.
 /// Every operation returns a Future that rejects with a
 /// [JsCollectionsError].
-class JsCollectionsAdapter {
+final class JsCollectionsAdapter implements JsCollection {
   JsCollectionsAdapter(this._collection);
 
   final AtCollection<Map<String, dynamic>> _collection;
@@ -153,6 +171,7 @@ class JsCollectionsAdapter {
 
   /// Creates an item owned by this atSign. Rejects with [CollectionErrorCodes.alreadyExists]
   /// when [id] exists.
+  @override
   Future<JsItem> create(
     Map<String, dynamic> data, {
     String? id,
@@ -172,6 +191,7 @@ class JsCollectionsAdapter {
       );
 
   /// The item at [address], or null when there is none.
+  @override
   Future<JsItem?> get(JsItemAddress address) => _guard(() async {
         final item = await _collection.getOrNull(address.id, address.owner);
         return item == null ? null : _item(item);
@@ -180,11 +200,13 @@ class JsCollectionsAdapter {
   /// Every readable item, in the order AtCollection returns them, and the
   /// records that could not be read. An unreadable record does not fail the
   /// listing; one whose key names no Atsign is left out, with a warning.
+  @override
   Future<JsListing> list() => _guard(() => _read(const []));
 
   /// The readable items matching every clause, in the order AtCollection
   /// returns them, and the records that could not be read. Operators: `==`,
   /// `!=`, `<`, `<=`, `>`, `>=`, `isNull`, `isNotNull`.
+  @override
   Future<JsListing> query(List<JsWhereClause> clauses) =>
       _guard(() => _read([for (final clause in clauses) _predicate(clause)]));
 
@@ -193,6 +215,7 @@ class JsCollectionsAdapter {
   /// [CollectionErrorCodes.wrongType] when the item carries another type tag; an untagged
   /// (`n/a`) item takes this collection's tag. [share] and [remove] work on
   /// an item of any type.
+  @override
   Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data) =>
       _write(address, (current) async {
         final next = _collection.draft(
@@ -217,6 +240,7 @@ class JsCollectionsAdapter {
 
   /// Adds [atSigns] to the recipients of the item at [address]. Never
   /// removes a recipient.
+  @override
   Future<JsItem> share(JsItemAddress address, List<String> atSigns) =>
       _write(address, (current) async {
         await _collection.updateSharedWith(
@@ -229,6 +253,7 @@ class JsCollectionsAdapter {
 
   /// Deletes the item at [address]. Rejects with [CollectionErrorCodes.hasSubItems] when it
   /// has sub-items and [cascade] is false.
+  @override
   Future<void> remove(JsItemAddress address, {bool cascade = false}) =>
       _write(address, (current) async {
         await _collection.delete(current, cascade: cascade);
@@ -245,6 +270,7 @@ class JsCollectionsAdapter {
   /// `subItemDeleted` (`ancestry`, a list of `{id, subName, owner}`); and
   /// `unknown` for an event type this adapter does not know. Times are
   /// milliseconds since the epoch.
+  @override
   Future<void> Function() watch(
     void Function(JsEvent event) onEvent, {
     required void Function(JsCollectionsError error) onError,

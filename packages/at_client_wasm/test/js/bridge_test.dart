@@ -11,9 +11,9 @@ import 'package:at_client_wasm/src/js/bridge.dart';
 import 'package:at_client_wasm/src/js/js_session.dart';
 import 'package:test/test.dart';
 
-/// A [JsCollectionsAdapter] that records each call and answers what it is
+/// A [JsCollection] that records each call and answers what it is
 /// told to.
-class _FakeAdapter implements JsCollectionsAdapter {
+class _FakeAdapter implements JsCollection {
   final calls = <String>[];
   Object? failure;
   JsItem item = {
@@ -138,7 +138,7 @@ class _FakeSession implements JsSession {
   }
 
   @override
-  Future<JsCollectionsAdapter> collection(String name,
+  Future<JsCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs}) async {
     _call('collection');
     collectionArgs.add((name, type, eventSource, expirationMs));

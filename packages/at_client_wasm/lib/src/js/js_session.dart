@@ -109,7 +109,7 @@ abstract interface class JsSession {
   /// [type]. [expirationMs] defaults to seven days; [eventSource] is
   /// `data`, `notifs` or `both`. Throws a [SessionClosedException] after
   /// [close] and rejects with a [JsCollectionsError] for a bad argument.
-  Future<JsCollectionsAdapter> collection(String name,
+  Future<JsCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs});
 
   /// A one-time passcode a new device quotes to request enrollment.
@@ -206,7 +206,7 @@ class AtClientJsSession implements JsSession {
       name.endsWith('.$namespace') ? name : '$name.$namespace';
 
   @override
-  Future<JsCollectionsAdapter> collection(String name,
+  Future<JsCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs}) async {
     _open();
     return JsCollectionsAdapter.open(_client,

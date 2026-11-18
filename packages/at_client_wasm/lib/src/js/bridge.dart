@@ -356,7 +356,7 @@ int _wholeNumber(JSAny? value, String name) {
 class BridgeCollection {
   BridgeCollection(this._adapter, this._self);
 
-  final JsCollectionsAdapter _adapter;
+  final JsCollection _adapter;
   final String _self;
 
   JsItemAddress _address(JSAny? value) {
