@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
 import 'package:at_chops/at_chops.dart'
-    show AesGcm256EncryptionAlgo, HkdfSha256, InitialisationVector;
+    show AESKey, AesGcm256EncryptionAlgo, HkdfSha256, InitialisationVector;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_client/passkey.dart';
@@ -249,23 +249,30 @@ class LocalSetupLock implements SetupLock {
 
 /// A [RecordSealer] over AES-GCM-256 with a raw key held in memory.
 class _AesGcmSealer implements RecordSealer {
-  _AesGcmSealer(Uint8List key)
-      : _key = key,
-        _algo = AesGcm256EncryptionAlgo.fromKeyBytes(key);
+  /// Takes ownership of [key]: [close] zeroes it. Each call builds the
+  /// at_chops algo from the key's base64, a `String` nothing can zero.
+  _AesGcmSealer(Uint8List key) : _key = key;
 
   final Uint8List _key;
-  final AesGcm256EncryptionAlgo _algo;
+  bool _closed = false;
+
+  AesGcm256EncryptionAlgo get _algo {
+    if (_closed) throw StateError('_AesGcmSealer is closed');
+    return AesGcm256EncryptionAlgo(AESKey(base64Encode(_key)));
+  }
 
   @override
-  Future<Uint8List> seal(Uint8List iv, List<int> plaintext, List<int> aad) =>
+  Future<Uint8List> seal(
+          Uint8List iv, List<int> plaintext, List<int> aad) async =>
       _algo.encrypt(Uint8List.fromList(plaintext),
           iv: InitialisationVector(iv), aad: aad);
 
   @override
   Future<Uint8List> open(
       Uint8List iv, Uint8List ciphertext, List<int> aad) async {
+    final algo = _algo;
     try {
-      return await _algo.decrypt(ciphertext,
+      return await algo.decrypt(ciphertext,
           iv: InitialisationVector(iv), aad: aad);
     } on AtDecryptionException {
       throw PasskeyRecordAuthenticationException();
@@ -274,8 +281,8 @@ class _AesGcmSealer implements RecordSealer {
 
   @override
   void close() {
+    _closed = true;
     _key.fillRange(0, _key.length, 0);
-    _algo.close();
   }
 }
 

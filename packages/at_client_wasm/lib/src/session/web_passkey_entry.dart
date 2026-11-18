@@ -43,7 +43,11 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
-/// lock too long, and the atServer's own errors when activation is refused.
+/// lock too long, [IndexedDbException] when a failure of this browser's
+/// IndexedDB stops the onboarding, and the atServer's own errors when
+/// activation is refused. IndexedDB stops it either before it registers a
+/// passkey or, while it writes the passkey hints, after the CRAM secret is
+/// deleted, when [passkeyLogin] finishes the onboarding.
 ///
 /// Stopping the session, or its client, closes the passkey vault it holds.
 Future<PasskeySession> onboardNewAtSign(
@@ -73,8 +77,10 @@ Future<PasskeySession> onboardNewAtSign(
 /// Throws [PasskeyLostException] when the passkey cannot open [atSign] (no
 /// credential, no pointer, PKAM refused), [PublicKeyMismatchException] when
 /// the restored public keys are not the published ones,
-/// [MissingAtKeysDocumentException] when the enrollment has no document, and
-/// [SetupLockTimeoutException] when another tab holds the setup lock too long.
+/// [MissingAtKeysDocumentException] when the enrollment has no document,
+/// [SetupLockTimeoutException] when another tab holds the setup lock too long,
+/// and [IndexedDbException] when a failure of this browser's IndexedDB stops
+/// the login.
 ///
 /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException` means
 /// the prompt failed, and the user may simply have cancelled it: WebAuthn

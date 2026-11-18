@@ -291,6 +291,7 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 | `MissingAtKeysDocumentException` | The enrollment has no document |
 | `PkamRefusedException` | The atServer explicitly refused PKAM for the enrollment (a bad signature always; a denied, revoked or unknown or expired enrollment when the reply names it). `passkeyLogin` surfaces it as `PasskeyLostException` with the `PkamRefusedException` kept as its cause; `PrfUnavailableException` and `SetupLockTimeoutException` are not wrapped |
 | `SetupLockTimeoutException` | The atSign's setup lock was not granted in time (`onboardNewAtSign` and `passkeyLogin`) |
+| `IndexedDbException` | A failure of this browser's IndexedDB stopped `passkeyLogin` or `onboardNewAtSign`: the passkey database would not open, or a request on it failed. The message names the failing stage, or that the store is closed, and, when the browser gave one, its error, never a stored value. `onboardNewAtSign` fails this way before it registers a passkey or, while it writes the passkey hints, after the CRAM secret is deleted, when `passkeyLogin` finishes the onboarding. A database a newer build upgraded opens as it is |
 
 ### v1 limitations
 
