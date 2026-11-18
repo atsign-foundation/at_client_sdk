@@ -24,5 +24,5 @@ Feature: A refusal reads the same whichever form the atServer writes it in
 
   Scenario: A verb refused while it authenticates throws the exception at_auth raised
     Given an atServer that refuses an at_client connection's pkam: with error:AT0027
-    When the client sends a verb
+    When the client sends a verb through its remote secondary
     Then the verb throws an AtAuthErrorReplyException whose errorCode is AT0027

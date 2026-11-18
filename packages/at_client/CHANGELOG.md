@@ -14,12 +14,13 @@
   code. AT0028 in reply to any verb but a PKAM and its `from:` still
   leaves the connection online. `AtEnrollmentExpiredException` is
   exported.
-- fix: a verb refused when it authenticates throws the
-  `AtAuthErrorReplyException` at_auth raised, whose `errorCode` is the
-  atServer's code, and the connection state takes a refusal's cause from
-  that code, never from the text of an exception's message. An authenticator
-  of your own reports a code by throwing that exception; a plain
-  `UnAuthenticatedException` is refused as `unauthenticated`.
+- fix: a verb sent through `AtClient.getRemoteSecondary()` that is refused
+  when it authenticates throws the `AtAuthErrorReplyException` at_auth
+  raised, whose `errorCode` is the atServer's code, and the connection state
+  takes a refusal's cause from that code, never from the text of an
+  exception's message. An authenticator of your own reports a code by
+  throwing that exception; a plain `UnAuthenticatedException` is refused as
+  `unauthenticated`.
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file
