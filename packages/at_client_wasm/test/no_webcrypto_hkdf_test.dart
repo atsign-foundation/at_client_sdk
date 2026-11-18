@@ -9,12 +9,23 @@ import 'package:test/test.dart';
 /// `importKey`, `deriveBits` and `deriveKey` are given to run HKDF.
 final _hkdfAlgorithmName = RegExp(r'''(['"])hkdf\1''', caseSensitive: false);
 
-/// The lines of [source] that ask WebCrypto for HKDF, as `<line>: <text>`.
-List<String> _hkdfRequests(String source) {
+/// `deriveBits` or `deriveKey`, as a name or in a string, other than at_chops'
+/// `HkdfSha256.deriveKey` and `HkdfSha384.deriveKey`.
+final _webCryptoDerivation =
+    RegExp(r'(?<!HkdfSha(?:256|384)\s*\.\s*)\bderive(?:Bits|Key)\b');
+
+/// The lines of [source] that ask WebCrypto for HKDF or for any derivation,
+/// as `<line>: <text>`. Matches run over the whole source, so a call wrapped
+/// at its dot is still found.
+List<String> _webCryptoDerivations(String source) {
   final lines = source.split('\n');
+  final hits = <int>{
+    for (final pattern in [_hkdfAlgorithmName, _webCryptoDerivation])
+      for (final match in pattern.allMatches(source))
+        '\n'.allMatches(source.substring(0, match.start)).length
+  };
   return [
-    for (var i = 0; i < lines.length; i++)
-      if (_hkdfAlgorithmName.hasMatch(lines[i])) '${i + 1}: ${lines[i].trim()}'
+    for (final i in hits.toList()..sort()) '${i + 1}: ${lines[i].trim()}'
   ];
 }
 
@@ -38,35 +49,41 @@ void main() {
 
     final requests = [
       for (final file in sources)
-        for (final line in _hkdfRequests(file.readAsStringSync()))
+        for (final line in _webCryptoDerivations(file.readAsStringSync()))
           '${file.path}:$line'
     ];
     expect(requests, isEmpty,
-        reason: 'no at_client_wasm library source may ask WebCrypto for HKDF');
+        reason: 'no at_client_wasm library source may ask WebCrypto for HKDF '
+            'or call deriveBits or deriveKey');
   });
 
-  test('the scan matches a WebCrypto HKDF request and not at_chops HKDF', () {
+  test('the scan matches WebCrypto derivations and not at_chops HKDF', () {
     const webCryptoRequests = [
-      "          .importKey('raw', jsPrf, 'HKDF'.toJS, false,",
       "        'name': 'HKDF'.toJS,",
+      "          .importKey('raw', jsPrf, 'HKDF'.toJS, false,",
+      "              _usages(['deriveBits', 'deriveKey']))",
+      '        .deriveBits(_hkdf(label, canonical), master, _hkdfBits)',
+      '          .deriveKey(',
     ];
     for (final line in webCryptoRequests) {
-      final matched = _hkdfRequests(line);
+      final matched = _webCryptoDerivations(line);
       print('positive control matched: $matched');
       expect(matched, hasLength(1),
-          reason: 'the scan must catch a WebCrypto HKDF request: $line');
+          reason: 'the scan must catch a WebCrypto derivation: $line');
     }
 
     final deriver =
         File('lib/src/keys/web_crypto_passkey.dart').readAsStringSync();
-    final atChopsLines = deriver
-        .split('\n')
-        .where((line) => line.contains('HkdfSha256'))
-        .toList();
+    final atChopsLines = [
+      ...deriver.split('\n').where((line) => line.contains('HkdfSha256')),
+      '    Uint8List expand(String label) => HkdfSha256.deriveKey(prf.output,',
+    ];
+    final matched = _webCryptoDerivations(atChopsLines.join('\n'));
     print('negative control lines: $atChopsLines');
-    expect(atChopsLines, isNotEmpty,
+    print('negative control matched: $matched');
+    expect(atChopsLines, hasLength(greaterThan(1)),
         reason: "the deriver must name at_chops' HkdfSha256");
-    expect(_hkdfRequests(atChopsLines.join('\n')), isEmpty,
-        reason: "naming at_chops' HkdfSha256 is not a WebCrypto HKDF request");
+    expect(matched, isEmpty,
+        reason: "naming at_chops' HKDF is not a WebCrypto derivation");
   });
 }

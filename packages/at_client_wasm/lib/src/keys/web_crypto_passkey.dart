@@ -14,8 +14,9 @@ const _derivedBytes = 32;
 const _tagBits = 128;
 
 /// The `DOMException` name WebCrypto rejects an AES-GCM decrypt with when the
-/// tag does not verify.
-const _failedTagCheck = 'OperationError';
+/// record fails to authenticate: its tag does not verify, or it is shorter
+/// than the tag.
+const _notAuthentic = 'OperationError';
 
 JSObject _params(Map<String, JSAny> fields) {
   final params = JSObject();
@@ -41,9 +42,10 @@ Uint8List _bytesOf(JSAny? buffer) {
 /// A [RecordSealer] over a non-extractable WebCrypto AES-GCM-256 key.
 ///
 /// The key is a handle the page cannot read back. A ciphertext is the
-/// encrypted bytes followed by the 16-byte tag. A record whose tag check fails
-/// throws a [PasskeyRecordAuthenticationException]; any other rejection from
-/// WebCrypto propagates as itself.
+/// encrypted bytes followed by the 16-byte tag. A record that fails to
+/// authenticate, because its tag does not verify or it is shorter than the
+/// tag, throws a [PasskeyRecordAuthenticationException]; any other rejection
+/// from WebCrypto propagates as itself.
 class WebCryptoRecordSealer implements RecordSealer {
   /// A sealer over [key], run on [subtle].
   WebCryptoRecordSealer(this._subtle, this._key);
@@ -105,7 +107,7 @@ class WebCryptoRecordSealer implements RecordSealer {
           .decrypt(_algorithm(iv, aad), key, ciphertext.toJS)
           .toDart;
     } catch (e) {
-      if (domExceptionName(e) == _failedTagCheck) {
+      if (domExceptionName(e) == _notAuthentic) {
         throw PasskeyRecordAuthenticationException();
       }
       rethrow;
@@ -130,18 +132,27 @@ String _wipedHex(Uint8List bytes) {
 /// the info `<label>|<canonical atSign>`.
 ///
 /// One extract of the PRF output is expanded to the 32-byte record id,
-/// namespace, auth seed and seal key. The PRF bytes and the extracted key are
-/// overwritten with zeroes on every exit, before the seal key is imported.
-/// The seal key's bytes exist in Dart until [WebCryptoRecordSealer.importKey]
-/// imports them as a non-extractable AES-GCM key and overwrites them with
-/// zeroes.
+/// namespace, auth seed and seal key. Of the buffers the deriver holds, it
+/// overwrites with zeroes the PRF output and the extracted key on every exit,
+/// the record id and namespace once read as hex, and the seal key through
+/// [WebCryptoRecordSealer.importKey]; it returns the auth seed's buffer, and
+/// zeroes it only when the import fails. The copies HkdfSha256 makes while
+/// computing these bytes, the seal key's among them, stay in Dart memory
+/// until they are garbage collected.
 class WebCryptoKeyDeriver implements PasskeyKeyDeriver {
   /// A deriver that imports the seal key on [subtle], by default the page's
-  /// `crypto.subtle`.
-  WebCryptoKeyDeriver({SubtleCrypto? subtle})
-      : _subtle = subtle ?? window.crypto.subtle;
+  /// `crypto.subtle`, and expands with [expand], by default at_chops'
+  /// [HkdfSha256.expand].
+  WebCryptoKeyDeriver(
+      {SubtleCrypto? subtle,
+      Uint8List Function(Uint8List prk, {Uint8List? info, required int length})?
+          expand})
+      : _subtle = subtle ?? window.crypto.subtle,
+        _expand = expand ?? HkdfSha256.expand;
 
   final SubtleCrypto _subtle;
+  final Uint8List Function(Uint8List prk,
+      {Uint8List? info, required int length}) _expand;
 
   @override
   Future<PasskeyDerivation> derive(PrfSecret prf, String atSign) async {
@@ -153,7 +164,7 @@ class WebCryptoKeyDeriver implements PasskeyKeyDeriver {
       final canonical = atSign.toAtsign();
       final prk = HkdfSha256.extract(prf.output, salt: Uint8List(0));
       try {
-        Uint8List expand(String label) => HkdfSha256.expand(prk,
+        Uint8List expand(String label) => _expand(prk,
             info: utf8.encode('$label|$canonical'), length: _derivedBytes);
         lookupHex = _wipedHex(expand(recordIdLabel));
         ns = _wipedHex(expand(recordNsLabel));

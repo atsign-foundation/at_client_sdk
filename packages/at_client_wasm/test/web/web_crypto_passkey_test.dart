@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
 import 'package:at_client_wasm/src/keys/dom_exception_name.dart';
+import 'package:at_chops/at_chops.dart' show HkdfSha256;
 import 'package:at_client_wasm/src/keys/web_crypto_passkey.dart';
 import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:test/test.dart';
@@ -54,6 +55,31 @@ class _Import {
   final List<int> bytesAtCall;
   CryptoKey? key;
 }
+
+/// One expand call seen by [_expandSpy]: its info as text, the extracted key
+/// it was given and a copy of that key, and its output and a copy of it, each
+/// copy taken at the call.
+class _Expansion {
+  _Expansion(this.info, this.prk, this.output)
+      : prkAtCall = List.of(prk),
+        outputAtCall = List.of(output);
+
+  final String info;
+  final Uint8List prk;
+  final List<int> prkAtCall;
+  final Uint8List output;
+  final List<int> outputAtCall;
+}
+
+/// An expand that runs at_chops' [HkdfSha256.expand] and records each call
+/// in [calls].
+Uint8List Function(Uint8List prk, {Uint8List? info, required int length})
+    _expandSpy(List<_Expansion> calls) =>
+        (Uint8List prk, {Uint8List? info, required int length}) {
+          final output = HkdfSha256.expand(prk, info: info, length: length);
+          calls.add(_Expansion(utf8.decode(info!), prk, output));
+          return output;
+        };
 
 /// A subtle that forwards `importKey`, `encrypt` and `decrypt` to the page's
 /// and records each `importKey` call in [calls].
@@ -182,15 +208,28 @@ void main() {
   });
 
   test("The seal key's bytes are overwritten once imported", () async {
-    final calls = <_Import>[];
-    await WebCryptoKeyDeriver(subtle: _importSpy(calls))
+    final imports = <_Import>[];
+    final expansions = <_Expansion>[];
+    await WebCryptoKeyDeriver(
+            subtle: _importSpy(imports), expand: _expandSpy(expansions))
         .derive(prf(), '@alice');
-    expect(calls, hasLength(1),
+    final sealKeys =
+        expansions.where((e) => e.info == '$recordSealLabel|@alice').toList();
+    expect(sealKeys, hasLength(1),
+        reason: 'the deriver expands the @alice seal key label once');
+    final sealKey = sealKeys.single;
+    expect(_hex(sealKey.outputAtCall), _aliceSealKey,
+        reason: 'the buffer the deriver holds is the @alice seal key of the '
+            'derivation vectors');
+    expect(imports, hasLength(1),
         reason: 'the seal key is the one key the deriver imports');
-    expect(_hex(calls.single.bytesAtCall), _aliceSealKey,
+    expect(_hex(imports.single.bytesAtCall), _aliceSealKey,
         reason: 'the bytes handed to importKey are the @alice seal key of '
             'the derivation vectors');
-    expect(_allZero(calls.single.data), isTrue,
+    expect(sealKey.output, everyElement(0),
+        reason: 'the seal key buffer the deriver holds must be zeroes once '
+            'imported');
+    expect(_allZero(imports.single.data), isTrue,
         reason: 'the seal key bytes handed to WebCrypto must be zeroes once '
             'imported');
   });
@@ -217,6 +256,29 @@ void main() {
           throwsA(isA<InvalidAtSignException>()));
       expect(bytes, everyElement(0),
           reason: 'an invalid atSign must not leave the PRF bytes unwiped');
+    });
+
+    test('the extracted key and the id and namespace buffers are zeroed',
+        () async {
+      final expansions = <_Expansion>[];
+      final alice = await WebCryptoKeyDeriver(expand: _expandSpy(expansions))
+          .derive(prf(), '@alice');
+      expect(expansions, hasLength(4), reason: 'one expand per output');
+      final prk = expansions.first.prk;
+      expect(expansions.map((e) => e.prk), everyElement(same(prk)),
+          reason: 'every output is expanded from one extracted key');
+      expect(expansions.first.prkAtCall, isNot(everyElement(0)),
+          reason: 'the extracted key held its bytes while it was expanded');
+      expect(prk, everyElement(0),
+          reason: 'the extracted key must be zeroes once derived');
+      Uint8List output(String label) =>
+          expansions.singleWhere((e) => e.info == '$label|@alice').output;
+      expect(output(recordIdLabel), everyElement(0),
+          reason: 'the record id buffer must be zeroes once read');
+      expect(output(recordNsLabel), everyElement(0),
+          reason: 'the namespace buffer must be zeroes once read');
+      expect(output(recordAuthSeedLabel), same(alice.authSeed),
+          reason: 'the auth seed buffer is the one the derivation returns');
     });
 
     test('the @alice sealer does not open a @bob record', () async {
@@ -346,7 +408,14 @@ void main() {
           throwsA(isA<PasskeyRecordAuthenticationException>()));
     });
 
-    test('a rejection other than a failed tag check propagates as itself',
+    test('a record shorter than the tag fails with an authentication exception',
+        () async {
+      final s = await sealer();
+      await expectLater(s.open(iv, Uint8List(15), utf8.encode('a')),
+          throwsA(isA<PasskeyRecordAuthenticationException>()));
+    });
+
+    test('a rejection other than a failed authentication propagates as itself',
         () async {
       final encryptOnly = await window.crypto.subtle
           .generateKey(_params({'name': 'AES-GCM'.toJS, 'length': 256.toJS}),
@@ -363,7 +432,8 @@ void main() {
       expect(rejection, isNotNull,
           reason: 'a key without decrypt usage must not open a record');
       expect(rejection, isNot(isA<PasskeyRecordAuthenticationException>()),
-          reason: 'only a failed tag check is an authentication failure');
+          reason: 'only a record that fails to authenticate is an '
+              'authentication failure');
       expect(domExceptionName(rejection!), 'InvalidAccessError',
           reason: 'the WebCrypto rejection must reach the caller as itself');
     });
