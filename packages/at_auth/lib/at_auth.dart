@@ -9,6 +9,8 @@ export 'src/auth/at_authenticator.dart';
 // CRAM activation as a parameter list: the verb at_client's `activate` builds
 // on, and the shape the request object above is being replaced by.
 export 'src/auth/activation.dart';
+// The second half of an activation, for a caller that deferred it.
+export 'src/auth/complete_activation.dart';
 
 // Contains models related to onboarding and authentication requests and responses.
 export 'src/auth/models/retry_options.dart';

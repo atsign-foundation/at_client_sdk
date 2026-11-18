@@ -1,5 +1,6 @@
 ## 4.1.0-rc.1
 
+- feat: `completeActivationOf` finishes an activation started with `completeActivation: false`, on a connection the caller holds: it publishes the encryption public key and deletes the CRAM secret.
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
 - fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening.
