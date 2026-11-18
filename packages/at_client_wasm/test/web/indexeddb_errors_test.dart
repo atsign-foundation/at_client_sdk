@@ -28,7 +28,7 @@ const _newerVersion = 5;
 
 /// A store earlier versions created, which an upgrade to this build's
 /// version deletes.
-const _retiredStore = 'at_client_wasm_keys';
+const _retiredStore = 'at_client_wasm_pending';
 
 /// A root no lookup can reach, so no test leaves the browser.
 final _transport =

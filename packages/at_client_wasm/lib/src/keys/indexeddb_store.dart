@@ -39,20 +39,19 @@ class IndexedDbHintStore implements PasskeyHintStore {
 
   /// The object stores earlier versions created, which an upgrade deletes
   /// with whatever they hold.
-  ///
-  /// Version 3's `at_client_wasm_pending` store is not among them: a record
-  /// there may be the only copy of an unfinished onboarding's keys, so an
-  /// upgrade leaves it and what it holds in place.
-  static const _retiredStores = ['at_client_wasm_keys'];
+  static const _retiredStores = [
+    'at_client_wasm_pending',
+    'at_client_wasm_keys'
+  ];
 
   /// The schema version this code creates; a database already at a higher
   /// version is opened as it is.
   static const _schemaVersion = 4;
 
   /// Opens the passkey database, creating its object stores and deleting the
-  /// retired ones earlier versions created when it is absent or below the
-  /// schema version this code creates; a version 3 database's pending records
-  /// are kept. A database at a higher version opens as it is.
+  /// ones earlier versions created when it is absent or below the schema
+  /// version this code creates; a database at a higher version opens as it
+  /// is.
   ///
   /// Fails with [IndexedDbException] when the browser refuses the open or
   /// another connection holds the database open and blocks an upgrade.
