@@ -334,6 +334,69 @@ void main() {
     }
   });
 
+  test('a lease with under half its ttl left is not used for a put', () async {
+    final clocks = <_Clock>[];
+    server.leaseOf = (key, ttl) {
+      final clock = _Clock();
+      clocks.add(clock);
+      return ServerMutexLease.timed(key, DateTime.now().add(ttl), clock, ttl);
+    };
+    final io = storeOf('self');
+    server.onEvent = (e) {
+      if (e == 'self get' && clocks.length == 1) {
+        clocks.single.elapsed = const Duration(milliseconds: 501);
+      }
+    };
+
+    await addSymmetric(io);
+
+    final self = server.of('self');
+    final first = self.indexOf('lock');
+    final second = self.indexOf('lock', first + 1);
+    expect(second, greaterThan(first),
+        reason: 'a lease with under half its ttl left is not used for a put');
+    expect(self.sublist(first, second), isNot(contains('put')));
+    final put = self.indexOf('put');
+    expect(put, greaterThan(second));
+    expect(self.sublist(second, put), contains('get'),
+        reason: 'it re-reads the document before it puts');
+    expect((await stored()).enrollmentSymmetricKey, isNotNull);
+  });
+
+  group('a lease that served a write', () {
+    late List<_Clock> clocks;
+    late AtServerAtKeysIo io;
+
+    setUp(() async {
+      clocks = <_Clock>[];
+      server.leaseOf = (key, ttl) {
+        final clock = _Clock();
+        clocks.add(clock);
+        return ServerMutexLease.timed(key, DateTime.now().add(ttl), clock, ttl);
+      };
+      io = storeOf('self');
+      await addSymmetric(io);
+    });
+
+    test('with half its ttl left serves the next write', () async {
+      clocks.single.elapsed = const Duration(milliseconds: 500);
+      await addSigning(io);
+      expect(
+          server.of('self').where((e) => e.startsWith('lock')), hasLength(1));
+    });
+
+    test('with under half its ttl left is not reused for the next write',
+        () async {
+      clocks.single.elapsed = const Duration(milliseconds: 501);
+      await addSigning(io);
+      final self = server.of('self');
+      final secondPut = self.lastIndexOf('put');
+      expect(self.sublist(self.indexOf('put') + 1, secondPut), contains('lock'),
+          reason: 'a lease with under half its ttl left is not reused');
+      expect(clocks, hasLength(2));
+    });
+  });
+
   test('a lease serves the writes that follow it while it lasts', () async {
     final io = storeOf('self', lockTtl: const Duration(seconds: 10));
     await addSymmetric(io);

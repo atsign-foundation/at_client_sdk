@@ -2,22 +2,27 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
   Every write of an enrollment's server-held @keys document runs under a
   server mutex: the short-ttl immutable self record that ServerMutex takes,
   one per enrollment. A writer that finds the lock held waits and tries
-  again, from a fresh read of the document. A refused write (a candidate
-  that drops stored material, or a read-back that differs) still stops the
-  store: it accepts no further write.
+  again, from a fresh read of the document. A put needs at least half the
+  lock's ttl left on its lease; with less, the writer takes the lock again
+  and re-reads. A refused write (a candidate that drops stored material,
+  or a read-back that differs) still stops the store: it accepts no further
+  write.
 
   Races: two clients of one enrollment (two tabs, or two devices on one
   synced passkey) each take the lock before reading, so the second builds
-  on the first's write. Replay: the lock record is not a credential and is
-  created on the enrollment's own authenticated connection. Denial of
-  service: a held lock is released by its ttl, so a writer that stopped
-  holding it delays the enrollment's writes by at most that ttl, and a
-  writer gives up after a bounded wait. Forgery and impersonation: only the
-  Atsign's own authenticated connections create its self records, and the
-  lock record and the document sit in the enrollment's own namespace, which
-  an atServer lets only that enrollment change; an atServer that predates
-  that rule lets another enrollment of the Atsign hold the lock to delay
-  writes, but there it could already overwrite the document.
+  on the first's write. A put sent late in a lease could land after the
+  lock expired, so a put needs half the ttl left, and the read-back and the
+  refusal of a write that drops material stay as the backstop. Replay: the
+  lock record is not a credential and is created on the enrollment's own
+  authenticated connection. Denial of service: a held lock is released by
+  its ttl, so a writer that stopped holding it delays the enrollment's
+  writes by at most that ttl, and a writer gives up after a bounded wait.
+  Forgery and impersonation: only the Atsign's own authenticated
+  connections create its self records, and the lock record and the document
+  sit in the enrollment's own namespace, which an atServer lets only that
+  enrollment change; an atServer that predates that rule lets another
+  enrollment of the Atsign hold the lock to delay writes, but there it could
+  already overwrite the document.
 
   @race
   Scenario: Two clients of one enrollment add key material at once, and both additions survive

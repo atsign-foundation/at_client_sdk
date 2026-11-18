@@ -39,6 +39,13 @@ class ServerMutexLease {
   /// Whether the lease has run out, by the time elapsed since it was made, so
   /// a change to the wall clock neither extends nor shortens it.
   bool get isSpent => _held.elapsed >= _length;
+
+  /// How long the lease has left, by the time elapsed since it was made; zero
+  /// once it is spent.
+  Duration get remaining {
+    final left = _length - _held.elapsed;
+    return left > Duration.zero ? left : Duration.zero;
+  }
 }
 
 /// Short-lived locks shared by every client of an atSign, held on its

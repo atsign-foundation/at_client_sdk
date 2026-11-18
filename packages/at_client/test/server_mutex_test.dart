@@ -370,6 +370,23 @@ void main() {
       expect(ahead.isSpent, isTrue,
           reason: 'a wall clock short of expiresAt does not extend it');
     });
+
+    test('has left its length less the time elapsed, and none once spent', () {
+      final running = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().subtract(const Duration(hours: 1)),
+          Stopwatch()..start(),
+          const Duration(minutes: 1));
+      expect(running.remaining, greaterThan(const Duration(seconds: 59)),
+          reason: 'a wall clock moved past expiresAt does not shorten it');
+      expect(running.remaining, lessThanOrEqualTo(const Duration(minutes: 1)));
+      final spent = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().add(const Duration(hours: 1)),
+          Stopwatch(),
+          Duration.zero);
+      expect(spent.remaining, Duration.zero);
+    });
   });
 }
 

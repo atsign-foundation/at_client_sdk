@@ -61,16 +61,18 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// [EnrollmentDocumentStore.tryLock], from before it reads the stored document
 /// until it puts. A writer that finds the lock held tries again after a pause
 /// of a quarter to one second, chosen at random, until it takes it or its
-/// wait bound runs out, which throws [AtServerAtKeysLockedException]. A lease
-/// serves this store's later writes while it lasts. When the lease has run
-/// out by the time the document is sealed, nothing is put: the write takes
-/// the lock again and starts over from a fresh read, running an [update]'s
-/// mutate again, with at most three leases in all. Every [update] builds its
-/// candidate on the document it read under the lock, so it keeps what another
-/// writer filed. The lock is not a fence: a put sent just before the lease
-/// runs out can land after it, so a write that would drop stored material is
-/// still refused, and each write is read back and compared with what was
-/// written.
+/// wait bound runs out, which throws [AtServerAtKeysLockedException]. A put
+/// needs at least half the lock's ttl left on its lease, measured by the
+/// lease's own stopwatch, and a lease serves this store's later writes only
+/// while that much is left. When less is left by the time the document is
+/// sealed, nothing is put: the write takes the lock again and starts over
+/// from a fresh read, running an [update]'s mutate again, with at most three
+/// leases in all. Every [update] builds its candidate on the document it read
+/// under the lock, so it keeps what another writer filed. The lock is not a
+/// fence: the margin leaves a put half the ttl to land, but one sent within
+/// it can still land after the lock expired, so a write that would drop
+/// stored material is still refused, and each write is read back and
+/// compared with what was written.
 ///
 /// The document never holds the enrollment's APKAM private key: a passkey
 /// enrollment derives the pair from the passkey and the atServer must not
@@ -473,11 +475,12 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
   }
 
   /// Under a lease on the enrollment's lock, builds the document with
-  /// [candidate], seals it and, while the lease lasts, puts it and reads it
-  /// back. A null candidate puts nothing.
+  /// [candidate], seals it and, while the lease leaves enough for a put, puts
+  /// it and reads it back. A null candidate puts nothing.
   ///
-  /// When the lease has run out by the time the document is sealed, puts
-  /// nothing and starts again from a new lease, up to [_leaseTakes] leases.
+  /// When the lease leaves too little by the time the document is sealed,
+  /// puts nothing and starts again from a new lease, up to [_leaseTakes]
+  /// leases.
   Future<void> _putLocked(
       String atsign, Future<Map<String, dynamic>?> Function() candidate) async {
     for (var takes = 1;; takes++) {
@@ -485,24 +488,29 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
       final written = await candidate();
       if (written == null) return;
       final sealed = await _seal(written);
-      if (!lease.isSpent) {
+      if (_leaves(lease)) {
         await _documents.put(atsign, _enrollmentId, sealed);
         return _verify(atsign, written);
       }
       if (takes == _leaseTakes) {
         throw AtServerAtKeysLockedException(
             'enrollment $_enrollmentId: the @keys lock '
-            '${enrollmentLockKey(_enrollmentId, atsign)} ran out before the '
-            'document was put, $takes times, so nothing was put');
+            '${enrollmentLockKey(_enrollmentId, atsign)} had less than half '
+            'its ttl left when the document was ready to put, $takes times, '
+            'so nothing was put');
       }
     }
   }
 
-  /// The lease this store holds while it lasts, or a new one, taken as soon
-  /// as no other writer holds the lock and within [_lockWait].
+  /// Whether [lease] has at least half the lock's ttl left, enough for a put.
+  bool _leaves(ServerMutexLease lease) => lease.remaining >= _lockTtl ~/ 2;
+
+  /// The lease this store holds while it leaves enough for a put, or a new
+  /// one, taken as soon as no other writer holds the lock and within
+  /// [_lockWait].
   Future<ServerMutexLease> _leased(String atsign) async {
     final held = _lease;
-    if (held != null && !held.isSpent) return held;
+    if (held != null && _leaves(held)) return held;
     final waited = Stopwatch()..start();
     while (true) {
       final lease =
