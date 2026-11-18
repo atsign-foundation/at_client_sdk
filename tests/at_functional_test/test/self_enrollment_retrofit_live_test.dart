@@ -10,6 +10,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/lifecycle/authenticated_lookup.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, parseApskValue, verifyEnvelope;
@@ -115,7 +116,8 @@ void main() {
   Future<AtLookUp> legacyLookUp(AtAuthSession session) =>
       authenticatedLookUp(atSign, session.atKeysIo, rootDomain,
           enrollmentId: session.enrollmentId, lookUps: secureSocketLookUps(),
-              secondaryAddressFinder: TestUtils.atDirectory);
+              secondaryAddressFinder: TestUtils.atDirectory,
+              clientConfig: clientConfigOf(null));
 
   test(
       'the rollout-window retrofit: an rsa2048 self-enrollment auto-approves '

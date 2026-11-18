@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_auth/src/auth/client_config.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
@@ -38,28 +39,33 @@ const _cramTransientWaitMillis = 4000;
 /// Nothing here reaches into at_lookup for key material, and at_lookup names
 /// none of these types: `AtKeys` and `AtKeysIo` live in at_auth, which depends
 /// on at_lookup, so the dependency only points one way.
+///
+/// The `from:` sends [clientConfig] as [withClientConfigDefaults] completes
+/// it, as do the other two builders here.
 AtAuthenticator authenticatorFor(
   AtKeysIo io,
   String atSign, {
   String? cramSecret,
   String? enrollmentId,
   Map<String, dynamic> clientConfig = const {},
-}) =>
-    (executor) async {
-      final AtKeys keys;
-      try {
-        keys = await io.read(atSign);
-      } on AtKeysSourceAbsentException {
-        if (cramSecret == null) {
-          throw UnAuthenticatedException(
-              'No keys for $atSign and no CRAM secret to onboard with, so '
-              'there is no credential to authenticate with');
-        }
-        _logger.finer('no keyfile for $atSign - authenticating with CRAM');
-        return _cram(executor, atSign, cramSecret, clientConfig);
+}) {
+  final config = withClientConfigDefaults(clientConfig);
+  return (executor) async {
+    final AtKeys keys;
+    try {
+      keys = await io.read(atSign);
+    } on AtKeysSourceAbsentException {
+      if (cramSecret == null) {
+        throw UnAuthenticatedException(
+            'No keys for $atSign and no CRAM secret to onboard with, so '
+            'there is no credential to authenticate with');
       }
-      return _pkam(executor, atSign, keys, enrollmentId, clientConfig);
-    };
+      _logger.finer('no keyfile for $atSign - authenticating with CRAM');
+      return _cram(executor, atSign, cramSecret, config);
+    }
+    return _pkam(executor, atSign, keys, enrollmentId, config);
+  };
+}
 
 /// Authenticates with a CRAM secret alone, for a caller holding no keystore.
 ///
@@ -70,8 +76,10 @@ AtAuthenticator authenticatorForCramSecret(
   String atSign,
   String cramSecret, {
   Map<String, dynamic> clientConfig = const {},
-}) =>
-    (executor) => _cram(executor, atSign, cramSecret, clientConfig);
+}) {
+  final config = withClientConfigDefaults(clientConfig);
+  return (executor) => _cram(executor, atSign, cramSecret, config);
+}
 
 /// The legacy credential: a PKAM private key and nothing else.
 ///
@@ -85,34 +93,36 @@ AtAuthenticator authenticatorForPrivateKey(
   String privateKey, {
   String? enrollmentId,
   Map<String, dynamic> clientConfig = const {},
-}) =>
-    (executor) async {
-      _logger.finer('authenticating $atSign with a bare private key');
-      var fromResponse = await executor.sendSync((FromVerbBuilder()
-            ..atSign = atSign
-            ..clientConfig = Map<String, dynamic>.from(clientConfig))
-          .buildCommand());
-      if (fromResponse.isEmpty) {
-        return false;
-      }
-      fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-      fromResponse = validatedFromChallenge(fromResponse, atSign);
+}) {
+  final config = withClientConfigDefaults(clientConfig);
+  return (executor) async {
+    _logger.finer('authenticating $atSign with a bare private key');
+    var fromResponse = await executor.sendSync((FromVerbBuilder()
+          ..atSign = atSign
+          ..clientConfig = Map<String, dynamic>.from(config))
+        .buildCommand());
+    if (fromResponse.isEmpty) {
+      return false;
+    }
+    fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
+    fromResponse = validatedFromChallenge(fromResponse, atSign);
 
-      final signature = _signRsaPkamChallenge(fromResponse, privateKey);
+    final signature = _signRsaPkamChallenge(fromResponse, privateKey);
 
-      final pkamResponse = await executor.sendSync((PkamVerbBuilder()
-            ..signingAlgo = SigningAlgoType.rsa2048.name
-            ..hashingAlgo = HashingAlgoType.sha256.name
-            ..enrollmentlId = enrollmentId
-            ..signature = signature)
-          .buildCommand());
-      if (pkamResponse == 'data:success') {
-        _logger.info('pkam auth success for $atSign');
-        return true;
-      }
-      throw UnAuthenticatedException(
-          'Failed connecting to $atSign. $pkamResponse');
-    };
+    final pkamResponse = await executor.sendSync((PkamVerbBuilder()
+          ..signingAlgo = SigningAlgoType.rsa2048.name
+          ..hashingAlgo = HashingAlgoType.sha256.name
+          ..enrollmentlId = enrollmentId
+          ..signature = signature)
+        .buildCommand());
+    if (pkamResponse == 'data:success') {
+      _logger.info('pkam auth success for $atSign');
+      return true;
+    }
+    throw UnAuthenticatedException(
+        'Failed connecting to $atSign. $pkamResponse');
+  };
+}
 
 /// Answers the atServer's `from:` challenge with a PKAM signature from [keys].
 /// [validatedFromChallenge] refuses a challenge that does not name [atSign],

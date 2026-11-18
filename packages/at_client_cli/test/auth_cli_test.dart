@@ -298,14 +298,14 @@ void postureArgumentTests() {
               'Anything else is a default in disguise:\n${args.join('\n')}');
     });
 
-    /// The auth_cli.dart lines whose `await createAtClient(` call passes no
+    /// The auth_cli.dart lines whose `await _commandClient(` call passes no
     /// [argument].
-    List<int> createAtClientCallsWithout(String argument) {
+    List<int> commandClientCallsWithout(String argument) {
       // NOTE: read from source because driving each command needs an atServer
       // per row.
       final source = File('lib/src/commands/auth_cli.dart').readAsStringSync();
       final calls =
-          RegExp(r'await createAtClient\(').allMatches(source).toList();
+          RegExp(r'await _commandClient\(').allMatches(source).toList();
       expect(calls, isNotEmpty,
           reason: 'if this finds nothing the rest of the row proves nothing');
 
@@ -321,16 +321,16 @@ void postureArgumentTests() {
     }
 
     test('every command that builds a client passes the posture to it', () {
-      final without = createAtClientCallsWithout('posture');
+      final without = commandClientCallsWithout('posture');
       expect(without, isEmpty,
-          reason: 'auth_cli.dart lines $without call createAtClient without a '
+          reason: 'auth_cli.dart lines $without call _commandClient without a '
               'posture, so those commands ignore --posture');
     });
 
     test('every command that builds a client passes --mca to it', () {
-      final without = createAtClientCallsWithout('maxConnectAttempts');
+      final without = commandClientCallsWithout('maxConnectAttempts');
       expect(without, isEmpty,
-          reason: 'auth_cli.dart lines $without call createAtClient without '
+          reason: 'auth_cli.dart lines $without call _commandClient without '
               'maxConnectAttempts, so those commands ignore --mca');
     });
 
@@ -453,10 +453,16 @@ void postureArgumentTests() {
 
     test('wrappedMain inserts onboard before parsing', () async {
       // NOTE: --help stops at onboard's usage, so this needs no atServer.
-      expect(await wrappedMain(['-a', '@alice', '--help']), 0,
+      expect(
+          await wrappedMain(['-a', '@alice', '--help'],
+              program: 'at_activate', programVersion: null),
+          0,
           reason: 'with no insertion, a leading -a reaches the top-level '
               'parser, which has no such option');
-      expect(await wrappedMain(['--version']), 0,
+      expect(
+          await wrappedMain(['--version'],
+              program: 'at_activate', programVersion: null),
+          0,
           reason: 'a leading option that is not a command must still be '
               'served');
     });

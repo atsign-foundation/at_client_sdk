@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeys, AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysIo;
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -92,7 +93,8 @@ Future<AtClient> buildAtClient({
         ? await SyncServiceImpl.create(client)
         : await syncServiceBuilder(client);
     client.enrollmentService = enrollmentServiceBuilder == null
-        ? EnrollmentServiceImpl(client, AtEnrollment.create())
+        ? EnrollmentServiceImpl(
+            client, enrollmentFor(preference.atClientParticulars))
         : await enrollmentServiceBuilder(client);
   } catch (_) {
     await client.stop();

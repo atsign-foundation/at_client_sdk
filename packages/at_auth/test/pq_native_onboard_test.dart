@@ -34,6 +34,7 @@ class _CountingAtAuth extends AtAuthImpl {
     required super.pkamAuthenticator,
     required super.atEnrollment,
     required super.cramAuthenticator,
+    required super.clientConfig,
     this.validationFailure,
   });
 
@@ -123,7 +124,8 @@ void main() {
     atAuth = AtAuthImpl(
         atLookUp: mockAtLookUp,
         pkamAuthenticator: mockPkam,
-        atEnrollment: mockAtEnrollment);
+        atEnrollment: mockAtEnrollment,
+        clientConfig: const {});
   });
 
   tearDown(() => tempDir.deleteSync(recursive: true));
@@ -317,7 +319,8 @@ void main() {
       MockCramAuthenticator cram,
     }) spied({Object? validationFailure}) {
       final cram = MockCramAuthenticator();
-      when(() => cram.authenticate(any(), any(), any()))
+      when(() => cram.authenticate(any(), any(), any(),
+              clientConfig: any(named: 'clientConfig')))
           .thenAnswer((_) async => true);
       return (
         auth: _CountingAtAuth(
@@ -325,6 +328,7 @@ void main() {
             pkamAuthenticator: MockPkamAuthenticator(),
             atEnrollment: mockAtEnrollment,
             cramAuthenticator: cram,
+            clientConfig: const {},
             validationFailure: validationFailure),
         cram: cram,
       );
@@ -334,7 +338,8 @@ void main() {
         ({_CountingAtAuth auth, MockCramAuthenticator cram}) spy) {
       expect(spy.auth.validations, 0,
           reason: 'the atServer is not contacted for a refused pair');
-      verifyNever(() => spy.cram.authenticate(any(), any(), any()));
+      verifyNever(() => spy.cram.authenticate(any(), any(), any(),
+          clientConfig: any(named: 'clientConfig')));
       verifyNever(() => mockAtLookUp.executeVerb(any()));
       verifyNever(
           () => mockAtLookUp.executeCommand(any(), auth: any(named: 'auth')));
@@ -407,7 +412,8 @@ void main() {
       when(() => lookUp.executeVerb(any())).thenAnswer((_) async => 'data:2');
       when(() => lookUp.dropConnection()).thenAnswer((_) async => {});
       final cram = MockCramAuthenticator();
-      when(() => cram.authenticate(any(), any(), any()))
+      when(() => cram.authenticate(any(), any(), any(),
+              clientConfig: any(named: 'clientConfig')))
           .thenAnswer((_) async => true);
       final pkam = MockPkamAuthenticator();
       when(() => pkam.authenticate(any(), any())).thenAnswer((_) async => true);
@@ -416,7 +422,8 @@ void main() {
               atLookUp: lookUp,
               pkamAuthenticator: pkam,
               cramAuthenticator: cram,
-              atEnrollment: AtEnrollmentImpl())
+              atEnrollment: AtEnrollmentImpl(),
+              clientConfig: const {})
           .onboard(
               requestFor(
                   signingAlgo: SigningAlgoType.mldsa65, apkamKeyPair: mldsa),
