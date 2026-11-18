@@ -1486,8 +1486,11 @@ class EnrollerSettings {
 /// kept for, and the app they name to their atServer.
 const String commandNamespace = 'at_activate';
 
+/// The program at_register runs at_activate's onboarding under.
+const String registerProgram = 'at_register';
+
 /// The programs at_client_cli ships, which name its version when given none.
-const Set<String> _ownPrograms = {commandNamespace, 'at_register'};
+const Set<String> _ownPrograms = {commandNamespace, registerProgram};
 
 /// Changes [preference] to name [program] at [version] as the app on every
 /// `from:` its clients send to authenticate, and returns it.
