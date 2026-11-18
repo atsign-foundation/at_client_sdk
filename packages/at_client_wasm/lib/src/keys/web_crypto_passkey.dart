@@ -111,11 +111,12 @@ class WebCryptoKeyDeriver implements PasskeyKeyDeriver {
 
   @override
   Future<PasskeyDerivation> derive(PrfSecret prf, String atSign) async {
-    final canonical = atSign.toAtsign();
     final bytes = Uint8List.fromList(prf.output);
     final jsPrf = bytes.toJS;
+    final String canonical;
     final CryptoKey master;
     try {
+      canonical = atSign.toAtsign();
       master = await _subtle
           .importKey('raw', jsPrf, 'HKDF'.toJS, false,
               _usages(['deriveBits', 'deriveKey']))

@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
 import 'package:at_client_wasm/src/keys/web_crypto_passkey.dart';
+import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:test/test.dart';
 import 'package:web/web.dart';
 
@@ -68,6 +69,14 @@ void main() {
       final secret = prf();
       await deriver.derive(secret, '@alice');
       expect(secret.output, everyElement(0));
+    });
+
+    test('the PRF bytes are zeroed when the atSign is invalid', () async {
+      final secret = prf();
+      await expectLater(deriver.derive(secret, '@al ice'),
+          throwsA(isA<InvalidAtSignException>()));
+      expect(secret.output, everyElement(0),
+          reason: 'an invalid atSign must not leave the PRF bytes unwiped');
     });
 
     test('the sealer opens a record sealed by a raw-bytes sealer', () async {
