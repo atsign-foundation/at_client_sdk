@@ -136,6 +136,14 @@ void main() {
         reason: 'the client closed the storage it built');
   });
 
+  test('the client a session opens starts no monitor of its own', () async {
+    final client = await open();
+    await pumpEventQueue();
+
+    expect(client.getPreferences()!.monitorAutoStart, isFalse);
+    expect(wire.lookUpsBuilt.map((l) => l.notificationStarts), everyElement(0));
+  });
+
   test('the client reads its keys from the key store it was given', () async {
     final store = keysIoFor('eid1');
 

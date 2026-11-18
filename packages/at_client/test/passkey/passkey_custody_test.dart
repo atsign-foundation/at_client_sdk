@@ -730,6 +730,36 @@ void main() {
         expect(authenticator.gets, 2);
       });
 
+      test(
+          'hints saved while the open waits for the setup lock are retried '
+          'without them when the atServer refuses their enrollment', () async {
+        server.revoked.add('eid-old');
+        final saved = FakeHints();
+        final release = Completer<void>();
+        final other =
+            setupLock.run(setupLockName(_lockPrefix, _atSign), () async {
+          await release.future;
+          saved
+            ..credentials[_atSign] = Uint8List.fromList([1])
+            ..ids[_atSign] = 'eid-old';
+        });
+        authenticator.gets = 0;
+        setupLock.names.clear();
+
+        final opening = custody(withHints: saved).open(atSign: _atSign);
+        while (setupLock.names.isEmpty) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        release.complete();
+        await other;
+        final session = await opening;
+
+        expect(session.client.enrollmentId, 'eid1');
+        expect(authenticator.gets, 2,
+            reason: 'one ceremony with the saved hints, one without');
+        expect(saved.ids[_atSign], 'eid1');
+      });
+
       test('a credential id alone counts as no hints', () async {
         final half = FakeHints()
           ..credentials[_atSign] = Uint8List.fromList([1]);
@@ -1002,7 +1032,6 @@ void main() {
         'a second passkey derives different keys, so it cannot open the '
         'first passkey\'s records', () async {
       final first = await custody().onboard(atSign: _atSign, cram: 'cram');
-      // As if the registrar had issued a new CRAM secret.
       server.cramDeleted.remove(_atSign);
       final second = await custody(withHints: FakeHints())
           .onboard(atSign: _atSign, cram: 'cram');

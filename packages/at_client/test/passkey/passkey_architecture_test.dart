@@ -34,6 +34,21 @@ void main() {
       }
     });
 
+    test(
+        'the lifecycle helpers passkey code calls suppress the '
+        'visible-for-testing lint once each', () {
+      for (final path in [
+        'lib/src/lifecycle/atsign_lifecycle.dart',
+        'lib/src/lifecycle/pending_enrollment.dart',
+      ]) {
+        expect(
+            'invalid_use_of_visible_for_testing_member'
+                .allMatches(File(path).readAsStringSync()),
+            hasLength(1),
+            reason: path);
+      }
+    });
+
     test('no import reaches into another package src', () {
       final other = RegExp(r"import\s+'package:(?!at_client/)[^/']+/src/");
       for (final f in _sources()) {

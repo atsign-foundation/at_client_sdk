@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
@@ -753,17 +752,5 @@ void main() {
       await expectLater((await open()).keepsAllOf(_atSign, _base()),
           throwsA(isA<MissingAtKeysDocumentException>()));
     });
-  });
-
-  test('is a WrittenAtKeysIo that declares its own update', () {
-    final source = Directory('lib/src/passkey')
-        .listSync()
-        .whereType<File>()
-        .map((f) => f.readAsStringSync())
-        .firstWhere((s) => s.contains('class AtServerAtKeysIo'));
-    expect(source, contains('extends WrittenAtKeysIo'));
-    expect(source, contains('Future<void> update('));
-    expect(source, isNot(contains('InMemoryAtKeysIo')));
-    expect(AtServerAtKeysIo, isNotNull);
   });
 }

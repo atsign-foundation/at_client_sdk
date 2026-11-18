@@ -47,6 +47,22 @@ class _CapturingDeriver implements PasskeyKeyDeriver {
 bool _sealerClosed(PasskeyDerivation d) =>
     (d.sealer as BytesRecordSealer).closed;
 
+/// Derives as [BytesPasskeyKeyDeriver] does, from a copy of the PRF output, so
+/// the output it is handed stays as it was.
+class _CopyingDeriver implements PasskeyKeyDeriver {
+  @override
+  Future<PasskeyDerivation> derive(PrfSecret prf, String atSign) =>
+      const BytesPasskeyKeyDeriver()
+          .derive(PrfSecret(Uint8List.fromList(prf.output)), atSign);
+}
+
+/// Fails every derivation, leaving the PRF output as it was.
+class _FailingDeriver implements PasskeyKeyDeriver {
+  @override
+  Future<PasskeyDerivation> derive(PrfSecret prf, String atSign) async =>
+      throw StateError('derivation failed');
+}
+
 void main() {
   late FakeServer server;
   late FakeGateway gateway;
@@ -54,17 +70,18 @@ void main() {
   late FakeHints hints;
   late List<PasskeyDerivation> derived;
 
-  PasskeyCustody custody({FakeHints? withHints}) => PasskeyCustody(
-      prf: PasskeyPrf(authenticator),
-      pointerReader: server,
-      gateway: gateway,
-      credentials: withHints ?? hints,
-      enrollmentIds: withHints ?? hints,
-      persistence: FakePersistence(),
-      retryDelay: Duration.zero,
-      setupLock: FakeSetupLock(),
-      setupLockPrefix: 'test:setup',
-      deriver: _CapturingDeriver(derived));
+  PasskeyCustody custody({FakeHints? withHints, PasskeyKeyDeriver? deriver}) =>
+      PasskeyCustody(
+          prf: PasskeyPrf(authenticator),
+          pointerReader: server,
+          gateway: gateway,
+          credentials: withHints ?? hints,
+          enrollmentIds: withHints ?? hints,
+          persistence: FakePersistence(),
+          retryDelay: Duration.zero,
+          setupLock: FakeSetupLock(),
+          setupLockPrefix: 'test:setup',
+          deriver: deriver ?? _CapturingDeriver(derived));
 
   void forgetCaptured() {
     derived.clear();
@@ -176,6 +193,38 @@ void main() {
       await (await custody(withHints: FakeHints()).open(atSign: _atSign))
           .stop();
       expect(seedZeroed, isTrue);
+    });
+  });
+
+  group('a deriver that leaves the PRF output as it was', () {
+    void expectPrfWiped() {
+      expect(authenticator.issuedPrf, isNotEmpty);
+      for (final prf in authenticator.issuedPrf) {
+        expect(_zeroed(prf), isTrue, reason: 'PRF output');
+      }
+    }
+
+    test('onboarding and open wipe the PRF output once it is derived',
+        () async {
+      final onboarded = await custody(deriver: _CopyingDeriver())
+          .onboard(atSign: _atSign, cram: 'cram');
+      expectPrfWiped();
+      await onboarded.stop();
+      forgetCaptured();
+
+      final opened =
+          await custody(withHints: FakeHints(), deriver: _CopyingDeriver())
+              .open(atSign: _atSign);
+      expectPrfWiped();
+      await opened.stop();
+    });
+
+    test('a derivation that fails still wipes the PRF output', () async {
+      await expectLater(
+          custody(deriver: _FailingDeriver())
+              .onboard(atSign: _atSign, cram: 'cram'),
+          throwsStateError);
+      expectPrfWiped();
     });
   });
 
