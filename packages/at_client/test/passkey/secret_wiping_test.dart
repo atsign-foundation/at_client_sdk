@@ -84,9 +84,9 @@ void main() {
     }
   }
 
-  /// The PRF outputs are all zeroes while the client holds the vault: its
-  /// auth seed is zeroed and its sealer open until the client stops.
-  void expectHeldByClient() {
+  /// The PRF outputs are all zeroes while a session holds the vault: its
+  /// auth seed is zeroed and its sealer open until the session stops.
+  void expectHeldBySession() {
     expect(authenticator.issuedPrf, isNotEmpty);
     for (final prf in authenticator.issuedPrf) {
       expect(_zeroed(prf), isTrue, reason: 'PRF output');
@@ -129,12 +129,12 @@ void main() {
     });
 
     test(
-        'wipes the PRF at handover, and the kek and seed when the client stops',
-        () async {
-      final client =
+        'wipes the PRF at handover, and the kek and seed when the session '
+        'stops', () async {
+      final session =
           await custody(withHints: FakeHints()).open(atSign: _atSign);
-      expectHeldByClient();
-      await client.stop();
+      expectHeldBySession();
+      await session.stop();
       expectWiped();
     });
 
@@ -181,11 +181,11 @@ void main() {
 
   group('onboard', () {
     test(
-        'wipes the PRF at handover, and the kek and seed when the client stops',
-        () async {
-      final client = await custody().onboard(atSign: _atSign, cram: 'cram');
-      expectHeldByClient();
-      await client.stop();
+        'wipes the PRF at handover, and the kek and seed when the session '
+        'stops', () async {
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+      expectHeldBySession();
+      await session.stop();
       expectWiped();
     });
 

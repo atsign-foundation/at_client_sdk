@@ -10,8 +10,8 @@ import 'session_queue.dart';
 /// [lookUp], reads its @keys from [keysIo] and persists every change through
 /// it.
 ///
-/// Stopping the client stops [lookUp] and closes [keysIo] when it is flagged
-/// `closedByClient`, which releases what the session holds for the client.
+/// Stopping the client stops [lookUp] and leaves [keysIo] open: whoever built
+/// it closes it.
 ///
 /// The client has in-memory storage, reads and writes go to the atServer
 /// ([RemoteLocalPref.remoteOnly]), the monitor is off, and every other

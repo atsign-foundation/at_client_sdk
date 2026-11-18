@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart' show ClosableAtKeysIo, WrittenAtKeysIo;
+import 'package:at_auth/at_auth.dart' show WrittenAtKeysIo;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show ApkamKeyPair;
@@ -199,27 +200,29 @@ class FakeSession implements EnrollmentSession {
   }
 }
 
-/// The client a [FakeSession] opens: it knows the keys IO it was opened with
-/// stops the session, then closes the keys IO when that is flagged
-/// `closedByClient`, as a client's stop does.
+/// The client a [FakeSession] opens, on the keys IO it was opened with. Its
+/// stop, shared by every caller, reports `stopped` on its connection, then
+/// stops the session, as a client's stop does; it never closes the keys IO.
 class FakeAtClient extends Fake implements AtClient {
   FakeAtClient(this.session, this.keysIo);
 
   final FakeSession session;
   final WrittenAtKeysIo keysIo;
+  Future<void>? _stopping;
+
+  @override
+  final connection = AtConnection(
+      atSign: '@fake', attempt: (_) async => AtConnectionState.online());
 
   @override
   String? get enrollmentId => session.enrollmentId;
 
   @override
-  Future<void> stop() async {
-    try {
-      await session.close();
-    } finally {
-      if (keysIo case final ClosableAtKeysIo io when io.closedByClient) {
-        await io.close();
-      }
-    }
+  Future<void> stop() => _stopping ??= _stop();
+
+  Future<void> _stop() async {
+    await connection.close();
+    await session.close();
   }
 }
 

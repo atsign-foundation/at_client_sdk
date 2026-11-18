@@ -109,8 +109,7 @@ void main() {
             documents: docs,
             vault: vault,
             enrollmentId: _eid,
-            apkamKeyPair: pair,
-            closedByClient: true),
+            apkamKeyPair: pair),
         app: 'wavi',
         transport: (
           lookUps: wire.lookUps,

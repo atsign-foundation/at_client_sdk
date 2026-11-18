@@ -1,5 +1,6 @@
 /// The passkey custody surface: onboarding an atSign with a passkey, opening
-/// it again, and the enrollment gateway, stores and @keys IO they run on.
+/// it again, the session either returns, and the enrollment gateway, stores
+/// and @keys IO they run on.
 library;
 
 export 'src/passkey/at_server_at_keys_io.dart'
@@ -25,4 +26,5 @@ export 'src/passkey/passkey_custody.dart'
         PublicKeyMismatchException,
         StoragePersistence,
         canonicalPasskeyAtSign;
+export 'src/passkey/passkey_session.dart' show PasskeySession;
 export 'src/passkey/public_lookup.dart' show publicLookup;

@@ -330,24 +330,6 @@ class PqClientBootstrap {
     ring.startUpAsked();
   }
 
-  /// Waits up to [within] for the step in flight to finish, so a caller about
-  /// to close the key store does not close it under a write that step is
-  /// still to make. Meant for after [stop], when no further step starts.
-  ///
-  /// Returns at once when no startup began. A step still running when [within]
-  /// elapses is logged and left to finish or fail on its own.
-  Future<void> settleStartup(Duration within) async {
-    if (!_started) return;
-    try {
-      await startupComplete.timeout(within);
-    } on TimeoutException {
-      _logger.warning(
-          'PQ startup for $_atSign was still running ${within.inMilliseconds} '
-          'ms after it was stopped, so the key store is closed under it: a '
-          'write it had still to make is refused, and the next start makes it.');
-    }
-  }
-
   /// Whether the `seedNamespaceKeys` step will seed anything.
   bool get _seedsNamespaceKeys =>
       _gates.seedNamespaceKeys &&

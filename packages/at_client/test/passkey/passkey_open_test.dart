@@ -81,7 +81,6 @@ void main() {
         vault: derived.vault,
         enrollmentId: _eid,
         apkamKeyPair: pair,
-        closedByClient: true,
         restored: restored);
   }
 
@@ -150,10 +149,7 @@ void main() {
   });
 
   group('T4 recovery of a stranded atSign', () {
-    test('a published document and no pending record: login opens a client',
-        () async {
-      // What custody's restore hands the opener: the stored document, read
-      // back through a store of its own, on a device with no pending record.
+    test('a published document: login opens a client', () async {
       final restored = await (await store()).read(_atSign);
       final client = await open(await store(restored: restored));
       expect(client.connection.current.isOnline, isTrue);

@@ -55,8 +55,8 @@ typedef Activator = Future<AtKeys> Function(
 /// Opens the client that runs as [enrollmentId] on [lookUp]: the connection
 /// that already authenticated as it. The client reads its @keys from [keysIo]
 /// and persists every change through it. It takes over [lookUp] and stops it
-/// when the client stops; a [keysIo] flagged `closedByClient` is closed then
-/// too. If this throws, [lookUp] is still the caller's to release.
+/// when the client stops; it never closes [keysIo]. If this throws, [lookUp]
+/// is still the caller's to release.
 typedef ClientOpener = Future<AtClient> Function(
     {required AtLookupMuxable lookUp,
     required String atSign,

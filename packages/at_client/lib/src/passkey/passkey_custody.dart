@@ -17,6 +17,7 @@ import 'at_server_at_keys_io.dart';
 import 'enrollment_gateway.dart' show ApkamKeyPair, apkamKeyPairFromSeed;
 import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
+import 'passkey_session.dart';
 
 /// Asks the browser not to evict this origin's storage.
 abstract class StoragePersistence {
@@ -131,9 +132,8 @@ abstract class EnrollmentSession {
   /// persisting every change through it. The client takes over this session's
   /// connection and stops it when the client stops; once it is opened, do not
   /// [close] the session. When opening throws, the opener may already have
-  /// stopped a client it built, which releases the connection and closes a
-  /// key store handed to it; the caller still closes the session, which is
-  /// safe after such a stop.
+  /// stopped a client it built, which releases the connection; the caller
+  /// still closes the session, which is safe after such a stop.
   Future<AtClient> openClient(WrittenAtKeysIo keysIo);
 
   Future<void> close();
@@ -253,7 +253,8 @@ class PasskeyCustody {
   /// every other approved enrollment (those an interrupted onboarding left),
   /// and only then completes the activation, which publishes the encryption
   /// public key and deletes the CRAM secret. It then remembers the passkey on
-  /// the device and returns the client running as the new enrollment.
+  /// the device and returns the session of the client running as the new
+  /// enrollment.
   ///
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
@@ -268,9 +269,10 @@ class PasskeyCustody {
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The returned
-  /// client holds the vault for its session and persists its @keys through an
-  /// [AtServerAtKeysIo] sealed with it; the sealer closes when the client
-  /// stops, or when this throws.
+  /// [PasskeySession]'s client persists its @keys through an
+  /// [AtServerAtKeysIo] sealed with the passkey's vault, and the session
+  /// closes the store and the vault once the client stops. Everything is
+  /// closed when this throws.
   ///
   /// A failed or cancelled prompt that registers the passkey writes nothing,
   /// and the same call can be made again.
@@ -278,7 +280,7 @@ class PasskeyCustody {
   /// The setup lock is always taken, so this can also throw what the lock
   /// throws when it cannot be taken (for example a
   /// `SetupLockTimeoutException`).
-  Future<AtClient> onboard(
+  Future<PasskeySession> onboard(
       {required String atSign, required String cram}) async {
     final canonical = canonicalPasskeyAtSign(atSign);
     return await setupLock.run(setupLockName(setupLockPrefix, canonical),
@@ -329,7 +331,7 @@ class PasskeyCustody {
   /// Completes the activation [written] holds, remembers the passkey
   /// [credentialId] for [canonical] and opens the client. Everything is
   /// closed when it throws.
-  Future<AtClient> _complete(
+  Future<PasskeySession> _complete(
       String canonical, Uint8List credentialId, _Written written) async {
     final (:vault, :session, :store, :atKeys) = written;
     try {
@@ -342,7 +344,7 @@ class PasskeyCustody {
       rethrow;
     }
     try {
-      return await _openClient(canonical, session, store);
+      return await _openSession(canonical, session, store, vault);
     } on Object {
       vault.close();
       rethrow;
@@ -350,26 +352,31 @@ class PasskeyCustody {
   }
 
   /// Opens the client of [session] on [store], whose reads are served from
-  /// memory once it holds the document. Closes [store] and [session] when the
-  /// open throws.
-  Future<AtClient> _openClient(String canonical, EnrollmentSession session,
-      AtServerAtKeysIo store) async {
+  /// memory once it holds the document, and returns it as a session over
+  /// [vault]. Closes [store] and [session] when the open throws.
+  Future<PasskeySession> _openSession(
+      String canonical,
+      EnrollmentSession session,
+      AtServerAtKeysIo store,
+      PasskeyVault vault) async {
+    final AtClient client;
     try {
       await store.read(canonical);
-      return await session.openClient(store);
+      client = await session.openClient(store);
     } on Object {
       store.close();
       await _closeAfterFailedOpen(session);
       rethrow;
     }
+    return PasskeySession(client, store, vault);
   }
 
-  /// Opens [atSign]'s @keys and returns the client running as its
-  /// enrollment. A device that remembers [atSign]'s credential and enrollment
-  /// returns without reading the pointer; any other (one id alone counts as
-  /// none) asserts any discoverable passkey and finds the enrollment through
-  /// the pointer, after waiting for [atSign]'s setup lock so that an
-  /// onboarding in another tab finishes first.
+  /// Opens [atSign]'s @keys and returns the session of the client running as
+  /// its enrollment. A device that remembers [atSign]'s credential and
+  /// enrollment returns without reading the pointer; any other (one id alone
+  /// counts as none) asserts any discoverable passkey and finds the
+  /// enrollment through the pointer, after waiting for [atSign]'s setup lock
+  /// so that an onboarding in another tab finishes first.
   ///
   /// When the remembered ceremony yields no credential, or the atServer
   /// refuses PKAM for the remembered enrollment, the open is retried once, as
@@ -383,9 +390,9 @@ class PasskeyCustody {
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The vault is
-  /// closed when this throws. The returned client holds the vault for its
-  /// session and persists its @keys through an [AtServerAtKeysIo] sealed with
-  /// it; the sealer closes when the client stops.
+  /// closed when this throws. The returned [PasskeySession]'s client persists
+  /// its @keys through an [AtServerAtKeysIo] sealed with the passkey's vault,
+  /// and the session closes the store and the vault once the client stops.
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException] or
   /// [PublicKeyMismatchException]; none leaves a session open or the device's
@@ -401,7 +408,7 @@ class PasskeyCustody {
   /// The setup lock is taken when the device has no hints and when remembered
   /// hints are stale, so the call can also throw what the lock throws when it
   /// cannot be taken (for example a `SetupLockTimeoutException`).
-  Future<AtClient> open({required String atSign}) async {
+  Future<PasskeySession> open({required String atSign}) async {
     final canonical = canonicalPasskeyAtSign(atSign);
     final hints = await _savedHints(canonical);
     if (hints == null) return _lockedOpen(canonical, useSavedHints: true);
@@ -416,13 +423,13 @@ class PasskeyCustody {
   /// tab finishes first. Saved hints written while waiting are used unless
   /// [useSavedHints] is false; a refused set is replaced by one attempt
   /// without them.
-  Future<AtClient> _lockedOpen(String canonical,
+  Future<PasskeySession> _lockedOpen(String canonical,
           {required bool useSavedHints}) =>
       setupLock.run(setupLockName(setupLockPrefix, canonical),
           () => _openHoldingLock(canonical, useSavedHints: useSavedHints));
 
   /// [_lockedOpen] for a caller that already holds [canonical]'s setup lock.
-  Future<AtClient> _openHoldingLock(String canonical,
+  Future<PasskeySession> _openHoldingLock(String canonical,
       {required bool useSavedHints}) async {
     final hints = useSavedHints ? await _savedHints(canonical) : null;
     if (hints == null) return _attempt(canonical, null);
@@ -448,7 +455,7 @@ class PasskeyCustody {
   /// ceremony that yields no credential, or a PKAM the atServer refuses, then
   /// throws [_StaleHints] so the caller can try again without them. Without
   /// hints either is a lost passkey.
-  Future<AtClient> _attempt(String canonical, _Hints? hints) async {
+  Future<PasskeySession> _attempt(String canonical, _Hints? hints) async {
     final PasskeyUnlock unlocked;
     try {
       unlocked = await prf.unlock(credentialId: hints?.credentialId);
@@ -488,9 +495,9 @@ class PasskeyCustody {
         await _closeAfterFailedOpen(session);
         rethrow;
       }
-      final client = await _openClient(canonical, session, store);
+      final opened = await _openSession(canonical, session, store, vault);
       handedOver = true;
-      return client;
+      return opened;
     } finally {
       if (!handedOver) vault.close();
     }
@@ -515,8 +522,7 @@ class PasskeyCustody {
           documents: session.documents,
           vault: vault,
           enrollmentId: session.enrollmentId,
-          apkamKeyPair: pair,
-          closedByClient: true);
+          apkamKeyPair: pair);
 
   /// Creates the enrollment's document from [atKeys] through [store], which
   /// reads it back.

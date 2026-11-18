@@ -1,7 +1,7 @@
 ## 4.1.0-rc.1
 
-- fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (which serves the last document from memory, with no atServer round trip), and never stores the private half or the public half in the @keys document. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `stop()` zeroes the private key and a read after it throws. A write still running when `stop()` closes the store finishes whole before the store is released; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its atSign and type, and accepts only an atSign with one leading `@` (`alice` and `left@right` are refused as invalid).
-- fix: the passkey vault's auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and `stop()` zeroes what it can. The APKAM private key (an immutable `String` in the authenticator) and the @keys private keys stay in memory for the session and cannot be wiped in Dart.
+- fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (which serves the last document from memory, with no atServer round trip), and never stores the private half or the public half in the @keys document. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `close()` zeroes the private key and a read after it throws. A write still running at `close()` finishes whole; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its atSign and type, and accepts only an atSign with one leading `@` (`alice` and `left@right` are refused as invalid).
+- fix: the passkey vault's auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and stopping the passkey session zeroes what it can. The APKAM private key (an immutable `String` in the authenticator) and the @keys private keys stay in memory for the session and cannot be wiped in Dart.
 - fix: `AtServerAtKeysIo.update` builds on a fresh read of the stored document, not the copy read at login, so a second tab's update after another tab's write lands.
 - fix: `AtServerAtKeysIo` runs `write`, `flush` and `update` on one instance one at a time, so overlapping updates from one client each keep the other's change.
 - docs: `PasskeyLostException`, `PasskeyCustody.open` and `PasskeyCustody.onboard` say that a failed prompt (a `PasskeyCeremonyException` cause) may be a plain cancel, because WebAuthn reports a cancel and a missing passkey alike, and that nothing is deleted, revoked or cleared after a failed or cancelled prompt. An app offers "Try again" and "Reset" and never resets on its own.
@@ -12,13 +12,10 @@
 - fix: `PasskeyCustody.open` takes the saved hints only when it has both ids; one alone is treated as none. When the narrowed ceremony fails or the atServer refuses PKAM for the saved enrollment, it retries once as a device with no hints, under the setup lock, and a success replaces the saved ids. A cancelled ceremony cannot be told from a deleted passkey and is retried too. A store that is a `PasskeyHintStore` receives both ids in one write.
 - feat: `package:at_client/passkey.dart` is a new library for onboarding and
   opening an atSign with a passkey. `PasskeyCustody.onboard` and `open` each
-  return an `AtClient` running as the atSign's enrollment, which persists its
-  @keys through an `AtServerAtKeysIo`, holds the passkey's vault for its
-  session and zeroes the auth seed when it stops. Stopping a client closes its
-  key store when the store is a `ClosableAtKeysIo` flagged `closedByClient`,
-  after the client's connections have stopped; any other store is lent and left
-  open. `ClosableAtKeysIo` is exported from `package:at_client/at_client.dart`
-  and `AtServerAtKeysIo` implements it. `PasskeyCustody` takes a
+  return a `PasskeySession`: the `AtClient` running as the atSign's enrollment,
+  which persists its @keys through an `AtServerAtKeysIo`, and the passkey's
+  vault. Stopping the session, or its client, closes the key store and the
+  vault; `AtClient.stop()` closes no key store. `PasskeyCustody` takes a
   `setupLockPrefix` for its per-atSign setup lock, and `PkamRefusedException`
   says an approver can `enroll:unrevoke` a revoked enrollment.
   `AtServerAtKeysIo` keeps the sealed

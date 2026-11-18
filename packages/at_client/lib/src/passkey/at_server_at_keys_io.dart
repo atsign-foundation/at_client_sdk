@@ -65,13 +65,15 @@ class AtServerAtKeysWriteException extends AtException {
 /// another writer's change shows on the next [update] or reopen. The pair is
 /// held as bytes, encoded on each read and zeroed by [close]; a [read] after
 /// [close] throws [StateError].
-class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
+///
+/// The store never closes the vault it seals with: whoever built the vault
+/// closes it, after [close].
+class AtServerAtKeysIo extends WrittenAtKeysIo {
   AtServerAtKeysIo(
       {required EnrollmentDocumentStore documents,
       required PasskeyVault vault,
       required String enrollmentId,
       required ApkamKeyPair apkamKeyPair,
-      this.closedByClient = false,
       AtKeys? restored})
       : _documents = documents,
         _vault = vault,
@@ -110,8 +112,8 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
   ///
   /// A call that has not started when [close] runs fails with
   /// [AtServerAtKeysWriteException] before any I/O. A call already running
-  /// finishes whole, with the vault and the pair still open: [close] releases
-  /// them only when the last call on the chain has settled.
+  /// finishes whole, with the pair still held: [close] zeroes it only when the
+  /// last call on the chain has settled.
   Future<T> _serialized<T>(Future<T> Function() body) {
     _pending++;
     final result = _tail.then((_) {
@@ -128,24 +130,17 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     return result;
   }
 
-  /// Whether the client that runs on this store closes it when it stops.
-  ///
-  /// False by default: the store is lent, and whoever lent it closes the
-  /// [PasskeyVault] it was given. True hands the vault's lifetime to the
-  /// client, whose stop then calls [close].
-  @override
-  final bool closedByClient;
+  /// Completes when every write queued on this store so far has ended,
+  /// whether it succeeded or failed. Never fails.
+  Future<void> get settled => _tail;
 
-  /// Closes the vault this store was given, which overwrites the auth seed
-  /// with zeroes and closes its sealer, and zeroes the APKAM private key it
-  /// holds. Idempotent. A later read throws [StateError]; a later or queued
-  /// write, flush or update throws [AtServerAtKeysWriteException] without
-  /// touching the atServer.
+  /// Zeroes the APKAM private key this store holds. Idempotent. A later read
+  /// throws [StateError]; a later or queued write, flush or update throws
+  /// [AtServerAtKeysWriteException] without touching the atServer.
   ///
-  /// A write already running is not cut off: it finishes, and the vault and
-  /// the key are released right after it. Never waits, so a write that hangs
-  /// cannot hold a stop; it holds the key in memory until it settles.
-  @override
+  /// A write already running is not cut off: it finishes, and the key is
+  /// zeroed right after it. Never waits, so a write that hangs cannot hold a
+  /// stop; it holds the key in memory until it settles.
   void close() {
     _closed = true;
     _cache = null;
@@ -157,7 +152,6 @@ class AtServerAtKeysIo extends WrittenAtKeysIo implements ClosableAtKeysIo {
     _released = true;
     _private.fillRange(0, _private.length, 0);
     _cache = null;
-    _vault.close();
   }
 
   /// The keys of [atsign]'s document with the derived APKAM pair filed. The

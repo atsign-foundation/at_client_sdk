@@ -20,12 +20,6 @@
   caller, and `recordPrfSalt()` is synchronous. The four HKDF labels (record id,
   pointer namespace, seal key, auth seed) share the form
   `at_auth/custody/<name>/v1`.
-- feat: `ClosableAtKeysIo` is a new interface, exported with `AtKeysIo`, for a
-  key store that holds something to release. It declares `closedByClient` and
-  `close()`; `AtKeysIo` and its subclasses gain no members, so a class that
-  implements them compiles as before. A client closes a key store only when it
-  is a `ClosableAtKeysIo` flagged `closedByClient`; any other store is lent to
-  it.
 - feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
   enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
   private half does not sign for its public half is refused with

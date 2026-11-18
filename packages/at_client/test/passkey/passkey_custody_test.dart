@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysFileOverwriteException, ClosableAtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysFileOverwriteException;
 import 'package:at_auth/passkey.dart';
 import 'package:at_commons/at_commons.dart'
     show AtRootDomain, InvalidAtSignException;
@@ -141,8 +140,8 @@ void main() {
 
     test('opens the client with the @keys, without the APKAM private key',
         () async {
-      final client = await custody().onboard(atSign: _atSign, cram: 'cram')
-          as FakeAtClient;
+      final client = (await custody().onboard(atSign: _atSign, cram: 'cram'))
+          .client as FakeAtClient;
       final keys = await client.keysIo.read(_atSign);
       expect(keys.toJson()['aesPkamPrivateKey'], isNull);
       expect(keys.atsign, _atSign.toAtsign());
@@ -159,8 +158,8 @@ void main() {
 
     test('remembers the credential and enrollment id and asks for persistence',
         () async {
-      final client = await custody().onboard(atSign: _atSign, cram: 'cram');
-      expect(client.enrollmentId, 'eid1');
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(session.client.enrollmentId, 'eid1');
       expect(hints.ids[_atSign], 'eid1');
       expect(hints.credentials[_atSign], Uint8List.fromList([1]));
       // Once before the activation, once when the hints are written.
@@ -321,9 +320,10 @@ void main() {
             ..pointerPutFailures = 0;
           gateway.onAuthenticate = null;
 
-          final client = await custody().onboard(atSign: _atSign, cram: 'cram');
+          final session =
+              await custody().onboard(atSign: _atSign, cram: 'cram');
 
-          expect(client.enrollmentId, 'eid2');
+          expect(session.client.enrollmentId, 'eid2');
           expect(authenticator.creates, 2, reason: 'a new passkey');
           expect(server.cramDeleted, {_atSign});
           expect(gateway.lastSession!.clients, hasLength(1));
@@ -400,10 +400,10 @@ void main() {
       expect(hints.ids, isEmpty, reason: 'the device remembers nothing');
       gateway.openErrorForNext = null;
 
-      final client =
+      final session =
           await custody(withHints: FakeHints()).open(atSign: _atSign);
 
-      expect(client.enrollmentId, 'eid1');
+      expect(session.client.enrollmentId, 'eid1');
       expect(gateway.activated, hasLength(1));
     });
 
@@ -493,8 +493,9 @@ void main() {
     });
 
     test('an opened client can still seal and open its document', () async {
-      final client = await custody(withHints: FakeHints()).open(atSign: _atSign)
-          as FakeAtClient;
+      final client =
+          (await custody(withHints: FakeHints()).open(atSign: _atSign)).client
+              as FakeAtClient;
 
       final keys = await client.keysIo.read(_atSign);
       keys.fileLegacyMaterial(apkamSymmetricKey: 'YWZ0ZXItb3Blbg==');
@@ -505,8 +506,8 @@ void main() {
     });
 
     test('an onboarded client can still seal and open its document', () async {
-      final client =
-          await custody().onboard(atSign: '@bob', cram: 'cram') as FakeAtClient;
+      final client = (await custody().onboard(atSign: '@bob', cram: 'cram'))
+          .client as FakeAtClient;
 
       final keys = await client.keysIo.read('@bob');
       keys.fileLegacyMaterial(apkamSymmetricKey: 'YWZ0ZXItb25ib2FyZA==');
@@ -516,17 +517,23 @@ void main() {
       await client.stop();
     });
 
-    test('hands the client a key store it closes when it stops', () async {
-      final client = await custody(withHints: FakeHints()).open(atSign: _atSign)
-          as FakeAtClient;
+    test('returns a session that closes its key store once its client stops',
+        () async {
+      final client =
+          (await custody(withHints: FakeHints()).open(atSign: _atSign)).client
+              as FakeAtClient;
 
-      expect(client.keysIo, isA<ClosableAtKeysIo>());
-      expect((client.keysIo as ClosableAtKeysIo).closedByClient, isTrue);
+      await client.stop();
+      await pumpEventQueue();
+
+      await expectLater(
+          Future.sync(() => client.keysIo.read(_atSign)), throwsStateError);
     });
 
-    test('stops through the real teardown, closing the vault', () async {
-      final opened = await custody(withHints: FakeHints()).open(atSign: _atSign)
-          as FakeAtClient;
+    test('Stopping a client closes no key store', () async {
+      final opened =
+          (await custody(withHints: FakeHints()).open(atSign: _atSign)).client
+              as FakeAtClient;
       final client = await buildAtClient(
           atSign: _atSign,
           namespace: 'wavi',
@@ -540,8 +547,7 @@ void main() {
 
       await client.stop();
 
-      await expectLater(
-          Future.sync(() => opened.keysIo.read(_atSign)), throwsStateError);
+      expect((await opened.keysIo.read(_atSign)).atsign, _atSign.toAtsign());
     });
   });
 
@@ -613,8 +619,8 @@ void main() {
       final session =
           await custody(withHints: FakeHints()).open(atSign: _atSign);
       expect(authenticator.gets, 1);
-      expect(session.enrollmentId, 'eid1');
-      final keys = await (session as FakeAtClient).keysIo.read(_atSign);
+      expect(session.client.enrollmentId, 'eid1');
+      final keys = await (session.client as FakeAtClient).keysIo.read(_atSign);
       expect(keys.atsign, _atSign.toAtsign());
       expect(keys.toJson()['aesEncryptPrivateKey'], fakeEncryptPrivateKey);
       expect(server.pointerReads, 1);
@@ -631,7 +637,7 @@ void main() {
     test('returns without reading the pointer when the device remembers',
         () async {
       final session = await custody().open(atSign: _atSign);
-      expect(session.enrollmentId, 'eid1');
+      expect(session.client.enrollmentId, 'eid1');
       expect(server.pointerReads, 0);
       expect(hints.ids[_atSign], 'eid1');
       expect(persistence.requests, 1);
@@ -640,7 +646,7 @@ void main() {
     test('narrows the assertion to the remembered credential', () async {
       authenticator.gets = 0;
       final session = await custody().open(atSign: _atSign);
-      expect(session.enrollmentId, 'eid1');
+      expect(session.client.enrollmentId, 'eid1');
       expect(hints.credentials[_atSign], Uint8List.fromList([1]));
       expect(authenticator.lastAllowCredential, Uint8List.fromList([1]));
     });
@@ -655,7 +661,7 @@ void main() {
         authenticator.gets = 0;
         setupLock.names.clear();
         final session = await custody(withHints: stale).open(atSign: _atSign);
-        expect(session.enrollmentId, 'eid1');
+        expect(session.client.enrollmentId, 'eid1');
         expect(authenticator.gets, 2);
         expect(authenticator.lastAllowCredential, isNull);
         expect(stale.credentials[_atSign], Uint8List.fromList([1]));
@@ -669,7 +675,7 @@ void main() {
         final stale = remembering(1, 'eid-old');
         authenticator.gets = 0;
         final session = await custody(withHints: stale).open(atSign: _atSign);
-        expect(session.enrollmentId, 'eid1');
+        expect(session.client.enrollmentId, 'eid1');
         expect(authenticator.gets, 2);
         expect(server.pointerReads, 1);
         expect(stale.ids[_atSign], 'eid1');
@@ -747,7 +753,8 @@ void main() {
 
     test('a failing persist request does not fail the open', () async {
       persistence.error = StateError('denied');
-      expect((await custody().open(atSign: _atSign)).enrollmentId, 'eid1');
+      expect(
+          (await custody().open(atSign: _atSign)).client.enrollmentId, 'eid1');
     });
 
     test('recovery without a pointer is a lost passkey', () async {
@@ -822,7 +829,7 @@ void main() {
       final first = await onboarding;
       final second = await opening;
 
-      expect(second.enrollmentId, first.enrollmentId);
+      expect(second.client.enrollmentId, first.client.enrollmentId);
       expect(locked.names, ['$_lockPrefix:@bob', '$_lockPrefix:@bob']);
     });
 
@@ -953,9 +960,9 @@ void main() {
 
       test('the enrollment\'s own derived APKAM public key is accepted',
           () async {
-        final client =
+        final session =
             await custody(withHints: FakeHints()).open(atSign: _atSign);
-        expect(client.enrollmentId, 'eid1');
+        expect(session.client.enrollmentId, 'eid1');
       });
     });
   });
@@ -973,7 +980,7 @@ void main() {
       final secondKeys = await keysOf(1);
 
       expect(authenticator.prfByCredential, hasLength(2));
-      expect(second.enrollmentId, isNot(first.enrollmentId));
+      expect(second.client.enrollmentId, isNot(first.client.enrollmentId));
       expect(gateway.activated, hasLength(2));
       expect(gateway.activated[1].apkamKeyPair.publicKey,
           isNot(gateway.activated[0].apkamKeyPair.publicKey));
@@ -985,12 +992,12 @@ void main() {
       await expectLater(
           gateway.authenticate(
               atSign: _atSign,
-              enrollmentId: first.enrollmentId!,
+              enrollmentId: first.client.enrollmentId!,
               apkamKeyPair: await apkamKeyPairFromSeed(secondKeys.authSeed)),
           throwsA(isA<PkamRefusedException>()));
       await expectLater(
-          secondKeys.vault.open(
-              PasskeyRecordType.atkeys, server.documents[first.enrollmentId]!),
+          secondKeys.vault.open(PasskeyRecordType.atkeys,
+              server.documents[first.client.enrollmentId]!),
           throwsA(isA<PasskeyRecordAuthenticationException>()));
       await expectLater(
           secondKeys.vault.open(
@@ -1012,8 +1019,8 @@ void main() {
       expect(gateway.lastSession!.closed, isTrue);
 
       gateway.openErrorForNext = null;
-      final client = await custody().open(atSign: _atSign);
-      expect(client.enrollmentId, 'eid1');
+      final session = await custody().open(atSign: _atSign);
+      expect(session.client.enrollmentId, 'eid1');
     });
 
     test('onboard closes the session and the store when no client was built',
@@ -1070,17 +1077,17 @@ void main() {
     }
 
     test('onboard returns a client over an AtServerAtKeysIo', () async {
-      final client = await custody().onboard(atSign: _atSign, cram: 'cram');
-      await expectPersists(client as FakeAtClient);
-      await client.stop();
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+      await expectPersists(session.client as FakeAtClient);
+      await session.stop();
     });
 
     test('open returns a client over an AtServerAtKeysIo', () async {
       await (await custody().onboard(atSign: _atSign, cram: 'cram')).stop();
-      final client =
+      final session =
           await custody(withHints: FakeHints()).open(atSign: _atSign);
-      await expectPersists(client as FakeAtClient);
-      await client.stop();
+      await expectPersists(session.client as FakeAtClient);
+      await session.stop();
     });
   });
 }

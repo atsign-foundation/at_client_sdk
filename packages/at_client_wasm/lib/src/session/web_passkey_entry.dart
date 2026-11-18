@@ -1,5 +1,4 @@
 import 'package:at_auth/passkey.dart';
-import 'package:at_client/at_client.dart';
 import 'package:at_client/passkey.dart';
 
 import '../keys/indexeddb_store.dart';
@@ -17,8 +16,8 @@ import 'web_storage_persistence.dart';
 /// ceremony when this is false.
 Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 
-/// Onboards a fresh [atSign] in this browser and returns its client, PKAM'd
-/// before return.
+/// Onboards a fresh [atSign] in this browser and returns its passkey session,
+/// whose client is PKAM'd before return.
 ///
 /// Registers a passkey (a random WebAuthn `user.id`; [atSign] only in the
 /// user name), derives the atSign's APKAM key, record key and pointer name
@@ -43,7 +42,9 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
 /// lock too long, and the atServer's own errors when activation is refused.
-Future<AtClient> onboardNewAtSign(
+///
+/// Stopping the session, or its client, closes the passkey vault it holds.
+Future<PasskeySession> onboardNewAtSign(
         {required String atSign,
         required String cram,
         required String app,
@@ -59,8 +60,8 @@ Future<AtClient> onboardNewAtSign(
         options: transport,
         run: (custody) => custody.onboard(atSign: atSign, cram: cram));
 
-/// Opens [atSign]'s client with its passkey and returns it, PKAM'd before
-/// return.
+/// Opens [atSign]'s client with its passkey and returns its passkey session,
+/// whose client is PKAM'd before return.
 ///
 /// [atSign] is always required: the passkey proves it, and a wrong one finds
 /// no pointer. A device that remembers [atSign]'s passkey and enrollment goes
@@ -81,7 +82,9 @@ Future<AtClient> onboardNewAtSign(
 ///
 /// [PrfUnavailableException] and [SetupLockTimeoutException] are thrown as
 /// they are, not wrapped in [PasskeyLostException].
-Future<AtClient> passkeyLogin(
+///
+/// Stopping the session, or its client, closes the passkey vault it holds.
+Future<PasskeySession> passkeyLogin(
         {required String atSign,
         required String app,
         required String rpId,
@@ -99,13 +102,13 @@ const _defaultDevice = 'browser';
 
 /// Runs [run] on a [PasskeyCustody] over this browser's passkeys, IndexedDB,
 /// locks and atServer transport, and closes the IndexedDB store after.
-Future<AtClient> _withCustody(
+Future<PasskeySession> _withCustody(
     {required String app,
     required String rpId,
     required String rpName,
     required String device,
     required SessionTransportOptions? options,
-    required Future<AtClient> Function(PasskeyCustody) run}) async {
+    required Future<PasskeySession> Function(PasskeyCustody) run}) async {
   final server = passkeyServerSide(options: options, app: app, device: device);
   final store = await IndexedDbHintStore.open();
   try {

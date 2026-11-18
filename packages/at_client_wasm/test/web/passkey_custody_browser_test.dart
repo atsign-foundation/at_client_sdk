@@ -9,7 +9,7 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart' show AtKeys, WrittenAtKeysIo;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/at_client.dart'
-    show AtClient, AtConnectionCause, AtConnectionState;
+    show AtClient, AtConnection, AtConnectionCause, AtConnectionState;
 import 'package:at_client/passkey.dart';
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
 import 'package:at_client_wasm/src/keys/web_crypto_passkey.dart';
@@ -65,10 +65,21 @@ class _Client implements AtClient {
   final WrittenAtKeysIo keysIo;
 
   @override
-  String? get enrollmentId => session.enrollmentId;
+  final connection = AtConnection(
+      atSign: _atSign, attempt: (_) async => AtConnectionState.online());
 
   @override
-  Future<void> stop() => session.close();
+  String? get enrollmentId => session.enrollmentId;
+
+  Future<void>? _stopping;
+
+  @override
+  Future<void> stop() => _stopping ??= _stop();
+
+  Future<void> _stop() async {
+    await connection.close();
+    await session.close();
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -248,7 +259,7 @@ class _Device {
   /// Applied to each gateway this device builds.
   Object? dieAfterActivation;
   late _Gateway gateway;
-  final clients = <AtClient>[];
+  final sessions = <PasskeySession>[];
 
   /// A copy of every auth seed this device derived.
   final seeds = <Uint8List>[];
@@ -270,16 +281,16 @@ class _Device {
   }
 
   Future<AtClient> onboard() async {
-    final client =
+    final session =
         await (await custody()).onboard(atSign: _atSign, cram: _cram);
-    clients.add(client);
-    return client;
+    sessions.add(session);
+    return session.client;
   }
 
   Future<AtClient> open() async {
-    final client = await (await custody()).open(atSign: _atSign);
-    clients.add(client);
-    return client;
+    final session = await (await custody()).open(atSign: _atSign);
+    sessions.add(session);
+    return session.client;
   }
 
   /// Clears site data: IndexedDB and web storage. The passkey and the
@@ -300,8 +311,8 @@ class _Device {
   }
 
   Future<void> dispose() async {
-    for (final client in clients) {
-      await client.stop();
+    for (final session in sessions) {
+      await session.stop();
     }
     store.close();
     await clearSiteData();
@@ -404,8 +415,9 @@ void main() {
     final fresh = await device.custody();
     expect(await device.store.credentialId(_atSign), isNull);
     expect(await device.store.enrollmentId(_atSign), isNull);
-    final recovered = await fresh.open(atSign: _atSign);
-    device.clients.add(recovered);
+    final session = await fresh.open(atSign: _atSign);
+    device.sessions.add(session);
+    final recovered = session.client;
 
     expect(recovered.enrollmentId, enrolledId);
     final recoveredKeys = (await _keysOf(recovered)).toJson();

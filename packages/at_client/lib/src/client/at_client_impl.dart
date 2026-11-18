@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
-    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys, ClosableAtKeysIo;
+    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_client/src/enroll/first_enrollment.dart'
@@ -62,9 +62,9 @@ import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
-/// A failure met while stopping a client, paired with the stack of where it
-/// was raised so the step that raised it stays identifiable after the rethrow.
-typedef _HeldDefect = ({Object error, StackTrace stack});
+/// A defect met while stopping a client, paired with the stack of where it was
+/// raised so the step that raised it stays identifiable after the rethrow.
+typedef _HeldDefect = ({Error error, StackTrace stack});
 
 /// Implementation of the [AtClient] interface.
 class AtClientImpl implements AtClient {
@@ -1290,12 +1290,6 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  /// The longest [stop] waits for the PQ startup step in flight to finish
-  /// before it closes a key store the client owns. A step that is still
-  /// running then is abandoned: it is logged and teardown continues.
-  @visibleForTesting
-  Duration pqStartupStopGrace = const Duration(seconds: 10);
-
   bool _isStopped = false;
 
   @override
@@ -1354,13 +1348,12 @@ class AtClientImpl implements AtClient {
     final serviceDefect = await _stopBackgroundProcesses();
     final storageDefect = await _releaseStorage();
     await localSecondary?.release();
-    final keysDefect = await _releaseKeysIo();
     // NOTE: by identity, not by key — the map is keyed (atSign, enrollmentId),
     // so a client filed under an enrollment is not found under the bare atSign
     // and would be left in the map, stopped, for the next caller to restart.
     atClientInstanceMap.removeWhere((_, client) => identical(client, this));
 
-    final defect = serviceDefect ?? storageDefect ?? keysDefect;
+    final defect = serviceDefect ?? storageDefect;
     if (defect != null) {
       // NOTE: rethrown with the stack of where it was RAISED. A bare `throw`
       // here restacks it onto this line, which names every teardown step
@@ -1387,30 +1380,6 @@ class AtClientImpl implements AtClient {
       defect = (error: e, stack: stack);
     }
     _storage = null;
-    return defect;
-  }
-
-  /// Closes the key store when it is a [ClosableAtKeysIo] flagged
-  /// [ClosableAtKeysIo.closedByClient]; a store that was lent is left open. Runs after the connections have
-  /// stopped, so nothing is still reading through it.
-  Future<_HeldDefect?> _releaseKeysIo() async {
-    _HeldDefect? defect;
-    try {
-      final keysIo = _atKeysIo;
-      if (keysIo is ClosableAtKeysIo && keysIo.closedByClient) {
-        await _pqBootstrap?.settleStartup(pqStartupStopGrace);
-        await keysIo.close();
-      }
-    } on Exception catch (e, stack) {
-      // Held, like a defect, so stop() does not report a key store that did
-      // not close as stopped cleanly; the remaining teardown still runs.
-      _logger.warning('Error while closing the key store: $e');
-      defect = (error: e, stack: stack);
-    } on Error catch (e, stack) {
-      _logger.severe('Defect while closing the key store, which names a bug '
-          'rather than a passing condition: $e');
-      defect = (error: e, stack: stack);
-    }
     return defect;
   }
 

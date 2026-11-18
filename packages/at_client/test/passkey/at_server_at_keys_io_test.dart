@@ -437,21 +437,10 @@ void main() {
   });
 
   group('close', () {
-    Future<AtServerAtKeysIo> flagged() async => AtServerAtKeysIo(
-        documents: documents(),
-        vault: derived.vault,
-        enrollmentId: _eid,
-        apkamKeyPair: pair,
-        closedByClient: true);
-
-    test('is lent to the client unless it is flagged', () async {
-      expect((await open()).closedByClient, isFalse);
-      expect((await flagged()).closedByClient, isTrue);
-    });
-
-    test('closes the vault, after which a flush or update throws', () async {
+    test('after close a write, flush, update or read throws without I/O',
+        () async {
       await seedRecord(_base());
-      final io = await flagged();
+      final io = await open();
 
       io.close();
 
@@ -465,21 +454,28 @@ void main() {
 
     test('zeroes the private key, so a read after close throws', () async {
       await seedRecord(_base());
-      final io = await flagged();
+      final io = await open();
       expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
 
       io.close();
 
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
-      await expectLater(
-          derived.vault.withAuthSeed((_) async {}), throwsStateError);
+    });
+
+    test('leaves the vault it seals with open', () async {
+      final io = await open();
+
+      io.close();
+
+      await derived.vault.withAuthSeed((_) async {});
+      await derived.vault.seal(PasskeyRecordType.atkeys, {'a': 1});
     });
 
     test(
-        'an update in flight finishes whole before the vault closes; one '
-        'queued behind it is refused with no I/O', () async {
+        'an update in flight finishes whole after close; one queued behind it '
+        'is refused with no I/O', () async {
       await seedRecord(_base());
-      final io = await flagged();
+      final io = await open();
       server.holdUpdate = Completer<void>();
       final running = io.update(_atSign.toAtsign(), (keys) {
         keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
@@ -491,30 +487,53 @@ void main() {
           expectLater(queued, throwsA(isA<AtServerAtKeysWriteException>()));
 
       io.close();
-      for (var i = 0; i < 10; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      // Past the point of no return: the vault is still open for the
-      // read-back.
-      await derived.vault.withAuthSeed((_) async {});
       server.holdUpdate!.complete();
 
       await running;
       await queuedOutcome;
       expect(server.updates, hasLength(1));
-      await expectLater(
-          derived.vault.withAuthSeed((_) async {}), throwsStateError);
       await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
     test('is idempotent', () async {
-      final io = await flagged();
+      final io = await open();
 
       io.close();
       io.close();
 
-      await expectLater(
-          derived.vault.withAuthSeed((_) async {}), throwsStateError);
+      await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
+    });
+  });
+
+  group('settled', () {
+    test('completes once every write queued so far has ended', () async {
+      await seedRecord(_base());
+      final io = await open();
+      server.holdUpdate = Completer<void>();
+      final running = io.update(_atSign.toAtsign(), (keys) {
+        keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-y'));
+        return true;
+      });
+      await server.updateArrived.future;
+      var settled = false;
+      unawaited(io.settled.then((_) => settled = true));
+      await pumpEventQueue();
+      expect(settled, isFalse);
+
+      server.holdUpdate!.complete();
+      await running;
+      await pumpEventQueue();
+
+      expect(settled, isTrue);
+    });
+
+    test('completes when the write queued last failed', () async {
+      final io = await open();
+      final failing = expectLater(io.update(_atSign.toAtsign(), (keys) => true),
+          throwsA(isA<MissingAtKeysDocumentException>()));
+
+      await io.settled;
+      await failing;
     });
   });
 

@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/passkey.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
@@ -539,96 +538,4 @@ void main() {
       expect(wire.lookUpsBuilt.single.closed, isTrue);
     });
   });
-
-  group('a client that owns the vault through its keys store', () {
-    late PasskeyVault vault;
-    late Uint8List heldSeed;
-    late EnrollmentSession session;
-    late Future<void> Function() stopClient;
-
-    setUp(() async {
-      vault = (await DerivedKeys.derive(
-              Uint8List.fromList(List.generate(32, (i) => i + 7)), _atSign))
-          .vault;
-      await vault.withAuthSeed((seed) async => heldSeed = seed);
-      final gateway = AtAuthEnrollmentGateway(
-          lookUps: wire.lookUps,
-          finder: finder,
-          root: AtRootDomain.atsignDomain,
-          app: 'wavi',
-          device: 'browser',
-          clientOpener: (
-                  {required lookUp,
-                  required atSign,
-                  required enrollmentId,
-                  required keysIo}) async =>
-              _KeysClosingClient(lookUp.close, keysIo));
-      session = await gateway.authenticate(
-          atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
-      final client = await session.openClient(AtServerAtKeysIo(
-          documents: session.documents,
-          vault: vault,
-          enrollmentId: _eid,
-          apkamKeyPair: await _derived(),
-          closedByClient: true));
-      stopClient = client.stop;
-    });
-
-    test('stays usable while the client runs', () async {
-      expect(wire.lookUpsBuilt.single.closed, isFalse);
-      expect(heldSeed.every((b) => b == 0), isFalse);
-      await vault.withAuthSeed((_) async {});
-    });
-
-    test('stopping the client closes the vault through the keys store',
-        () async {
-      await stopClient();
-
-      expect(wire.lookUpsBuilt.single.closed, isTrue);
-      var ran = false;
-      await expectLater(
-          vault.withAuthSeed((_) async => ran = true), throwsStateError);
-      expect(ran, isFalse);
-      await expectLater(
-          vault.seal(PasskeyRecordType.atkeys, {'a': 1}), throwsStateError);
-      await expectLater(
-          vault.open(PasskeyRecordType.atkeys, '{}'), throwsStateError);
-      expect(heldSeed.every((b) => b == 0), isTrue);
-    });
-
-    test(
-        'closes the vault when the lookUp fails to close, and the error '
-        'propagates', () async {
-      wire.stopThrows = true;
-
-      await expectLater(stopClient(), throwsStateError);
-
-      expect(wire.lookUpsBuilt.single.closed, isTrue);
-      await expectLater(vault.withAuthSeed((_) async {}), throwsStateError);
-      expect(heldSeed.every((b) => b == 0), isTrue);
-    });
-  });
-}
-
-/// An [AtClient] that stops its lookUp, then closes a keys store flagged
-/// `closedByClient`, as a client's stop does.
-class _KeysClosingClient implements AtClient {
-  _KeysClosingClient(this._closeLookUp, this._keysIo);
-
-  final Future<void> Function() _closeLookUp;
-  final WrittenAtKeysIo _keysIo;
-
-  @override
-  Future<void> stop() async {
-    try {
-      await _closeLookUp();
-    } finally {
-      if (_keysIo case final ClosableAtKeysIo io when io.closedByClient) {
-        await io.close();
-      }
-    }
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
