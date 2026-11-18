@@ -21,7 +21,6 @@ jobs:
       id-token: write
       attestations: write
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG_PREFIX: at_client_web-bridge-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,6 +29,8 @@ jobs:
 
       - name: Skip when the release exists
         id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${TAG_PREFIX}${GITHUB_SHA::12}"
           echo "name=$tag" >> "$GITHUB_OUTPUT"
@@ -39,6 +40,9 @@ jobs:
 
       - uses: ./actions/setup-flutter-and-dart
         if: steps.tag.outputs.exists != 'true'
+        with:
+          # Pinned to an exact release so the bundle is reproducible.
+          dart-channel: "3.14.1"
 
       - name: Build the bridge bundle
         if: steps.tag.outputs.exists != 'true'
@@ -62,6 +66,7 @@ jobs:
         if: steps.tag.outputs.exists != 'true'
         working-directory: packages/at_client_wasm/build
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.name }}
         run: |
           gh release create "$TAG" at_client_web.js at_client_web.js.sha256 \
