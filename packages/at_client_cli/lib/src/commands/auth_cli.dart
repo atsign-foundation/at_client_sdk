@@ -1555,9 +1555,9 @@ Future<AtClient> createAtClient(
         waitForPqStartup: waitForPqStartup,
         maxConnectAttempts: maxConnectAttempts);
 
-/// [createAtClient]'s client, whose `from:` names [program] at
-/// [programVersion], or at_client_cli's version, when [program] is set, and
-/// [appName] at [appVersion] when it is not.
+/// [createAtClient]'s client, whose `from:` names [program] as [namedAs]
+/// names it when [program] is set, and [appName] at [appVersion] when it is
+/// not.
 Future<AtClient> _commandClient(
     {required String? program,
     required String? programVersion,
