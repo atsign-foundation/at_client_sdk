@@ -433,8 +433,9 @@ class PasskeyCustody {
   /// and the session closes the store and the vault once the client stops.
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
-  /// [PublicKeyMismatchException] or what finishing the activation throws;
-  /// none leaves a session open or the device's hints rewritten.
+  /// [PublicKeyMismatchException], a `PrfUnavailableException` when the
+  /// passkey gives no usable PRF output, or what finishing the activation
+  /// throws; none leaves a session open or the device's hints rewritten.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
