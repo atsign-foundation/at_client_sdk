@@ -23,8 +23,8 @@ void main() {
       expect(await support.supported(), isFalse);
       await expectLater(
           support.require(),
-          throwsA(isA<PrfUnavailableException>().having(
-              (e) => e.message, 'message', contains('supported browser'))));
+          throwsA(isA<PrfUnavailableException>()
+              .having((e) => e.message, 'message', prfUnsupportedMessage)));
     });
 
     test('the capability answer wins over a recorded miss', () async {
