@@ -1,14 +1,14 @@
-## 1.1.0
+## 1.1.0-rc.1
 
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
-- chore: requires at_client 4.1.0.
+- chore: requires at_client 4.1.0-rc.1.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
-- fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
+- fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0-rc.1, which sends
   it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
   `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that
   reached a proxy without a `proxy:<host>` root must make it the root.
-  Requires at_lookup 4.1.0.
+  Requires at_lookup 4.1.0-rc.1.
 
 ## 1.0.0
 

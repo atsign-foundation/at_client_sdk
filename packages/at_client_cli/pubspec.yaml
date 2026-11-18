@@ -1,6 +1,6 @@
 name: at_client_cli
 description: The Atsign Protocol for Dart command-line programs, daemons and servers - CLIBase, and the at_activate and at_register tools.
-version: 1.0.0
+version: 1.1.0-rc.1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_cli
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
