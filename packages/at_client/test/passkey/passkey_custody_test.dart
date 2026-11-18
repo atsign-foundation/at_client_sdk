@@ -783,6 +783,19 @@ void main() {
         expect(stale.credentials[_atSign], Uint8List.fromList([1]));
       });
 
+      test('the retry without the remembered ids stores the new pair',
+          () async {
+        server.revoked.add('eid-old');
+        final stale = remembering(9, 'eid-old');
+        authenticator.gets = 0;
+        final session = await custody(withHints: stale).open(atSign: _atSign);
+        expect(session.enrollmentId, 'eid1');
+        expect(stale.credentials[_atSign], Uint8List.fromList([1]));
+        expect(stale.ids[_atSign], 'eid1');
+        expect(stale.credentials[_atSign], isNot(Uint8List.fromList([9])));
+        expect(stale.ids[_atSign], isNot('eid-old'));
+      });
+
       test('the retry happens once, then the passkey is lost', () async {
         authenticator.yieldsNoCredential = true;
         authenticator.gets = 0;

@@ -5,7 +5,8 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysFileOverwriteException;
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/passkey/at_keys_document.dart';
-import 'package:at_commons/at_commons.dart' show UnAuthenticatedException;
+import 'package:at_commons/at_commons.dart'
+    show AtException, UnAuthenticatedException;
 import 'package:at_client/src/passkey/passkey_custody.dart';
 import 'package:test/test.dart';
 
@@ -32,6 +33,17 @@ class _LateRecordStore extends FakePendingStore {
   Future<void> delete(String atSign) async {
     deletes++;
   }
+}
+
+/// A setup lock that is never granted, as one whose acquisition timed out.
+class _TimedOutLock implements SetupLock {
+  @override
+  Future<T> run<T>(String name, Future<T> Function() body) =>
+      Future.error(_LockTimeout(name));
+}
+
+class _LockTimeout extends AtException {
+  _LockTimeout(String name) : super('$name was not granted');
 }
 
 void main() {
@@ -572,6 +584,48 @@ void main() {
         expect(server.pointers, isNotEmpty);
       });
     }
+  });
+
+  group('a setup lock that times out', () {
+    Matcher timeout() => throwsA(isA<_LockTimeout>());
+
+    PasskeyCustody timedOutCustody() => PasskeyCustody(
+        prf: PasskeyPrf(authenticator),
+        deriver: const BytesPasskeyKeyDeriver(),
+        pointerReader: server,
+        gateway: gateway,
+        credentials: hints,
+        enrollmentIds: hints,
+        persistence: persistence,
+        pendingStore: pending,
+        retryDelay: Duration.zero,
+        setupLock: _TimedOutLock(),
+        setupLockPrefix: _lockPrefix);
+
+    test('keeps the pending record when onboard waits for the lock', () async {
+      await dieAfterActivation();
+      final record = pending.records[_atSign]!;
+      await expectLater(
+          timedOutCustody().onboard(atSign: _atSign, cram: 'cram2'), timeout());
+      expect(pending.records[_atSign], same(record));
+      expect(gateway.activated, hasLength(1));
+    });
+
+    test('keeps the pending record when open waits for the lock', () async {
+      await dieAfterActivation();
+      final record = pending.records[_atSign]!;
+      await expectLater(timedOutCustody().open(atSign: _atSign), timeout());
+      expect(pending.records[_atSign], same(record));
+    });
+
+    test('keeps the pending record when a discard waits for the lock',
+        () async {
+      await dieAfterActivation();
+      final record = pending.records[_atSign]!;
+      await expectLater(
+          timedOutCustody().discardPendingOnboarding(_atSign), timeout());
+      expect(pending.records[_atSign], same(record));
+    });
   });
 
   group('discardPendingOnboarding', () {

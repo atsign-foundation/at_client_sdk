@@ -104,6 +104,18 @@ void main() {
       expect(remoteLookUp.closed, isFalse);
     });
 
+    test('put sends the update with no metadata segment', () async {
+      await store.put(_atSign, _hex, _record, ns: _ns);
+      final command = remoteLookUp.commands.single.command;
+      expect(command, startsWith('update:public:_'));
+      expect(
+          command,
+          isNot(contains(RegExp(r'(ttl|ttb|ttr|ccd|dataSignature|'
+              r'isBinary|isEncrypted|sharedKeyEnc|pubKeyCS|encoding|ivNonce)'))));
+      expect(command.substring('update:'.length).split(' ').first,
+          'public:_$_hex.$_ns@alice');
+    });
+
     test('put rejects a record with a newline', () {
       expect(store.put(_atSign, _hex, '{\n}', ns: _ns), throwsArgumentError);
       expect(remoteLookUp.commands, isEmpty);

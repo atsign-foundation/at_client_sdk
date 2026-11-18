@@ -89,6 +89,18 @@ void main() {
         (command: 'update:atkeys.$_eid.a.__e@alice $_document\n', auth: true));
   });
 
+  test('put sends the update with no metadata segment', () async {
+    await store.put(_atSign, _eid, _document);
+    final command = remoteLookUp.commands.single.command;
+    expect(command, startsWith('update:atkeys.'));
+    expect(
+        command,
+        isNot(contains(RegExp(r'(ttl|ttb|ttr|ccd|dataSignature|'
+            r'isBinary|isEncrypted|sharedKeyEnc|pubKeyCS|encoding|ivNonce)'))));
+    expect(command.substring('update:'.length).split(' ').first,
+        'atkeys.$_eid.a.__e@alice');
+  });
+
   test('put rejects a document with a newline', () {
     expect(store.put(_atSign, _eid, '{\n}'), throwsArgumentError);
     expect(remoteLookUp.commands, isEmpty);
