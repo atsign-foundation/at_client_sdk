@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
-import 'package:at_commons/atsign.dart' show Atsign;
+import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
@@ -13,6 +13,7 @@ import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/nskey_generation.dart';
+import 'test_utils/rerunning_at_keys_io.dart';
 
 /// Moving an arriving nskey private out of the transit buffer and into AtKeys.
 void main() {
@@ -88,6 +89,40 @@ void main() {
     expect(await filer.readSeed(namespace, generation.kid), isNotNull);
     expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
         [generation.kid]);
+  });
+
+  test(
+      'a seed another writer files while the update runs again is reported '
+      'as already filed', () async {
+    final io = RerunningAtKeysIo();
+    await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+    final announced = <Object>[];
+    filer.privatesFiled.listen(announced.add);
+    final generation = await nskeyGeneration();
+    var otherWrote = false;
+    io
+      ..rerunning = true
+      ..between = (_) async {
+        if (otherWrote) return;
+        otherWrote = true;
+        await NskeyPrivateFiling(keysIo: io, atSign: atSign).store(
+            namespace: namespace,
+            nskeyKid: generation.kid,
+            seed: NskeySeed(generation.seed));
+      };
+
+    final filed = await filer.store(
+        namespace: namespace,
+        nskeyKid: generation.kid,
+        seed: NskeySeed(generation.seed));
+    await pumpEventQueue();
+
+    expect(otherWrote, isTrue);
+    expect(await filer.readSeed(namespace, generation.kid), isNotNull,
+        reason: 'the other writer filed it');
+    expect(filed, isFalse, reason: 'this filing wrote nothing');
+    expect(announced, isEmpty);
   });
 
   test('the same kid in two namespaces files as two keys', () async {

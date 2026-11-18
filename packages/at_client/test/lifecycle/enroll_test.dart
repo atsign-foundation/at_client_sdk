@@ -19,6 +19,7 @@ import 'package:test/test.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/recorded_logs.dart';
+import '../test_utils/rerunning_at_keys_io.dart';
 import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
@@ -916,6 +917,32 @@ void main() {
       expect(stored.pendingEnrollmentIds, isEmpty);
       expect(stored.enrollmentIds, isEmpty, reason: 'nothing is written');
       expect(stored.holdsAuthenticationMaterial, isFalse);
+    });
+
+    test(
+        'A cancel that lands while the approval write runs again writes '
+        'nothing', () async {
+      final store = RerunningAtKeysIo();
+      final pending = await submit(store, atServer(decide: (_) async => true));
+      var cancelled = false;
+      store
+        ..rerunning = true
+        ..between = (dropped) async {
+          if (cancelled || dropped.pendingEnrollmentIds.isNotEmpty) return;
+          cancelled = true;
+          unawaited(pending.cancel());
+        };
+
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+
+      expect(cancelled, isTrue,
+          reason: 'the cancel landed between the runs of the approval write');
+      final stored = await store.read(atSign);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+      expect(stored.enrollmentIds, isEmpty, reason: 'nothing is written');
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+      expect(pending.approved, isFalse);
     });
 
     /// An atServer that approves at the first PKAM and holds the next, the

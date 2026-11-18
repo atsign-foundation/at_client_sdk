@@ -1,5 +1,6 @@
 ## 4.1.0-rc.1
 
+- docs: `WrittenAtKeysIo.update` says an implementation may run its mutate more than once, each time on a fresh read, keeping only the last run's changes.
 - feat: `completeActivationOf` finishes an activation started with `completeActivation: false`, on a connection the caller holds: it publishes the encryption public key and deletes the CRAM secret.
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
 - fix: `PasskeyVault` holds its atSign in canonical form, so a record sealed for `@Alice` opens for `@alice`.

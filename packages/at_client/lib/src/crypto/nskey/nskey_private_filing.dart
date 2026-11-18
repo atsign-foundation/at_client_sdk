@@ -674,6 +674,10 @@ class NskeyPrivateFiling {
     var alreadyFiled = false;
     try {
       await io.update(atSign.toAtsign(), (keys) {
+        // NOTE: update may run this again on a fresh read; only the last run
+        // counts.
+        filed = false;
+        alreadyFiled = false;
         if (_materialFor(keys, namespace, nskeyKid,
                 CryptographicMaterialRole.privateDecapsulation) !=
             null) {

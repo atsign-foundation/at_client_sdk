@@ -37,6 +37,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/recorded_logs.dart';
+import 'test_utils/rerunning_at_keys_io.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/nskey_generation.dart';
 import 'test_utils/test_keypairs.dart';
@@ -1128,8 +1129,9 @@ void main() {
 
     /// A keyfile holding APKAM material for [id], so the enrollment slot
     /// exists — the precondition the reconciliation requires.
-    Future<InMemoryAtKeysIo> keyfileHolding(String id) async {
-      final io = InMemoryAtKeysIo();
+    Future<InMemoryAtKeysIo> keyfileHolding(String id,
+        {InMemoryAtKeysIo? into}) async {
+      final io = into ?? InMemoryAtKeysIo();
       final keys = AtKeys(atsign: atSign.toAtsign())
         ..fileApkamMaterial(
           enrollmentId: id,
@@ -1214,6 +1216,76 @@ void main() {
           {'buzz': 'r'},
           reason: 'the atServer is the authority on what this enrollment '
               'may reach');
+    });
+
+    /// Records what is logged from here to the end of the test, at finer.
+    RecordedLogs recordLogs() {
+      final logs = RecordedLogs();
+      final previousHandler = AtSignLogger.defaultLoggingHandler;
+      final previousLevel = AtSignLogger.root_level;
+      AtSignLogger.defaultLoggingHandler = logs;
+      AtSignLogger.root_level = 'finer';
+      addTearDown(() {
+        AtSignLogger.defaultLoggingHandler = previousHandler;
+        AtSignLogger.root_level = previousLevel;
+      });
+      return logs;
+    }
+
+    /// A keyfile that runs every update twice and records [grants] for the
+    /// enrollment first.
+    Future<RerunningAtKeysIo> rerunningHolding(
+        Map<String, String> grants) async {
+      final io = RerunningAtKeysIo();
+      await keyfileHolding(enrollmentId, into: io);
+      await io.update(atSign.toAtsign(), (keys) {
+        keys.recordEnrollmentSnapshot(enrollmentId,
+            namespaces: grants, appName: 'wavi');
+        return true;
+      });
+      return io..rerunning = true;
+    }
+
+    test('a changed grant is said once when the update runs twice', () async {
+      final io = await rerunningHolding({'buzz': 'rw'});
+      final logs = recordLogs();
+
+      await runStartup(
+          io, localSecondaryReturning(recordWith(namespace: {'buzz': 'r'})));
+
+      expect(io.reruns, greaterThan(0));
+      expect(logs.at('WARNING').where((m) => m.contains('have changed')),
+          hasLength(1));
+      expect((await io.read(atSign)).enrollmentInfo(enrollmentId)!.namespaces,
+          {'buzz': 'r'});
+    });
+
+    test(
+        'a changed grant another writer records between the runs is not said '
+        'by this start', () async {
+      final io = await rerunningHolding({'buzz': 'rw'});
+      var otherWrote = false;
+      io.between = (dropped) async {
+        if (otherWrote ||
+            dropped.enrollmentInfo(enrollmentId)?.namespaces?['buzz'] != 'r') {
+          return;
+        }
+        otherWrote = true;
+        final keys = await io.read(atSign);
+        keys.recordEnrollmentSnapshot(enrollmentId,
+            namespaces: {'buzz': 'r'}, appName: 'wavi');
+        await io.flush(atSign.toAtsign(), keys);
+      };
+      final logs = recordLogs();
+
+      await runStartup(
+          io, localSecondaryReturning(recordWith(namespace: {'buzz': 'r'})));
+
+      expect(otherWrote, isTrue,
+          reason: 'the other writer recorded the grant between the runs');
+      expect(logs.records, isNotEmpty, reason: 'the recorder is capturing');
+      expect(
+          logs.at('WARNING').where((m) => m.contains('have changed')), isEmpty);
     });
 
     test('a client authenticating with the atSign\'s own keys records nothing',
