@@ -8,4 +8,4 @@ export 'src/exception/at_lookup_exception.dart';
 export 'src/cache/secondary_address_finder.dart';
 export 'src/cache/fixed_secondary_address_finder.dart';
 export 'src/util/error_response.dart'
-    show atServerErrorCodeIn, errorResponseCode, errorResponseException;
+    show errorResponseCode, errorResponseException;

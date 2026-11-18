@@ -144,7 +144,16 @@ void main() {
       'a JSON object with no errorCode': '{"errorDescription":"key not found"}',
       'a JSON object whose errorCode is not a string':
           '{"errorCode":15,"errorDescription":"key not found"}',
+      'a JSON object whose errorCode is a list': '{"errorCode":["AT0015"]}',
+      'a JSON object naming a code only in its description':
+          '{"errorDescription":"AT0015 key not found"}',
+      'a JSON object with a number for errorCode and a code in its '
+              'description':
+          '{"errorCode":15,"errorDescription":"AT0015"}',
+      'a code that does not lead the body': 'Exception: AT0015-key not found',
       'malformed JSON': '{"errorCode":"AT0015",',
+      'JSON followed by other text':
+          '{"errorCode":"AT0015","errorDescription":"x"} trailing',
     };
     unknown.forEach((shape, body) {
       test('reads $shape as AT0014, holding the body', () {
@@ -164,20 +173,42 @@ void main() {
       });
     });
 
-    test(
-        'Given each form an atServer writes, when errorResponseCode reads '
-        'it, then it reads the code errorResponseException throws', () {
+    test("A reply's code and the exception a lookup throws for it agree", () {
       const replies = {
         'error:AT0027:enrollment_id: e-1 is revoked': 'AT0027',
         'error:AT0015-key not found': 'AT0015',
         'error:AT0015': 'AT0015',
         'error:{"errorCode":"AT0401","errorDescription":"refused"}': 'AT0401',
         'error:{"errorCode":"AT0015"}': 'AT0015',
+        'error:{"errorCode":"AT0027","errorDescription":"was error:AT0401"}':
+            'AT0027',
       };
       replies.forEach((reply, code) {
         expect(errorResponseCode(reply), code, reason: reply);
         expect(errorResponseException(reply).errorCode, code, reason: reply);
       });
+      const namesNone = 'error:Exception: pkam authentication failed';
+      expect(errorResponseCode(namesNone), isNull);
+      expect(errorResponseException(namesNone).errorCode, 'AT0014');
+    });
+
+    test(
+        'A code is read only where a dash, a colon or the end of the reply '
+        'follows it', () {
+      expect(errorResponseCode('error:AT00271-x'), isNull);
+      expect(errorResponseCode('error:AT0027 enrollment revoked'), isNull);
+      expect(errorResponseCode('error:AT0027'), 'AT0027');
+    });
+
+    test('A JSON reply is read whole', () {
+      for (final reply in [
+        'error:{"errorCode":"AT0015","errorDescription":"x"} trailing',
+        'error:{"errorCode":"AT0015"',
+        'error:{"errorDescription":"AT0015 key not found"}',
+        'error:{"errorCode":15,"errorDescription":"AT0015"}',
+      ]) {
+        expect(errorResponseCode(reply), isNull, reason: reply);
+      }
     });
 
     test(
