@@ -31,4 +31,10 @@ void main() {
   test('the ceremony timeout is two minutes', () {
     expect(passkeyCeremonyTimeoutMs, 120000);
   });
+
+  test('the assertion requires user verification', () {
+    final options =
+        passkeyRequestOptions(rpId: 'example.com', evalInput: Uint8List(32));
+    expect((options['publicKey'] as Map)['userVerification'], 'required');
+  });
 }

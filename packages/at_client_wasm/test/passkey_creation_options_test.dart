@@ -56,6 +56,11 @@ void main() {
     expect(a['extensions'], {'prf': <String, Object?>{}});
   });
 
+  test('the passkey is discoverable and user-verified', () {
+    expect((_options('@alice')['publicKey'] as Map)['authenticatorSelection'],
+        {'residentKey': 'required', 'userVerification': 'required'});
+  });
+
   group('displayName', () {
     test('is the core rule of the enrollment time and device name', () {
       for (final device in ['Alice Mac', '\u{1F600}' * 30]) {
