@@ -15,7 +15,7 @@ class Wire {
   final lookUpsBuilt = <WireLookUp>[];
 
   /// Whether the authenticator succeeds. False is an authenticator reporting
-  /// failure, which PKAM raises as at_lookup does.
+  /// failure, which PKAM returns as false.
   var pkamAccepted = true;
 
   /// Whether PKAM runs the authenticator the lookUp was built with, as a real
@@ -62,17 +62,16 @@ class Wire {
         dials++;
         onDial?.call(dials);
         finders.add(secondaryAddressFinder);
-        return WireLookUp(this, atSign)
+        return WireLookUp(this)
           ..authenticator = authenticator
           ..also(lookUpsBuilt.add);
       };
 }
 
 class WireLookUp implements AtLookupMuxable {
-  WireLookUp(this._wire, this._atSign);
+  WireLookUp(this._wire);
 
   final Wire _wire;
-  final String _atSign;
 
   @override
   AtAuthenticator? authenticator;
@@ -90,20 +89,12 @@ class WireLookUp implements AtLookupMuxable {
   @override
   Stream<bool> get notificationConnectionUp => const Stream.empty();
 
-  /// Returns true or throws, as at_lookup's PKAM does: an authenticator
-  /// that reports failure is an [UnAuthenticatedException].
+  /// Returns what the authenticator reports: an authenticator that reports
+  /// failure is a false, which [AtLookUp.pkamAuthenticate]'s contract permits.
   @override
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
     if (_wire.connectFails) throw StateError('connection refused');
-    if (!await _authenticatorSucceeds()) {
-      throw UnAuthenticatedException('Failed connecting to $_atSign.'
-          ' The authenticator reported failure');
-    }
-    return true;
-  }
-
-  Future<bool> _authenticatorSucceeds() async {
     final run = authenticator;
     if (_wire.runsAuthenticator && run != null) {
       return run(_WireExecutor(_wire));

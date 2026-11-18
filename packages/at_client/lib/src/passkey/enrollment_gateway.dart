@@ -157,7 +157,10 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
         pkamSent = false;
         return authenticate(_NotingPkam(executor, () => pkamSent = true));
       };
-      await lookUp.pkamAuthenticate();
+      if (!await lookUp.pkamAuthenticate()) {
+        throw UnAuthenticatedException('Failed connecting to $atSign. The '
+            'authenticator reported failure');
+      }
     } catch (e) {
       await _closeQuietly(lookUp);
       if (pkamSent &&
