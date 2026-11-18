@@ -8,8 +8,7 @@ Feature: A refusal reads the same whichever form the atServer writes it in
 
   Races: none arise; each refusal is read on the connection it arrived on.
   Replay: none arise; a refusal carries no secret and no freshness.
-  DoS: none arise; no retry or work is added, and a refusal that names no
-  code is handled as one that names an unknown code.
+  DoS: none arise; no retry or work is added.
   Forgery and impersonation: the refusal comes from the client's own atServer
   over TLS; reading its code the same way in every form grants nothing.
 
@@ -22,3 +21,8 @@ Feature: A refusal reads the same whichever form the atServer writes it in
     Given an at_client connection whose enrollment the atServer has since revoked
     When the client sends a verb and the atServer answers error:AT0027:<text>
     Then the client's connection state is refused, with cause revoked
+
+  Scenario: A verb refused while it authenticates throws the exception at_auth raised
+    Given an atServer that refuses an at_client connection's pkam: with error:AT0027
+    When the client sends a verb
+    Then the verb throws an AtAuthErrorReplyException whose errorCode is AT0027

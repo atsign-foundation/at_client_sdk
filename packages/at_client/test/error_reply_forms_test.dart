@@ -202,4 +202,39 @@ void main() {
     expect(server.connectCount, 1,
         reason: 'the refusal came on the connection the enrollment opened');
   });
+
+  group(
+      'A verb refused while it authenticates throws the exception at_auth '
+      'raised', () {
+    forms.forEach((form, refusal) {
+      test(
+          'Given an atServer that refuses a PKAM in the $form form, when the '
+          'client sends a verb, then the verb throws the refusal with its code',
+          () async {
+        final server =
+            FakeAtServer(atSign: atSign, runsClientAuthenticator: true)
+              ..refuseClientAuth = (_) => refusal('AT0027', pkamRefused);
+        final remote = RemoteSecondary(
+            atSign,
+            AtClientPreference()
+              ..namespace = 'wavi'
+              ..rootDomain = '127.0.0.1',
+            atKeysIo: keys,
+            lookUps: server.lookUps,
+            secondaryAddressFinder: server.addressFinder);
+        addTearDown(remote.closeConnection);
+
+        await expectLater(
+            remote.executeVerb(LLookupVerbBuilder()
+              ..atKey = (AtKey()
+                ..key = 'phone'
+                ..sharedBy = atSign)),
+            throwsA(isA<AtAuthErrorReplyException>()
+                .having((e) => e.errorCode, 'errorCode', 'AT0027')));
+        expect(server.socket.written.where((c) => c.startsWith('pkam:')),
+            hasLength(1),
+            reason: 'the control: the refusal answered a PKAM');
+      });
+    });
+  });
 }
