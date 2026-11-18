@@ -281,6 +281,39 @@ void main() {
           reason: 'the auth seed buffer is the one the derivation returns');
     });
 
+    test('the auth seed buffer is zeroed when the seal key import fails',
+        () async {
+      final expansions = <_Expansion>[];
+      final spy = _expandSpy(expansions);
+      // A 31-byte seal key, which WebCrypto refuses to import as AES-GCM.
+      Uint8List expand(Uint8List prk, {Uint8List? info, required int length}) {
+        final output = spy(prk, info: info, length: length);
+        return utf8.decode(info!) == '$recordSealLabel|@alice'
+            ? Uint8List.sublistView(output, 0, length - 1)
+            : output;
+      }
+
+      final imports = <_Import>[];
+      Object? refusal;
+      try {
+        await WebCryptoKeyDeriver(subtle: _importSpy(imports), expand: expand)
+            .derive(prf(), '@alice');
+      } catch (e) {
+        refusal = e;
+      }
+      expect(imports, hasLength(1),
+          reason: 'the deriver tried to import the seal key');
+      expect(domExceptionName(refusal ?? Object()), 'DataError',
+          reason: "WebCrypto's refusal reaches the caller as itself");
+      final authSeed = expansions
+          .singleWhere((e) => e.info == '$recordAuthSeedLabel|@alice');
+      expect(_hex(authSeed.outputAtCall),
+          'b0e85850ef5407a914408bc6ccdc6a32baeb6446127275414199179a2cf79fc6',
+          reason: 'the buffer the deriver holds is the @alice auth seed');
+      expect(authSeed.output, everyElement(0),
+          reason: 'the auth seed buffer must be zeroes after a failed import');
+    });
+
     test('the @alice sealer does not open a @bob record', () async {
       final alice = await deriver.derive(prf(), '@alice');
       await expectLater(
