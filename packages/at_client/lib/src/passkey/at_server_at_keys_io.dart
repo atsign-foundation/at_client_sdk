@@ -112,7 +112,11 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
   /// lock lasts [lockTtl], and a write waits up to [lockWait] to take it.
   ///
   /// Throws [ArgumentError] for a [lockTtl] under a millisecond or over
-  /// [maxServerMutexTtl], or a [lockWait] that is not positive.
+  /// [maxServerMutexTtl], or a [lockWait] that is not longer than half
+  /// [lockTtl]. A lease this store no longer reuses, having under half
+  /// [lockTtl] left, still holds the lock against this store's own next take
+  /// for the rest of it, so a shorter [lockWait] would give up on a lock no
+  /// other writer holds.
   AtServerAtKeysIo(
       {required EnrollmentDocumentStore documents,
       required String atSign,
@@ -129,10 +133,10 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
         _open = open,
         _enrollmentId = enrollmentId,
         _lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
-        _lockWait = lockWait > Duration.zero
+        _lockWait = lockWait > lockTtl ~/ 2 && lockWait > Duration.zero
             ? lockWait
-            : throw ArgumentError.value(
-                lockWait, 'lockWait', 'must be positive'),
+            : throw ArgumentError.value(lockWait, 'lockWait',
+                'must be positive and longer than half lockTtl ($lockTtl)'),
         _publicKey = apkamKeyPair.publicKey,
         _private = base64Decode(apkamKeyPair.privateKey) {
     final seed = restored;

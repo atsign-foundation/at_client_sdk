@@ -255,7 +255,9 @@ void main() {
       'a writer whose bound is shorter than a pause between takes gives up '
       'when its bound ends', () async {
     server.lockHeld = true;
-    final io = storeOf('self', lockWait: const Duration(milliseconds: 50));
+    final io = storeOf('self',
+        lockTtl: const Duration(milliseconds: 50),
+        lockWait: const Duration(milliseconds: 50));
     final took = Stopwatch()..start();
 
     await expectLater(
@@ -413,7 +415,9 @@ void main() {
   });
 
   test('a lease serves the writes that follow it while it lasts', () async {
-    final io = storeOf('self', lockTtl: const Duration(seconds: 10));
+    final io = storeOf('self',
+        lockTtl: const Duration(seconds: 10),
+        lockWait: const Duration(seconds: 15));
     await addSymmetric(io);
     await addSigning(io);
     expect(server.of('self').where((e) => e == 'lock'), hasLength(1));
