@@ -8,11 +8,11 @@ Feature: The passkey hints are a convenience, so a login and an onboarding go on
   with an Exception is logged as a warning naming the Atsign, and the
   onboarding or login returns its session all the same; the next login
   without hints writes them. A failure that is an Error, not an Exception,
-  still fails the call. A remembered enrollment id that cannot be read, or
-  that is outside the enrollment id alphabet, counts as no hints, so it is
-  never sent to the atServer; a failed read of the credential id, which is
-  read first, still fails the call. An enrollment id the pointer holds that
-  is outside the alphabet is still a lost passkey, refused before any PKAM.
+  still fails the call. A remembered credential id or enrollment id that
+  cannot be read, or an enrollment id outside the enrollment id alphabet,
+  counts as no hints, so it is never sent to the atServer. An enrollment id
+  the pointer holds that is outside the alphabet is still a lost passkey,
+  refused before any PKAM.
 
   Races: tabs of one origin that log in at once each write the hints they
   authenticated with; a pair that no longer opens is retried without
@@ -61,6 +61,14 @@ Feature: The passkey hints are a convenience, so a login and an onboarding go on
     Then the login asserts any passkey and reads the passkey's pointer
     And it gets a passkey session whose client is online as the enrollment the pointer names
     And a warning names @alice🛠 and says its remembered enrollment id could not be read
+
+  Scenario: A remembered credential id that cannot be read counts as no hints
+    Given this device remembers the passkey of @alice🛠
+    And reading its remembered credential id fails with an Exception
+    When the app logs in to @alice🛠 with that passkey
+    Then the login asserts any passkey and reads the passkey's pointer
+    And it gets a passkey session whose client is online as the enrollment the pointer names
+    And a warning names @alice🛠 and says its remembered credential id could not be read
 
   Scenario: A remembered enrollment id outside the enrollment id alphabet counts as no hints
     Given this device remembers the passkey of @alice🛠 beside an enrollment id outside the enrollment id alphabet

@@ -1,11 +1,12 @@
 Feature: IndexedDB failures reach the app as AtExceptions
   Every failure of the browser's IndexedDB that reaches a passkey entry
   point is an IndexedDbException, which extends AtException and is exported
-  by package:at_client_wasm, so an app can catch it by type. Two never reach
-  the app, since the passkey hints are a convenience: a failed write of the
-  hints, after which the entry point returns its session, and a remembered
-  enrollment id that cannot be read, whether IndexedDB fails the read or
-  its stored bytes are not UTF-8, which counts as no hints.
+  by package:at_client_wasm, so an app can catch it by type. Three never
+  reach the app, since the passkey hints are a convenience: a failed write
+  of the hints, after which the entry point returns its session; a failed
+  read of the remembered credential id; and a remembered enrollment id
+  that cannot be read, whether IndexedDB fails the read or its stored
+  bytes are not UTF-8. Each read failure counts as no hints.
 
   Races, replay, forgery and impersonation: only this origin's own pages
   and browser can make IndexedDB fail, and they already hold more than the
@@ -44,6 +45,13 @@ Feature: IndexedDB failures reach the app as AtExceptions
   Scenario: A failed IndexedDB read of the remembered enrollment id counts as no hints
     Given this origin's IndexedDB holds passkey hints for @alice🛠
     And IndexedDB fails the read of the remembered enrollment id after the credential id is read
+    When the app logs in to @alice🛠 with the passkey
+    Then the login asserts any passkey and reads the passkey's pointer
+    And it is logged in as the pointed enrollment, with no IndexedDbException
+
+  Scenario: A failed IndexedDB read of the remembered credential id counts as no hints
+    Given this origin's IndexedDB holds passkey hints for @alice🛠
+    And IndexedDB fails the read of the remembered credential id
     When the app logs in to @alice🛠 with the passkey
     Then the login asserts any passkey and reads the passkey's pointer
     And it is logged in as the pointed enrollment, with no IndexedDbException
