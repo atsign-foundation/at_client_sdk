@@ -303,17 +303,17 @@ class _PkamSession implements EnrollmentSession {
 
   /// Whether a failed revoke is left to the list that follows: only the
   /// atServer's refusals of the revoke itself, which [RemoteSecondary] maps
-  /// from AT0028 (the enrollment has expired or no longer exists), AT0029
-  /// (invalid or expired enrollment), AT0031 (cannot revoke) and AT0032 (the
-  /// enrollment is in no state to revoke). Every other failure, such as a
-  /// lost or failed connection (AT0004, AT0021), a timeout, a paused, busy or
-  /// failing atServer (AT0024, AT0012, AT0011) or an I/O error, propagates as
-  /// it is.
+  /// from AT0028 (the enrollment has expired or no longer exists; it arrives
+  /// as an [AtThrottleLimitExceeded], the type at_commons gives that code),
+  /// AT0029 (invalid or expired enrollment), AT0031 (the atServer will not
+  /// revoke it) and AT0032 (the enrollment is in no state to revoke). Every
+  /// other failure, such as a lost or failed connection (AT0004, AT0021), a
+  /// timeout, a paused, busy or failing atServer (AT0024, AT0012, AT0011) or
+  /// an I/O error, propagates as it is.
   ///
-  /// AT0028 is also the atServer's code for a throttled request, and both
-  /// reach here as an [AtThrottleLimitExceeded], so a throttled revoke is
-  /// left to the list too; that is safe, since the list throws while the
-  /// enrollment the revoke named is still approved.
+  /// The list decides: it throws while an enrollment the revoke named is
+  /// still approved, and it fails too when this session's own enrollment has
+  /// expired, which the atServer also answers with AT0028.
   static bool _isRefusal(AtException e) =>
       e is AtThrottleLimitExceeded ||
       e is AtInvalidEnrollmentException ||

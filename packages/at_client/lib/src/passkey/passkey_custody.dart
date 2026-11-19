@@ -137,9 +137,9 @@ abstract class EnrollmentSession {
   /// Revokes every approved enrollment of the atSign other than this one.
   ///
   /// Throws when an approved enrollment other than this one is still listed
-  /// afterwards; a revoke the atServer refuses for an enrollment that has
-  /// expired, no longer exists or is no longer approved (AT0028, AT0029,
-  /// AT0031, AT0032) is not a failure. A revoke that fails any other way,
+  /// afterwards; a revoke the atServer refuses (AT0028, AT0029, AT0031,
+  /// AT0032), as for an enrollment that has expired, no longer exists, is no
+  /// longer approved or is one it will not revoke, is not a failure. A revoke that fails any other way,
   /// such as a lost or failed connection, a timeout or a paused, busy or
   /// failing atServer, throws at once.
   Future<void> revokeOtherEnrollments();
