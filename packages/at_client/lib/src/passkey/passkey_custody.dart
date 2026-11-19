@@ -279,6 +279,11 @@ class PasskeyCustody {
   /// remembers the passkey on the device and returns the session of the
   /// client running as the new enrollment.
   ///
+  /// The device's passkey hints are a convenience: a write of them that
+  /// fails with an [Exception] is logged as a warning naming [atSign], and
+  /// the onboarding returns its session all the same, leaving the next [open]
+  /// to save them. One that fails with an [Error] fails the onboarding.
+  ///
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
   ///
@@ -417,10 +422,13 @@ class PasskeyCustody {
 
   /// Opens [atSign]'s @keys and returns the session of the client running as
   /// its enrollment. A device that remembers [atSign]'s credential and
-  /// enrollment returns without reading the pointer; any other (one id alone
-  /// counts as none) asserts any discoverable passkey and finds the
-  /// enrollment through the pointer, after waiting for [atSign]'s setup lock
-  /// so that an onboarding in another tab finishes first.
+  /// enrollment returns without reading the pointer; any other asserts any
+  /// discoverable passkey and finds the enrollment through the pointer,
+  /// after waiting for [atSign]'s setup lock so that an onboarding in another
+  /// tab finishes first. One id alone counts as none, and so does a
+  /// remembered enrollment id whose read fails with an [Exception] or that is
+  /// outside the enrollment id alphabet, which is never sent; either is
+  /// logged as a warning naming [atSign].
   ///
   /// When the remembered ceremony yields no credential, or the atServer
   /// refuses PKAM for the remembered enrollment, the open is retried once, as
@@ -429,8 +437,8 @@ class PasskeyCustody {
   /// deleted passkey, so a cancel is retried too, and a second failure is a
   /// lost passkey.
   ///
-  /// A remembered or pointed enrollment id outside the id alphabet is a lost
-  /// passkey, refused before any PKAM.
+  /// An enrollment id the pointer holds outside the enrollment id alphabet is
+  /// a lost passkey, refused before any PKAM.
   ///
   /// Once the document is read, an open without remembered ids, including
   /// the retry without them, finishes the activation an onboarding may have
@@ -452,9 +460,16 @@ class PasskeyCustody {
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
   /// [PublicKeyMismatchException], a `PrfUnavailableException` when the
-  /// passkey gives no usable PRF output, or what revoking the other
-  /// enrollments or finishing the activation throws; none leaves a session
-  /// open or the device's hints rewritten.
+  /// passkey gives no usable PRF output, what reading the remembered
+  /// credential id throws, or what revoking the other enrollments or
+  /// finishing the activation throws; none leaves a session open or the
+  /// device's hints rewritten.
+  ///
+  /// The device's passkey hints are a convenience: a write of them that
+  /// fails with an [Exception] is logged as a warning naming [atSign], and
+  /// the open returns its session all the same, leaving the next open without
+  /// hints to save them. One that fails with an [Error] is thrown, and the
+  /// session is closed.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
