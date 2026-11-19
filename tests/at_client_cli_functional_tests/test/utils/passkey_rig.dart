@@ -391,7 +391,9 @@ class PasskeyRig {
       device: 'vetest',
       clientOpener: openClient);
 
-  PasskeyCustody custody({PasskeyHintStore? hints}) {
+  /// A custody over [gateway], by default this rig's own.
+  PasskeyCustody custody(
+      {PasskeyHintStore? hints, EnrollmentGateway? gateway}) {
     final store = hints ?? MemoryHints();
     return PasskeyCustody(
         prf: PasskeyPrf(port),
@@ -400,7 +402,7 @@ class PasskeyRig {
             lookUps: lookUps,
             rootDomain: veRoot,
             secondaryAddressFinder: finder),
-        gateway: gateway(),
+        gateway: gateway ?? this.gateway(),
         credentials: store,
         enrollmentIds: store,
         setupLock: setupLock,

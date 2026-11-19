@@ -8,6 +8,8 @@ import 'package:at_auth/passkey.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_client/passkey.dart';
+import 'package:at_client/src/passkey/enrollment_document_store.dart'
+    show RemoteEnrollmentDocumentStore;
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show apkamKeyPairFromSeed;
 import 'package:at_demo_data/at_demo_data.dart' show cramKeyMap;
@@ -255,6 +257,97 @@ void main() {
         '${answer < 0 ? 'nothing' : tap.lines[answer].text}');
     expect(_accepted(tap, again), isTrue,
         reason: 'the atServer accepts the second delete of the CRAM secret');
+  }, timeout: _timeout);
+
+  test(
+      'Onboarding records its completion as due before it writes the @keys '
+      'document, and deletes that record last', () async {
+    const atSign = '@emoji🦄🛠';
+    final rig = PasskeyRig(salt: 33);
+    final otherTool = AtAuthEnrollmentGateway(
+        lookUps: rig.lookUps,
+        finder: rig.finder,
+        root: veRoot,
+        app: 'wavi',
+        device: 'othertool',
+        clientOpener: rig.openClient);
+    final other = await otherTool.activate(
+        atSign: atSign,
+        apkamKeyPair: await apkamKeyPairFromSeed(
+            Uint8List.fromList(List.generate(32, (i) => 200 - i))),
+        cram: cramKeyMap[atSign]!);
+    addTearDown(other.close);
+    Object? otherRead;
+    Object? otherDelete;
+    bool? ownRead;
+
+    final session = await rig
+        .custody(
+            gateway: _PausingGateway(rig.gateway(), (onboarding) async {
+          final id = onboarding.enrollmentId;
+          otherRead = await other.documents
+              .isCompletionDue(atSign, id)
+              .then<Object>((due) => due, onError: (Object e) => e);
+          otherDelete = await other.documents
+              .clearCompletionDue(atSign, id)
+              .then<Object>((_) => 'deleted', onError: (Object e) => e);
+          ownRead = await onboarding.documents.isCompletionDue(atSign, id);
+        }))
+        .onboard(atSign: atSign, cram: cramKeyMap[atSign]!);
+    addTearDown(session.stop);
+    final enrollmentId = session.client.enrollmentId!;
+
+    final tap = rig.tap;
+    bool isRecord(String c, String verb) =>
+        c.startsWith('$verb:completion-due.$enrollmentId.a.__e@');
+    final mark = tap.indexOfSent((c) => isRecord(c, 'update'));
+    final document = tap.indexOfSent(_isDocumentPut);
+    expect([mark, document], everyElement(greaterThan(-1)),
+        reason: tap.transcript());
+    expect(_accepted(tap, mark), isTrue);
+    expect(_replyIndex(tap, mark), lessThan(document),
+        reason: 'the atServer stored the record before the @keys document '
+            'was sent');
+    final publish = tap.indexOfSent((c) => _publishes(c, atSign));
+    expect(publish, greaterThan(-1), reason: tap.transcript());
+    final clear = tap.indexOfSent((c) => isRecord(c, 'delete'), from: publish);
+    expect(clear, greaterThan(_replyIndex(tap, publish)),
+        reason: 'the record was deleted after the key was published');
+    expect(tap.lines[clear].connection, tap.lines[mark].connection,
+        reason: "the enrollment deleted it on its own connection");
+    expect(_accepted(tap, clear), isTrue);
+    expect(
+        await RemoteEnrollmentDocumentStore(
+                session.client.getRemoteSecondary()!)
+            .isCompletionDue(atSign, enrollmentId),
+        isFalse,
+        reason: 'the record is gone once the onboarding returns');
+
+    final namespaces = await _namespacesOf(session.client, other.enrollmentId,
+        status: 'revoked');
+    expect(namespaces,
+        allOf(containsPair('*', 'rw'), containsPair('__manage', 'rw')),
+        reason: 'the control: the other enrollment held *:rw and '
+            '__manage:rw');
+    expect(ownRead, isTrue,
+        reason: "the control: the record was stored, and the enrollment's "
+            'own read found it after the other enrollment tried to delete it');
+    for (final (verb, outcome) in [
+      ('llookup', otherRead),
+      ('delete', otherDelete)
+    ]) {
+      final sent = tap.indexOfSent((c) => isRecord(c, verb));
+      expect(sent, greaterThan(-1), reason: tap.transcript());
+      expect(tap.lines[sent].connection, isNot(tap.lines[mark].connection),
+          reason: 'the control: the other enrollment sent it');
+      final reply = _replyIndex(tap, sent);
+      print('LIVE another enrollment\'s $verb of the record: '
+          '${reply < 0 ? 'no reply' : tap.lines[reply].text}');
+      expect(outcome, isA<AtException>(),
+          reason: "another enrollment's $verb of the record is refused");
+      expect(outcome, isNot(isA<KeyNotFoundException>()),
+          reason: 'the refusal is not a record not found');
+    }
   }, timeout: _timeout);
 
   test('A signing root is published only after the CRAM secret is deleted',
@@ -578,6 +671,23 @@ Future<Set<String>> _approved(AtClient client, String atSign) async {
   return {for (final key in listed.keys) (key as String).split('.').first};
 }
 
+/// The namespaces of the enrollment [enrollmentId], whose status is
+/// [status], as [client] lists them.
+Future<Map<String, dynamic>> _namespacesOf(AtClient client, String enrollmentId,
+    {required String status}) async {
+  final reply = await client.getRemoteSecondary()!.executeCommand(
+      'enroll:list:{"enrollmentStatusFilter":["$status"]}\n',
+      auth: true);
+  final listed =
+      jsonDecode(reply!.substring(reply.indexOf('data:') + 5)) as Map;
+  for (final MapEntry(:key, :value) in listed.entries) {
+    if ((key as String).split('.').first == enrollmentId) {
+      return (value as Map)['namespace'] as Map<String, dynamic>;
+    }
+  }
+  throw StateError('no $status enrollment $enrollmentId');
+}
+
 /// `accepted` when a `cram:` login of [atSign] with its CRAM secret succeeds
 /// on a connection of its own, else `refused:` and the reason.
 Future<String> _cramLogin(String atSign) async {
@@ -692,6 +802,113 @@ Future<void> _isolateWriter(List<Object> args) async {
     _refusedTakes(rig.tap, from: mark)
   ]);
   await session.stop();
+}
+
+/// A gateway whose activations, once they record their completion as due,
+/// run [onMarked] before the onboarding goes on.
+class _PausingGateway implements EnrollmentGateway {
+  _PausingGateway(this._inner, this.onMarked);
+
+  final EnrollmentGateway _inner;
+  final Future<void> Function(EnrollmentSession onboarding) onMarked;
+
+  @override
+  String get device => _inner.device;
+
+  @override
+  Future<EnrollmentSession> authenticate(
+          {required String atSign,
+          required String enrollmentId,
+          required ApkamKeyPair apkamKeyPair}) =>
+      _inner.authenticate(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          apkamKeyPair: apkamKeyPair);
+
+  @override
+  Future<EnrollmentSession> activate(
+          {required String atSign,
+          required ApkamKeyPair apkamKeyPair,
+          required String cram}) async =>
+      _PausingSession(
+          await _inner.activate(
+              atSign: atSign, apkamKeyPair: apkamKeyPair, cram: cram),
+          onMarked);
+}
+
+/// [_inner], with a document store that runs [_onMarked] once the record of
+/// a due completion is written.
+class _PausingSession implements EnrollmentSession {
+  _PausingSession(this._inner, this._onMarked);
+
+  final EnrollmentSession _inner;
+  final Future<void> Function(EnrollmentSession onboarding) _onMarked;
+
+  @override
+  String get enrollmentId => _inner.enrollmentId;
+
+  @override
+  late final EnrollmentDocumentStore documents = _PausingDocuments(this);
+
+  @override
+  EnrollmentPointerStore get pointers => _inner.pointers;
+
+  @override
+  Future<Map<String, dynamic>> atKeys() => _inner.atKeys();
+
+  @override
+  Future<PublishedEncryptionKey> publishedEncryptionKey(
+          Map<String, dynamic> atKeys) =>
+      _inner.publishedEncryptionKey(atKeys);
+
+  @override
+  Future<void> revokeOtherEnrollments() => _inner.revokeOtherEnrollments();
+
+  @override
+  Future<void> completeActivation(Map<String, dynamic> atKeys) =>
+      _inner.completeActivation(atKeys);
+
+  @override
+  Future<AtClient> openClient(WrittenAtKeysIo keysIo) =>
+      _inner.openClient(keysIo);
+
+  @override
+  Future<void> close() => _inner.close();
+}
+
+class _PausingDocuments implements EnrollmentDocumentStore {
+  _PausingDocuments(this._session);
+
+  final _PausingSession _session;
+
+  EnrollmentDocumentStore get _inner => _session._inner.documents;
+
+  @override
+  Future<String?> get(String atSign, String enrollmentId) =>
+      _inner.get(atSign, enrollmentId);
+
+  @override
+  Future<void> put(String atSign, String enrollmentId, String document) =>
+      _inner.put(atSign, enrollmentId, document);
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) =>
+      _inner.tryLock(atSign, enrollmentId, ttl: ttl);
+
+  @override
+  Future<void> markCompletionDue(String atSign, String enrollmentId) async {
+    await _inner.markCompletionDue(atSign, enrollmentId);
+    await _session._onMarked(_session);
+  }
+
+  @override
+  Future<bool> isCompletionDue(String atSign, String enrollmentId) =>
+      _inner.isCompletionDue(atSign, enrollmentId);
+
+  @override
+  Future<void> clearCompletionDue(String atSign, String enrollmentId) =>
+      _inner.clearCompletionDue(atSign, enrollmentId);
 }
 
 /// A rig whose client runs under a posture that creates a signing root.
