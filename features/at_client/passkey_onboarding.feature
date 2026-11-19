@@ -12,29 +12,39 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   CRAM secret, and that retry revokes every other approved enrollment of the
   Atsign, including those earlier attempts left; once it is deleted the
   Atsign is onboarded, and logging in with the passkey opens its enrollment
-  and saves the passkey hints the onboarding could not. Before it writes
-  the @keys document, onboarding records that the activation's completion
-  is due, in a record only its own enrollment can read or write,
-  `completion-due.<enrollmentId>.a.__e@<atSign>`; the completion deletes
-  that record as its last step, after the publish. A login on a device with
-  no saved hints for the Atsign reads that record before it looks at the
-  published key. While the completion is due, the login takes the same
-  three steps, publishing the document's key over any other key, then
-  deletes the record. When the completion is not due, the login revokes
-  nothing: it publishes the document's key when none is published, deletes
-  the CRAM secret, which is already gone, and refuses a published key that
-  is not the document's. A login that uses saved hints sends none of these,
-  since a device saves them only once the completion is done. The device
-  keeps nothing about an unfinished onboarding: IndexedDB holds only the
-  passkey hints, written once the CRAM secret is deleted.
+  and saves the passkey hints the onboarding could not.
+  Before it writes the @keys document, onboarding records that the
+  activation's completion is due, in a record no other enrollment can read
+  or write, `completion-due.<enrollmentId>.a.__e@<atSign>`; once its own
+  delete of the CRAM secret answers, it records there that the CRAM secret
+  is deleted, and the completion deletes the record as its last step,
+  after the publish. A login on a device with no saved hints for the
+  Atsign reads that record before it looks at the published key. When the
+  record says the CRAM secret is deleted, the login takes the same three
+  steps, publishing the document's key over any other key, then deletes
+  the record. When it says only that the completion is due, the login
+  takes the same three steps, revoking every other approved enrollment,
+  only when no key or the document's key is published, and refuses another
+  key before it sends anything. When the completion is not due, the login
+  revokes nothing: it publishes the document's key when none is published,
+  deletes the CRAM secret, which is already gone, and refuses a published
+  key that is not the document's.
+  A login that uses saved hints sends none of these, since a device saves
+  them only once the completion is done. The device keeps nothing about an
+  unfinished onboarding: IndexedDB holds only the passkey hints, written
+  once the CRAM secret is deleted.
 
   The CRAM secret is deleted before the revoke, so nothing a CRAM holder
   enrolled before the delete survives it. A revoke that fails stops the
   completion before the publish and leaves the record, so the next login
-  without saved hints tries the revoke again. A login revokes only while the
-  completion is due, so it finishes an onboarding over a key another
-  activation tool published while the CRAM secret was live, and a key
-  another enrollment published later is still refused.
+  without saved hints tries the revoke again.
+  A login publishes over another key only when its onboarding's own delete
+  of the CRAM secret answered, so it finishes an onboarding over a key
+  another activation tool published while the CRAM secret was live, and
+  refuses a key another tool published after it activated with the same
+  secret and deleted it. A login revokes only while the completion is due,
+  so a key another enrollment published later is still refused. Each
+  revoke is named in a warning.
 
   Races: tabs of one origin onboarding one Atsign wait on its setup lock.
   Two devices onboarding one Atsign with the same CRAM secret at once can
@@ -59,7 +69,8 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   captured is resent. A login's delete, revoke and publish run on its own
   PKAM-authenticated connection, and sending any of them again changes
   nothing the first did not. Denial of service: each interrupted attempt
-  leaves one approved enrollment until a retry or a login revokes it. A
+  leaves one approved enrollment until a retry or a login revokes it, and
+  its completion-due record. A
   revoke that keeps failing fails every login without saved hints; only an
   enrollment that holds `__manage`, which can approve or reinstate
   enrollments as fast as they are revoked, or the atServer can keep it
@@ -70,13 +81,15 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   holder already holds more than any enrollment; the retry revokes only
   enrollments of this Atsign, after the CRAM secret is deleted and before
   its key is published. A login revokes and publishes only after PKAM as
-  the enrollment its passkey's pointer names, and only when no key is
-  published; it publishes only the key its @keys document holds, which
+  the enrollment its passkey's pointer names; it publishes only the key its
+  @keys document holds, which
   only the passkey opens. A login revokes only while the onboarding's
   completion is due, so a published key that has gone does not make a
   later login revoke: the login publishes the document's key again. The
   atServer refuses every other enrollment, root included, a read or write
-  of the completion-due record. A key replaced by another enrollment that
+  of the completion-due record. A CRAM-authenticated connection is not
+  refused, and its holder already holds more than any enrollment. A key
+  replaced by another enrollment that
   holds `*:rw` and `__manage:rw` makes every login refuse it while the
   completion is not due, until such an enrollment publishes the document's
   key again.
@@ -94,10 +107,11 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     Then it deletes the CRAM secret, then asks the atServer to revoke every other approved enrollment, then publishes its encryption public key
     And it sends the CRAM secret's delete once more after the publish, and the atServer accepts it
 
-  Scenario: Onboarding records its completion as due before it writes the @keys document, and deletes that record last
+  Scenario: Onboarding records its completion as due before it writes the @keys document, records the CRAM secret's deletion, and deletes that record last
     Given @alice🛠 is not yet activated and its CRAM secret is known
     When the app onboards @alice🛠 with a new passkey
     Then the atServer stored `completion-due.<enrollmentId>.a.__e@alice🛠` before the @keys document
+    And the record said the CRAM secret was deleted after the CRAM secret's delete answered and before the revoke
     And it deleted that record after the encryption public key was published
     And while it was stored, another enrollment of @alice🛠 holding `*:rw` and `__manage:rw` was refused a read and a delete of it
 
@@ -107,6 +121,13 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     Then the onboarding throws that refusal
     And no @keys document or pointer is written and the CRAM secret is not deleted
     And the new credential is reported to the platform as unknown
+
+  Scenario: An onboarding whose record of the CRAM secret's deletion cannot be written fails, and a login finishes it
+    Given the atServer refuses, once, the write recording that @alice🛠's CRAM secret is deleted
+    When the app onboards @alice🛠 with a new passkey
+    Then the onboarding fails after the CRAM secret is deleted and before any revoke
+    When the app then logs in to @alice🛠 with the passkey on a device with no saved hints
+    Then the login finishes the completion and opens the onboarding's enrollment
 
   Scenario: A signing root is published only after the CRAM secret is deleted
     Given @alice🛠 is not yet activated and its CRAM secret is known
@@ -176,10 +197,24 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
 
   Scenario: A login finishes an onboarding over a key another activation tool published while the CRAM secret was live
     Given another activation tool published an encryption public key for @alice🛠 while the CRAM secret was live, and stopped
-    And an onboarding of @alice🛠 then deleted the CRAM secret and stopped before it published its own key
+    And an onboarding of @alice🛠 then deleted the CRAM secret, recorded that, and stopped before it published its own key
     When the app logs in to @alice🛠 with that onboarding's passkey on a device with no saved hints
     Then the login revokes the other tool's enrollment, publishes the @keys document's encryption public key over the other tool's key, then deletes the completion-due record
     And it opens the onboarding's enrollment
+
+  Scenario: A login refuses a key another tool published after its onboarding stopped before deleting the CRAM secret
+    Given an onboarding of @alice🛠 stopped after it wrote its pointer and before its delete of the CRAM secret answered
+    And another activation tool then activated @alice🛠 with the same CRAM secret, published its encryption public key and deleted the CRAM secret
+    When the app logs in to @alice🛠 with that onboarding's passkey on a device with no saved hints
+    Then it throws a PublicKeyMismatchException
+    And it sends no delete, revoke or publish
+    And the other tool's enrollment is still approved
+
+  Scenario: A login after an onboarding that stopped before deleting the CRAM secret, with no key published, finishes it
+    Given an onboarding of @alice🛠 stopped after it wrote its pointer and before its delete of the CRAM secret answered
+    And another enrollment of @alice🛠 is approved and no encryption public key is published
+    When the app logs in to @alice🛠 with that passkey on a device with no saved hints
+    Then the login deletes the CRAM secret, revokes the other enrollment, publishes the @keys document's encryption public key and deletes the completion-due record
 
   Scenario: A login that finds no key published and the completion done publishes the document's key and revokes nothing
     Given @alice🛠 was onboarded and its completion is done
@@ -237,6 +272,11 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     Then the login throws the revoke's AtEnrollmentException, not a PasskeyLostException
     And it publishes no encryption public key and saves no passkey hints
     And the next login sends the revoke again
+
+  Scenario: A login that revokes names each enrollment it revokes in a warning
+    Given an onboarding of @alice🛠 deleted the CRAM secret and then could not revoke another approved enrollment
+    When the app logs in to @alice🛠 with that passkey on a device with no saved hints
+    Then a warning names @alice🛠 and the id of the enrollment the login revoked
 
   Scenario: A login with saved hints sends no activation completion
     Given @alice🛠 was onboarded on this device, which saved its passkey hints
