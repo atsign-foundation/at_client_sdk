@@ -790,7 +790,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     final generation = ++_notifyGeneration;
     _reconnecting = true;
     var refused = false;
-    // Where the next wait is read from in its schedule.
     var step = 0;
     try {
       while (_isNotifying && generation == _notifyGeneration) {
