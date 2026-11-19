@@ -46,12 +46,18 @@ class _Client extends Fake implements AtClient {
 
   /// How many stops ran.
   var stops = 0;
+
+  /// How many times [stop] was called, counting calls that share a stop.
+  var stopCalls = 0;
   Future<void> Function()? onStop;
   Object? stopError;
   Future<void>? _stopping;
 
   @override
-  Future<void> stop() => _stopping ??= _stop();
+  Future<void> stop() {
+    stopCalls++;
+    return _stopping ??= _stop();
+  }
 
   Future<void> _stop() async {
     stops++;
@@ -210,6 +216,64 @@ void main() {
   });
 
   test(
+      'A @keys write queued while the client stops ends before the store '
+      'closes', () async {
+    rig.docs.hold = Completer<void>();
+    final session = PasskeySession(rig.client, rig.store, rig.vault);
+    final running = rig.update();
+    await pumpEventQueue();
+    Future<void>? queued;
+    rig.client.onStop = () async {
+      await pumpEventQueue();
+      queued = rig.update();
+    };
+    final stopping = session.stop();
+    await pumpEventQueue();
+
+    rig.docs.hold!.complete();
+    await running;
+    await stopping;
+
+    await expectLater(queued!, completes);
+    expect(rig.store.closes, 1);
+    await rig.expectVaultClosed();
+  });
+
+  test(
+      'A @keys write queued while the session waits for an earlier write '
+      'ends before the store closes', () async {
+    final first = Completer<void>();
+    rig.docs.hold = first;
+    final session = PasskeySession(rig.client, rig.store, rig.vault);
+    final running = rig.update();
+    await pumpEventQueue();
+    var stopped = false;
+    final stopping = session.stop().whenComplete(() => stopped = true);
+    await pumpEventQueue();
+    expect(rig.client.stops, 1);
+
+    final second = Completer<void>();
+    rig.docs.hold = second;
+    final queued = rig.update();
+    first.complete();
+    await running;
+    await pumpEventQueue();
+
+    expect(rig.store.closes, 0,
+        reason: 'the store closed while a write queued during the wait for '
+            'an earlier write was still running');
+    expect(stopped, isFalse,
+        reason: 'the session stopped while a write queued during the wait '
+            'for an earlier write was still running');
+    expect(await rig.vaultOpen(), isTrue);
+    second.complete();
+    await expectLater(queued, completes);
+    await stopping;
+    expect(rig.store.closes, 1);
+    await rig.expectVaultClosed();
+  });
+
+  test(
       'Stopping the session closes the vault even when stopping the client '
       'fails', () async {
     final error = StateError('stop failed');
@@ -224,9 +288,11 @@ void main() {
   test('Stopping a session a second time does nothing', () async {
     final session = PasskeySession(rig.client, rig.store, rig.vault);
     await session.stop();
+    final calls = rig.client.stopCalls;
 
     await session.stop();
 
+    expect(rig.client.stopCalls, calls, reason: 'no second client stop');
     expect(rig.client.stops, 1);
     expect(rig.store.closes, 1);
   });
@@ -235,9 +301,11 @@ void main() {
     rig.client.stopError = StateError('stop failed');
     final session = PasskeySession(rig.client, rig.store, rig.vault);
     await expectLater(session.stop(), throwsStateError);
+    final calls = rig.client.stopCalls;
 
     await session.stop();
 
+    expect(rig.client.stopCalls, calls, reason: 'no second client stop');
     expect(rig.client.stops, 1);
   });
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
@@ -27,8 +26,10 @@ typedef WireLine = ({int connection, bool sent, String text, DateTime at});
 ///
 /// [dropOn] cuts the network instead of sending the first command it
 /// matches, as a process that loses its network there does: that command and
-/// every later one never reach the atServer, each write throws, and no
-/// connection opens until [severed] is cleared.
+/// every later one never reach the atServer, each write throws
+/// [AtIOException], and each connect throws [SecondaryConnectException] until
+/// [severed] is cleared, as [AtTransport.add] and [AtTransportFactory.connect]
+/// promise.
 class WireTap implements AtTransportFactory {
   final AtTransportFactory _inner =
       SecureSocketTransportFactory(secureSocketConfig: SecureSocketConfig());
@@ -49,7 +50,8 @@ class WireTap implements AtTransportFactory {
   Future<AtTransport> connect(String host, String port,
       {Duration? timeout}) async {
     if (severed) {
-      throw SocketException('network cut, as the test arranged: $host:$port');
+      throw SecondaryConnectException(
+          'network cut, as the test arranged: $host:$port');
     }
     return _Tapped(this, _connections++,
         await _inner.connect(host, port, timeout: timeout));
@@ -130,7 +132,7 @@ class _Tapped implements AtTransport {
     if (_tap.severed) {
       _tap.dropped.add(text);
       _inner.destroy();
-      throw const SocketException('network cut, as the test arranged');
+      throw AtIOException('network cut, as the test arranged');
     }
     _tap.lines
         .add((connection: _id, sent: true, text: text, at: DateTime.now()));

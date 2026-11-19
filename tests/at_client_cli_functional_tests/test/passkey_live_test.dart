@@ -228,6 +228,35 @@ void main() {
     expect(cram, startsWith('refused'));
   }, timeout: _timeout);
 
+  test(
+      'Onboarding deletes the CRAM secret, then revokes the other '
+      'enrollments, then publishes its encryption public key', () async {
+    const atSign = '@policy2';
+    final rig = PasskeyRig(salt: 32);
+    final session = await _onboard(rig, atSign);
+    addTearDown(session.stop);
+
+    final tap = rig.tap;
+    final delete = tap.indexOfSent(_isCramDelete);
+    final list = tap.indexOfSent((c) => c.startsWith('enroll:list'));
+    final publish = tap.indexOfSent((c) => _publishes(c, atSign));
+    final again = tap.indexOfSent(_isCramDelete, from: delete + 1);
+    expect([delete, list, publish, again], everyElement(greaterThan(-1)),
+        reason: tap.transcript());
+    expect(_accepted(tap, delete), isTrue);
+    expect(_replyIndex(tap, delete), lessThan(list),
+        reason: 'the CRAM secret was deleted before the revoke was asked for');
+    expect(list, lessThan(publish),
+        reason: 'the revoke was asked for before the key was published');
+    expect(_accepted(tap, publish), isTrue);
+    expect(_replyIndex(tap, publish), lessThan(again));
+    final answer = _replyIndex(tap, again);
+    print('LIVE second CRAM secret delete answered: '
+        '${answer < 0 ? 'nothing' : tap.lines[answer].text}');
+    expect(_accepted(tap, again), isTrue,
+        reason: 'the atServer accepts the second delete of the CRAM secret');
+  }, timeout: _timeout);
+
   test('A signing root is published only after the CRAM secret is deleted',
       () async {
     const atSign = '@xavier';
@@ -282,14 +311,7 @@ void main() {
         (c) => c.contains('atkeys-lock.')
       ),
       'after its @keys document was written': ('@jeremy', _isPointerPut),
-      'after its pointer was written': (
-        '@policy1',
-        (c) => c.startsWith('enroll:list')
-      ),
-      'after its encryption public key was published': (
-        '@policy2',
-        _isCramDelete
-      ),
+      'after its pointer was written': ('@policy1', _isCramDelete),
     };
     for (final MapEntry(key: point, value: (atSign, cut))
         in interruptions.entries) {
@@ -324,10 +346,16 @@ void main() {
         (c) => c.startsWith('enroll:revoke') && c.contains(earlier),
         from: mark);
     final delete = tap.indexOfSent(_isCramDelete, from: mark);
-    expect(revoke, greaterThan(-1), reason: tap.transcript());
+    final publish = tap.indexOfSent((c) => _publishes(c, atSign), from: mark);
+    expect([revoke, delete, publish], everyElement(greaterThan(-1)),
+        reason: tap.transcript());
+    expect(_accepted(tap, delete), isTrue);
+    expect(_replyIndex(tap, delete), lessThan(revoke),
+        reason: 'the earlier enrollment was revoked after the CRAM secret was '
+            'deleted');
     expect(_accepted(tap, revoke), isTrue);
-    expect(_replyIndex(tap, revoke), lessThan(delete),
-        reason: 'the earlier enrollment was revoked before the delete');
+    expect(_replyIndex(tap, revoke), lessThan(publish),
+        reason: 'and before the new encryption public key was published');
     expect(
         await _approved(session.client, atSign), {session.client.enrollmentId});
   }, timeout: _timeout);
@@ -337,24 +365,25 @@ void main() {
       "interrupted attempt's", () async {
     const atSign = '@relay2';
     final rig = PasskeyRig(salt: 52);
-    await _interrupted(rig, atSign, _isCramDelete);
-    final first = _publishedKey(rig.tap, from: 0);
-    expect(first, isNotNull, reason: 'the first attempt published its key');
+    final otherTools = _b("another tool's key");
+    expect(await _publishOverCram(atSign, otherTools), startsWith('data:'),
+        reason: 'another tool published a key over a CRAM connection');
+    expect(await publicLookupReply(atSign, 'publickey'), 'data:$otherTools');
 
     final session = await _onboard(rig, atSign);
     addTearDown(session.stop);
 
     final own = (await rig.storedDocument(atSign, session.client.enrollmentId!,
         rig.currentPrf))['aesEncryptPublicKey'];
+    expect(own, isNot(otherTools));
     expect(await publicLookupReply(atSign, 'publickey'), 'data:$own');
-    expect(own, isNot(first));
   }, timeout: _timeout);
 
   test('A passkey left by an interrupted onboarding is refused as lost',
       () async {
     const atSign = '@gateway1';
     final rig = PasskeyRig(salt: 53);
-    await _interrupted(rig, atSign, (c) => c.startsWith('enroll:list'));
+    await _interrupted(rig, atSign, _isCramDelete);
     await (await _onboard(rig, atSign)).stop();
 
     rig.port.current = 1;
@@ -411,9 +440,11 @@ void main() {
       () async {
     const atSign = '@device2';
     final rig = PasskeyRig(salt: 56);
-    await _interrupted(rig, atSign, (c) => _publishes(c, atSign));
+    await _interrupted(rig, atSign, _isCramDelete);
     expect(await publicLookupReply(atSign, 'publickey'), contains('AT0015'),
         reason: 'the onboarding published no encryption public key');
+    expect(await _cramLogin(atSign), 'accepted',
+        reason: 'the onboarding left the CRAM secret');
 
     final session =
         await rig.custody(hints: MemoryHints()).open(atSign: atSign);
@@ -494,18 +525,6 @@ bool _isRootPublish(String c) =>
 bool _publishes(String c, String atSign) =>
     c.startsWith('update:') && c.contains('public:publickey$atSign ');
 
-/// The value the first `publickey` publish sent at or after [from] carried.
-String? _publishedKey(WireTap tap, {required int from}) {
-  for (final l in tap.lines.skip(from)) {
-    if (l.sent &&
-        l.text.startsWith('update:') &&
-        l.text.contains('public:publickey@')) {
-      return l.text.substring(l.text.indexOf(' ') + 1);
-    }
-  }
-  return null;
-}
-
 /// The index of the reply to the command at [sent], or -1.
 int _replyIndex(WireTap tap, int sent) {
   if (sent < 0) return -1;
@@ -568,6 +587,25 @@ Future<String> _cramLogin(String atSign) async {
     lookUp.authenticator =
         authenticatorForCramSecret(atSign, cramKeyMap[atSign]!);
     return await lookUp.pkamAuthenticate() ? 'accepted' : 'refused: false';
+  } on Exception catch (e) {
+    return 'refused: $e';
+  } finally {
+    await lookUp.close();
+  }
+}
+
+/// The reply to an `update` of [atSign]'s public `publickey` to [value], sent
+/// on a CRAM connection of its own, as another activation tool sends it.
+Future<String> _publishOverCram(String atSign, String value) async {
+  final lookUp = secureSocketLookUps()(
+      atSign: atSign, rootDomain: veRoot, authenticator: null);
+  try {
+    lookUp.authenticator =
+        authenticatorForCramSecret(atSign, cramKeyMap[atSign]!);
+    if (!await lookUp.pkamAuthenticate()) return 'refused: false';
+    final command =
+        'update:ttr:-1:isEncrypted:false:public:publickey$atSign $value\n';
+    return '${await lookUp.executeCommand(command, auth: true)}';
   } on Exception catch (e) {
     return 'refused: $e';
   } finally {

@@ -41,6 +41,10 @@ class _AtServer {
   /// Refuses every create of the lock, whatever its ttl.
   var lockHeld = false;
 
+  /// How long a create of the lock takes to be answered; the record is made
+  /// at the end of it.
+  var takeDelay = Duration.zero;
+
   /// Accepts puts without storing them.
   var dropPuts = false;
 
@@ -89,6 +93,9 @@ class _Connection implements EnrollmentDocumentStore {
   @override
   Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
       {required Duration ttl}) async {
+    if (server.takeDelay > Duration.zero) {
+      await Future<void>.delayed(server.takeDelay);
+    }
     final now = DateTime.now();
     final until = server._lockedUntil;
     if (server.lockHeld || (until != null && now.isBefore(until))) {
@@ -264,6 +271,61 @@ void main() {
     expect(took.elapsed, lessThan(const Duration(milliseconds: 250)),
         reason: 'the last pause is cut to what is left of the bound, and a '
             'pause between takes is at least 250ms');
+  });
+
+  test('A writer waits out its own last lease before its bound starts',
+      () async {
+    final clocks = <_Clock>[];
+    server.leaseOf = (key, ttl) {
+      final clock = _Clock();
+      clocks.add(clock);
+      return ServerMutexLease.timed(key, DateTime.now().add(ttl), clock, ttl);
+    };
+    final io = storeOf('self', lockWait: const Duration(milliseconds: 200));
+    await addSymmetric(io);
+    const left = Duration(milliseconds: 300);
+    clocks.single.elapsed = const Duration(seconds: 1) - left;
+    server._lockedUntil =
+        DateTime.now().add(left + const Duration(milliseconds: 100));
+    final took = Stopwatch()..start();
+
+    await addSigning(io);
+
+    expect(took.elapsed, lessThan(const Duration(milliseconds: 900)),
+        reason: 'it waits for what is left of the lease, not a whole ttl');
+    expect(server.events.where((e) => !e.startsWith('self ')), isEmpty,
+        reason: 'no other writer held the lock');
+    expect(server.of('self').where((e) => e == 'lock'), hasLength(2),
+        reason: 'it took the lock again rather than reuse the short lease');
+    expect(jsonEncode((await stored()).toJson()), contains(_b('sign-priv')),
+        reason: 'the bound started after the wait, so the take refused by a '
+            'record that outlived the lease was retried within it');
+  });
+
+  test(
+      "a writer's wait for its own last lease includes the time its take "
+      'took to be answered', () async {
+    final clocks = <_Clock>[];
+    server.leaseOf = (key, ttl) {
+      final clock = _Clock();
+      clocks.add(clock);
+      return ServerMutexLease.timed(key, DateTime.now().add(ttl), clock, ttl);
+    };
+    const answered = Duration(milliseconds: 150);
+    server.takeDelay = answered;
+    final io = storeOf('self', lockWait: const Duration(milliseconds: 50));
+    await addSymmetric(io);
+    server.takeDelay = Duration.zero;
+    const left = Duration(milliseconds: 300);
+    clocks.single.elapsed = const Duration(seconds: 1) - left;
+    server._lockedUntil = DateTime.now().add(left + answered);
+
+    await addSigning(io);
+
+    expect(server.of('self').where((e) => e == 'lock'), hasLength(2));
+    expect(jsonEncode((await stored()).toJson()), contains(_b('sign-priv')),
+        reason: 'the record made at the end of a slow take outlives the '
+            'lease by that time, and the wait covers it');
   });
 
   test('A write whose read-back differs stops the store', () async {

@@ -8,6 +8,11 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
   or a read-back that differs) still stops the store: it accepts no further
   write.
 
+  A writer whose own last lease is too short to reuse first waits until
+  the atServer has let that lock go: what is left of the lease, under half
+  the ttl, plus the time its take took to be answered. Its bound on
+  waiting for the lock starts after that.
+
   Races: two clients of one enrollment (two tabs, or two devices on one
   synced passkey) each take the lock before reading, so the second builds
   on the first's write. A put sent late in a lease could land after the
@@ -16,7 +21,9 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
   lock record is not a credential and is created on the enrollment's own
   authenticated connection. Denial of service: a held lock is released by
   its ttl, so a writer that stopped holding it delays the enrollment's
-  writes by at most that ttl, and a writer gives up after a bounded wait.
+  writes by at most that ttl, and a writer gives up after a bounded wait:
+  for its own last lock, under half the ttl plus the time its take took,
+  then its bound.
   Forgery and impersonation: only the Atsign's own authenticated
   connections create its self records, and the lock record and the document
   sit in the enrollment's own namespace, which an atServer lets only that
@@ -57,6 +64,15 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
     Then the write fails with an AtException that names the lock
     And nothing was put
     And the store accepts a later write
+
+  @dos
+  Scenario: A writer waits out its own last lease before its bound starts
+    Given the client's last lease on the @keys lock has under half its ttl left
+    And the client's bound is shorter than what is left of that lease
+    And no other writer holds the lock
+    When the client adds a key to its @keys
+    Then it takes the lock again once that lease has run out
+    And the key is written
 
   Scenario: A write whose read-back differs stops the store
     Given the @keys document read back after a write differs from the one written

@@ -55,10 +55,21 @@ class _FakeAtServer {
   Completer<void>? holdUpdate;
   final updateArrived = Completer<void>();
 
+  /// When set, the next lookup waits for it after it is logged and signals
+  /// [lookupArrived], so a test can act while a write reads.
+  Completer<void>? holdLookup;
+  final lookupArrived = Completer<void>();
+
   Future<String?> respond(String command) async {
     commands.add(command);
     final line = command.substring(0, command.length - 1);
     if (line.startsWith('llookup:')) {
+      final hold = holdLookup;
+      if (hold != null) {
+        holdLookup = null;
+        lookupArrived.complete();
+        await hold.future;
+      }
       if (corruptAfterUpdate && updates.isNotEmpty) {
         return 'data:not-a-sealed-doc';
       }
@@ -721,9 +732,11 @@ void main() {
       await seedRecord(_base());
       final io = await open();
       expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
+      expect(io.holdsPrivateKey, isTrue);
 
       io.close();
 
+      expect(io.holdsPrivateKey, isFalse);
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
@@ -741,22 +754,28 @@ void main() {
         'is refused with no I/O', () async {
       await seedRecord(_base());
       final io = await open();
-      server.holdUpdate = Completer<void>();
+      final hold = Completer<void>();
       final running = io.update(_atSign.toAtsign(), (keys) {
         keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
+        // Holds the re-read before the candidate is checked against the
+        // stored document, a step that still reads the pair's private key.
+        server.holdLookup = hold;
         return true;
       });
-      await server.updateArrived.future;
+      await server.lookupArrived.future;
       final queued = io.update(_atSign.toAtsign(), (keys) => true);
       final queuedOutcome =
           expectLater(queued, throwsA(isA<AtServerAtKeysWriteException>()));
 
       io.close();
-      server.holdUpdate!.complete();
+      expect(io.holdsPrivateKey, isTrue);
+      hold.complete();
 
       await running;
       await queuedOutcome;
       expect(server.updates, hasLength(1));
+      expect(io.holdsPrivateKey, isFalse);
+      expect((await stored(derived)).enrollmentSymmetricKey?.key, _b('sym-x'));
       await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 

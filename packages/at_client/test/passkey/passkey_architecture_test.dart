@@ -87,8 +87,8 @@ void main() {
 
   group('flow surface', () {
     test(
-        'the flow revokes only the other enrollments, while onboarding, and '
-        'offers no revoke', () {
+        'the flow revokes only the other enrollments, while completing an '
+        'activation, and offers no revoke', () {
       final all = _all();
       expect(all.toLowerCase(), isNot(contains('revoke(')));
       expect('EnrollOperationEnum.revoke'.allMatches(all), hasLength(1));
@@ -102,7 +102,7 @@ void main() {
       expect(
           _member(
               File('lib/src/passkey/passkey_custody.dart').readAsStringSync(),
-              'Future<_Written> _activateAndWrite('),
+              'Future<void> _completeActivation('),
           contains('.revokeOtherEnrollments()'));
     });
 
