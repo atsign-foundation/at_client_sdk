@@ -6,6 +6,8 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart'
+    show aesGcmEncryptUpdateLength;
 import 'package:cryptography/cryptography.dart';
 import 'package:cryptography/dart.dart';
 import 'package:test/test.dart';
@@ -74,6 +76,31 @@ void main() {
         reason: "FFI output is not the vector's ciphertext and tag");
     expect(pureOut, expected,
         reason: "pure-Dart output is not the vector's ciphertext and tag");
+  });
+
+  test(
+      'AES-256-GCM FFI encryption refuses a reported ciphertext length that differs from the plaintext length',
+      () async {
+    final DynamicLibrary? lib = tryLoadLibCrypto();
+    if (lib == null) fail('libcrypto not available on this host');
+
+    final int Function(int) original = aesGcmEncryptUpdateLength;
+    addTearDown(() => aesGcmEncryptUpdateLength = original);
+    aesGcmEncryptUpdateLength = (int reported) => reported - 1;
+
+    final AESKey key =
+        AESKey(base64Encode(List<int>.generate(32, (int i) => i)));
+    final InitialisationVector iv = InitialisationVector(
+        Uint8List.fromList(List<int>.generate(12, (int i) => 0xa0 + i)));
+    final Uint8List plain =
+        Uint8List.fromList(List<int>.generate(60, (int i) => i));
+
+    await expectLater(
+        AesGcm256FfiAlgo.fromLib(lib, key).encrypt(plain, iv: iv),
+        throwsA(isA<StateError>().having((StateError e) => e.message, 'message',
+            'EVP_EncryptUpdate produced a 59-byte ciphertext, expected 60')),
+        reason: 'FFI encryption accepted a reported ciphertext length that '
+            'differs from the plaintext length');
   });
 }
 
