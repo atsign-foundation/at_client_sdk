@@ -12,7 +12,7 @@
 | B | **One PRF call, then HKDF; no stored salt** | Gary's model (second PRF call with a random salt stored in the blob); browser-onboarding's `R` |
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
-| C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27) | — |
+| C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail, except a login without saved hints whose onboarding's own delete of the CRAM secret answered and whose completion is still due, which publishes the document's key over the other (K-5, re-ruled 2026-10-27) | — |
 | D | **Third derivation, the auth seed**, seeds the enrollment's ML-DSA-65 APKAM key, never stored — the primary PKAM-key path (K-12). Fallbacks ruled by K-13 | #2295 (H-6 seed label) adopted; K-8's APKAM key generated and stored in the blob |
 | — | Rejected: a per-write data key (C3) | #2295 |
 

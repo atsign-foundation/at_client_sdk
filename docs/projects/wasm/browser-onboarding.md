@@ -129,9 +129,16 @@ sequenceDiagram
     B->>S: llookup atkeys.eid.a.__e → open with kek
     B->>B: the document's APKAM public key must be the passkey's, else hard fail
     B->>S: llookup completion-due.eid.a.__e (an error other than not found fails the login)
-    alt the onboarding's completion is due
+    alt the record says the onboarding's own CRAM secret delete answered
         B->>S: delete the CRAM secret, revoke every other approved enrollment, publish the document's key, delete completion-due.eid.a.__e
-    else not due
+    else the record says only that the completion is due
+        B->>S: lookup public:publickey@atSign
+        alt another key published
+            B->>B: hard fail (BO-9, K-5), nothing sent
+        else none or the document's key published
+            B->>S: delete the CRAM secret, revoke every other approved enrollment, publish the document's key, delete completion-due.eid.a.__e
+        end
+    else no record: the completion is not due
         B->>S: lookup public:publickey@atSign
         alt another key published
             B->>B: hard fail (BO-9, K-5)
@@ -175,7 +182,7 @@ Return and recovery differ only in the hint, and so in whether the user types th
 | BO-6 | ~~`ttl` refreshed on open prunes dead passkeys~~ **superseded 2026-10-27 by K-10**: the pointer has no TTL | — |
 | BO-7 | **Pointer read by exact lookup key, unauthenticated; document read over PKAM; all writes PKAM-authenticated**; the pointer never appears in `scan` | recovery must find the `enrollmentId` before auth; writes need an owner; enumeration would break R5. The document is listed to its own enrollment and to CRAM only, by an `enrollmentId` they already know |
 | BO-8 | A record is **per passkey, not per device**; synced passkeys allowed | iCloud Keychain / Google Password Manager sync one credential across a user's devices. This passkey only unlocks the keys blob — it is not the device-bound credential `trusted-devices/design.md` requires for device-trust assertions |
-| BO-9 | **Restored public keys must match the published ones before the restored keys are used** — after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27); AAD = the record's clear header | the server cannot forge a record without the kek, but it can replay an older valid one (rollback) or edit the clear header (downgrade). The match catches only a partial rollback: the published keys come from the same atServer (§5) |
+| BO-9 | **Restored public keys must match the published ones before the restored keys are used** — after PKAM, before any encrypt or decrypt; a mismatch is a hard fail, except a login without saved hints whose onboarding's own delete of the CRAM secret answered and whose completion is still due, which publishes the document's key over the other (K-5, re-ruled 2026-10-27); AAD = the record's clear header | the server cannot forge a record without the kek, but it can replay an older valid one (rollback) or edit the clear header (downgrade). The match catches only a partial rollback: the published keys come from the same atServer (§5) |
 | BO-10 | **K-12 fallbacks (K-13):** no-PRF = PKAM key sealed under a passphrase-derived key in a server-held, public-readable record, no TTL, user-chosen passphrase allowed; lost passkey = no recovery, enroll fresh + approver revokes; IndexedDB holds the hint only (c1, c2 rejected); a second passkey is its own enrollment; no at-rest expiry, revocation is the kill switch | the record is fetched by lookup hash, so no PKAM is needed to read it (no bootstrap loop). Public, so offline-attackable: passphrase strength and KDF cost bound the security (Q-10). Caching the derived key would break K-12's "never stored" |
 
 ### 3.5 No-PRF authenticator (K-13 a)
@@ -235,7 +242,7 @@ An app that gets this error must:
 | Try again | Nothing changes; you are prompted for your passkey again. | The app calls `passkeyLogin` (or `onboardNewAtSign`) again. |
 | Reset | This starts a new enrollment. It needs a one-time passcode (OTP) and approval from another device, and the old enrollment is revoked. | The app runs the enrollment flow (3.1); an approver revokes the old enrollment (3.6). |
 
-An onboarding that fails before the CRAM secret is deleted leaves nothing in the browser, so its **Try again** calls `onboardNewAtSign` again with the same CRAM secret, which registers a new passkey and revokes every other approved enrollment of the atSign, the failed attempt's included. One that fails after the CRAM secret is deleted, while it revokes the other enrollments, publishes the encryption public key, deletes its completion-due record, writes the passkey hints or opens the client, has already onboarded the Atsign, so its **Try again** calls `passkeyLogin`, which logs in with the passkey and saves the hints when the onboarding could not. `passkeyLogin` also finishes an onboarding that wrote the document and pointer but did not finish its completion. Onboarding records that the completion is due, in `completion-due.<enrollmentId>.a.__e@<atSign>`, before it writes the document, and deletes that record as the completion's last step; a login without saved hints reads it before it looks at the published key. While the completion is due, the login deletes the CRAM secret, then revokes every other approved enrollment, then publishes the document's key over any key that is published, then deletes the record. When it is not due, the login revokes nothing: it publishes the document's key when none is published, deletes the CRAM secret, which is already gone, and refuses another published key. The CRAM secret is deleted before the revoke, so nothing a CRAM holder enrolled before the delete survives it.
+An onboarding that fails before the CRAM secret is deleted leaves nothing in the browser, so its **Try again** calls `onboardNewAtSign` again with the same CRAM secret, which registers a new passkey and revokes every other approved enrollment of the atSign, the failed attempt's included. One that fails after the CRAM secret is deleted, while it revokes the other enrollments, publishes the encryption public key, deletes its completion-due record, writes the passkey hints or opens the client, has already onboarded the Atsign, so its **Try again** calls `passkeyLogin`, which logs in with the passkey and saves the hints when the onboarding could not. `passkeyLogin` also finishes an onboarding that wrote the document and pointer but did not finish its completion. Onboarding records that the completion is due, in `completion-due.<enrollmentId>.a.__e@<atSign>`, before it writes the document; once its own delete of the CRAM secret answers, it records there that the CRAM secret is deleted, and it deletes the record as the completion's last step. A login without saved hints reads the record before it looks at the published key. When the record says the CRAM secret is deleted, the login deletes the CRAM secret, then revokes every other approved enrollment, then publishes the document's key over any key that is published, then deletes the record. When it says only that the completion is due, the login does the same only when no key or the document's key is published, and refuses another key before it sends anything: that key may be one another tool published after it activated with the same CRAM secret and deleted it. When there is no record, the login revokes nothing: it publishes the document's key when none is published, deletes the CRAM secret, which is already gone, and refuses another published key. A login never records that the CRAM secret is deleted. The CRAM secret is deleted before the revoke, so nothing a CRAM holder enrolled before the delete survives it, and each revoke is named in a warning.
 
 ---
 
@@ -249,7 +256,7 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 | The passkey private key never leaves the authenticator | WebAuthn |
 | Dead passkeys accumulate at most one orphan pointer each | the pointer has no TTL and revocation cannot remove it (K-10); it holds only a sealed `enrollmentId` |
 | A stale device cannot resurrect removed records | no shared record, nothing merged |
-| A replayed older document is refused when the published keys were not rolled back with it (partial rollback) | BO-9 / K-5 public-key check, after PKAM and before the restored keys are used |
+| A replayed older document is refused when the published keys were not rolled back with it (partial rollback); while a completion is due the document has only its onboarding's version | BO-9 / K-5 public-key check, after PKAM and before the restored keys are used |
 
 **Does not hold:**
 
@@ -286,7 +293,7 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 
 | Item | Behaviour |
 |---|---|
-| `onboardNewAtSign` | Registers a passkey, activates the atSign with CRAM and the derived APKAM key, records that the completion is due, files the document, then the pointer, then deletes the CRAM secret, then revokes every other approved enrollment, then publishes the encryption public key, then deletes the completion-due record. Returns a `PasskeySession` whose client is PKAM'd. Takes an optional `SessionTransportOptions` |
+| `onboardNewAtSign` | Registers a passkey, activates the atSign with CRAM and the derived APKAM key, records that the completion is due, files the document, then the pointer, then deletes the CRAM secret and records that it is deleted, then revokes every other approved enrollment, then publishes the encryption public key, then deletes the completion-due record. Returns a `PasskeySession` whose client is PKAM'd. Takes an optional `SessionTransportOptions` |
 | `passkeyLogin` | `atSign` required: the passkey proves it, a wrong one finds no pointer. A known device goes straight to PKAM; any other asserts a discoverable passkey and reads the pointer. Returns a `PasskeySession` whose client is PKAM'd. Takes an optional `SessionTransportOptions` |
 | `prfSupported` | Whether the browser reports passkey PRF. `onboardNewAtSign` checks it and refuses before any ceremony. In a browser that cannot report PRF support, a PRF miss recorded during a registration makes it false for 30 days, until `clearPrfMiss` clears it |
 | `clearPrfMiss` | Clears a recorded PRF miss, so the next `onboardNewAtSign` runs the passkey ceremonies again; for the user's "Try again", for example with another authenticator |
@@ -302,7 +309,7 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 |---|---|
 | `PrfUnavailableException` | No passkey PRF: refused before any ceremony when the browser reports none or a miss is recorded, and after registration or login when the PRF output is missing, not 32 bytes or all zeroes |
 | `PasskeyLostException` | No credential, no pointer, a malformed enrollment id, or PKAM refused. When its cause is a `PasskeyCeremonyException` the prompt failed and the user may simply have cancelled it (WebAuthn reports a cancel and a missing passkey alike); see 3.8 |
-| `PublicKeyMismatchException` | The document's APKAM public key is not the passkey's, on any login. Or the published encryption public key is not the document's (K-5) on a login with saved hints, or on one without them once the onboarding's completion is done; every such login refuses the same way until an enrollment holding `*:rw` and `__manage:rw` publishes the document's key again. While the completion is due, a login without saved hints publishes the document's key over any other, so it finishes an onboarding that stopped after deleting the CRAM secret, over a key another activation tool published while the CRAM secret was live |
+| `PublicKeyMismatchException` | The document's APKAM public key is not the passkey's, on any login. Or the published encryption public key is not the document's (K-5) on a login with saved hints, or on one without them unless its onboarding recorded that its own delete of the CRAM secret answered and its completion is still due; every such login refuses the same way until an enrollment holding `*:rw` and `__manage:rw` publishes the document's key again. A login without saved hints whose onboarding recorded that, while its completion is due, publishes the document's key over any other, so it finishes an onboarding over a key another activation tool published while the CRAM secret was live |
 | `MissingAtKeysDocumentException` | The enrollment has no document |
 | `PkamRefusedException` | The atServer explicitly refused PKAM for the enrollment (a bad signature always; a denied, revoked or unknown or expired enrollment when the reply names it). `passkeyLogin` surfaces it as `PasskeyLostException` with the `PkamRefusedException` kept as its cause; `PrfUnavailableException` and `SetupLockTimeoutException` are not wrapped |
 | `SetupLockTimeoutException` | The atSign's setup lock was not granted in time (`onboardNewAtSign` and `passkeyLogin`) |
@@ -313,7 +320,7 @@ An onboarding that fails before the CRAM secret is deleted leaves nothing in the
 | Limitation | What v1 does |
 |---|---|
 | Encryption keys | Enrollment mints RSA encryption keys beside the ML-DSA-65 APKAM key |
-| K-5 check | Compares the encryption public key (the RSA one) in the restored @keys with the one published at `publickey@<atSign>`, on every login but one without saved hints while the onboarding's completion is due, which publishes the document's key instead |
+| K-5 check | Compares the encryption public key (the RSA one) in the restored @keys with the one published at `publickey@<atSign>`, on every login but one without saved hints whose onboarding recorded that its own delete of the CRAM secret answered and whose completion is still due, which publishes the document's key instead |
 | Pointer namespace | Each passkey has its own namespace `<ns>`, derived from it (K-17); the pointer is `public:_<lookupHex>.<ns>@<atSign>` |
 | Pointer integrity | The passkey's enrollment is the onboarding enrollment, activated by CRAM; it holds the root grant, which includes `<ns>:rw`, and writes the pointer (K-17) |
 | Root domain | The atDirectory is the production root unless `SessionTransportOptions` names another root or a proxy |
