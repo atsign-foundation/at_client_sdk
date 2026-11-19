@@ -100,8 +100,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   only the passkey opens. A login revokes only while the onboarding's
   completion is due, so a published key that has gone does not make a
   later login revoke: the login publishes the document's key again. The
-  atServer refuses every other enrollment, root included, a read or write
-  of the completion-due record. A CRAM-authenticated connection may read
+  atServer refuses every other enrollment a read, write or delete of the
+  completion-due record from atServer p3.15.0, and a connection with the
+  Atsign's legacy keys from p3.16.5. A CRAM-authenticated connection may read
   the record, and from atServer p3.19.0 is refused a write or delete of
   it; while the CRAM secret lives, its holder already holds more than any
   enrollment. A key
