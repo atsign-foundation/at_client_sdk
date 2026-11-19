@@ -11,10 +11,14 @@ class _RecordingLookUp extends Fake implements AtLookUp {
   /// Makes every `update` verb throw this once it is recorded.
   Object? updateError;
 
+  /// Makes every `delete` verb throw this once it is recorded.
+  Object? deleteError;
+
   @override
   Future<String?> executeVerb(VerbBuilder builder, {bool sync = false}) async {
     sent.add(builder.buildCommand());
     if (updateError case final e? when builder is UpdateVerbBuilder) throw e;
+    if (deleteError case final e? when builder is DeleteVerbBuilder) throw e;
     return 'data:1';
   }
 }
@@ -50,6 +54,40 @@ void main() {
           throwsA(same(error)));
       expect(lookUp.sent,
           ['update:ttr:-1:isEncrypted:false:public:publickey@alice cHVi\n']);
+    });
+
+    for (final (name, value) in [
+      ('a line feed', 'cHVi\nZGVs'),
+      ('a carriage return', 'cHVi\rZGVs'),
+    ]) {
+      test('refuses an encryption public key with $name before any command',
+          () async {
+        final lookUp = _RecordingLookUp();
+        await expectLater(
+            completeActivationOf(
+                atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: value),
+            throwsArgumentError);
+        expect(lookUp.sent, isEmpty);
+      });
+    }
+
+    test('counts a CRAM secret the atServer reports as not found as deleted',
+        () async {
+      final lookUp = _RecordingLookUp()
+        ..deleteError = AtLookUpException('AT0015', 'key not found');
+      await completeActivationOf(
+          atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: 'cHVi');
+      expect(lookUp.sent, hasLength(2));
+    });
+
+    test('a CRAM secret delete refused for another reason propagates',
+        () async {
+      final refusal = AtLookUpException('AT0003', 'unauthorized');
+      final lookUp = _RecordingLookUp()..deleteError = refusal;
+      await expectLater(
+          completeActivationOf(
+              atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: null),
+          throwsA(same(refusal)));
     });
   });
 }

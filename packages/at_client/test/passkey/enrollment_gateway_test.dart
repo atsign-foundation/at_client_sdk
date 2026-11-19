@@ -10,6 +10,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart';
 import 'package:at_client/src/passkey/passkey_custody.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 
@@ -438,6 +439,35 @@ void main() {
       await session.completeActivation({});
 
       expect(wire.commands, ['delete:privatekey:at_secret\n']);
+    });
+
+    for (final (name, value) in [
+      ('a line feed', 'MIIB\nXYZ'),
+      ('a carriage return', 'MIIB\rXYZ'),
+    ]) {
+      test('refuses an encryption public key with $name before any command',
+          () async {
+        final session = await activate();
+        final sent = wire.commands.length;
+
+        await expectLater(
+            session.completeActivation({'aesEncryptPublicKey': value}),
+            throwsArgumentError);
+
+        expect(wire.commands, hasLength(sent));
+      });
+    }
+
+    test('counts a CRAM secret the atServer reports as not found as deleted',
+        () async {
+      final session = await activate();
+      wire.answer = (command) => command.startsWith('delete:')
+          ? throw AtLookUpException('AT0015', 'key not found')
+          : null;
+
+      await session.completeActivation({});
+
+      expect(wire.commands.last, 'delete:privatekey:at_secret\n');
     });
   });
 
