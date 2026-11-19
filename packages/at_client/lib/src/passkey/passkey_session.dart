@@ -24,7 +24,7 @@ class PasskeySession {
   /// write waiting out another writer's lock still seals before the vault
   /// closes; the vault then closes under whatever is still running.
   PasskeySession(this.client, AtServerAtKeysIo store, PasskeyVault vault,
-      {Duration settleWithin = defaultSettleWithin})
+      {Duration settleWithin = defaultSettleWithin, this.hintsSaved = true})
       : _store = store,
         _vault = vault,
         _settleWithin = settleWithin + store.lockWaitBound {
@@ -39,6 +39,13 @@ class PasskeySession {
 
   /// The client running as the passkey's enrollment.
   final AtClient client;
+
+  /// Whether the device's passkey hints were saved when this session was
+  /// opened. False when their write failed with an [Exception]: the ids the
+  /// device remembered before, if any, are still held, so an app that sees
+  /// false may clear its hint stores itself, since a stale pair makes every
+  /// later login prompt twice.
+  final bool hintsSaved;
 
   final AtServerAtKeysIo _store;
   final PasskeyVault _vault;

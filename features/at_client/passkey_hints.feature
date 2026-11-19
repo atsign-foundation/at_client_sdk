@@ -37,8 +37,10 @@ Feature: The passkey hints are a convenience, so a login and an onboarding go on
     When the app logs in to @alice🛠 with that passkey
     Then it gets a passkey session whose client is online as the onboarding's enrollment
     And a warning names @alice🛠 and says its passkey hints were not saved
+    And the session says the passkey hints were not saved
     When the app logs in to @alice🛠 with that passkey again
     Then the passkey hints are saved
+    And the session says the passkey hints were saved
 
   Scenario: An onboarding whose passkey hints cannot be written returns its session
     Given this device's hint store fails the write of the passkey hints with an Exception
@@ -46,6 +48,7 @@ Feature: The passkey hints are a convenience, so a login and an onboarding go on
     Then it gets a passkey session whose client is online as the new enrollment
     And the CRAM secret is deleted and the encryption public key is published
     And this device holds no passkey hints for @alice🛠
+    And the session says the passkey hints were not saved
 
   Scenario: A hint write that fails with an Error, not an Exception, still fails the login
     Given @alice🛠 was onboarded with a passkey

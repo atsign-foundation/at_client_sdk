@@ -384,9 +384,11 @@ class PasskeyCustody {
   Future<PasskeySession> _complete(
       String canonical, Uint8List credentialId, _Written written) async {
     final (:vault, :session, :store, :atKeys) = written;
+    final bool hintsSaved;
     try {
       await _completeActivation(session, atKeys);
-      await _remember(canonical, credentialId, session.enrollmentId,
+      hintsSaved = await _remember(
+          canonical, credentialId, session.enrollmentId,
           flow: _Flow.onboarding);
     } on Object {
       store.close();
@@ -395,7 +397,8 @@ class PasskeyCustody {
       rethrow;
     }
     try {
-      return await _openSession(canonical, session, store, vault);
+      return await _openSession(canonical, session, store, vault,
+          hintsSaved: hintsSaved);
     } on Object {
       vault.close();
       rethrow;
@@ -416,12 +419,11 @@ class PasskeyCustody {
 
   /// Opens the client of [session] on [store], whose reads are served from
   /// memory once it holds the document, and returns it as a session over
-  /// [vault]. Closes [store] and [session] when the open throws.
-  Future<PasskeySession> _openSession(
-      String canonical,
-      EnrollmentSession session,
-      AtServerAtKeysIo store,
-      PasskeyVault vault) async {
+  /// [vault], reporting [hintsSaved]. Closes [store] and [session] when the
+  /// open throws.
+  Future<PasskeySession> _openSession(String canonical,
+      EnrollmentSession session, AtServerAtKeysIo store, PasskeyVault vault,
+      {required bool hintsSaved}) async {
     final AtClient client;
     try {
       await store.read(canonical);
@@ -431,7 +433,7 @@ class PasskeyCustody {
       await _closeAfterFailedOpen(session);
       rethrow;
     }
-    return PasskeySession(client, store, vault);
+    return PasskeySession(client, store, vault, hintsSaved: hintsSaved);
   }
 
   /// Opens [atSign]'s @keys and returns the session of the client running as
@@ -447,7 +449,7 @@ class PasskeyCustody {
   /// When the remembered ceremony yields no credential, or the atServer
   /// refuses PKAM for the remembered enrollment, the open is retried once, as
   /// a device with no hints, under the setup lock; a success replaces the
-  /// remembered ids. The ceremony's exception does not tell a cancel from a
+  /// remembered ids when their write succeeds (see below). The ceremony's exception does not tell a cancel from a
   /// deleted passkey, so a cancel is retried too, and a second failure is a
   /// lost passkey.
   ///
@@ -480,8 +482,12 @@ class PasskeyCustody {
   ///
   /// The device's passkey hints are a convenience: a write of them that
   /// fails with an [Exception] is logged as a warning naming [atSign], and
-  /// the open returns its session all the same, leaving the next open without
-  /// hints to save them. One that fails with an [Error] is thrown, and the
+  /// the open returns its session all the same, with
+  /// [PasskeySession.hintsSaved] false. The ids the device remembered before
+  /// are then left as they were: none, which the next open without hints
+  /// saves again, or a stale pair, which every later open tries and then
+  /// retries without, prompting twice, until a write succeeds or the app
+  /// clears its hint stores. One that fails with an [Error] is thrown, and the
   /// session is closed; when the two ids go to separate stores, the first may
   /// already be written.
   ///
@@ -614,6 +620,7 @@ class PasskeyCustody {
         throw PasskeyLostException(canonical, 'PKAM refused', cause: e);
       }
       final store = _keysIo(canonical, session, vault, pair);
+      final bool hintsSaved;
       try {
         final unpublished = await _restore(canonical, store, session, pair);
         if (hints == null) {
@@ -624,14 +631,16 @@ class PasskeyCustody {
                 session, {_encryptPublicKey: unpublished});
           }
         }
-        await _remember(canonical, unlocked.credentialId, enrollmentId,
+        hintsSaved = await _remember(
+            canonical, unlocked.credentialId, enrollmentId,
             flow: _Flow.login);
       } on Object {
         store.close();
         await _closeAfterFailedOpen(session);
         rethrow;
       }
-      final opened = await _openSession(canonical, session, store, vault);
+      final opened = await _openSession(canonical, session, store, vault,
+          hintsSaved: hintsSaved);
       handedOver = true;
       return opened;
     } finally {
@@ -747,12 +756,14 @@ class PasskeyCustody {
 
   /// Remembers the passkey and enrollment of [atSign] at the end of [flow]:
   /// both ids in one write when the hint stores are one [PasskeyHintStore],
-  /// otherwise one put each. A write that fails with an [Exception] is logged
-  /// as a warning and dropped, so the flow goes on without saved hints; one
-  /// that fails with an [Error] is thrown.
-  Future<void> _remember(
+  /// otherwise one put each. Returns whether the write succeeded: one that
+  /// fails with an [Exception] is logged as a warning and returns false, so
+  /// the flow goes on without saved hints; one that fails with an [Error] is
+  /// thrown.
+  Future<bool> _remember(
       String atSign, Uint8List credentialId, String enrollmentId,
       {required _Flow flow}) async {
+    var saved = true;
     try {
       final combined = credentials;
       if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
@@ -766,8 +777,10 @@ class PasskeyCustody {
       // enrollment id.
       _logger.warning('the passkey hints of $atSign were not saved after the '
           '${flow.name} (${e.runtimeType})');
+      saved = false;
     }
     await _requestPersist();
+    return saved;
   }
 
   /// Asks the browser not to evict this origin's storage; a refused or failed

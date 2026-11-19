@@ -185,9 +185,12 @@ void main() {
     expect(warned.single, isNot(contains('quota exceeded')),
         reason: "the warning carries no exception's message");
 
-    device.failWrites = false;
-    kept(await custody(device).open(atSign: _atSign));
+    expect(session.hintsSaved, isFalse);
 
+    device.failWrites = false;
+    final next = kept(await custody(device).open(atSign: _atSign));
+
+    expect(next.hintsSaved, isTrue);
     expect(device.ids, {_atSign: enrollmentId});
     expect(device.credentials, {_atSign: authenticator.current});
   });
@@ -211,6 +214,7 @@ void main() {
         reason: 'the encryption public key is published');
     expect(device.credentials, isEmpty);
     expect(device.ids, isEmpty);
+    expect(session.hintsSaved, isFalse);
     final warned = warnings('were not saved').toList();
     expect(warned, hasLength(1));
     expect(

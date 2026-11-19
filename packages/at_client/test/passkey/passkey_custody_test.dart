@@ -1103,6 +1103,25 @@ void main() {
         expect(server.pointerReads, 1);
         expect(stale.ids[_atSign], 'eid1');
         expect(stale.credentials[_atSign], Uint8List.fromList([1]));
+        expect(session.hintsSaved, isTrue);
+      });
+
+      test(
+          'a retry whose hint write fails reports the hints unsaved, and '
+          'the stale ids stay', () async {
+        server.revoked.add('eid-old');
+        final stale = remembering(1, 'eid-old')..failWrites = true;
+        authenticator.gets = 0;
+
+        final session = await custody(withHints: stale).open(atSign: _atSign);
+
+        expect(session.client.enrollmentId, 'eid1');
+        expect(authenticator.gets, 2,
+            reason: 'one ceremony with the stale hints, one without');
+        expect(session.hintsSaved, isFalse,
+            reason: 'the caller learns the stale ids were not replaced');
+        expect(stale.ids[_atSign], 'eid-old');
+        expect(stale.credentials[_atSign], Uint8List.fromList([1]));
       });
 
       test('the retry happens once, then the passkey is lost', () async {
@@ -1202,6 +1221,7 @@ void main() {
         final session =
             await custody(withHints: combined).open(atSign: _atSign);
         expect(session.client.enrollmentId, 'eid1');
+        expect(session.hintsSaved, isFalse);
         expect(combined.credentials, isEmpty);
         expect(combined.ids, isEmpty);
         expect(persistence.requests, 1,
