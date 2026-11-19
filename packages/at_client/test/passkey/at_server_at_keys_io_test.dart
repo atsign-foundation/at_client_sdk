@@ -754,8 +754,11 @@ void main() {
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
-    test('calls neither the seal nor the open function it was given', () async {
+    test(
+        'a read, write, flush or update after close calls neither the seal '
+        'nor the open function it was given', () async {
       // NOTE: the two functions are the store's only route to the vault.
+      await seedRecord(_base());
       final calls = <String>[];
       final io = AtServerAtKeysIo(
           documents: documents(),
@@ -772,6 +775,11 @@ void main() {
           apkamKeyPair: pair);
 
       io.close();
+      final typed = throwsA(isA<AtServerAtKeysWriteException>());
+      await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
+      await expectLater(io.write(_atSign, _base()), typed);
+      await expectLater(io.flush(_atSign.toAtsign(), _base()), typed);
+      await expectLater(io.update(_atSign.toAtsign(), (keys) => true), typed);
       await io.settled;
 
       expect(calls, isEmpty);

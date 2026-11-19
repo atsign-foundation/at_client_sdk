@@ -544,7 +544,7 @@ void main() {
 
     // NOTE: the lookUp throws an atServer's error reply as an
     // AtLookUpException, which the remote secondary maps by its code.
-    for (final code in ['AT0011', 'AT0029', 'AT0031', 'AT0032']) {
+    for (final code in ['AT0029', 'AT0031', 'AT0032']) {
       test(
           'a revoke the atServer refuses with $code, for an enrollment no '
           'longer approved, is left to the list and is not a failure',
@@ -570,7 +570,7 @@ void main() {
       }, {
         _eid: 'approved',
         'eid-0': 'approved'
-      }, revoked: (_) => throw AtLookUpException('AT0011', 'refused'));
+      }, revoked: (_) => throw AtLookUpException('AT0031', 'refused'));
 
       await expectLater(session.revokeOtherEnrollments(),
           throwsA(isA<AtEnrollmentException>()));
@@ -578,10 +578,17 @@ void main() {
 
     test('a revoke that fails other than with an atServer refusal propagates',
         () async {
-      // What a real lookUp throws for a lost connection and for a timeout.
+      // What a real lookUp throws for a lost connection, a timeout, a
+      // browser reconnect that fails, and an atServer that is failing,
+      // busy, paused or throttling.
       for (final (code, failure) in [
         ('AT0004', 'the connection was lost'),
         ('AT0014', 'Request timed out'),
+        ('AT0021', 'wss connect failed'),
+        ('AT0011', 'internal server exception'),
+        ('AT0012', 'inbound connection limit exceeded'),
+        ('AT0024', 'server is paused'),
+        ('AT0028', 'throttle limit exceeded'),
       ]) {
         wire.commands.clear();
         final session = await activate();
@@ -607,6 +614,18 @@ void main() {
       await expectLater(
           session.revokeOtherEnrollments(), throwsA(same(failure)),
           reason: 'a revoke that never reached the atServer was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke that fails with an I/O error propagates', () async {
+      final session = await activate();
+      final failure = AtIOException('the socket write failed');
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw failure);
+
+      await expectLater(
+          session.revokeOtherEnrollments(), throwsA(same(failure)),
+          reason: 'a revoke that failed to send was not refused');
       expect(wire.commands, [list, revoke('eid-0')]);
     });
 

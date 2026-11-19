@@ -301,16 +301,17 @@ class _PkamSession implements EnrollmentSession {
     }
   }
 
-  /// Whether a failed revoke is left to the list that follows: any [e] but an
-  /// [AtConnectException], an [AtTimeoutException] or a bare [AtException].
-  /// A lost connection or a timeout reaches here as one of those three:
-  /// [RemoteSecondary] turns the lookup's AT0004 (connection) and AT0014
-  /// (timeout, unknown) codes into a bare one. An atServer refusal that maps
-  /// to an [AtConnectException], such as AT0009, is not left to the list.
+  /// Whether a failed revoke is left to the list that follows: only the
+  /// atServer's refusals of the revoke itself, which [RemoteSecondary] maps
+  /// from AT0029 (invalid or expired enrollment), AT0031 (cannot revoke) and
+  /// AT0032 (the enrollment is in no state to revoke). Every other failure,
+  /// such as a lost or failed connection (AT0004, AT0021), a timeout, a
+  /// paused, busy, throttled or failing atServer (AT0024, AT0012, AT0028,
+  /// AT0011) or an I/O error, propagates as it is.
   static bool _isRefusal(AtException e) =>
-      e is! AtConnectException &&
-      e is! AtTimeoutException &&
-      e.runtimeType != AtException;
+      e is AtInvalidEnrollmentException ||
+      e is AtEnrollmentRevokeException ||
+      e is IllegalStateException;
 
   /// The ids of the atSign's approved enrollments other than this one.
   Future<List<String>> _otherApprovedEnrollments() async => [

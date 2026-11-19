@@ -96,12 +96,17 @@ class FakeServer implements EnrollmentPointerReader {
 }
 
 class FakeSession implements EnrollmentSession {
-  FakeSession(this.server, this.atSign, this.enrollmentId);
+  FakeSession(this.server, this.atSign, this.enrollmentId,
+      {required this.enrolled});
 
   final FakeServer server;
   final String atSign;
   @override
   final String enrollmentId;
+
+  /// Whether this session came from an activation, so holds @keys; a session
+  /// from an authentication holds none.
+  final bool enrolled;
   var closed = false;
   var closeCalls = 0;
 
@@ -109,12 +114,19 @@ class FakeSession implements EnrollmentSession {
   Object? closeError;
 
   /// [FakeServer.keys] with an encryption public key of this enrollment's
-  /// own, as each activation mints one.
+  /// own, as each activation mints one. Throws [StateError] on a session that
+  /// was authenticated, as the real one does.
   @override
-  Future<Map<String, dynamic>> atKeys() async => {
-        ...server.keys,
-        'aesEncryptPublicKey': encryptionPublicKeyOf(enrollmentId)
-      };
+  Future<Map<String, dynamic>> atKeys() async {
+    if (!enrolled) {
+      throw StateError('this session was authenticated, not enrolled: it '
+          'holds no @keys');
+    }
+    return {
+      ...server.keys,
+      'aesEncryptPublicKey': encryptionPublicKeyOf(enrollmentId)
+    };
+  }
 
   @override
   Future<PublishedEncryptionKey> publishedEncryptionKey(
@@ -357,8 +369,8 @@ class FakeGateway implements EnrollmentGateway {
   /// Whether that session stops a client it built before throwing.
   var openStopsFirstForNext = false;
 
-  FakeSession _session(String atSign, String eid) =>
-      FakeSession(server, atSign, eid)
+  FakeSession _session(String atSign, String eid, {required bool enrolled}) =>
+      FakeSession(server, atSign, eid, enrolled: enrolled)
         ..closeError = closeErrorForNext
         ..openClientError = openErrorForNext
         ..openClientStopsFirst = openStopsFirstForNext;
@@ -377,7 +389,8 @@ class FakeGateway implements EnrollmentGateway {
         server.pairByEnrollment[enrollmentId] != apkamKeyPair.publicKey) {
       throw PkamRefusedException(enrollmentId);
     }
-    final session = lastSession = _session(atSign, enrollmentId);
+    final session =
+        lastSession = _session(atSign, enrollmentId, enrolled: false);
     onAuthenticate?.call(session);
     return session;
   }
@@ -409,7 +422,7 @@ class FakeGateway implements EnrollmentGateway {
     server.approved[eid] = atSign;
     server.timeline.add('activate:$eid');
     await onActivate?.call();
-    final session = lastSession = _session(atSign, eid);
+    final session = lastSession = _session(atSign, eid, enrolled: true);
     onAuthenticate?.call(session);
     return session;
   }

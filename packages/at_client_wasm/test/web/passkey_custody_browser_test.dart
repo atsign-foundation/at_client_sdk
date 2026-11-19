@@ -125,8 +125,13 @@ class _Session implements EnrollmentSession {
     server.approved.removeWhere((eid) => eid != enrollmentId);
   }
 
+  /// Thrown by the next [completeActivation], before it changes anything.
+  Object? dieBeforeCramDelete;
+
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
+    final died = dieBeforeCramDelete;
+    if (died != null) throw died;
     if (atKeys['aesEncryptPublicKey'] case final String key) {
       server.publishedKey = key;
     }
@@ -206,9 +211,11 @@ class _Gateway implements EnrollmentGateway {
   var activations = 0;
   _Session? lastSession;
 
-  /// Throws this once the enrollment is approved, as a tab that dies there
-  /// would.
-  Object? dieAfterActivation;
+  /// Each session [activate] hands out throws this from its first
+  /// [EnrollmentSession.completeActivation], before the CRAM secret is
+  /// deleted: as a tab that dies once the custody has written the document
+  /// and the pointer would.
+  Object? dieBeforeCramDelete;
 
   /// Every APKAM key pair this gateway received.
   final pairs = <ApkamKeyPair>[];
@@ -237,9 +244,8 @@ class _Gateway implements EnrollmentGateway {
     final eid = 'eid${++server.enrollments}';
     server.apkamPublicKeys[eid] = apkamKeyPair.publicKey;
     server.approved.add(eid);
-    final died = dieAfterActivation;
-    if (died != null) throw died;
-    return lastSession = _Session(server, eid);
+    return lastSession = _Session(server, eid)
+      ..dieBeforeCramDelete = dieBeforeCramDelete;
   }
 }
 
@@ -287,7 +293,7 @@ class _Device {
   late IndexedDbHintStore store;
 
   /// Applied to each gateway this device builds.
-  Object? dieAfterActivation;
+  Object? dieBeforeCramDelete;
   late _Gateway gateway;
   final sessions = <PasskeySession>[];
 
@@ -296,7 +302,7 @@ class _Device {
 
   Future<PasskeyCustody> custody() async {
     store = await IndexedDbHintStore.open(dbName: dbName);
-    gateway = _Gateway(server)..dieAfterActivation = dieAfterActivation;
+    gateway = _Gateway(server)..dieBeforeCramDelete = dieBeforeCramDelete;
     return PasskeyCustody(
         prf: PasskeyPrf(_authenticator,
             prfSupport: PrfSupport(WebPrfEnvironment())),
@@ -617,16 +623,21 @@ void main() {
   });
 
   group('a tab that dies after the activation', () {
-    setUp(() => device.dieAfterActivation = StateError('tab died'));
+    setUp(() => device.dieBeforeCramDelete = StateError('tab died'));
 
-    /// Kills the tab right after activation, then reloads: a fresh custody
-    /// over the same IndexedDB and the same passkey.
+    /// Kills the tab once the custody has activated and written the document
+    /// and the pointer, before the CRAM secret is deleted, then reloads: a
+    /// fresh custody over the same IndexedDB and the same passkey.
     Future<void> dieThenReload() async {
       await expectLater(device.onboard(), throwsA(isA<StateError>()));
       expect(device.gateway.activations, 1);
+      expect(server.documents.keys, ['eid1'],
+          reason: 'the custody wrote the document before the tab died');
+      expect(server.pointers, hasLength(1),
+          reason: 'the custody wrote the pointer before the tab died');
       expect(server.cramLive, isTrue);
       device.store.close();
-      device.dieAfterActivation = null;
+      device.dieBeforeCramDelete = null;
     }
 
     test('The device keeps nothing about an onboarding that did not complete',
@@ -652,10 +663,15 @@ void main() {
       await _expectOnlyHint(device, 'eid2');
     });
 
-    test('reload then log in finds no pointer and is a lost passkey', () async {
+    test('reload then log in finds the pointer and completes the activation',
+        () async {
       await dieThenReload();
-      await expectLater(device.open(), throwsA(isA<PasskeyLostException>()));
+      final client = await device.open();
+      expect(client.enrollmentId, 'eid1');
       expect(server.enrollments, 1);
+      expect(server.cramLive, isFalse);
+      expect(server.publishedKey, _encPublic);
+      await _expectOnlyHint(device, 'eid1');
     });
   });
 }
