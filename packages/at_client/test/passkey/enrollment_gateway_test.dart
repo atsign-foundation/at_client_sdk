@@ -571,6 +571,45 @@ void main() {
         expect(wire.commands, [list, revoke('eid-0')], reason: code);
       }
     });
+
+    test('a revoke that cannot reach the atServer propagates', () async {
+      final session = await activate();
+      final failure =
+          AtConnectException('findAtServer for $_atSign : Connection refused');
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw failure);
+
+      await expectLater(
+          session.revokeOtherEnrollments(), throwsA(same(failure)),
+          reason: 'a revoke that never reached the atServer was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke whose answer does not come in time propagates', () async {
+      final session = await activate();
+      final failure = AtTimeoutException(
+          'Full response not received after 90000 millis from remote atServer');
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw failure);
+
+      await expectLater(
+          session.revokeOtherEnrollments(), throwsA(same(failure)),
+          reason: 'a revoke whose answer never came was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke the atServer answers with an error is left to the list',
+        () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0011', 'not approved'));
+
+      await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'an atServer refusal of a revoke is left to the list that '
+              'follows');
+    });
   });
 
   group('a session whose client failed to open', () {

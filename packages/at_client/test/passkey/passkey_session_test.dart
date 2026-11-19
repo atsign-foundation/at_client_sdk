@@ -94,7 +94,7 @@ class _Client extends Fake implements AtClient {
   }
 }
 
-/// A store that counts its closes.
+/// A store that counts its closes and completes [closed] at the first.
 class _Store extends AtServerAtKeysIo {
   _Store(
       {required super.documents,
@@ -107,10 +107,14 @@ class _Store extends AtServerAtKeysIo {
       super.lockWait});
 
   var closes = 0;
+  final _closed = Completer<void>();
+
+  Future<void> get closed => _closed.future;
 
   @override
   void close() {
     closes++;
+    if (!_closed.isCompleted) _closed.complete();
     super.close();
   }
 }
@@ -386,6 +390,28 @@ void main() {
     expect(await rig.vaultOpen(), isTrue);
     await Future<void>.delayed(const Duration(milliseconds: 400));
 
+    await rig.expectVaultClosed();
+  });
+
+  test(
+      'a client stop that never ends keeps the store open for the session\'s '
+      'own bound plus the store\'s lock wait bound', () async {
+    rig = await _Rig.build(
+        lockTtl: const Duration(milliseconds: 20),
+        lockWait: const Duration(milliseconds: 30));
+    const settleWithin = Duration(milliseconds: 50);
+    PasskeySession(rig.client, rig.store, rig.vault,
+        settleWithin: settleWithin);
+    rig.client.onStop = () => Completer<void>().future;
+
+    final clock = Stopwatch()..start();
+    unawaited(rig.client.stop());
+    await rig.store.closed.timeout(const Duration(seconds: 5));
+
+    expect(clock.elapsed,
+        greaterThanOrEqualTo(settleWithin + rig.store.lockWaitBound),
+        reason: 'a write may wait up to the store\'s lock wait bound for the '
+            'lock, so the session waits that long beyond its own bound');
     await rig.expectVaultClosed();
   });
 
