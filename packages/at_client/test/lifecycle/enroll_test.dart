@@ -475,7 +475,7 @@ void main() {
   });
 
   test(
-      'a refusal the wait cannot resolve leaves the pending keys, even when '
+      'A refusal the wait cannot resolve leaves the pending keys, even when '
       'its text says denied', () async {
     final store = InMemoryAtKeysIo();
     final pending = await submit(

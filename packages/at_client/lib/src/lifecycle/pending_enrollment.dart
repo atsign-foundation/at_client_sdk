@@ -101,7 +101,7 @@ class PendingEnrollment {
   /// atServer, and [retryInterval] is the pause between polls. A denial
   /// ([AtEnrollmentDeniedException]), or the request's expiry
   /// ([AtEnrollmentExpiredException]), removes this enrollment from [keys]
-  /// and throws; any other [AtEnrollmentException] leaves it pending.
+  /// and throws. A refusal the wait cannot resolve leaves it pending.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
