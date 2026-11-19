@@ -2,7 +2,9 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
   Every write of an enrollment's server-held @keys document runs under a
   server mutex: the short-ttl immutable self record that ServerMutex takes,
   one per enrollment. A writer that finds the lock held waits and tries
-  again, from a fresh read of the document. A put needs at least half the
+  again, from a fresh read of the document. A writer whose own last lease
+  is too short to reuse first waits for it to run out, and its bound starts
+  after that. A put needs at least half the
   lock's ttl left on its lease; with less, the writer takes the lock again
   and re-reads. A refused write (a candidate that drops stored material,
   or a read-back that differs) still stops the store: it accepts no further
@@ -57,6 +59,15 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
     Then the write fails with an AtException that names the lock
     And nothing was put
     And the store accepts a later write
+
+  @dos
+  Scenario: A writer waits out its own last lease before its bound starts
+    Given the client's last lease on the @keys lock has under half its ttl left
+    And the client's bound is shorter than what is left of that lease
+    And no other writer holds the lock
+    When the client adds a key to its @keys
+    Then it takes the lock again once that lease has run out
+    And the key is written
 
   Scenario: A write whose read-back differs stops the store
     Given the @keys document read back after a write differs from the one written

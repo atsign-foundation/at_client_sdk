@@ -62,7 +62,9 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// [EnrollmentDocumentStore.tryLock], from before it reads the stored document
 /// until it puts. A writer that finds the lock held tries again after a pause
 /// of a quarter to one second, chosen at random, until it takes it or its
-/// wait bound runs out, which throws [AtServerAtKeysLockedException]. A put
+/// wait bound runs out, which throws [AtServerAtKeysLockedException]. When
+/// its own last lease is too short to reuse, it first waits for that lease
+/// to run out, and the bound starts after that. A put
 /// needs at least half the lock's ttl left on its lease, measured by the
 /// lease's own stopwatch, and a lease serves this store's later writes only
 /// while that much is left. When less is left by the time the document is
@@ -109,14 +111,11 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
   /// The store of [enrollmentId]'s document for [atSign] through [documents],
   /// sealed by [seal] and opened by [open], holding [apkamKeyPair]; a
   /// [restored] document is served by [read] without I/O. Each take of the
-  /// lock lasts [lockTtl], and a write waits up to [lockWait] to take it.
+  /// lock lasts [lockTtl], and a write waits up to [lockWait] to take it,
+  /// counted from when this store's own last lease runs out.
   ///
   /// Throws [ArgumentError] for a [lockTtl] under a millisecond or over
-  /// [maxServerMutexTtl], or a [lockWait] that is not longer than half
-  /// [lockTtl]. A lease this store no longer reuses, having under half
-  /// [lockTtl] left, still holds the lock against this store's own next take
-  /// for the rest of it, so a shorter [lockWait] would give up on a lock no
-  /// other writer holds.
+  /// [maxServerMutexTtl], or a [lockWait] that is not positive.
   AtServerAtKeysIo(
       {required EnrollmentDocumentStore documents,
       required String atSign,
@@ -133,10 +132,10 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
         _open = open,
         _enrollmentId = enrollmentId,
         _lockTtl = checkedServerMutexTtl(lockTtl, 'lockTtl'),
-        _lockWait = lockWait > lockTtl ~/ 2 && lockWait > Duration.zero
+        _lockWait = lockWait > Duration.zero
             ? lockWait
-            : throw ArgumentError.value(lockWait, 'lockWait',
-                'must be positive and longer than half lockTtl ($lockTtl)'),
+            : throw ArgumentError.value(
+                lockWait, 'lockWait', 'must be positive'),
         _publicKey = apkamKeyPair.publicKey,
         _private = base64Decode(apkamKeyPair.privateKey) {
     final seed = restored;
@@ -528,11 +527,14 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
   bool _leaves(ServerMutexLease lease) => lease.remaining >= _lockTtl ~/ 2;
 
   /// The lease this store holds while it leaves enough for a put, or a new
-  /// one, taken as soon as no other writer holds the lock and within
-  /// [_lockWait].
+  /// one, taken once that lease has run out and as soon as no other writer
+  /// holds the lock, within [_lockWait] of that.
   Future<ServerMutexLease> _leased(String atsign) async {
     final held = _lease;
-    if (held != null && _leaves(held)) return held;
+    if (held != null) {
+      if (_leaves(held)) return held;
+      await Future<void>.delayed(held.remaining);
+    }
     final waited = Stopwatch()..start();
     while (true) {
       final lease =

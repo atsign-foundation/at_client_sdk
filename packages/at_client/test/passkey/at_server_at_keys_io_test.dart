@@ -193,32 +193,10 @@ void main() {
           naming('lockWait'));
     });
 
-    test('refuses a lockWait not longer than half the lockTtl', () {
-      expect(
-          () => build(
-              lockTtl: const Duration(minutes: 1),
-              lockWait: const Duration(seconds: 15)),
-          naming('lockWait'),
-          reason: 'a lease too short to reuse holds the lock against the '
-              "store's own next take for up to half the ttl");
-      expect(
-          () => build(
-              lockTtl: const Duration(seconds: 10),
-              lockWait: const Duration(seconds: 5)),
-          naming('lockWait'));
-    });
-
-    test('accepts a lockTtl of the cap with a lockWait just over half of it',
-        () {
+    test('accepts a lockTtl of the cap and a lockWait of a millisecond', () {
       expect(
           build(
               lockTtl: maxServerMutexTtl,
-              lockWait:
-                  maxServerMutexTtl ~/ 2 + const Duration(milliseconds: 1)),
-          isA<AtServerAtKeysIo>());
-      expect(
-          build(
-              lockTtl: const Duration(milliseconds: 1),
               lockWait: const Duration(milliseconds: 1)),
           isA<AtServerAtKeysIo>());
     });

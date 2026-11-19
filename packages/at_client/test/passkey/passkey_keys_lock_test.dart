@@ -255,9 +255,7 @@ void main() {
       'a writer whose bound is shorter than a pause between takes gives up '
       'when its bound ends', () async {
     server.lockHeld = true;
-    final io = storeOf('self',
-        lockTtl: const Duration(milliseconds: 50),
-        lockWait: const Duration(milliseconds: 50));
+    final io = storeOf('self', lockWait: const Duration(milliseconds: 50));
     final took = Stopwatch()..start();
 
     await expectLater(
@@ -266,6 +264,29 @@ void main() {
     expect(took.elapsed, lessThan(const Duration(milliseconds: 250)),
         reason: 'the last pause is cut to what is left of the bound, and a '
             'pause between takes is at least 250ms');
+  });
+
+  test('A writer waits out its own last lease before its bound starts',
+      () async {
+    final clocks = <_Clock>[];
+    server.leaseOf = (key, ttl) {
+      final clock = _Clock();
+      clocks.add(clock);
+      return ServerMutexLease.timed(key, DateTime.now().add(ttl), clock, ttl);
+    };
+    final io = storeOf('self', lockWait: const Duration(milliseconds: 50));
+    await addSymmetric(io);
+    const left = Duration(milliseconds: 300);
+    clocks.single.elapsed = const Duration(seconds: 1) - left;
+    server._lockedUntil = DateTime.now().add(left);
+
+    await addSigning(io);
+
+    expect(server.events.where((e) => !e.startsWith('self ')), isEmpty,
+        reason: 'no other writer held the lock');
+    expect(server.of('self').where((e) => e == 'lock'), hasLength(2),
+        reason: 'it took the lock again rather than reuse the short lease');
+    expect(jsonEncode((await stored()).toJson()), contains(_b('sign-priv')));
   });
 
   test('A write whose read-back differs stops the store', () async {
@@ -415,9 +436,7 @@ void main() {
   });
 
   test('a lease serves the writes that follow it while it lasts', () async {
-    final io = storeOf('self',
-        lockTtl: const Duration(seconds: 10),
-        lockWait: const Duration(seconds: 15));
+    final io = storeOf('self', lockTtl: const Duration(seconds: 10));
     await addSymmetric(io);
     await addSigning(io);
     expect(server.of('self').where((e) => e == 'lock'), hasLength(1));
