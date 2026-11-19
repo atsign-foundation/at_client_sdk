@@ -73,9 +73,15 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// running an [update]'s mutate again, with at most three leases in all. Every
 /// [update] builds its candidate on the document it read under the lock, so it
 /// keeps what another writer filed. The lock is not a fence: the margin leaves
-/// a put half the ttl to land, but one sent within it can still land after the
-/// lock expired, so a write that would drop stored material is still refused,
-/// and each write is read back and compared with what was written.
+/// a put half the ttl to land, but one that takes longer can land after the
+/// lock expired and after another writer read the document, and that writer's
+/// put then drops it. Neither check below catches that: the late writer reads
+/// back its own document before the overwrite, and the other writer's
+/// candidate is checked against its read, which predates the late put. Both
+/// writes report success. The margin is the only guard against it.
+///
+/// A write that would drop stored material is refused, and each write is read
+/// back and compared with what was written.
 ///
 /// The lock needs an atServer from p3.13.0, the first to parse `:nc`. An
 /// expired lock stops blocking at once from p3.16.5. Another enrollment of

@@ -15,8 +15,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   and saves the passkey hints the onboarding could not. A login on a device
   with no saved hints for the Atsign finishes an activation that an
   onboarding left half done. When no encryption public key is published it
-  takes the same three steps: it deletes the CRAM secret, then revokes every
-  other approved enrollment, then publishes the @keys document's encryption
+  takes the same three steps: it deletes the CRAM secret, then, only when
+  the atServer still held a CRAM secret to delete, revokes every other
+  approved enrollment, then publishes the @keys document's encryption
   public key. When the document's key is already published it only deletes
   the CRAM secret, which is already gone. A login that uses saved hints
   sends none of these, since a device saves them only once the activation is
@@ -27,9 +28,14 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   The CRAM secret is deleted before the revoke so that a published key
   means the revoke ran once no new `cram:` login could succeed: nothing a
   CRAM holder enrolled before the delete survives it. A login therefore
-  revokes only when no key is published. A revoke that fails stops the
-  completion before the publish, so the key stays unpublished and the next
-  login without saved hints tries the revoke again. One case a login cannot
+  revokes only when no key is published, and only when its own delete found
+  the CRAM secret live: a finished onboarding deleted it too, so a key
+  missing once it is gone does not show the activation unfinished, and the
+  login then only publishes the document's key. A revoke that fails stops
+  the completion before the publish, so the key stays unpublished; the next
+  login without saved hints finds the CRAM secret gone and publishes the
+  key without revoking, leaving the enrollments that were made with the
+  CRAM secret approved. One case a login cannot
   finish: another activation tool published an encryption public key while
   the CRAM secret was live and stopped before deleting it, and this
   onboarding then stopped after deleting the CRAM secret and before
@@ -44,9 +50,10 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   already create or end any enrollment, so nothing guards against it. Two
   logins with one passkey finishing one activation each delete the CRAM
   secret, revoke the same enrollments and publish the same key, so the
-  second changes nothing. Two logins with passkeys from two attempts,
-  after a retry's revoke failed, can revoke each other's enrollment as two
-  onboardings can; both passkeys came from the CRAM secret's holder. A
+  second changes nothing. Of two logins with passkeys from two attempts,
+  only the one whose delete finds the CRAM secret live revokes, so they
+  cannot revoke each other's enrollment; both passkeys came from the CRAM
+  secret's holder. A
   failed onboarding releases the setup lock without waiting for the
   platform to take its report that the new passkey is unknown; the report
   names only that passkey, so the onboarding that takes the lock next is
@@ -56,10 +63,8 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   PKAM-authenticated connection, and sending any of them again changes
   nothing the first did not. Denial of service: each interrupted attempt
   leaves one approved enrollment until a retry or a login revokes it. A
-  revoke that keeps failing fails every login without saved hints; only an
-  enrollment that holds `__manage`, which can approve or reinstate
-  enrollments as fast as they are revoked, or the atServer can keep it
-  failing, and either already holds more than the login. A platform that
+  revoke fails at most the login whose delete found the CRAM secret live;
+  the next login does not revoke. A platform that
   never finishes taking a report that a passkey is unknown holds up
   neither the failed onboarding nor the setup lock. Forgery and
   impersonation: only a CRAM secret's holder activates or retries, and that
@@ -68,8 +73,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   its key is published. A login revokes and publishes only after PKAM as
   the enrollment its passkey's pointer names, and only when no key is
   published; it publishes only the key its @keys document holds, which
-  only the passkey opens. The atServer refuses a `delete:` of `publickey`,
-  so a published key cannot be deleted to make a later login revoke. A key
+  only the passkey opens. It revokes only when its delete found the CRAM
+  secret live, so a published key that goes missing on a finished Atsign
+  never makes a later login revoke. A key
   replaced by another enrollment that holds `*:rw` and `__manage:rw` makes
   every login refuse it, until such an enrollment publishes the document's
   key again.
@@ -138,12 +144,19 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     Then the login publishes the document's encryption public key
     And it deletes the CRAM secret
 
-  Scenario: A login that finds no encryption public key published deletes the CRAM secret, then revokes the other enrollments, then publishes the key
+  Scenario: A login that finds no encryption public key published and the CRAM secret live deletes it, then revokes the other enrollments, then publishes the key
     Given an onboarding of @alice🛠 was interrupted after its enrollment was approved
-    And a second onboarding of @alice🛠 deleted the CRAM secret and then could not revoke the first one's enrollment
+    And a second onboarding of @alice🛠 wrote its @keys document and pointer and stopped before deleting the CRAM secret
     When the app logs in to @alice🛠 with the second onboarding's passkey on a device with no saved hints
     Then the login deletes the CRAM secret, then revokes the first onboarding's enrollment, then publishes the @keys document's encryption public key
     And it opens the second onboarding's enrollment
+
+  Scenario: A login that finds no encryption public key published once the CRAM secret is gone revokes nothing and publishes the document's key
+    Given @alice🛠 was onboarded with a passkey and another enrollment of @alice🛠 has since been approved
+    And the atServer no longer publishes an encryption public key for @alice🛠
+    When the app logs in to @alice🛠 with that passkey on a device with no saved hints
+    Then the login sends no revoke and publishes the @keys document's encryption public key
+    And the other enrollment is still approved
 
   Scenario: A login that finds the document's encryption public key published deletes the CRAM secret and revokes nothing
     Given an onboarding of @alice🛠 was interrupted after it published its encryption public key
@@ -153,13 +166,13 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     And it sends no revoke and publishes nothing
     And the other enrollment is still approved
 
-  Scenario: A login whose revoke keeps failing throws the revoke's failure, and the next login tries again
-    Given an onboarding of @alice🛠 deleted the CRAM secret and then could not revoke the other approved enrollments
-    And the atServer still lists another approved enrollment after every revoke
+  Scenario: A login whose revoke fails throws the revoke's failure, and the next login, finding the CRAM secret gone, publishes without revoking
+    Given an onboarding of @alice🛠 wrote its @keys document and pointer and stopped before deleting the CRAM secret
+    And the atServer still lists another approved enrollment after the revoke
     When the app logs in to @alice🛠 with that passkey on a device with no saved hints
     Then the login throws the revoke's AtEnrollmentException, not a PasskeyLostException
     And it publishes no encryption public key and saves no passkey hints
-    And the next login sends the revoke again
+    And the next login sends no revoke and publishes the @keys document's encryption public key
 
   Scenario: A login with saved hints sends no activation completion
     Given @alice🛠 was onboarded on this device, which saved its passkey hints

@@ -162,7 +162,7 @@ class FakeSession implements EnrollmentSession {
   }
 
   @override
-  Future<void> completeActivation(Map<String, dynamic> atKeys) async {
+  Future<bool> completeActivation(Map<String, dynamic> atKeys) async {
     server.timeline.add('complete-activation');
     completed.add(atKeys);
     if (completeError case final e?) throw e;
@@ -171,9 +171,10 @@ class FakeSession implements EnrollmentSession {
       server.timeline.add('publish:$key');
       if (completeErrorAfterPublish case final e?) throw e;
     }
-    server.cramDeleted.add(atSign);
+    final wasLive = server.cramDeleted.add(atSign);
     server.timeline.add('cram-deleted');
     if (completeErrorAfterDelete case final e?) throw e;
+    return wasLive;
   }
 
   @override

@@ -15,9 +15,12 @@ final _logger = AtSignLogger('completeActivation');
 /// all the same. A CRAM secret the atServer reports as not found counts as
 /// deleted.
 ///
+/// Returns true when the atServer deleted a CRAM secret, and false when it
+/// reported none to delete.
+///
 /// Throws [ArgumentError], before any command, when [encryptionPublicKey]
 /// holds a carriage return or a line feed.
-Future<void> completeActivationOf(
+Future<bool> completeActivationOf(
     {required AtLookUp atLookUp,
     required String atSign,
     required String? encryptionPublicKey}) async {
@@ -51,8 +54,10 @@ Future<void> completeActivationOf(
   try {
     final deleteResponse = await atLookUp.executeVerb(deleteBuilder);
     _logger.info('Cram secret delete response : $deleteResponse');
+    return true;
   } on AtLookUpException catch (e) {
     if (e.errorCode != error_codes['KeyNotFoundException']) rethrow;
     _logger.info('The CRAM secret of $atSign was already deleted');
+    return false;
   }
 }

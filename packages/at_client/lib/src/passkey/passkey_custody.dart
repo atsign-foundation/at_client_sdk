@@ -148,7 +148,10 @@ abstract class EnrollmentSession {
   /// published, then deletes the atSign's CRAM secret. When [atKeys] holds no
   /// encryption public key it publishes nothing and only deletes the CRAM
   /// secret.
-  Future<void> completeActivation(Map<String, dynamic> atKeys);
+  ///
+  /// Returns true when the atServer deleted a CRAM secret, and false when it
+  /// reported none to delete.
+  Future<bool> completeActivation(Map<String, dynamic> atKeys);
 
   /// A client running as this enrollment, reading its @keys from [keysIo] and
   /// persisting every change through it. The client takes over this session's
@@ -375,7 +378,7 @@ class PasskeyCustody {
       String canonical, Uint8List credentialId, _Written written) async {
     final (:vault, :session, :store, :atKeys) = written;
     try {
-      await _completeActivation(session, atKeys);
+      await _completeActivation(session, atKeys, false);
       await _remember(canonical, credentialId, session.enrollmentId);
     } on Object {
       store.close();
@@ -393,13 +396,19 @@ class PasskeyCustody {
 
   /// Completes the activation [session]'s enrollment was created by: deletes
   /// the atSign's CRAM secret, then revokes every other approved enrollment,
-  /// then publishes the encryption public key [atKeys] holds.
-  static Future<void> _completeActivation(
-      EnrollmentSession session, Map<String, dynamic> atKeys) async {
+  /// then publishes the encryption public key [atKeys] holds. With
+  /// [onlyWhileCramLive] the revoke is skipped when the atServer had no CRAM
+  /// secret left to delete.
+  static Future<void> _completeActivation(EnrollmentSession session,
+      Map<String, dynamic> atKeys, bool onlyWhileCramLive) async {
     // NOTE: the CRAM secret is deleted before the revoke, so a published
     // encryption public key means the revoke ran after it was gone.
-    await session.completeActivation(const {});
-    await session.revokeOtherEnrollments();
+    final cramWasLive = await session.completeActivation(const {});
+    // NOTE: a finished onboarding deleted the CRAM secret too, so a missing
+    // key with no CRAM secret left does not show the activation unfinished.
+    if (cramWasLive || !onlyWhileCramLive) {
+      await session.revokeOtherEnrollments();
+    }
     await session.completeActivation(atKeys);
   }
 
@@ -444,9 +453,13 @@ class PasskeyCustody {
   /// the retry without them, finishes the activation an onboarding may have
   /// left unfinished, before it remembers anything or opens the client: when
   /// the atServer publishes no encryption public key it deletes the atSign's
-  /// CRAM secret, then revokes every approved enrollment other than this
-  /// one, then publishes the document's key; when the document's key is
-  /// published it only deletes the CRAM secret. An open that uses remembered
+  /// CRAM secret, then, only when the atServer still held a CRAM secret to
+  /// delete, revokes every approved enrollment other than this one, then
+  /// publishes the document's key; when the document's key is published it
+  /// only deletes the CRAM secret. A missing key with the CRAM secret already
+  /// gone does not show the activation unfinished, since a finished one
+  /// deleted it too, so the open then revokes nothing and only publishes the
+  /// key again. An open that uses remembered
   /// ids sends none of these, since a device remembers them only once the
   /// activation is finished. On every open, a published key other than the
   /// document's is refused before anything is sent. When finishing the
@@ -521,8 +534,9 @@ class PasskeyCustody {
   /// ceremony that yields no credential, or a PKAM the atServer refuses, then
   /// throws [_StaleHints] so the caller can try again without them. Without
   /// hints either is a lost passkey. Only an open without hints finishes the
-  /// activation, and it revokes the other enrollments and publishes the
-  /// encryption key only when no encryption key is published.
+  /// activation: it publishes the encryption key only when no encryption key
+  /// is published, and revokes the other enrollments only then and only when
+  /// its delete found the CRAM secret still live.
   Future<PasskeySession> _attempt(String canonical, _Hints? hints) async {
     final PasskeyUnlock unlocked;
     try {
@@ -562,7 +576,7 @@ class PasskeyCustody {
             await session.completeActivation(const {});
           } else {
             await _completeActivation(
-                session, {_encryptPublicKey: unpublished});
+                session, {_encryptPublicKey: unpublished}, true);
           }
         }
         await _remember(canonical, unlocked.credentialId, enrollmentId);

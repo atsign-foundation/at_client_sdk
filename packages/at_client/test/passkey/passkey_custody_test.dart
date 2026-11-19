@@ -503,7 +503,8 @@ void main() {
 
     test(
         'a revoke that fails during onboarding is thrown, reports nothing and '
-        'saves no hints, and a login then completes the activation', () async {
+        'saves no hints, and a login, finding the CRAM secret gone, publishes '
+        'the key without revoking', () async {
       final remains = AtEnrollmentException(
           '1 approved enrollments other than eid1 remain after revoking them');
       gateway.onAuthenticate = (session) => session.revokeError = remains;
@@ -525,7 +526,6 @@ void main() {
 
       expect(completionSteps(from: mark), [
         'cram-deleted',
-        'revoke-others',
         'publish:${encryptionPublicKeyOf('eid1')}',
         'cram-deleted',
       ]);
@@ -534,22 +534,22 @@ void main() {
     });
 
     test(
-        'A login that finds no encryption public key published deletes the '
-        'CRAM secret, then revokes the other enrollments, then publishes the '
-        'key', () async {
+        'A login that finds no encryption public key published and the CRAM '
+        'secret live deletes it, then revokes the other enrollments, then '
+        'publishes the key', () async {
       server.documentPutFailures = 99;
       await expectLater(
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       server.documentPutFailures = 0;
       gateway.onAuthenticate =
-          (session) => session.revokeError = StateError('revoke failed');
+          (session) => session.completeError = StateError('interrupted');
       await expectLater(
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       gateway.onAuthenticate = null;
       expect(server.approved, {'eid1': _atSign, 'eid2': _atSign},
-          reason: 'the control: the failed revoke left the first enrollment');
-      expect(server.cramDeleted, {_atSign},
-          reason: 'the control: the second onboarding deleted the CRAM secret');
+          reason: 'the control: the first attempt left its enrollment');
+      expect(server.cramDeleted, isEmpty,
+          reason: 'the control: the CRAM secret is still live');
       expect(server.publishedKey, isNull,
           reason: 'the control: no encryption public key is published');
       final mark = server.timeline.length;
@@ -598,32 +598,66 @@ void main() {
     });
 
     test(
-        'A login whose revoke keeps failing throws the revoke\'s failure, and '
-        'the next login tries again', () async {
+        'A login that finds no encryption public key published once the CRAM '
+        'secret is gone revokes nothing and publishes the document\'s key',
+        () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      server.approved['eid9'] = _atSign;
+      server.publishedKey = null;
+      final mark = server.timeline.length;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(
+          completionSteps(from: mark),
+          [
+            'cram-deleted',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+          ],
+          reason: 'a finished onboarding deleted the CRAM secret, so a '
+              'missing key does not show it unfinished');
+      expect(server.approved, {'eid1': _atSign, 'eid9': _atSign},
+          reason: 'the other enrollment is still approved');
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login whose revoke fails throws the revoke\'s failure, and the '
+        'next login, finding the CRAM secret gone, publishes without '
+        'revoking', () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       final remains = AtEnrollmentException(
           '1 approved enrollments other than eid1 remain after revoking them');
       gateway.onAuthenticate = (session) => session.revokeError = remains;
-      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
-          throwsA(same(remains)));
       final device = FakeHints();
+      var mark = server.timeline.length;
 
-      for (final login in ['the first login', 'the next login']) {
-        final mark = server.timeline.length;
-        await expectLater(custody(withHints: device).open(atSign: _atSign),
-            throwsA(same(remains)),
-            reason: '$login throws the revoke\'s AtEnrollmentException, not '
-                'a PasskeyLostException');
-        expect(completionSteps(from: mark), ['cram-deleted', 'revoke-others'],
-            reason: '$login sends the revoke and publishes nothing');
-        expect(gateway.lastSession!.closed, isTrue);
-      }
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(same(remains)),
+          reason: 'the login throws the revoke\'s AtEnrollmentException, not '
+              'a PasskeyLostException');
+
+      expect(completionSteps(from: mark), ['cram-deleted', 'revoke-others'],
+          reason: 'the login sends the revoke and publishes nothing');
+      expect(gateway.lastSession!.closed, isTrue);
       expect(server.publishedKey, isNull);
       expect(device.credentials, isEmpty, reason: 'no hints are saved');
       expect(device.ids, isEmpty, reason: 'no hints are saved');
 
-      gateway.onAuthenticate = null;
+      mark = server.timeline.length;
       final session = await custody(withHints: device).open(atSign: _atSign);
 
+      expect(completionSteps(from: mark), [
+        'cram-deleted',
+        'publish:${encryptionPublicKeyOf('eid1')}',
+        'cram-deleted',
+      ]);
       expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
       expect(device.ids, {_atSign: 'eid1'});
       expect(session.client.enrollmentId, 'eid1');

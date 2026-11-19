@@ -57,8 +57,13 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 ///
 /// The failing stage's error is thrown as it is, so it does not say whether
 /// the CRAM secret was deleted. Try again with [passkeyLogin] first; only
-/// when that throws [PasskeyLostException] did the passkey file no pointer,
-/// and [onboardNewAtSign] is run again with the same [cram].
+/// when that throws a [PasskeyLostException] with no `cause` whose `reason`
+/// is `no enrollment pointer` did the passkey file no pointer, and
+/// [onboardNewAtSign] is run again with the same [cram]. One whose cause is a
+/// `PasskeyCeremonyException` (a failed or cancelled prompt) or a
+/// `PkamRefusedException` says nothing about the CRAM secret, which may be
+/// deleted: answer it with [passkeyLogin] again, never with
+/// [onboardNewAtSign].
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
@@ -101,7 +106,9 @@ Future<PasskeySession> onboardNewAtSign(
 /// [IndexedDbException] when a failure of this browser's IndexedDB stops
 /// the login, and what finishing an unfinished onboarding throws, such as the
 /// `AtEnrollmentException` of a revoke that leaves another approved
-/// enrollment; the next login tries again.
+/// enrollment. That revoke runs only when the login's delete found the CRAM
+/// secret still live, so the next login, finding it gone, does not try it
+/// again.
 ///
 /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException` means
 /// the prompt failed, and the user may simply have cancelled it: WebAuthn

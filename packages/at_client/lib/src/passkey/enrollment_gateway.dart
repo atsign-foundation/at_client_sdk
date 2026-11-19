@@ -323,7 +323,7 @@ class _PkamSession implements EnrollmentSession {
       ];
 
   @override
-  Future<void> completeActivation(Map<String, dynamic> atKeys) =>
+  Future<bool> completeActivation(Map<String, dynamic> atKeys) =>
       completeActivationOf(
           atLookUp: _lookUp,
           atSign: _atSign,

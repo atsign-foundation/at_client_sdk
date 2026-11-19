@@ -453,9 +453,10 @@ void main() {
         () async {
       final session = await activate();
 
-      await session.completeActivation({});
+      final deleted = await session.completeActivation({});
 
       expect(wire.commands, ['delete:privatekey:at_secret\n']);
+      expect(deleted, isTrue, reason: 'the atServer deleted a CRAM secret');
     });
 
     for (final (name, value) in [
@@ -475,16 +476,18 @@ void main() {
       });
     }
 
-    test('counts a CRAM secret the atServer reports as not found as deleted',
-        () async {
+    test(
+        'counts a CRAM secret the atServer reports as not found as deleted, '
+        'and reports that it found none', () async {
       final session = await activate();
       wire.answer = (command) => command.startsWith('delete:')
           ? throw AtLookUpException('AT0015', 'key not found')
           : null;
 
-      await session.completeActivation({});
+      final deleted = await session.completeActivation({});
 
       expect(wire.commands.last, 'delete:privatekey:at_secret\n');
+      expect(deleted, isFalse);
     });
   });
 

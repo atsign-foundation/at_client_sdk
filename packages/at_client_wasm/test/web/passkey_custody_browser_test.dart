@@ -120,11 +120,13 @@ class _Session implements EnrollmentSession {
   }
 
   @override
-  Future<void> completeActivation(Map<String, dynamic> atKeys) async {
+  Future<bool> completeActivation(Map<String, dynamic> atKeys) async {
     if (atKeys['aesEncryptPublicKey'] case final String key) {
       server.publishedKey = key;
     }
+    final wasLive = server.cramLive;
     server.cramLive = false;
+    return wasLive;
   }
 
   @override

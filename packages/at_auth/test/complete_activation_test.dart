@@ -41,9 +41,10 @@ void main() {
         'A completion with no encryption public key deletes only the CRAM '
         'secret', () async {
       final lookUp = _RecordingLookUp();
-      await completeActivationOf(
+      final deleted = await completeActivationOf(
           atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: null);
       expect(lookUp.sent, ['delete:privatekey:at_secret\n']);
+      expect(deleted, isTrue, reason: 'the atServer deleted a CRAM secret');
     });
 
     test('A failed publish keeps the CRAM secret and propagates', () async {
@@ -73,13 +74,15 @@ void main() {
       });
     }
 
-    test('A CRAM secret the atServer reports as not found counts as deleted',
-        () async {
+    test(
+        'A CRAM secret the atServer reports as not found counts as deleted, '
+        'and the completion reports that it found none', () async {
       final lookUp = _RecordingLookUp()
         ..deleteError = AtLookUpException('AT0015', 'key not found');
-      await completeActivationOf(
+      final deleted = await completeActivationOf(
           atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: 'cHVi');
       expect(lookUp.sent, hasLength(2));
+      expect(deleted, isFalse, reason: 'there was no CRAM secret to delete');
     });
 
     test('A CRAM secret delete refused for another reason propagates',
