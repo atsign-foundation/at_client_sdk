@@ -539,8 +539,8 @@ classified when the connection changes; a browser online/offline event alone doe
 The client reconnects by itself and exposes no retry.
 
 **Errors.** Every call rejects with an `AtError` carrying `code`; collection failures add
-`id`, `owner`, `kind` and `failures` when known. Codes are the §6 set plus the
-`COLLECTION_*` codes of §6.1.
+`id`, `owner`, `kind` and `failures` when known. Codes are the session codes of
+[§6.2](#62-session-error-codes-alpha) plus the `COLLECTION_*` codes of §6.1.
 
 **Keys.** The plaintext `.atKeys` JSON, or the flat shape `AtKeys.fromJson` accepts, opens a
 session. Documents whose key fields are self-encrypted are not decrypted in the browser.
@@ -578,6 +578,10 @@ class AtError extends Error {
 
 Codes must be stable across releases — they are the only thing a TypeScript consumer can
 branch on. Never surface the boxed handle.
+
+In the alpha, a rejection is a plain object `{code, message}`; a collection failure adds `id`,
+`owner`, `kind` and `failures` where it has them. `retriable` is part of the full design above,
+not the alpha.
 
 **Collections introduce a second result shape upstream, and it folds into this one.**
 `AtCollection`'s batch write paths (`delete(cascade: true)`, sub-collection sweeps) can
@@ -621,6 +625,22 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 
 Schema errors get a `COLLECTION_*` code from §6.1 when the persisted collection record and its schema validation
 land. Until then no adapter operation validates data against a schema.
+
+### 6.2 Session error codes (alpha)
+
+`atErrorCode` (`at_error_code.dart`) maps every error the bridge rejects with to one code. A
+`COLLECTION_*` code comes from `JsCollectionsError` (§6.1); the other codes are:
+
+| Code | Raised when |
+|---|---|
+| `pkam_refused` | `AtOpenRefusedException`: the atServer refuses the open (a revoked or unauthenticated credential, an unapproved or expired enrollment) or there is no atServer for the atSign |
+| `offline` | `PortalSessionOfflineException`: the open did not come online and was not classed as a refusal |
+| `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with |
+| `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending |
+| `closed` | `SessionClosedException`: a call on a session after `close`; or `StoppedException` |
+| `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessException` (a pairing call on a session without `__manage`); or `UnsupportedError`, such as `create` on a page that is not a secure context |
+| `bad_key` | `BadKeyException`: a key cannot do what was asked, such as a notify with no `sharedWith` |
+| `internal` | any other error; the message is the fixed text `internal error`, except that an `ArgumentError` keeps its own text |
 
 ---
 
