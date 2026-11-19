@@ -17,13 +17,13 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
   synced passkey) each take the lock before reading, so the second builds
   on the first's write. A put sent late in a lease could land after the
   lock expired, so a put needs half the ttl left. That margin is the only
-  guard that prevents it: a put that takes longer than half the ttl to land
-  can land after another writer read the document, and that writer's put
-  then drops it. The refusal of a write that drops material does not catch
-  this, since the other writer's candidate is checked against a read from
-  before the late put landed. The late writer's read-back catches it only
-  when the other writer's put lands first; when the read-back comes first,
-  both writes report success. Replay: the
+  guard that prevents a lost write: a put that takes longer than half the
+  ttl to land can land after the lock expired, and then it and the put of
+  the next writer to take the lock can each drop what the other added,
+  whichever lands last. The refusal of a write that drops material does not
+  catch this, since the overwriting writer's last read predates the put it
+  overwrites, and the overwritten writer's read-back catches it only when
+  the overwrite lands first; otherwise both writes report success. Replay: the
   lock record is not a credential and is created on the enrollment's own
   authenticated connection. Denial of service: a held lock is released by
   its ttl, so a writer that stopped holding it delays the enrollment's
