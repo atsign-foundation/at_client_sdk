@@ -478,6 +478,8 @@ rejects with `COLLECTION_INVALID_ARGUMENT` before any write when the id is empty
 starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When
 `create` is given no id, `AtCollection` generates one.
 
+**Item data.** `data` for `create` and `update` must be a plain object, not an array, at most 64 levels deep and free of cycles; otherwise the call rejects with code `internal`, naming `data`. Arrays nested inside `data` are valid.
+
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
 `unreadable` holds one `{id, owner, code}` per record this device cannot read, where `code`

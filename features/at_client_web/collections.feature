@@ -72,6 +72,11 @@ Feature: Collections store, read and share items through the session
     When get is called with a string for the address, create with a number for the data, query with a number for where, or share with a string for atSigns
     Then each rejects with code internal and a message naming that parameter
 
+  Scenario: collection data that is an array or too deep rejects naming data
+    Given an open collection
+    When create or update is called with an array as the data, or create with data nested 100 levels deep or with a cyclic object
+    Then each rejects with code internal and a message naming data
+
   Scenario: collection watch delivers events, including unknown, and unsubscribes (T6.5, T6.8)
     Given a collection watch with an event and an error callback
     When an updated event, an event of an unknown type and an error arrive, and the returned function is then called
