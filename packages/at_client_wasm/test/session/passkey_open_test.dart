@@ -7,6 +7,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart';
+import 'package:at_client_wasm/at_client_wasm.dart'
+    show PortalSessionOfflineException;
 import 'package:at_client_wasm/src/session/session_open.dart';
 import 'package:test/test.dart';
 
@@ -16,8 +18,10 @@ const _atSign = '@alice';
 const _eid = 'e1d2c3';
 
 /// A sealer that keeps the plaintext: the vault's framing is under test
-/// elsewhere, this test needs a store that round-trips.
+/// elsewhere, this test needs a store that round-trips. Records being closed.
 class _Sealer implements RecordSealer {
+  var closed = false;
+
   @override
   Future<Uint8List> seal(
           Uint8List iv, List<int> plaintext, List<int> aad) async =>
@@ -29,7 +33,7 @@ class _Sealer implements RecordSealer {
       ciphertext;
 
   @override
-  void close() {}
+  void close() => closed = true;
 }
 
 class _Docs implements EnrollmentDocumentStore {
@@ -63,6 +67,7 @@ void main() {
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
   late _Docs docs;
+  late _Sealer sealer;
   late PasskeyVault vault;
   late ApkamKeyPair pair;
 
@@ -70,8 +75,46 @@ void main() {
         lookupHex: '0' * 64,
         ns: '1' * 64,
         authSeed: Uint8List.fromList(List.generate(32, (i) => i + 1)),
-        sealer: _Sealer(),
+        sealer: sealer = _Sealer(),
       ), atSign: '@alice');
+
+  /// The enrollment's key store, sealed with [vault].
+  AtServerAtKeysIo newStore() => AtServerAtKeysIo(
+      documents: docs,
+      atSign: _atSign,
+      seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
+      open: (r) => vault.open(PasskeyRecordType.atkeys, r),
+      enrollmentId: _eid,
+      apkamKeyPair: pair);
+
+  Future<AtClient> open(AtServerAtKeysIo keysIo) => openSession(
+          lookUp: wire.lookUps(
+              atSign: _atSign,
+              rootDomain: AtRootDomain.atsignDomain,
+              authenticator: null,
+              secondaryAddressFinder: finder),
+          atSign: _atSign,
+          enrollmentId: _eid,
+          keysIo: keysIo,
+          app: 'wavi',
+          transport: (
+            lookUps: wire.lookUps,
+            finder: finder,
+            root: AtRootDomain.atsignDomain
+          ));
+
+  /// Whether [store] and [vault] are both still open: the store still serves
+  /// the document's keys and holds its APKAM private key, and the vault still
+  /// seals with an open sealer.
+  Future<void> expectStillOpen(AtServerAtKeysIo store) async {
+    expect(store.holdsPrivateKey, isTrue, reason: 'the store is not closed');
+    await expectLater(Future.sync(() => store.read(_atSign)), completes,
+        reason: 'the store is not closed');
+    expect(sealer.closed, isFalse, reason: 'the vault is not closed');
+    await expectLater(
+        vault.seal(PasskeyRecordType.atkeys, {'probe': true}), completes,
+        reason: 'the vault is not closed');
+  }
 
   setUp(() async {
     wire = Wire()..runsAuthenticator = true;
@@ -104,27 +147,7 @@ void main() {
   });
 
   test('opens as the enrollment and re-authenticates from the store', () async {
-    final client = await openSession(
-        lookUp: wire.lookUps(
-            atSign: _atSign,
-            rootDomain: AtRootDomain.atsignDomain,
-            authenticator: null,
-            secondaryAddressFinder: finder),
-        atSign: _atSign,
-        enrollmentId: _eid,
-        keysIo: AtServerAtKeysIo(
-            documents: docs,
-            atSign: _atSign,
-            seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
-            open: (r) => vault.open(PasskeyRecordType.atkeys, r),
-            enrollmentId: _eid,
-            apkamKeyPair: pair),
-        app: 'wavi',
-        transport: (
-          lookUps: wire.lookUps,
-          finder: finder,
-          root: AtRootDomain.atsignDomain
-        ));
+    final client = await open(newStore());
 
     expect(client.enrollmentId, _eid);
     final lookUp = wire.lookUpsBuilt.last;
@@ -136,5 +159,32 @@ void main() {
     expect(wire.pkamCommands.length, commands + 1);
     expect(wire.pkamCommands.last, contains('enrollmentId:$_eid:'));
     expect(docs.gets, gets, reason: 'PKAM reads the keys from memory');
+  });
+
+  group('the key store is lent to the client', () {
+    test('stopping the client leaves the key store and the vault open',
+        () async {
+      final store = newStore();
+      final client = await open(store);
+
+      await client.stop();
+
+      await expectStillOpen(store);
+    });
+
+    test(
+        'a client that does not come online is stopped and leaves the key '
+        'store and the vault open', () async {
+      wire
+        ..runsAuthenticator = false
+        ..pkamAccepted = false;
+      final store = newStore();
+
+      await expectLater(
+          open(store), throwsA(isA<PortalSessionOfflineException>()));
+
+      expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);
+      await expectStillOpen(store);
+    });
   });
 }
