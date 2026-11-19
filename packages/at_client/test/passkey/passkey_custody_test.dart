@@ -4,7 +4,11 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysFileOverwriteException;
 import 'package:at_auth/passkey.dart';
 import 'package:at_commons/at_commons.dart'
-    show AtEnrollmentException, AtRootDomain, InvalidAtSignException;
+    show
+        AtEnrollmentException,
+        AtRootDomain,
+        InvalidAtSignException,
+        UnAuthenticatedException;
 import 'package:at_client/at_client.dart'
     show AtClientPreference, buildAtClient;
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
@@ -63,6 +67,16 @@ void main() {
   late FakeHints hints;
   late FakePersistence persistence;
   late FakeSetupLock setupLock;
+  late List<AtServerAtKeysIo> stores;
+
+  /// That every key store the custody built, from store [from] on, has been
+  /// closed, its APKAM private key zeroed.
+  void expectStoresClosed({int from = 0}) {
+    final built = stores.skip(from);
+    expect(built, isNotEmpty);
+    expect(built.map((store) => store.holdsPrivateKey), everyElement(isFalse),
+        reason: 'a failure closes every key store it built');
+  }
 
   PasskeyCustody custody({LegacyHints? withHints}) => PasskeyCustody(
       prf: PasskeyPrf(authenticator),
@@ -75,7 +89,8 @@ void main() {
       now: () => _enrolledAt,
       retryDelay: Duration.zero,
       setupLock: setupLock,
-      setupLockPrefix: _lockPrefix);
+      setupLockPrefix: _lockPrefix,
+      onKeyStore: stores.add);
 
   Future<DerivedKeys> keysOf(int credential) async {
     final prf = Uint8List.fromList(List.generate(32, (i) => i + credential));
@@ -101,9 +116,51 @@ void main() {
     hints = FakeHints();
     persistence = FakePersistence(server.timeline);
     setupLock = FakeSetupLock();
+    stores = [];
   }
 
   setUp(reset);
+
+  group('a PKAM failure that is not a refusal', () {
+    for (final (code, error) in [
+      ('AT0011', UnAuthenticatedException('AT0011-Internal server exception')),
+      ('AT0028', UnAuthenticatedException('AT0028:throttled')),
+    ]) {
+      test('$code on a login with hints keeps them and is not retried',
+          () async {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+        final steps = server.timeline.length;
+        gateway
+          ..authenticateFailures = 1
+          ..authenticateError = error;
+
+        await expectLater(
+            custody().open(atSign: _atSign), throwsA(same(error)));
+
+        expect(gateway.authenticated, ['eid1'],
+            reason: 'no retry without the hints');
+        expect(hints.ids, {_atSign: 'eid1'});
+        expect(completionSteps(from: steps), isEmpty);
+      });
+
+      test('$code through the pointer is thrown, not a lost passkey',
+          () async {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+        final steps = server.timeline.length;
+        final fresh = FakeHints();
+        gateway
+          ..authenticateFailures = 1
+          ..authenticateError = error;
+
+        await expectLater(custody(withHints: fresh).open(atSign: _atSign),
+            throwsA(same(error)));
+
+        expect(gateway.authenticated, ['eid1']);
+        expect(fresh.ids, isEmpty);
+        expect(completionSteps(from: steps), isEmpty);
+      });
+    }
+  });
 
   group('an atSign not in canonical form', () {
     for (final bad in ['alice', 'left@right', '@left@right', '@@alice']) {
@@ -290,6 +347,7 @@ void main() {
       expect(server.log, everyElement('put-document:eid1'));
       expect(server.log, hasLength(3));
       expect(gateway.lastSession!.closed, isTrue);
+      expectStoresClosed();
       expect(server.cramDeleted, isEmpty);
       expect(hints.ids, isEmpty);
     });
@@ -314,6 +372,7 @@ void main() {
       expect(await failure(), same(broken));
       expect(server.cramDeleted, {_atSign});
       expect(gateway.lastSession!.closed, isTrue);
+      expectStoresClosed();
       expect(gateway.lastSession!.clients, isEmpty);
       expect(authenticator.signalled, isEmpty,
           reason: 'a failure after the activation is completed reports '
@@ -463,6 +522,7 @@ void main() {
       expect(server.cramDeleted, {_atSign},
           reason: 'the CRAM secret was deleted before the revoke');
       expect(server.publishedKey, isNull);
+      expectStoresClosed();
       gateway.onAuthenticate = null;
       final mark = server.timeline.length;
 
@@ -670,6 +730,7 @@ void main() {
       expect(gateway.lastSession!.clients, isEmpty);
       expect(fresh.ids, isEmpty);
       expect(server.cramDeleted, isEmpty);
+      expectStoresClosed();
       gateway.onAuthenticate = null;
 
       await custody(withHints: fresh).open(atSign: _atSign);
@@ -1491,11 +1552,13 @@ void main() {
         () async {
       server.publishedTag = 'v2';
       final fresh = FakeHints();
+      final built = stores.length;
       await expectLater(custody(withHints: fresh).open(atSign: _atSign),
           throwsA(isA<PublicKeyMismatchException>()));
       expect(gateway.lastSession!.closed, isTrue);
       expect(fresh.ids, isEmpty);
       expect(persistence.requests, 0);
+      expectStoresClosed(from: built);
     });
 
     group('a document rolled back in', () {
@@ -1608,6 +1671,7 @@ void main() {
           throwsA(same(openError)));
       final session = gateway.lastSession!;
       expect(session.closeCalls, 1);
+      expectStoresClosed();
       await expectLater(
           Future.sync(() => session.keysIos.single.read(_atSign)),
           throwsA(isA<StateError>()

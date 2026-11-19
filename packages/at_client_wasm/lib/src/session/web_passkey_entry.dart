@@ -56,6 +56,13 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 /// pointer but before publishing the encryption public key. Nothing is kept
 /// in this browser until the CRAM secret is deleted.
 ///
+/// The failing stage's error is thrown as it is, so it does not say whether
+/// the CRAM secret was deleted. Try again with [passkeyLogin] first, which
+/// finishes the onboarding when it succeeds. A [PasskeyLostException] from it
+/// does not say whether the passkey filed a pointer, since a cancelled prompt
+/// throws it too, and running [onboardNewAtSign] again needs the CRAM secret
+/// still live.
+///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
 /// lock too long, [IndexedDbException] when this browser's passkey database
@@ -137,7 +144,7 @@ Future<PasskeySession> _withCustody(
     required Future<PasskeySession> Function(PasskeyCustody) run}) async {
   final server = passkeyServerSide(options: options, app: app, device: device);
   return runClosingStore(
-      IndexedDbHintStore.open,
+      openEntryHintStore,
       (store) => run(PasskeyCustody(
           prf: PasskeyPrf(WebPasskeyPort(rpId: rpId, rpName: rpName),
               prfSupport: PrfSupport(WebPrfEnvironment())),
@@ -150,6 +157,14 @@ Future<PasskeySession> _withCustody(
           persistence: WebStoragePersistence(),
           deriver: WebCryptoKeyDeriver())));
 }
+
+/// Opens the hint store [onboardNewAtSign] and [passkeyLogin] run on, this
+/// browser's passkey database by default.
+///
+/// Public only so that tests can see the store an entry point opened; the
+/// package does not export it.
+Future<IndexedDbHintStore> Function() openEntryHintStore =
+    IndexedDbHintStore.open;
 
 /// Runs [run] on the hint store [openStore] opens, and closes that store once
 /// [run] has returned or thrown; what [run] throws propagates.

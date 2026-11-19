@@ -12,6 +12,7 @@ import 'package:at_commons/at_commons.dart'
     show AtException, InvalidAtSignException;
 import 'package:at_commons/atsign.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../client/at_client_spec.dart' show AtClient;
 import 'at_server_at_keys_io.dart';
@@ -230,7 +231,8 @@ class PasskeyCustody {
       this.persistence,
       this.now = DateTime.now,
       this.retryDelay = const Duration(milliseconds: 250),
-      required this.deriver});
+      required this.deriver,
+      @visibleForTesting this.onKeyStore});
 
   final PasskeyPrf prf;
   final EnrollmentPointerReader pointerReader;
@@ -253,6 +255,11 @@ class PasskeyCustody {
 
   /// Derives the vault's keys from a passkey's PRF output.
   final PasskeyKeyDeriver deriver;
+
+  /// Sees each key store this custody builds, before any I/O on it; tests use
+  /// it to observe that a failed onboarding or login closes the store.
+  @visibleForTesting
+  final void Function(AtServerAtKeysIo store)? onKeyStore;
 
   /// The vault [deriver] derives from [secret], which is overwritten with
   /// zeroes once the vault is derived or the derivation fails.
@@ -300,7 +307,12 @@ class PasskeyCustody {
   /// and publishing the encryption public key when none is published, and
   /// otherwise only deleting the CRAM secret, which is already gone; it then
   /// saves the hints. Nothing is kept on the device until the CRAM secret is
-  /// deleted.
+  /// deleted. The failing stage's error is rethrown as it is, so it does not
+  /// say whether the CRAM secret was deleted: a caller retries with [open]
+  /// first, which finishes the onboarding when it succeeds. A
+  /// [PasskeyLostException] from that [open] does not say whether the passkey
+  /// filed a pointer, since a cancelled prompt throws it too, and onboarding
+  /// again needs the CRAM secret still live.
   ///
   /// When the assertion after registering the new passkey fails or yields no
   /// usable PRF output, the new passkey is reported to the platform as
@@ -642,14 +654,17 @@ class PasskeyCustody {
   /// the custody writes and reads through and then hands to the client. The
   /// store reaches the vault only to seal and open that document.
   AtServerAtKeysIo _keysIo(String atSign, EnrollmentSession session,
-          PasskeyVault vault, ApkamKeyPair pair) =>
-      AtServerAtKeysIo(
-          documents: session.documents,
-          atSign: atSign,
-          seal: (document) => vault.seal(PasskeyRecordType.atkeys, document),
-          open: (record) => vault.open(PasskeyRecordType.atkeys, record),
-          enrollmentId: session.enrollmentId,
-          apkamKeyPair: pair);
+      PasskeyVault vault, ApkamKeyPair pair) {
+    final store = AtServerAtKeysIo(
+        documents: session.documents,
+        atSign: atSign,
+        seal: (document) => vault.seal(PasskeyRecordType.atkeys, document),
+        open: (record) => vault.open(PasskeyRecordType.atkeys, record),
+        enrollmentId: session.enrollmentId,
+        apkamKeyPair: pair);
+    onKeyStore?.call(store);
+    return store;
+  }
 
   /// Creates the enrollment's document from [atKeys] through [store], which
   /// reads it back.
