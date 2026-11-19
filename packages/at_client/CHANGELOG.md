@@ -25,7 +25,9 @@
   code stands for, where it threw `AtClientException`. For AT0015, `get`
   and `getMeta` throw `AtKeyNotFoundException`, still an
   `AtClientException`, and `NotificationService.getStatus` throws
-  `KeyNotFoundException`, which is not one.
+  `KeyNotFoundException`, which is not one. A code with no exception of its
+  own, such as AT0014 for a reply naming no code, still throws
+  `AtClientException`.
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file

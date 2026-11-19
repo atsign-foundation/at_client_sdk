@@ -65,6 +65,26 @@ void main() {
               contains('Unexpected response found'))));
     });
 
+    test(
+        'Given a reply naming no code, or a code no typed exception stands '
+        'for, when DefaultResponseParser parses it, then it throws an '
+        'AtClientException carrying the reply\'s code and text', () {
+      const replies = {
+        'error:oops': ('AT0014', 'oops'),
+        'error:AT0014-boom': ('AT0014', 'boom'),
+        'error:AT0026-boom': ('AT0026', 'boom'),
+      };
+      replies.forEach((reply, expected) {
+        final response = AtResponse();
+        expect(
+            () => DefaultResponseParser().parseFailureResponse(reply, response),
+            throwsA(isA<AtClientException>()
+                .having((e) => e.message, 'message', contains(expected.$2))),
+            reason: reply);
+        expect(response.errorCode, expected.$1, reason: reply);
+      });
+    });
+
     test('test random response string', () {
       var response = DefaultResponseParser().parse('this is some random text');
       expect(response.isError, false);

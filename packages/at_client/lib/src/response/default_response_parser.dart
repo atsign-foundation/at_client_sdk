@@ -33,13 +33,21 @@ class DefaultResponseParser implements ResponseParser {
 
   /// Throws the exception an atServer's `error:` [responseString] stands
   /// for, read in any form an atServer writes as a lookup reads it, after
-  /// setting [response]'s error fields from it.
+  /// setting [response]'s error fields from it. A code no typed exception
+  /// stands for, such as AT0014 for a reply naming no code, throws an
+  /// [AtClientException], as every reply did before codes were mapped.
   void parseFailureResponse(String responseString, AtResponse response) {
     final error = errorResponseException(responseString);
     response
       ..isError = true
       ..errorCode = error.errorCode
       ..errorDescription = error.errorMessage;
-    throw AtExceptionUtils.get(error.errorCode, error.errorMessage);
+    final typed = AtExceptionUtils.get(error.errorCode, error.errorMessage);
+    // AtExceptionUtils.get answers a plain AtException for any code it does
+    // not map; callers catch `on AtClientException` for those.
+    if (typed.runtimeType == AtException) {
+      throw AtClientException(error.errorCode, error.errorMessage);
+    }
+    throw typed;
   }
 }
