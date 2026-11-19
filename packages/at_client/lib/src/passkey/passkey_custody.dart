@@ -333,22 +333,17 @@ class PasskeyCustody {
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
   ///
-  /// An onboarding that fails before the CRAM secret is deleted is run again
-  /// with the same [cram] and a new passkey. The passkey this call registered
-  /// is reported to the platform as unknown when the failure comes before
-  /// the activation is completed, and the failure is thrown without waiting
-  /// for the platform to take the report; a failure while completing it, or
-  /// after, reports nothing. Once the CRAM secret is deleted the atSign is
-  /// onboarded, and a failure after that leaves [open] to log in: without
-  /// saved hints it completes the activation while the completion is due,
-  /// as [open] says, and it then saves the hints. Nothing is kept on the
-  /// device until the CRAM secret is deleted. The failing stage's error is
-  /// rethrown as it is, so it does not say whether the CRAM secret was
-  /// deleted: a caller retries with [open] first, which finishes the
-  /// onboarding when it succeeds. A [PasskeyLostException] from that [open]
-  /// does not say whether the passkey filed a pointer, since a cancelled
-  /// prompt throws it too, and onboarding again needs the CRAM secret still
-  /// live.
+  /// A failure before the pointer is written is thrown as it is, and the
+  /// passkey this call registered is reported to the platform as unknown,
+  /// without waiting for the platform to take the report; the onboarding is
+  /// then run again with the same [cram] and a new passkey while the CRAM
+  /// secret is live. Once the pointer is written, an [Exception] that stops
+  /// the onboarding is thrown as a [PasskeyOnboardingIncompleteException]
+  /// naming [atSign] in canonical form, whose cause is that exception, with
+  /// its stack trace, and nothing is reported to the platform: [open] with
+  /// the passkey then finishes the onboarding, as [open] says, opens its
+  /// enrollment and saves the hints. An [Error] is thrown as it is. Nothing
+  /// is kept on the device until the CRAM secret is deleted.
   ///
   /// When the assertion after registering the new passkey fails or yields no
   /// usable PRF output, the new passkey is reported to the platform as
