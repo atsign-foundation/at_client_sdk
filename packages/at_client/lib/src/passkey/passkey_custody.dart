@@ -426,9 +426,9 @@ class PasskeyCustody {
   /// discoverable passkey and finds the enrollment through the pointer,
   /// after waiting for [atSign]'s setup lock so that an onboarding in another
   /// tab finishes first. One id alone counts as none, and so does a
-  /// remembered enrollment id whose read fails with an [Exception] or that is
-  /// outside the enrollment id alphabet, which is never sent; either is
-  /// logged as a warning naming [atSign].
+  /// remembered credential id or enrollment id whose read fails with an
+  /// [Exception], or an enrollment id outside the enrollment id alphabet,
+  /// which is never sent; each is logged as a warning naming [atSign].
   ///
   /// When the remembered ceremony yields no credential, or the atServer
   /// refuses PKAM for the remembered enrollment, the open is retried once, as
@@ -460,10 +460,9 @@ class PasskeyCustody {
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
   /// [PublicKeyMismatchException], a `PrfUnavailableException` when the
-  /// passkey gives no usable PRF output, what reading the remembered
-  /// credential id throws, or what revoking the other enrollments or
-  /// finishing the activation throws; none leaves a session open or the
-  /// device's hints rewritten.
+  /// passkey gives no usable PRF output, an [Error] from reading a remembered
+  /// id, or what revoking the other enrollments or finishing the activation
+  /// throws; none leaves a session open or the device's hints rewritten.
   ///
   /// The device's passkey hints are a convenience: a write of them that
   /// fails with an [Exception] is logged as a warning naming [atSign], and

@@ -85,21 +85,20 @@ Future<PasskeySession> onboardNewAtSign(
 /// [atSign] is always required: the passkey proves it, and a wrong one finds
 /// no pointer. A device that remembers [atSign]'s passkey and enrollment goes
 /// straight to PKAM; one that does not asserts any discoverable passkey and
-/// finds the enrollment through the public pointer. A remembered enrollment
-/// id that IndexedDB cannot read, or whose stored bytes are not UTF-8,
-/// counts as not remembered, and a failed write of the passkey hints is
-/// logged as a warning and the session returned.
+/// finds the enrollment through the public pointer. A remembered credential
+/// id or enrollment id that IndexedDB cannot read, or an enrollment id whose
+/// stored bytes are not UTF-8, counts as not remembered, and a failed write
+/// of the passkey hints is logged as a warning and the session returned.
 ///
 /// Throws [PasskeyLostException] when the passkey cannot open [atSign] (no
 /// credential, no pointer, PKAM refused), [PublicKeyMismatchException] when
 /// the restored public keys are not the published ones,
 /// [MissingAtKeysDocumentException] when the enrollment has no document,
 /// [SetupLockTimeoutException] when another tab holds the setup lock too long,
-/// [IndexedDbException] when this browser's passkey database will not open or
-/// the remembered credential id cannot be read, and what finishing an
-/// unfinished onboarding throws, such as the `AtEnrollmentException` of a
-/// revoke that leaves another approved enrollment; the next login tries
-/// again.
+/// [IndexedDbException] when this browser's passkey database will not open,
+/// and what finishing an unfinished onboarding throws, such as the
+/// `AtEnrollmentException` of a revoke that leaves another approved
+/// enrollment; the next login tries again.
 ///
 /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException` means
 /// the prompt failed, and the user may simply have cancelled it: WebAuthn
