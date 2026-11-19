@@ -1,31 +1,34 @@
 Feature: Completing an activation publishes the encryption public key, then deletes the CRAM secret
-  completeActivationOf finishes an activation started with its completion
-  deferred, on a connection authenticated as the atSign's first enrollment.
-  It publishes the encryption public key it is given as
-  public:publickey@<atSign> with ttr -1, replacing any key already
-  published, and then deletes the CRAM secret. Given no key, it publishes
-  nothing and deletes the CRAM secret all the same. The update command
-  carries the key as it is, so a key must be one line.
+  completeActivationOf finishes an activation, at the end of AtAuth.onboard
+  or later when the activation deferred it, on a connection its caller has
+  authenticated as the enrollment the activation created. It publishes the
+  encryption public key it is given as public:publickey@<atSign> with ttr
+  -1, replacing any key already published, and then deletes the CRAM
+  secret. Given no key, it publishes nothing and deletes the CRAM secret all
+  the same. The update command carries the key as it is, so a key must be
+  one line.
 
   Races: of two completions of one activation, the later publish replaces
   the earlier key, and a CRAM secret the first deleted counts as deleted for
   the second.
   Replay: nothing is issued or checked; the connection is already
   authenticated. Denial of service: at most two commands, on the caller's
-  own connection. Forgery and impersonation: the connection is
-  authenticated as the atSign's first enrollment, so only that enrollment's
-  holder publishes the key or deletes the CRAM secret.
+  own connection. Forgery and impersonation: it sends on the connection it
+  is given and checks nothing about it, so its callers authenticate that
+  connection as the activation's enrollment first; until the CRAM secret is
+  deleted, its holder can send the same two commands, and that holder
+  already owns the atSign.
 
   Scenario: A completion publishes the encryption public key with ttr -1, then deletes the CRAM secret
     # packages/at_auth/test/complete_activation_test.dart
-    Given a connection authenticated as @alice's first enrollment
+    Given a connection authenticated as the enrollment @alice's activation created
     When the activation is completed with an encryption public key
     Then the key is published as public:publickey@alice with ttr -1
     And the CRAM secret is deleted after it
 
   Scenario: A completion with no encryption public key deletes only the CRAM secret
     # packages/at_auth/test/complete_activation_test.dart
-    Given a connection authenticated as @alice's first enrollment
+    Given a connection authenticated as the enrollment @alice's activation created
     When the activation is completed with no encryption public key
     Then nothing is published
     And the CRAM secret is deleted

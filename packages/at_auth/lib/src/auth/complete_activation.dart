@@ -6,7 +6,7 @@ import 'package:at_utils/at_logger.dart';
 final _logger = AtSignLogger('completeActivation');
 
 /// Completes the activation of [atSign] over [atLookUp], a connection
-/// authenticated as the atSign's first enrollment: publishes
+/// authenticated as the enrollment the activation created: publishes
 /// [encryptionPublicKey] as `public:publickey@<atSign>` with `ttr:-1`, then
 /// deletes the CRAM secret.
 ///
