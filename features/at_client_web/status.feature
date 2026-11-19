@@ -2,8 +2,12 @@ Feature: The connection status is readable and observable
 
   status returns the latest state and onStatus reports each change until the
   caller calls the function it returned. The states are connecting, connected,
-  waiting:network, waiting:server and waiting:auth. There is no retry call;
-  the client reconnects by itself.
+  waiting:network, waiting:server and waiting:auth. There is no retry call; the
+  client reconnects by itself.
+
+  These scenarios describe the Dart bridge that @atsign/at_client_web wraps; the
+  npm package turns {code, message} into AtError and the callbacks into async
+  iterators, and specifies that in at_js.
 
   Scenario: onStatus delivers changes and returns an off function
     Given an open client with a listener
@@ -19,4 +23,4 @@ Feature: The connection status is readable and observable
   Scenario: onStatus after close answers {code: closed}
     Given a closed session
     When onStatus is called
-    Then it answers a rejection object with code closed
+    Then it returns {code: closed} instead of the off function

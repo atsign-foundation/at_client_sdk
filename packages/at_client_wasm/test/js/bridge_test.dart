@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 class _FakeAdapter implements JsCollection {
   final calls = <String>[];
   Object? failure;
+  var missing = false;
   JsItem item = {
     'id': 'i1',
     'owner': '@alice',
@@ -45,8 +46,8 @@ class _FakeAdapter implements JsCollection {
       _run('create', () => item, (data, id, sharedWith));
 
   @override
-  Future<JsItem?> get(JsItemAddress address) =>
-      _run('get', () => item, (address.id, address.owner.toString()));
+  Future<JsItem?> get(JsItemAddress address) => _run('get',
+      () => missing ? null : item, (address.id, address.owner.toString()));
 
   @override
   Future<JsListing> list() => _run('list', () => listing);
@@ -631,6 +632,29 @@ void main() {
         'v'.toJS
       ]));
       expect(r.code, 'closed');
+      for (final (method, args) in [
+        (
+          'notify',
+          <JSAny?>[
+            _obj({'key': 'k'}),
+            'v'.toJS
+          ]
+        ),
+        (
+          'collection',
+          <JSAny?>[
+            'c'.toJS,
+            _obj({'type': 't'})
+          ]
+        ),
+        ('otp', <JSAny?>[]),
+        ('pendingEnrollments', <JSAny?>[]),
+        ('approve', <JSAny?>['e1'.toJS]),
+        ('deny', <JSAny?>['e1'.toJS]),
+      ]) {
+        expect((await _rejected(_call(s, method, args))).code, 'closed',
+            reason: method);
+      }
     });
 
     group('subscribe errors', () {
@@ -652,7 +676,7 @@ void main() {
       test('subscribe with no onError does not throw', () {
         _call(s, 'subscribe', ['x'.toJS, (() {}).toJS]);
 
-        session.errorSink!(StateError('x'));
+        expect(() => session.errorSink!(StateError('x')), returnsNormally);
       });
 
       test('a non-function onError answers a rejection object', () {
@@ -757,13 +781,16 @@ void main() {
         expect((item['data']! as JSObject)['n'].dartify(), 1);
       });
 
-      test('collection item data is a null-prototype object', () async {
+      test('collection item data is a null-prototype object (T6.3)', () async {
         adapter.item = {
           ...adapter.item,
           'data': <String, Object?>{
             '__proto__': 'p',
             'toString': 'ts',
-            'inner': {'__proto__': 1}
+            'inner': {'__proto__': 1},
+            'list': [
+              {'__proto__': 1}
+            ]
           }
         };
 
@@ -775,11 +802,13 @@ void main() {
         final object = globalContext['Object']! as JSObject;
         expect(object.callMethod('getPrototypeOf'.toJS, data), isNull);
         expect(object.callMethod('keys'.toJS, data).dartify(),
-            unorderedEquals(['__proto__', 'toString', 'inner']));
+            unorderedEquals(['__proto__', 'toString', 'inner', 'list']));
         expect(
             object.callMethod(
                 'getPrototypeOf'.toJS, data['inner']! as JSObject),
             isNull);
+        final element = (data['list']! as JSArray).toDart.single! as JSObject;
+        expect(object.callMethod('getPrototypeOf'.toJS, element), isNull);
         expect(object.callMethod('getPrototypeOf'.toJS, item), isNotNull);
       });
 
@@ -803,6 +832,12 @@ void main() {
           _obj({'id': 'i1', 'owner': 'bob'})
         ]));
         expect(adapter.last, ('i1', '@bob'));
+        adapter.missing = true;
+        expect(
+            await _resolved(_call(c, 'get', [
+              _obj({'id': 'gone'})
+            ])),
+            isNull);
       });
 
       test('collection list and query return {items, unreadable}', () async {
@@ -832,6 +867,8 @@ void main() {
           'code': CollectionErrorCodes.unreadable
         });
         expect((queried['items']! as JSArray).length, 1);
+        expect((queried['unreadable'].dartify() as List).single,
+            containsPair('id', 'u1'));
         expect(adapter.last, [('a.b', '>=', 3), ('c', 'isNull', null)]);
       });
 
@@ -861,7 +898,8 @@ void main() {
         expect(adapter.last, ('i1', '@alice', false));
       });
 
-      test('a collection failure rejects with its code and fields', () async {
+      test('a collection failure rejects with its code and fields (T6.4)',
+          () async {
         adapter.failure = JsCollectionsError(
             CollectionErrorCodes.partialFailure, 'some writes failed',
             id: 'i1',
@@ -919,7 +957,7 @@ void main() {
       });
 
       test(
-          'collection watch delivers events, including unknown, and unsubscribes',
+          'collection watch delivers events, including unknown, and unsubscribes (T6.5, T6.8)',
           () async {
         final events = <Object?>[];
         final errors = <Object?>[];
@@ -948,6 +986,7 @@ void main() {
         final r = _call(c, 'watch', [5.toJS])! as JSObject;
 
         expect(r['code'].dartify(), 'internal');
+        expect(r['message'].dartify() as String, contains('onEvent'));
       });
     });
 

@@ -3,6 +3,10 @@ Feature: An approving device enrolls another browser
   otp, pendingEnrollments, approve and deny need a session with the __manage
   access. The approving device approves a request exactly as filed.
 
+  These scenarios describe the Dart bridge that @atsign/at_client_web wraps; the
+  npm package turns {code, message} into AtError and the callbacks into async
+  iterators, and specifies that in at_js.
+
   Scenario: each call rejects with unsupported without __manage
     Given an open session without the __manage access
     When otp, pendingEnrollments, approve or deny is called

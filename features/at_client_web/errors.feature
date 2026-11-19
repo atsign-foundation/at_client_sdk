@@ -1,8 +1,13 @@
-Feature: Every failure is an AtError whose code the caller branches on
+Feature: Every failure carries a code the caller branches on
 
-  A call rejects with an AtError. A {code, message} the bridge reports keeps
-  its code when it is a known one; anything else is internal. An argument the
-  bridge rejects names the parameter, never the value it received.
+  A call rejects with a plain {code, message} object, which the npm package
+  wraps in an AtError. A {code, message} the bridge reports keeps its code when
+  it is a known one; anything else is internal. An argument the bridge rejects
+  names the parameter, never the value it received.
+
+  These scenarios describe the Dart bridge that @atsign/at_client_web wraps; the
+  npm package turns {code, message} into AtError and the callbacks into async
+  iterators, and specifies that in at_js.
 
   Scenario: an unmapped exception rejects internal with a fixed message
     Given a failure inside the Dart bridge that no code maps

@@ -1,10 +1,14 @@
 Feature: notify sends to another atSign and subscribe delivers only genuine events
 
   notify sends a value on a key shared with another atSign and resolves true
-  when it was delivered. subscribe registers when called and hands the app
-  events as an async iterator. A notification this session sent, or one whose
-  key owner is not its sender, is never delivered. The iterator buffers up to
-  4096 events; past that it ends and its next() rejects overflow.
+  when it was delivered. subscribe registers when called and calls the event
+  callback with each event and returns the function that unsubscribes. A
+  notification this session sent, or one whose key owner is not its sender, is
+  never delivered.
+
+  These scenarios describe the Dart bridge that @atsign/at_client_web wraps; the
+  npm package turns {code, message} into AtError and the callbacks into async
+  iterators, and specifies that in at_js.
 
   Scenario: notify resolves true when delivered and false when not
     Given an open session and a recipient
@@ -54,11 +58,16 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
 
   Scenario: subscribe errors go to onError as {code, message}
     Given a subscription with an onError function
-    When the stream reports an error
+    When the session reports a subscription error that no code maps
     Then onError receives {code: internal, message: 'internal error'}
-    And the subscription survives
+
+  Scenario: a stream error reaches onError and the subscription survives
+    Given a subscription with an onError function
+    When the notification stream reports an error and then a notification
+    Then onError receives the error
+    And the notification is still delivered
 
   Scenario: subscribe with no onError does not throw
     Given a subscription with no onError
-    When the stream reports an error
+    When the session reports a subscription error
     Then nothing is thrown
