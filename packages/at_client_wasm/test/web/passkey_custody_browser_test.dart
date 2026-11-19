@@ -92,11 +92,15 @@ class _Client implements AtClient {
 }
 
 class _Session implements EnrollmentSession {
-  _Session(this.server, this.enrollmentId);
+  _Session(this.server, this.enrollmentId, {required this.enrolled});
 
   final _Server server;
   @override
   final String enrollmentId;
+
+  /// Whether this session came from an activation, so holds @keys; a session
+  /// from an authentication holds none.
+  final bool enrolled;
   var closed = false;
 
   /// How many times [close] ran, whoever called it.
@@ -105,8 +109,16 @@ class _Session implements EnrollmentSession {
   /// The keys IO [openClient] was last given.
   WrittenAtKeysIo? openedOn;
 
+  /// [_Server.keys]. Throws [StateError] on a session that was
+  /// authenticated, as the real one does.
   @override
-  Future<Map<String, dynamic>> atKeys() async => server.keys;
+  Future<Map<String, dynamic>> atKeys() async {
+    if (!enrolled) {
+      throw StateError('this session was authenticated, not enrolled: it '
+          'holds no @keys');
+    }
+    return server.keys;
+  }
 
   @override
   Future<PublishedEncryptionKey> publishedEncryptionKey(
@@ -223,7 +235,7 @@ class _Gateway implements EnrollmentGateway {
         server.apkamPublicKeys[enrollmentId] != apkamKeyPair.publicKey) {
       throw PkamRefusedException(enrollmentId);
     }
-    return lastSession = _Session(server, enrollmentId);
+    return lastSession = _Session(server, enrollmentId, enrolled: false);
   }
 
   @override
@@ -239,7 +251,7 @@ class _Gateway implements EnrollmentGateway {
     server.approved.add(eid);
     final died = dieAfterActivation;
     if (died != null) throw died;
-    return lastSession = _Session(server, eid);
+    return lastSession = _Session(server, eid, enrolled: true);
   }
 }
 
