@@ -162,7 +162,7 @@ void main() {
       ..failWrites = true
       ..writeFailure = HintStoreException('quota exceeded writing $_eid');
 
-    final session = await custody(device).open(atSign: _atSign);
+    final session = kept(await custody(device).open(atSign: _atSign));
 
     expect(session.client.connection.current.isOnline, isTrue);
     expect(session.client.enrollmentId, enrollmentId);
