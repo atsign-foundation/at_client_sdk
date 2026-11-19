@@ -2,9 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-// ignore: implementation_imports
-import 'package:at_client/src/enroll/authorised_namespaces.dart'
-    show ownGrantsOf;
 
 import '../collections/js_collections_adapter.dart';
 
