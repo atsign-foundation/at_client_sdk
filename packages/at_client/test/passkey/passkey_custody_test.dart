@@ -1376,7 +1376,8 @@ void main() {
           reason: "the warning carries no exception's message");
     });
 
-    for (final (read, fail) in <(String, void Function(LegacyHints, Object))>[
+    for (final (read, breakRead)
+        in <(String, void Function(LegacyHints, Object))>[
       ('credential id', (hints, e) => hints.credentialIdReadFailure = e),
       ('enrollment id', (hints, e) => hints.enrollmentIdReadFailure = e),
     ]) {
@@ -1387,7 +1388,7 @@ void main() {
         final device = FakeHints()
           ..credentials[_atSign] = Uint8List.fromList([1])
           ..ids[_atSign] = 'eid1';
-        fail(device, broken);
+        breakRead(device, broken);
         authenticator
           ..gets = 0
           ..issuedPrf.clear();
@@ -1405,6 +1406,47 @@ void main() {
         expect(device.ids, {_atSign: 'eid1'},
             reason: 'the hints are left as they were');
         expect(device.credentials[_atSign], [1]);
+      });
+    }
+
+    for (final (read, breakRead) in <(String, void Function(LegacyHints))>[
+      (
+        'credential id',
+        (hints) => hints.credentialIdReadFailure =
+            HintStoreException('cannot read the credential id')
+      ),
+      (
+        'enrollment id',
+        (hints) => hints.enrollmentIdReadFailure =
+            HintStoreException('cannot read the enrollment id')
+      ),
+    ]) {
+      test(
+          'a read of the remembered $read that fails before the setup lock '
+          'and not under it uses the hints, and warns of nothing', () async {
+        breakRead(hints..readFailuresOnce = true);
+        authenticator.gets = 0;
+        setupLock.names.clear();
+        logs.records.clear();
+
+        final session = await custody().open(atSign: _atSign);
+
+        expect(hints.credentialIdReadFailure ?? hints.enrollmentIdReadFailure,
+            isNull,
+            reason: 'the control: the first read failed');
+        expect(setupLock.names, [setupLockName(_lockPrefix, _atSign)],
+            reason: 'the failed read sent the open under the setup lock');
+        expect(authenticator.gets, 1);
+        expect(authenticator.lastAllowCredential, Uint8List.fromList([1]),
+            reason: 'the ceremony is narrowed to the remembered credential');
+        expect(server.pointerReads, 0, reason: 'no pointer is read');
+        expect(gateway.authenticated, ['eid1'],
+            reason: 'PKAM is for the remembered enrollment');
+        expect(session.client.enrollmentId, 'eid1');
+        expect(logs.at('WARNING').where((m) => m.contains('could not be read')),
+            isEmpty,
+            reason: 'only the read under the setup lock warns, and it read '
+                'the hints');
       });
     }
 

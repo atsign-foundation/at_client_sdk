@@ -557,6 +557,10 @@ class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
   /// Makes [enrollmentId] throw this.
   Object? enrollmentIdReadFailure;
 
+  /// Makes [credentialIdReadFailure] and [enrollmentIdReadFailure] each fail
+  /// one read only, as a store that fails and then recovers does.
+  var readFailuresOnce = false;
+
   final credentials = <String, Uint8List>{};
   final ids = <String, String>{};
 
@@ -565,7 +569,10 @@ class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
 
   @override
   Future<Uint8List?> credentialId(String atSign) async {
-    if (credentialIdReadFailure case final e?) throw e;
+    if (credentialIdReadFailure case final e?) {
+      if (readFailuresOnce) credentialIdReadFailure = null;
+      throw e;
+    }
     return credentials[atSign];
   }
 
@@ -578,7 +585,10 @@ class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
 
   @override
   Future<String?> enrollmentId(String atSign) async {
-    if (enrollmentIdReadFailure case final e?) throw e;
+    if (enrollmentIdReadFailure case final e?) {
+      if (readFailuresOnce) enrollmentIdReadFailure = null;
+      throw e;
+    }
     return ids[atSign];
   }
 
