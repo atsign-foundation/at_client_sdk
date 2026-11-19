@@ -196,6 +196,9 @@ const _encryptPublicKey = 'aesEncryptPublicKey';
 /// The ids a device remembers for an atSign.
 typedef _Hints = ({Uint8List credentialId, String enrollmentId});
 
+/// The flow that remembers a passkey, as a warning names it.
+enum _Flow { onboarding, login }
+
 /// Raised inside [PasskeyCustody.open] when the remembered ids led to no
 /// credential or a refused PKAM.
 class _StaleHints extends AtException {
@@ -285,6 +288,11 @@ class PasskeyCustody {
   /// onboarding left, then publishes the encryption public key. It then
   /// remembers the passkey on the device and returns the session of the
   /// client running as the new enrollment.
+  ///
+  /// The device's passkey hints are a convenience: a write of them that
+  /// fails with an [Exception] is logged as a warning naming [atSign], and
+  /// the onboarding returns its session all the same, leaving the next [open]
+  /// to save them. One that fails with an [Error] fails the onboarding.
   ///
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
@@ -379,7 +387,8 @@ class PasskeyCustody {
     final (:vault, :session, :store, :atKeys) = written;
     try {
       await _completeActivation(session, atKeys);
-      await _remember(canonical, credentialId, session.enrollmentId);
+      await _remember(canonical, credentialId, session.enrollmentId,
+          flow: _Flow.onboarding);
     } on Object {
       store.close();
       await _closeAfterFailedOpen(session);
@@ -428,10 +437,13 @@ class PasskeyCustody {
 
   /// Opens [atSign]'s @keys and returns the session of the client running as
   /// its enrollment. A device that remembers [atSign]'s credential and
-  /// enrollment returns without reading the pointer; any other (one id alone
-  /// counts as none) asserts any discoverable passkey and finds the
-  /// enrollment through the pointer, after waiting for [atSign]'s setup lock
-  /// so that an onboarding in another tab finishes first.
+  /// enrollment returns without reading the pointer; any other asserts any
+  /// discoverable passkey and finds the enrollment through the pointer,
+  /// after waiting for [atSign]'s setup lock so that an onboarding in another
+  /// tab finishes first. One id alone counts as none, and so does a
+  /// remembered credential id or enrollment id whose read fails with an
+  /// [Exception], or an enrollment id outside the enrollment id alphabet,
+  /// which is never sent; each is logged as a warning naming [atSign].
   ///
   /// When the remembered ceremony yields no credential, or the atServer
   /// refuses PKAM for the remembered enrollment, the open is retried once, as
@@ -440,8 +452,8 @@ class PasskeyCustody {
   /// deleted passkey, so a cancel is retried too, and a second failure is a
   /// lost passkey.
   ///
-  /// A remembered or pointed enrollment id outside the id alphabet is a lost
-  /// passkey, refused before any PKAM.
+  /// An enrollment id the pointer holds outside the enrollment id alphabet is
+  /// a lost passkey, refused before any PKAM.
   ///
   /// Once the document is read, an open without remembered ids, including
   /// the retry without them, finishes the activation an onboarding may have
@@ -463,9 +475,16 @@ class PasskeyCustody {
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
   /// [PublicKeyMismatchException], a `PrfUnavailableException` when the
-  /// passkey gives no usable PRF output, or what revoking the other
-  /// enrollments or finishing the activation throws; none leaves a session
-  /// open or the device's hints rewritten.
+  /// passkey gives no usable PRF output, an [Error] from reading a remembered
+  /// id, or what revoking the other enrollments or finishing the activation
+  /// throws; none leaves a session open or the device's hints rewritten.
+  ///
+  /// The device's passkey hints are a convenience: a write of them that
+  /// fails with an [Exception] is logged as a warning naming [atSign], and
+  /// the open returns its session all the same, leaving the next open without
+  /// hints to save them. One that fails with an [Error] is thrown, and the
+  /// session is closed; when the two ids go to separate stores, the first may
+  /// already be written.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
@@ -479,7 +498,7 @@ class PasskeyCustody {
   /// cannot be taken (for example a `SetupLockTimeoutException`).
   Future<PasskeySession> open({required String atSign}) async {
     final canonical = canonicalPasskeyAtSign(atSign);
-    final hints = await _savedHints(canonical);
+    final hints = await _savedHints(canonical, warn: false);
     if (hints == null) return _lockedOpen(canonical, useSavedHints: true);
     try {
       return await _attempt(canonical, hints);
@@ -500,7 +519,8 @@ class PasskeyCustody {
   /// [_lockedOpen] for a caller that already holds [canonical]'s setup lock.
   Future<PasskeySession> _openHoldingLock(String canonical,
       {required bool useSavedHints}) async {
-    final hints = useSavedHints ? await _savedHints(canonical) : null;
+    final hints =
+        useSavedHints ? await _savedHints(canonical, warn: true) : null;
     if (hints == null) return _attempt(canonical, null);
     try {
       return await _attempt(canonical, hints);
@@ -511,11 +531,48 @@ class PasskeyCustody {
 
   /// The credential and enrollment ids this device remembers for [canonical],
   /// or null unless it remembers both: one of the two alone, as a write that
-  /// stopped halfway leaves, counts as no hints.
-  Future<_Hints?> _savedHints(String canonical) async {
-    final credentialId = await credentials.credentialId(canonical);
-    final enrollmentId = await enrollmentIds.enrollmentId(canonical);
+  /// stopped halfway leaves, counts as no hints. So does a remembered id
+  /// whose read fails with an [Exception], and an enrollment id outside the
+  /// enrollment id alphabet, which is never sent; each is logged as a warning
+  /// when [warn] is true, which only the read under the setup lock passes, so
+  /// an open warns once. The credential id is read first, and a failed read
+  /// of it leaves the enrollment id unread. An [Error] from either read is
+  /// thrown.
+  Future<_Hints?> _savedHints(String canonical, {required bool warn}) async {
+    final Uint8List? credentialId;
+    try {
+      credentialId = await credentials.credentialId(canonical);
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message.
+      if (warn) {
+        _logger.warning('the remembered credential id of $canonical could '
+            'not be read (${e.runtimeType}); logging in without passkey hints');
+      }
+      return null;
+    }
+    final String? enrollmentId;
+    try {
+      enrollmentId = await enrollmentIds.enrollmentId(canonical);
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message.
+      if (warn) {
+        _logger.warning('the remembered enrollment id of $canonical could '
+            'not be read (${e.runtimeType}); logging in without passkey hints');
+      }
+      return null;
+    }
     if (credentialId == null || enrollmentId == null) return null;
+    try {
+      checkEnrollmentId(enrollmentId);
+    } on ArgumentError {
+      // NOTE: the warning never carries the enrollment id.
+      if (warn) {
+        _logger.warning('the remembered enrollment id of $canonical is '
+            'outside the enrollment id alphabet; logging in without passkey '
+            'hints');
+      }
+      return null;
+    }
     return (credentialId: credentialId, enrollmentId: enrollmentId);
   }
 
@@ -568,7 +625,8 @@ class PasskeyCustody {
                 session, {_encryptPublicKey: unpublished});
           }
         }
-        await _remember(canonical, unlocked.credentialId, enrollmentId);
+        await _remember(canonical, unlocked.credentialId, enrollmentId,
+            flow: _Flow.login);
       } on Object {
         store.close();
         await _closeAfterFailedOpen(session);
@@ -688,16 +746,27 @@ class PasskeyCustody {
     return flat == null || flat == pair.publicKey;
   }
 
-  /// Remembers the passkey and enrollment of [atSign]: both ids in one write
-  /// when the hint stores are one [PasskeyHintStore], otherwise one put each.
+  /// Remembers the passkey and enrollment of [atSign] at the end of [flow]:
+  /// both ids in one write when the hint stores are one [PasskeyHintStore],
+  /// otherwise one put each. A write that fails with an [Exception] is logged
+  /// as a warning and dropped, so the flow goes on without saved hints; one
+  /// that fails with an [Error] is thrown.
   Future<void> _remember(
-      String atSign, Uint8List credentialId, String enrollmentId) async {
-    final combined = credentials;
-    if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
-      await combined.putHint(atSign, credentialId, enrollmentId);
-    } else {
-      await credentials.putCredentialId(atSign, credentialId);
-      await enrollmentIds.putEnrollmentId(atSign, enrollmentId);
+      String atSign, Uint8List credentialId, String enrollmentId,
+      {required _Flow flow}) async {
+    try {
+      final combined = credentials;
+      if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
+        await combined.putHint(atSign, credentialId, enrollmentId);
+      } else {
+        await credentials.putCredentialId(atSign, credentialId);
+        await enrollmentIds.putEnrollmentId(atSign, enrollmentId);
+      }
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message or the
+      // enrollment id.
+      _logger.warning('the passkey hints of $atSign were not saved after the '
+          '${flow.name} (${e.runtimeType})');
     }
     await _requestPersist();
   }
