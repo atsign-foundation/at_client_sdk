@@ -107,6 +107,14 @@ class FakeAtServer {
   /// atServer refusing the credential; null accepts it.
   String? pkamRefusal;
 
+  /// The whole line the atServer answers each `from:` with while set, in
+  /// place of the challenge [pkamPrivateKey]'s authenticator signs.
+  String? pkamFromAnswer;
+
+  /// Whether the atServer drops each connection on its `from:`, as a network
+  /// failing mid-handshake does, while [pkamPrivateKey] is set.
+  bool dropOnFrom = false;
+
   /// Whether each lookup runs the authenticator its caller hands in, whose
   /// `from:` this server answers with a challenge and whose `pkam:` or `cram:`
   /// it accepts, in place of this server's own and of [pkamPrivateKey]'s.
@@ -250,6 +258,15 @@ class FakeAtServer {
       return;
     }
     if (pkamPrivateKey != null && command.startsWith('from:')) {
+      if (dropOnFrom) {
+        unawaited(socket.serverCloses());
+        return;
+      }
+      final answer = pkamFromAnswer;
+      if (answer != null) {
+        unawaited(socket.serverSends('$answer\n@'));
+        return;
+      }
       const uuid = Uuid();
       unawaited(
           socket.serverSends('data:_${uuid.v4()}$atSign:${uuid.v4()}\n@'));

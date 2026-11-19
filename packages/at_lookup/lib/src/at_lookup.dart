@@ -19,7 +19,8 @@ import 'package:at_lookup/src/util/error_response.dart'
 /// authenticates is one instance and two answers.
 ///
 /// Return false, or throw [UnAuthenticatedException], when the atServer
-/// refuses the credential: only those count as a refusal, which
+/// answered without letting the client in, by refusing the credential or
+/// by any other answer: only those count as turned away, which
 /// [AtLookupMuxable.notifications] reports and a notification reconnect waits
 /// longer after. A reconnect retries any other exception as a failure to
 /// reach the atServer.
@@ -280,11 +281,11 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// Listen as soon as you read it: until a listener arrives, notifications
   /// are held without bound, and none of that back-pressure applies.
   ///
-  /// While notifying, each reconnect attempt the atServer refuses, one that
-  /// fails with an [UnAuthenticatedException], arrives here as that exception
-  /// in an error event, and the stream stays open: reconnecting carries on,
-  /// waiting longer after each refusal, up to 5 minutes between attempts.
-  /// Listen with an `onError`, or each refusal is an unhandled error.
+  /// While notifying, each reconnect attempt the atServer turns away, one
+  /// that fails with an [UnAuthenticatedException], arrives here as that
+  /// exception in an error event, and the stream stays open: reconnecting
+  /// carries on, waiting longer after each, up to 5 minutes between attempts.
+  /// Listen with an `onError`, or each is an unhandled error.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.

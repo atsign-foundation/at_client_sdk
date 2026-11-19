@@ -136,10 +136,10 @@ class Monitor {
     Duration(seconds: 34),
   ];
 
-  /// The delays a refused first start waits on: at_lookup's
-  /// [AtLookupImpl.notificationRefusalReconnectDelays], so a refused start
-  /// and a refused reconnect slow down alike. Settable so a test of several
-  /// refusals does not wait minutes.
+  /// The delays a first start the atServer turned away waits on: at_lookup's
+  /// [AtLookupImpl.notificationRefusalReconnectDelays], so a start and a
+  /// reconnect turned away slow down alike. Settable so a test of several
+  /// such attempts does not wait minutes.
   @visibleForTesting
   List<Duration> startRefusalRetryDelays =
       AtLookupImpl.notificationRefusalReconnectDelays;
@@ -165,7 +165,8 @@ class Monitor {
   /// connection to the atServer, and it is the one connection a passive
   /// client keeps open, so it is how the network's return gets noticed. It is
   /// told `refused`, with the cause, each time the atServer refuses this
-  /// monitor's connection. A monitor built without one tells nobody.
+  /// monitor's connection, and nothing when an attempt fails any other way.
+  /// A monitor built without one tells nobody.
   final AtConnection? connection;
 
   Monitor({
@@ -264,16 +265,17 @@ class Monitor {
         return;
       }
       logger.warning('Failed to start notifications: $e');
-      final refusal = _refusalIn(e);
+      final failure = _failureIn(e);
+      final refusal = failure.refusal;
       if (refusal != null) unawaited(connection?.report(refusal));
-      _scheduleStartRetry(refused: refusal != null);
+      _scheduleStartRetry(turnedAway: failure.turnedAway);
     }
   }
 
   /// Reports a reconnect the atServer refused to [connection]; any other
   /// error on the notification stream is logged.
   void _onNotificationStreamError(Object e) {
-    final refusal = _refusalIn(e);
+    final refusal = _failureIn(e).refusal;
     if (refusal == null) {
       logger.warning('Error on the notification stream: $e');
       return;
@@ -286,27 +288,36 @@ class Monitor {
     unawaited(connection?.report(refusal));
   }
 
-  /// The refused state [error] stands for, or null when it is not a refusal.
+  /// What a failed attempt to open this monitor's connection says, for a
+  /// first start and a reconnect alike.
   ///
-  /// A refusal is an [UnAuthenticatedException], the one failure [lookUp]
-  /// counts as refused when it reconnects, so a first start and a reconnect
-  /// back off alike; [classifyConnectionFailure] names its cause.
-  AtConnectionState? _refusalIn(Object error) =>
-      error is UnAuthenticatedException
-          ? classifyConnectionFailure(error)
-          : null;
+  /// [turnedAway] when the atServer answered without letting this client in,
+  /// an [UnAuthenticatedException], which [lookUp] too waits longer after;
+  /// [refusal] is the refused state to report when that answer refused the
+  /// credentials, as [classifyConnectionFailure] reads it, and null for any
+  /// other failure.
+  ({bool turnedAway, AtConnectionState? refusal}) _failureIn(Object error) {
+    if (error is! UnAuthenticatedException) {
+      return (turnedAway: false, refusal: null);
+    }
+    final state = classifyConnectionFailure(error);
+    return (
+      turnedAway: true,
+      refusal: state != null && state.isRefused ? state : null,
+    );
+  }
 
   /// Tries the first connect again, while the caller still wants to listen,
-  /// waiting longer when the atServer [refused] the last attempt.
-  void _scheduleStartRetry({required bool refused}) {
+  /// waiting longer when the atServer [turnedAway] the last attempt.
+  void _scheduleStartRetry({required bool turnedAway}) {
     _startRetry?.cancel();
     if (_targetState != NotificationListenerState.listening) return;
     // NOTE: held at the network schedule's last step, so the waits after the
-    // refusals that follow grow from there.
-    if (!refused) {
+    // attempts turned away that follow grow from there.
+    if (!turnedAway) {
       _startRetryIx = _startRetryIx.clamp(0, startRetryDelays.length - 1);
     }
-    final delays = refused ? startRefusalRetryDelays : startRetryDelays;
+    final delays = turnedAway ? startRefusalRetryDelays : startRetryDelays;
     final delay = delays[_startRetryIx.clamp(0, delays.length - 1)];
     _startRetryIx++;
     onStartRetryDelay?.call(delay);

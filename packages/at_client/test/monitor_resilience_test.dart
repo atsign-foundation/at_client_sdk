@@ -513,12 +513,27 @@ void main() {
       cause: AtConnectionCause.unauthenticated,
       answer: 'error:AT0401-Exception: pkam authentication failed',
     ),
-    (
-      code: 'an authentication refusal with a code this build does not know',
-      cause: AtConnectionCause.unauthenticated,
-      answer: 'error:AT9999:a refusal this build has no name for',
-    ),
   ];
+
+  /// Answers that let the client in no more than a refusal does, and are
+  /// not one: [pkam] answers each `pkam:`, [from] each `from:`.
+  const turnedAway = [
+    (
+      answer: 'AT0011',
+      pkam: 'error:AT0011-Exception: Internal server exception',
+      from: null,
+    ),
+    (
+      answer: 'a code this build does not know',
+      pkam: 'error:AT9999:an answer this build has no name for',
+      from: null,
+    ),
+    (answer: 'no challenge to sign', pkam: null, from: 'data:'),
+  ];
+
+  void answerWith(({String answer, String? pkam, String? from}) row) => server
+    ..pkamRefusal = row.pkam
+    ..pkamFromAnswer = row.from;
 
   /// Asserts the connection reads refused with [cause], reported once
   /// however many refusals there were.
@@ -583,6 +598,62 @@ void main() {
         expect(longest(builtStartRefusalDelays), const Duration(minutes: 5),
             reason: 'which grows to 5 minutes');
         refusedWith(row.cause);
+      });
+    }
+  });
+
+  group(
+      'a notification reconnect the atServer answers with <answer> is retried '
+      'less often, leaving the connection state as it was', () {
+    setUp(refusableServer);
+
+    for (final row in turnedAway) {
+      test(row.answer, () async {
+        await startListening(connection: connection);
+        answerWith(row);
+
+        await server.drop();
+        await server.waitUntil(() => reconnectDelays.length >= 6,
+            what: 'five reconnects turned away');
+
+        expect(reconnectDelays.take(6),
+            [ms(20), ms(50), ms(70), ms(90), ms(90), ms(90)],
+            reason: 'the wait after the drop is the network one; after each '
+                'attempt turned away the wait is from the slower schedule, '
+                'longer each time and holding at its last entry');
+        expect(longest(builtReconnectRefusalDelays), const Duration(minutes: 5),
+            reason: 'which grows to 5 minutes');
+        expect(changes.map((c) => (c.outcome, c.cause)),
+            [(AtConnectionOutcome.online, null)],
+            reason: 'an answer that is not a refusal leaves the connection '
+                'state as it was before the drop');
+      });
+    }
+  });
+
+  group(
+      'a notification start the atServer answers with <answer> is retried '
+      'less often, leaving the connection state as it was', () {
+    setUp(refusableServer);
+
+    for (final row in turnedAway) {
+      test(row.answer, () async {
+        answerWith(row);
+
+        await startListening(connection: connection, untilListening: false);
+        await server.waitUntil(() => startDelays.length >= 5,
+            what: 'five starts turned away');
+
+        expect(startDelays.take(5), [ms(30), ms(50), ms(70), ms(90), ms(90)],
+            reason: 'each retry of a start turned away waits from the slower '
+                'schedule, longer each time and holding at its last entry');
+        expect(builtStartRefusalDelays, builtReconnectRefusalDelays,
+            reason: 'the schedule a reconnect turned away waits on');
+        expect(longest(builtStartRefusalDelays), const Duration(minutes: 5),
+            reason: 'which grows to 5 minutes');
+        expect(changes, isEmpty,
+            reason: 'an answer that is not a refusal leaves the connection '
+                'state as it was before the start');
       });
     }
   });
@@ -677,5 +748,116 @@ void main() {
         reason: 'a start that never reached the atServer retries on the '
             'network schedule');
     expect(changes.where((c) => c.isRefused), isEmpty);
+  });
+
+  group(
+      'Given an atServer that answers the notification connection the same '
+      'way every time', () {
+    /// Each answer, how the atServer gives it, whether it turns the client
+    /// away, and the connection state the client reports for it.
+    final answers = <({
+      String answer,
+      void Function(FakeAtServer) give,
+      bool turnedAway,
+      List<(AtConnectionOutcome, AtConnectionCause?)> reported,
+    })>[
+      for (final row in refusals)
+        (
+          answer: row.code,
+          give: (s) => s.pkamRefusal = row.answer,
+          turnedAway: true,
+          reported: [(AtConnectionOutcome.refused, row.cause)],
+        ),
+      (
+        answer: 'AT0028',
+        give: (s) => s.pkamRefusal =
+            'error:AT0028:enrollment_id: $enrollment is expired',
+        turnedAway: true,
+        reported: [
+          (AtConnectionOutcome.refused, AtConnectionCause.invalidEnrollment)
+        ],
+      ),
+      (
+        answer: 'a reply with no code',
+        give: (s) => s.pkamRefusal = 'data:failure',
+        turnedAway: true,
+        reported: [
+          (AtConnectionOutcome.refused, AtConnectionCause.unauthenticated)
+        ],
+      ),
+      for (final row in turnedAway)
+        (
+          answer: row.answer,
+          give: (s) => s
+            ..pkamRefusal = row.pkam
+            ..pkamFromAnswer = row.from,
+          turnedAway: true,
+          reported: const [],
+        ),
+      (
+        answer: 'a failed connect',
+        give: (s) => s.refuseConnects = 1000,
+        turnedAway: false,
+        reported: const [],
+      ),
+      (
+        answer: 'a drop during from:',
+        give: (s) => s.dropOnFrom = true,
+        turnedAway: false,
+        reported: const [],
+      ),
+    ];
+
+    String scheduleOf(Duration delay) => afterRefusal.contains(delay)
+        ? 'slower'
+        : AtLookupImpl.notificationReconnectDelays.contains(delay)
+            ? 'network'
+            : '$delay';
+
+    for (final row in answers) {
+      test(
+          '${row.answer}: when the client starts listening and when it '
+          'reconnects, then both wait on the same schedule and report the '
+          'same connection state', () async {
+        expect(defaultStartRetries, defaultReconnects,
+            reason: 'a start and a reconnect that never reached the atServer '
+                'wait on the same network schedule');
+
+        refusableServer();
+        row.give(server);
+        await startListening(connection: connection, untilListening: false);
+        await server.waitUntil(() => startDelays.length >= 3,
+            what: 'three failed starts');
+        final startWaits = startDelays.take(3).map(scheduleOf).toList();
+        final startReported =
+            changes.map((c) => (c.outcome, c.cause)).toList();
+        await service.stop();
+
+        refusableServer();
+        await startListening(connection: connection);
+        row.give(server);
+        await server.drop();
+        await server.waitUntil(() => reconnectDelays.length >= 4,
+            what: 'three failed reconnects');
+        // NOTE: the first wait after a drop is the network one whatever
+        // follows, so a reconnect's waits after a failure start at the second.
+        final reconnectWaits =
+            reconnectDelays.skip(1).take(3).map(scheduleOf).toList();
+        final reconnectReported =
+            changes.skip(1).map((c) => (c.outcome, c.cause)).toList();
+
+        final waits = List.filled(3, row.turnedAway ? 'slower' : 'network');
+        expect(startWaits, waits,
+            reason: 'a start waits on the slower schedule exactly when the '
+                'atServer answered without letting the client in');
+        expect(reconnectWaits, waits,
+            reason: 'and a reconnect waits on the schedule a start does');
+        expect(startReported, row.reported,
+            reason: 'a start reports a refusal of the credentials, with its '
+                'cause, and nothing for any other failure');
+        expect(reconnectReported, row.reported,
+            reason: 'and a reconnect reports what a start does');
+      });
+    }
   });
 }

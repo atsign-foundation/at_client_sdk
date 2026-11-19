@@ -686,8 +686,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     Duration(seconds: 34),
   ];
 
-  /// Delays between reconnect attempts after the atServer refused the last
-  /// one. Each refusal moves one step on, starting from the step the
+  /// Delays between reconnect attempts after the atServer turned the last
+  /// one away, refusing the credential or answering without letting the
+  /// client in. Each such attempt moves one step on, starting from the step the
   /// [notificationReconnectDelays] had reached, at most its last; the last
   /// here is repeated indefinitely.
   static const List<Duration> notificationRefusalReconnectDelays = [
@@ -707,7 +708,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   ];
 
   /// The [notificationRefusalReconnectDelays] this lookup waits on, settable
-  /// so a test of several refusals does not wait minutes.
+  /// so a test of several attempts turned away does not wait minutes.
   @visibleForTesting
   List<Duration> refusalReconnectDelays = notificationRefusalReconnectDelays;
 
@@ -824,7 +825,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
             _reportRefusal(e);
           } else {
             // NOTE: held at the network schedule's last step, so the waits
-            // after the refusals that follow grow from there.
+            // after the attempts turned away that follow grow from there.
             step = min(step, notificationReconnectDelays.length - 1);
           }
         }
@@ -910,7 +911,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   bool get isNotifying => _isNotifying;
 
   /// See [AtLookupMuxable.notifications]. A reconnect attempt the atServer
-  /// refuses is added to this stream as an error, and the stream stays open.
+  /// turns away is added to this stream as an error, and the stream stays open.
   @override
   Stream<String> get notifications {
     if (_stopped) return const Stream.empty();
