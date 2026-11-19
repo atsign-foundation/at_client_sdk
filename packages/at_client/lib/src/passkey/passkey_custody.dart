@@ -153,7 +153,8 @@ abstract class EnrollmentSession {
 
   /// Writes [state] to this enrollment's completion-due record, which says
   /// that the completion of the activation that created it is due, replacing
-  /// what the record held. No other enrollment can read or write the record.
+  /// what the record held. From at_server p3.15.0 no other enrollment can
+  /// read or write the record.
   Future<void> recordCompletionDue(CompletionDue state);
 
   /// What this enrollment's completion-due record says, or null when there is
@@ -418,9 +419,7 @@ class PasskeyCustody {
   static Future<void> _completeActivation(
       EnrollmentSession session, Map<String, dynamic> atKeys,
       {required bool onboarding}) async {
-    // NOTE: the CRAM secret is deleted before the revoke, and the
-    // completion-due record only after the publish. Only an onboarding
-    // records the CRAM secret's deletion.
+    // NOTE: only an onboarding may record the CRAM secret's deletion.
     await session.completeActivation(const {});
     if (onboarding) {
       await session.recordCompletionDue(CompletionDue.cramSecretDeleted);

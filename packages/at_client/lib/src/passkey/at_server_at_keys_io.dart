@@ -80,7 +80,8 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// The lock needs an atServer from p3.13.0, the first to parse `:nc`. An
 /// expired lock stops blocking at once from p3.16.5. Another enrollment of
 /// the atSign cannot create or delete the lock record from p3.15.0, and a
-/// connection with the atSign's legacy keys cannot from p3.19.0.
+/// connection with the atSign's legacy keys cannot from p3.16.5. A
+/// CRAM-authenticated connection can until p3.19.0.
 ///
 /// The document never holds the enrollment's APKAM private key: a passkey
 /// enrollment derives the pair from the passkey and the atServer must not
