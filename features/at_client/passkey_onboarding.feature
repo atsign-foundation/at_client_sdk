@@ -7,12 +7,16 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   delete once more with it. Only then does it remember the passkey on the
   device and open the client, which, under a posture that creates a signing
   root, mints the Atsign's signing root, filing the root's private key in
-  the @keys document before publishing the root. Until the CRAM secret is
-  deleted, an onboarding that was interrupted is run again with the same
-  CRAM secret, and that retry revokes every other approved enrollment of the
-  Atsign, including those earlier attempts left; once it is deleted the
-  Atsign is onboarded, and logging in with the passkey opens its enrollment
-  and saves the passkey hints the onboarding could not.
+  the @keys document before publishing the root.
+  An onboarding that fails before its pointer is written throws the
+  failure as it is, and is run again with the same CRAM secret while that
+  secret is live; the retry revokes every other approved enrollment of the
+  Atsign, including those earlier attempts left. One that fails with an
+  exception once its pointer is written throws a
+  PasskeyOnboardingIncompleteException naming the Atsign, whose cause is
+  that failure: logging in with the passkey then finishes the onboarding,
+  opens its enrollment and saves the passkey hints the onboarding could
+  not.
   Before it writes the @keys document, onboarding records that the
   activation's completion is due, in a record no other enrollment can read
   or write, `completion-due.<enrollmentId>.a.__e@<atSign>`; once its own
@@ -109,7 +113,9 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   replaced by another enrollment that
   holds `*:rw` and `__manage:rw` makes every login refuse it while the
   completion is not due, until such an enrollment publishes the document's
-  key again.
+  key again. A PasskeyOnboardingIncompleteException is made in the app's
+  own process from its own failure and sends nothing; the login it points
+  to proves the Atsign again with the passkey, under the same setup lock.
 
   Scenario: Onboarding writes the @keys document and pointer before it deletes the CRAM secret
     Given @alice🛠 is not yet activated and its CRAM secret is known
@@ -251,7 +257,7 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   Scenario: A completion whose record delete fails saves no passkey hints, and the next login finishes it
     Given the atServer refuses the delete of @alice🛠's completion-due record once
     When the app onboards @alice🛠 with a new passkey
-    Then the onboarding throws that refusal, after the encryption public key is published
+    Then the onboarding throws a PasskeyOnboardingIncompleteException whose cause is that refusal, after the encryption public key is published
     And this device saves no passkey hints for @alice🛠
     When the app then logs in to @alice🛠 with the passkey on a device with no saved hints
     Then the login finishes the completion and deletes the completion-due record
@@ -322,3 +328,46 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     Given the app onboards @alice🛠 with a new passkey
     When completing the activation fails
     Then nothing is reported to the platform about the new credential
+
+  Scenario Outline: An onboarding that fails once its pointer is written throws a PasskeyOnboardingIncompleteException
+    Given the app onboards @alice🛠 with a new passkey
+    When <step> fails with an exception
+    Then the onboarding throws a PasskeyOnboardingIncompleteException naming @alice🛠, whose cause is that exception
+    And nothing is reported to the platform about the new credential
+
+    Examples:
+      | step                                          |
+      | the CRAM secret's delete                      |
+      | the record that the CRAM secret is deleted    |
+      | the revoke of the other enrollments           |
+      | the publish of the encryption public key      |
+      | the delete of the completion-due record       |
+      | opening the client                            |
+
+  Scenario: An onboarding that fails before its pointer is written throws the failure as it is
+    Given the app onboards @alice🛠 with a new passkey
+    When the write of the pointer fails with an exception
+    Then the onboarding throws that exception
+    And the new credential is reported to the platform as unknown
+
+  Scenario: An Error once the pointer is written is thrown as it is
+    Given the app onboards @alice🛠 with a new passkey
+    When the publish of the encryption public key fails with an Error, not an Exception
+    Then the onboarding throws that Error
+
+  @race
+  Scenario Outline: A login finishes an onboarding whose CRAM secret delete failed, whether or not the secret was deleted
+    Given an onboarding of @alice🛠 threw a PasskeyOnboardingIncompleteException because its CRAM secret's delete failed <how>
+    When the app logs in to @alice🛠 with that passkey on a device with no saved hints
+    Then the login deletes the CRAM secret, revokes the other enrollments, publishes the encryption public key and deletes the completion-due record
+    And it opens the onboarding's enrollment
+
+    Examples:
+      | how                                                   |
+      | after the atServer deleted the secret                 |
+      | before the atServer deleted the secret                |
+
+  Scenario: PasskeyCustody.onboard in a browser throws the same PasskeyOnboardingIncompleteException
+    Given the app onboards @alice🛠 in a browser through PasskeyCustody.onboard
+    When the publish of the encryption public key fails with an exception
+    Then it throws a PasskeyOnboardingIncompleteException naming @alice🛠
