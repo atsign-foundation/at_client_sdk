@@ -393,8 +393,9 @@ and `withTransport` take no `clientConfig:` either.
 
 From at_lookup 4.1.0, `notifications` carries an error event, an
 `UnAuthenticatedException`, for each notification reconnect the atServer
-refuses, and stays open while reconnecting goes on. Listen with an
-`onError`: without one, each refusal is an uncaught error.
+turns away, answering without letting the client in, and stays open while
+reconnecting goes on. Listen with an `onError`: without one, each is an
+uncaught error.
 
 ### A test double for the atServer
 

@@ -131,7 +131,9 @@
   anything is enrolled. Requires at_auth 4.1.0-rc.1.
 - feat: `client.connection` reads refused, with its cause, while the atServer
   refuses the notification connection, and the connection keeps retrying,
-  waiting up to 5 minutes between attempts.
+  waiting up to 5 minutes between attempts. Any other answer that doesn't let
+  the client in, such as AT0011, waits the same way and leaves
+  `client.connection` as it was.
 
 ## 4.0.0
 

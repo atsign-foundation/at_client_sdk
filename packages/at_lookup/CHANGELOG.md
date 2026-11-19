@@ -15,12 +15,13 @@
   `[::1]:8443` gives `[::1]` and `8443`. It used to split on every `:` and
   keep the first two parts, giving `[` and an empty port. `[::1]` with no
   port gives nothing.
-- feat: after the atServer refuses a notification reconnect, reconnecting
-  carries on, waiting longer after each refusal, up to 5 minutes between
-  attempts.
-- feat: `notifications` now carries an error event for each notification
-  reconnect the atServer refuses, and stays open. A listener with no
-  `onError` gets each refusal as an uncaught error, so give it one.
+- feat: after the atServer turns a notification reconnect away, answering
+  without letting the client in, reconnecting carries on, waiting longer
+  after each such answer, up to 5 minutes between attempts.
+- feat: `notifications` now carries an error event, an
+  `UnAuthenticatedException`, for each notification reconnect the atServer
+  turns away, and stays open. A listener with no `onError` gets each as an
+  uncaught error, so give it one.
 - fix: an `error:<code>:<text>` reply throws an `AtLookUpException` with
   that code and text, as the dash and JSON forms do; a reply with no code at
   its head gives `AT0014`.
