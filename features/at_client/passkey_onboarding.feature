@@ -46,6 +46,12 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   secret and deleted it. A login revokes only while the completion is due,
   so a key another enrollment published later is still refused. Each
   revoke is named in a warning.
+  An onboarding whose own delete of the CRAM secret landed but whose
+  answer was lost, or whose record of it could not be written, after
+  another activation tool published a key while the secret was live,
+  leaves the record saying only that the completion is due; a login then
+  refuses that key, and the Atsign needs a new CRAM secret from its
+  registrar.
 
   Races: tabs of one origin onboarding one Atsign wait on its setup lock.
   Two devices onboarding one Atsign with the same CRAM secret at once can
@@ -58,7 +64,14 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   second changes nothing. A login that finishes a completion while the
   onboarding's own last steps run sends the same delete, revoke and
   publish; it reads the record before the published key, so it never finds
-  the completion not due while the key is still unpublished. Two logins
+  the completion not due while the key is still unpublished. Two devices
+  holding the same synced passkey can leave a stale record: when a login
+  on one finishes the completion and deletes the record while the
+  onboarding on the other stalls before it records the CRAM secret's
+  deletion, that write recreates the record, and if the onboarding then
+  stops before its own delete, a later login without saved hints revokes
+  every enrollment approved since and publishes the document's key over
+  any other. Two logins
   with passkeys from two attempts, after a retry's revoke failed, can
   revoke each other's enrollment as two onboardings can; both passkeys
   came from the CRAM secret's holder. A
