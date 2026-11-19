@@ -343,8 +343,10 @@ void main() {
 
     await expectLater(
         () => authenticatorForCramSecret(atSign, cramSecret)(executor),
-        throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
-            'message', 'Cram authentication failed for $atSign: $reply')));
+        throwsA(isA<AtAuthErrorReplyException>()
+            .having((e) => e.message, 'message',
+                'Cram authentication failed for $atSign: $reply')
+            .having((e) => e.errorCode, 'errorCode', 'AT0011')));
     expect(executor.sent, hasLength(1),
         reason: 'no cram: is sent for an error: answer');
   });
