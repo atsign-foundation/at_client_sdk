@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart' show AtKeys, WrittenAtKeysIo;
@@ -255,6 +256,10 @@ class _Authenticator implements PasskeyPort {
   final _id = Uint8List.fromList([7]);
   final prfOutput = Uint8List.fromList(List.generate(32, (i) => i + 3));
 
+  /// The credential each assertion was narrowed to, or null for one that
+  /// asked for any passkey.
+  final asked = <Uint8List?>[];
+
   @override
   Future<PasskeyCreation> create(
           {required String atSign,
@@ -264,8 +269,10 @@ class _Authenticator implements PasskeyPort {
 
   @override
   Future<PasskeyAssertion> get(
-          {required Uint8List evalInput, Uint8List? allowCredential}) async =>
-      (credentialId: _id, prfFirst: Uint8List.fromList(prfOutput));
+      {required Uint8List evalInput, Uint8List? allowCredential}) async {
+    asked.add(allowCredential);
+    return (credentialId: _id, prfFirst: Uint8List.fromList(prfOutput));
+  }
 }
 
 /// One browser profile: an IndexedDB database over real IndexedDB, locks and
@@ -425,6 +432,42 @@ Future<void> _deleteCredential(String dbName, String atSign) async {
   }
 }
 
+/// Stores [bytes] as [atSign]'s enrollment id in database [dbName], as they
+/// are.
+Future<void> _putEnrollmentBytes(
+    String dbName, String atSign, List<int> bytes) async {
+  final db = await _settled(window.indexedDB.open(dbName)) as IDBDatabase;
+  try {
+    final tx = db.transaction('at_client_wasm_enrollments'.toJS, 'readwrite');
+    tx
+        .objectStore('at_client_wasm_enrollments')
+        .put(Uint8List.fromList(bytes).toJS, atSign.toJS);
+    await _committed(tx);
+  } finally {
+    db.close();
+  }
+}
+
+/// Makes this browser's IndexedDB fail every read of a remembered enrollment
+/// id until the test ends, as a read request that errors does; reads of
+/// every other object store go through.
+void _failEnrollmentIdReads() {
+  final prototype =
+      (globalContext['IDBObjectStore'] as JSObject)['prototype'] as JSObject;
+  final get = prototype['get'] as JSFunction;
+  prototype['get'] = ((JSObject store, JSAny? key) {
+    if ((store['name'] as JSString).toDart != 'at_client_wasm_enrollments') {
+      return get.callAsFunction(store, key);
+    }
+    final request = JSObject()
+      ..['error'] = DOMException('The read failed.', 'UnknownError');
+    Timer.run(() => (request['onerror'] as JSFunction)
+        .callAsFunction(request, Event('error')));
+    return request;
+  }).toJSCaptureThis;
+  addTearDown(() => prototype['get'] = get);
+}
+
 Future<List<String>> _databases(String prefix) async {
   final all = (await window.indexedDB.databases().toDart).toDart;
   return [
@@ -522,43 +565,96 @@ void main() {
   });
 
   test(
-      'A failed IndexedDB write of the passkey hints during onboarding reaches '
-      'the app as an IndexedDbException, and a login then logs in', () async {
+      'A failed IndexedDB write of the passkey hints during onboarding returns '
+      'the session, and a login then saves the hints', () async {
     await _seedCredentialHeldBy(device.dbName, '@bob');
     final custody = await device.custody();
 
-    Object? thrown;
-    try {
-      await custody.onboard(atSign: _atSign, cram: _cram);
-    } catch (e) {
-      thrown = e;
-    }
+    final onboarded = await custody.onboard(atSign: _atSign, cram: _cram);
+    device.sessions.add(onboarded);
     device.store.close();
 
-    expect(thrown, isA<IndexedDbException>());
-    final message = (thrown as IndexedDbException).message;
-    expect(message, contains('ConstraintError'),
-        reason: "the exception names the browser's error");
-    final onboarded = device.gateway.lastSession!.enrollmentId;
-    expect(message, isNot(contains(onboarded)),
-        reason: 'the exception never carries the enrollment id being written');
-    expect(message, isNot(contains(_atSign)),
-        reason: 'the exception never carries the atSign');
+    final enrollmentId = device.gateway.lastSession!.enrollmentId;
+    expect(onboarded.client.enrollmentId, enrollmentId,
+        reason: 'a passkey session as the new enrollment, and no '
+            'IndexedDbException');
     expect(server.cramLive, isFalse,
-        reason: 'the hint write fails after the CRAM secret is deleted');
-    expect(device.gateway.lastSession!.closed, isTrue);
+        reason: 'the hint write comes after the CRAM secret is deleted');
     final dump = await _dump(device.dbName);
-    expect(dump['at_client_wasm_credentials'], {
-      '@bob': [7]
-    });
+    expect(
+        dump['at_client_wasm_credentials'],
+        {
+          '@bob': [7]
+        },
+        reason: 'the control: IndexedDB refused the write of the hints');
     expect(dump['at_client_wasm_enrollments'], isEmpty,
-        reason: 'the failed write stored neither id');
+        reason: 'this browser holds no passkey hints for the atSign');
 
     await _deleteCredential(device.dbName, '@bob');
     final loggedIn = await device.open();
-    expect(loggedIn.enrollmentId, onboarded);
+    expect(loggedIn.enrollmentId, enrollmentId);
     expect(server.enrollments, 1, reason: 'the login enrolls nothing');
-    await _expectOnlyHint(device, onboarded);
+    await _expectOnlyHint(device, enrollmentId);
+  });
+
+  test(
+      'A remembered enrollment id whose stored bytes are not UTF-8 counts as '
+      'no hints', () async {
+    final enrollmentId = (await device.onboard()).enrollmentId!;
+    device.store.close();
+    await _putEnrollmentBytes(device.dbName, _atSign, [0x65, 0xff, 0xfe]);
+    final custody = await device.custody();
+    expect(await device.store.credentialId(_atSign), [7],
+        reason: 'the control: this browser remembers the passkey');
+    expect(await device.store.enrollmentId(_atSign), isNull,
+        reason: 'the store reads bytes that are not UTF-8 as no enrollment '
+            'id');
+    device._authenticator.asked.clear();
+    final pointerReads = server.pointerReads;
+
+    final session = await custody.open(atSign: _atSign);
+    device.sessions.add(session);
+
+    expect(device._authenticator.asked, [null],
+        reason: 'the login asserts any passkey');
+    expect(server.pointerReads, pointerReads + 1,
+        reason: "the login reads the passkey's pointer");
+    expect(session.client.enrollmentId, enrollmentId,
+        reason: 'logged in as the pointed enrollment, with no '
+            'IndexedDbException and no FormatException');
+    await _expectOnlyHint(device, enrollmentId);
+  });
+
+  test(
+      'A failed IndexedDB read of the remembered enrollment id counts as no '
+      'hints', () async {
+    final enrollmentId = (await device.onboard()).enrollmentId!;
+    device.store.close();
+    final custody = await device.custody();
+    expect(await device.store.enrollmentId(_atSign), enrollmentId,
+        reason: 'the control: this browser holds the passkey hints');
+    _failEnrollmentIdReads();
+    await expectLater(
+        device.store.enrollmentId(_atSign),
+        throwsA(isA<IndexedDbException>()
+            .having((e) => e.message, 'message', contains('UnknownError'))),
+        reason: 'the control: IndexedDB fails the read of the remembered '
+            'enrollment id');
+    expect(await device.store.credentialId(_atSign), [7],
+        reason: 'the control: the credential id is still read');
+    device._authenticator.asked.clear();
+    final pointerReads = server.pointerReads;
+
+    final session = await custody.open(atSign: _atSign);
+    device.sessions.add(session);
+
+    expect(device._authenticator.asked, [null],
+        reason: 'the login asserts any passkey');
+    expect(server.pointerReads, pointerReads + 1,
+        reason: "the login reads the passkey's pointer");
+    expect(session.client.enrollmentId, enrollmentId,
+        reason: 'logged in as the pointed enrollment, with no '
+            'IndexedDbException');
   });
 
   test('after onboarding and recovery the browser stores hold only the hint',

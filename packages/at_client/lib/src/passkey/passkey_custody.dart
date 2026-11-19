@@ -192,6 +192,9 @@ const _encryptPublicKey = 'aesEncryptPublicKey';
 /// The ids a device remembers for an atSign.
 typedef _Hints = ({Uint8List credentialId, String enrollmentId});
 
+/// The flow that remembers a passkey, as a warning names it.
+enum _Flow { onboarding, login }
+
 /// Raised inside [PasskeyCustody.open] when the remembered ids led to no
 /// credential or a refused PKAM.
 class _StaleHints extends AtException {
@@ -364,7 +367,8 @@ class PasskeyCustody {
     final (:vault, :session, :store, :atKeys) = written;
     try {
       await _completeActivation(session, atKeys);
-      await _remember(canonical, credentialId, session.enrollmentId);
+      await _remember(canonical, credentialId, session.enrollmentId,
+          flow: _Flow.onboarding);
     } on Object {
       store.close();
       await _closeAfterFailedOpen(session);
@@ -496,11 +500,31 @@ class PasskeyCustody {
 
   /// The credential and enrollment ids this device remembers for [canonical],
   /// or null unless it remembers both: one of the two alone, as a write that
-  /// stopped halfway leaves, counts as no hints.
+  /// stopped halfway leaves, counts as no hints. So does a remembered
+  /// enrollment id whose read fails with an [Exception], which is logged as a
+  /// warning, and one outside the enrollment id alphabet, which is never
+  /// sent. A failed read of the credential id, which is read first, is
+  /// thrown.
   Future<_Hints?> _savedHints(String canonical) async {
     final credentialId = await credentials.credentialId(canonical);
-    final enrollmentId = await enrollmentIds.enrollmentId(canonical);
+    final String? enrollmentId;
+    try {
+      enrollmentId = await enrollmentIds.enrollmentId(canonical);
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message.
+      _logger.warning('the remembered enrollment id of $canonical could not '
+          'be read (${e.runtimeType}); logging in without passkey hints');
+      return null;
+    }
     if (credentialId == null || enrollmentId == null) return null;
+    try {
+      checkEnrollmentId(enrollmentId);
+    } on ArgumentError {
+      // NOTE: the warning never carries the enrollment id.
+      _logger.warning('the remembered enrollment id of $canonical is outside '
+          'the enrollment id alphabet; logging in without passkey hints');
+      return null;
+    }
     return (credentialId: credentialId, enrollmentId: enrollmentId);
   }
 
@@ -553,7 +577,8 @@ class PasskeyCustody {
                 session, {_encryptPublicKey: unpublished});
           }
         }
-        await _remember(canonical, unlocked.credentialId, enrollmentId);
+        await _remember(canonical, unlocked.credentialId, enrollmentId,
+            flow: _Flow.login);
       } on Object {
         store.close();
         await _closeAfterFailedOpen(session);
@@ -670,16 +695,28 @@ class PasskeyCustody {
     return flat == null || flat == pair.publicKey;
   }
 
-  /// Remembers the passkey and enrollment of [atSign]: both ids in one write
-  /// when the hint stores are one [PasskeyHintStore], otherwise one put each.
+  /// Remembers the passkey and enrollment of [atSign] at the end of [flow]:
+  /// both ids in one write when the hint stores are one [PasskeyHintStore],
+  /// otherwise one put each. A write that fails with an [Exception] is logged
+  /// as a warning and dropped, so the flow goes on without saved hints; one
+  /// that fails with an [Error] is thrown.
   Future<void> _remember(
-      String atSign, Uint8List credentialId, String enrollmentId) async {
-    final combined = credentials;
-    if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
-      await combined.putHint(atSign, credentialId, enrollmentId);
-    } else {
-      await credentials.putCredentialId(atSign, credentialId);
-      await enrollmentIds.putEnrollmentId(atSign, enrollmentId);
+      String atSign, Uint8List credentialId, String enrollmentId,
+      {required _Flow flow}) async {
+    try {
+      final combined = credentials;
+      if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
+        await combined.putHint(atSign, credentialId, enrollmentId);
+      } else {
+        await credentials.putCredentialId(atSign, credentialId);
+        await enrollmentIds.putEnrollmentId(atSign, enrollmentId);
+      }
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message or the
+      // enrollment id.
+      _logger.warning('the passkey hints of $atSign were not saved at '
+          '${flow.name} (${e.runtimeType}); the next login without them '
+          'saves them');
     }
     await _requestPersist();
   }

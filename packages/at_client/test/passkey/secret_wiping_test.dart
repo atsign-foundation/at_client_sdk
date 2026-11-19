@@ -179,10 +179,24 @@ void main() {
       expectWiped();
     });
 
-    test('wipes everything when remembering the device fails', () async {
+    test('wipes everything when remembering the device fails with an Error',
+        () async {
+      final broken = StateError('the hint store is broken');
+      final fresh = FakeHints()
+        ..failWrites = true
+        ..writeFailure = broken;
+      await expectLater(custody(withHints: fresh).open(atSign: _atSign),
+          throwsA(same(broken)));
+      expectWiped();
+    });
+
+    test(
+        'a session opened when remembering the device fails with an Exception '
+        'holds the vault until it stops', () async {
       final fresh = FakeHints()..failWrites = true;
-      await expectLater(
-          custody(withHints: fresh).open(atSign: _atSign), throwsStateError);
+      final session = await custody(withHints: fresh).open(atSign: _atSign);
+      expectHeldBySession();
+      await session.stop();
       expectWiped();
     });
 

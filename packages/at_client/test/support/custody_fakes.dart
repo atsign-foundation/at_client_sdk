@@ -508,19 +508,30 @@ class FakeSetupLock implements SetupLock {
   }
 }
 
+/// What a hint store fake throws for a failed read or write unless told
+/// otherwise: an [Exception], as a browser's hint store throws.
+class HintStoreException implements Exception {
+  HintStoreException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'HintStoreException: $message';
+}
+
 /// Hints held in memory by one object that is both hint ports and writes the
 /// pair together, as a combined store does.
 class FakeHints extends LegacyHints implements PasskeyHintStore {
   /// The pairs written through [putHint].
   var pairWrites = 0;
 
-  /// Makes [putHint] throw before it stores either id.
+  /// Makes [putHint] throw [writeFailure] before it stores either id.
   var failPairWrites = false;
 
   @override
   Future<void> putHint(
       String atSign, Uint8List credentialId, String enrollmentId) async {
-    if (failWrites || failPairWrites) throw StateError('hint write failed');
+    if (failWrites || failPairWrites) throw writeFailure;
     pairWrites++;
     credentials[atSign] = credentialId;
     ids[atSign] = enrollmentId;
@@ -529,8 +540,22 @@ class FakeHints extends LegacyHints implements PasskeyHintStore {
 
 /// Hints held in memory by a store that is only the two separate ports.
 class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
-  /// Makes every write fail.
+  /// Makes every write throw [writeFailure] before it stores anything.
   var failWrites = false;
+
+  /// Makes [putEnrollmentId] throw [writeFailure] while [putCredentialId]
+  /// still stores, as a pair whose second put does not land.
+  var failEnrollmentIdWrites = false;
+
+  /// What a failed write throws: a [HintStoreException] unless a test sets
+  /// another, such as an [Error].
+  Object writeFailure = HintStoreException('the hint store refused a write');
+
+  /// Makes [credentialId] throw this.
+  Object? credentialIdReadFailure;
+
+  /// Makes [enrollmentId] throw this.
+  Object? enrollmentIdReadFailure;
 
   final credentials = <String, Uint8List>{};
   final ids = <String, String>{};
@@ -539,20 +564,27 @@ class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
   var singleWrites = 0;
 
   @override
-  Future<Uint8List?> credentialId(String atSign) async => credentials[atSign];
+  Future<Uint8List?> credentialId(String atSign) async {
+    if (credentialIdReadFailure case final e?) throw e;
+    return credentials[atSign];
+  }
 
   @override
   Future<void> putCredentialId(String atSign, Uint8List id) async {
-    if (failWrites) throw StateError('hint write failed');
+    if (failWrites) throw writeFailure;
     singleWrites++;
     credentials[atSign] = id;
   }
 
   @override
-  Future<String?> enrollmentId(String atSign) async => ids[atSign];
+  Future<String?> enrollmentId(String atSign) async {
+    if (enrollmentIdReadFailure case final e?) throw e;
+    return ids[atSign];
+  }
 
   @override
   Future<void> putEnrollmentId(String atSign, String id) async {
+    if (failWrites || failEnrollmentIdWrites) throw writeFailure;
     singleWrites++;
     ids[atSign] = id;
   }

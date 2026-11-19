@@ -304,9 +304,14 @@ void main() {
       expect(server.cramDeleted, isEmpty);
     });
 
-    test('a failed remember comes after the CRAM secret is deleted', () async {
-      hints.failWrites = true;
-      await failure();
+    test(
+        'a hint write that fails with an Error comes after the CRAM secret is '
+        'deleted and fails the onboarding', () async {
+      final broken = StateError('the hint store is broken');
+      hints
+        ..failWrites = true
+        ..writeFailure = broken;
+      expect(await failure(), same(broken));
       expect(server.cramDeleted, {_atSign});
       expect(gateway.lastSession!.closed, isTrue);
       expect(gateway.lastSession!.clients, isEmpty);
@@ -822,12 +827,26 @@ void main() {
   });
 
   group('open', () {
-    test('closes the session when remembering the device fails', () async {
+    test('closes the session when remembering the device fails with an Error',
+        () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      final broken = StateError('the hint store is broken');
+      final fresh = FakeHints()
+        ..failWrites = true
+        ..writeFailure = broken;
+      await expectLater(custody(withHints: fresh).open(atSign: _atSign),
+          throwsA(same(broken)));
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(gateway.lastSession!.clients, isEmpty);
+    });
+
+    test('opens when remembering the device fails with an Exception', () async {
       await custody().onboard(atSign: _atSign, cram: 'cram');
       final fresh = FakeHints()..failWrites = true;
-      await expectLater(
-          custody(withHints: fresh).open(atSign: _atSign), throwsStateError);
-      expect(gateway.lastSession!.closed, isTrue);
+      final session = await custody(withHints: fresh).open(atSign: _atSign);
+      expect(session.client.enrollmentId, 'eid1');
+      expect(gateway.lastSession!.closed, isFalse);
+      expect(fresh.ids, isEmpty);
     });
   });
 
@@ -1116,12 +1135,58 @@ void main() {
         expect(separate.credentials[_atSign], Uint8List.fromList([1]));
       });
 
-      test('a failed combined write leaves neither id', () async {
+      test(
+          'a failed combined write leaves neither id, and the open asks for '
+          'persistence and returns its session', () async {
         final combined = FakeHints()..failPairWrites = true;
-        await expectLater(custody(withHints: combined).open(atSign: _atSign),
-            throwsStateError);
+        final session =
+            await custody(withHints: combined).open(atSign: _atSign);
+        expect(session.client.enrollmentId, 'eid1');
         expect(combined.credentials, isEmpty);
         expect(combined.ids, isEmpty);
+        expect(persistence.requests, 1,
+            reason: 'a dropped hint write still asks for persistence');
+      });
+
+      test(
+          'separate stores whose first put fails keep neither id, and the '
+          'open returns its session', () async {
+        final separate = LegacyHints()..failWrites = true;
+        final session =
+            await custody(withHints: separate).open(atSign: _atSign);
+        expect(session.client.enrollmentId, 'eid1');
+        expect(separate.credentials, isEmpty);
+        expect(separate.ids, isEmpty);
+      });
+
+      test(
+          'separate stores whose second put fails leave a new credential id '
+          'beside the old enrollment id, and the next login replaces both',
+          () async {
+        server.revoked.add('eid-old');
+        final separate = LegacyHints()
+          ..credentials[_atSign] = Uint8List.fromList([9])
+          ..ids[_atSign] = 'eid-old'
+          ..failEnrollmentIdWrites = true;
+
+        final first = await custody(withHints: separate).open(atSign: _atSign);
+
+        expect(first.client.enrollmentId, 'eid1');
+        expect(separate.credentials[_atSign], Uint8List.fromList([1]),
+            reason: 'the first put landed');
+        expect(separate.ids[_atSign], 'eid-old',
+            reason: 'the second put did not');
+        separate.failEnrollmentIdWrites = false;
+        gateway.authenticated.clear();
+
+        final second = await custody(withHints: separate).open(atSign: _atSign);
+
+        expect(gateway.authenticated, ['eid-old', 'eid1'],
+            reason: 'PKAM refuses the mixed pair, and the retry without hints '
+                'reads the pointer');
+        expect(second.client.enrollmentId, 'eid1');
+        expect(separate.ids[_atSign], 'eid1');
+        expect(separate.credentials[_atSign], Uint8List.fromList([1]));
       });
     });
 
@@ -1252,13 +1317,42 @@ void main() {
       expect(server.documentReads, 0);
     });
 
-    test('a remembered enrollment id that is malformed is refused before PKAM',
-        () async {
+    test(
+        'a remembered enrollment id that is malformed counts as no hints and '
+        'is never sent', () async {
       final bad = FakeHints()
         ..credentials[_atSign] = Uint8List.fromList([1])
         ..ids[_atSign] = 'bad id/..';
-      await expectLater(custody(withHints: bad).open(atSign: _atSign),
-          throwsA(isA<PasskeyLostException>()));
+      authenticator.gets = 0;
+      setupLock.names.clear();
+
+      final session = await custody(withHints: bad).open(atSign: _atSign);
+
+      expect(gateway.authenticated, ['eid1'],
+          reason: 'only the pointed enrollment is authenticated');
+      expect(authenticator.gets, 1);
+      expect(authenticator.lastAllowCredential, isNull);
+      expect(server.pointerReads, 1);
+      expect(setupLock.names, [setupLockName(_lockPrefix, _atSign)]);
+      expect(session.client.enrollmentId, 'eid1');
+      expect(bad.ids[_atSign], 'eid1');
+    });
+
+    test(
+        'a failed read of the remembered credential id fails the login before '
+        'any prompt, and the enrollment id is not read', () async {
+      final unreadable = HintStoreException('cannot read the credential id');
+      final device = FakeHints()
+        ..credentials[_atSign] = Uint8List.fromList([1])
+        ..ids[_atSign] = 'eid1'
+        ..credentialIdReadFailure = unreadable
+        ..enrollmentIdReadFailure = StateError('the enrollment id was read');
+      authenticator.gets = 0;
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(same(unreadable)));
+
+      expect(authenticator.gets, 0);
       expect(gateway.authenticated, isEmpty);
     });
 
