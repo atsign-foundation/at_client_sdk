@@ -317,8 +317,7 @@ void main() {
             reason: 'and a reconnect would not report it');
       });
 
-      test('a refused start that fails after stop() is not reported',
-          () async {
+      test('a refused start that fails after stop() is not reported', () async {
         final failing = Completer<void>();
         muxable
           ..startError = UnAuthenticatedException('Failed connecting to '
