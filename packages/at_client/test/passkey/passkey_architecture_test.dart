@@ -123,6 +123,8 @@ void main() {
         'EnrollOperationEnum.revoke',
         "'a revoke was refused",
         "after revoking them'",
+        // The refusal of a revoke (AT0031) that is left to the list.
+        'e is AtEnrollmentRevokeException',
       ]) {
         expect(allowed.allMatches(rest), hasLength(1), reason: allowed);
         rest = rest.replaceAll(allowed, '');
