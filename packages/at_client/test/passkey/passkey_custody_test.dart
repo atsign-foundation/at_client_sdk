@@ -1362,10 +1362,15 @@ void main() {
       expect(server.pointers.keys,
           unorderedEquals([firstKeys.lookupHex, secondKeys.lookupHex]));
 
-      // The second onboarding revoked the first enrollment, so the pairs are
-      // compared on the second, live one: only its own passkey's pair
-      // authenticates as it.
-      expect(server.revoked, contains(first.client.enrollmentId));
+      expect(server.pairByEnrollment[first.client.enrollmentId],
+          (await apkamKeyPairFromSeed(firstKeys.authSeed)).publicKey,
+          reason: "the first enrollment holds the first passkey's pair");
+      expect(server.pairByEnrollment[second.client.enrollmentId],
+          (await apkamKeyPairFromSeed(secondKeys.authSeed)).publicKey,
+          reason: "the second enrollment holds the second passkey's pair");
+      expect(server.revoked, contains(first.client.enrollmentId),
+          reason: 'the second onboarding revoked the first enrollment, so the '
+              'pairs are compared on the second, live one');
       await expectLater(
           gateway.authenticate(
               atSign: _atSign,

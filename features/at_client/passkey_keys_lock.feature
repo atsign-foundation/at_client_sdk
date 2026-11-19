@@ -2,13 +2,16 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
   Every write of an enrollment's server-held @keys document runs under a
   server mutex: the short-ttl immutable self record that ServerMutex takes,
   one per enrollment. A writer that finds the lock held waits and tries
-  again, from a fresh read of the document. A writer whose own last lease
-  is too short to reuse first waits for it to run out, and its bound starts
-  after that. A put needs at least half the
+  again, from a fresh read of the document. A put needs at least half the
   lock's ttl left on its lease; with less, the writer takes the lock again
   and re-reads. A refused write (a candidate that drops stored material,
   or a read-back that differs) still stops the store: it accepts no further
   write.
+
+  A writer whose own last lease is too short to reuse first waits until
+  the atServer has let that lock go: what is left of the lease, under half
+  the ttl, plus the time its take took to be answered. Its bound on
+  waiting for the lock starts after that.
 
   Races: two clients of one enrollment (two tabs, or two devices on one
   synced passkey) each take the lock before reading, so the second builds
@@ -18,7 +21,9 @@ Feature: Every write of a server-held @keys document holds the enrollment's lock
   lock record is not a credential and is created on the enrollment's own
   authenticated connection. Denial of service: a held lock is released by
   its ttl, so a writer that stopped holding it delays the enrollment's
-  writes by at most that ttl, and a writer gives up after a bounded wait.
+  writes by at most that ttl, and a writer gives up after a bounded wait:
+  for its own last lock, under half the ttl plus the time its take took,
+  then its bound.
   Forgery and impersonation: only the Atsign's own authenticated
   connections create its self records, and the lock record and the document
   sit in the enrollment's own namespace, which an atServer lets only that
