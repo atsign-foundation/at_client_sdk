@@ -60,6 +60,10 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// event between a stop() and the teardown it queues.
   Future<void>? stopGate;
 
+  /// Awaited before [startError] is thrown, so a test can land a stop()
+  /// while a start that is failing is still in flight.
+  Future<void>? failGate;
+
   @override
   Stream<String> get notifications => _notifications.stream;
 
@@ -76,7 +80,10 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     bool selfNotificationsEnabled = true,
   }) async {
     startCalls++;
-    if (startError != null) throw startError!;
+    if (startError != null) {
+      if (failGate != null) await failGate;
+      throw startError!;
+    }
     started = true;
     if (startGate != null) await startGate;
     // Invoked, as the real muxable does on every (re)connect - so these
@@ -308,6 +315,25 @@ void main() {
                 'UnAuthenticatedException, so the two back off alike');
         expect(connection.current.isRefused, isFalse,
             reason: 'and a reconnect would not report it');
+      });
+
+      test('a refused start that fails after stop() is not reported',
+          () async {
+        final failing = Completer<void>();
+        muxable
+          ..startError = UnAuthenticatedException('Failed connecting to '
+              '@alice. error:AT0027:enrollment_id: e1 is revoked')
+          ..failGate = failing.future;
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+        monitor.stop();
+        failing.complete();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(connection.current.isRefused, isFalse,
+            reason: 'the caller stopped listening before the start failed, so '
+                'the attempt ends as a stop does, with nothing reported');
+        expect(delays, isEmpty, reason: 'and nothing is retried');
       });
     });
   });
