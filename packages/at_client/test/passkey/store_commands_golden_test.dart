@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_pointer_store.dart';
 import 'package:at_client/src/passkey/public_lookup.dart';
@@ -49,26 +50,36 @@ void main() {
               r'^update:nc:ttl:10000:isEncrypted:false:immutable:true:'
               r'atkeys-lock\.e1d2c3\.a\.__e@alice e1d2c3:[0-9a-f]{32}\n$')));
     });
+  });
 
-    test('mark completion due', () async {
-      await RemoteEnrollmentDocumentStore(secondary())
-          .markCompletionDue(_atSign, _eid);
+  group('completion-due record commands', () {
+    CompletionDueRecord record() =>
+        CompletionDueRecord(secondary(), atSign: _atSign, enrollmentId: _eid);
+
+    test('write activated', () async {
+      await record().write(CompletionDue.activated);
       expect(remote.commands.single, (
-        command: 'update:completion-due.e1d2c3.a.__e@alice due\n',
+        command: 'update:completion-due.e1d2c3.a.__e@alice activated\n',
         auth: true
       ));
     });
 
-    test('read completion due', () async {
-      await RemoteEnrollmentDocumentStore(secondary())
-          .isCompletionDue(_atSign, _eid);
+    test('write cram-deleted', () async {
+      await record().write(CompletionDue.cramSecretDeleted);
+      expect(remote.commands.single, (
+        command: 'update:completion-due.e1d2c3.a.__e@alice cram-deleted\n',
+        auth: true
+      ));
+    });
+
+    test('read', () async {
+      await record().read();
       expect(remote.commands.single,
           (command: 'llookup:completion-due.e1d2c3.a.__e@alice\n', auth: true));
     });
 
-    test('clear completion due', () async {
-      await RemoteEnrollmentDocumentStore(secondary())
-          .clearCompletionDue(_atSign, _eid);
+    test('clear', () async {
+      await record().clear();
       expect(remote.commands.single,
           (command: 'delete:completion-due.e1d2c3.a.__e@alice\n', auth: true));
     });

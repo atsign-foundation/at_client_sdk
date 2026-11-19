@@ -28,9 +28,6 @@ class _AtServer {
   String? document;
   DateTime? _lockedUntil;
 
-  /// The enrollments whose completion-due record exists.
-  final completionDue = <String>{};
-
   /// Every command, as `<writer> <command>`.
   final events = <String>[];
 
@@ -110,18 +107,6 @@ class _Connection implements EnrollmentDocumentStore {
     return server.leaseOf(
         AtKey.fromString(enrollmentLockKey(enrollmentId, atSign)), ttl);
   }
-
-  @override
-  Future<void> markCompletionDue(String atSign, String enrollmentId) async =>
-      server.completionDue.add(enrollmentId);
-
-  @override
-  Future<bool> isCompletionDue(String atSign, String enrollmentId) async =>
-      server.completionDue.contains(enrollmentId);
-
-  @override
-  Future<void> clearCompletionDue(String atSign, String enrollmentId) async =>
-      server.completionDue.remove(enrollmentId);
 }
 
 /// A stopwatch that reads the elapsed time the test sets.
@@ -537,16 +522,4 @@ class _Throwing implements EnrollmentDocumentStore {
     }
     return _inner.tryLock(atSign, enrollmentId, ttl: ttl);
   }
-
-  @override
-  Future<void> markCompletionDue(String atSign, String enrollmentId) =>
-      _inner.markCompletionDue(atSign, enrollmentId);
-
-  @override
-  Future<bool> isCompletionDue(String atSign, String enrollmentId) =>
-      _inner.isCompletionDue(atSign, enrollmentId);
-
-  @override
-  Future<void> clearCompletionDue(String atSign, String enrollmentId) =>
-      _inner.clearCompletionDue(atSign, enrollmentId);
 }

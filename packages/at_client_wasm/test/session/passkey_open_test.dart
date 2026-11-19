@@ -53,21 +53,6 @@ class _Docs implements EnrollmentDocumentStore {
       ServerMutexLease(
           AtKey.fromString(enrollmentLockKey(enrollmentId, atSign)),
           DateTime.now().add(ttl));
-
-  /// The enrollments whose completion-due record exists.
-  final completionDue = <String>{};
-
-  @override
-  Future<void> markCompletionDue(String atSign, String enrollmentId) async =>
-      completionDue.add(enrollmentId);
-
-  @override
-  Future<bool> isCompletionDue(String atSign, String enrollmentId) async =>
-      completionDue.contains(enrollmentId);
-
-  @override
-  Future<void> clearCompletionDue(String atSign, String enrollmentId) async =>
-      completionDue.remove(enrollmentId);
 }
 
 String _b(String s) => base64Encode(utf8.encode(s));

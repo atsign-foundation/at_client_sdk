@@ -39,8 +39,8 @@ class _Server implements EnrollmentPointerReader {
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
 
-  /// The enrollments whose completion-due record exists.
-  final completionDue = <String>{};
+  /// What each enrollment's completion-due record says, by enrollment id.
+  final completionDue = <String, CompletionDue>{};
   final apkamPublicKeys = <String, String>{};
   final approved = <String>{};
   var pointerReads = 0;
@@ -131,6 +131,18 @@ class _Session implements EnrollmentSession {
   }
 
   @override
+  Future<void> recordCompletionDue(CompletionDue state) async =>
+      server.completionDue[enrollmentId] = state;
+
+  @override
+  Future<CompletionDue?> completionDue() async =>
+      server.completionDue[enrollmentId];
+
+  @override
+  Future<void> clearCompletionDue() async =>
+      server.completionDue.remove(enrollmentId);
+
+  @override
   late final EnrollmentDocumentStore documents = _Documents(this);
 
   @override
@@ -172,18 +184,6 @@ class _Documents implements EnrollmentDocumentStore {
           {required Duration ttl}) async =>
       ServerMutexLease(
           AtKey()..key = 'atkeys-lock.$eid.a', DateTime.now().add(ttl));
-
-  @override
-  Future<void> markCompletionDue(String atSign, String eid) async =>
-      session.server.completionDue.add(eid);
-
-  @override
-  Future<bool> isCompletionDue(String atSign, String eid) async =>
-      session.server.completionDue.contains(eid);
-
-  @override
-  Future<void> clearCompletionDue(String atSign, String eid) async =>
-      session.server.completionDue.remove(eid);
 }
 
 class _Pointers implements EnrollmentPointerStore {

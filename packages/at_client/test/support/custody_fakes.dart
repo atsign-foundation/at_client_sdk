@@ -7,6 +7,7 @@ import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/server_mutex.dart' show ServerMutexLease;
 import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show ApkamKeyPair;
@@ -35,12 +36,12 @@ class FakeServer implements EnrollmentPointerReader {
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
 
-  /// The enrollments whose completion-due record exists.
-  final completionDue = <String>{};
+  /// What each enrollment's completion-due record says, by enrollment id.
+  final completionDue = <String, CompletionDue>{};
 
-  /// Makes a write of a completion-due record throw this before it is
-  /// stored.
-  Object? completionDueMarkError;
+  /// Makes the next write of each state throw what it maps to before the
+  /// record is written; each refusal is used once.
+  final completionDueWriteRefusals = <CompletionDue, Object>{};
 
   /// Makes a read of a completion-due record throw this.
   Object? completionDueReadError;
@@ -52,7 +53,7 @@ class FakeServer implements EnrollmentPointerReader {
 
   /// Answers every completion-due operation in place of this server, when
   /// set.
-  EnrollmentDocumentStore? completionDueStore;
+  CompletionDueRecord? completionDueRecord;
 
   /// The APKAM public key each enrollment authenticates with.
   final pairByEnrollment = <String, String>{};
@@ -63,11 +64,11 @@ class FakeServer implements EnrollmentPointerReader {
   final log = <String>[];
 
   /// Every step of an onboarding in the order it happened: the server's
-  /// writes (as in [log]), the activation, each write, read and delete of a
-  /// completion-due record, each lookup of the published encryption public
-  /// key, each completion with the key it published and the CRAM secret's
-  /// deletion, each revoke request with the enrollments it revoked, and the
-  /// client opening.
+  /// writes (as in [log]), the activation, each write of a completion-due
+  /// record with the state it wrote, each read and delete of one, each lookup
+  /// of the published encryption public key, each completion with the key it
+  /// published and the CRAM secret's deletion, each revoke request with the
+  /// enrollments it revoked, and the client opening.
   final timeline = <String>[];
 
   /// The atSigns whose CRAM secret is deleted; an activation of one of them
@@ -200,6 +201,37 @@ class FakeSession implements EnrollmentSession {
   }
 
   @override
+  Future<void> recordCompletionDue(CompletionDue state) async {
+    server.timeline.add('record-completion-due:$enrollmentId:${state.name}');
+    if (server.completionDueRecord case final record?) {
+      return record.write(state);
+    }
+    if (server.completionDueWriteRefusals.remove(state) case final e?) {
+      throw e;
+    }
+    server.completionDue[enrollmentId] = state;
+  }
+
+  @override
+  Future<CompletionDue?> completionDue() async {
+    server.timeline.add('read-completion-due:$enrollmentId');
+    if (server.completionDueRecord case final record?) return record.read();
+    if (server.completionDueReadError case final e?) throw e;
+    return server.completionDue[enrollmentId];
+  }
+
+  @override
+  Future<void> clearCompletionDue() async {
+    server.timeline.add('clear-completion-due:$enrollmentId');
+    if (server.completionDueRecord case final record?) return record.clear();
+    if (server.completionDueClearFailures > 0) {
+      server.completionDueClearFailures--;
+      throw server.completionDueClearError;
+    }
+    server.completionDue.remove(enrollmentId);
+  }
+
+  @override
   late final EnrollmentDocumentStore documents = _Documents(this);
 
   @override
@@ -319,45 +351,6 @@ class _Documents implements EnrollmentDocumentStore {
       {required Duration ttl}) async {
     _own(eid);
     return freeLease(atSign, eid, ttl);
-  }
-
-  @override
-  Future<void> markCompletionDue(String atSign, String eid) async {
-    _own(eid);
-    final server = session.server;
-    server.timeline.add('mark-completion-due:$eid');
-    if (server.completionDueStore case final store?) {
-      return store.markCompletionDue(atSign, eid);
-    }
-    if (server.completionDueMarkError case final e?) throw e;
-    server.completionDue.add(eid);
-  }
-
-  @override
-  Future<bool> isCompletionDue(String atSign, String eid) async {
-    _own(eid);
-    final server = session.server;
-    server.timeline.add('read-completion-due:$eid');
-    if (server.completionDueStore case final store?) {
-      return store.isCompletionDue(atSign, eid);
-    }
-    if (server.completionDueReadError case final e?) throw e;
-    return server.completionDue.contains(eid);
-  }
-
-  @override
-  Future<void> clearCompletionDue(String atSign, String eid) async {
-    _own(eid);
-    final server = session.server;
-    server.timeline.add('clear-completion-due:$eid');
-    if (server.completionDueStore case final store?) {
-      return store.clearCompletionDue(atSign, eid);
-    }
-    if (server.completionDueClearFailures > 0) {
-      server.completionDueClearFailures--;
-      throw server.completionDueClearError;
-    }
-    server.completionDue.remove(eid);
   }
 }
 
