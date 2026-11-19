@@ -201,6 +201,8 @@ void main() {
     test('a refused reconnect is reported refused', () async {
       monitor.start();
       await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
       muxable.refuse(UnAuthenticatedException('Failed connecting to @alice. '
           'error:AT0027:enrollment_id: e1 is revoked'));
       await Future.delayed(const Duration(milliseconds: 20));
@@ -227,6 +229,38 @@ void main() {
       expect(connection.current.isOnline, isTrue,
           reason: 'the caller stopped listening before the refusal arrived, '
               'so the attempt ends as a stop does, with nothing reported');
+    });
+
+    test(
+        'a refusal held back by a running handler is not reported once the '
+        'connection is back up', () async {
+      final handling = Completer<void>();
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) => handling.future,
+        getLastNotificationTime: () async => null,
+        connection: connection,
+      );
+      monitor.logger.level = 'severe';
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.deliver('A');
+      await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      muxable.refuse(UnAuthenticatedException('Failed connecting to @alice. '
+          'error:AT0027:enrollment_id: e1 is revoked'));
+      muxable.reconnected();
+      await Future.delayed(const Duration(milliseconds: 20));
+      handling.complete();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.currentState, NotificationListenerState.listening);
+      expect(connection.current.isOnline, isTrue,
+          reason: 'the refusal belongs to an attempt the recovery superseded, '
+              'so reporting it once the handler lets it through would leave '
+              'a connected client reading refused');
     });
 
     group('after a failed start', () {

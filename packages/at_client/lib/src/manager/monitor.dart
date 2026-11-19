@@ -285,6 +285,13 @@ class Monitor {
           'reported: $e');
       return;
     }
+    // NOTE: reported only while the connection is down. One that arrives
+    // after it is back up belongs to an attempt the recovery superseded.
+    if (_currentState == NotificationListenerState.listening) {
+      logger.info('the connection recovered before this refusal arrived, '
+          'so it is not reported: $e');
+      return;
+    }
     unawaited(connection?.report(refusal));
   }
 
