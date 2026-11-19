@@ -1,5 +1,5 @@
 import 'package:at_client/at_client.dart';
-import 'package:at_commons/at_builders.dart' show VerbBuilder;
+import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 
 class ScriptedAtLookUp implements AtLookupMuxable {
@@ -18,10 +18,35 @@ class ScriptedAtLookUp implements AtLookupMuxable {
     return respond(atCommand);
   }
 
-  /// Sends what [builder] builds as an authenticated command.
+  /// Sends what [builder] builds, authenticated or not as `AtLookupImpl`
+  /// decides from the builder: a lookup or a scan as its own `auth` says, an
+  /// enroll request unauthenticated, any other verb it handles authenticated.
+  /// A builder it does not handle sends nothing and fails, as `AtLookupImpl`
+  /// reports it timed out.
   @override
-  Future<String?> executeVerb(VerbBuilder builder) =>
-      executeCommand(builder.buildCommand(), auth: true);
+  Future<String?> executeVerb(VerbBuilder builder) async {
+    final bool auth = switch (builder) {
+      LookupVerbBuilder(:final auth) || ScanVerbBuilder(:final auth) => auth,
+      EnrollVerbBuilder(operation: EnrollOperationEnum.request) => false,
+      UpdateVerbBuilder() ||
+      DeleteVerbBuilder() ||
+      LLookupVerbBuilder() ||
+      PLookupVerbBuilder() ||
+      StatsVerbBuilder() ||
+      ConfigVerbBuilder() ||
+      NotifyVerbBuilder() ||
+      NotifyStatusVerbBuilder() ||
+      NotifyListVerbBuilder() ||
+      NotifyAllVerbBuilder() ||
+      SyncVerbBuilder() ||
+      NotifyRemoveVerbBuilder() ||
+      NotifyFetchVerbBuilder() ||
+      EnrollVerbBuilder() =>
+        true,
+      _ => throw AtLookUpException('AT0014', 'Request timed out'),
+    };
+    return executeCommand(builder.buildCommand(), auth: auth);
+  }
 
   @override
   Future<void> close() async => closed = true;
