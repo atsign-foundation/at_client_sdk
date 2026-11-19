@@ -829,8 +829,7 @@ void main() {
         await server.waitUntil(() => startDelays.length >= 3,
             what: 'three failed starts');
         final startWaits = startDelays.take(3).map(scheduleOf).toList();
-        final startReported =
-            changes.map((c) => (c.outcome, c.cause)).toList();
+        final startReported = changes.map((c) => (c.outcome, c.cause)).toList();
         await service.stop();
 
         refusableServer();
