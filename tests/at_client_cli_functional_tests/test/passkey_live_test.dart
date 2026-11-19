@@ -401,10 +401,8 @@ void main() {
       final reply = _replyIndex(tap, sent);
       print('LIVE another enrollment\'s $verb of the record: '
           '${reply < 0 ? 'no reply' : tap.lines[reply].text}');
-      expect(outcome, isA<AtException>(),
+      expect(outcome, isA<UnAuthorizedException>(),
           reason: "another enrollment's $verb of the record is refused");
-      expect(outcome, isNot(isA<KeyNotFoundException>()),
-          reason: 'the refusal is not a record not found');
     }
   }, timeout: _timeout);
 
