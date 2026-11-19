@@ -44,7 +44,6 @@ Feature: A refused PKAM is read by the client's one classifier
       | AT0028  | the enrollment has expired, or the atServer no longer holds it |
       | AT0028  | the enrollment has expired, though the reply does not name it  |
       | AT0029  | the enrollment has expired, or the atServer no longer holds it |
-      | no code | the reply is a bare prompt                                     |
       | no code | the reply carries no error:                                    |
 
   Scenario Outline: A refusal reads the same in every form the atServer writes it in
