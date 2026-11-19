@@ -517,14 +517,25 @@ class PasskeyCustody {
 
   /// The credential and enrollment ids this device remembers for [canonical],
   /// or null unless it remembers both: one of the two alone, as a write that
-  /// stopped halfway leaves, counts as no hints. So does a remembered
-  /// enrollment id whose read fails with an [Exception], and one outside the
-  /// enrollment id alphabet, which is never sent; either is logged as a
-  /// warning when [warn] is true, which only the read under the setup lock
-  /// passes, so an open warns once. A failed read of the credential id, which
-  /// is read first, is thrown.
+  /// stopped halfway leaves, counts as no hints. So does a remembered id
+  /// whose read fails with an [Exception], and an enrollment id outside the
+  /// enrollment id alphabet, which is never sent; each is logged as a warning
+  /// when [warn] is true, which only the read under the setup lock passes, so
+  /// an open warns once. The credential id is read first, and a failed read
+  /// of it leaves the enrollment id unread. An [Error] from either read is
+  /// thrown.
   Future<_Hints?> _savedHints(String canonical, {required bool warn}) async {
-    final credentialId = await credentials.credentialId(canonical);
+    final Uint8List? credentialId;
+    try {
+      credentialId = await credentials.credentialId(canonical);
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message.
+      if (warn) {
+        _logger.warning('the remembered credential id of $canonical could '
+            'not be read (${e.runtimeType}); logging in without passkey hints');
+      }
+      return null;
+    }
     final String? enrollmentId;
     try {
       enrollmentId = await enrollmentIds.enrollmentId(canonical);

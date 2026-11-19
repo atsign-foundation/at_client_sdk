@@ -448,15 +448,15 @@ Future<void> _putEnrollmentBytes(
   }
 }
 
-/// Makes this browser's IndexedDB fail every read of a remembered enrollment
-/// id until the test ends, as a read request that errors does; reads of
-/// every other object store go through.
-void _failEnrollmentIdReads() {
+/// Makes this browser's IndexedDB fail every read from object store
+/// [storeName] until the test ends, as a read request that errors does;
+/// reads of every other object store go through.
+void _failReadsOf(String storeName) {
   final prototype =
       (globalContext['IDBObjectStore'] as JSObject)['prototype'] as JSObject;
   final get = prototype['get'] as JSFunction;
   prototype['get'] = ((JSObject store, JSAny? key) {
-    if ((store['name'] as JSString).toDart != 'at_client_wasm_enrollments') {
+    if ((store['name'] as JSString).toDart != storeName) {
       return get.callAsFunction(store, key);
     }
     final request = JSObject()
@@ -633,7 +633,7 @@ void main() {
     final custody = await device.custody();
     expect(await device.store.enrollmentId(_atSign), enrollmentId,
         reason: 'the control: this browser holds the passkey hints');
-    _failEnrollmentIdReads();
+    _failReadsOf('at_client_wasm_enrollments');
     await expectLater(
         device.store.enrollmentId(_atSign),
         throwsA(isA<IndexedDbException>()
@@ -642,6 +642,38 @@ void main() {
             'enrollment id');
     expect(await device.store.credentialId(_atSign), [7],
         reason: 'the control: the credential id is still read');
+    device._authenticator.asked.clear();
+    final pointerReads = server.pointerReads;
+
+    final session = await custody.open(atSign: _atSign);
+    device.sessions.add(session);
+
+    expect(device._authenticator.asked, [null],
+        reason: 'the login asserts any passkey');
+    expect(server.pointerReads, pointerReads + 1,
+        reason: "the login reads the passkey's pointer");
+    expect(session.client.enrollmentId, enrollmentId,
+        reason: 'logged in as the pointed enrollment, with no '
+            'IndexedDbException');
+  });
+
+  test(
+      'A failed IndexedDB read of the remembered credential id counts as no '
+      'hints', () async {
+    final enrollmentId = (await device.onboard()).enrollmentId!;
+    device.store.close();
+    final custody = await device.custody();
+    expect(await device.store.credentialId(_atSign), [7],
+        reason: 'the control: this browser holds the passkey hints');
+    _failReadsOf('at_client_wasm_credentials');
+    await expectLater(
+        device.store.credentialId(_atSign),
+        throwsA(isA<IndexedDbException>()
+            .having((e) => e.message, 'message', contains('UnknownError'))),
+        reason: 'the control: IndexedDB fails the read of the remembered '
+            'credential id');
+    expect(await device.store.enrollmentId(_atSign), enrollmentId,
+        reason: 'the control: the enrollment id is still read');
     device._authenticator.asked.clear();
     final pointerReads = server.pointerReads;
 

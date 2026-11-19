@@ -283,6 +283,42 @@ void main() {
         reason: "the warning carries no exception's message");
   });
 
+  test('A remembered credential id that cannot be read counts as no hints',
+      () async {
+    final saved = FakeHints();
+    await onboarded(saved);
+    final credentialId = saved.credentials[_atSign]!;
+    final device = FakeHints()
+      ..credentials.addAll(saved.credentials)
+      ..ids.addAll(saved.ids)
+      ..credentialIdReadFailure =
+          HintStoreException('cannot read credential $credentialId');
+    expect(device.ids, {_atSign: _eid},
+        reason: 'the control: this device remembers the passkey');
+    authenticator.gets = 0;
+    final mark = server.commands.length;
+
+    final session = kept(await custody(device).open(atSign: _atSign));
+
+    expect(authenticator.gets, 1);
+    expect(authenticator.lastAllowCredential, isNull,
+        reason: 'the login asserts any passkey');
+    expect(commandsFrom(mark), contains('lookup:${await pointerKey()}'),
+        reason: "the login reads the passkey's pointer");
+    expect(session.client.connection.current.isOnline, isTrue);
+    expect(session.client.enrollmentId, await pointedEnrollmentId());
+    final warned = warnings('could not be read').toList();
+    expect(warned, hasLength(1), reason: 'the login warns once');
+    expect(
+        warned.single,
+        allOf(contains(_atSign), contains('remembered credential id'),
+            contains('HintStoreException')));
+    expect(warned.single, isNot(contains('$credentialId')),
+        reason: 'the warning carries no credential id');
+    expect(warned.single, isNot(contains('cannot read')),
+        reason: "the warning carries no exception's message");
+  });
+
   test(
       'A remembered enrollment id outside the enrollment id alphabet counts '
       'as no hints', () async {

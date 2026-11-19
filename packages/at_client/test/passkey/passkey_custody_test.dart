@@ -1339,48 +1339,74 @@ void main() {
     });
 
     test(
-        'a failed read of the remembered credential id fails the login before '
-        'any prompt, and the enrollment id is not read', () async {
-      final unreadable = HintStoreException('cannot read the credential id');
+        'a failed read of the remembered credential id counts as no hints, '
+        'and the enrollment id is not read', () async {
       final device = FakeHints()
         ..credentials[_atSign] = Uint8List.fromList([1])
         ..ids[_atSign] = 'eid1'
-        ..credentialIdReadFailure = unreadable
-        ..enrollmentIdReadFailure = StateError('the enrollment id was read');
+        ..credentialIdReadFailure =
+            HintStoreException('cannot read the credential id')
+        ..enrollmentIdReadFailure =
+            HintStoreException('cannot read the enrollment id');
       authenticator.gets = 0;
+      logs.records.clear();
 
-      await expectLater(custody(withHints: device).open(atSign: _atSign),
-          throwsA(same(unreadable)));
+      final session = await custody(withHints: device).open(atSign: _atSign);
 
-      expect(authenticator.gets, 0);
-      expect(gateway.authenticated, isEmpty);
+      expect(authenticator.gets, 1);
+      expect(authenticator.lastAllowCredential, isNull,
+          reason: 'the login asserts any passkey');
+      expect(server.pointerReads, 1,
+          reason: "the login reads the passkey's pointer");
+      expect(gateway.authenticated, ['eid1'],
+          reason: 'only the pointed enrollment is authenticated');
+      expect(session.client.enrollmentId, 'eid1');
+      final warned = logs
+          .at('WARNING')
+          .where((m) => m.contains('could not be read'))
+          .toList();
+      expect(warned, hasLength(1),
+          reason: 'only the credential id read warns: the enrollment id, '
+              'whose read would also fail, is not read');
+      expect(
+          warned.single,
+          allOf(contains(_atSign), contains('remembered credential id'),
+              contains('HintStoreException')));
+      expect(warned.single, isNot(contains('cannot read')),
+          reason: "the warning carries no exception's message");
     });
 
-    test(
-        'an Error reading the remembered enrollment id fails the login '
-        'before any prompt and opens nothing', () async {
-      final broken = StateError('the hint store is broken');
-      final device = FakeHints()
-        ..credentials[_atSign] = Uint8List.fromList([1])
-        ..ids[_atSign] = 'eid1'
-        ..enrollmentIdReadFailure = broken;
-      authenticator
-        ..gets = 0
-        ..issuedPrf.clear();
-      final sessionBefore = gateway.lastSession;
+    for (final (read, fail) in <(String, void Function(LegacyHints, Object))>[
+      ('credential id', (hints, e) => hints.credentialIdReadFailure = e),
+      ('enrollment id', (hints, e) => hints.enrollmentIdReadFailure = e),
+    ]) {
+      test(
+          'an Error reading the remembered $read fails the login before any '
+          'prompt and opens nothing', () async {
+        final broken = StateError('the hint store is broken');
+        final device = FakeHints()
+          ..credentials[_atSign] = Uint8List.fromList([1])
+          ..ids[_atSign] = 'eid1';
+        fail(device, broken);
+        authenticator
+          ..gets = 0
+          ..issuedPrf.clear();
+        final sessionBefore = gateway.lastSession;
 
-      await expectLater(custody(withHints: device).open(atSign: _atSign),
-          throwsA(same(broken)));
+        await expectLater(custody(withHints: device).open(atSign: _atSign),
+            throwsA(same(broken)));
 
-      expect(authenticator.gets, 0, reason: 'no passkey prompt');
-      expect(authenticator.issuedPrf, isEmpty, reason: 'no PRF output');
-      expect(gateway.authenticated, isEmpty, reason: 'no PKAM');
-      expect(gateway.lastSession, same(sessionBefore),
-          reason: 'no enrollment session');
-      expect(setupLock.held, isEmpty);
-      expect(device.ids, {_atSign: 'eid1'},
-          reason: 'the hints are left as they were');
-    });
+        expect(authenticator.gets, 0, reason: 'no passkey prompt');
+        expect(authenticator.issuedPrf, isEmpty, reason: 'no PRF output');
+        expect(gateway.authenticated, isEmpty, reason: 'no PKAM');
+        expect(gateway.lastSession, same(sessionBefore),
+            reason: 'no enrollment session');
+        expect(setupLock.held, isEmpty);
+        expect(device.ids, {_atSign: 'eid1'},
+            reason: 'the hints are left as they were');
+        expect(device.credentials[_atSign], [1]);
+      });
+    }
 
     test('a pointed enrollment id that is malformed is refused before PKAM',
         () async {
