@@ -57,6 +57,28 @@ void main() {
           throwsA(isA<KeyNotFoundException>()));
     });
 
+    test(
+        'Given a reply naming no code, or a code no typed exception stands '
+        'for, when DefaultResponseParser parses it, then it throws a plain '
+        'AtException, and the response carries its code and message', () {
+      const replies = {
+        'error:oops': ('AT0014', 'Unknown server error: oops'),
+        'error:AT0014-boom': ('AT0014', 'boom'),
+        'error:AT0026-boom': ('AT0026', 'boom'),
+      };
+      replies.forEach((reply, expected) {
+        final response = AtResponse();
+        expect(
+            () => DefaultResponseParser().parseFailureResponse(reply, response),
+            throwsA(isA<AtException>()
+                .having((e) => e.runtimeType, 'runtimeType', AtException)
+                .having((e) => e.message, 'message', expected.$2)),
+            reason: reply);
+        expect(response.errorCode, expected.$1, reason: reply);
+        expect(response.errorDescription, expected.$2, reason: reply);
+      });
+    });
+
     test('test errors with unexpected response', () {
       expect(
           () =>
