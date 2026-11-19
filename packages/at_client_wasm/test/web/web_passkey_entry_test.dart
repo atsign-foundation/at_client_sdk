@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
+import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:at_client_wasm/src/session/web_passkey_entry.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart';
@@ -57,6 +58,48 @@ void main() {
 
       await expectLater(
           used.credentialId('@alice'), throwsA(isA<IndexedDbException>()));
+    });
+  });
+
+  group('the entry points', () {
+    late String dbName;
+    final opened = <IndexedDbHintStore>[];
+    final defaultOpen = openEntryHintStore;
+
+    setUp(() {
+      dbName = 'web_passkey_entry_points_test';
+      opened.clear();
+      openEntryHintStore = () async {
+        final store = await IndexedDbHintStore.open(dbName: dbName);
+        opened.add(store);
+        return store;
+      };
+    });
+    tearDown(() async {
+      openEntryHintStore = defaultOpen;
+      await _deleteDb(dbName);
+    });
+
+    Future<void> expectStoreClosed(Future<Object?> entry) async {
+      await expectLater(entry, throwsA(isA<InvalidAtSignException>()));
+      expect(opened, hasLength(1), reason: 'the entry point opened its store');
+      await expectLater(opened.single.enrollmentId('@alice'),
+          throwsA(isA<IndexedDbException>()),
+          reason: 'the entry point closed its store');
+    }
+
+    test('onboardNewAtSign closes the store it opened when it throws', () {
+      return expectStoreClosed(onboardNewAtSign(
+          atSign: 'alice',
+          cram: 'cram',
+          app: 'wavi',
+          rpId: 'localhost',
+          rpName: 'test'));
+    });
+
+    test('passkeyLogin closes the store it opened when it throws', () {
+      return expectStoreClosed(passkeyLogin(
+          atSign: 'alice', app: 'wavi', rpId: 'localhost', rpName: 'test'));
     });
   });
 }

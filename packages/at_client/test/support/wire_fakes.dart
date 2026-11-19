@@ -29,6 +29,9 @@ class Wire {
   Object? pkamThrows;
 
   /// What a `lookup:` or `llookup:` command answers; null answers nothing.
+  /// An `error:<code>-<text>` answer is thrown as the [AtLookUpException] a
+  /// real `AtLookupImpl` throws for it, as one never returns an `error:`
+  /// reply.
   String? lookupAnswer;
 
   /// One entry per PKAM, taken in order: that PKAM waits for it, then answers
@@ -67,6 +70,8 @@ class Wire {
 
 class WireLookUp implements AtLookupMuxable {
   WireLookUp(this._wire);
+
+  static final _errorReply = RegExp(r'^error:(AT\d{4})[-:]?(.*)$');
 
   final Wire _wire;
 
@@ -109,9 +114,11 @@ class WireLookUp implements AtLookupMuxable {
     commandsSent++;
     final isLookup =
         command.startsWith('lookup:') || command.startsWith('llookup:');
-    return isLookup && _wire.lookupAnswer != null
-        ? _wire.lookupAnswer
-        : _wire.answer?.call(command);
+    final lookupAnswer = _wire.lookupAnswer;
+    if (!isLookup || lookupAnswer == null) return _wire.answer?.call(command);
+    final error = _errorReply.firstMatch(lookupAnswer);
+    if (error != null) throw AtLookUpException(error[1]!, error[2]!);
+    return lookupAnswer;
   }
 
   @override

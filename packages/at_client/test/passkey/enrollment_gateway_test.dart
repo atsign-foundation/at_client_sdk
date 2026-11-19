@@ -413,15 +413,32 @@ void main() {
           PublishedEncryptionKey.none);
     });
 
-    test('throws when the lookup fails other than with the key not found',
-        () async {
+    test('is none when the atServer has no publickey (AT0015)', () async {
       final session = await sessionOver(
-          Wire()..lookupAnswer = 'error:AT0011-Internal server exception');
+          Wire()..lookupAnswer = 'error:AT0015-key not found : publickey');
 
-      await expectLater(
-          session.publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
-          throwsA(isA<InvalidResponseException>()));
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.none);
     });
+
+    for (final (code, reply) in [
+      ('AT0011', 'error:AT0011-Internal server exception'),
+      ('AT0014', 'error:AT0014-Request timed out'),
+    ]) {
+      test(
+          'throws the lookup\'s $code failure, which is not the key not '
+          'found', () async {
+        final session = await sessionOver(Wire()..lookupAnswer = reply);
+
+        await expectLater(
+            session
+                .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+            throwsA(isA<AtLookUpException>()
+                .having((e) => e.errorCode, 'errorCode', code)));
+      });
+    }
 
     test('is the same when the restored keys carry no public key to compare',
         () async {
