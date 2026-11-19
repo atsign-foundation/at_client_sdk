@@ -483,7 +483,7 @@ class PasskeyCustody {
   /// cannot be taken (for example a `SetupLockTimeoutException`).
   Future<PasskeySession> open({required String atSign}) async {
     final canonical = canonicalPasskeyAtSign(atSign);
-    final hints = await _savedHints(canonical);
+    final hints = await _savedHints(canonical, warn: false);
     if (hints == null) return _lockedOpen(canonical, useSavedHints: true);
     try {
       return await _attempt(canonical, hints);
@@ -504,7 +504,8 @@ class PasskeyCustody {
   /// [_lockedOpen] for a caller that already holds [canonical]'s setup lock.
   Future<PasskeySession> _openHoldingLock(String canonical,
       {required bool useSavedHints}) async {
-    final hints = useSavedHints ? await _savedHints(canonical) : null;
+    final hints =
+        useSavedHints ? await _savedHints(canonical, warn: true) : null;
     if (hints == null) return _attempt(canonical, null);
     try {
       return await _attempt(canonical, hints);
@@ -516,19 +517,22 @@ class PasskeyCustody {
   /// The credential and enrollment ids this device remembers for [canonical],
   /// or null unless it remembers both: one of the two alone, as a write that
   /// stopped halfway leaves, counts as no hints. So does a remembered
-  /// enrollment id whose read fails with an [Exception], which is logged as a
-  /// warning, and one outside the enrollment id alphabet, which is never
-  /// sent. A failed read of the credential id, which is read first, is
-  /// thrown.
-  Future<_Hints?> _savedHints(String canonical) async {
+  /// enrollment id whose read fails with an [Exception], and one outside the
+  /// enrollment id alphabet, which is never sent; either is logged as a
+  /// warning when [warn] is true, which only the read under the setup lock
+  /// passes, so an open warns once. A failed read of the credential id, which
+  /// is read first, is thrown.
+  Future<_Hints?> _savedHints(String canonical, {required bool warn}) async {
     final credentialId = await credentials.credentialId(canonical);
     final String? enrollmentId;
     try {
       enrollmentId = await enrollmentIds.enrollmentId(canonical);
     } on Exception catch (e) {
       // NOTE: the warning never carries the exception's message.
-      _logger.warning('the remembered enrollment id of $canonical could not '
-          'be read (${e.runtimeType}); logging in without passkey hints');
+      if (warn) {
+        _logger.warning('the remembered enrollment id of $canonical could '
+            'not be read (${e.runtimeType}); logging in without passkey hints');
+      }
       return null;
     }
     if (credentialId == null || enrollmentId == null) return null;
@@ -536,8 +540,11 @@ class PasskeyCustody {
       checkEnrollmentId(enrollmentId);
     } on ArgumentError {
       // NOTE: the warning never carries the enrollment id.
-      _logger.warning('the remembered enrollment id of $canonical is outside '
-          'the enrollment id alphabet; logging in without passkey hints');
+      if (warn) {
+        _logger.warning('the remembered enrollment id of $canonical is '
+            'outside the enrollment id alphabet; logging in without passkey '
+            'hints');
+      }
       return null;
     }
     return (credentialId: credentialId, enrollmentId: enrollmentId);
@@ -729,9 +736,8 @@ class PasskeyCustody {
     } on Exception catch (e) {
       // NOTE: the warning never carries the exception's message or the
       // enrollment id.
-      _logger.warning('the passkey hints of $atSign were not saved at '
-          '${flow.name} (${e.runtimeType}); the next login without them '
-          'saves them');
+      _logger.warning('the passkey hints of $atSign were not saved after the '
+          '${flow.name} (${e.runtimeType})');
     }
     await _requestPersist();
   }

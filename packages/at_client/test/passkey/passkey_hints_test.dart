@@ -175,7 +175,10 @@ void main() {
     expect(warned, hasLength(1));
     expect(
         warned.single,
-        allOf(contains(_atSign), contains('passkey hints'), contains('login'),
+        allOf(
+            contains(_atSign),
+            contains('passkey hints'),
+            contains('were not saved after the login'),
             contains('HintStoreException')));
     expect(warned.single, isNot(contains(_eid)),
         reason: 'the warning carries no enrollment id');
@@ -212,7 +215,9 @@ void main() {
     expect(warned, hasLength(1));
     expect(
         warned.single,
-        allOf(contains(_atSign), contains('onboarding'),
+        allOf(
+            contains(_atSign),
+            contains('were not saved after the onboarding'),
             contains('HintStoreException')));
     expect(warned.single, isNot(contains(_eid)));
     expect(warned.single, isNot(contains('quota exceeded')));
@@ -267,17 +272,15 @@ void main() {
     expect(session.client.connection.current.isOnline, isTrue);
     expect(session.client.enrollmentId, await pointedEnrollmentId());
     final warned = warnings('could not be read').toList();
-    expect(warned, isNotEmpty);
-    for (final line in warned) {
-      expect(
-          line,
-          allOf(contains(_atSign), contains('remembered enrollment id'),
-              contains('HintStoreException')));
-      expect(line, isNot(contains(_eid)),
-          reason: 'the warning carries no enrollment id');
-      expect(line, isNot(contains('cannot read')),
-          reason: "the warning carries no exception's message");
-    }
+    expect(warned, hasLength(1), reason: 'the login warns once');
+    expect(
+        warned.single,
+        allOf(contains(_atSign), contains('remembered enrollment id'),
+            contains('HintStoreException')));
+    expect(warned.single, isNot(contains(_eid)),
+        reason: 'the warning carries no enrollment id');
+    expect(warned.single, isNot(contains('cannot read')),
+        reason: "the warning carries no exception's message");
   });
 
   test(
@@ -306,6 +309,10 @@ void main() {
     expect(session.client.connection.current.isOnline, isTrue);
     expect(session.client.enrollmentId, pointed);
     expect(device.ids, {_atSign: pointed}, reason: 'the hints are replaced');
+    final warned = warnings('outside the enrollment id alphabet').toList();
+    expect(warned, hasLength(1), reason: 'the login warns once');
+    expect(warned.single,
+        allOf(contains(_atSign), contains('remembered enrollment id')));
     expect(
         logs.at('WARNING').where((m) => m.contains(_outsideAlphabet)), isEmpty,
         reason: 'no warning carries the remembered id');

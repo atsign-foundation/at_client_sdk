@@ -278,9 +278,9 @@ void main() {
         'with a warning that names the atSign and not the bytes', () async {
       final store = await open();
       await store.putCredentialId('@alice', Uint8List.fromList([7]));
+      final stored = [...utf8.encode('eid'), 0xff, 0xfe];
       final raw = await _rawOpen(currentDbName!, 4);
-      await _rawPut(raw, 'at_client_wasm_enrollments', '@alice',
-          [...utf8.encode('eid'), 0xff, 0xfe]);
+      await _rawPut(raw, 'at_client_wasm_enrollments', '@alice', stored);
       raw.close();
       warnings.messages.clear();
 
@@ -289,9 +289,17 @@ void main() {
       expect(await store.credentialId('@alice'), [7],
           reason: 'the credential id is read as it was');
       expect(warnings.messages, hasLength(1));
-      expect(warnings.messages.single, contains('@alice'));
-      expect(warnings.messages.single, isNot(contains('eid')),
+      final warning = warnings.messages.single;
+      expect(warning, contains('@alice'));
+      expect(warning, isNot(contains('eid')),
           reason: 'the warning never carries the stored bytes');
+      expect(warning, isNot(contains(stored.join(', '))),
+          reason: 'the warning never carries the stored bytes as a list');
+      expect(warning, isNot(contains(String.fromCharCodes(stored))),
+          reason: 'the warning never carries the stored bytes as a string');
+      expect(
+          warning, isNot(contains(utf8.decode(stored, allowMalformed: true))),
+          reason: 'the warning never carries the stored bytes decoded');
     });
 
     test('enrollmentId round-trips per atSign', () async {

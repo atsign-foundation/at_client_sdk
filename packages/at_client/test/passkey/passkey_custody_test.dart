@@ -1356,6 +1356,32 @@ void main() {
       expect(gateway.authenticated, isEmpty);
     });
 
+    test(
+        'an Error reading the remembered enrollment id fails the login '
+        'before any prompt and opens nothing', () async {
+      final broken = StateError('the hint store is broken');
+      final device = FakeHints()
+        ..credentials[_atSign] = Uint8List.fromList([1])
+        ..ids[_atSign] = 'eid1'
+        ..enrollmentIdReadFailure = broken;
+      authenticator
+        ..gets = 0
+        ..issuedPrf.clear();
+      final sessionBefore = gateway.lastSession;
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(same(broken)));
+
+      expect(authenticator.gets, 0, reason: 'no passkey prompt');
+      expect(authenticator.issuedPrf, isEmpty, reason: 'no PRF output');
+      expect(gateway.authenticated, isEmpty, reason: 'no PKAM');
+      expect(gateway.lastSession, same(sessionBefore),
+          reason: 'no enrollment session');
+      expect(setupLock.held, isEmpty);
+      expect(device.ids, {_atSign: 'eid1'},
+          reason: 'the hints are left as they were');
+    });
+
     test('a pointed enrollment id that is malformed is refused before PKAM',
         () async {
       final keys = await keysOf(0);
