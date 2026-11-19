@@ -695,8 +695,9 @@ class PasskeyCustody {
   /// as it is unfinished, publishing the encryption public key [atKeys]
   /// holds, as [open] says. It reads the completion-due record before it
   /// looks at the published key, and refuses another published key with
-  /// [PublicKeyMismatchException] before it sends anything, unless the record
-  /// says the onboarding's own delete of the CRAM secret answered.
+  /// [PublicKeyMismatchException] before it sends any delete, revoke or
+  /// publish, unless the record says the onboarding's own delete of the CRAM
+  /// secret answered.
   static Future<void> _finishActivation(
       EnrollmentSession session, Map<String, dynamic> atKeys) async {
     final key = atKeys[_encryptPublicKey];
