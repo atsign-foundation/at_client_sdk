@@ -29,24 +29,46 @@ void main() {
     record = recordOver(remoteLookUp);
   });
 
-  test('completionDueKey is completion-due.<eid>.a.__e@<atSign> canonical', () {
-    expect(completionDueKey(_eid, 'Alice'), _key);
-    expect(completionDueKey(_eid, '@ali.ce'), _key,
-        reason: 'the atSign is canonical: its dots are removed');
-    expect(() => completionDueKey('E1d2c3', _atSign), throwsArgumentError);
+  test(
+      "the record's commands name completion-due.<eid>.a.__e@<atSign> with "
+      'the atSign canonical', () async {
+    for (final atSign in ['Alice', '@ali.ce']) {
+      final lookUp = ScriptedAtLookUp((_) async => 'data:activated');
+      final named = CompletionDueRecord(
+          RemoteSecondary(_atSign, AtClientPreference(),
+              atLookUp: lookUp,
+              lookUps: RecordingLookUps((_) async => null).call),
+          atSign: atSign,
+          enrollmentId: _eid);
+      await named.write(CompletionDue.activated);
+      await named.read();
+      await named.clear();
+      expect(
+          lookUp.commands.map((c) => c.command),
+          [
+            'update:$_key activated\n',
+            'llookup:$_key\n',
+            'delete:$_key\n',
+          ],
+          reason: 'the atSign $atSign is canonical: its case is folded and '
+              'its dots are removed');
+    }
   });
 
   test(
       'a record over a malformed enrollment id is refused before anything is '
       'sent', () {
-    expect(
-        () => CompletionDueRecord(
-            RemoteSecondary(_atSign, AtClientPreference(),
-                atLookUp: remoteLookUp,
-                lookUps: RecordingLookUps((_) async => null).call),
-            atSign: _atSign,
-            enrollmentId: 'a.b'),
-        throwsArgumentError);
+    for (final enrollmentId in ['a.b', 'E1d2c3']) {
+      expect(
+          () => CompletionDueRecord(
+              RemoteSecondary(_atSign, AtClientPreference(),
+                  atLookUp: remoteLookUp,
+                  lookUps: RecordingLookUps((_) async => null).call),
+              atSign: _atSign,
+              enrollmentId: enrollmentId),
+          throwsArgumentError,
+          reason: enrollmentId);
+    }
     expect(remoteLookUp.commands, isEmpty);
   });
 

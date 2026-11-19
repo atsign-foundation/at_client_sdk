@@ -25,14 +25,6 @@ enum CompletionDue {
 const _activated = 'activated';
 const _cramSecretDeleted = 'cram-deleted';
 
-/// The name of an enrollment's completion-due record,
-/// `completion-due.<enrollmentId>.a.__e@<atsign>` with the atSign canonical.
-///
-/// Throws [ArgumentError] when [enrollmentId] is empty or holds a character
-/// outside `a-z 0-9 _ -`.
-String completionDueKey(String enrollmentId, String atSign) =>
-    '${_recordKey(enrollmentId, atSign)}';
-
 /// The [AtKey] of [enrollmentId]'s completion-due record at [atSign]: a self
 /// record in the enrollment's own namespace, beside its @keys document.
 AtKey _recordKey(String enrollmentId, String atSign) {
