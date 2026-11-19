@@ -158,6 +158,12 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
   /// How many leases one write may take before it gives up.
   static const _leaseTakes = 3;
 
+  /// The longest one write waits for the enrollment's lock, not counting the
+  /// atServer's answers: for each of its leases, up to the lock's ttl for
+  /// this store's own last lease to lapse and then up to the write's wait for
+  /// another writer's to.
+  Duration get lockWaitBound => (_lockTtl + _lockWait) * _leaseTakes;
+
   /// The lease on the enrollment's lock this store last took.
   ServerMutexLease? _lease;
 

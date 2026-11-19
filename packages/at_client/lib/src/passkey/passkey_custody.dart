@@ -137,7 +137,8 @@ abstract class EnrollmentSession {
   ///
   /// Throws when an approved enrollment other than this one is still listed
   /// afterwards; a revoke the atServer refuses for an enrollment that is no
-  /// longer approved is not a failure.
+  /// longer approved is not a failure. A revoke that fails to reach the
+  /// atServer or get its answer, such as on a lost connection, throws.
   Future<void> revokeOtherEnrollments();
 
   /// Completes the activation this session's enrollment was created by:
