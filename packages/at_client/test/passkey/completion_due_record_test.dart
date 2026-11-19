@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/passkey/completion_due_record.dart';
@@ -69,6 +71,19 @@ void main() {
       expect(await recordOver(stored).read(), CompletionDue.activated);
     });
   }
+
+  test('read counts a value with surrounding whitespace as that value',
+      () async {
+    for (final value in [
+      'cram-deleted\n',
+      ' cram-deleted ',
+      '\tcram-deleted'
+    ]) {
+      final stored = ScriptedAtLookUp((_) async => 'data:$value');
+      expect(await recordOver(stored).read(), CompletionDue.cramSecretDeleted,
+          reason: 'the stored value ${jsonEncode(value)} is cram-deleted');
+    }
+  });
 
   test('read is null on key not found', () async {
     final missing = ScriptedAtLookUp(

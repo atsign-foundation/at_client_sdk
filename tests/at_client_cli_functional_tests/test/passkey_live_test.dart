@@ -298,6 +298,7 @@ void main() {
         clientConfig: const {});
     addTearDown(otherLookUp.close);
     Object? otherRead;
+    Object? otherWrite;
     Object? otherDelete;
     final ownReads = <CompletionDue, CompletionDue?>{};
 
@@ -315,6 +316,9 @@ void main() {
             otherRead = await record.read().then<Object>(
                 (read) => read ?? 'absent',
                 onError: (Object e) => e);
+            otherWrite = await record
+                .write(CompletionDue.cramSecretDeleted)
+                .then<Object>((_) => 'written', onError: (Object e) => e);
             otherDelete = await record
                 .clear()
                 .then<Object>((_) => 'deleted', onError: (Object e) => e);
@@ -339,7 +343,8 @@ void main() {
             'was sent');
     final delete = tap.indexOfSent(_isCramDelete);
     final rewrite = tap.indexOfSent(
-        (c) => isRecord(c, 'update') && c.endsWith(' cram-deleted'));
+        (c) => isRecord(c, 'update') && c.endsWith(' cram-deleted'),
+        from: delete < 0 ? 0 : delete);
     final list = tap.indexOfSent((c) => c.startsWith('enroll:list'),
         from: rewrite < 0 ? 0 : rewrite);
     expect([delete, rewrite, list], everyElement(greaterThan(-1)),
@@ -384,9 +389,12 @@ void main() {
             '__manage:rw');
     for (final (verb, outcome) in [
       ('llookup', otherRead),
+      ('update', otherWrite),
       ('delete', otherDelete)
     ]) {
-      final sent = tap.indexOfSent((c) => isRecord(c, verb));
+      final sent = tap.indexOfSent((c) =>
+          isRecord(c, verb) &&
+          (verb != 'update' || c.endsWith(' cram-deleted')));
       expect(sent, greaterThan(-1), reason: tap.transcript());
       expect(tap.lines[sent].connection, isNot(tap.lines[mark].connection),
           reason: 'the control: the other enrollment sent it');
