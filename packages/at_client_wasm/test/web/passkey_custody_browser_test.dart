@@ -101,15 +101,33 @@ class _Client implements AtClient {
 }
 
 class _Session implements EnrollmentSession {
-  _Session(this.server, this.enrollmentId);
+  _Session(this.server, this.enrollmentId, {required this.enrolled});
 
   final _Server server;
   @override
   final String enrollmentId;
+
+  /// Whether this session came from an activation, so holds @keys; a session
+  /// from an authentication holds none.
+  final bool enrolled;
   var closed = false;
 
+  /// How many times [close] ran, whoever called it.
+  var closeCalls = 0;
+
+  /// The keys IO [openClient] was last given.
+  WrittenAtKeysIo? openedOn;
+
+  /// [_Server.keys]. Throws [StateError] on a session that was
+  /// authenticated, as the real one does.
   @override
-  Future<Map<String, dynamic>> atKeys() async => server.keys;
+  Future<Map<String, dynamic>> atKeys() async {
+    if (!enrolled) {
+      throw StateError('this session was authenticated, not enrolled: it '
+          'holds no @keys');
+    }
+    return server.keys;
+  }
 
   @override
   Future<PublishedEncryptionKey> publishedEncryptionKey(
@@ -128,8 +146,13 @@ class _Session implements EnrollmentSession {
     server.approved.removeWhere((eid) => eid != enrollmentId);
   }
 
+  /// Thrown by [completeActivation] while set, before it changes anything.
+  Object? dieBeforeCramDelete;
+
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
+    final died = dieBeforeCramDelete;
+    if (died != null) throw died;
     if (atKeys['aesEncryptPublicKey'] case final String key) {
       if (server.publishFailure case final failure?) throw failure;
       server.publishedKey = key;
@@ -157,6 +180,7 @@ class _Session implements EnrollmentSession {
 
   @override
   Future<AtClient> openClient(WrittenAtKeysIo keysIo) async {
+    openedOn = keysIo;
     final client = _Client(this, keysIo);
     if (server.clientsOffline) {
       // As the session opener does: stop the client, then throw.
@@ -170,6 +194,7 @@ class _Session implements EnrollmentSession {
   @override
   Future<void> close() async {
     closed = true;
+    closeCalls++;
   }
 }
 
@@ -220,9 +245,11 @@ class _Gateway implements EnrollmentGateway {
   var activations = 0;
   _Session? lastSession;
 
-  /// Throws this once the enrollment is approved, as a tab that dies there
-  /// would.
-  Object? dieAfterActivation;
+  /// Each session [activate] hands out throws this from its first
+  /// [EnrollmentSession.completeActivation], before the CRAM secret is
+  /// deleted: as a tab that dies once the custody has written the document
+  /// and the pointer would.
+  Object? dieBeforeCramDelete;
 
   /// Every APKAM key pair this gateway received.
   final pairs = <ApkamKeyPair>[];
@@ -237,7 +264,7 @@ class _Gateway implements EnrollmentGateway {
         server.apkamPublicKeys[enrollmentId] != apkamKeyPair.publicKey) {
       throw PkamRefusedException(enrollmentId);
     }
-    return lastSession = _Session(server, enrollmentId);
+    return lastSession = _Session(server, enrollmentId, enrolled: false);
   }
 
   @override
@@ -251,9 +278,8 @@ class _Gateway implements EnrollmentGateway {
     final eid = 'eid${++server.enrollments}';
     server.apkamPublicKeys[eid] = apkamKeyPair.publicKey;
     server.approved.add(eid);
-    final died = dieAfterActivation;
-    if (died != null) throw died;
-    return lastSession = _Session(server, eid);
+    return lastSession = _Session(server, eid, enrolled: true)
+      ..dieBeforeCramDelete = dieBeforeCramDelete;
   }
 }
 
@@ -307,7 +333,7 @@ class _Device {
   late IndexedDbHintStore store;
 
   /// Applied to each gateway this device builds.
-  Object? dieAfterActivation;
+  Object? dieBeforeCramDelete;
   late _Gateway gateway;
   final sessions = <PasskeySession>[];
 
@@ -316,7 +342,7 @@ class _Device {
 
   Future<PasskeyCustody> custody() async {
     store = await IndexedDbHintStore.open(dbName: dbName);
-    gateway = _Gateway(server)..dieAfterActivation = dieAfterActivation;
+    gateway = _Gateway(server)..dieBeforeCramDelete = dieBeforeCramDelete;
     return PasskeyCustody(
         prf: PasskeyPrf(_authenticator,
             prfSupport: PrfSupport(WebPrfEnvironment())),
@@ -577,7 +603,13 @@ void main() {
         device.onboard(),
         throwsA(isA<PasskeyOnboardingIncompleteException>().having(
             (e) => e.cause, 'cause', isA<PortalSessionOfflineException>())));
-    expect(device.gateway.lastSession!.closed, isTrue);
+    final failed = device.gateway.lastSession!;
+    expect(failed.closeCalls, 2,
+        reason: 'the client the opener stopped closed the session once, and '
+            'the custody closed it again');
+    await expectLater(
+        Future.sync(() => failed.openedOn!.read(_atSign)), throwsStateError,
+        reason: 'the custody closed the key store the client was opened on');
     expect(server.cramLive, isFalse);
 
     server.clientsOffline = false;
@@ -775,16 +807,21 @@ void main() {
   });
 
   group('a tab that dies after the activation', () {
-    setUp(() => device.dieAfterActivation = StateError('tab died'));
+    setUp(() => device.dieBeforeCramDelete = StateError('tab died'));
 
-    /// Kills the tab right after activation, then reloads: a fresh custody
-    /// over the same IndexedDB and the same passkey.
+    /// Kills the tab once the custody has activated and written the document
+    /// and the pointer, before the CRAM secret is deleted, then reloads: a
+    /// fresh custody over the same IndexedDB and the same passkey.
     Future<void> dieThenReload() async {
       await expectLater(device.onboard(), throwsA(isA<StateError>()));
       expect(device.gateway.activations, 1);
+      expect(server.documents.keys, ['eid1'],
+          reason: 'the custody wrote the document before the tab died');
+      expect(server.pointers, hasLength(1),
+          reason: 'the custody wrote the pointer before the tab died');
       expect(server.cramLive, isTrue);
       device.store.close();
-      device.dieAfterActivation = null;
+      device.dieBeforeCramDelete = null;
     }
 
     test('The device keeps nothing about an onboarding that did not complete',
@@ -810,10 +847,15 @@ void main() {
       await _expectOnlyHint(device, 'eid2');
     });
 
-    test('reload then log in finds no pointer and is a lost passkey', () async {
+    test('reload then log in finds the pointer and completes the activation',
+        () async {
       await dieThenReload();
-      await expectLater(device.open(), throwsA(isA<PasskeyLostException>()));
+      final client = await device.open();
+      expect(client.enrollmentId, 'eid1');
       expect(server.enrollments, 1);
+      expect(server.cramLive, isFalse);
+      expect(server.publishedKey, _encPublic);
+      await _expectOnlyHint(device, 'eid1');
     });
   });
 }

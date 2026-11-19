@@ -594,14 +594,56 @@ void main() {
       expect(wire.commands, [list, list]);
     });
 
+    // NOTE: the lookUp throws an atServer's error reply as an
+    // AtLookUpException, which the remote secondary maps by its code.
+    for (final code in ['AT0029', 'AT0031', 'AT0032']) {
+      test(
+          'a revoke the atServer refuses with $code, for an enrollment no '
+          'longer approved, is left to the list and is not a failure',
+          () async {
+        final session = await activate();
+        serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+            revoked: (_) => throw AtLookUpException(code, 'not approved'));
+
+        await session.revokeOtherEnrollments();
+
+        expect(wire.commands, [list, revoke('eid-0'), list],
+            reason: 'an atServer refusal of a revoke is left to the list '
+                'that follows');
+      });
+    }
+
     test(
-        'a refused revoke of an enrollment no longer approved is not a failure',
-        () async {
+        'Given another approved enrollment of @alice🛠 is gone by the time '
+        'the completion revokes it, when the atServer answers that revoke '
+        'with AT0028, then the revoke is left to the list that follows, and '
+        'the completion goes on when the list no longer shows it', () async {
       final session = await activate();
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => 'error:AT0011:not approved');
+          revoked: (_) => throw AtLookUpException(
+              'AT0028', 'enrollment_id: eid-0 is expired or invalid'));
 
       await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the atServer answers AT0028 to a revoke of an enrollment '
+              'that has expired or no longer exists');
+    });
+
+    test(
+        'an AT0028 answer to a revoke whose enrollment the list still shows '
+        'as approved makes the revoke throw', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved'},
+          {_eid: 'approved', 'eid-0': 'approved'},
+          revoked: (_) => throw AtLookUpException(
+              'AT0028', 'enrollment_id: eid-0 is expired or invalid'));
+
+      await expectLater(session.revokeOtherEnrollments(),
+          throwsA(isA<AtEnrollmentException>()),
+          reason: 'the list that follows still shows eid-0 as approved');
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the list that follows decides');
     });
 
     test('throws when an approved enrollment other than its own remains',
@@ -613,18 +655,25 @@ void main() {
       }, {
         _eid: 'approved',
         'eid-0': 'approved'
-      }, revoked: (_) => 'error:AT0011:refused');
+      }, revoked: (_) => throw AtLookUpException('AT0031', 'refused'));
 
       await expectLater(session.revokeOtherEnrollments(),
           throwsA(isA<AtEnrollmentException>()));
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the list that follows throws, not the refused revoke');
     });
 
     test('a revoke that fails other than with an atServer refusal propagates',
         () async {
-      // What a real lookUp throws for a lost connection and for a timeout.
+      // What a real lookUp throws for a lost connection, a timeout, a
+      // connect that fails, and an atServer that is failing, busy or paused.
       for (final (code, failure) in [
         ('AT0004', 'the connection was lost'),
         ('AT0014', 'Request timed out'),
+        ('AT0021', 'wss connect failed'),
+        ('AT0011', 'internal server exception'),
+        ('AT0012', 'inbound connection limit exceeded'),
+        ('AT0024', 'server is paused'),
       ]) {
         wire.commands.clear();
         final session = await activate();
@@ -640,43 +689,51 @@ void main() {
       }
     });
 
+    // NOTE: a real lookUp lets each of these failures out only as an
+    // AtLookUpException carrying its code, never as the exception itself.
     test('a revoke that cannot reach the atServer propagates', () async {
       final session = await activate();
-      final failure =
-          AtConnectException('findAtServer for $_atSign : Connection refused');
+      const failure = 'Exception: $_atSign: unable to connect to atServer on '
+          'atserver.test:1 - SocketException: Connection refused';
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw failure);
+          revoked: (_) => throw AtLookUpException('AT0021', failure));
 
       await expectLater(
-          session.revokeOtherEnrollments(), throwsA(same(failure)),
+          session.revokeOtherEnrollments(),
+          throwsA(isA<SecondaryConnectException>()
+              .having((e) => e.message, 'message', failure)),
           reason: 'a revoke that never reached the atServer was not refused');
       expect(wire.commands, [list, revoke('eid-0')]);
     });
 
     test('a revoke whose answer does not come in time propagates', () async {
       final session = await activate();
-      final failure = AtTimeoutException(
-          'Full response not received after 90000 millis from remote atServer');
+      const failure = 'Exception: Full response not received after 90000 '
+          'millis from remote atServer';
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw failure);
+          revoked: (_) => throw AtLookUpException('AT0023', failure));
 
       await expectLater(
-          session.revokeOtherEnrollments(), throwsA(same(failure)),
+          session.revokeOtherEnrollments(),
+          throwsA(isA<AtTimeoutException>()
+              .having((e) => e.message, 'message', failure)),
           reason: 'a revoke whose answer never came was not refused');
       expect(wire.commands, [list, revoke('eid-0')]);
     });
 
-    test('a revoke the atServer answers with an error is left to the list',
-        () async {
+    test('a revoke that fails with an I/O error propagates', () async {
       final session = await activate();
+      const failure = 'Exception: connection to atserver.test:1 failed: '
+          'SocketException: Broken pipe';
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw AtLookUpException('AT0011', 'not approved'));
+          revoked: (_) => throw AtLookUpException('AT0004', failure));
 
-      await session.revokeOtherEnrollments();
-
-      expect(wire.commands, [list, revoke('eid-0'), list],
-          reason: 'an atServer refusal of a revoke is left to the list that '
-              'follows');
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(
+              isA<AtException>().having((e) => e.message, 'message', failure)),
+          reason: 'a revoke that failed to send was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
     });
   });
 

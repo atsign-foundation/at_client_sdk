@@ -789,7 +789,9 @@ Future<Map<String, dynamic>> _namespacesOf(AtClient client, String enrollmentId,
 }
 
 /// `accepted` when a `cram:` login of [atSign] with its CRAM secret succeeds
-/// on a connection of its own, else `refused:` and the reason.
+/// on a connection of its own, `refused:` and the reason when the atServer
+/// refuses it, else `failed:` and the reason: a probe that could not connect,
+/// timed out or failed otherwise says nothing about the CRAM secret.
 Future<String> _cramLogin(String atSign) async {
   final lookUp = secureSocketLookUps()(
       atSign: atSign, rootDomain: veRoot, authenticator: null);
@@ -797,8 +799,12 @@ Future<String> _cramLogin(String atSign) async {
     lookUp.authenticator =
         authenticatorForCramSecret(atSign, cramKeyMap[atSign]!);
     return await lookUp.pkamAuthenticate() ? 'accepted' : 'refused: false';
-  } on Exception catch (e) {
+  } on UnAuthenticatedException catch (e) {
     return 'refused: $e';
+  } on AtLookUpException catch (e) {
+    return e.errorCode == 'AT0401' ? 'refused: $e' : 'failed: $e';
+  } on Exception catch (e) {
+    return 'failed: $e';
   } finally {
     await lookUp.close();
   }
