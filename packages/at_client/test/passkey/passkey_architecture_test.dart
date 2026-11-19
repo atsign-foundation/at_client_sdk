@@ -11,6 +11,12 @@ final _extendsAtException = RegExp(r'^\s*extends\s+AtException\b');
 
 String _all() => _sources().map((f) => f.readAsStringSync()).join('\n');
 
+/// [source] without its comment lines.
+String _code(String source) => source
+    .split('\n')
+    .where((line) => !line.trimLeft().startsWith('//'))
+    .join('\n');
+
 /// The member of [source] whose declaration starts with [signature], through
 /// its matching closing brace.
 String _member(String source, String signature) {
@@ -104,6 +110,26 @@ void main() {
               File('lib/src/passkey/passkey_custody.dart').readAsStringSync(),
               'Future<void> _completeActivation('),
           contains('.revokeOtherEnrollments()'));
+    });
+
+    test(
+        'the code names a revoke only in the one revoke path, its declaration '
+        'and its one call', () {
+      var rest = _code(_all()).replaceAll('unrevoke', '');
+      for (final allowed in [
+        'Future<void> revokeOtherEnrollments();',
+        'Future<void> revokeOtherEnrollments() async',
+        '.revokeOtherEnrollments()',
+        'EnrollOperationEnum.revoke',
+        "'a revoke was refused",
+        "after revoking them'",
+      ]) {
+        expect(allowed.allMatches(rest), hasLength(1), reason: allowed);
+        rest = rest.replaceAll(allowed, '');
+      }
+      expect(rest.toLowerCase(), isNot(contains('revok')),
+          reason: 'a revoke command, a tear-off of revokeOtherEnrollments or '
+              'any other revoke is a second revoke path');
     });
 
     test('the flow offers no document or pointer delete', () {
