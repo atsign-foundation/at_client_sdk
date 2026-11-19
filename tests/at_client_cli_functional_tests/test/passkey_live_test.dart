@@ -157,10 +157,14 @@ void main() {
     expect(refused, greaterThan(0), reason: 'the client found it held');
     final put = rig.tap.indexOfSent(_isDocumentPut, from: mark);
     expect(put, greaterThan(otherPut));
+    final took = _acceptedTakeAfter(rig.tap, mark);
+    expect(took, allOf(greaterThan(-1), lessThan(put)),
+        reason: 'it took the lock before it put');
     expect(
-        rig.tap.indexOfSent((c) => c.startsWith('llookup:atkeys.'), from: mark),
-        lessThan(put),
-        reason: 'it re-read the document before it put');
+        rig.tap.indexOfSent((c) => c.startsWith('llookup:atkeys.'), from: took),
+        allOf(greaterThan(took), lessThan(put)),
+        reason: 'it re-read the document once it held the lock, before it '
+            'put');
     final stored =
         jsonEncode(await rig.storedDocument(atSign, enrollmentId, prf));
     expect(stored, contains(_b('other-priv')),
@@ -176,6 +180,9 @@ void main() {
     await Future<void>.delayed(_pastTheLock);
 
     await _file(session.client, atSign, 'f0every1', 'every1');
+    // The first write's lease now has less than half its ttl left, so the
+    // second write cannot put on it.
+    await Future<void>.delayed(_pastHalfTheLock);
     await _file(session.client, atSign, 'f0every2', 'every2');
 
     final lines = rig.tap.lines;
@@ -186,17 +193,14 @@ void main() {
     print('LIVE document puts: ${puts.length}');
     expect(puts.length, greaterThanOrEqualTo(3));
     for (final put in puts) {
-      final takes = [
-        for (var i = 0; i < put; i++)
-          if (lines[i].sent &&
-              lines[i].text.contains('atkeys-lock.') &&
-              _accepted(rig.tap, i) &&
-              lines[put].at.difference(lines[i].at) < _lockTtl)
-            i
-      ];
-      expect(takes, isNotEmpty,
-          reason: 'put #$put was sent within the ttl of a lock this '
-              'process took:\n${rig.tap.transcript()}');
+      final took = _acceptedTakeBefore(rig.tap, put);
+      expect(took, greaterThan(-1),
+          reason: 'put #$put follows a lock this process took:\n'
+              '${rig.tap.transcript()}');
+      expect(lines[put].at.difference(lines[took].at),
+          lessThanOrEqualTo(_lockTtl ~/ 2 + _tapSlack),
+          reason: 'put #$put was sent with at least half the ttl of the '
+              'lock it holds left:\n${rig.tap.transcript()}');
     }
   }, timeout: _timeout);
 
@@ -497,6 +501,13 @@ const _lockTtl = Duration(seconds: 10);
 /// Long enough for a lock taken before it to have expired.
 const _pastTheLock = Duration(seconds: 11);
 
+/// Long enough for a lock taken before it to have less than half its ttl
+/// left.
+const _pastHalfTheLock = Duration(seconds: 6);
+
+/// How much later than the command itself the tap may stamp a sent line.
+const _tapSlack = Duration(milliseconds: 250);
+
 String _b(String s) => base64Encode(utf8.encode(s));
 
 Future<PasskeySession> _onboard(PasskeyRig rig, String atSign) =>
@@ -544,6 +555,30 @@ bool _accepted(WireTap tap, int sent) {
   return reply >= 0 &&
       tap.lines[reply].text.contains('data:') &&
       !tap.lines[reply].text.contains('error:');
+}
+
+/// Whether the line at [i] is a take of the @keys lock the atServer granted.
+bool _isAcceptedTake(WireTap tap, int i) =>
+    tap.lines[i].sent &&
+    tap.lines[i].text.contains('atkeys-lock.') &&
+    _accepted(tap, i);
+
+/// The index of the first granted take of the @keys lock at or after [from],
+/// or -1.
+int _acceptedTakeAfter(WireTap tap, int from) {
+  for (var i = from; i < tap.lines.length; i++) {
+    if (_isAcceptedTake(tap, i)) return i;
+  }
+  return -1;
+}
+
+/// The index of the last granted take of the @keys lock before [before], or
+/// -1.
+int _acceptedTakeBefore(WireTap tap, int before) {
+  for (var i = before - 1; i >= 0; i--) {
+    if (_isAcceptedTake(tap, i)) return i;
+  }
+  return -1;
 }
 
 /// How many takes of the @keys lock sent at or after [from] were refused.
