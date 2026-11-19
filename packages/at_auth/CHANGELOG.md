@@ -61,6 +61,10 @@
   stack trace; the trace is logged at fine.
 - fix: a message about an atKeys date that does not parse gives the
   parser's reason and holds none of the date's text.
+- fix: a message about an atKeys file that cannot be read quotes none of
+  its values. A passphrase-protected file whose hashing algorithm is
+  unknown, or whose key derivation cannot run, says so rather than that
+  the passphrase may be incorrect.
 - feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
   activation enrolls in place of a freshly minted APKAM keypair, as
   `AtEnrollmentRequest` does. A pair that does not sign for its public half, or

@@ -29,8 +29,8 @@ enum AtKeysUnusableCause {
 /// Keys that cannot be used to authenticate as [atSign]: [cause] says why,
 /// and [source] where they were looked for.
 ///
-/// Its message holds no stack trace. It can quote values from the keys, such
-/// as an unsupported token, a duplicate keyId or an enrollment id.
+/// Its message holds no stack trace and quotes no value read from the keys
+/// but the atSign they record, an enrollment id or an algorithm name.
 class AtKeysUnusableException extends AtException {
   final String atSign;
   final AtKeysUnusableCause cause;
@@ -97,8 +97,9 @@ String _where(String source) =>
         ? 'in $source'
         : 'at $source';
 
-/// Why [error] leaves the keys unusable, in one line holding none of what
-/// was read.
+/// Why [error] leaves the keys unusable, in one line: what the error says,
+/// which names where the keys failed and quotes no value from them
+/// but an enrollment id or an algorithm name.
 String _reasonFor(Object error) {
   final text = switch (error) {
     AtKeysFormatException(:final isJson, :final reason, :final position) =>

@@ -294,6 +294,202 @@ void main() {
               "type 'int' is not a subtype of type 'String' in type cast"),
           error: isA<TypeError>());
     });
+
+    test('a keyId that appears twice', () async {
+      final keyId = randomBase64(24);
+      await refusedAfterOnline(
+          unreadable: () async {
+            final document = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final enrollment =
+                (document['enrollments'] as List).first as Map<String, dynamic>;
+            final keys = enrollment['keys'] as List;
+            final entry = keys.first as Map<String, dynamic>;
+            entry['keyId'] = keyId;
+            keys.add(Map<String, dynamic>.of(entry));
+            File(path).writeAsStringSync(jsonEncode(document));
+            return keyId;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path),
+          reason: startsWith('Duplicate atKeys keyId at '),
+          error: isA<AtKeysValidationException>());
+    });
+
+    test('an envelope version this build has no code for', () async {
+      final version = randomBase64(24);
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            envelope['v'] = version;
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return version;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason: contains('an envelope version this build has no code for'),
+          error: isA<AtDecryptionException>());
+    });
+
+    test('a role that appears twice for one keyId', () async {
+      final value = randomBase64(24);
+      await refusedAfterOnline(
+          unreadable: () async {
+            final document = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final enrollment =
+                (document['enrollments'] as List).first as Map<String, dynamic>;
+            final entry =
+                (enrollment['keys'] as List).first as Map<String, dynamic>;
+            entry['keyId'] = value;
+            final material = entry['material'] as List;
+            final part = material.first as Map<String, dynamic>;
+            part['role'] = value;
+            material.add(Map<String, dynamic>.of(part));
+            File(path).writeAsStringSync(jsonEncode(document));
+            return value;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path),
+          reason: startsWith('Duplicate role at '),
+          error: isA<AtKeysValidationException>());
+    });
+
+    test('an enrollment holding two active keys of one role and algorithm',
+        () async {
+      final value = randomBase64(24);
+      await refusedAfterOnline(
+          unreadable: () async {
+            final document = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final enrollment =
+                (document['enrollments'] as List).first as Map<String, dynamic>;
+            enrollment['enrollmentId'] = value;
+            final keys = enrollment['keys'] as List;
+            final entry = keys.first as Map<String, dynamic>;
+            final part =
+                (entry['material'] as List).first as Map<String, dynamic>;
+            part['role'] = value;
+            part['algorithm'] = value;
+            keys.add({...entry, 'keyId': randomBase64(12)});
+            File(path).writeAsStringSync(jsonEncode(document));
+            return value;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path),
+          reason: startsWith('an enrollment holds more than one active key '
+              'material of one role and algorithm'),
+          error: isA<AtKeysEnrollmentException>());
+    });
+
+    test('an atKeys version this build has no code for', () async {
+      final version = '${random.nextInt(900000000) + 100000000}'
+          '${random.nextInt(900000000) + 100000000}';
+      await refusedAfterOnline(
+          unreadable: () async {
+            final document = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            document['version'] = int.parse(version);
+            File(path).writeAsStringSync(jsonEncode(document));
+            return version;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path),
+          reason: startsWith('this atKeys file declares a version this build '
+              'has no code for'),
+          error: isA<AtKeysUnsupportedVersionException>());
+    });
+
+    test('a namespace that names no string', () async {
+      final namespace = randomBase64(24);
+      await refusedAfterOnline(
+          unreadable: () async {
+            final document = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final enrollment =
+                (document['enrollments'] as List).first as Map<String, dynamic>;
+            enrollment['namespaces'] = {namespace: 5};
+            File(path).writeAsStringSync(jsonEncode(document));
+            return namespace;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path),
+          reason: startsWith('Expected string in enrollments[0].namespaces'),
+          error: isA<AtKeysParseException>());
+    });
+
+    test('a key derivation cost below one', () async {
+      final cost = '-${random.nextInt(900000000) + 100000000}'
+          '${random.nextInt(900000000) + 100000000}';
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            (envelope['kdfParams'] as Map<String, dynamic>)['iterations'] =
+                int.parse(cost);
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return cost;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason:
+              contains('must carry a positive integer kdfParams.iterations'),
+          error: isA<AtDecryptionException>());
+    });
+
+    test('a key derivation memory below eight times its parallelism', () async {
+      final cost = '${random.nextInt(90000000) + 10000000}'
+          '${random.nextInt(900000000) + 100000000}';
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final kdfParams = envelope['kdfParams'] as Map<String, dynamic>;
+            kdfParams['memory'] = int.parse(cost);
+            kdfParams['parallelism'] = int.parse(cost);
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return cost;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason: contains('kdfParams.memory of at least 8 times its '
+              'kdfParams.parallelism'),
+          error: isA<AtDecryptionException>());
+    });
+
+    test('a key derivation this device cannot run', () async {
+      final memory = 4 *
+          ((random.nextInt(9000) + 1000) * 1000000000 +
+              random.nextInt(1000000000));
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final kdfParams = envelope['kdfParams'] as Map<String, dynamic>;
+            kdfParams['memory'] = memory;
+            kdfParams['parallelism'] = 1;
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return '${memory * 1024}';
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason: startsWith('this atKeys file asks for a key derivation this '
+              'device could not run'),
+          error: isA<AtDecryptionException>());
+    });
+
+    test('a hashing algorithm this build has no code for', () async {
+      final name = randomBase64(24);
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            envelope['hashingAlgoType'] = name;
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return name;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason: startsWith('this atKeys file names a hashingAlgoType this '
+              'build has no code for'),
+          error: isA<AtDecryptionException>());
+    });
   });
 
   group(
