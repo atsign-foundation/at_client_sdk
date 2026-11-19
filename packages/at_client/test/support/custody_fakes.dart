@@ -26,13 +26,33 @@ String encryptionPublicKeyOf(String enrollmentId) =>
     base64Encode(utf8.encode('enc-pub-$enrollmentId'));
 
 /// The atServer as the custody flows see it: pointers by lookup id, each
-/// enrollment's own document, and an ordered log of every write.
+/// enrollment's own document and completion-due record, and an ordered log
+/// of every document and pointer write.
 class FakeServer implements EnrollmentPointerReader {
   final pointers = <String, String>{};
 
   /// The namespace each pointer was written in, by lookup id.
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
+
+  /// The enrollments whose completion-due record exists.
+  final completionDue = <String>{};
+
+  /// Makes a write of a completion-due record throw this before it is
+  /// stored.
+  Object? completionDueMarkError;
+
+  /// Makes a read of a completion-due record throw this.
+  Object? completionDueReadError;
+
+  /// Deletes of a completion-due record that throw
+  /// [completionDueClearError] before one is accepted.
+  var completionDueClearFailures = 0;
+  Object completionDueClearError = StateError('completion-due delete failed');
+
+  /// Answers every completion-due operation in place of this server, when
+  /// set.
+  EnrollmentDocumentStore? completionDueStore;
 
   /// The APKAM public key each enrollment authenticates with.
   final pairByEnrollment = <String, String>{};
@@ -43,9 +63,11 @@ class FakeServer implements EnrollmentPointerReader {
   final log = <String>[];
 
   /// Every step of an onboarding in the order it happened: the server's
-  /// writes (as in [log]), the activation, each completion with the key it
-  /// published and the CRAM secret's deletion, each revoke request with the
-  /// enrollments it revoked, and the client opening.
+  /// writes (as in [log]), the activation, each write, read and delete of a
+  /// completion-due record, each lookup of the published encryption public
+  /// key, each completion with the key it published and the CRAM secret's
+  /// deletion, each revoke request with the enrollments it revoked, and the
+  /// client opening.
   final timeline = <String>[];
 
   /// The atSigns whose CRAM secret is deleted; an activation of one of them
@@ -119,6 +141,7 @@ class FakeSession implements EnrollmentSession {
   @override
   Future<PublishedEncryptionKey> publishedEncryptionKey(
       Map<String, dynamic> atKeys) async {
+    server.timeline.add('lookup-publickey');
     if (!server.publishes(atKeys)) return PublishedEncryptionKey.different;
     final held = atKeys['aesEncryptPublicKey'];
     if (held is! String) return PublishedEncryptionKey.same;
@@ -296,6 +319,45 @@ class _Documents implements EnrollmentDocumentStore {
       {required Duration ttl}) async {
     _own(eid);
     return freeLease(atSign, eid, ttl);
+  }
+
+  @override
+  Future<void> markCompletionDue(String atSign, String eid) async {
+    _own(eid);
+    final server = session.server;
+    server.timeline.add('mark-completion-due:$eid');
+    if (server.completionDueStore case final store?) {
+      return store.markCompletionDue(atSign, eid);
+    }
+    if (server.completionDueMarkError case final e?) throw e;
+    server.completionDue.add(eid);
+  }
+
+  @override
+  Future<bool> isCompletionDue(String atSign, String eid) async {
+    _own(eid);
+    final server = session.server;
+    server.timeline.add('read-completion-due:$eid');
+    if (server.completionDueStore case final store?) {
+      return store.isCompletionDue(atSign, eid);
+    }
+    if (server.completionDueReadError case final e?) throw e;
+    return server.completionDue.contains(eid);
+  }
+
+  @override
+  Future<void> clearCompletionDue(String atSign, String eid) async {
+    _own(eid);
+    final server = session.server;
+    server.timeline.add('clear-completion-due:$eid');
+    if (server.completionDueStore case final store?) {
+      return store.clearCompletionDue(atSign, eid);
+    }
+    if (server.completionDueClearFailures > 0) {
+      server.completionDueClearFailures--;
+      throw server.completionDueClearError;
+    }
+    server.completionDue.remove(eid);
   }
 }
 

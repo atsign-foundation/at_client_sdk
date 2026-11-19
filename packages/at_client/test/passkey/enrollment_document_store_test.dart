@@ -124,4 +124,87 @@ void main() {
     expect(store.put(_atSign, _eid, '{\n}'), throwsArgumentError);
     expect(remoteLookUp.commands, isEmpty);
   });
+
+  group('the completion-due record', () {
+    test('completionDueKey is completion-due.<eid>.a.__e@<atSign> canonical',
+        () {
+      expect(
+          completionDueKey(_eid, 'Alice'), 'completion-due.$_eid.a.__e@alice');
+      expect(() => completionDueKey('E1d2c3', _atSign), throwsArgumentError);
+    });
+
+    test('markCompletionDue sends update on the authenticated remote',
+        () async {
+      await store.markCompletionDue(_atSign, _eid);
+      expect(remoteLookUp.commands.single, (
+        command: 'update:completion-due.$_eid.a.__e@alice due\n',
+        auth: true
+      ));
+    });
+
+    test('isCompletionDue sends llookup on the authenticated remote', () async {
+      final due = ScriptedAtLookUp((_) async => 'data:due');
+      expect(await storeOver(due).isCompletionDue(_atSign, _eid), isTrue);
+      expect(due.commands.single,
+          (command: 'llookup:completion-due.$_eid.a.__e@alice\n', auth: true));
+    });
+
+    test('isCompletionDue is false on key not found', () async {
+      final missing = ScriptedAtLookUp(
+          (_) async => throw AtLookUpException('AT0015', 'key not found'));
+      expect(await storeOver(missing).isCompletionDue(_atSign, _eid), isFalse);
+    });
+
+    test('isCompletionDue is false on data:null', () async {
+      final empty = ScriptedAtLookUp((_) async => 'data:null');
+      expect(await storeOver(empty).isCompletionDue(_atSign, _eid), isFalse);
+    });
+
+    test('isCompletionDue propagates other errors', () async {
+      final refused = ScriptedAtLookUp(
+          (_) async => throw AtLookUpException('AT0009', 'unauthorized'));
+      await expectLater(storeOver(refused).isCompletionDue(_atSign, _eid),
+          throwsA(isA<UnAuthorizedException>()));
+    });
+
+    test('isCompletionDue throws a typed error on a response without data',
+        () async {
+      final odd = ScriptedAtLookUp((_) async => 'error:AT0011-boom');
+      await expectLater(storeOver(odd).isCompletionDue(_atSign, _eid),
+          throwsA(isA<InvalidResponseException>()));
+    });
+
+    test('clearCompletionDue sends delete on the authenticated remote',
+        () async {
+      await store.clearCompletionDue(_atSign, _eid);
+      expect(remoteLookUp.commands.single,
+          (command: 'delete:completion-due.$_eid.a.__e@alice\n', auth: true));
+    });
+
+    test('clearCompletionDue counts key not found as deleted', () async {
+      final missing = ScriptedAtLookUp(
+          (_) async => throw AtLookUpException('AT0015', 'key not found'));
+      await storeOver(missing).clearCompletionDue(_atSign, _eid);
+      expect(missing.commands.single.command,
+          'delete:completion-due.$_eid.a.__e@alice\n');
+    });
+
+    test('clearCompletionDue propagates other errors', () async {
+      final refused = ScriptedAtLookUp(
+          (_) async => throw AtLookUpException('AT0009', 'unauthorized'));
+      await expectLater(storeOver(refused).clearCompletionDue(_atSign, _eid),
+          throwsA(isA<UnAuthorizedException>()));
+    });
+
+    test('a malformed enrollment id is refused before anything is sent',
+        () async {
+      await expectLater(
+          store.markCompletionDue(_atSign, 'a.b'), throwsArgumentError);
+      await expectLater(
+          store.isCompletionDue(_atSign, 'a.b'), throwsArgumentError);
+      await expectLater(
+          store.clearCompletionDue(_atSign, 'a.b'), throwsArgumentError);
+      expect(remoteLookUp.commands, isEmpty);
+    });
+  });
 }

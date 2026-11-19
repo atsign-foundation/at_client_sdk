@@ -33,6 +33,21 @@ class _Docs implements EnrollmentDocumentStore {
   Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
           {required Duration ttl}) async =>
       freeLease(atSign, enrollmentId, ttl);
+
+  /// The enrollments whose completion-due record exists.
+  final completionDue = <String>{};
+
+  @override
+  Future<void> markCompletionDue(String atSign, String enrollmentId) async =>
+      completionDue.add(enrollmentId);
+
+  @override
+  Future<bool> isCompletionDue(String atSign, String enrollmentId) async =>
+      completionDue.contains(enrollmentId);
+
+  @override
+  Future<void> clearCompletionDue(String atSign, String enrollmentId) async =>
+      completionDue.remove(enrollmentId);
 }
 
 /// A client whose stop, shared by every caller as a real client's is, reports

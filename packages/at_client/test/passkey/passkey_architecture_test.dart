@@ -110,6 +110,16 @@ void main() {
       final all = _all();
       expect(all, isNot(contains('Future<void> delete(')));
       expect(all, isNot(contains("'delete:")));
+      expect('DeleteVerbBuilder()'.allMatches(all), hasLength(1),
+          reason: 'the passkey sources build one delete, of the '
+              'completion-due record');
+      expect(
+          _member(
+              File('lib/src/passkey/enrollment_document_store.dart')
+                  .readAsStringSync(),
+              'Future<void> clearCompletionDue(String atSign, String '
+              'enrollmentId) async'),
+          contains('DeleteVerbBuilder()'));
     });
   });
 

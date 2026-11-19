@@ -46,6 +46,18 @@ class _Docs implements EnrollmentDocumentStore {
   Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
           {required Duration ttl}) async =>
       freeLease(atSign, enrollmentId, ttl);
+
+  @override
+  Future<void> markCompletionDue(String atSign, String enrollmentId) async =>
+      records[completionDueKey(enrollmentId, atSign)] = 'due';
+
+  @override
+  Future<bool> isCompletionDue(String atSign, String enrollmentId) async =>
+      records.containsKey(completionDueKey(enrollmentId, atSign));
+
+  @override
+  Future<void> clearCompletionDue(String atSign, String enrollmentId) async =>
+      records.remove(completionDueKey(enrollmentId, atSign));
 }
 
 void _fileSigning(AtKeys keys, String tag, {String eid = _eid}) =>

@@ -1,6 +1,6 @@
 import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:at_commons/at_builders.dart'
-    show LLookupVerbBuilder, UpdateVerbBuilder;
+    show DeleteVerbBuilder, LLookupVerbBuilder, UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart'
     show AtKey, InvalidResponseException, KeyNotFoundException;
 import 'package:at_commons/atsign.dart';
@@ -8,8 +8,9 @@ import 'package:at_commons/atsign.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/server_mutex.dart';
 
-/// Reads and writes an enrollment's sealed @keys document over that
-/// enrollment's authenticated connection.
+/// Reads and writes an enrollment's sealed @keys document, and the record
+/// that its activation's completion is due, over that enrollment's
+/// authenticated connection.
 abstract class EnrollmentDocumentStore {
   /// The document's JSON text, or null when there is none.
   Future<String?> get(String atSign, String enrollmentId);
@@ -21,6 +22,19 @@ abstract class EnrollmentDocumentStore {
   /// null while it is held. Every other failure is thrown.
   Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
       {required Duration ttl});
+
+  /// Records that the completion of the activation that created
+  /// [enrollmentId] is due.
+  Future<void> markCompletionDue(String atSign, String enrollmentId);
+
+  /// Whether the completion of the activation that created [enrollmentId] is
+  /// due: true while its record exists. Every failure other than the record
+  /// being absent is thrown.
+  Future<bool> isCompletionDue(String atSign, String enrollmentId);
+
+  /// Deletes the record that the completion of [enrollmentId]'s activation is
+  /// due. A record the atServer reports as not found counts as deleted.
+  Future<void> clearCompletionDue(String atSign, String enrollmentId);
 }
 
 final _enrollmentId = RegExp(r'^[a-z0-9_-]+$');
@@ -72,24 +86,48 @@ AtKey _lockKey(String enrollmentId, String atSign) {
     ..sharedBy = atSign.toAtsign();
 }
 
-/// Reads and writes documents on [remote], the enrollment's own
-/// PKAM-authenticated connection, which it leaves open, and takes their
-/// locks there as server mutexes.
+/// The name of the record that the completion of an enrollment's activation
+/// is due, `completion-due.<enrollmentId>.a.__e@<atsign>` with the atSign
+/// canonical.
+///
+/// Throws [ArgumentError] when [enrollmentId] is empty or holds a character
+/// outside `a-z 0-9 _ -`.
+String completionDueKey(String enrollmentId, String atSign) =>
+    '${_completionDueKey(enrollmentId, atSign)}';
+
+/// The [AtKey] of the record that the completion of [enrollmentId]'s
+/// activation at [atSign] is due: a self record in the enrollment's own
+/// namespace, beside the document.
+AtKey _completionDueKey(String enrollmentId, String atSign) {
+  checkEnrollmentId(enrollmentId);
+  return AtKey()
+    ..key = 'completion-due.$enrollmentId.a'
+    ..namespace = '__e'
+    ..sharedBy = atSign.toAtsign();
+}
+
+/// The value of every completion-due record.
+const _completionDue = 'due';
+
+/// Reads and writes documents and completion-due records on [remote], the
+/// enrollment's own PKAM-authenticated connection, which it leaves open, and
+/// takes the documents' locks there as server mutexes.
 class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
   RemoteEnrollmentDocumentStore(this.remote);
 
   final RemoteSecondary remote;
 
   @override
-  Future<String?> get(String atSign, String enrollmentId) async {
-    final command = (LLookupVerbBuilder()
-          ..atKey = _documentKey(enrollmentId, atSign))
-        .buildCommand();
+  Future<String?> get(String atSign, String enrollmentId) async =>
+      _localLookup(_documentKey(enrollmentId, atSign));
+
+  /// The value [key] holds, or null when the atServer holds none.
+  Future<String?> _localLookup(AtKey key) async {
+    final command = (LLookupVerbBuilder()..atKey = key).buildCommand();
     final String? response;
     try {
       response = await remote.executeCommand(command, auth: true);
     } on KeyNotFoundException {
-      // A missing document is reported as null, not as an error.
       return null;
     }
     if (response == null || !response.startsWith('data:')) {
@@ -112,6 +150,32 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
           ..value = document)
         .buildCommand();
     await remote.executeCommand(command, auth: true);
+  }
+
+  @override
+  Future<void> markCompletionDue(String atSign, String enrollmentId) async {
+    final command = (UpdateVerbBuilder()
+          ..omitMetadata = true
+          ..atKey = _completionDueKey(enrollmentId, atSign)
+          ..value = _completionDue)
+        .buildCommand();
+    await remote.executeCommand(command, auth: true);
+  }
+
+  @override
+  Future<bool> isCompletionDue(String atSign, String enrollmentId) async =>
+      await _localLookup(_completionDueKey(enrollmentId, atSign)) != null;
+
+  @override
+  Future<void> clearCompletionDue(String atSign, String enrollmentId) async {
+    final command = (DeleteVerbBuilder()
+          ..atKey = _completionDueKey(enrollmentId, atSign))
+        .buildCommand();
+    try {
+      await remote.executeCommand(command, auth: true);
+    } on KeyNotFoundException {
+      return;
+    }
   }
 
   @override

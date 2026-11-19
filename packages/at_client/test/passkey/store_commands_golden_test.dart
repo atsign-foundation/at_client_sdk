@@ -49,6 +49,29 @@ void main() {
               r'^update:nc:ttl:10000:isEncrypted:false:immutable:true:'
               r'atkeys-lock\.e1d2c3\.a\.__e@alice e1d2c3:[0-9a-f]{32}\n$')));
     });
+
+    test('mark completion due', () async {
+      await RemoteEnrollmentDocumentStore(secondary())
+          .markCompletionDue(_atSign, _eid);
+      expect(remote.commands.single, (
+        command: 'update:completion-due.e1d2c3.a.__e@alice due\n',
+        auth: true
+      ));
+    });
+
+    test('read completion due', () async {
+      await RemoteEnrollmentDocumentStore(secondary())
+          .isCompletionDue(_atSign, _eid);
+      expect(remote.commands.single,
+          (command: 'llookup:completion-due.e1d2c3.a.__e@alice\n', auth: true));
+    });
+
+    test('clear completion due', () async {
+      await RemoteEnrollmentDocumentStore(secondary())
+          .clearCompletionDue(_atSign, _eid);
+      expect(remote.commands.single,
+          (command: 'delete:completion-due.e1d2c3.a.__e@alice\n', auth: true));
+    });
   });
 
   group('pointer store commands', () {
