@@ -69,6 +69,8 @@ export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
 export 'package:at_client/src/enroll/enrollment_conveyance.dart'
     show EnrollmentConveyanceException;
+export 'package:at_client/src/enroll/authorised_namespaces.dart'
+    show ownGrantsOf;
 export 'package:at_client/src/secret_sharing/algo_ids.dart';
 export 'package:at_client/src/rpc/at_rpc.dart';
 export 'package:at_client/src/rpc/at_rpc_types.dart';
