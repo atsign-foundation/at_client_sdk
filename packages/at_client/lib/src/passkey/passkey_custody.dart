@@ -301,8 +301,10 @@ class PasskeyCustody {
   /// saves the hints. Nothing is kept on the device until the CRAM secret is
   /// deleted. The failing stage's error is rethrown as it is, so it does not
   /// say whether the CRAM secret was deleted: a caller retries with [open]
-  /// first, and onboards again only when that throws [PasskeyLostException],
-  /// as the passkey then filed no pointer and the CRAM secret is still live.
+  /// first, which finishes the onboarding when it succeeds. A
+  /// [PasskeyLostException] from that [open] does not say whether the passkey
+  /// filed a pointer, since a cancelled prompt throws it too, and onboarding
+  /// again needs the CRAM secret still live.
   ///
   /// When the assertion after registering the new passkey fails or yields no
   /// usable PRF output, the new passkey is reported to the platform as

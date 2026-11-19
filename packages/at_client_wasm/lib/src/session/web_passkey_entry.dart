@@ -56,9 +56,11 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 /// secret is deleted.
 ///
 /// The failing stage's error is thrown as it is, so it does not say whether
-/// the CRAM secret was deleted. Try again with [passkeyLogin] first; only
-/// when that throws [PasskeyLostException] did the passkey file no pointer,
-/// and [onboardNewAtSign] is run again with the same [cram].
+/// the CRAM secret was deleted. Try again with [passkeyLogin] first, which
+/// finishes the onboarding when it succeeds. A [PasskeyLostException] from it
+/// does not say whether the passkey filed a pointer, since a cancelled prompt
+/// throws it too, and running [onboardNewAtSign] again needs the CRAM secret
+/// still live.
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
