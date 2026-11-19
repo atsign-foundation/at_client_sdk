@@ -301,11 +301,12 @@ class _PkamSession implements EnrollmentSession {
     }
   }
 
-  /// Whether [e] is the atServer's answer refusing a verb, rather than the
-  /// request failing to reach it or come back. A lost connection or a
-  /// timeout reaches here as an [AtConnectException] or [AtTimeoutException],
-  /// or as a bare [AtException]: [RemoteSecondary] turns the lookup's AT0004
-  /// (connection) and AT0014 (timeout, unknown) codes into one.
+  /// Whether a failed revoke is left to the list that follows: any [e] but an
+  /// [AtConnectException], an [AtTimeoutException] or a bare [AtException].
+  /// A lost connection or a timeout reaches here as one of those three:
+  /// [RemoteSecondary] turns the lookup's AT0004 (connection) and AT0014
+  /// (timeout, unknown) codes into a bare one. An atServer refusal that maps
+  /// to an [AtConnectException], such as AT0009, is not left to the list.
   static bool _isRefusal(AtException e) =>
       e is! AtConnectException &&
       e is! AtTimeoutException &&
