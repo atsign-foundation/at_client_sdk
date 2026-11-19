@@ -26,8 +26,8 @@ class _RecordingLookUp extends Fake implements AtLookUp {
 void main() {
   group('completeActivationOf', () {
     test(
-        'publishes the encryption public key with ttr -1, then deletes the '
-        'CRAM secret', () async {
+        'A completion publishes the encryption public key with ttr -1, then '
+        'deletes the CRAM secret', () async {
       final lookUp = _RecordingLookUp();
       await completeActivationOf(
           atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: 'cHVi');
@@ -37,15 +37,16 @@ void main() {
       ]);
     });
 
-    test('with no encryption public key, deletes the CRAM secret only',
-        () async {
+    test(
+        'A completion with no encryption public key deletes only the CRAM '
+        'secret', () async {
       final lookUp = _RecordingLookUp();
       await completeActivationOf(
           atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: null);
       expect(lookUp.sent, ['delete:privatekey:at_secret\n']);
     });
 
-    test('a failed publish keeps the CRAM secret and propagates', () async {
+    test('A failed publish keeps the CRAM secret and propagates', () async {
       final error = StateError('publish failed');
       final lookUp = _RecordingLookUp()..updateError = error;
       await expectLater(
@@ -60,8 +61,9 @@ void main() {
       ('a line feed', 'cHVi\nZGVs'),
       ('a carriage return', 'cHVi\rZGVs'),
     ]) {
-      test('refuses an encryption public key with $name before any command',
-          () async {
+      test(
+          'An encryption public key holding $name is refused before any '
+          'command', () async {
         final lookUp = _RecordingLookUp();
         await expectLater(
             completeActivationOf(
@@ -71,7 +73,7 @@ void main() {
       });
     }
 
-    test('counts a CRAM secret the atServer reports as not found as deleted',
+    test('A CRAM secret the atServer reports as not found counts as deleted',
         () async {
       final lookUp = _RecordingLookUp()
         ..deleteError = AtLookUpException('AT0015', 'key not found');
@@ -80,7 +82,7 @@ void main() {
       expect(lookUp.sent, hasLength(2));
     });
 
-    test('a CRAM secret delete refused for another reason propagates',
+    test('A CRAM secret delete refused for another reason propagates',
         () async {
       final refusal = AtLookUpException('AT0003', 'unauthorized');
       final lookUp = _RecordingLookUp()..deleteError = refusal;
