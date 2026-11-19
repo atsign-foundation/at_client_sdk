@@ -48,17 +48,21 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 /// as it is, and any passkey it registered is reported to the browser as
 /// unknown. It is run again with the same [cram] while the CRAM secret is
 /// live, which registers a new passkey and revokes every other approved
-/// enrollment of the atSign, the failed run's included.
+/// enrollment of the Atsign, the failed run's included.
 ///
 /// One that fails with an exception once it has written the pointer, while
 /// it deletes the CRAM secret, records that, revokes, publishes, deletes the
 /// completion-due record or opens the client, throws a
-/// [PasskeyOnboardingIncompleteException] naming the atSign, whose cause is
-/// that failure, and reports nothing to the browser. The atSign is then
-/// onboarded, and [passkeyLogin] logs in with the passkey, finishes the
-/// onboarding and saves the passkey hints. An [Error] is thrown as it is. A
-/// failed write of the hints does not fail the onboarding: it is logged as a
-/// warning, the session is returned, and the next [passkeyLogin] saves them.
+/// [PasskeyOnboardingIncompleteException] naming the Atsign, whose cause is
+/// that failure, and reports nothing to the browser. [passkeyLogin] with the
+/// passkey then finishes the onboarding, unless it refuses another published
+/// encryption public key with [PublicKeyMismatchException]; it opens the
+/// onboarding's enrollment and saves the passkey hints if they are not
+/// saved. An [Error] is thrown as it is wherever it happens, so it does not
+/// say whether the pointer was written: try [passkeyLogin] with the passkey
+/// first. A failed write of the hints does not fail the onboarding: it is
+/// logged as a warning, the session is returned, and the next
+/// [passkeyLogin] saves them.
 /// [passkeyLogin] also finishes an onboarding that stopped after writing the
 /// document and pointer, while its completion is due. Nothing is kept in
 /// this browser until the CRAM secret is deleted.

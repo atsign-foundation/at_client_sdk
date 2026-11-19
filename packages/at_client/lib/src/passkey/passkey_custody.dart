@@ -78,9 +78,11 @@ class PasskeyLostException extends AtException {
 }
 
 /// Thrown by [PasskeyCustody.onboard] when an [Exception] stops it once the
-/// new enrollment's pointer is written: [atSign] is onboarded, and
-/// [PasskeyCustody.open] with the passkey finishes the onboarding, opens its
-/// enrollment and saves the passkey hints.
+/// new enrollment's pointer is written. [PasskeyCustody.open] with the
+/// passkey then finishes the onboarding, unless it refuses another published
+/// encryption public key with [PublicKeyMismatchException]; it opens the
+/// onboarding's enrollment and saves the passkey hints if they are not
+/// saved.
 ///
 /// [cause] is that exception, and this one is thrown with its stack trace.
 /// The message names [atSign] and never carries the cause's message.
@@ -341,9 +343,13 @@ class PasskeyCustody {
   /// the onboarding is thrown as a [PasskeyOnboardingIncompleteException]
   /// naming [atSign] in canonical form, whose cause is that exception, with
   /// its stack trace, and nothing is reported to the platform: [open] with
-  /// the passkey then finishes the onboarding, as [open] says, opens its
-  /// enrollment and saves the hints. An [Error] is thrown as it is. Nothing
-  /// is kept on the device until the CRAM secret is deleted.
+  /// the passkey then finishes the onboarding, as [open] says, unless it
+  /// refuses another published encryption public key with
+  /// [PublicKeyMismatchException]; it opens the onboarding's enrollment and
+  /// saves the hints if they are not saved. An [Error] is thrown as it is
+  /// wherever it happens, so it does not say whether the pointer was
+  /// written: a caller tries [open] with the passkey first. Nothing is kept
+  /// on the device until the CRAM secret is deleted.
   ///
   /// When the assertion after registering the new passkey fails or yields no
   /// usable PRF output, the new passkey is reported to the platform as

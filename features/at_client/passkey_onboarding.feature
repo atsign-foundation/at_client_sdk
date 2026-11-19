@@ -15,8 +15,11 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   exception once its pointer is written throws a
   PasskeyOnboardingIncompleteException naming the Atsign, whose cause is
   that failure: logging in with the passkey then finishes the onboarding,
-  opens its enrollment and saves the passkey hints the onboarding could
-  not.
+  unless it refuses another published encryption public key with a
+  PublicKeyMismatchException; it opens the onboarding's enrollment and
+  saves the passkey hints if they are not saved. An Error is thrown as it
+  is wherever it happens, so it does not say whether the pointer was
+  written: try logging in with the passkey first.
   Before it writes the @keys document, onboarding records that the
   activation's completion is due, in a record no other enrollment can read
   or write, `completion-due.<enrollmentId>.a.__e@<atSign>`; once its own
