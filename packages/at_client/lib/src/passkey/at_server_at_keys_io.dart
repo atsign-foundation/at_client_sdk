@@ -74,12 +74,12 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// [update] builds its candidate on the document it read under the lock, so it
 /// keeps what another writer filed. The lock is not a fence: the margin leaves
 /// a put half the ttl to land, but one that takes longer can land after the
-/// lock expired and after another writer read the document, and that writer's
-/// put then drops it. The refusal below does not catch that, since the other
-/// writer's candidate is checked against its read, which predates the late
-/// put. The late writer's read-back catches it only when the other writer's
-/// put lands first; when the read-back comes first, both writes report
-/// success. The margin is the only guard that prevents it.
+/// lock expired, and then it and the put of the next writer to take the lock
+/// can each drop what the other added, whichever lands last. The refusal
+/// below does not catch that, since the overwriting writer's last read
+/// predates the put it overwrites, and the overwritten writer's read-back
+/// catches it only when the overwrite lands first; otherwise both writes
+/// report success. The margin is the only guard that prevents it.
 ///
 /// A write that would drop stored material is refused, and each write is read
 /// back and compared with what was written.
