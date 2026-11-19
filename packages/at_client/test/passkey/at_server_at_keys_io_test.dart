@@ -200,6 +200,20 @@ void main() {
               lockWait: const Duration(milliseconds: 1)),
           isA<AtServerAtKeysIo>());
     });
+
+    test(
+        'bounds a write\'s wait for the lock at three leases of the lock\'s '
+        'ttl and the write\'s wait', () {
+      expect(
+          build(
+                  lockTtl: const Duration(seconds: 2),
+                  lockWait: const Duration(seconds: 7))
+              .lockWaitBound,
+          const Duration(seconds: 27),
+          reason: 'each of a write\'s three leases may wait up to the ttl for '
+              'its own last lease to lapse and then up to the wait for '
+              'another writer\'s');
+    });
   });
 
   test('write then reload then read round-trips at the enrollment key',
