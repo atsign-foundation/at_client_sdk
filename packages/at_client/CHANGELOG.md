@@ -12,7 +12,7 @@
 - fix: `PasskeyCustody.open` finishes an onboarding that stopped after writing its pointer: when no encryption public key is published it deletes the CRAM secret, then revokes every other approved enrollment, then publishes the document's key; when the document's key is published it only deletes the CRAM secret. It fails the open if any of these fails. A login that succeeds with the device's saved hints sends none of them. `EnrollmentSession.publicKeysMatch` is replaced by `publishedEncryptionKey`, which says whether the atServer publishes no encryption public key, the document's, or another; a document holding none counts as matching.
 - feat: `AtServerAtKeysIo.keepsAllOf` reports whether the stored document already holds everything the given keys hold.
 - fix: `AtServerAtKeysIo` throws `ArgumentError` when built with a `lockTtl` under a millisecond or over 15 minutes, or a `lockWait` that is not positive, instead of failing at its first write.
-- feat: an onboarding deletes the CRAM secret, then revokes every other approved enrollment of the Atsign, then publishes its encryption public key, so no enrollment approved before the CRAM secret was deleted survives, and a passkey from an interrupted attempt is refused as lost. A revoke that fails fails the onboarding without reporting the new passkey to the platform, and `open` then finishes it.
+- feat: an onboarding deletes the CRAM secret, then revokes every other approved enrollment of the Atsign, then publishes its encryption public key, so no enrollment approved before the CRAM secret was deleted survives, and a passkey from an interrupted attempt is refused as lost. A revoke that fails fails the onboarding without reporting the new passkey to the platform, and `open` then finishes it. A revoke that throws `AtConnectException`, `AtTimeoutException` or a plain `AtException`, as a lost connection or a timeout does, fails the onboarding at once; any other failed revoke is left to the list that follows, which fails the onboarding while another approved enrollment remains.
 - fix: `PasskeyCustody.open` takes the saved hints only when it has both ids; one alone is treated as none. When the narrowed ceremony fails or the atServer refuses PKAM for the saved enrollment, it retries once as a device with no hints, under the setup lock, and a success replaces the saved ids. A cancelled ceremony cannot be told from a deleted passkey and is retried too. A store that is a `PasskeyHintStore` receives both ids in one write.
 - fix: a write of the passkey hints that fails with an `Exception` does not fail `PasskeyCustody.onboard` or `open`: it is logged as a warning naming the Atsign, and the next login saves the hints. A remembered credential id or enrollment id that cannot be read, or an enrollment id outside the enrollment id alphabet, counts as no hints and is never sent.
 - feat: `package:at_client/passkey.dart` is a new library for onboarding and
@@ -20,8 +20,12 @@
   return a `PasskeySession`: the `AtClient` running as the Atsign's enrollment,
   which persists its `@keys` through an `AtServerAtKeysIo`, and the passkey's
   vault. Stopping the session, or its client, closes the key store and then
-  the vault once the client has stopped, or after 10 seconds if that stop or a
-  queued `@keys` write is still running; `AtClient.stop()` closes no key
+  the vault once the client has stopped, or after 10 seconds plus the longest
+  one write may wait for the enrollment's lock (`AtServerAtKeysIo.lockWaitBound`,
+  75 seconds by default) if that stop or a queued `@keys` write is still
+  running, so one write waiting out another writer's lock still lands, though a
+  write queued behind it may be refused;
+  `AtClient.stop()` closes no key
   store. `PasskeyCustody` takes a
   `setupLockPrefix` for its per-atSign setup lock, and `PkamRefusedException`
   says an approver can `enroll:unrevoke` a revoked enrollment.

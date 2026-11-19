@@ -222,8 +222,14 @@ void main() {
   }, timeout: const Timeout(Duration(seconds: 60)));
 
   test("Every @keys write holds the enrollment's lock", () async {
-    final session = await onboard();
-    final enrollmentId = session.client.enrollmentId!;
+    final onboarded = await onboard();
+    final enrollmentId = onboarded.client.enrollmentId!;
+    await onboarded.stop();
+    // A session opened again runs on a store that holds no lease, so its
+    // write cannot lean on the lock onboarding took.
+    final session = await custody(FakeHints()).open(atSign: _atSign);
+    sessions.add(session);
+    final opened = server.commands.length;
     await (session.client.atKeysIo as WrittenAtKeysIo)
         .update(_atSign.toAtsign(), (keys) {
       keys.fileLegacyMaterial(
@@ -240,17 +246,23 @@ void main() {
     ];
     expect(writes, hasLength(greaterThanOrEqualTo(2)),
         reason: 'the onboarding write and the client\'s');
-    for (final write in writes) {
+    expect(writes.last, greaterThanOrEqualTo(opened),
+        reason: 'the reopened client\'s write came after it opened');
+    for (final (n, write) in writes.indexed) {
+      // Each store's first write takes its own lock: only a take after the
+      // write before it counts.
+      final since = n == 0 ? 0 : writes[n - 1] + 1;
       final taken = [
-        for (var i = 0; i < write; i++)
+        for (var i = since; i < write; i++)
           if (command(i).startsWith('update:') && command(i).contains(lock)) i
       ];
-      expect(taken, isNotEmpty, reason: 'write $write held no lock');
+      expect(taken, isNotEmpty, reason: 'write $write took no lock of its own');
       expect(command(taken.last),
           startsWith('update:nc:ttl:10000:isEncrypted:false:immutable:true:'));
       expect(server.arrived[write].difference(server.arrived[taken.last]),
-          lessThan(const Duration(seconds: 10)),
-          reason: 'the lease was unexpired when the document was put');
+          lessThan(const Duration(seconds: 5)),
+          reason: 'the lease had at least half its ttl left when the document '
+              'was put');
     }
   });
 
