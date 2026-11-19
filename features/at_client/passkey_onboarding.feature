@@ -25,7 +25,8 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   the record. When it says only that the completion is due, the login
   takes the same three steps, revoking every other approved enrollment,
   only when no key or the document's key is published, and refuses another
-  key before it sends anything. When the completion is not due, the login
+  key before it sends any delete, revoke or publish. When the completion
+  is not due, the login
   revokes nothing: it publishes the document's key when none is published,
   deletes the CRAM secret, which is already gone, and refuses a published
   key that is not the document's.
@@ -87,8 +88,10 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   completion is due, so a published key that has gone does not make a
   later login revoke: the login publishes the document's key again. The
   atServer refuses every other enrollment, root included, a read or write
-  of the completion-due record. A CRAM-authenticated connection is not
-  refused, and its holder already holds more than any enrollment. A key
+  of the completion-due record. A CRAM-authenticated connection may read
+  the record, and from atServer p3.19.0 is refused a write or delete of
+  it; while the CRAM secret lives, its holder already holds more than any
+  enrollment. A key
   replaced by another enrollment that
   holds `*:rw` and `__manage:rw` makes every login refuse it while the
   completion is not due, until such an enrollment publishes the document's
