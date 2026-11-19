@@ -4,7 +4,7 @@
 
 | ID | Ruling in one line | Date | Link |
 |---|---|---|---|
-| K-5 | Restored public keys must match the published `publickey` after PKAM; mismatch is a hard fail | 2026-10-15, re-ruled 2026-10-27 | [K-5](decisions.md#browser-at-keys-custody--k-1k-18) |
+| K-5 | Restored public keys must match the published `publickey` after PKAM; mismatch is a hard fail; amended: a login without saved hints whose onboarding's own delete of the CRAM secret answered and whose completion is still due publishes the document's key over the other | 2026-10-15, re-ruled 2026-10-27, amended 2026-11-19 | [K-5](decisions.md#browser-at-keys-custody--k-1k-18) |
 | K-10 | TTL-less public pointer `_<lookupHex>.<ns>` seals the enrollmentId (namespace per K-17) | 2026-10-27 | [K-10](decisions.md#browser-at-keys-custody--k-1k-18) |
 | K-11 | Sealed @keys live in a private per-enrollment document, read over PKAM | 2026-10-27 | [K-11](decisions.md#browser-at-keys-custody--k-1k-18) |
 | K-12 | The PKAM key is derived from the passkey, never stored | 2026-10-27 | [K-12](decisions.md#browser-at-keys-custody--k-1k-18) |

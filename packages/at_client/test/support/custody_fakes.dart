@@ -7,6 +7,7 @@ import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/server_mutex.dart' show ServerMutexLease;
 import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show ApkamKeyPair;
@@ -26,13 +27,33 @@ String encryptionPublicKeyOf(String enrollmentId) =>
     base64Encode(utf8.encode('enc-pub-$enrollmentId'));
 
 /// The atServer as the custody flows see it: pointers by lookup id, each
-/// enrollment's own document, and an ordered log of every write.
+/// enrollment's own document and completion-due record, and an ordered log
+/// of every document and pointer write.
 class FakeServer implements EnrollmentPointerReader {
   final pointers = <String, String>{};
 
   /// The namespace each pointer was written in, by lookup id.
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
+
+  /// What each enrollment's completion-due record says, by enrollment id.
+  final completionDue = <String, CompletionDue>{};
+
+  /// Makes the next write of each state throw what it maps to before the
+  /// record is written; each refusal is used once.
+  final completionDueWriteRefusals = <CompletionDue, Object>{};
+
+  /// Makes a read of a completion-due record throw this.
+  Object? completionDueReadError;
+
+  /// Deletes of a completion-due record that throw
+  /// [completionDueClearError] before one is accepted.
+  var completionDueClearFailures = 0;
+  Object completionDueClearError = StateError('completion-due delete failed');
+
+  /// Answers every completion-due operation in place of this server, when
+  /// set.
+  CompletionDueRecord? completionDueRecord;
 
   /// The APKAM public key each enrollment authenticates with.
   final pairByEnrollment = <String, String>{};
@@ -43,7 +64,9 @@ class FakeServer implements EnrollmentPointerReader {
   final log = <String>[];
 
   /// Every step of an onboarding in the order it happened: the server's
-  /// writes (as in [log]), the activation, each completion with the key it
+  /// writes (as in [log]), the activation, each write of a completion-due
+  /// record with the state it wrote, each read and delete of one, each lookup
+  /// of the published encryption public key, each completion with the key it
   /// published and the CRAM secret's deletion, each revoke request with the
   /// enrollments it revoked, and the client opening.
   final timeline = <String>[];
@@ -96,12 +119,17 @@ class FakeServer implements EnrollmentPointerReader {
 }
 
 class FakeSession implements EnrollmentSession {
-  FakeSession(this.server, this.atSign, this.enrollmentId);
+  FakeSession(this.server, this.atSign, this.enrollmentId,
+      {required this.enrolled});
 
   final FakeServer server;
   final String atSign;
   @override
   final String enrollmentId;
+
+  /// Whether this session came from an activation, so holds @keys; a session
+  /// from an authentication holds none.
+  final bool enrolled;
   var closed = false;
   var closeCalls = 0;
 
@@ -109,16 +137,24 @@ class FakeSession implements EnrollmentSession {
   Object? closeError;
 
   /// [FakeServer.keys] with an encryption public key of this enrollment's
-  /// own, as each activation mints one.
+  /// own, as each activation mints one. Throws [StateError] on a session that
+  /// was authenticated, as the real one does.
   @override
-  Future<Map<String, dynamic>> atKeys() async => {
-        ...server.keys,
-        'aesEncryptPublicKey': encryptionPublicKeyOf(enrollmentId)
-      };
+  Future<Map<String, dynamic>> atKeys() async {
+    if (!enrolled) {
+      throw StateError('this session was authenticated, not enrolled: it '
+          'holds no @keys');
+    }
+    return {
+      ...server.keys,
+      'aesEncryptPublicKey': encryptionPublicKeyOf(enrollmentId)
+    };
+  }
 
   @override
   Future<PublishedEncryptionKey> publishedEncryptionKey(
       Map<String, dynamic> atKeys) async {
+    server.timeline.add('lookup-publickey');
     if (!server.publishes(atKeys)) return PublishedEncryptionKey.different;
     final held = atKeys['aesEncryptPublicKey'];
     if (held is! String) return PublishedEncryptionKey.same;
@@ -174,6 +210,37 @@ class FakeSession implements EnrollmentSession {
     server.cramDeleted.add(atSign);
     server.timeline.add('cram-deleted');
     if (completeErrorAfterDelete case final e?) throw e;
+  }
+
+  @override
+  Future<void> recordCompletionDue(CompletionDue state) async {
+    server.timeline.add('record-completion-due:$enrollmentId:${state.name}');
+    if (server.completionDueRecord case final record?) {
+      return record.write(state);
+    }
+    if (server.completionDueWriteRefusals.remove(state) case final e?) {
+      throw e;
+    }
+    server.completionDue[enrollmentId] = state;
+  }
+
+  @override
+  Future<CompletionDue?> completionDue() async {
+    server.timeline.add('read-completion-due:$enrollmentId');
+    if (server.completionDueRecord case final record?) return record.read();
+    if (server.completionDueReadError case final e?) throw e;
+    return server.completionDue[enrollmentId];
+  }
+
+  @override
+  Future<void> clearCompletionDue() async {
+    server.timeline.add('clear-completion-due:$enrollmentId');
+    if (server.completionDueRecord case final record?) return record.clear();
+    if (server.completionDueClearFailures > 0) {
+      server.completionDueClearFailures--;
+      throw server.completionDueClearError;
+    }
+    server.completionDue.remove(enrollmentId);
   }
 
   @override
@@ -357,8 +424,8 @@ class FakeGateway implements EnrollmentGateway {
   /// Whether that session stops a client it built before throwing.
   var openStopsFirstForNext = false;
 
-  FakeSession _session(String atSign, String eid) =>
-      FakeSession(server, atSign, eid)
+  FakeSession _session(String atSign, String eid, {required bool enrolled}) =>
+      FakeSession(server, atSign, eid, enrolled: enrolled)
         ..closeError = closeErrorForNext
         ..openClientError = openErrorForNext
         ..openClientStopsFirst = openStopsFirstForNext;
@@ -377,7 +444,8 @@ class FakeGateway implements EnrollmentGateway {
         server.pairByEnrollment[enrollmentId] != apkamKeyPair.publicKey) {
       throw PkamRefusedException(enrollmentId);
     }
-    final session = lastSession = _session(atSign, enrollmentId);
+    final session =
+        lastSession = _session(atSign, enrollmentId, enrolled: false);
     onAuthenticate?.call(session);
     return session;
   }
@@ -409,7 +477,7 @@ class FakeGateway implements EnrollmentGateway {
     server.approved[eid] = atSign;
     server.timeline.add('activate:$eid');
     await onActivate?.call();
-    final session = lastSession = _session(atSign, eid);
+    final session = lastSession = _session(atSign, eid, enrolled: true);
     onAuthenticate?.call(session);
     return session;
   }
@@ -508,19 +576,30 @@ class FakeSetupLock implements SetupLock {
   }
 }
 
+/// What a hint store fake throws for a failed read or write unless told
+/// otherwise: an [Exception], as a browser's hint store throws.
+class HintStoreException implements Exception {
+  HintStoreException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'HintStoreException: $message';
+}
+
 /// Hints held in memory by one object that is both hint ports and writes the
 /// pair together, as a combined store does.
 class FakeHints extends LegacyHints implements PasskeyHintStore {
   /// The pairs written through [putHint].
   var pairWrites = 0;
 
-  /// Makes [putHint] throw before it stores either id.
+  /// Makes [putHint] throw [writeFailure] before it stores either id.
   var failPairWrites = false;
 
   @override
   Future<void> putHint(
       String atSign, Uint8List credentialId, String enrollmentId) async {
-    if (failWrites || failPairWrites) throw StateError('hint write failed');
+    if (failWrites || failPairWrites) throw writeFailure;
     pairWrites++;
     credentials[atSign] = credentialId;
     ids[atSign] = enrollmentId;
@@ -529,8 +608,26 @@ class FakeHints extends LegacyHints implements PasskeyHintStore {
 
 /// Hints held in memory by a store that is only the two separate ports.
 class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
-  /// Makes every write fail.
+  /// Makes every write throw [writeFailure] before it stores anything.
   var failWrites = false;
+
+  /// Makes [putEnrollmentId] throw [writeFailure] while [putCredentialId]
+  /// still stores, as a pair whose second put does not land.
+  var failEnrollmentIdWrites = false;
+
+  /// What a failed write throws: a [HintStoreException] unless a test sets
+  /// another, such as an [Error].
+  Object writeFailure = HintStoreException('the hint store refused a write');
+
+  /// Makes [credentialId] throw this.
+  Object? credentialIdReadFailure;
+
+  /// Makes [enrollmentId] throw this.
+  Object? enrollmentIdReadFailure;
+
+  /// Makes [credentialIdReadFailure] and [enrollmentIdReadFailure] each fail
+  /// one read only, as a store that fails and then recovers does.
+  var readFailuresOnce = false;
 
   final credentials = <String, Uint8List>{};
   final ids = <String, String>{};
@@ -539,20 +636,33 @@ class LegacyHints implements CredentialHintStore, EnrollmentIdStore {
   var singleWrites = 0;
 
   @override
-  Future<Uint8List?> credentialId(String atSign) async => credentials[atSign];
+  Future<Uint8List?> credentialId(String atSign) async {
+    if (credentialIdReadFailure case final e?) {
+      if (readFailuresOnce) credentialIdReadFailure = null;
+      throw e;
+    }
+    return credentials[atSign];
+  }
 
   @override
   Future<void> putCredentialId(String atSign, Uint8List id) async {
-    if (failWrites) throw StateError('hint write failed');
+    if (failWrites) throw writeFailure;
     singleWrites++;
     credentials[atSign] = id;
   }
 
   @override
-  Future<String?> enrollmentId(String atSign) async => ids[atSign];
+  Future<String?> enrollmentId(String atSign) async {
+    if (enrollmentIdReadFailure case final e?) {
+      if (readFailuresOnce) enrollmentIdReadFailure = null;
+      throw e;
+    }
+    return ids[atSign];
+  }
 
   @override
   Future<void> putEnrollmentId(String atSign, String id) async {
+    if (failWrites || failEnrollmentIdWrites) throw writeFailure;
     singleWrites++;
     ids[atSign] = id;
   }

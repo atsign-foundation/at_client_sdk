@@ -73,14 +73,22 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// running an [update]'s mutate again, with at most three leases in all. Every
 /// [update] builds its candidate on the document it read under the lock, so it
 /// keeps what another writer filed. The lock is not a fence: the margin leaves
-/// a put half the ttl to land, but one sent within it can still land after the
-/// lock expired, so a write that would drop stored material is still refused,
-/// and each write is read back and compared with what was written.
+/// a put half the ttl to land, but one that takes longer can land after the
+/// lock expired, and then it and the put of the next writer to take the lock
+/// can each drop what the other added, whichever lands last. The refusal
+/// below does not catch that, since the overwriting writer's last read
+/// predates the put it overwrites, and the overwritten writer's read-back
+/// catches it only when the overwrite lands first; otherwise both writes
+/// report success. The margin is the only guard that prevents it.
+///
+/// A write that would drop stored material is refused, and each write is read
+/// back and compared with what was written.
 ///
 /// The lock needs an atServer from p3.13.0, the first to parse `:nc`. An
 /// expired lock stops blocking at once from p3.16.5. Another enrollment of
 /// the atSign cannot create or delete the lock record from p3.15.0, and a
-/// connection with the atSign's legacy keys cannot from p3.19.0.
+/// connection with the atSign's legacy keys cannot from p3.16.5. A
+/// CRAM-authenticated connection can until p3.19.0.
 ///
 /// The document never holds the enrollment's APKAM private key: a passkey
 /// enrollment derives the pair from the passkey and the atServer must not
@@ -157,6 +165,12 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
 
   /// How many leases one write may take before it gives up.
   static const _leaseTakes = 3;
+
+  /// The longest one write waits for the enrollment's lock, not counting the
+  /// atServer's answers: for each of its leases, up to the lock's ttl for
+  /// this store's own last lease to lapse and then up to the write's wait for
+  /// another writer's to.
+  Duration get lockWaitBound => (_lockTtl + _lockWait) * _leaseTakes;
 
   /// The lease on the enrollment's lock this store last took.
   ServerMutexLease? _lease;

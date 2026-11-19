@@ -4,13 +4,19 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysFileOverwriteException;
 import 'package:at_auth/passkey.dart';
 import 'package:at_commons/at_commons.dart'
-    show AtEnrollmentException, AtRootDomain, InvalidAtSignException;
+    show
+        AtEnrollmentException,
+        AtRootDomain,
+        InvalidAtSignException,
+        UnAuthenticatedException;
 import 'package:at_client/at_client.dart'
     show AtClientPreference, buildAtClient;
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show apkamKeyPairFromSeed;
 import 'package:at_client/src/passkey/passkey_custody.dart';
@@ -19,6 +25,7 @@ import 'package:test/test.dart';
 
 import '../support/bytes_passkey_sealer.dart';
 import '../support/custody_fakes.dart';
+import '../support/lookup_fakes.dart';
 import '../test_utils/recorded_logs.dart';
 import '../test_utils/mocks.dart' show MockAtLookupImpl;
 import '../test_utils/transport.dart' show defaultAtDirectory;
@@ -63,6 +70,16 @@ void main() {
   late FakeHints hints;
   late FakePersistence persistence;
   late FakeSetupLock setupLock;
+  late List<AtServerAtKeysIo> stores;
+
+  /// That every key store the custody built, from store [from] on, has been
+  /// closed, its APKAM private key zeroed.
+  void expectStoresClosed({int from = 0}) {
+    final built = stores.skip(from);
+    expect(built, isNotEmpty);
+    expect(built.map((store) => store.holdsPrivateKey), everyElement(isFalse),
+        reason: 'a failure closes every key store it built');
+  }
 
   PasskeyCustody custody({LegacyHints? withHints}) => PasskeyCustody(
       prf: PasskeyPrf(authenticator),
@@ -75,7 +92,8 @@ void main() {
       now: () => _enrolledAt,
       retryDelay: Duration.zero,
       setupLock: setupLock,
-      setupLockPrefix: _lockPrefix);
+      setupLockPrefix: _lockPrefix,
+      onKeyStore: stores.add);
 
   Future<DerivedKeys> keysOf(int credential) async {
     final prf = Uint8List.fromList(List.generate(32, (i) => i + credential));
@@ -94,6 +112,22 @@ void main() {
             step
       ];
 
+  /// [completionSteps] with each write and delete of a completion-due record
+  /// in its place.
+  List<String> completionAndRecordSteps({int from = 0}) => [
+        for (final step in server.timeline.skip(from))
+          if (step == 'cram-deleted' ||
+              step == 'revoke-others' ||
+              step.startsWith('revoke:') ||
+              step.startsWith('publish:') ||
+              step.startsWith('record-completion-due:') ||
+              step.startsWith('clear-completion-due:'))
+            step
+      ];
+
+  /// The fake key pair another activation tool activates with.
+  const otherToolsPair = (publicKey: 'b3RoZXItcHVi', privateKey: 'b3RoZXI=');
+
   void reset() {
     server = FakeServer();
     gateway = FakeGateway(server);
@@ -101,9 +135,50 @@ void main() {
     hints = FakeHints();
     persistence = FakePersistence(server.timeline);
     setupLock = FakeSetupLock();
+    stores = [];
   }
 
   setUp(reset);
+
+  group('a PKAM failure that is not a refusal', () {
+    for (final (code, error) in [
+      ('AT0011', UnAuthenticatedException('AT0011-Internal server exception')),
+      ('AT0028', UnAuthenticatedException('AT0028:throttled')),
+    ]) {
+      test('$code on a login with hints keeps them and is not retried',
+          () async {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+        final steps = server.timeline.length;
+        gateway
+          ..authenticateFailures = 1
+          ..authenticateError = error;
+
+        await expectLater(
+            custody().open(atSign: _atSign), throwsA(same(error)));
+
+        expect(gateway.authenticated, ['eid1'],
+            reason: 'no retry without the hints');
+        expect(hints.ids, {_atSign: 'eid1'});
+        expect(completionSteps(from: steps), isEmpty);
+      });
+
+      test('$code through the pointer is thrown, not a lost passkey', () async {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+        final steps = server.timeline.length;
+        final fresh = FakeHints();
+        gateway
+          ..authenticateFailures = 1
+          ..authenticateError = error;
+
+        await expectLater(custody(withHints: fresh).open(atSign: _atSign),
+            throwsA(same(error)));
+
+        expect(gateway.authenticated, ['eid1']);
+        expect(fresh.ids, isEmpty);
+        expect(completionSteps(from: steps), isEmpty);
+      });
+    }
+  });
 
   group('an atSign not in canonical form', () {
     for (final bad in ['alice', 'left@right', '@left@right', '@@alice']) {
@@ -290,6 +365,7 @@ void main() {
       expect(server.log, everyElement('put-document:eid1'));
       expect(server.log, hasLength(3));
       expect(gateway.lastSession!.closed, isTrue);
+      expectStoresClosed();
       expect(server.cramDeleted, isEmpty);
       expect(hints.ids, isEmpty);
     });
@@ -304,11 +380,17 @@ void main() {
       expect(server.cramDeleted, isEmpty);
     });
 
-    test('a failed remember comes after the CRAM secret is deleted', () async {
-      hints.failWrites = true;
-      await failure();
+    test(
+        'a hint write that fails with an Error comes after the CRAM secret is '
+        'deleted and fails the onboarding', () async {
+      final broken = StateError('the hint store is broken');
+      hints
+        ..failWrites = true
+        ..writeFailure = broken;
+      expect(await failure(), same(broken));
       expect(server.cramDeleted, {_atSign});
       expect(gateway.lastSession!.closed, isTrue);
+      expectStoresClosed();
       expect(gateway.lastSession!.clients, isEmpty);
       expect(authenticator.signalled, isEmpty,
           reason: 'a failure after the activation is completed reports '
@@ -366,6 +448,106 @@ void main() {
               'the key is published with a second delete of the CRAM secret');
       expect(gateway.lastSession!.completed,
           [isEmpty, containsPair('aesEncryptPublicKey', isA<String>())]);
+    });
+
+    test(
+        'Onboarding records its completion as due before it writes the @keys '
+        'document, records the CRAM secret\'s deletion, and deletes that '
+        'record last', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      final steps = server.timeline;
+      final mark = steps.indexOf('record-completion-due:eid1:activated');
+      expect(mark, greaterThan(steps.indexOf('activate:eid1')),
+          reason: 'the record is written as the new enrollment');
+      expect(mark, lessThan(steps.indexOf('put-document:eid1')),
+          reason: 'the record is stored before the @keys document');
+      expect(mark, lessThan(steps.indexOf('put-pointer')));
+      final rewrite =
+          steps.indexOf('record-completion-due:eid1:cramSecretDeleted');
+      expect(rewrite, greaterThan(steps.indexOf('cram-deleted')),
+          reason: 'the record says the CRAM secret is deleted once its delete '
+              'answered');
+      expect(rewrite, lessThan(steps.indexOf('revoke-others')),
+          reason: 'and before the revoke');
+      final publish = steps.indexOf('publish:${encryptionPublicKeyOf('eid1')}');
+      final clear = steps.indexOf('clear-completion-due:eid1');
+      expect(publish, greaterThan(-1));
+      expect(clear, greaterThan(steps.lastIndexOf('cram-deleted')),
+          reason: 'the record is deleted after the publish and its CRAM '
+              'secret delete');
+      expect(clear, greaterThan(publish));
+      expect(completionAndRecordSteps().last, 'clear-completion-due:eid1',
+          reason: 'deleting the record is the completion\'s last step');
+      expect(server.completionDue, isEmpty);
+    });
+
+    test(
+        'An onboarding whose completion-due record cannot be written fails '
+        'before it writes anything else', () async {
+      final refusal = StateError('the atServer refused the record');
+      server.completionDueWriteRefusals[CompletionDue.activated] = refusal;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(refusal)));
+
+      expect(server.timeline, contains('record-completion-due:eid1:activated'),
+          reason: 'the control: the record\'s write was sent');
+      expect(server.log, isEmpty,
+          reason: 'no @keys document or pointer is written');
+      expect(server.documents, isEmpty);
+      expect(server.pointers, isEmpty);
+      expect(server.cramDeleted, isEmpty,
+          reason: 'the CRAM secret is not deleted');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(authenticator.signalled, [authenticator.current],
+          reason: 'the new credential is reported to the platform as unknown');
+      expect(hints.ids, isEmpty);
+    });
+
+    test(
+        'An onboarding whose record of the CRAM secret\'s deletion cannot be '
+        'written fails, and a login finishes it', () async {
+      final refusal = StateError('the atServer refused the rewrite');
+      server.completionDueWriteRefusals[CompletionDue.cramSecretDeleted] =
+          refusal;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(refusal)));
+
+      final steps = server.timeline;
+      expect(steps.indexOf('record-completion-due:eid1:cramSecretDeleted'),
+          greaterThan(steps.indexOf('cram-deleted')),
+          reason: 'the control: the rewrite was sent once the CRAM secret '
+              'was deleted');
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the onboarding fails after the CRAM secret is deleted');
+      expect(steps, isNot(contains('revoke-others')),
+          reason: 'and before any revoke');
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the record still says only that the '
+              'completion is due');
+      expect(hints.ids, isEmpty);
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      final session = await custody(withHints: device).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login finishes the completion');
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1',
+          reason: 'it opens the onboarding\'s enrollment');
+      expect(device.ids, {_atSign: 'eid1'});
     });
 
     group(
@@ -458,6 +640,7 @@ void main() {
       expect(server.cramDeleted, {_atSign},
           reason: 'the CRAM secret was deleted before the revoke');
       expect(server.publishedKey, isNull);
+      expectStoresClosed();
       gateway.onAuthenticate = null;
       final mark = server.timeline.length;
 
@@ -474,9 +657,8 @@ void main() {
     });
 
     test(
-        'A login that finds no encryption public key published deletes the '
-        'CRAM secret, then revokes the other enrollments, then publishes the '
-        'key', () async {
+        'A login that finds the completion due deletes the CRAM secret, then '
+        'revokes the other enrollments, then publishes the key', () async {
       server.documentPutFailures = 99;
       await expectLater(
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
@@ -490,36 +672,38 @@ void main() {
           reason: 'the control: the failed revoke left the first enrollment');
       expect(server.cramDeleted, {_atSign},
           reason: 'the control: the second onboarding deleted the CRAM secret');
-      expect(server.publishedKey, isNull,
-          reason: 'the control: no encryption public key is published');
+      expect(server.completionDue['eid2'], CompletionDue.cramSecretDeleted,
+          reason: 'the control: the second onboarding recorded the CRAM '
+              'secret\'s deletion');
       final mark = server.timeline.length;
 
       final session =
           await custody(withHints: FakeHints()).open(atSign: _atSign);
 
       expect(
-          completionSteps(from: mark),
+          completionAndRecordSteps(from: mark),
           [
             'cram-deleted',
             'revoke-others',
             'revoke:eid1',
             'publish:${encryptionPublicKeyOf('eid2')}',
             'cram-deleted',
+            'clear-completion-due:eid2',
           ],
           reason: 'the login deletes the CRAM secret, then revokes the first '
-              'enrollment, then publishes the document\'s key');
+              'enrollment, then publishes the document\'s key, then deletes '
+              'the completion-due record');
       expect(session.client.enrollmentId, 'eid2');
       expect(server.approved, {'eid2': _atSign});
+      expect(server.completionDue, isNot(contains('eid2')));
     });
 
     test(
-        'A login that finds the document\'s encryption public key published '
-        'deletes the CRAM secret and revokes nothing', () async {
-      gateway.onAuthenticate = (session) =>
-          session.completeErrorAfterPublish = StateError('interrupted');
-      await expectLater(
-          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
-      gateway.onAuthenticate = null;
+        'A login that finds the completion done and the document\'s key '
+        'published deletes the CRAM secret and revokes nothing', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(server.completionDue, isEmpty,
+          reason: 'the control: the onboarding\'s completion is done');
       expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
           reason: 'the control: the onboarding published its key');
       server.approved['eid9'] = _atSign;
@@ -535,6 +719,310 @@ void main() {
       expect(server.approved, {'eid1': _atSign, 'eid9': _atSign},
           reason: 'the other enrollment is still approved');
       expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login finishes an onboarding over a key another activation tool '
+        'published while the CRAM secret was live', () async {
+      const otherTools = 'b3RoZXItdG9vbA==';
+      server.approved['eid9'] = _atSign;
+      server.publishedKey = otherTools;
+      gateway.onAuthenticate =
+          (session) => session.revokeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the control: the onboarding deleted the CRAM secret');
+      expect(server.completionDue, {'eid1': CompletionDue.cramSecretDeleted},
+          reason: 'the control: the onboarding recorded that');
+      expect(server.publishedKey, otherTools,
+          reason: 'the control: the other tool\'s key is still published');
+      expect(server.approved, {'eid1': _atSign, 'eid9': _atSign},
+          reason: 'the control: the other tool\'s enrollment is approved');
+      final mark = server.timeline.length;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'revoke:eid9',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login revokes the other tool\'s enrollment, publishes '
+              'the document\'s key, then deletes the completion-due record');
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
+          reason: 'the document\'s key is published over the other tool\'s');
+      expect(server.approved, {'eid1': _atSign});
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login refuses a key another tool published after its onboarding '
+        'stopped before deleting the CRAM secret', () async {
+      const otherTools = 'b3RoZXItdG9vbA==';
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding stopped before its delete of '
+              'the CRAM secret answered');
+      final other = await gateway.activate(
+          atSign: _atSign, apkamKeyPair: otherToolsPair, cram: 'cram');
+      await other.completeActivation({'aesEncryptPublicKey': otherTools});
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the control: the other tool deleted the CRAM secret');
+      expect(server.publishedKey, otherTools,
+          reason: 'the control: the other tool published its key');
+      expect(server.approved, {'eid1': _atSign, 'eid2': _atSign});
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(isA<PublicKeyMismatchException>()));
+
+      expect(gateway.authenticated.last, 'eid1',
+          reason: 'the control: the login authenticated the onboarding\'s '
+              'enrollment');
+      expect(server.timeline.skip(mark), contains('read-completion-due:eid1'),
+          reason: 'the control: the login read the record');
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(server.publishedKey, otherTools);
+      expect(server.approved, {'eid1': _atSign, 'eid2': _atSign},
+          reason: 'the other tool\'s enrollment is still approved');
+      expect(device.ids, isEmpty);
+    });
+
+    test(
+        'A login after an onboarding that stopped before deleting the CRAM '
+        'secret, with no key published, finishes it', () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      server.approved['eid9'] = _atSign;
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding stopped before its delete of '
+              'the CRAM secret answered');
+      expect(server.publishedKey, isNull,
+          reason: 'the control: no encryption public key is published');
+      final mark = server.timeline.length;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'revoke:eid9',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login deletes the CRAM secret, revokes the other '
+              'enrollment, publishes the document\'s key and deletes the '
+              'completion-due record');
+      expect(server.approved, {'eid1': _atSign});
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login that finds no key published and the completion done '
+        'publishes the document\'s key and revokes nothing', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(server.completionDue, isEmpty,
+          reason: 'the control: the onboarding\'s completion is done');
+      server.approved['eid9'] = _atSign;
+      server.publishedKey = null;
+      final mark = server.timeline.length;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(completionAndRecordSteps(from: mark),
+          ['publish:${encryptionPublicKeyOf('eid1')}', 'cram-deleted'],
+          reason: 'the login publishes the document\'s key and deletes the '
+              'CRAM secret, and sends no revoke');
+      expect(gateway.lastSession!.completed, [
+        {'aesEncryptPublicKey': encryptionPublicKeyOf('eid1')}
+      ]);
+      expect(server.approved, {'eid1': _atSign, 'eid9': _atSign},
+          reason: 'the other enrollment is still approved');
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A completion whose record delete fails saves no passkey hints, and '
+        'the next login finishes it', () async {
+      final refusal = StateError('the atServer refused the delete');
+      server
+        ..completionDueClearFailures = 1
+        ..completionDueClearError = refusal;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(refusal)));
+
+      final steps = server.timeline;
+      expect(steps.indexOf('publish:${encryptionPublicKeyOf('eid1')}'),
+          lessThan(steps.indexOf('clear-completion-due:eid1')),
+          reason: 'the onboarding throws the refusal after the encryption '
+              'public key is published');
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
+      expect(hints.credentials, isEmpty,
+          reason: 'this device saves no passkey hints');
+      expect(hints.ids, isEmpty, reason: 'this device saves no passkey hints');
+      expect(authenticator.signalled, isEmpty,
+          reason: 'a failure while completing the activation reports nothing');
+      expect(server.completionDue, {'eid1': CompletionDue.cramSecretDeleted},
+          reason: 'the control: the completion is still due');
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      final session = await custody(withHints: device).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login finishes the completion and deletes the '
+              'completion-due record');
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1');
+      expect(device.ids, {_atSign: 'eid1'});
+    });
+
+    test(
+        'A completion-due record the atServer reports as not found counts as '
+        'deleted', () async {
+      final remote = ScriptedAtLookUp((command) async {
+        if (command.startsWith('delete:completion-due.')) {
+          throw AtLookUpException('AT0015', 'key not found');
+        }
+        return 'data:1';
+      });
+      server.completionDueRecord = CompletionDueRecord(
+          RemoteSecondary(_atSign, AtClientPreference(),
+              atLookUp: remote,
+              lookUps: RecordingLookUps((_) async => null).call),
+          atSign: _atSign,
+          enrollmentId: 'eid1');
+
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      expect(remote.commands.map((c) => c.command),
+          contains('delete:completion-due.eid1.a.__e@alice\n'),
+          reason: 'the control: the delete was sent and answered AT0015');
+      expect(gateway.lastSession!.clients, hasLength(1),
+          reason: 'the onboarding opened its client');
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login whose read of the completion-due record fails throws and '
+        'sends nothing', () async {
+      gateway.onAuthenticate = (session) =>
+          session.completeErrorAfterDelete = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.publishedKey, isNull,
+          reason: 'the control: the onboarding published no key');
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding\'s completion is due');
+      final failure = StateError('the read of the record failed');
+      server.completionDueReadError = failure;
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(same(failure)));
+
+      expect(server.timeline.skip(mark), contains('read-completion-due:eid1'),
+          reason: 'the control: the login read the record');
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(device.ids, isEmpty);
+    });
+
+    test(
+        'A login reads the completion-due record before it looks at the '
+        'published key', () async {
+      gateway.onAuthenticate = (session) =>
+          session.completeErrorAfterDelete = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.publishedKey, isNull,
+          reason: 'the control: the onboarding published no key');
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the record says only that the completion is '
+              'due, so the login looks up the published key');
+      final mark = server.timeline.length;
+
+      await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      final steps = server.timeline.skip(mark).toList();
+      final read = steps.indexOf('read-completion-due:eid1');
+      final lookups = [
+        for (var i = 0; i < steps.length; i++)
+          if (steps[i] == 'lookup-publickey') i
+      ];
+      expect(read, greaterThan(-1), reason: 'the login reads the record');
+      expect(lookups, isNotEmpty,
+          reason: 'the control: the login looks up publickey@alice');
+      expect(lookups, everyElement(greaterThan(read)),
+          reason: 'the login reads the completion-due record before it looks '
+              'up publickey@alice');
+    });
+
+    test(
+        'A login refuses a @keys document whose APKAM public key is not the '
+        'passkey\'s, even while the completion is due', () async {
+      server.keys = {...server.keys, 'aesPkamPublicKey': 'cm9sbGVkLWJhY2s='};
+      gateway.onAuthenticate = (session) =>
+          session.completeErrorAfterDelete = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding\'s completion is due');
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(isA<PublicKeyMismatchException>()));
+
+      expect(gateway.authenticated.last, 'eid1',
+          reason: 'the control: the login authenticated the enrollment');
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(server.completionDue, {'eid1': CompletionDue.activated});
+      expect(device.ids, isEmpty);
     });
 
     test(
@@ -665,6 +1153,7 @@ void main() {
       expect(gateway.lastSession!.clients, isEmpty);
       expect(fresh.ids, isEmpty);
       expect(server.cramDeleted, isEmpty);
+      expectStoresClosed();
       gateway.onAuthenticate = null;
 
       await custody(withHints: fresh).open(atSign: _atSign);
@@ -674,17 +1163,24 @@ void main() {
     });
 
     test(
-        'a login that finds another encryption public key published is '
-        'refused and completes nothing', () async {
+        'A login that finds another key published and the completion done '
+        'refuses it', () async {
       await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(server.completionDue, isEmpty,
+          reason: 'the control: the onboarding\'s completion is done');
+      server.approved['eid9'] = _atSign;
       server.publishedKey = 'cm90YXRlZA==';
+      final mark = server.timeline.length;
 
       await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
           throwsA(isA<PublicKeyMismatchException>()));
 
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
       expect(gateway.lastSession!.completed, isEmpty);
       expect(gateway.lastSession!.closed, isTrue);
       expect(server.publishedKey, 'cm90YXRlZA==');
+      expect(server.approved, {'eid1': _atSign, 'eid9': _atSign});
     });
 
     test('A login with saved hints sends no activation completion', () async {
@@ -822,12 +1318,26 @@ void main() {
   });
 
   group('open', () {
-    test('closes the session when remembering the device fails', () async {
+    test('closes the session when remembering the device fails with an Error',
+        () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      final broken = StateError('the hint store is broken');
+      final fresh = FakeHints()
+        ..failWrites = true
+        ..writeFailure = broken;
+      await expectLater(custody(withHints: fresh).open(atSign: _atSign),
+          throwsA(same(broken)));
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(gateway.lastSession!.clients, isEmpty);
+    });
+
+    test('opens when remembering the device fails with an Exception', () async {
       await custody().onboard(atSign: _atSign, cram: 'cram');
       final fresh = FakeHints()..failWrites = true;
-      await expectLater(
-          custody(withHints: fresh).open(atSign: _atSign), throwsStateError);
-      expect(gateway.lastSession!.closed, isTrue);
+      final session = await custody(withHints: fresh).open(atSign: _atSign);
+      expect(session.client.enrollmentId, 'eid1');
+      expect(gateway.lastSession!.closed, isFalse);
+      expect(fresh.ids, isEmpty);
     });
   });
 
@@ -1116,12 +1626,58 @@ void main() {
         expect(separate.credentials[_atSign], Uint8List.fromList([1]));
       });
 
-      test('a failed combined write leaves neither id', () async {
+      test(
+          'a failed combined write leaves neither id, and the open asks for '
+          'persistence and returns its session', () async {
         final combined = FakeHints()..failPairWrites = true;
-        await expectLater(custody(withHints: combined).open(atSign: _atSign),
-            throwsStateError);
+        final session =
+            await custody(withHints: combined).open(atSign: _atSign);
+        expect(session.client.enrollmentId, 'eid1');
         expect(combined.credentials, isEmpty);
         expect(combined.ids, isEmpty);
+        expect(persistence.requests, 1,
+            reason: 'a dropped hint write still asks for persistence');
+      });
+
+      test(
+          'separate stores whose first put fails keep neither id, and the '
+          'open returns its session', () async {
+        final separate = LegacyHints()..failWrites = true;
+        final session =
+            await custody(withHints: separate).open(atSign: _atSign);
+        expect(session.client.enrollmentId, 'eid1');
+        expect(separate.credentials, isEmpty);
+        expect(separate.ids, isEmpty);
+      });
+
+      test(
+          'separate stores whose second put fails leave a new credential id '
+          'beside the old enrollment id, and the next login replaces both',
+          () async {
+        server.revoked.add('eid-old');
+        final separate = LegacyHints()
+          ..credentials[_atSign] = Uint8List.fromList([9])
+          ..ids[_atSign] = 'eid-old'
+          ..failEnrollmentIdWrites = true;
+
+        final first = await custody(withHints: separate).open(atSign: _atSign);
+
+        expect(first.client.enrollmentId, 'eid1');
+        expect(separate.credentials[_atSign], Uint8List.fromList([1]),
+            reason: 'the first put landed');
+        expect(separate.ids[_atSign], 'eid-old',
+            reason: 'the second put did not');
+        separate.failEnrollmentIdWrites = false;
+        gateway.authenticated.clear();
+
+        final second = await custody(withHints: separate).open(atSign: _atSign);
+
+        expect(gateway.authenticated, ['eid-old', 'eid1'],
+            reason: 'PKAM refuses the mixed pair, and the retry without hints '
+                'reads the pointer');
+        expect(second.client.enrollmentId, 'eid1');
+        expect(separate.ids[_atSign], 'eid1');
+        expect(separate.credentials[_atSign], Uint8List.fromList([1]));
       });
     });
 
@@ -1252,15 +1808,138 @@ void main() {
       expect(server.documentReads, 0);
     });
 
-    test('a remembered enrollment id that is malformed is refused before PKAM',
-        () async {
+    test(
+        'a remembered enrollment id that is malformed counts as no hints and '
+        'is never sent', () async {
       final bad = FakeHints()
         ..credentials[_atSign] = Uint8List.fromList([1])
         ..ids[_atSign] = 'bad id/..';
-      await expectLater(custody(withHints: bad).open(atSign: _atSign),
-          throwsA(isA<PasskeyLostException>()));
-      expect(gateway.authenticated, isEmpty);
+      authenticator.gets = 0;
+      setupLock.names.clear();
+
+      final session = await custody(withHints: bad).open(atSign: _atSign);
+
+      expect(gateway.authenticated, ['eid1'],
+          reason: 'only the pointed enrollment is authenticated');
+      expect(authenticator.gets, 1);
+      expect(authenticator.lastAllowCredential, isNull);
+      expect(server.pointerReads, 1);
+      expect(setupLock.names, [setupLockName(_lockPrefix, _atSign)]);
+      expect(session.client.enrollmentId, 'eid1');
+      expect(bad.ids[_atSign], 'eid1');
     });
+
+    test(
+        'a failed read of the remembered credential id counts as no hints, '
+        'and the enrollment id is not read', () async {
+      final device = FakeHints()
+        ..credentials[_atSign] = Uint8List.fromList([1])
+        ..ids[_atSign] = 'eid1'
+        ..credentialIdReadFailure =
+            HintStoreException('cannot read the credential id')
+        ..enrollmentIdReadFailure =
+            HintStoreException('cannot read the enrollment id');
+      authenticator.gets = 0;
+      logs.records.clear();
+
+      final session = await custody(withHints: device).open(atSign: _atSign);
+
+      expect(authenticator.gets, 1);
+      expect(authenticator.lastAllowCredential, isNull,
+          reason: 'the login asserts any passkey');
+      expect(server.pointerReads, 1,
+          reason: "the login reads the passkey's pointer");
+      expect(gateway.authenticated, ['eid1'],
+          reason: 'only the pointed enrollment is authenticated');
+      expect(session.client.enrollmentId, 'eid1');
+      final warned = logs
+          .at('WARNING')
+          .where((m) => m.contains('could not be read'))
+          .toList();
+      expect(warned, hasLength(1),
+          reason: 'only the credential id read warns: the enrollment id, '
+              'whose read would also fail, is not read');
+      expect(
+          warned.single,
+          allOf(contains(_atSign), contains('remembered credential id'),
+              contains('HintStoreException')));
+      expect(warned.single, isNot(contains('cannot read')),
+          reason: "the warning carries no exception's message");
+    });
+
+    for (final (read, breakRead)
+        in <(String, void Function(LegacyHints, Object))>[
+      ('credential id', (hints, e) => hints.credentialIdReadFailure = e),
+      ('enrollment id', (hints, e) => hints.enrollmentIdReadFailure = e),
+    ]) {
+      test(
+          'an Error reading the remembered $read fails the login before any '
+          'prompt and opens nothing', () async {
+        final broken = StateError('the hint store is broken');
+        final device = FakeHints()
+          ..credentials[_atSign] = Uint8List.fromList([1])
+          ..ids[_atSign] = 'eid1';
+        breakRead(device, broken);
+        authenticator
+          ..gets = 0
+          ..issuedPrf.clear();
+        final sessionBefore = gateway.lastSession;
+
+        await expectLater(custody(withHints: device).open(atSign: _atSign),
+            throwsA(same(broken)));
+
+        expect(authenticator.gets, 0, reason: 'no passkey prompt');
+        expect(authenticator.issuedPrf, isEmpty, reason: 'no PRF output');
+        expect(gateway.authenticated, isEmpty, reason: 'no PKAM');
+        expect(gateway.lastSession, same(sessionBefore),
+            reason: 'no enrollment session');
+        expect(setupLock.held, isEmpty);
+        expect(device.ids, {_atSign: 'eid1'},
+            reason: 'the hints are left as they were');
+        expect(device.credentials[_atSign], [1]);
+      });
+    }
+
+    for (final (read, breakRead) in <(String, void Function(LegacyHints))>[
+      (
+        'credential id',
+        (hints) => hints.credentialIdReadFailure =
+            HintStoreException('cannot read the credential id')
+      ),
+      (
+        'enrollment id',
+        (hints) => hints.enrollmentIdReadFailure =
+            HintStoreException('cannot read the enrollment id')
+      ),
+    ]) {
+      test(
+          'a read of the remembered $read that fails before the setup lock '
+          'and not under it uses the hints, and warns of nothing', () async {
+        breakRead(hints..readFailuresOnce = true);
+        authenticator.gets = 0;
+        setupLock.names.clear();
+        logs.records.clear();
+
+        final session = await custody().open(atSign: _atSign);
+
+        expect(hints.credentialIdReadFailure ?? hints.enrollmentIdReadFailure,
+            isNull,
+            reason: 'the control: the first read failed');
+        expect(setupLock.names, [setupLockName(_lockPrefix, _atSign)],
+            reason: 'the failed read sent the open under the setup lock');
+        expect(authenticator.gets, 1);
+        expect(authenticator.lastAllowCredential, Uint8List.fromList([1]),
+            reason: 'the ceremony is narrowed to the remembered credential');
+        expect(server.pointerReads, 0, reason: 'no pointer is read');
+        expect(gateway.authenticated, ['eid1'],
+            reason: 'PKAM is for the remembered enrollment');
+        expect(session.client.enrollmentId, 'eid1');
+        expect(logs.at('WARNING').where((m) => m.contains('could not be read')),
+            isEmpty,
+            reason: 'only the read under the setup lock warns, and it read '
+                'the hints');
+      });
+    }
 
     test('a pointed enrollment id that is malformed is refused before PKAM',
         () async {
@@ -1303,11 +1982,13 @@ void main() {
         () async {
       server.publishedTag = 'v2';
       final fresh = FakeHints();
+      final built = stores.length;
       await expectLater(custody(withHints: fresh).open(atSign: _atSign),
           throwsA(isA<PublicKeyMismatchException>()));
       expect(gateway.lastSession!.closed, isTrue);
       expect(fresh.ids, isEmpty);
       expect(persistence.requests, 0);
+      expectStoresClosed(from: built);
     });
 
     group('a document rolled back in', () {
@@ -1420,6 +2101,7 @@ void main() {
           throwsA(same(openError)));
       final session = gateway.lastSession!;
       expect(session.closeCalls, 1);
+      expectStoresClosed();
       await expectLater(
           Future.sync(() => session.keysIos.single.read(_atSign)),
           throwsA(isA<StateError>()

@@ -5,8 +5,11 @@ import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart' show PasskeyHintStore;
+import 'package:at_client/at_client.dart' show AtSignLogger;
 import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:web/web.dart';
+
+final _logger = AtSignLogger('indexedDbHintStore');
 
 /// A [PasskeyHintStore] that persists to IndexedDB.
 ///
@@ -214,11 +217,20 @@ class IndexedDbHintStore implements PasskeyHintStore {
   Future<void> putEnrollmentId(String atSign, String id) =>
       _put(_enrollmentsStore, atSign, utf8.encode(id));
 
-  /// Retrieves the enrollment id for the [atSign].
+  /// Retrieves the enrollment id for the [atSign], or null when there is none
+  /// or its stored bytes are not UTF-8, which is logged as a warning.
   @override
   Future<String?> enrollmentId(String atSign) async {
     final bytes = await _get(_enrollmentsStore, atSign);
-    return bytes == null ? null : utf8.decode(bytes);
+    if (bytes == null) return null;
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      // NOTE: the warning never carries the stored bytes.
+      _logger.warning('the remembered enrollment id of $atSign is not UTF-8; '
+          'it counts as none');
+      return null;
+    }
   }
 
   /// Closes the database connection; the store does not reopen afterwards.

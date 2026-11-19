@@ -143,6 +143,13 @@ void main() {
     });
   });
 
+  group('enums', () {
+    test('CompletionDue names what a completion-due record says', () {
+      expect(CompletionDue.values,
+          [CompletionDue.activated, CompletionDue.cramSecretDeleted]);
+    });
+  });
+
   group('exceptions', () {
     test('each is an AtException carrying what it names', () {
       final exceptions = <AtException>[

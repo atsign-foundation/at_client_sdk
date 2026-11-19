@@ -200,6 +200,20 @@ void main() {
               lockWait: const Duration(milliseconds: 1)),
           isA<AtServerAtKeysIo>());
     });
+
+    test(
+        'bounds a write\'s wait for the lock at three leases of the lock\'s '
+        'ttl and the write\'s wait', () {
+      expect(
+          build(
+                  lockTtl: const Duration(seconds: 2),
+                  lockWait: const Duration(seconds: 7))
+              .lockWaitBound,
+          const Duration(seconds: 27),
+          reason: 'each of a write\'s three leases may wait up to the ttl for '
+              'its own last lease to lapse and then up to the wait for '
+              'another writer\'s');
+    });
   });
 
   test('write then reload then read round-trips at the enrollment key',
@@ -740,13 +754,36 @@ void main() {
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
-    test('leaves the vault it seals with open', () async {
-      final io = await open();
+    test(
+        'a read, write, flush or update after close calls neither the seal '
+        'nor the open function it was given', () async {
+      // NOTE: the two functions are the store's only route to the vault.
+      await seedRecord(_base());
+      final calls = <String>[];
+      final io = AtServerAtKeysIo(
+          documents: documents(),
+          atSign: _atSign,
+          seal: (d) {
+            calls.add('seal');
+            return derived.vault.seal(PasskeyRecordType.atkeys, d);
+          },
+          open: (r) {
+            calls.add('open');
+            return derived.vault.open(PasskeyRecordType.atkeys, r);
+          },
+          enrollmentId: _eid,
+          apkamKeyPair: pair);
 
       io.close();
+      final typed = throwsA(isA<AtServerAtKeysWriteException>());
+      await expectLater(Future.sync(() => io.read(_atSign)), throwsStateError);
+      await expectLater(io.write(_atSign, _base()), typed);
+      await expectLater(io.flush(_atSign.toAtsign(), _base()), typed);
+      await expectLater(io.update(_atSign.toAtsign(), (keys) => true), typed);
+      await io.settled;
 
-      await derived.vault.withAuthSeed((_) async {});
-      await derived.vault.seal(PasskeyRecordType.atkeys, {'a': 1});
+      expect(calls, isEmpty);
+      expect(server.commands, isEmpty);
     });
 
     test(

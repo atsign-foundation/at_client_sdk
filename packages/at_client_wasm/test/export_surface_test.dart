@@ -56,18 +56,41 @@ void main() {
             multiLine: true)));
   });
 
+  test(
+      'exports the session the passkey entry points return and the lock '
+      'refusal they throw', () {
+    final barrel = File('lib/at_client_wasm_web.dart').readAsStringSync();
+    expect(
+        barrel,
+        matches(RegExp(
+            r"^export 'package:at_client/passkey\.dart'\s+show[^;]*"
+            r'\bAtServerAtKeysLockedException\b[^;]*\bPasskeySession\b',
+            multiLine: true)));
+  });
+
   test('no exported file carries a test seam', () {
     for (final MapEntry(:key, :value) in sources.entries) {
       expect(value, isNot(contains('visibleForTesting')), reason: key);
     }
   });
 
-  test('exports nothing the core libraries already export', () {
+  test(
+      'exports nothing the core libraries already export beyond the types '
+      'the passkey entry points name', () {
+    final reExport =
+        RegExp(r"^export 'package:at_(auth|client)/[^;]*;", multiLine: true);
+    final space = RegExp(r'\s+');
     for (final MapEntry(:key, :value) in sources.entries) {
+      final found =
+          reExport.allMatches(value).map((m) => m[0]!.replaceAll(space, ' '));
       expect(
-          value,
-          isNot(matches(
-              RegExp(r"^export 'package:at_(auth|client)/", multiLine: true))),
+          found,
+          key == 'at_client_wasm_web.dart'
+              ? [
+                  "export 'package:at_client/passkey.dart' "
+                      'show AtServerAtKeysLockedException, PasskeySession;'
+                ]
+              : isEmpty,
           reason: key);
     }
     expect(files, isNot(contains('src/session/session_open.dart')));

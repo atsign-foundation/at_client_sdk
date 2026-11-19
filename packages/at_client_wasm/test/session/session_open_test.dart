@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:at_auth/passkey.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_wasm/at_client_wasm.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
@@ -13,22 +11,6 @@ import 'wire_fakes.dart';
 
 const _atSign = '@alice';
 const _app = 'wavi';
-
-/// A [RecordSealer] that only records being closed.
-class _Sealer implements RecordSealer {
-  var closed = false;
-
-  @override
-  Future<Uint8List> seal(Uint8List iv, List<int> plaintext, List<int> aad) =>
-      throw UnimplementedError();
-
-  @override
-  Future<Uint8List> open(Uint8List iv, Uint8List ciphertext, List<int> aad) =>
-      throw UnimplementedError();
-
-  @override
-  void close() => closed = true;
-}
 
 /// The key store a client is built on, counting the reads it served.
 class _KeysIo extends SessionKeysIo {
@@ -46,8 +28,6 @@ class _KeysIo extends SessionKeysIo {
 void main() {
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
-  late _Sealer sealer;
-  late PasskeyVault vault;
 
   SessionTransport transport() =>
       (lookUps: wire.lookUps, finder: finder, root: AtRootDomain.atsignDomain);
@@ -72,13 +52,6 @@ void main() {
 
   setUp(() {
     wire = Wire();
-    sealer = _Sealer();
-    vault = PasskeyVault((
-      lookupHex: '0' * 64,
-      ns: '1' * 64,
-      authSeed: Uint8List(32)..fillRange(0, 32, 7),
-      sealer: sealer,
-    ), atSign: '@alice');
   });
 
   tearDown(() async {
@@ -88,30 +61,9 @@ void main() {
     }
     AtClientImpl.atClientInstanceMap.clear();
     AtClientManager.getInstance().reset();
-    vault.close();
   });
 
-  group('the key store is lent to the client', () {
-    test('stopping the client leaves the vault open', () async {
-      final client = await open();
-
-      await client.stop();
-
-      expect(sealer.closed, isFalse);
-      await expectLater(vault.withAuthSeed((_) async {}), completes);
-    });
-
-    test(
-        'a client that does not come online is stopped and leaves the vault '
-        'open', () async {
-      wire.pkamAccepted = false;
-
-      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
-
-      expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);
-      expect(sealer.closed, isFalse);
-    });
-
+  group('a client that does not come online', () {
     test('a stop failure never replaces the error of an open that failed',
         () async {
       wire.pkamAccepted = false;

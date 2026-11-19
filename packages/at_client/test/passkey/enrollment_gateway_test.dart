@@ -8,6 +8,7 @@ import 'package:at_auth/passkey.dart' show PasskeyRecordType;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart';
 import 'package:at_client/src/passkey/passkey_custody.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
@@ -16,6 +17,7 @@ import 'package:test/test.dart';
 
 import '../support/custody_fakes.dart' show DerivedKeys;
 import '../support/wire_fakes.dart';
+import '../test_utils/recorded_logs.dart';
 
 const _atSign = '@alice';
 const _eid = 'eid-1';
@@ -62,6 +64,8 @@ class _Capture implements LoggingHandler {
 }
 
 void main() {
+  final logs = RecordedLogs();
+  setUpAll(logs.installOn);
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
   late ({String publicKey, String privateKey}) derived;
@@ -337,6 +341,28 @@ void main() {
       expect(wire.commands.single, startsWith('lookup:_'));
     });
 
+    test(
+        'the completion-due record is written, read and deleted on the PKAM '
+        'connection', () async {
+      final connection = wire.lookUpsBuilt.single;
+      wire.lookupAnswer = 'data:cram-deleted';
+
+      await session.recordCompletionDue(CompletionDue.activated);
+      await session.recordCompletionDue(CompletionDue.cramSecretDeleted);
+      final read = await session.completionDue();
+      await session.clearCompletionDue();
+
+      expect(read, CompletionDue.cramSecretDeleted);
+      expect(wire.dials, 1);
+      expect(wire.commands, [
+        'update:completion-due.$_eid.a.__e$_atSign activated\n',
+        'update:completion-due.$_eid.a.__e$_atSign cram-deleted\n',
+        'llookup:completion-due.$_eid.a.__e$_atSign\n',
+        'delete:completion-due.$_eid.a.__e$_atSign\n',
+      ]);
+      expect(connection.commandsSent, 4);
+    });
+
     test('close closes the PKAM connection', () async {
       await session.close();
 
@@ -395,15 +421,31 @@ void main() {
           PublishedEncryptionKey.none);
     });
 
-    test('throws when the lookup fails other than with the key not found',
-        () async {
+    test('is none when the atServer has no publickey (AT0015)', () async {
       final session = await sessionOver(
-          Wire()..lookupAnswer = 'error:AT0011-Internal server exception');
+          Wire()..lookupAnswer = 'error:AT0015-key not found : publickey');
 
-      await expectLater(
-          session.publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
-          throwsA(isA<InvalidResponseException>()));
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.none);
     });
+
+    for (final (code, reply) in [
+      ('AT0011', 'error:AT0011-Internal server exception'),
+      ('AT0014', 'error:AT0014-Request timed out'),
+    ]) {
+      test(
+          'throws the lookup\'s $code failure, which is not the key not '
+          'found', () async {
+        final session = await sessionOver(Wire()..lookupAnswer = reply);
+
+        await expectLater(
+            session.publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+            throwsA(isA<AtLookUpException>()
+                .having((e) => e.errorCode, 'errorCode', code)));
+      });
+    }
 
     test('is the same when the restored keys carry no public key to compare',
         () async {
@@ -524,6 +566,32 @@ void main() {
       expect(wire.dials, 1);
     });
 
+    test('A login that revokes names each enrollment it revokes in a warning',
+        () async {
+      const other = 'eid-9';
+      final session = await gateway().authenticate(
+          atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
+      serve({_eid: 'approved', other: 'approved'}, {_eid: 'approved'});
+      final from = logs.records.length;
+
+      await session.revokeOtherEnrollments();
+
+      final logged = logs.records.skip(from).toList();
+      expect(wire.commands, contains(revoke(other)),
+          reason: 'the control: the login revoked the other enrollment');
+      final named = [
+        for (final r in logged)
+          if (r.message.contains(other)) r
+      ];
+      expect(named, hasLength(1),
+          reason: 'one log names the enrollment the login revoked');
+      expect(named.single.level, 'WARNING', reason: 'it is a warning');
+      expect(named.single.message, contains(_atSign),
+          reason: 'and names the Atsign');
+      expect(logged.where((r) => r.message.contains(_eid)), isEmpty,
+          reason: "no log names the passkey's own enrollment");
+    });
+
     test('revokes nothing that is listed but not approved', () async {
       final session = await activate();
       serve({_eid: 'approved', 'eid-0': 'pending', 'eid-2': 'revoked'},
@@ -534,14 +602,56 @@ void main() {
       expect(wire.commands, [list, list]);
     });
 
+    // NOTE: the lookUp throws an atServer's error reply as an
+    // AtLookUpException, which the remote secondary maps by its code.
+    for (final code in ['AT0029', 'AT0031', 'AT0032']) {
+      test(
+          'a revoke the atServer refuses with $code, for an enrollment no '
+          'longer approved, is left to the list and is not a failure',
+          () async {
+        final session = await activate();
+        serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+            revoked: (_) => throw AtLookUpException(code, 'not approved'));
+
+        await session.revokeOtherEnrollments();
+
+        expect(wire.commands, [list, revoke('eid-0'), list],
+            reason: 'an atServer refusal of a revoke is left to the list '
+                'that follows');
+      });
+    }
+
     test(
-        'a refused revoke of an enrollment no longer approved is not a failure',
-        () async {
+        'Given another approved enrollment of @alice🛠 is gone by the time '
+        'the completion revokes it, when the atServer answers that revoke '
+        'with AT0028, then the revoke is left to the list that follows, and '
+        'the completion goes on when the list no longer shows it', () async {
       final session = await activate();
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => 'error:AT0011:not approved');
+          revoked: (_) => throw AtLookUpException(
+              'AT0028', 'enrollment_id: eid-0 is expired or invalid'));
 
       await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the atServer answers AT0028 to a revoke of an enrollment '
+              'that has expired or no longer exists');
+    });
+
+    test(
+        'an AT0028 answer to a revoke whose enrollment the list still shows '
+        'as approved makes the revoke throw', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved'},
+          {_eid: 'approved', 'eid-0': 'approved'},
+          revoked: (_) => throw AtLookUpException(
+              'AT0028', 'enrollment_id: eid-0 is expired or invalid'));
+
+      await expectLater(session.revokeOtherEnrollments(),
+          throwsA(isA<AtEnrollmentException>()),
+          reason: 'the list that follows still shows eid-0 as approved');
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the list that follows decides');
     });
 
     test('throws when an approved enrollment other than its own remains',
@@ -553,20 +663,84 @@ void main() {
       }, {
         _eid: 'approved',
         'eid-0': 'approved'
-      }, revoked: (_) => 'error:AT0011:refused');
+      }, revoked: (_) => throw AtLookUpException('AT0031', 'refused'));
 
       await expectLater(session.revokeOtherEnrollments(),
           throwsA(isA<AtEnrollmentException>()));
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the list that follows throws, not the refused revoke');
     });
 
     test('a revoke that fails other than with an atServer refusal propagates',
         () async {
-      final session = await activate();
-      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw StateError('the connection was lost'));
+      // What a real lookUp throws for a lost connection, a timeout, a
+      // connect that fails, and an atServer that is failing, busy or paused.
+      for (final (code, failure) in [
+        ('AT0004', 'the connection was lost'),
+        ('AT0014', 'Request timed out'),
+        ('AT0021', 'wss connect failed'),
+        ('AT0011', 'internal server exception'),
+        ('AT0012', 'inbound connection limit exceeded'),
+        ('AT0024', 'server is paused'),
+      ]) {
+        wire.commands.clear();
+        final session = await activate();
+        serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+            revoked: (_) => throw AtLookUpException(code, failure));
 
-      await expectLater(session.revokeOtherEnrollments(), throwsStateError,
-          reason: 'only an atServer refusal of a revoke is tolerated');
+        await expectLater(
+            session.revokeOtherEnrollments(),
+            throwsA(isA<AtException>()
+                .having((e) => e.message, 'message', failure)),
+            reason: 'only an atServer refusal of a revoke is tolerated');
+        expect(wire.commands, [list, revoke('eid-0')], reason: code);
+      }
+    });
+
+    // NOTE: a real lookUp lets each of these failures out only as an
+    // AtLookUpException carrying its code, never as the exception itself.
+    test('a revoke that cannot reach the atServer propagates', () async {
+      final session = await activate();
+      const failure = 'Exception: $_atSign: unable to connect to atServer on '
+          'atserver.test:1 - SocketException: Connection refused';
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0021', failure));
+
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(isA<SecondaryConnectException>()
+              .having((e) => e.message, 'message', failure)),
+          reason: 'a revoke that never reached the atServer was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke whose answer does not come in time propagates', () async {
+      final session = await activate();
+      const failure = 'Exception: Full response not received after 90000 '
+          'millis from remote atServer';
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0023', failure));
+
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(isA<AtTimeoutException>()
+              .having((e) => e.message, 'message', failure)),
+          reason: 'a revoke whose answer never came was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke that fails with an I/O error propagates', () async {
+      final session = await activate();
+      const failure = 'Exception: connection to atserver.test:1 failed: '
+          'SocketException: Broken pipe';
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0004', failure));
+
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(
+              isA<AtException>().having((e) => e.message, 'message', failure)),
+          reason: 'a revoke that failed to send was not refused');
       expect(wire.commands, [list, revoke('eid-0')]);
     });
   });

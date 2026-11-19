@@ -12,9 +12,11 @@ import 'package:at_commons/at_commons.dart'
     show AtException, InvalidAtSignException;
 import 'package:at_commons/atsign.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../client/at_client_spec.dart' show AtClient;
 import 'at_server_at_keys_io.dart';
+import 'completion_due_record.dart' show CompletionDue;
 import 'enrollment_gateway.dart' show ApkamKeyPair, apkamKeyPairFromSeed;
 import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
@@ -140,8 +142,11 @@ abstract class EnrollmentSession {
   /// Revokes every approved enrollment of the atSign other than this one.
   ///
   /// Throws when an approved enrollment other than this one is still listed
-  /// afterwards; a revoke the atServer refuses for an enrollment that is no
-  /// longer approved is not a failure.
+  /// afterwards; a revoke the atServer refuses (AT0028, AT0029, AT0031,
+  /// AT0032), as for an enrollment that has expired, no longer exists, is no
+  /// longer approved or is one it will not revoke, is not a failure. A revoke that fails any other way,
+  /// such as a lost or failed connection, a timeout or a paused, busy or
+  /// failing atServer, throws at once.
   Future<void> revokeOtherEnrollments();
 
   /// Completes the activation this session's enrollment was created by:
@@ -150,6 +155,21 @@ abstract class EnrollmentSession {
   /// encryption public key it publishes nothing and only deletes the CRAM
   /// secret.
   Future<void> completeActivation(Map<String, dynamic> atKeys);
+
+  /// Writes [state] to this enrollment's completion-due record, which says
+  /// that the completion of the activation that created it is due, replacing
+  /// what the record held. From at_server p3.15.0 no other enrollment can
+  /// read or write the record.
+  Future<void> recordCompletionDue(CompletionDue state);
+
+  /// What this enrollment's completion-due record says, or null when there is
+  /// none and the completion is not due. Every failure other than the record
+  /// being absent is thrown.
+  Future<CompletionDue?> completionDue();
+
+  /// Deletes this enrollment's completion-due record. One the atServer
+  /// reports as not found counts as deleted.
+  Future<void> clearCompletionDue();
 
   /// A client running as this enrollment, reading its @keys from [keysIo] and
   /// persisting every change through it. The client takes over this session's
@@ -200,6 +220,9 @@ const _encryptPublicKey = 'aesEncryptPublicKey';
 /// The ids a device remembers for an atSign.
 typedef _Hints = ({Uint8List credentialId, String enrollmentId});
 
+/// The flow that remembers a passkey, as a warning names it.
+enum _Flow { onboarding, login }
+
 /// Raised inside [PasskeyCustody.open] when the remembered ids led to no
 /// credential or a refused PKAM.
 class _StaleHints extends AtException {
@@ -233,7 +256,8 @@ class PasskeyCustody {
       this.persistence,
       this.now = DateTime.now,
       this.retryDelay = const Duration(milliseconds: 250),
-      required this.deriver});
+      required this.deriver,
+      @visibleForTesting this.onKeyStore});
 
   final PasskeyPrf prf;
   final EnrollmentPointerReader pointerReader;
@@ -257,6 +281,11 @@ class PasskeyCustody {
   /// Derives the vault's keys from a passkey's PRF output.
   final PasskeyKeyDeriver deriver;
 
+  /// Sees each key store this custody builds, before any I/O on it; tests use
+  /// it to observe that a failed onboarding or login closes the store.
+  @visibleForTesting
+  final void Function(AtServerAtKeysIo store)? onKeyStore;
+
   /// The vault [deriver] derives from [secret], which is overwritten with
   /// zeroes once the vault is derived or the derivation fails.
   Future<PasskeyVault> _deriveAndWipe(PrfSecret secret, String atSign) async {
@@ -276,13 +305,20 @@ class PasskeyCustody {
   }
 
   /// Onboards a fresh [atSign]: registers a passkey, activates the atSign
-  /// with [cram] and the APKAM key pair derived from the passkey, and writes
-  /// the sealed @keys document and the pointer as the new enrollment. Then it
-  /// completes the activation: it deletes the CRAM secret, then revokes every
-  /// other approved enrollment of the atSign, including any an interrupted
-  /// onboarding left, then publishes the encryption public key. It then
-  /// remembers the passkey on the device and returns the session of the
-  /// client running as the new enrollment.
+  /// with [cram] and the APKAM key pair derived from the passkey, and, as the
+  /// new enrollment, records that the activation's completion is due, then
+  /// writes the sealed @keys document and the pointer. Then it completes the
+  /// activation: it deletes the CRAM secret and, once that delete answers,
+  /// records that it is deleted, then revokes every other approved
+  /// enrollment of the atSign, including any an interrupted onboarding left,
+  /// then publishes the encryption public key, then deletes the record that
+  /// the completion is due. It then remembers the passkey on the device and
+  /// returns the session of the client running as the new enrollment.
+  ///
+  /// The device's passkey hints are a convenience: a write of them that
+  /// fails with an [Exception] is logged as a warning naming [atSign], and
+  /// the onboarding returns its session all the same, leaving the next [open]
+  /// to save them. One that fails with an [Error] fails the onboarding.
   ///
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
@@ -294,11 +330,15 @@ class PasskeyCustody {
   /// for the platform to take the report; a failure while completing it, or
   /// after, reports nothing. Once the CRAM secret is deleted the atSign is
   /// onboarded, and a failure after that leaves [open] to log in: without
-  /// saved hints it completes the activation, revoking the other enrollments
-  /// and publishing the encryption public key when none is published, and
-  /// otherwise only deleting the CRAM secret, which is already gone; it then
-  /// saves the hints. Nothing is kept on the device until the CRAM secret is
-  /// deleted.
+  /// saved hints it completes the activation while the completion is due,
+  /// as [open] says, and it then saves the hints. Nothing is kept on the
+  /// device until the CRAM secret is deleted. The failing stage's error is
+  /// rethrown as it is, so it does not say whether the CRAM secret was
+  /// deleted: a caller retries with [open] first, which finishes the
+  /// onboarding when it succeeds. A [PasskeyLostException] from that [open]
+  /// does not say whether the passkey filed a pointer, since a cancelled
+  /// prompt throws it too, and onboarding again needs the CRAM secret still
+  /// live.
   ///
   /// When the assertion after registering the new passkey fails or yields no
   /// usable PRF output, the new passkey is reported to the platform as
@@ -335,9 +375,9 @@ class PasskeyCustody {
     });
   }
 
-  /// Activates [canonical] with [cram], completion deferred, and writes the
-  /// new enrollment's document and pointer. Everything it built is closed
-  /// when it throws.
+  /// Activates [canonical] with [cram], completion deferred, records that the
+  /// completion is due, and writes the new enrollment's document and pointer.
+  /// Everything it built is closed when it throws.
   Future<_Written> _activateAndWrite(
       String canonical, String cram, PrfSecret secret) async {
     final vault = await _deriveAndWipe(secret, canonical);
@@ -348,6 +388,7 @@ class PasskeyCustody {
       await _requestPersist();
       final activated = session = await gateway.activate(
           atSign: canonical, apkamKeyPair: pair, cram: cram);
+      await activated.recordCompletionDue(CompletionDue.activated);
       final atKeys = {...await activated.atKeys()}..remove(_apkamPrivateKey);
       final keysIo = store = _keysIo(canonical, activated, vault, pair);
       await _putDocument(canonical, keysIo, atKeys);
@@ -371,8 +412,9 @@ class PasskeyCustody {
       String canonical, Uint8List credentialId, _Written written) async {
     final (:vault, :session, :store, :atKeys) = written;
     try {
-      await _completeActivation(session, atKeys);
-      await _remember(canonical, credentialId, session.enrollmentId);
+      await _completeActivation(session, atKeys, onboarding: true);
+      await _remember(canonical, credentialId, session.enrollmentId,
+          flow: _Flow.onboarding);
     } on Object {
       store.close();
       await _closeAfterFailedOpen(session);
@@ -388,15 +430,21 @@ class PasskeyCustody {
   }
 
   /// Completes the activation [session]'s enrollment was created by: deletes
-  /// the atSign's CRAM secret, then revokes every other approved enrollment,
-  /// then publishes the encryption public key [atKeys] holds.
+  /// the atSign's CRAM secret, then, for an [onboarding], records that it is
+  /// deleted, then revokes every other approved enrollment, then publishes
+  /// the encryption public key [atKeys] holds, then deletes the record that
+  /// the completion is due.
   static Future<void> _completeActivation(
-      EnrollmentSession session, Map<String, dynamic> atKeys) async {
-    // NOTE: the CRAM secret is deleted before the revoke, so a published
-    // encryption public key means the revoke ran after it was gone.
+      EnrollmentSession session, Map<String, dynamic> atKeys,
+      {required bool onboarding}) async {
+    // NOTE: only an onboarding may record the CRAM secret's deletion.
     await session.completeActivation(const {});
+    if (onboarding) {
+      await session.recordCompletionDue(CompletionDue.cramSecretDeleted);
+    }
     await session.revokeOtherEnrollments();
     await session.completeActivation(atKeys);
+    await session.clearCompletionDue();
   }
 
   /// Opens the client of [session] on [store], whose reads are served from
@@ -421,10 +469,13 @@ class PasskeyCustody {
 
   /// Opens [atSign]'s @keys and returns the session of the client running as
   /// its enrollment. A device that remembers [atSign]'s credential and
-  /// enrollment returns without reading the pointer; any other (one id alone
-  /// counts as none) asserts any discoverable passkey and finds the
-  /// enrollment through the pointer, after waiting for [atSign]'s setup lock
-  /// so that an onboarding in another tab finishes first.
+  /// enrollment returns without reading the pointer; any other asserts any
+  /// discoverable passkey and finds the enrollment through the pointer,
+  /// after waiting for [atSign]'s setup lock so that an onboarding in another
+  /// tab finishes first. One id alone counts as none, and so does a
+  /// remembered credential id or enrollment id whose read fails with an
+  /// [Exception], or an enrollment id outside the enrollment id alphabet,
+  /// which is never sent; each is logged as a warning naming [atSign].
   ///
   /// When the remembered ceremony yields no credential, or the atServer
   /// refuses PKAM for the remembered enrollment, the open is retried once, as
@@ -433,20 +484,33 @@ class PasskeyCustody {
   /// deleted passkey, so a cancel is retried too, and a second failure is a
   /// lost passkey.
   ///
-  /// A remembered or pointed enrollment id outside the id alphabet is a lost
-  /// passkey, refused before any PKAM.
+  /// An enrollment id the pointer holds outside the enrollment id alphabet is
+  /// a lost passkey, refused before any PKAM.
   ///
-  /// Once the document is read, an open without remembered ids, including
-  /// the retry without them, finishes the activation an onboarding may have
-  /// left unfinished, before it remembers anything or opens the client: when
-  /// the atServer publishes no encryption public key it deletes the atSign's
-  /// CRAM secret, then revokes every approved enrollment other than this
-  /// one, then publishes the document's key; when the document's key is
-  /// published it only deletes the CRAM secret. An open that uses remembered
-  /// ids sends none of these, since a device remembers them only once the
-  /// activation is finished. On every open, a published key other than the
-  /// document's is refused before anything is sent. When finishing the
-  /// activation fails, the open fails, and the next open finishes it.
+  /// Every open refuses a document whose APKAM public key is not the
+  /// passkey's, before anything is sent. Once the document is read, an open
+  /// without remembered ids, including the retry without them, finishes the
+  /// activation an onboarding may have left unfinished, before it remembers
+  /// anything or opens the client. It reads the record that the completion is
+  /// due before it looks at the published encryption public key:
+  ///
+  /// - When the record says the onboarding's own delete of the CRAM secret
+  ///   answered, it deletes the atSign's CRAM secret, then revokes every
+  ///   approved enrollment other than this one, then publishes the
+  ///   document's key over any that is published, then deletes the record.
+  /// - When it says only that the completion is due, it does the same when
+  ///   no key or the document's key is published, and refuses another key
+  ///   before anything is sent.
+  /// - When there is no record, it revokes nothing: it publishes the
+  ///   document's key when none is published, deletes the CRAM secret, which
+  ///   is already gone, and refuses another key before anything is sent.
+  ///
+  /// An open never records the CRAM secret's deletion. An open that uses
+  /// remembered ids reads no record and sends none of these, since a device
+  /// remembers them only once the completion is done; it too refuses a
+  /// published key other than the document's. When reading the record or
+  /// finishing the activation fails, the open fails, and the next open tries
+  /// again.
   ///
   /// The PRF output is overwritten with zeroes once the vault is derived, and
   /// the auth seed once the APKAM key pair is derived from it. The vault is
@@ -456,9 +520,17 @@ class PasskeyCustody {
   ///
   /// Throws [PasskeyLostException], [MissingAtKeysDocumentException],
   /// [PublicKeyMismatchException], a `PrfUnavailableException` when the
-  /// passkey gives no usable PRF output, or what revoking the other
+  /// passkey gives no usable PRF output, an [Error] from reading a remembered
+  /// id, or what reading the completion-due record, revoking the other
   /// enrollments or finishing the activation throws; none leaves a session
   /// open or the device's hints rewritten.
+  ///
+  /// The device's passkey hints are a convenience: a write of them that
+  /// fails with an [Exception] is logged as a warning naming [atSign], and
+  /// the open returns its session all the same, leaving the next open without
+  /// hints to save them. One that fails with an [Error] is thrown, and the
+  /// session is closed; when the two ids go to separate stores, the first may
+  /// already be written.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
@@ -472,7 +544,7 @@ class PasskeyCustody {
   /// cannot be taken (for example a `SetupLockTimeoutException`).
   Future<PasskeySession> open({required String atSign}) async {
     final canonical = canonicalPasskeyAtSign(atSign);
-    final hints = await _savedHints(canonical);
+    final hints = await _savedHints(canonical, warn: false);
     if (hints == null) return _lockedOpen(canonical, useSavedHints: true);
     try {
       return await _attempt(canonical, hints);
@@ -493,7 +565,8 @@ class PasskeyCustody {
   /// [_lockedOpen] for a caller that already holds [canonical]'s setup lock.
   Future<PasskeySession> _openHoldingLock(String canonical,
       {required bool useSavedHints}) async {
-    final hints = useSavedHints ? await _savedHints(canonical) : null;
+    final hints =
+        useSavedHints ? await _savedHints(canonical, warn: true) : null;
     if (hints == null) return _attempt(canonical, null);
     try {
       return await _attempt(canonical, hints);
@@ -504,11 +577,48 @@ class PasskeyCustody {
 
   /// The credential and enrollment ids this device remembers for [canonical],
   /// or null unless it remembers both: one of the two alone, as a write that
-  /// stopped halfway leaves, counts as no hints.
-  Future<_Hints?> _savedHints(String canonical) async {
-    final credentialId = await credentials.credentialId(canonical);
-    final enrollmentId = await enrollmentIds.enrollmentId(canonical);
+  /// stopped halfway leaves, counts as no hints. So does a remembered id
+  /// whose read fails with an [Exception], and an enrollment id outside the
+  /// enrollment id alphabet, which is never sent; each is logged as a warning
+  /// when [warn] is true, which only the read under the setup lock passes, so
+  /// an open warns once. The credential id is read first, and a failed read
+  /// of it leaves the enrollment id unread. An [Error] from either read is
+  /// thrown.
+  Future<_Hints?> _savedHints(String canonical, {required bool warn}) async {
+    final Uint8List? credentialId;
+    try {
+      credentialId = await credentials.credentialId(canonical);
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message.
+      if (warn) {
+        _logger.warning('the remembered credential id of $canonical could '
+            'not be read (${e.runtimeType}); logging in without passkey hints');
+      }
+      return null;
+    }
+    final String? enrollmentId;
+    try {
+      enrollmentId = await enrollmentIds.enrollmentId(canonical);
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message.
+      if (warn) {
+        _logger.warning('the remembered enrollment id of $canonical could '
+            'not be read (${e.runtimeType}); logging in without passkey hints');
+      }
+      return null;
+    }
     if (credentialId == null || enrollmentId == null) return null;
+    try {
+      checkEnrollmentId(enrollmentId);
+    } on ArgumentError {
+      // NOTE: the warning never carries the enrollment id.
+      if (warn) {
+        _logger.warning('the remembered enrollment id of $canonical is '
+            'outside the enrollment id alphabet; logging in without passkey '
+            'hints');
+      }
+      return null;
+    }
     return (credentialId: credentialId, enrollmentId: enrollmentId);
   }
 
@@ -517,8 +627,8 @@ class PasskeyCustody {
   /// ceremony that yields no credential, or a PKAM the atServer refuses, then
   /// throws [_StaleHints] so the caller can try again without them. Without
   /// hints either is a lost passkey. Only an open without hints finishes the
-  /// activation, and it revokes the other enrollments and publishes the
-  /// encryption key only when no encryption key is published.
+  /// activation, as [_finishActivation] does; one with hints refuses a
+  /// published encryption key other than the document's.
   Future<PasskeySession> _attempt(String canonical, _Hints? hints) async {
     final PasskeyUnlock unlocked;
     try {
@@ -552,16 +662,15 @@ class PasskeyCustody {
       }
       final store = _keysIo(canonical, session, vault, pair);
       try {
-        final unpublished = await _restore(canonical, store, session, pair);
+        final atKeys = await _restore(canonical, store, pair);
         if (hints == null) {
-          if (unpublished == null) {
-            await session.completeActivation(const {});
-          } else {
-            await _completeActivation(
-                session, {_encryptPublicKey: unpublished});
-          }
+          await _finishActivation(session, atKeys);
+        } else if (await session.publishedEncryptionKey(atKeys) ==
+            PublishedEncryptionKey.different) {
+          throw PublicKeyMismatchException();
         }
-        await _remember(canonical, unlocked.credentialId, enrollmentId);
+        await _remember(canonical, unlocked.credentialId, enrollmentId,
+            flow: _Flow.login);
       } on Object {
         store.close();
         await _closeAfterFailedOpen(session);
@@ -590,14 +699,17 @@ class PasskeyCustody {
   /// the custody writes and reads through and then hands to the client. The
   /// store reaches the vault only to seal and open that document.
   AtServerAtKeysIo _keysIo(String atSign, EnrollmentSession session,
-          PasskeyVault vault, ApkamKeyPair pair) =>
-      AtServerAtKeysIo(
-          documents: session.documents,
-          atSign: atSign,
-          seal: (document) => vault.seal(PasskeyRecordType.atkeys, document),
-          open: (record) => vault.open(PasskeyRecordType.atkeys, record),
-          enrollmentId: session.enrollmentId,
-          apkamKeyPair: pair);
+      PasskeyVault vault, ApkamKeyPair pair) {
+    final store = AtServerAtKeysIo(
+        documents: session.documents,
+        atSign: atSign,
+        seal: (document) => vault.seal(PasskeyRecordType.atkeys, document),
+        open: (record) => vault.open(PasskeyRecordType.atkeys, record),
+        enrollmentId: session.enrollmentId,
+        apkamKeyPair: pair);
+    onKeyStore?.call(store);
+    return store;
+  }
 
   /// Creates the enrollment's document from [atKeys] through [store], which
   /// reads it back.
@@ -650,21 +762,48 @@ class PasskeyCustody {
   }
 
   /// Reads the enrollment's document through [store], which then serves the
-  /// client's reads from memory, and checks its public keys against the
-  /// published ones and the passkey's pair. Returns the document's encryption
-  /// public key when the atServer publishes none, and otherwise null.
-  Future<String?> _restore(String atSign, AtServerAtKeysIo store,
-      EnrollmentSession session, ApkamKeyPair pair) async {
+  /// client's reads from memory, and returns it without the APKAM private
+  /// key. Throws [PublicKeyMismatchException] when the document's APKAM
+  /// public key is not the public key of [pair], the passkey's.
+  Future<Map<String, dynamic>> _restore(
+      String atSign, AtServerAtKeysIo store, ApkamKeyPair pair) async {
     final stored = await store.read(atSign);
-    final atKeys = stored.toJson()..remove(_apkamPrivateKey);
-    final published = await session.publishedEncryptionKey(atKeys);
-    if (published == PublishedEncryptionKey.different ||
-        !_holdsApkamPublicKeyOf(stored, pair)) {
+    if (!_holdsApkamPublicKeyOf(stored, pair)) {
       throw PublicKeyMismatchException();
     }
-    return published == PublishedEncryptionKey.none
-        ? atKeys[_encryptPublicKey] as String?
-        : null;
+    return stored.toJson()..remove(_apkamPrivateKey);
+  }
+
+  /// Finishes the activation [session]'s enrollment was created by, as far
+  /// as it is unfinished, publishing the encryption public key [atKeys]
+  /// holds, as [open] says. It reads the completion-due record before it
+  /// looks at the published key, and refuses another published key with
+  /// [PublicKeyMismatchException] before it sends any delete, revoke or
+  /// publish, unless the record says the onboarding's own delete of the CRAM
+  /// secret answered.
+  static Future<void> _finishActivation(
+      EnrollmentSession session, Map<String, dynamic> atKeys) async {
+    final key = atKeys[_encryptPublicKey];
+    final encryptionKey = {if (key is String) _encryptPublicKey: key};
+    switch (await session.completionDue()) {
+      case CompletionDue.cramSecretDeleted:
+        return _completeActivation(session, encryptionKey, onboarding: false);
+      case CompletionDue.activated:
+        if (await session.publishedEncryptionKey(atKeys) ==
+            PublishedEncryptionKey.different) {
+          throw PublicKeyMismatchException();
+        }
+        return _completeActivation(session, encryptionKey, onboarding: false);
+      case null:
+        switch (await session.publishedEncryptionKey(atKeys)) {
+          case PublishedEncryptionKey.none:
+            await session.completeActivation(encryptionKey);
+          case PublishedEncryptionKey.same:
+            await session.completeActivation(const {});
+          case PublishedEncryptionKey.different:
+            throw PublicKeyMismatchException();
+        }
+    }
   }
 
   /// Whether the flat APKAM public key [stored] holds, if any, is the public
@@ -678,16 +817,27 @@ class PasskeyCustody {
     return flat == null || flat == pair.publicKey;
   }
 
-  /// Remembers the passkey and enrollment of [atSign]: both ids in one write
-  /// when the hint stores are one [PasskeyHintStore], otherwise one put each.
+  /// Remembers the passkey and enrollment of [atSign] at the end of [flow]:
+  /// both ids in one write when the hint stores are one [PasskeyHintStore],
+  /// otherwise one put each. A write that fails with an [Exception] is logged
+  /// as a warning and dropped, so the flow goes on without saved hints; one
+  /// that fails with an [Error] is thrown.
   Future<void> _remember(
-      String atSign, Uint8List credentialId, String enrollmentId) async {
-    final combined = credentials;
-    if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
-      await combined.putHint(atSign, credentialId, enrollmentId);
-    } else {
-      await credentials.putCredentialId(atSign, credentialId);
-      await enrollmentIds.putEnrollmentId(atSign, enrollmentId);
+      String atSign, Uint8List credentialId, String enrollmentId,
+      {required _Flow flow}) async {
+    try {
+      final combined = credentials;
+      if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
+        await combined.putHint(atSign, credentialId, enrollmentId);
+      } else {
+        await credentials.putCredentialId(atSign, credentialId);
+        await enrollmentIds.putEnrollmentId(atSign, enrollmentId);
+      }
+    } on Exception catch (e) {
+      // NOTE: the warning never carries the exception's message or the
+      // enrollment id.
+      _logger.warning('the passkey hints of $atSign were not saved after the '
+          '${flow.name} (${e.runtimeType})');
     }
     await _requestPersist();
   }

@@ -8,6 +8,7 @@ export 'src/passkey/at_server_at_keys_io.dart'
         AtServerAtKeysIo,
         AtServerAtKeysLockedException,
         AtServerAtKeysWriteException;
+export 'src/passkey/completion_due_record.dart' show CompletionDue;
 export 'src/passkey/enrollment_document_store.dart'
     show EnrollmentDocumentStore, enrollmentDocumentKey;
 export 'src/passkey/enrollment_gateway.dart'
