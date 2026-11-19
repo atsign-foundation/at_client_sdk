@@ -519,12 +519,12 @@ void main() {
     test(
         'An onboarding whose record of the CRAM secret\'s deletion cannot be '
         'written fails, and a login finishes it', () async {
-      final refusal = StateError('the atServer refused the rewrite');
+      final refusal = AtException('the atServer refused the rewrite');
       server.completionDueWriteRefusals[CompletionDue.cramSecretDeleted] =
           refusal;
 
-      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
-          throwsA(same(refusal)));
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), refusal);
 
       final steps = server.timeline;
       expect(steps.indexOf('record-completion-due:eid1:cramSecretDeleted'),
@@ -1363,6 +1363,19 @@ void main() {
                   'credential');
         });
       }
+    });
+
+    test(
+        'an exception that is not an AtException once the pointer is written '
+        'is the cause of the exception onboarding throws', () async {
+      final timeout = TimeoutException('the revoke timed out');
+      gateway.onAuthenticate = (session) => session.revokeError = timeout;
+
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), timeout);
+
+      expect(server.pointers, hasLength(1),
+          reason: 'the control: the pointer was written');
     });
 
     test(
