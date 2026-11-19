@@ -77,6 +77,25 @@ class PasskeyLostException extends AtException {
   String toString() => 'PasskeyLostException: $reason for $atSign';
 }
 
+/// Thrown by [PasskeyCustody.onboard] when an [Exception] stops it once the
+/// new enrollment's pointer is written: [atSign] is onboarded, and
+/// [PasskeyCustody.open] with the passkey finishes the onboarding, opens its
+/// enrollment and saves the passkey hints.
+///
+/// [cause] is that exception, and this one is thrown with its stack trace.
+/// The message names [atSign] and never carries the cause's message.
+class PasskeyOnboardingIncompleteException extends AtException {
+  PasskeyOnboardingIncompleteException(this.atSign, {required this.cause})
+      : super('the onboarding of $atSign did not finish; logging in with its '
+            'passkey finishes it');
+
+  final Atsign atSign;
+  final Exception cause;
+
+  @override
+  String toString() => 'PasskeyOnboardingIncompleteException: $message';
+}
+
 /// Thrown when an authenticated enrollment has no @keys document.
 class MissingAtKeysDocumentException extends AtException {
   MissingAtKeysDocumentException(this.enrollmentId)
@@ -362,7 +381,13 @@ class PasskeyCustody {
         unawaited(prf.signalUnknownCredential(passkey.credentialId));
         rethrow;
       }
-      return _complete(canonical, passkey.credentialId, written);
+      try {
+        return await _complete(canonical, passkey.credentialId, written);
+      } on Exception catch (e, stackTrace) {
+        Error.throwWithStackTrace(
+            PasskeyOnboardingIncompleteException(canonical, cause: e),
+            stackTrace);
+      }
     });
   }
 

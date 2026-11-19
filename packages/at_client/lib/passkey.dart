@@ -26,6 +26,7 @@ export 'src/passkey/passkey_custody.dart'
         MissingAtKeysDocumentException,
         PasskeyCustody,
         PasskeyLostException,
+        PasskeyOnboardingIncompleteException,
         PkamRefusedException,
         PublicKeyMismatchException,
         PublishedEncryptionKey,

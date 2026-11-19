@@ -18,6 +18,7 @@ import 'package:at_client/at_client.dart'
         AtKey,
         ServerMutexLease;
 import 'package:at_client/passkey.dart';
+import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
 import 'package:at_client_wasm/src/keys/web_crypto_passkey.dart';
 import 'package:at_client_wasm/src/keys/web_prf_environment.dart';
@@ -50,6 +51,10 @@ class _Server implements EnrollmentPointerReader {
 
   /// The encryption public key published for the atSign, once published.
   String? publishedKey;
+
+  /// Makes a publish of an encryption public key throw this before it
+  /// publishes anything.
+  Object? publishFailure;
 
   /// Whether the CRAM secret is not yet deleted; an activation needs it.
   var cramLive = true;
@@ -126,6 +131,7 @@ class _Session implements EnrollmentSession {
   @override
   Future<void> completeActivation(Map<String, dynamic> atKeys) async {
     if (atKeys['aesEncryptPublicKey'] case final String key) {
+      if (server.publishFailure case final failure?) throw failure;
       server.publishedKey = key;
     }
     server.cramLive = false;
@@ -563,11 +569,14 @@ void main() {
   });
 
   test(
-      'an onboard whose client open fails offline surfaces that error and '
-      'leaves the atSign ready for passkey login', () async {
+      'an onboard whose client open fails offline throws that error as the '
+      'cause of a PasskeyOnboardingIncompleteException and leaves the atSign '
+      'ready for passkey login', () async {
     server.clientsOffline = true;
     await expectLater(
-        device.onboard(), throwsA(isA<PortalSessionOfflineException>()));
+        device.onboard(),
+        throwsA(isA<PasskeyOnboardingIncompleteException>().having(
+            (e) => e.cause, 'cause', isA<PortalSessionOfflineException>())));
     expect(device.gateway.lastSession!.closed, isTrue);
     expect(server.cramLive, isFalse);
 
@@ -577,6 +586,26 @@ void main() {
     expect(loggedIn.enrollmentId, onboarded);
     expect(server.enrollments, 1, reason: 'login enrolls nothing');
     await _expectOnlyHint(device, onboarded);
+  });
+
+  test(
+      'PasskeyCustody.onboard in a browser throws the same '
+      'PasskeyOnboardingIncompleteException', () async {
+    final failure = AtException('the publish failed');
+    server.publishFailure = failure;
+
+    await expectLater(
+        device.onboard(),
+        throwsA(isA<PasskeyOnboardingIncompleteException>()
+            .having((e) => e.atSign, 'atSign', _atSign)
+            .having((e) => e.cause, 'cause', same(failure))));
+
+    expect(server.pointers, hasLength(1),
+        reason: 'the control: the pointer was written');
+    expect(server.cramLive, isFalse,
+        reason: 'the control: the CRAM secret was deleted before the publish');
+    expect(server.publishedKey, isNull,
+        reason: 'the control: the publish failed before it published');
   });
 
   test(
