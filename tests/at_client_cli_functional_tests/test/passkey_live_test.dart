@@ -265,7 +265,8 @@ void main() {
 
   test(
       'Onboarding records its completion as due before it writes the @keys '
-      'document, and deletes that record last', () async {
+      "document, records the CRAM secret's deletion, and deletes that record "
+      'last', () async {
     const atSign = '@emoji🦄🛠';
     final rig = PasskeyRig(salt: 33);
     final otherPair = await apkamKeyPairFromSeed(
@@ -323,7 +324,8 @@ void main() {
     final tap = rig.tap;
     bool isRecord(String c, String verb) =>
         c.startsWith('$verb:completion-due.$enrollmentId.a.__e@');
-    final mark = tap.indexOfSent((c) => isRecord(c, 'update'));
+    final mark = tap
+        .indexOfSent((c) => isRecord(c, 'update') && c.endsWith(' activated'));
     final document = tap.indexOfSent(_isDocumentPut);
     expect([mark, document], everyElement(greaterThan(-1)),
         reason: tap.transcript());
@@ -331,6 +333,30 @@ void main() {
     expect(_replyIndex(tap, mark), lessThan(document),
         reason: 'the atServer stored the record before the @keys document '
             'was sent');
+    final delete = tap.indexOfSent(_isCramDelete);
+    final rewrite = tap.indexOfSent(
+        (c) => isRecord(c, 'update') && c.endsWith(' cram-deleted'));
+    final list = tap.indexOfSent((c) => c.startsWith('enroll:list'),
+        from: rewrite < 0 ? 0 : rewrite);
+    expect([delete, rewrite, list], everyElement(greaterThan(-1)),
+        reason: tap.transcript());
+    expect(_accepted(tap, delete), isTrue);
+    expect(rewrite, greaterThan(_replyIndex(tap, delete)),
+        reason: "the record said the CRAM secret was deleted after the CRAM "
+            "secret's delete answered");
+    expect(tap.lines[rewrite].connection, tap.lines[mark].connection,
+        reason: 'the enrollment overwrote its own record');
+    expect(_accepted(tap, rewrite), isTrue,
+        reason: 'the atServer accepted the overwrite');
+    expect(_replyIndex(tap, rewrite), lessThan(list),
+        reason: 'and before the revoke');
+    expect(
+        ownReads,
+        {
+          CompletionDue.activated: CompletionDue.activated,
+          CompletionDue.cramSecretDeleted: CompletionDue.cramSecretDeleted,
+        },
+        reason: "the enrollment's own reads found each value it wrote");
     final publish = tap.indexOfSent((c) => _publishes(c, atSign));
     expect(publish, greaterThan(-1), reason: tap.transcript());
     final clear = tap.indexOfSent((c) => isRecord(c, 'delete'), from: publish);
@@ -352,9 +378,6 @@ void main() {
         allOf(containsPair('*', 'rw'), containsPair('__manage', 'rw')),
         reason: 'the control: the other enrollment held *:rw and '
             '__manage:rw');
-    expect(ownReads[CompletionDue.activated], CompletionDue.activated,
-        reason: "the control: the record was stored, and the enrollment's "
-            'own read found it after the other enrollment tried to delete it');
     for (final (verb, outcome) in [
       ('llookup', otherRead),
       ('delete', otherDelete)
