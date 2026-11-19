@@ -607,6 +607,8 @@ void main() {
 
       await expectLater(session.revokeOtherEnrollments(),
           throwsA(isA<AtEnrollmentException>()));
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the list that follows throws, not the refused revoke');
     });
 
     test('a revoke that fails other than with an atServer refusal propagates',
@@ -635,29 +637,50 @@ void main() {
       }
     });
 
+    // NOTE: a real lookUp lets each of these failures out only as an
+    // AtLookUpException carrying its code, never as the exception itself.
     test('a revoke that cannot reach the atServer propagates', () async {
       final session = await activate();
-      final failure =
-          AtConnectException('findAtServer for $_atSign : Connection refused');
+      const failure = 'Exception: $_atSign: unable to connect to atServer on '
+          'atserver.test:1 - SocketException: Connection refused';
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw failure);
+          revoked: (_) => throw AtLookUpException('AT0021', failure));
 
       await expectLater(
-          session.revokeOtherEnrollments(), throwsA(same(failure)),
+          session.revokeOtherEnrollments(),
+          throwsA(isA<SecondaryConnectException>()
+              .having((e) => e.message, 'message', failure)),
           reason: 'a revoke that never reached the atServer was not refused');
       expect(wire.commands, [list, revoke('eid-0')]);
     });
 
     test('a revoke whose answer does not come in time propagates', () async {
       final session = await activate();
-      final failure = AtTimeoutException(
-          'Full response not received after 90000 millis from remote atServer');
+      const failure = 'Exception: Full response not received after 90000 '
+          'millis from remote atServer';
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw failure);
+          revoked: (_) => throw AtLookUpException('AT0023', failure));
 
       await expectLater(
-          session.revokeOtherEnrollments(), throwsA(same(failure)),
+          session.revokeOtherEnrollments(),
+          throwsA(isA<AtTimeoutException>()
+              .having((e) => e.message, 'message', failure)),
           reason: 'a revoke whose answer never came was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke that fails with an I/O error propagates', () async {
+      final session = await activate();
+      const failure = 'Exception: connection to atserver.test:1 failed: '
+          'SocketException: Broken pipe';
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0004', failure));
+
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(
+              isA<AtException>().having((e) => e.message, 'message', failure)),
+          reason: 'a revoke that failed to send was not refused');
       expect(wire.commands, [list, revoke('eid-0')]);
     });
   });
