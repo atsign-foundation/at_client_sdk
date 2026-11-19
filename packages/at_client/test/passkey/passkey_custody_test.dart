@@ -162,8 +162,7 @@ void main() {
         expect(completionSteps(from: steps), isEmpty);
       });
 
-      test('$code through the pointer is thrown, not a lost passkey',
-          () async {
+      test('$code through the pointer is thrown, not a lost passkey', () async {
         await custody().onboard(atSign: _atSign, cram: 'cram');
         final steps = server.timeline.length;
         final fresh = FakeHints();

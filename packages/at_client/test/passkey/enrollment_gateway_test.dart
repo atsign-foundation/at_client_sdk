@@ -433,8 +433,7 @@ void main() {
         final session = await sessionOver(Wire()..lookupAnswer = reply);
 
         await expectLater(
-            session
-                .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+            session.publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
             throwsA(isA<AtLookUpException>()
                 .having((e) => e.errorCode, 'errorCode', code)));
       });
