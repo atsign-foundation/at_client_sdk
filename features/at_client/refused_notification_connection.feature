@@ -7,18 +7,17 @@ Feature: A notification connection the atServer does not let in is retried less 
   request, is paused, or is at its connection limit. So the client never
   stops trying. It says the connection was refused, and why, only when the
   atServer refused the credentials; any other answer leaves the connection
-  state as it was, as it does for a verb.
+  state as it was.
 
   Races: a stop or a restart landing while a failed attempt is handled ends
-  that attempt as a stop does today; a refusal heard on a verb and on the
-  notification connection at once is one change of connection state.
-  Replay: no value crosses attempts; each attempt is a new connection
-  answering a new challenge.
-  DoS: today a device whose atServer keeps answering its notification
-  connection without letting it in authenticates every 34 seconds for as long
-  as it runs; after the change it settles at one attempt every 5 minutes. An
-  atServer that cannot be reached is retried every 34 seconds, as before.
-  Sync's own attempts are unchanged.
+  that attempt as a stop does; a refusal heard on a verb and on the
+  notification connection at once is one change of connection state; a
+  refusal that arrives after the connection has recovered is not reported.
+  Replay: no value crosses attempts; each attempt answers a new challenge.
+  DoS: a device whose atServer keeps answering its notification connection
+  without letting it in settles at one attempt every 5 minutes, not one every
+  34 seconds for as long as it runs. An atServer that cannot be reached is
+  retried every 34 seconds. Sync's own attempts are unchanged.
   Forgery: an answer comes from the atServer this client reached over TLS, or
   from this client's own authenticator when it has no credential to offer or
   will not sign the challenge it was sent; a party able to forge either holds
