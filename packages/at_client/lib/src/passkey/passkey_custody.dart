@@ -469,7 +469,8 @@ class PasskeyCustody {
   /// fails with an [Exception] is logged as a warning naming [atSign], and
   /// the open returns its session all the same, leaving the next open without
   /// hints to save them. One that fails with an [Error] is thrown, and the
-  /// session is closed.
+  /// session is closed; when the two ids go to separate stores, the first may
+  /// already be written.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
