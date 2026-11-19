@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/auth/at_authenticator.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
@@ -29,7 +30,10 @@ class EnrollmentHandshake {
 
   final EnrollmentProgress _progress;
 
-  EnrollmentHandshake(this._progress);
+  /// What the handshake's `from:` carries, as `authenticatorFor` completes it.
+  final Map<String, dynamic> clientConfig;
+
+  EnrollmentHandshake(this._progress, {required this.clientConfig});
 
   /// Waits over [atLookup] for the enrollment in [enrollmentResponse] to be
   /// approved, then collects what the approval released into its keys.
@@ -92,6 +96,7 @@ class EnrollmentHandshake {
       memory,
       enrollmentResponse.atSign!,
       enrollmentId: handshakeEnrollmentId,
+      clientConfig: clientConfig,
     );
 
     await _waitForPkamAuthSuccess(
@@ -300,25 +305,25 @@ class EnrollmentHandshake {
         // enrollment, so this costs nothing against the budget.
         // Error codes AT0401 and AT0026 indicate authentication failure due to unapproved enrollment. Retry until the enrollment is approved.
         // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
-        if (e.message.contains('error:AT0401') ||
-            e.message.contains('error:AT0026')) {
+        final code = _errorCodeIn(e.message);
+        if (code == 'AT0401' || code == 'AT0026') {
           consecutiveUnresolvableRefusals = 0;
           _logger.info('Pkam auth failed: ${e.message}');
         }
         // Error code AT0025 represents Enrollment denied. Therefore, no need to retry; throw exception.
-        else if (e.message.contains('error:AT0025')) {
+        else if (code == 'AT0025') {
           throw AtEnrollmentException(
               'The enrollment: $enrollmentIdFromServer is denied');
         }
         // NOTE AT0028 also names a throttled request, but the atServer
         // throttles enrollment requests, never PKAM, so here it means the
-        // enrollment expired or never existed.
-        else if (e.message.contains('error:AT0028')) {
+        // enrollment expired or never existed, as AT0029 does.
+        else if (code == 'AT0028' || code == 'AT0029') {
           final refusal = 'Enrollment $enrollmentIdFromServer has expired or '
               'does not exist: ${e.message}';
           _logger.severe(refusal);
           _progress.add('PKAM', refusal, ProgressEventType.error);
-          throw AtEnrollmentException(refusal);
+          throw AtEnrollmentExpiredException(refusal);
         } else {
           // Neither "not yet decided" nor "denied", so waiting cannot turn it
           // into an approval — an enrollment revoked mid-wait answers here,
@@ -390,4 +395,23 @@ class EnrollmentHandshake {
     }
   }
 
+}
+
+final RegExp _leadingErrorCode = RegExp(r'^AT\d{4}');
+
+/// The atServer's error code in [message], which carries its `error:` reply
+/// in any of the forms an atServer writes: `error:<code>-<text>`,
+/// `error:<code>:<text>` or `error:{"errorCode":"<code>",...}`. Null when it
+/// carries none.
+String? _errorCodeIn(String message) {
+  final at = message.indexOf('error:');
+  if (at < 0) return null;
+  final body = message.substring(at + 'error:'.length);
+  if (!body.startsWith('{')) return _leadingErrorCode.stringMatch(body);
+  try {
+    final code = jsonDecode(body)['errorCode'];
+    return code is String ? code : null;
+  } on FormatException {
+    return null;
+  }
 }

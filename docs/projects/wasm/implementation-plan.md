@@ -597,13 +597,24 @@ D-12. Independent of the P series, which is `at_server`-side.
     add; those three are removed. `--fatal-infos` is not a CI gate — CI runs bare
     `dart analyze` and `flutter analyze --no-fatal-infos`.
   **Raised while building X6, tracked nowhere else:**
-  - **The monitor connection advertises nothing.** `RemoteSecondary`'s authenticator
-    sends `_getClientConfig()` — version, clientId, appName, appVersion, platform — in its
-    `from:`, and the one `NotificationServiceImpl` builds for the monitor carries none.
-    `AtClientConfig.atClientVersion` therefore reaches the atServer over the verb
-    connection only. Whether that is deliberate is unknown: the socket-owning Monitor built
-    its own connection, so there was nothing to inherit. Worth settling if the atServer logs
-    or branches on client version per connection.
+  - **Every at_client connection sends `version`.** Every authenticating `from:` names
+    the app and the SDK (`appName`, `appVersion`, `sdkName`, `sdkVersion`), the monitor's
+    included, and at_client sends its own version as `version` on every `from:` it sends
+    to authenticate: `clientConfigOf` adds it, so the verb connection, sync's, the
+    monitor's, the enrollment handshake's and the start-up key check's all carry it.
+    `RemoteSecondary`'s alone adds `clientId` and `platform`. A program using at_auth
+    without at_client sends no `version`. Settled (plan-d3q, 2026-11-16): on a connection
+    whose `from:` named a version above 3.0.37, the atServer's global exception handler
+    writes its error replies as JSON, while a refusal a verb handler sets on its response,
+    the PKAM handler's enrollment refusals among them, stays `error:<code>:<text>`.
+    at_lookup reads the code of
+    every `error:` reply to `executeVerb`, `executeCommand` or a proxy root's `from:` in
+    the plain, colon and JSON forms, and so do the readers that match a refusal's code as
+    text: the enrollment wait in at_auth, and at_client's expired-request cleanup and
+    connection-failure classification, through one internal reader in each package.
+    `DefaultResponseParser` reads only `<code>-<text>`, but no atServer `error:` reply
+    reaches it: every remote path to it goes through at_lookup's `executeVerb`, which
+    throws on such a reply first.
   - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
     has exactly one consumer, and that consumer uses five members — `currentState`,
     `targetState`, `currentStateStream`, `start()`, `stop()`. What is left in it is
@@ -1166,20 +1177,23 @@ Builds on W1. Adds no Dart package — everything lands inside `at_client_wasm`.
 a flat ~25-method surface; that surface is removed, not extended. `AtCollection<T>`
 (`packages/at_client/lib/src/collections/collections.dart`) is now the sole facade target.
 
-- **J1 — Layer B, the collections-shaped facade.** `packages/at_client_wasm/lib/at_easy.dart`
-  (pure Dart, zero interop imports — `api-designing.md` §2.3): `AtEasy.collection<T>()`,
-  `AtEasyCollection<T>` (`create`/`update`/`share`/`remove`/`where`/`watch`), `AtEasyItem<T>`
-  (`data`, not `obj` — the ergonomic fix), `AtEasyQuery<T>`. `where(path, op, value)` builds
-  the `PathField`/`Predicate` AST internally — `Predicate` is not serializable upstream
-  (private `CmpPredicate._`, closure `PathField.extract`), so this bridge is Layer B's job,
-  never Layer C's. Namespace auto-qualification and `expiration` defaulting live here too.
-  → T6.3
-- **J1a — The declared-`typeTag` registry (D-11).** Layer B tracks `(name, type)` →
-  collection, enforcing the tag as mandatory at `collection()` call time. Ships with
-  write-compatibility documented as open (JS-7): every JS-written record stamps `'n/a'` on
-  the wire until route A (upstream `writeTypeTag`) or route B (a bounded carrier-class
-  shim, verified viable via `CItem.toJson()`/`jsonEncode`) lands. Do not silently attempt
-  route B without a decision recorded in `decisions.md` — it has a real ceiling.
+- **J1 — The Dart-side collections adapter.**
+  `packages/at_client_wasm/lib/src/collections/js_collections_adapter.dart` (pure Dart,
+  zero interop imports, exported from no library under `lib/`), specified in
+  `js-api.md` §5.5. It only translates plain values onto `AtCollection` and back: items
+  addressed by `{id, owner}`; writes re-read first and share add-only through
+  `updateSharedWith(..., unshareWithOthers: false)`; `where(path, op, value)` clauses map
+  onto `wherePath`, because `Predicate` is not serializable upstream (private
+  `CmpPredicate._`, closure `PathField.extract`); events go to callbacks; failures reject
+  with the collection error codes in `js-api.md` §6.1. Namespace auto-qualification, `expiration`
+  defaulting, ordering and limits are **not** in it. It replaces the `AtEasy` facade
+  proposed in #2481, per D-27 (`decisions.md`, accepted 2026-11-16). Scenarios: `features/at_client_wasm/js_collections_adapter.feature`.
+  → T6.3, T6.9
+- **J1a — The declared `typeTag` (D-11): route A.** Upstream `writeTypeTag` on
+  `AtClient.collection` stamps the declared tag on every record a collection writes.
+  The adapter passes `type` straight through as `writeTypeTag`, so a JS-written record
+  carries its declared tag on the wire on the Dart side (T6.9 stays expected-red until the facade exposes the adapter). Scope per D-27. There is no `(name, type)` registry and no
+  carrier-class shim (route B). Read-compatibility with typed Dart peers is unchanged.
 - **J1b — Verify `subCollection`'s `fromJson`/`typeTag` XOR check.** `js-api.md` §5.4
   measured the omit-both escape (F1) only for the root `AtClient.collection()`; confirm
   `subCollection` behaves identically before binding it.
@@ -1210,17 +1224,18 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
   precedent). Ship the `.js.map`.
 - **J7 — T6 harness**, timeout-bounded throughout, plus a sample TS consumer that
   `tsc --noEmit` type-checks against the published typings. Extend T6.3 to cover
-  `CItem`/`CEvent`/`Predicate` (not just `Future`/`Stream`/`List`/`Uint8List`), and add a
-  gate asserting a JS-written record carries its declared `typeTag` correctly once J1a's
-  route is chosen. → T6.1, T6.2, T6.7
+  `CItem`/`CEvent`/`Predicate` (not just `Future`/`Stream`/`List`/`Uint8List`). The
+  declared-`typeTag` gate (T6.9) is expected-red until the facade exists; the Dart-side adapter test passes through J1a.
+  → T6.1, T6.2, T6.7
 - **J8 — Resolve JS-1**: measure which implementation `cryptography` selects under
   dart2js and whether Web Crypto removes the deferred Argon2id work
   ([`design.md`](design.md) §2.10).
 - **J9 — Resolve JS-7**: raise the additive `writeTypeTag` change upstream; fall back to
   J1a's carrier-class shim only if declined. *Status, 2026-11-14:* upstream
   `writeTypeTag` is implemented in at_client 4.1.0 (unreleased), with a
-  per-client reopen check (`ArgumentError` from `AtClient.collection`). Still open here: the JS
-  binding adopting it, so JS writes stop stamping `n/a`.
+  per-client reopen check (`ArgumentError` from `AtClient.collection`), and the J1 adapter
+  adopts it. Still open here: the facade exposing the adapter, so JS writes stop stamping
+  `n/a`.
 - **J10 — Resolve JS-8**: ship the `AtClientManager` singleton documented as one atSign
   per page/process, plus a Layer B `AtFailure.alreadyInitialised` on a second distinct
   atSign (~10 lines) — converts silent state corruption into a clear error.

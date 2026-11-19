@@ -21,6 +21,9 @@
 - feat: `notifications` now carries an error event for each notification
   reconnect the atServer refuses, and stays open. A listener with no
   `onError` gets each refusal as an uncaught error, so give it one.
+- fix: an `error:<code>:<text>` reply throws an `AtLookUpException` with
+  that code and text, as the dash and JSON forms do; a reply with no code at
+  its head gives `AT0014`.
 
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.

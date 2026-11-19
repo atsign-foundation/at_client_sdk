@@ -2,29 +2,33 @@ import 'dart:convert';
 
 import 'package:at_lookup/src/exception/at_lookup_exception.dart';
 
+final RegExp _leadingErrorCode = RegExp(r'^(AT\d{4})(?:[-:]|$)');
+
 /// The [AtLookUpException] an atServer's `error:` [response] stands for.
 ///
-/// [response] is the whole reply, `error:` included. Its body is JSON with an
-/// `errorCode` and an `errorDescription`, or, from an older atServer,
-/// `<code>-<description>`.
+/// [response] is the whole reply, `error:` included. An atServer writes its
+/// body as `<code>-<text>`, as `<code>:<text>`, or as a JSON object whose
+/// string `errorCode` and `errorDescription` are the code and the text; a
+/// code at the head of the body is `AT` and four digits. Any other body is
+/// read as `AT0014`, with the body in the text.
 AtLookUpException errorResponseException(String response) {
   final body = response.replaceFirst(RegExp('^error:'), '');
-  // Setting the errorCode and errorDescription to default values.
-  var errorCode = 'AT0014';
-  var errorDescription = 'Unknown server error';
-  try {
-    var errorMap = jsonDecode(body);
-    errorCode = errorMap['errorCode'];
-    errorDescription = errorMap['errorDescription'];
-  } on FormatException {
-    // Catching the FormatException to preserve backward compatibility - responses without jsonEncoding.
-    // TODO: Can we remove the below catch block in next release once all the servers are migrated to new version.
-    if (body.contains('-')) {
-      errorCode = body.substring(0, body.indexOf('-'));
-      errorDescription = body.substring(body.indexOf('-') + 1);
-    } else {
-      errorDescription += ": $body";
-    }
+  final leading = _leadingErrorCode.firstMatch(body);
+  if (leading != null) {
+    return AtLookUpException(leading[1]!, body.substring(leading.end));
   }
-  return AtLookUpException(errorCode, errorDescription);
+  final json = _decodedOrNull(body);
+  if (json is Map && json['errorCode'] is String) {
+    return AtLookUpException(
+        json['errorCode'], '${json['errorDescription'] ?? ''}');
+  }
+  return AtLookUpException('AT0014', 'Unknown server error: $body');
+}
+
+Object? _decodedOrNull(String body) {
+  try {
+    return jsonDecode(body);
+  } on FormatException {
+    return null;
+  }
 }

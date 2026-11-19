@@ -1,5 +1,27 @@
 ## 4.1.0-rc.1
 
+- fix: an atServer whose answer to `from:` holds no challenge to sign
+  leaves the connection offline with cause `unreachable`, not refused,
+  and a first open hands back its client. The client still signs
+  nothing.
+- fix: a code other than a refusal in reply to a PKAM, such as AT0011, no
+  longer reads as a refusal: connecting reports offline carrying the error,
+  a verb that meets it leaves the connection state as it was, a first open
+  hands back its client, and `Atsign.authenticatesAs` throws the error.
+- feat: a PKAM the atServer refuses with AT0028 reports the connection
+  refused with cause `invalidEnrollment`, as AT0029 does, and
+  `PendingEnrollment` removes an expired request's pending keys on either
+  code. AT0028 in reply to any verb but a PKAM and its `from:` still
+  leaves the connection online. `AtEnrollmentExpiredException` is
+  exported.
+- feat: every `from:` at_client sends to authenticate names the app, from
+  `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
+  that sets no `appName`, or a blank one, is named after its program file
+  and the client logs one warning when it starts; an unset `appVersion` is
+  sent as `unknown`. at_client sends its own version as `version` on every
+  one of them.
+- feat: `Atsign.authenticatesAs` and `PendingEnrollment` take optional
+  `particulars` to name the app, and `AtClientParticulars` is exported.
 - fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
   putMeta or delete whose request options leave `useRemoteAtServer` unset
   goes to the atServer; an explicit true or false is still enforced. A
@@ -24,6 +46,32 @@
 - fix: `collection` folds the namespace to lower case, as atProtocol keys
   are, so `Todos.wavi` and `todos.wavi` hand back the same collection, whose
   `namespace` is `todos.wavi`.
+- fix: `AtCollection` folds an item id to lower case wherever it takes one,
+  and refuses, with an `ArgumentError` before any read or write, an id that is
+  empty or contains `.`, `:`, `@`, whitespace or a control character;
+  `create`, `upsert` and `draft` also refuse an id that starts with `_`. A new
+  item's id must be 1 to 64 characters of a-z, 0-9, `-` and `_`, starting with
+  a letter or digit. An item already stored under an id the check accepts
+  keeps its id. `subCollection` folds a `subName` to lower case, and refuses
+  one that is empty, contains `.`, `:`, `@`, whitespace or a control
+  character, or holds a character a key's name cannot. An event whose item id,
+  ancestor id or `subName` the check refuses is not emitted, and a warning
+  names the id and its owner; `getItems` and `getItemsAsStream` leave out an
+  item stored under such an id, with the same warning. `AtCollection` matches
+  a namespace or `subName` literally when it lists keys.
+  `upsert` looks up the metadata of an id that breaks the new-id rule, in local
+  storage and then on the atServer, without decrypting; an item either holds
+  counts as stored, and when the atServer lookup fails for any reason but the
+  item's absence or the client being stopped, the refusal stands and says so. A
+  client whose `remoteLocalPref` is `remoteOnly` asks the atServer alone, so an
+  item only local storage holds does not count.
+- feat: `AtClient.getMeta` reads a key's metadata without its value, so it no
+  longer decrypts and answers for a record this client cannot open; it takes
+  `getRequestOptions`, as `get` does, to choose between local storage and the
+  atServer. `AtClient` implementers must add the parameter. It returns null for
+  a record that is held but not visible now, no longer rewrites the metadata of
+  the key it is given, and reports `isCached` from the key asked for, not from
+  whether the atServer served it from its cache.
 - feat: every envelope at_client signs names its signer's Atsign, as `iss`
   in its protected header. at_client's own verifiers, including
   `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
