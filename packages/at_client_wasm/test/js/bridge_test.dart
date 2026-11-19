@@ -956,6 +956,42 @@ void main() {
         }
       });
 
+      test('collection data that is an array or too deep rejects naming data',
+          () async {
+        JSObject nested(int levels) {
+          var o = _obj({});
+          for (var i = 0; i < levels; i++) {
+            o = _obj({'n': o});
+          }
+          return o;
+        }
+
+        final cyclic = _obj({});
+        cyclic['self'] = cyclic;
+        for (final (promise, message) in [
+          (
+            _call(c, 'create', [
+              <JSAny?>[1.toJS].toJS
+            ]),
+            'an object'
+          ),
+          (
+            _call(c, 'update', [
+              _obj({'id': 'i1'}),
+              <JSAny?>[1.toJS].toJS
+            ]),
+            'an object'
+          ),
+          (_call(c, 'create', [nested(100)]), 'levels deep'),
+          (_call(c, 'create', [cyclic]), 'levels deep'),
+        ]) {
+          final r = await _rejected(promise);
+          expect(r.code, 'internal');
+          expect(r.message, contains('data'));
+          expect(r.message, contains(message));
+        }
+      });
+
       test(
           'collection watch delivers events, including unknown, and unsubscribes (T6.5, T6.8)',
           () async {

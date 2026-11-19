@@ -150,11 +150,16 @@ List<String> _strings(JSAny? value, String name) {
 }
 
 final JSObject _objectClass = globalContext['Object']! as JSObject;
+final JSObject _arrayClass = globalContext['Array']! as JSObject;
+
+/// The deepest nesting [_fromJs] accepts. A cyclic page object reaches it
+/// instead of recursing until the stack overflows.
+const _maxJsDepth = 64;
 
 /// The JS value [value] as plain Dart values: strings, bools, numbers
 /// (integral ones as `int`), lists and string-keyed maps. Anything else, a
 /// function or a bigint say, is refused naming [name].
-Object? _fromJs(JSAny? value, String name) {
+Object? _fromJs(JSAny? value, String name, [int depth = 0]) {
   if (value == null || value.isUndefinedOrNull) return null;
   if (value.isA<JSString>()) return (value as JSString).toDart;
   if (value.isA<JSBoolean>()) return (value as JSBoolean).toDart;
@@ -168,18 +173,25 @@ Object? _fromJs(JSAny? value, String name) {
     if (!number.isFinite) throw _expected(name, 'finite numbers only');
     return number;
   }
+  final isContainer = value.isA<JSArray>() ||
+      (value.isA<JSObject>() && !value.isA<JSFunction>());
+  if (isContainer && depth >= _maxJsDepth) {
+    throw _expected(name, 'at most $_maxJsDepth levels deep');
+  }
   if (value.isA<JSArray>()) {
     return [
-      for (final item in (value as JSArray<JSAny?>).toDart) _fromJs(item, name)
+      for (final item in (value as JSArray<JSAny?>).toDart)
+        _fromJs(item, name, depth + 1)
     ];
   }
-  if (value.isA<JSObject>() && !value.isA<JSFunction>()) {
+  if (isContainer) {
     final object = value as JSObject;
     final keys =
         (_objectClass.callMethod('keys'.toJS, object)! as JSArray<JSString>)
             .toDart;
     return <String, dynamic>{
-      for (final key in keys) key.toDart: _fromJs(object[key.toDart], name)
+      for (final key in keys)
+        key.toDart: _fromJs(object[key.toDart], name, depth + 1)
     };
   }
   throw _expected(name, 'plain JSON values');
@@ -368,7 +380,10 @@ class BridgeCollection {
   }
 
   Map<String, dynamic> _data(JSAny? value) {
-    _object(value, 'data');
+    final object = _object(value, 'data');
+    if ((_arrayClass.callMethod('isArray'.toJS, object)! as JSBoolean).toDart) {
+      throw _expected('data', 'an object');
+    }
     return _fromJs(value, 'data')! as Map<String, dynamic>;
   }
 
