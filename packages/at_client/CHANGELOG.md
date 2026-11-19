@@ -20,6 +20,12 @@
   takes a refusal's cause from that code, never from the text of an
   exception's message. An authenticator of your own reports a code by
   throwing that exception. `AtAuthErrorReplyException` is exported.
+- fix: when an `AtLookUp` of your own returns an `error:` reply rather than
+  throwing, at_client's response parser throws the exception the reply's
+  code stands for, where it threw `AtClientException`. For AT0015, `get`
+  and `getMeta` throw `AtKeyNotFoundException`, still an
+  `AtClientException`, and `NotificationService.getStatus` throws
+  `KeyNotFoundException`, which is not one.
 - feat: every `from:` at_client sends to authenticate names the app, from
   `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
   that sets no `appName`, or a blank one, is named after its program file
