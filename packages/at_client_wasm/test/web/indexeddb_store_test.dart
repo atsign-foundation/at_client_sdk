@@ -8,6 +8,7 @@ import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:at_client_wasm/src/keys/indexeddb_store.dart';
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:test/test.dart';
 import 'package:web/web.dart';
 
@@ -39,7 +40,23 @@ Future<void> _rawPut(
   return done.future;
 }
 
+/// Records the message of every warning a logger bound to it logs.
+class _Warnings implements LoggingHandler {
+  final messages = <String>[];
+
+  @override
+  void call(dynamic record) {
+    if ('${record.level.name}' == 'WARNING') messages.add('${record.message}');
+  }
+}
+
 void main() {
+  final warnings = _Warnings();
+  setUpAll(() {
+    AtSignLogger.defaultLoggingHandler = warnings;
+    AtSignLogger.root_level = 'warning';
+  });
+
   String generateDbName() =>
       'test_db_${DateTime.now().millisecondsSinceEpoch}_${(1000 + DateTime.now().microsecond).toString()}';
 
@@ -214,6 +231,19 @@ void main() {
           reason: "the abort names the transaction's error");
     }, timeout: const Timeout(Duration(seconds: 5)));
 
+    test(
+        'a refused write fails with a message that holds neither the atSign '
+        'nor the enrollment id', () async {
+      final store = await refusingCredential7(all: false);
+
+      await expectLater(
+          store.putHint('@alice', Uint8List.fromList([7]), 'eid-1'),
+          throwsA(isA<IndexedDbException>()
+              .having((e) => e.message, 'message', contains('ConstraintError'))
+              .having((e) => e.message, 'message', isNot(contains('eid-1')))
+              .having((e) => e.message, 'message', isNot(contains('@alice')))));
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
     test('an open the browser refuses outright fails naming the error',
         () async {
       final factory = window.indexedDB as JSObject;
@@ -241,6 +271,35 @@ void main() {
 
       expect(await store.credentialId('@alice'), credId);
       expect(await store.credentialId('@bob'), isNull);
+    });
+
+    test(
+        'an enrollment id whose stored bytes are not UTF-8 reads as none, '
+        'with a warning that names the atSign and not the bytes', () async {
+      final store = await open();
+      await store.putCredentialId('@alice', Uint8List.fromList([7]));
+      final stored = [...utf8.encode('eid'), 0xff, 0xfe];
+      final raw = await _rawOpen(currentDbName!, 4);
+      await _rawPut(raw, 'at_client_wasm_enrollments', '@alice', stored);
+      raw.close();
+      warnings.messages.clear();
+
+      expect(await store.enrollmentId('@alice'), isNull);
+
+      expect(await store.credentialId('@alice'), [7],
+          reason: 'the credential id is read as it was');
+      expect(warnings.messages, hasLength(1));
+      final warning = warnings.messages.single;
+      expect(warning, contains('@alice'));
+      expect(warning, isNot(contains('eid')),
+          reason: 'the warning never carries the stored bytes');
+      expect(warning, isNot(contains(stored.join(', '))),
+          reason: 'the warning never carries the stored bytes as a list');
+      expect(warning, isNot(contains(String.fromCharCodes(stored))),
+          reason: 'the warning never carries the stored bytes as a string');
+      expect(
+          warning, isNot(contains(utf8.decode(stored, allowMalformed: true))),
+          reason: 'the warning never carries the stored bytes decoded');
     });
 
     test('enrollmentId round-trips per atSign', () async {
