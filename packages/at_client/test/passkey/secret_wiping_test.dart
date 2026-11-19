@@ -267,5 +267,13 @@ void main() {
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       expectWiped();
     });
+
+    test('wipes everything when the client cannot be opened', () async {
+      final openError = StateError('open failed');
+      gateway.openErrorForNext = openError;
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(openError)));
+      expectWiped();
+    });
   });
 }
