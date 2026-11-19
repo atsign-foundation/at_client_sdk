@@ -300,11 +300,13 @@ final List<Pattern> _unreachableText = [
 ///
 /// at_lookup's `executeVerb` throws an atServer's `error:` reply to the verb
 /// as an `AtLookUpException` carrying the code the reply names, or `AT0014`
-/// when it names none, and wraps every other failure as one carrying a code
-/// from `error_codes` for the exception's type, or `AT0014` for a type it
-/// has none for, with the failure as its cause. An `UnAuthenticatedException`
-/// raised by the authenticator is wrapped as `AT0401` and read as its cause,
-/// whose [AtAuthErrorReplyException.errorCode] is the atServer's own code.
+/// when it names none, and wraps every other failure as one carrying a code,
+/// with the failure as its cause: an `AtLookUpException`'s own code, such as
+/// a proxy's `error:` reply to its `from:`, or else the code `error_codes`
+/// has for the exception's type, or `AT0014` for a type it has none for. An
+/// `UnAuthenticatedException` raised by the authenticator is wrapped as
+/// `AT0401` and read as its cause, whose
+/// [AtAuthErrorReplyException.errorCode] is the atServer's own code.
 /// No code is read out of a message's text.
 AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtLookUpException) {
