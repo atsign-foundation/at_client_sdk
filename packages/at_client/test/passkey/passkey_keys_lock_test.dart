@@ -239,6 +239,46 @@ void main() {
     expect((await stored()).enrollmentSymmetricKey, isNotNull);
   });
 
+  /// The @keys writes besides update: a flush of the stored keys with one
+  /// more, and the write of an enrollment's first document.
+  final otherWrites = <String, Future<void> Function(AtServerAtKeysIo io)>{
+    'flush': (io) async {
+      final keys = await stored();
+      keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-flushed'));
+      await io.flush(_atSign.toAtsign(), keys);
+    },
+    'write': (io) async {
+      final keys = await stored();
+      server.document = null;
+      keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-flushed'));
+      await io.write(_atSign, keys);
+    },
+  };
+
+  for (final MapEntry(key: name, value: run) in otherWrites.entries) {
+    test('A $name takes the lock before it reads and puts', () async {
+      await run(storeOf('self'));
+
+      final self = server.of('self');
+      expect(self.first, 'lock');
+      expect(self.indexOf('get'), greaterThan(0),
+          reason: 'it reads the document only once it holds the lock');
+      expect(self.indexOf('put'), greaterThan(self.indexOf('get')));
+      expect((await stored()).enrollmentSymmetricKey?.key, _b('sym-flushed'));
+    });
+
+    test(
+        'A $name that cannot take the lock within its bound fails without '
+        'reading or putting', () async {
+      server.lockHeld = true;
+      final io = storeOf('self', lockWait: const Duration(milliseconds: 50));
+
+      await expectLater(run(io), throwsA(isA<AtServerAtKeysLockedException>()));
+      expect(server.of('self'), everyElement('lock refused'),
+          reason: 'nothing was read or put');
+    });
+  }
+
   test(
       'A writer that cannot take the lock within its bound fails without '
       'writing', () async {

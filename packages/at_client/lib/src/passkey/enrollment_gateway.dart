@@ -289,6 +289,7 @@ class _PkamSession implements EnrollmentSession {
               ..operation = EnrollOperationEnum.revoke
               ..enrollmentId = other);
       } on AtException catch (e) {
+        if (!_isRefusal(e)) rethrow;
         _logger.info('a revoke was refused (${e.runtimeType}); the list that '
             'follows decides whether it matters');
       }
@@ -299,6 +300,16 @@ class _PkamSession implements EnrollmentSession {
           'other than $enrollmentId remain after revoking them');
     }
   }
+
+  /// Whether [e] is the atServer's answer refusing a verb, rather than the
+  /// request failing to reach it or come back. A lost connection or a
+  /// timeout reaches here as an [AtConnectException] or [AtTimeoutException],
+  /// or as a bare [AtException]: [RemoteSecondary] turns the lookup's AT0004
+  /// (connection) and AT0014 (timeout, unknown) codes into one.
+  static bool _isRefusal(AtException e) =>
+      e is! AtConnectException &&
+      e is! AtTimeoutException &&
+      e.runtimeType != AtException;
 
   /// The ids of the atSign's approved enrollments other than this one.
   Future<List<String>> _otherApprovedEnrollments() async => [

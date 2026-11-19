@@ -19,18 +19,20 @@ import 'at_server_at_keys_io.dart';
 class PasskeySession {
   /// The session of [client], running on [store], which seals with [vault].
   ///
-  /// [settleWithin] bounds the wait for the client's stop and a queued @keys
-  /// write to end; the vault then closes under whatever is still running.
+  /// [settleWithin] plus the store's [AtServerAtKeysIo.lockWaitBound] bounds
+  /// the wait for the client's stop and a queued @keys write to end, so a
+  /// write waiting out another writer's lock still seals before the vault
+  /// closes; the vault then closes under whatever is still running.
   PasskeySession(this.client, AtServerAtKeysIo store, PasskeyVault vault,
       {Duration settleWithin = defaultSettleWithin})
       : _store = store,
         _vault = vault,
-        _settleWithin = settleWithin {
+        _settleWithin = settleWithin + store.lockWaitBound {
     _changes = client.connection.changes.listen(null, onDone: _releaseQuietly);
   }
 
   /// How long a session waits by default for its client's stop and a queued
-  /// @keys write to end.
+  /// @keys write to end, on top of the store's lock wait bound.
   static const defaultSettleWithin = Duration(seconds: 10);
 
   static final _logger = AtSignLogger('PasskeySession');

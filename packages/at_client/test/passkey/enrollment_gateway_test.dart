@@ -553,13 +553,23 @@ void main() {
 
     test('a revoke that fails other than with an atServer refusal propagates',
         () async {
-      final session = await activate();
-      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw StateError('the connection was lost'));
+      // What a real lookUp throws for a lost connection and for a timeout.
+      for (final (code, failure) in [
+        ('AT0004', 'the connection was lost'),
+        ('AT0014', 'Request timed out'),
+      ]) {
+        wire.commands.clear();
+        final session = await activate();
+        serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+            revoked: (_) => throw AtLookUpException(code, failure));
 
-      await expectLater(session.revokeOtherEnrollments(), throwsStateError,
-          reason: 'only an atServer refusal of a revoke is tolerated');
-      expect(wire.commands, [list, revoke('eid-0')]);
+        await expectLater(
+            session.revokeOtherEnrollments(),
+            throwsA(isA<AtException>()
+                .having((e) => e.message, 'message', failure)),
+            reason: 'only an atServer refusal of a revoke is tolerated');
+        expect(wire.commands, [list, revoke('eid-0')], reason: code);
+      }
     });
   });
 

@@ -4,20 +4,39 @@ import 'dart:typed_data';
 import 'package:at_auth/passkey.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/passkey.dart';
+import 'package:at_client/src/passkey/enrollment_document_store.dart'
+    show enrollmentLockKey;
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show apkamKeyPairFromSeed;
 import 'package:mocktail/mocktail.dart' show Fake;
 import 'package:test/test.dart';
 
-import '../support/custody_fakes.dart' show DerivedKeys, freeLease;
+import '../support/custody_fakes.dart' show DerivedKeys;
 
 const _atSign = '@alice';
 const _eid = 'eid1';
 
-/// Documents in memory; a put waits for [hold] when one is set.
+/// A lease's clock, which stands still until it is moved.
+class _Clock extends Fake implements Stopwatch {
+  @override
+  Duration elapsed = Duration.zero;
+}
+
+/// Documents in memory; a put waits for [hold] when one is set, and the lock
+/// is held by another writer while [lockedByOther] is. Leases run on clocks
+/// that [lapseLeases] runs out.
 class _Docs implements EnrollmentDocumentStore {
   final records = <String, String>{};
   Completer<void>? hold;
+  var lockedByOther = false;
+  final _leases = <(_Clock, Duration)>[];
+
+  /// Runs out every lease taken so far.
+  void lapseLeases() {
+    for (final (clock, ttl) in _leases) {
+      clock.elapsed = ttl;
+    }
+  }
 
   @override
   Future<String?> get(String atSign, String enrollmentId) async =>
@@ -31,8 +50,16 @@ class _Docs implements EnrollmentDocumentStore {
 
   @override
   Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
-          {required Duration ttl}) async =>
-      freeLease(atSign, enrollmentId, ttl);
+      {required Duration ttl}) async {
+    if (lockedByOther) return null;
+    final clock = _Clock();
+    _leases.add((clock, ttl));
+    return ServerMutexLease.timed(
+        AtKey.fromString(enrollmentLockKey(enrollmentId, atSign)),
+        DateTime.now().add(ttl),
+        clock,
+        ttl);
+  }
 }
 
 /// A client whose stop, shared by every caller as a real client's is, reports
@@ -75,7 +102,9 @@ class _Store extends AtServerAtKeysIo {
       required super.seal,
       required super.open,
       required super.enrollmentId,
-      required super.apkamKeyPair});
+      required super.apkamKeyPair,
+      super.lockTtl,
+      super.lockWait});
 
   var closes = 0;
 
@@ -90,7 +119,11 @@ class _Store extends AtServerAtKeysIo {
 class _Rig {
   _Rig._(this.vault, this.heldSeed, this.docs, this.store);
 
-  static Future<_Rig> build() async {
+  /// A rig whose store takes the lock for [lockTtl] and waits up to
+  /// [lockWait] for it.
+  static Future<_Rig> build(
+      {Duration lockTtl = const Duration(seconds: 10),
+      Duration lockWait = const Duration(seconds: 15)}) async {
     final vault = (await DerivedKeys.derive(
             Uint8List.fromList(List.generate(32, (i) => i + 1)), _atSign))
         .vault;
@@ -104,7 +137,9 @@ class _Rig {
         seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
         open: (r) => vault.open(PasskeyRecordType.atkeys, r),
         enrollmentId: _eid,
-        apkamKeyPair: pair);
+        apkamKeyPair: pair,
+        lockTtl: lockTtl,
+        lockWait: lockWait);
     await store.write(
         _atSign,
         AtKeys.legacy(
@@ -203,7 +238,9 @@ void main() {
     await stopping;
     await rig.expectVaultClosed();
 
-    final stuck = await _Rig.build();
+    final stuck = await _Rig.build(
+        lockTtl: const Duration(milliseconds: 10),
+        lockWait: const Duration(milliseconds: 10));
     stuck.docs.hold = Completer<void>();
     final bounded = PasskeySession(stuck.client, stuck.store, stuck.vault,
         settleWithin: const Duration(milliseconds: 100));
@@ -213,6 +250,32 @@ void main() {
     await bounded.stop().timeout(const Duration(seconds: 5));
     expect(clock.elapsed, lessThan(const Duration(seconds: 5)));
     await stuck.expectVaultClosed();
+  });
+
+  test(
+      'A @keys write waiting out another writer\'s lock when the client stops '
+      'still seals and puts before the vault closes', () async {
+    rig = await _Rig.build(
+        lockTtl: const Duration(milliseconds: 100),
+        lockWait: const Duration(seconds: 2));
+    final session = PasskeySession(rig.client, rig.store, rig.vault,
+        settleWithin: const Duration(milliseconds: 100));
+    final before = rig.docs.records[_eid];
+    rig.docs.lapseLeases();
+    rig.docs.lockedByOther = true;
+    final writing = rig.update();
+    final stopping = session.stop();
+    // The other writer lets the lock go after the session's own grace.
+    final otherDone = Completer<void>();
+    Timer(const Duration(milliseconds: 500), otherDone.complete);
+    await otherDone.future;
+    rig.docs.lockedByOther = false;
+
+    await writing;
+    await stopping;
+
+    expect(rig.docs.records[_eid], isNot(before), reason: 'the update put');
+    await rig.expectVaultClosed();
   });
 
   test(
@@ -311,6 +374,9 @@ void main() {
 
   test('a client stop that never ends keeps the vault open only to the bound',
       () async {
+    rig = await _Rig.build(
+        lockTtl: const Duration(milliseconds: 10),
+        lockWait: const Duration(milliseconds: 10));
     PasskeySession(rig.client, rig.store, rig.vault,
         settleWithin: const Duration(milliseconds: 100));
     rig.client.onStop = () => Completer<void>().future;
