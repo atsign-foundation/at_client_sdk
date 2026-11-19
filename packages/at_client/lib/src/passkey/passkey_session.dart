@@ -20,7 +20,7 @@ class PasskeySession {
   /// The session of [client], running on [store], which seals with [vault].
   ///
   /// [settleWithin] plus the store's [AtServerAtKeysIo.lockWaitBound] bounds
-  /// the wait for the client's stop and a queued @keys write to end, so a
+  /// the wait for the client's stop and a queued @keys write to end, so one
   /// write waiting out another writer's lock still seals before the vault
   /// closes; the vault then closes under whatever is still running.
   PasskeySession(this.client, AtServerAtKeysIo store, PasskeyVault vault,
