@@ -24,8 +24,12 @@ class AtLookUpExceptionUtil {
   /// An [AtIOException], which a transport's failed write is, and a
   /// [ConnectionInvalidException], which a lost connection is, take the code
   /// of a socket error, and an [UnAuthenticatedException] of any subtype the
-  /// code of a failed authentication.
+  /// code of a failed authentication. An [AtLookUpException], which a proxy
+  /// root's refused `from:` preamble is, keeps the code it already carries.
   static String getErrorCode(Exception exception) {
+    if (exception is AtLookUpException) {
+      return exception.errorCode;
+    }
     if (exception is AtIOException || exception is ConnectionInvalidException) {
       return error_codes['SocketException']!;
     }
