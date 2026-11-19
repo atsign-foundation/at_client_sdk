@@ -135,9 +135,12 @@ class FakeSession implements EnrollmentSession {
   /// Makes [completeActivation] throw this before it publishes anything.
   Object? completeError;
 
-  /// Makes a [completeActivation] that publishes an encryption public key
-  /// throw this once it has published it, before it deletes the CRAM secret.
-  Object? completeErrorAfterPublish;
+  /// The @keys every [publishEncryptionKey] call was given.
+  final published = <Map<String, dynamic>>[];
+
+  /// Makes [publishEncryptionKey] throw this once it has published the key,
+  /// as a publish whose reply is lost does.
+  Object? publishErrorAfterPublish;
 
   /// Makes [completeActivation] throw this once it has deleted the CRAM
   /// secret, as a call whose reply is lost does.
@@ -169,11 +172,25 @@ class FakeSession implements EnrollmentSession {
     if (atKeys['aesEncryptPublicKey'] case final String key) {
       server.publishedKey = key;
       server.timeline.add('publish:$key');
-      if (completeErrorAfterPublish case final e?) throw e;
     }
     server.cramDeleted.add(atSign);
     server.timeline.add('cram-deleted');
     if (completeErrorAfterDelete case final e?) throw e;
+    onCompleteActivation?.call();
+  }
+
+  /// Runs at the end of every [completeActivation], once the CRAM secret is
+  /// deleted; what it throws, that call throws.
+  void Function()? onCompleteActivation;
+
+  @override
+  Future<void> publishEncryptionKey(Map<String, dynamic> atKeys) async {
+    published.add(atKeys);
+    if (atKeys['aesEncryptPublicKey'] case final String key) {
+      server.publishedKey = key;
+      server.timeline.add('publish:$key');
+      if (publishErrorAfterPublish case final e?) throw e;
+    }
   }
 
   @override

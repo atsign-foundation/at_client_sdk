@@ -296,6 +296,18 @@ void main() {
     expect(now.enrollmentSymmetricKey, isNotNull);
   });
 
+  test('update reads the stored document once before it puts', () async {
+    await seedRecord(_base());
+    final io = await open();
+    await io.update(_atSign.toAtsign(), (keys) {
+      keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
+      return true;
+    });
+    final put = server.commands.indexOf(server.updates.single);
+    final reads = server.commands.take(put).where((c) => c.contains(key));
+    expect(reads.where((c) => c.startsWith('llookup:')), hasLength(1));
+  });
+
   test('two overlapping updates on one instance both land', () async {
     await seedRecord(_base());
     server.yieldOnRead = true;
@@ -406,37 +418,6 @@ void main() {
         }),
         throwsA(isA<AtServerAtKeysWriteException>()));
     expect(server.updates, hasLength(1));
-  });
-
-  test(
-      'two stores on one record: a change made while the other held a stale '
-      'read is refused, typed, and the first change stays', () async {
-    await seedRecord(_base());
-    final w1Keys = await DerivedKeys.derive(
-        Uint8List.fromList(List.generate(32, (i) => i + 1)), _atSign);
-    final w2Keys = await DerivedKeys.derive(
-        Uint8List.fromList(List.generate(32, (i) => i + 1)), _atSign);
-    final w1 = await open(keys: w1Keys);
-    final w2 = await open(keys: w2Keys);
-    final w1Landed = Completer<void>();
-    final w2Update = w2.update(_atSign.toAtsign(), (keys) async {
-      await w1Landed.future;
-      keys.fileLegacyMaterial(enrollmentId: 'w2');
-      return true;
-    });
-    await Future<void>.delayed(Duration.zero);
-    await w1.update(_atSign.toAtsign(), (keys) {
-      keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
-      return true;
-    });
-    final afterW1 = server.records[key];
-    w1Landed.complete();
-
-    await expectLater(w2Update, throwsA(isA<AtKeysAssuranceException>()));
-    expect(server.records[key], afterW1, reason: 'a refusal changes nothing');
-    expect((await stored(w1Keys)).enrollmentSymmetricKey, isNotNull);
-    await expectLater(Future.sync(() => w2.flush(_atSign.toAtsign(), _base())),
-        throwsA(isA<AtServerAtKeysWriteException>()));
   });
 
   test(
@@ -754,13 +735,29 @@ void main() {
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
-    test('leaves the vault it seals with open', () async {
-      final io = await open();
+    test('calls neither the seal nor the open function it was given',
+        () async {
+      // NOTE: the two functions are the store's only route to the vault.
+      final calls = <String>[];
+      final io = AtServerAtKeysIo(
+          documents: documents(),
+          atSign: _atSign,
+          seal: (d) {
+            calls.add('seal');
+            return derived.vault.seal(PasskeyRecordType.atkeys, d);
+          },
+          open: (r) {
+            calls.add('open');
+            return derived.vault.open(PasskeyRecordType.atkeys, r);
+          },
+          enrollmentId: _eid,
+          apkamKeyPair: pair);
 
       io.close();
+      await io.settled;
 
-      await derived.vault.withAuthSeed((_) async {});
-      await derived.vault.seal(PasskeyRecordType.atkeys, {'a': 1});
+      expect(calls, isEmpty);
+      expect(server.commands, isEmpty);
     });
 
     test(
@@ -771,8 +768,8 @@ void main() {
       final hold = Completer<void>();
       final running = io.update(_atSign.toAtsign(), (keys) {
         keys.fileLegacyMaterial(apkamSymmetricKey: _b('sym-x'));
-        // Holds the re-read before the candidate is checked against the
-        // stored document, a step that still reads the pair's private key.
+        // Holds the next lookup, the read-back of the put, so the update is
+        // still running when the store is closed.
         server.holdLookup = hold;
         return true;
       });

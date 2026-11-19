@@ -92,4 +92,33 @@ void main() {
           throwsA(same(refusal)));
     });
   });
+
+  group('publishEncryptionPublicKeyOf', () {
+    test(
+        'A publish sends the encryption public key with ttr -1 and does not '
+        'delete the CRAM secret', () async {
+      final lookUp = _RecordingLookUp()
+        ..deleteError = StateError('the CRAM secret delete was sent');
+      await publishEncryptionPublicKeyOf(
+          atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: 'cHVi');
+      expect(lookUp.sent,
+          ['update:ttr:-1:isEncrypted:false:public:publickey@alice cHVi\n']);
+    });
+
+    for (final (name, value) in [
+      ('a line feed', 'cHVi\nZGVs'),
+      ('a carriage return', 'cHVi\rZGVs'),
+    ]) {
+      test(
+          'An encryption public key holding $name is refused before any '
+          'command', () async {
+        final lookUp = _RecordingLookUp();
+        await expectLater(
+            publishEncryptionPublicKeyOf(
+                atLookUp: lookUp, atSign: '@alice', encryptionPublicKey: value),
+            throwsArgumentError);
+        expect(lookUp.sent, isEmpty);
+      });
+    }
+  });
 }

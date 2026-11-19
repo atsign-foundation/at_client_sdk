@@ -150,6 +150,11 @@ abstract class EnrollmentSession {
   /// secret.
   Future<void> completeActivation(Map<String, dynamic> atKeys);
 
+  /// Publishes the encryption public key [atKeys] holds, replacing any that
+  /// is published, and sends nothing else: the CRAM secret is left as it is.
+  /// When [atKeys] holds no encryption public key it sends nothing.
+  Future<void> publishEncryptionKey(Map<String, dynamic> atKeys);
+
   /// A client running as this enrollment, reading its @keys from [keysIo] and
   /// persisting every change through it. The client takes over this session's
   /// connection and stops it when the client stops; once it is opened, do not
@@ -395,14 +400,15 @@ class PasskeyCustody {
 
   /// Completes the activation [session]'s enrollment was created by: deletes
   /// the atSign's CRAM secret, then revokes every other approved enrollment,
-  /// then publishes the encryption public key [atKeys] holds.
+  /// then publishes the encryption public key [atKeys] holds. The CRAM secret
+  /// is deleted once: the publish sends no second delete.
   static Future<void> _completeActivation(
       EnrollmentSession session, Map<String, dynamic> atKeys) async {
     // NOTE: the CRAM secret is deleted before the revoke, so a published
     // encryption public key means the revoke ran after it was gone.
     await session.completeActivation(const {});
     await session.revokeOtherEnrollments();
-    await session.completeActivation(atKeys);
+    await session.publishEncryptionKey(atKeys);
   }
 
   /// Opens the client of [session] on [store], whose reads are served from

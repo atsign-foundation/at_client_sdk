@@ -21,26 +21,12 @@ Future<void> completeActivationOf(
     {required AtLookUp atLookUp,
     required String atSign,
     required String? encryptionPublicKey}) async {
-  // NOTE: the update command carries the value as it is, so it must be one
-  // line.
-  if (encryptionPublicKey != null &&
-      (encryptionPublicKey.contains('\r') ||
-          encryptionPublicKey.contains('\n'))) {
-    throw ArgumentError.value(encryptionPublicKey, 'encryptionPublicKey',
-        'must not contain a carriage return or a line feed');
-  }
   // NOTE: publish nothing rather than "null" when no key is given.
   if (encryptionPublicKey != null) {
-    final updateBuilder = UpdateVerbBuilder()
-      ..atKey = (AtKey()
-        ..key = 'publickey'
-        ..sharedBy = atSign
-        ..metadata = (Metadata()
-          ..isPublic = true
-          ..ttr = -1))
-      ..value = encryptionPublicKey;
-    final encryptKeyUpdateResult = await atLookUp.executeVerb(updateBuilder);
-    _logger.info('Encryption public key update result $encryptKeyUpdateResult');
+    await publishEncryptionPublicKeyOf(
+        atLookUp: atLookUp,
+        atSign: atSign,
+        encryptionPublicKey: encryptionPublicKey);
   } else {
     _logger.info('No encryption public key was given for $atSign, so '
         'public:publickey is left as it is');
@@ -55,4 +41,34 @@ Future<void> completeActivationOf(
     if (e.errorCode != error_codes['KeyNotFoundException']) rethrow;
     _logger.info('The CRAM secret of $atSign was already deleted');
   }
+}
+
+/// Publishes [encryptionPublicKey] as `public:publickey@<atSign>` with
+/// `ttr:-1` over [atLookUp], replacing whatever `publickey` is already
+/// published, and sends nothing else: unlike [completeActivationOf] it leaves
+/// the CRAM secret as it is.
+///
+/// Throws [ArgumentError], before any command, when [encryptionPublicKey]
+/// holds a carriage return or a line feed.
+Future<void> publishEncryptionPublicKeyOf(
+    {required AtLookUp atLookUp,
+    required String atSign,
+    required String encryptionPublicKey}) async {
+  // NOTE: the update command carries the value as it is, so it must be one
+  // line.
+  if (encryptionPublicKey.contains('\r') ||
+      encryptionPublicKey.contains('\n')) {
+    throw ArgumentError.value(encryptionPublicKey, 'encryptionPublicKey',
+        'must not contain a carriage return or a line feed');
+  }
+  final updateBuilder = UpdateVerbBuilder()
+    ..atKey = (AtKey()
+      ..key = 'publickey'
+      ..sharedBy = atSign
+      ..metadata = (Metadata()
+        ..isPublic = true
+        ..ttr = -1))
+    ..value = encryptionPublicKey;
+  final encryptKeyUpdateResult = await atLookUp.executeVerb(updateBuilder);
+  _logger.info('Encryption public key update result $encryptKeyUpdateResult');
 }

@@ -418,12 +418,29 @@ void main() {
             'cram-deleted',
             'revoke-others',
             'publish:${encryptionPublicKeyOf('eid1')}',
-            'cram-deleted',
           ],
-          reason: 'the CRAM secret is deleted, then the revoke is sent, then '
-              'the key is published with a second delete of the CRAM secret');
-      expect(gateway.lastSession!.completed,
-          [isEmpty, containsPair('aesEncryptPublicKey', isA<String>())]);
+          reason: 'the CRAM secret is deleted once, then the revoke is sent, '
+              'then the key is published');
+      expect(gateway.lastSession!.completed, [isEmpty]);
+      expect(gateway.lastSession!.published,
+          [containsPair('aesEncryptPublicKey', isA<String>())]);
+    });
+
+    test(
+        'An onboarding whose activation is complete does not fail on a later '
+        'CRAM secret delete', () async {
+      gateway.onAuthenticate = (session) {
+        var deletes = 0;
+        session.onCompleteActivation = () {
+          if (++deletes > 1) throw StateError('connection dropped');
+        };
+      };
+
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      expect(session.client.enrollmentId, 'eid1');
+      expect(hints.ids, {_atSign: 'eid1'});
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
     });
 
     group(
@@ -526,7 +543,6 @@ void main() {
         'cram-deleted',
         'revoke-others',
         'publish:${encryptionPublicKeyOf('eid1')}',
-        'cram-deleted',
       ]);
       expect(session.client.enrollmentId, 'eid1');
       expect(hints.ids, {_atSign: 'eid1'});
@@ -563,7 +579,6 @@ void main() {
             'revoke-others',
             'revoke:eid1',
             'publish:${encryptionPublicKeyOf('eid2')}',
-            'cram-deleted',
           ],
           reason: 'the login deletes the CRAM secret, then revokes the first '
               'enrollment, then publishes the document\'s key');
@@ -575,7 +590,7 @@ void main() {
         'A login that finds the document\'s encryption public key published '
         'deletes the CRAM secret and revokes nothing', () async {
       gateway.onAuthenticate = (session) =>
-          session.completeErrorAfterPublish = StateError('interrupted');
+          session.publishErrorAfterPublish = StateError('interrupted');
       await expectLater(
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       gateway.onAuthenticate = null;
@@ -700,8 +715,8 @@ void main() {
           reason: 'the login publishes the document\'s encryption public key');
       expect(server.cramDeleted, {_atSign},
           reason: 'the login deletes the CRAM secret');
-      expect(gateway.lastSession!.completed, [
-        isEmpty,
+      expect(gateway.lastSession!.completed, [isEmpty]);
+      expect(gateway.lastSession!.published, [
         {'aesEncryptPublicKey': encryptionPublicKeyOf('eid1')}
       ]);
       expect(session.client.enrollmentId, 'eid1');
@@ -822,7 +837,7 @@ void main() {
           'the revoke fails': () => gateway.onAuthenticate =
               (session) => session.revokeError = StateError('lost'),
           'the publish fails': () => gateway.onAuthenticate = (session) =>
-              session.completeErrorAfterPublish = StateError('lost'),
+              session.publishErrorAfterPublish = StateError('lost'),
         }.entries) {
           reset();
           fail();

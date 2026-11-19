@@ -38,8 +38,9 @@ class AtServerAtKeysLockedException extends AtServerAtKeysWriteException {
 /// An enrollment's @keys, held as one sealed document on the atServer.
 ///
 /// [write] creates the document and refuses when one exists. [flush] and
-/// [update] replace it: each re-reads the stored document just before writing
-/// and refuses a candidate that drops anything stored; they then write, read
+/// [update] replace it: each reads the stored document once under the lock
+/// just before writing ([update] changes that read) and refuses a candidate
+/// that drops anything it read; they then write, read
 /// the document back and compare it with what was written. [flush] creates
 /// the document when there is none; [update] never does. Nothing is merged
 /// and no put is retried.
@@ -297,16 +298,19 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
     _requireOpen();
     _requireOwnAtsign(name, atKeys);
     atKeys.atsign ??= atsign;
-    await _putLocked(name, () => _replacing(atsign, atKeys));
+    await _putLocked(name, () async {
+      final stored = await _documents.get(name, _enrollmentId);
+      return _replacing(atsign, atKeys,
+          stored == null ? null : _stripped(await _decode(name, stored)));
+    });
   }
 
-  /// [atKeys] as the document to put in place of the stored one, refused when
-  /// it drops anything stored.
-  Future<Map<String, dynamic>> _replacing(Atsign atsign, AtKeys atKeys) async {
-    final name = atsign.toString();
-    final stored = await _documents.get(name, _enrollmentId);
-    if (stored != null) {
-      final existing = _stripped(await _decode(name, stored));
+  /// [atKeys] as the document to put in place of [existing], the stripped
+  /// stored document or null when there is none, refused when it drops
+  /// anything [existing] holds.
+  Map<String, dynamic> _replacing(
+      Atsign atsign, AtKeys atKeys, Map<String, dynamic>? existing) {
+    if (existing != null) {
       try {
         assurance.validateMapUpdate(
             existing: existing, candidate: _document(atKeys), atsign: atsign);
@@ -329,12 +333,15 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
     _requireStoreAtsign(name);
     _requireOpen();
     await _putLocked(name, () async {
-      final keys =
-          _withPair(_stripped(await _decode(name, await _stored(name))), name);
+      // NOTE: the one read under the lease is both what [mutate] changes and
+      // what the change is checked against.
+      final existing = _stripped(await _decode(name, await _stored(name)));
+      final keys = _withPair(
+          jsonDecode(jsonEncode(existing)) as Map<String, dynamic>, name);
       if (await mutate(keys) == false) return null;
       _requireOwnAtsign(name, keys);
       keys.atsign ??= atsign;
-      return _replacing(atsign, keys);
+      return _replacing(atsign, keys, existing);
     });
   }
 

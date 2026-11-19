@@ -40,10 +40,19 @@ class _AtServer implements AtTransportFactory {
   final _immutableUntil = <String, DateTime>{};
 
   /// Makes the next @keys document update wait, before it is stored, until
-  /// another connection sends a command about a @keys document or its lock.
+  /// another connection reads or writes a @keys document, or sends its next
+  /// command after a take of the lock was refused. A writer that went on
+  /// after that refusal reads the document as it was before the held update.
   var holdDocumentPut = false;
   int? _heldOn;
   Completer<void>? _held;
+
+  /// The connections whose take of a @keys lock was refused while an update
+  /// was held.
+  final _refusedTake = <int>{};
+
+  /// How many takes of a @keys lock were refused while an update was held.
+  var refusedWhileHeld = 0;
 
   /// The APKAM public key of each enrollment.
   final apkamKeys = <String, String>{};
@@ -92,8 +101,14 @@ class _AtServer implements AtTransportFactory {
     commands.add('$connection: $line');
     arrived.add(DateTime.now());
     final held = _held;
-    if (held != null && connection != _heldOn && line.contains('atkeys')) {
+    if (held != null &&
+        connection != _heldOn &&
+        (line.startsWith('update:atkeys.') ||
+            line.startsWith('llookup:atkeys.') ||
+            _refusedTake.contains(connection))) {
       _held = null;
+      _refusedTake.clear();
+      // NOTE: the held update is stored after this command is answered.
       held.complete();
     }
     if (holdDocumentPut && line.startsWith('update:atkeys.')) {
@@ -104,7 +119,15 @@ class _AtServer implements AtTransportFactory {
           hold.future.then((_) => socket.serverSends(_reply(socket, line))));
       return;
     }
-    unawaited(socket.serverSends(_reply(socket, line)));
+    final reply = _reply(socket, line);
+    if (_held != null &&
+        connection != _heldOn &&
+        line.contains('atkeys-lock.') &&
+        reply.startsWith('error:')) {
+      _refusedTake.add(connection);
+      refusedWhileHeld++;
+    }
+    unawaited(socket.serverSends(reply));
   }
 
   String _reply(FakeAtServerSocket socket, String line) {
@@ -384,6 +407,9 @@ void main() {
       }),
     ]);
 
+    expect(server.refusedWhileHeld, greaterThan(0),
+        reason: 'the control: one writer was refused the lock while the '
+            'other\'s update was held');
     final raw = jsonEncode(await documentOf(enrollmentId));
     expect(raw, contains(base64Encode(utf8.encode('one-priv'))));
     expect(raw, contains(base64Encode(utf8.encode('two-sym'))));

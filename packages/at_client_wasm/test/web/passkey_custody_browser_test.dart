@@ -99,6 +99,12 @@ class _Session implements EnrollmentSession {
   final String enrollmentId;
   var closed = false;
 
+  /// How many times [close] ran, whoever called it.
+  var closeCalls = 0;
+
+  /// The keys IO [openClient] was last given.
+  WrittenAtKeysIo? openedOn;
+
   @override
   Future<Map<String, dynamic>> atKeys() async => server.keys;
 
@@ -128,6 +134,13 @@ class _Session implements EnrollmentSession {
   }
 
   @override
+  Future<void> publishEncryptionKey(Map<String, dynamic> atKeys) async {
+    if (atKeys['aesEncryptPublicKey'] case final String key) {
+      server.publishedKey = key;
+    }
+  }
+
+  @override
   late final EnrollmentDocumentStore documents = _Documents(this);
 
   @override
@@ -135,6 +148,7 @@ class _Session implements EnrollmentSession {
 
   @override
   Future<AtClient> openClient(WrittenAtKeysIo keysIo) async {
+    openedOn = keysIo;
     final client = _Client(this, keysIo);
     if (server.clientsOffline) {
       // As the session opener does: stop the client, then throw.
@@ -148,6 +162,7 @@ class _Session implements EnrollmentSession {
   @override
   Future<void> close() async {
     closed = true;
+    closeCalls++;
   }
 }
 
@@ -510,7 +525,13 @@ void main() {
     server.clientsOffline = true;
     await expectLater(
         device.onboard(), throwsA(isA<PortalSessionOfflineException>()));
-    expect(device.gateway.lastSession!.closed, isTrue);
+    final failed = device.gateway.lastSession!;
+    expect(failed.closeCalls, 2,
+        reason: 'the client the opener stopped closed the session once, and '
+            'the custody closed it again');
+    await expectLater(
+        Future.sync(() => failed.openedOn!.read(_atSign)), throwsStateError,
+        reason: 'the custody closed the key store the client was opened on');
     expect(server.cramLive, isFalse);
 
     server.clientsOffline = false;

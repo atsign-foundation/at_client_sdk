@@ -487,6 +487,31 @@ void main() {
     });
   });
 
+  group('publishEncryptionKey', () {
+    test(
+        'publishes the encryption public key with ttr -1 on the PKAM '
+        'connection and sends no CRAM secret delete', () async {
+      final session = await activate();
+      final sent = wire.commands.length;
+
+      await session.publishEncryptionKey({'aesEncryptPublicKey': _encPublic});
+
+      expect(wire.commands.skip(sent), [
+        'update:ttr:-1:isEncrypted:false:public:publickey$_atSign $_encPublic\n',
+      ]);
+      expect(wire.dials, 1);
+    });
+
+    test('with no encryption public key, sends nothing', () async {
+      final session = await activate();
+      final sent = wire.commands.length;
+
+      await session.publishEncryptionKey({});
+
+      expect(wire.commands, hasLength(sent));
+    });
+  });
+
   group('revokeOtherEnrollments', () {
     const list = 'enroll:list:{"enrollmentStatusFilter":["approved"]}\n';
     String revoke(String id) => 'enroll:revoke:{"enrollmentId":"$id"}\n';
@@ -542,15 +567,24 @@ void main() {
       expect(wire.commands, [list, list]);
     });
 
-    test(
-        'a refused revoke of an enrollment no longer approved is not a failure',
-        () async {
-      final session = await activate();
-      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => 'error:AT0011:not approved');
+    // NOTE: the lookUp throws an atServer's error reply as an
+    // AtLookUpException, which the remote secondary maps by its code.
+    for (final code in ['AT0011', 'AT0029', 'AT0031', 'AT0032']) {
+      test(
+          'a revoke the atServer refuses with $code, for an enrollment no '
+          'longer approved, is left to the list and is not a failure',
+          () async {
+        final session = await activate();
+        serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+            revoked: (_) => throw AtLookUpException(code, 'not approved'));
 
-      await session.revokeOtherEnrollments();
-    });
+        await session.revokeOtherEnrollments();
+
+        expect(wire.commands, [list, revoke('eid-0'), list],
+            reason: 'an atServer refusal of a revoke is left to the list '
+                'that follows');
+      });
+    }
 
     test('throws when an approved enrollment other than its own remains',
         () async {
@@ -561,7 +595,7 @@ void main() {
       }, {
         _eid: 'approved',
         'eid-0': 'approved'
-      }, revoked: (_) => 'error:AT0011:refused');
+      }, revoked: (_) => throw AtLookUpException('AT0011', 'refused'));
 
       await expectLater(session.revokeOtherEnrollments(),
           throwsA(isA<AtEnrollmentException>()));
@@ -612,19 +646,6 @@ void main() {
           session.revokeOtherEnrollments(), throwsA(same(failure)),
           reason: 'a revoke whose answer never came was not refused');
       expect(wire.commands, [list, revoke('eid-0')]);
-    });
-
-    test('a revoke the atServer answers with an error is left to the list',
-        () async {
-      final session = await activate();
-      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
-          revoked: (_) => throw AtLookUpException('AT0011', 'not approved'));
-
-      await session.revokeOtherEnrollments();
-
-      expect(wire.commands, [list, revoke('eid-0'), list],
-          reason: 'an atServer refusal of a revoke is left to the list that '
-              'follows');
     });
   });
 

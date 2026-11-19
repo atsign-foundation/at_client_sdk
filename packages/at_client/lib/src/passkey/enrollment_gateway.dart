@@ -330,6 +330,14 @@ class _PkamSession implements EnrollmentSession {
           encryptionPublicKey: atKeys[_encryptPublicKey] as String?);
 
   @override
+  Future<void> publishEncryptionKey(Map<String, dynamic> atKeys) async {
+    final key = atKeys[_encryptPublicKey] as String?;
+    if (key == null) return;
+    await publishEncryptionPublicKeyOf(
+        atLookUp: _lookUp, atSign: _atSign, encryptionPublicKey: key);
+  }
+
+  @override
   Future<AtClient> openClient(WrittenAtKeysIo keysIo) => _gateway.clientOpener(
       lookUp: _lookUp,
       atSign: _atSign,
