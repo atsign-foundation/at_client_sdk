@@ -12,11 +12,23 @@ final _logger = AtSignLogger('completeActivation');
 ///
 /// The publish replaces whatever `publickey` is already published. With no
 /// [encryptionPublicKey] nothing is published, and the CRAM secret is deleted
-/// all the same.
+/// all the same. A CRAM secret the atServer reports as not found counts as
+/// deleted.
+///
+/// Throws [ArgumentError], before any command, when [encryptionPublicKey]
+/// holds a carriage return or a line feed.
 Future<void> completeActivationOf(
     {required AtLookUp atLookUp,
     required String atSign,
     required String? encryptionPublicKey}) async {
+  // NOTE: the update command carries the value as it is, so it must be one
+  // line.
+  if (encryptionPublicKey != null &&
+      (encryptionPublicKey.contains('\r') ||
+          encryptionPublicKey.contains('\n'))) {
+    throw ArgumentError.value(encryptionPublicKey, 'encryptionPublicKey',
+        'must not contain a carriage return or a line feed');
+  }
   // NOTE: publish nothing rather than "null" when no key is given.
   if (encryptionPublicKey != null) {
     final updateBuilder = UpdateVerbBuilder()
@@ -36,6 +48,11 @@ Future<void> completeActivationOf(
 
   final deleteBuilder = DeleteVerbBuilder()
     ..atKey = (AtKey()..key = AtConstants.atCramSecret);
-  final deleteResponse = await atLookUp.executeVerb(deleteBuilder);
-  _logger.info('Cram secret delete response : $deleteResponse');
+  try {
+    final deleteResponse = await atLookUp.executeVerb(deleteBuilder);
+    _logger.info('Cram secret delete response : $deleteResponse');
+  } on AtLookUpException catch (e) {
+    if (e.errorCode != error_codes['KeyNotFoundException']) rethrow;
+    _logger.info('The CRAM secret of $atSign was already deleted');
+  }
 }
