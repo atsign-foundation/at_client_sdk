@@ -8,6 +8,7 @@ import 'package:at_auth/passkey.dart' show PasskeyRecordType;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart';
 import 'package:at_client/src/passkey/passkey_custody.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
@@ -16,6 +17,7 @@ import 'package:test/test.dart';
 
 import '../support/custody_fakes.dart' show DerivedKeys;
 import '../support/wire_fakes.dart';
+import '../test_utils/recorded_logs.dart';
 
 const _atSign = '@alice';
 const _eid = 'eid-1';
@@ -62,6 +64,8 @@ class _Capture implements LoggingHandler {
 }
 
 void main() {
+  final logs = RecordedLogs();
+  setUpAll(logs.installOn);
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
   late ({String publicKey, String privateKey}) derived;
@@ -329,6 +333,28 @@ void main() {
       expect(wire.commands.single, startsWith('lookup:_'));
     });
 
+    test(
+        'the completion-due record is written, read and deleted on the PKAM '
+        'connection', () async {
+      final connection = wire.lookUpsBuilt.single;
+      wire.lookupAnswer = 'data:cram-deleted';
+
+      await session.recordCompletionDue(CompletionDue.activated);
+      await session.recordCompletionDue(CompletionDue.cramSecretDeleted);
+      final read = await session.completionDue();
+      await session.clearCompletionDue();
+
+      expect(read, CompletionDue.cramSecretDeleted);
+      expect(wire.dials, 1);
+      expect(wire.commands, [
+        'update:completion-due.$_eid.a.__e$_atSign activated\n',
+        'update:completion-due.$_eid.a.__e$_atSign cram-deleted\n',
+        'llookup:completion-due.$_eid.a.__e$_atSign\n',
+        'delete:completion-due.$_eid.a.__e$_atSign\n',
+      ]);
+      expect(connection.commandsSent, 4);
+    });
+
     test('close closes the PKAM connection', () async {
       await session.close();
 
@@ -530,6 +556,32 @@ void main() {
 
       expect(wire.commands, [list, revoke('eid-0'), revoke('eid-9'), list]);
       expect(wire.dials, 1);
+    });
+
+    test('A login that revokes names each enrollment it revokes in a warning',
+        () async {
+      const other = 'eid-9';
+      final session = await gateway().authenticate(
+          atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
+      serve({_eid: 'approved', other: 'approved'}, {_eid: 'approved'});
+      final from = logs.records.length;
+
+      await session.revokeOtherEnrollments();
+
+      final logged = logs.records.skip(from).toList();
+      expect(wire.commands, contains(revoke(other)),
+          reason: 'the control: the login revoked the other enrollment');
+      final named = [
+        for (final r in logged)
+          if (r.message.contains(other)) r
+      ];
+      expect(named, hasLength(1),
+          reason: 'one log names the enrollment the login revoked');
+      expect(named.single.level, 'WARNING', reason: 'it is a warning');
+      expect(named.single.message, contains(_atSign),
+          reason: 'and names the Atsign');
+      expect(logged.where((r) => r.message.contains(_eid)), isEmpty,
+          reason: "no log names the passkey's own enrollment");
     });
 
     test('revokes nothing that is listed but not approved', () async {

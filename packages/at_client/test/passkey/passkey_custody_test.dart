@@ -14,7 +14,9 @@ import 'package:at_client/at_client.dart'
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show apkamKeyPairFromSeed;
 import 'package:at_client/src/passkey/passkey_custody.dart';
@@ -23,6 +25,7 @@ import 'package:test/test.dart';
 
 import '../support/bytes_passkey_sealer.dart';
 import '../support/custody_fakes.dart';
+import '../support/lookup_fakes.dart';
 import '../test_utils/recorded_logs.dart';
 import '../test_utils/mocks.dart' show MockAtLookupImpl;
 import '../test_utils/transport.dart' show defaultAtDirectory;
@@ -108,6 +111,22 @@ void main() {
               step.startsWith('publish:'))
             step
       ];
+
+  /// [completionSteps] with each write and delete of a completion-due record
+  /// in its place.
+  List<String> completionAndRecordSteps({int from = 0}) => [
+        for (final step in server.timeline.skip(from))
+          if (step == 'cram-deleted' ||
+              step == 'revoke-others' ||
+              step.startsWith('revoke:') ||
+              step.startsWith('publish:') ||
+              step.startsWith('record-completion-due:') ||
+              step.startsWith('clear-completion-due:'))
+            step
+      ];
+
+  /// The fake key pair another activation tool activates with.
+  const otherToolsPair = (publicKey: 'b3RoZXItcHVi', privateKey: 'b3RoZXI=');
 
   void reset() {
     server = FakeServer();
@@ -431,6 +450,106 @@ void main() {
           [isEmpty, containsPair('aesEncryptPublicKey', isA<String>())]);
     });
 
+    test(
+        'Onboarding records its completion as due before it writes the @keys '
+        'document, records the CRAM secret\'s deletion, and deletes that '
+        'record last', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      final steps = server.timeline;
+      final mark = steps.indexOf('record-completion-due:eid1:activated');
+      expect(mark, greaterThan(steps.indexOf('activate:eid1')),
+          reason: 'the record is written as the new enrollment');
+      expect(mark, lessThan(steps.indexOf('put-document:eid1')),
+          reason: 'the record is stored before the @keys document');
+      expect(mark, lessThan(steps.indexOf('put-pointer')));
+      final rewrite =
+          steps.indexOf('record-completion-due:eid1:cramSecretDeleted');
+      expect(rewrite, greaterThan(steps.indexOf('cram-deleted')),
+          reason: 'the record says the CRAM secret is deleted once its delete '
+              'answered');
+      expect(rewrite, lessThan(steps.indexOf('revoke-others')),
+          reason: 'and before the revoke');
+      final publish = steps.indexOf('publish:${encryptionPublicKeyOf('eid1')}');
+      final clear = steps.indexOf('clear-completion-due:eid1');
+      expect(publish, greaterThan(-1));
+      expect(clear, greaterThan(steps.lastIndexOf('cram-deleted')),
+          reason: 'the record is deleted after the publish and its CRAM '
+              'secret delete');
+      expect(clear, greaterThan(publish));
+      expect(completionAndRecordSteps().last, 'clear-completion-due:eid1',
+          reason: 'deleting the record is the completion\'s last step');
+      expect(server.completionDue, isEmpty);
+    });
+
+    test(
+        'An onboarding whose completion-due record cannot be written fails '
+        'before it writes anything else', () async {
+      final refusal = StateError('the atServer refused the record');
+      server.completionDueWriteRefusals[CompletionDue.activated] = refusal;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(refusal)));
+
+      expect(server.timeline, contains('record-completion-due:eid1:activated'),
+          reason: 'the control: the record\'s write was sent');
+      expect(server.log, isEmpty,
+          reason: 'no @keys document or pointer is written');
+      expect(server.documents, isEmpty);
+      expect(server.pointers, isEmpty);
+      expect(server.cramDeleted, isEmpty,
+          reason: 'the CRAM secret is not deleted');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(authenticator.signalled, [authenticator.current],
+          reason: 'the new credential is reported to the platform as unknown');
+      expect(hints.ids, isEmpty);
+    });
+
+    test(
+        'An onboarding whose record of the CRAM secret\'s deletion cannot be '
+        'written fails, and a login finishes it', () async {
+      final refusal = StateError('the atServer refused the rewrite');
+      server.completionDueWriteRefusals[CompletionDue.cramSecretDeleted] =
+          refusal;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(refusal)));
+
+      final steps = server.timeline;
+      expect(steps.indexOf('record-completion-due:eid1:cramSecretDeleted'),
+          greaterThan(steps.indexOf('cram-deleted')),
+          reason: 'the control: the rewrite was sent once the CRAM secret '
+              'was deleted');
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the onboarding fails after the CRAM secret is deleted');
+      expect(steps, isNot(contains('revoke-others')),
+          reason: 'and before any revoke');
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the record still says only that the '
+              'completion is due');
+      expect(hints.ids, isEmpty);
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      final session = await custody(withHints: device).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login finishes the completion');
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1',
+          reason: 'it opens the onboarding\'s enrollment');
+      expect(device.ids, {_atSign: 'eid1'});
+    });
+
     group(
         'An onboarding interrupted before the CRAM secret is deleted can be '
         'run again with the same secret', () {
@@ -538,9 +657,8 @@ void main() {
     });
 
     test(
-        'A login that finds no encryption public key published deletes the '
-        'CRAM secret, then revokes the other enrollments, then publishes the '
-        'key', () async {
+        'A login that finds the completion due deletes the CRAM secret, then '
+        'revokes the other enrollments, then publishes the key', () async {
       server.documentPutFailures = 99;
       await expectLater(
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
@@ -554,36 +672,38 @@ void main() {
           reason: 'the control: the failed revoke left the first enrollment');
       expect(server.cramDeleted, {_atSign},
           reason: 'the control: the second onboarding deleted the CRAM secret');
-      expect(server.publishedKey, isNull,
-          reason: 'the control: no encryption public key is published');
+      expect(server.completionDue['eid2'], CompletionDue.cramSecretDeleted,
+          reason: 'the control: the second onboarding recorded the CRAM '
+              'secret\'s deletion');
       final mark = server.timeline.length;
 
       final session =
           await custody(withHints: FakeHints()).open(atSign: _atSign);
 
       expect(
-          completionSteps(from: mark),
+          completionAndRecordSteps(from: mark),
           [
             'cram-deleted',
             'revoke-others',
             'revoke:eid1',
             'publish:${encryptionPublicKeyOf('eid2')}',
             'cram-deleted',
+            'clear-completion-due:eid2',
           ],
           reason: 'the login deletes the CRAM secret, then revokes the first '
-              'enrollment, then publishes the document\'s key');
+              'enrollment, then publishes the document\'s key, then deletes '
+              'the completion-due record');
       expect(session.client.enrollmentId, 'eid2');
       expect(server.approved, {'eid2': _atSign});
+      expect(server.completionDue, isNot(contains('eid2')));
     });
 
     test(
-        'A login that finds the document\'s encryption public key published '
-        'deletes the CRAM secret and revokes nothing', () async {
-      gateway.onAuthenticate = (session) =>
-          session.completeErrorAfterPublish = StateError('interrupted');
-      await expectLater(
-          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
-      gateway.onAuthenticate = null;
+        'A login that finds the completion done and the document\'s key '
+        'published deletes the CRAM secret and revokes nothing', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(server.completionDue, isEmpty,
+          reason: 'the control: the onboarding\'s completion is done');
       expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
           reason: 'the control: the onboarding published its key');
       server.approved['eid9'] = _atSign;
@@ -599,6 +719,310 @@ void main() {
       expect(server.approved, {'eid1': _atSign, 'eid9': _atSign},
           reason: 'the other enrollment is still approved');
       expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login finishes an onboarding over a key another activation tool '
+        'published while the CRAM secret was live', () async {
+      const otherTools = 'b3RoZXItdG9vbA==';
+      server.approved['eid9'] = _atSign;
+      server.publishedKey = otherTools;
+      gateway.onAuthenticate =
+          (session) => session.revokeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the control: the onboarding deleted the CRAM secret');
+      expect(server.completionDue, {'eid1': CompletionDue.cramSecretDeleted},
+          reason: 'the control: the onboarding recorded that');
+      expect(server.publishedKey, otherTools,
+          reason: 'the control: the other tool\'s key is still published');
+      expect(server.approved, {'eid1': _atSign, 'eid9': _atSign},
+          reason: 'the control: the other tool\'s enrollment is approved');
+      final mark = server.timeline.length;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'revoke:eid9',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login revokes the other tool\'s enrollment, publishes '
+              'the document\'s key, then deletes the completion-due record');
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
+          reason: 'the document\'s key is published over the other tool\'s');
+      expect(server.approved, {'eid1': _atSign});
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login refuses a key another tool published after its onboarding '
+        'stopped before deleting the CRAM secret', () async {
+      const otherTools = 'b3RoZXItdG9vbA==';
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding stopped before its delete of '
+              'the CRAM secret answered');
+      final other = await gateway.activate(
+          atSign: _atSign, apkamKeyPair: otherToolsPair, cram: 'cram');
+      await other.completeActivation({'aesEncryptPublicKey': otherTools});
+      expect(server.cramDeleted, {_atSign},
+          reason: 'the control: the other tool deleted the CRAM secret');
+      expect(server.publishedKey, otherTools,
+          reason: 'the control: the other tool published its key');
+      expect(server.approved, {'eid1': _atSign, 'eid2': _atSign});
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(isA<PublicKeyMismatchException>()));
+
+      expect(gateway.authenticated.last, 'eid1',
+          reason: 'the control: the login authenticated the onboarding\'s '
+              'enrollment');
+      expect(server.timeline.skip(mark), contains('read-completion-due:eid1'),
+          reason: 'the control: the login read the record');
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(server.publishedKey, otherTools);
+      expect(server.approved, {'eid1': _atSign, 'eid2': _atSign},
+          reason: 'the other tool\'s enrollment is still approved');
+      expect(device.ids, isEmpty);
+    });
+
+    test(
+        'A login after an onboarding that stopped before deleting the CRAM '
+        'secret, with no key published, finishes it', () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      server.approved['eid9'] = _atSign;
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding stopped before its delete of '
+              'the CRAM secret answered');
+      expect(server.publishedKey, isNull,
+          reason: 'the control: no encryption public key is published');
+      final mark = server.timeline.length;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'revoke:eid9',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login deletes the CRAM secret, revokes the other '
+              'enrollment, publishes the document\'s key and deletes the '
+              'completion-due record');
+      expect(server.approved, {'eid1': _atSign});
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login that finds no key published and the completion done '
+        'publishes the document\'s key and revokes nothing', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(server.completionDue, isEmpty,
+          reason: 'the control: the onboarding\'s completion is done');
+      server.approved['eid9'] = _atSign;
+      server.publishedKey = null;
+      final mark = server.timeline.length;
+
+      final session =
+          await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      expect(completionAndRecordSteps(from: mark),
+          ['publish:${encryptionPublicKeyOf('eid1')}', 'cram-deleted'],
+          reason: 'the login publishes the document\'s key and deletes the '
+              'CRAM secret, and sends no revoke');
+      expect(gateway.lastSession!.completed, [
+        {'aesEncryptPublicKey': encryptionPublicKeyOf('eid1')}
+      ]);
+      expect(server.approved, {'eid1': _atSign, 'eid9': _atSign},
+          reason: 'the other enrollment is still approved');
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A completion whose record delete fails saves no passkey hints, and '
+        'the next login finishes it', () async {
+      final refusal = StateError('the atServer refused the delete');
+      server
+        ..completionDueClearFailures = 1
+        ..completionDueClearError = refusal;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(refusal)));
+
+      final steps = server.timeline;
+      expect(steps.indexOf('publish:${encryptionPublicKeyOf('eid1')}'),
+          lessThan(steps.indexOf('clear-completion-due:eid1')),
+          reason: 'the onboarding throws the refusal after the encryption '
+              'public key is published');
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
+      expect(hints.credentials, isEmpty,
+          reason: 'this device saves no passkey hints');
+      expect(hints.ids, isEmpty, reason: 'this device saves no passkey hints');
+      expect(authenticator.signalled, isEmpty,
+          reason: 'a failure while completing the activation reports nothing');
+      expect(server.completionDue, {'eid1': CompletionDue.cramSecretDeleted},
+          reason: 'the control: the completion is still due');
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      final session = await custody(withHints: device).open(atSign: _atSign);
+
+      expect(
+          completionAndRecordSteps(from: mark),
+          [
+            'cram-deleted',
+            'revoke-others',
+            'publish:${encryptionPublicKeyOf('eid1')}',
+            'cram-deleted',
+            'clear-completion-due:eid1',
+          ],
+          reason: 'the login finishes the completion and deletes the '
+              'completion-due record');
+      expect(server.completionDue, isEmpty);
+      expect(session.client.enrollmentId, 'eid1');
+      expect(device.ids, {_atSign: 'eid1'});
+    });
+
+    test(
+        'A completion-due record the atServer reports as not found counts as '
+        'deleted', () async {
+      final remote = ScriptedAtLookUp((command) async {
+        if (command.startsWith('delete:completion-due.')) {
+          throw AtLookUpException('AT0015', 'key not found');
+        }
+        return 'data:1';
+      });
+      server.completionDueRecord = CompletionDueRecord(
+          RemoteSecondary(_atSign, AtClientPreference(),
+              atLookUp: remote,
+              lookUps: RecordingLookUps((_) async => null).call),
+          atSign: _atSign,
+          enrollmentId: 'eid1');
+
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      expect(remote.commands.map((c) => c.command),
+          contains('delete:completion-due.eid1.a.__e@alice\n'),
+          reason: 'the control: the delete was sent and answered AT0015');
+      expect(gateway.lastSession!.clients, hasLength(1),
+          reason: 'the onboarding opened its client');
+      expect(session.client.enrollmentId, 'eid1');
+    });
+
+    test(
+        'A login whose read of the completion-due record fails throws and '
+        'sends nothing', () async {
+      gateway.onAuthenticate = (session) =>
+          session.completeErrorAfterDelete = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.publishedKey, isNull,
+          reason: 'the control: the onboarding published no key');
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding\'s completion is due');
+      final failure = StateError('the read of the record failed');
+      server.completionDueReadError = failure;
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(same(failure)));
+
+      expect(server.timeline.skip(mark), contains('read-completion-due:eid1'),
+          reason: 'the control: the login read the record');
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(device.ids, isEmpty);
+    });
+
+    test(
+        'A login reads the completion-due record before it looks at the '
+        'published key', () async {
+      gateway.onAuthenticate = (session) =>
+          session.completeErrorAfterDelete = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.publishedKey, isNull,
+          reason: 'the control: the onboarding published no key');
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the record says only that the completion is '
+              'due, so the login looks up the published key');
+      final mark = server.timeline.length;
+
+      await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+      final steps = server.timeline.skip(mark).toList();
+      final read = steps.indexOf('read-completion-due:eid1');
+      final lookups = [
+        for (var i = 0; i < steps.length; i++)
+          if (steps[i] == 'lookup-publickey') i
+      ];
+      expect(read, greaterThan(-1), reason: 'the login reads the record');
+      expect(lookups, isNotEmpty,
+          reason: 'the control: the login looks up publickey@alice');
+      expect(lookups, everyElement(greaterThan(read)),
+          reason: 'the login reads the completion-due record before it looks '
+              'up publickey@alice');
+    });
+
+    test(
+        'A login refuses a @keys document whose APKAM public key is not the '
+        'passkey\'s, even while the completion is due', () async {
+      server.keys = {...server.keys, 'aesPkamPublicKey': 'cm9sbGVkLWJhY2s='};
+      gateway.onAuthenticate = (session) =>
+          session.completeErrorAfterDelete = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      gateway.onAuthenticate = null;
+      expect(server.completionDue, {'eid1': CompletionDue.activated},
+          reason: 'the control: the onboarding\'s completion is due');
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      await expectLater(custody(withHints: device).open(atSign: _atSign),
+          throwsA(isA<PublicKeyMismatchException>()));
+
+      expect(gateway.authenticated.last, 'eid1',
+          reason: 'the control: the login authenticated the enrollment');
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
+      expect(gateway.lastSession!.completed, isEmpty);
+      expect(gateway.lastSession!.closed, isTrue);
+      expect(server.completionDue, {'eid1': CompletionDue.activated});
+      expect(device.ids, isEmpty);
     });
 
     test(
@@ -739,17 +1163,24 @@ void main() {
     });
 
     test(
-        'a login that finds another encryption public key published is '
-        'refused and completes nothing', () async {
+        'A login that finds another key published and the completion done '
+        'refuses it', () async {
       await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(server.completionDue, isEmpty,
+          reason: 'the control: the onboarding\'s completion is done');
+      server.approved['eid9'] = _atSign;
       server.publishedKey = 'cm90YXRlZA==';
+      final mark = server.timeline.length;
 
       await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
           throwsA(isA<PublicKeyMismatchException>()));
 
+      expect(completionAndRecordSteps(from: mark), isEmpty,
+          reason: 'it sends no delete, revoke or publish');
       expect(gateway.lastSession!.completed, isEmpty);
       expect(gateway.lastSession!.closed, isTrue);
       expect(server.publishedKey, 'cm90YXRlZA==');
+      expect(server.approved, {'eid1': _atSign, 'eid9': _atSign});
     });
 
     test('A login with saved hints sends no activation completion', () async {

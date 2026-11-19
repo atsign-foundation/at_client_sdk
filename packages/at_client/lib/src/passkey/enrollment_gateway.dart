@@ -20,6 +20,7 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:at_lookup/at_lookup.dart';
 
 import 'at_keys_document.dart';
+import 'completion_due_record.dart';
 import 'enrollment_document_store.dart';
 import 'enrollment_pointer_store.dart';
 import 'passkey_custody.dart';
@@ -235,6 +236,9 @@ class _PkamSession implements EnrollmentSession {
   late final EnrollmentDocumentStore documents =
       RemoteEnrollmentDocumentStore(_remote);
 
+  late final _completionDue =
+      CompletionDueRecord(_remote, atSign: _atSign, enrollmentId: enrollmentId);
+
   @override
   late final EnrollmentPointerStore pointers = RemoteEnrollmentPointerStore(
       LookupEnrollmentPointerReader(
@@ -278,9 +282,12 @@ class _PkamSession implements EnrollmentSession {
       atSign: _atSign,
       key: 'publickey');
 
+  /// Logs a warning naming the atSign and the enrollment before each revoke
+  /// it sends.
   @override
   Future<void> revokeOtherEnrollments() async {
     for (final other in await _otherApprovedEnrollments()) {
+      _logger.warning('revoking enrollment $other of ${_atSign.toAtsign()}');
       try {
         await decideEnrollmentOn(
             _remote,
@@ -336,6 +343,16 @@ class _PkamSession implements EnrollmentSession {
           atLookUp: _lookUp,
           atSign: _atSign,
           encryptionPublicKey: atKeys[_encryptPublicKey] as String?);
+
+  @override
+  Future<void> recordCompletionDue(CompletionDue state) =>
+      _completionDue.write(state);
+
+  @override
+  Future<CompletionDue?> completionDue() => _completionDue.read();
+
+  @override
+  Future<void> clearCompletionDue() => _completionDue.clear();
 
   @override
   Future<AtClient> openClient(WrittenAtKeysIo keysIo) => _gateway.clientOpener(

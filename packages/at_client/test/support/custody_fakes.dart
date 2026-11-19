@@ -7,6 +7,7 @@ import 'package:at_auth/passkey.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/server_mutex.dart' show ServerMutexLease;
 import 'package:at_client/src/lifecycle/at_connection.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show ApkamKeyPair;
@@ -26,13 +27,33 @@ String encryptionPublicKeyOf(String enrollmentId) =>
     base64Encode(utf8.encode('enc-pub-$enrollmentId'));
 
 /// The atServer as the custody flows see it: pointers by lookup id, each
-/// enrollment's own document, and an ordered log of every write.
+/// enrollment's own document and completion-due record, and an ordered log
+/// of every document and pointer write.
 class FakeServer implements EnrollmentPointerReader {
   final pointers = <String, String>{};
 
   /// The namespace each pointer was written in, by lookup id.
   final pointerNamespaces = <String, String>{};
   final documents = <String, String>{};
+
+  /// What each enrollment's completion-due record says, by enrollment id.
+  final completionDue = <String, CompletionDue>{};
+
+  /// Makes the next write of each state throw what it maps to before the
+  /// record is written; each refusal is used once.
+  final completionDueWriteRefusals = <CompletionDue, Object>{};
+
+  /// Makes a read of a completion-due record throw this.
+  Object? completionDueReadError;
+
+  /// Deletes of a completion-due record that throw
+  /// [completionDueClearError] before one is accepted.
+  var completionDueClearFailures = 0;
+  Object completionDueClearError = StateError('completion-due delete failed');
+
+  /// Answers every completion-due operation in place of this server, when
+  /// set.
+  CompletionDueRecord? completionDueRecord;
 
   /// The APKAM public key each enrollment authenticates with.
   final pairByEnrollment = <String, String>{};
@@ -43,7 +64,9 @@ class FakeServer implements EnrollmentPointerReader {
   final log = <String>[];
 
   /// Every step of an onboarding in the order it happened: the server's
-  /// writes (as in [log]), the activation, each completion with the key it
+  /// writes (as in [log]), the activation, each write of a completion-due
+  /// record with the state it wrote, each read and delete of one, each lookup
+  /// of the published encryption public key, each completion with the key it
   /// published and the CRAM secret's deletion, each revoke request with the
   /// enrollments it revoked, and the client opening.
   final timeline = <String>[];
@@ -131,6 +154,7 @@ class FakeSession implements EnrollmentSession {
   @override
   Future<PublishedEncryptionKey> publishedEncryptionKey(
       Map<String, dynamic> atKeys) async {
+    server.timeline.add('lookup-publickey');
     if (!server.publishes(atKeys)) return PublishedEncryptionKey.different;
     final held = atKeys['aesEncryptPublicKey'];
     if (held is! String) return PublishedEncryptionKey.same;
@@ -186,6 +210,37 @@ class FakeSession implements EnrollmentSession {
     server.cramDeleted.add(atSign);
     server.timeline.add('cram-deleted');
     if (completeErrorAfterDelete case final e?) throw e;
+  }
+
+  @override
+  Future<void> recordCompletionDue(CompletionDue state) async {
+    server.timeline.add('record-completion-due:$enrollmentId:${state.name}');
+    if (server.completionDueRecord case final record?) {
+      return record.write(state);
+    }
+    if (server.completionDueWriteRefusals.remove(state) case final e?) {
+      throw e;
+    }
+    server.completionDue[enrollmentId] = state;
+  }
+
+  @override
+  Future<CompletionDue?> completionDue() async {
+    server.timeline.add('read-completion-due:$enrollmentId');
+    if (server.completionDueRecord case final record?) return record.read();
+    if (server.completionDueReadError case final e?) throw e;
+    return server.completionDue[enrollmentId];
+  }
+
+  @override
+  Future<void> clearCompletionDue() async {
+    server.timeline.add('clear-completion-due:$enrollmentId');
+    if (server.completionDueRecord case final record?) return record.clear();
+    if (server.completionDueClearFailures > 0) {
+      server.completionDueClearFailures--;
+      throw server.completionDueClearError;
+    }
+    server.completionDue.remove(enrollmentId);
   }
 
   @override

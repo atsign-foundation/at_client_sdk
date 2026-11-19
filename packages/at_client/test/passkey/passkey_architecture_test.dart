@@ -11,6 +11,13 @@ final _extendsAtException = RegExp(r'^\s*extends\s+AtException\b');
 
 String _all() => _sources().map((f) => f.readAsStringSync()).join('\n');
 
+/// Each construction of a delete verb builder, however it is formatted.
+final _deleteBuilder = RegExp(r'\bDeleteVerbBuilder\s*\(');
+
+/// The opening brace of a member's body, after its parameter list's closing
+/// parenthesis and any `async`.
+final _bodyStart = RegExp(r'\)\s*(?:async\s*)?\{');
+
 /// [source] without its comment lines.
 String _code(String source) => source
     .split('\n')
@@ -18,12 +25,14 @@ String _code(String source) => source
     .join('\n');
 
 /// The member of [source] whose declaration starts with [signature], through
-/// its matching closing brace.
-String _member(String source, String signature) {
+/// its body's matching closing brace.
+String _member(String source, Pattern signature) {
   final start = source.indexOf(signature);
   if (start < 0) throw StateError('no $signature');
+  final body = _bodyStart.firstMatch(source.substring(start));
+  if (body == null) throw StateError('$signature has no body');
   var depth = 0;
-  for (var i = source.indexOf('{', start); i < source.length; i++) {
+  for (var i = start + body.end - 1; i < source.length; i++) {
     if (source[i] == '{') depth++;
     if (source[i] == '}' && --depth == 0) return source.substring(start, i + 1);
   }
@@ -123,6 +132,8 @@ void main() {
         'EnrollOperationEnum.revoke',
         "'a revoke was refused",
         "after revoking them'",
+        // The warning each revoke logs.
+        "warning('revoking enrollment",
         // The refusal of a revoke (AT0031) that is left to the list.
         'e is AtEnrollmentRevokeException',
       ]) {
@@ -138,6 +149,21 @@ void main() {
       final all = _all();
       expect(all, isNot(contains('Future<void> delete(')));
       expect(all, isNot(contains("'delete:")));
+      final deletes = {
+        for (final f in _sources())
+          if (_deleteBuilder.allMatches(f.readAsStringSync()).length
+              case final n when n > 0)
+            f.path: n
+      };
+      expect(deletes, {'lib/src/passkey/completion_due_record.dart': 1},
+          reason: 'the passkey sources build one delete, of the '
+              'completion-due record');
+      expect(
+          _member(
+              File('lib/src/passkey/completion_due_record.dart')
+                  .readAsStringSync(),
+              RegExp(r'Future<void>\s+clear\(\s*\)')),
+          matches(_deleteBuilder));
     });
   });
 
@@ -148,6 +174,7 @@ void main() {
     test('package:at_client/passkey.dart exports the passkey surface', () {
       for (final name in [
         'enrollment_gateway.dart',
+        'completion_due_record.dart',
         'enrollment_document_store.dart',
         'enrollment_pointer_store.dart',
         'public_lookup.dart',
