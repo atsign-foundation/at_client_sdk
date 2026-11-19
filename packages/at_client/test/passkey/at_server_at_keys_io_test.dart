@@ -754,13 +754,28 @@ void main() {
       expect(Future.sync(() => io.read(_atSign)), throwsStateError);
     });
 
-    test('leaves the vault it seals with open', () async {
-      final io = await open();
+    test('calls neither the seal nor the open function it was given', () async {
+      // NOTE: the two functions are the store's only route to the vault.
+      final calls = <String>[];
+      final io = AtServerAtKeysIo(
+          documents: documents(),
+          atSign: _atSign,
+          seal: (d) {
+            calls.add('seal');
+            return derived.vault.seal(PasskeyRecordType.atkeys, d);
+          },
+          open: (r) {
+            calls.add('open');
+            return derived.vault.open(PasskeyRecordType.atkeys, r);
+          },
+          enrollmentId: _eid,
+          apkamKeyPair: pair);
 
       io.close();
+      await io.settled;
 
-      await derived.vault.withAuthSeed((_) async {});
-      await derived.vault.seal(PasskeyRecordType.atkeys, {'a': 1});
+      expect(calls, isEmpty);
+      expect(server.commands, isEmpty);
     });
 
     test(
