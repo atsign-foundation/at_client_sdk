@@ -454,21 +454,26 @@ void main() {
   group(
       'An onboarding interrupted before the CRAM secret is deleted can be '
       'run again with the same secret', () {
-    final interruptions = <String, (String, bool Function(String))>{
+    final interruptions = <String, (String, bool Function(String), Matcher)>{
       'after its enrollment was approved': (
         '@gateway2',
-        (c) => c.contains('atkeys-lock.')
+        (c) => c.contains('atkeys-lock.'),
+        _asItIs,
       ),
-      'after its @keys document was written': ('@jeremy', _isPointerPut),
-      'after its pointer was written': ('@policy1', _isCramDelete),
+      'after its @keys document was written': (
+        '@jeremy',
+        _isPointerPut,
+        _asItIs,
+      ),
+      'after its pointer was written': ('@policy1', _isCramDelete, _incomplete),
     };
-    for (final MapEntry(key: point, value: (atSign, cut))
+    for (final MapEntry(key: point, value: (atSign, cut, thrown))
         in interruptions.entries) {
       test(
           'An onboarding interrupted before the CRAM secret is deleted can '
           'be run again with the same secret: $point', () async {
         final rig = PasskeyRig(salt: 40 + point.length);
-        await _interrupted(rig, atSign, cut);
+        await _interrupted(rig, atSign, cut, thrown);
 
         final session = await _onboard(rig, atSign);
         addTearDown(session.stop);
@@ -483,7 +488,7 @@ void main() {
       () async {
     const atSign = '@relay1';
     final rig = PasskeyRig(salt: 51);
-    await _interrupted(rig, atSign, (c) => c.contains('atkeys-lock.'));
+    await _interrupted(rig, atSign, (c) => c.contains('atkeys-lock.'), _asItIs);
     final earlier = _requestedEnrollmentId(rig.tap)!;
     final mark = rig.tap.lines.length;
 
@@ -532,7 +537,7 @@ void main() {
       () async {
     const atSign = '@gateway1';
     final rig = PasskeyRig(salt: 53);
-    await _interrupted(rig, atSign, _isCramDelete);
+    await _interrupted(rig, atSign, _isCramDelete, _incomplete);
     await (await _onboard(rig, atSign)).stop();
 
     rig.port.current = 1;
@@ -548,8 +553,8 @@ void main() {
       'deleted opens its enrollment', () async {
     const atSign = '@gary';
     final rig = PasskeyRig(salt: 54);
-    await _interrupted(
-        rig, atSign, (_) => rig.tap.indexOfSent(_isCramDelete) >= 0);
+    await _interrupted(rig, atSign,
+        (_) => rig.tap.indexOfSent(_isCramDelete) >= 0, _incomplete);
     final onboarded = _requestedEnrollmentId(rig.tap);
 
     final session =
@@ -565,7 +570,7 @@ void main() {
       'secret deletes it', () async {
     const atSign = '@sachin';
     final rig = PasskeyRig(salt: 55);
-    await _interrupted(rig, atSign, _isCramDelete);
+    await _interrupted(rig, atSign, _isCramDelete, _incomplete);
     expect(await _cramLogin(atSign), 'accepted',
         reason: 'the onboarding left the CRAM secret');
     final mark = rig.tap.lines.length;
@@ -589,7 +594,7 @@ void main() {
       () async {
     const atSign = '@device2';
     final rig = PasskeyRig(salt: 56);
-    await _interrupted(rig, atSign, _isCramDelete);
+    await _interrupted(rig, atSign, _isCramDelete, _incomplete);
     expect(await publicLookupReply(atSign, 'publickey'), contains('AT0015'),
         reason: 'the onboarding published no encryption public key');
     expect(await _cramLogin(atSign), 'accepted',
@@ -658,12 +663,20 @@ String _b(String s) => base64Encode(utf8.encode(s));
 Future<PasskeySession> _onboard(PasskeyRig rig, String atSign) =>
     rig.custody().onboard(atSign: atSign, cram: cramKeyMap[atSign]!);
 
+/// What an onboarding cut once its pointer is written throws.
+final _incomplete = isA<PasskeyOnboardingIncompleteException>();
+
+/// What an onboarding cut before its pointer is written throws: the failure
+/// as it is.
+final _asItIs = isNot(isA<PasskeyOnboardingIncompleteException>());
+
 /// Runs an onboarding of [atSign] whose network is cut at the first command
-/// [cut] matches, and then restored.
-Future<void> _interrupted(
-    PasskeyRig rig, String atSign, bool Function(String) cut) async {
+/// [cut] matches, expects it to throw what [thrown] matches, and then
+/// restores the network.
+Future<void> _interrupted(PasskeyRig rig, String atSign,
+    bool Function(String) cut, Matcher thrown) async {
   rig.tap.dropOn = cut;
-  await expectLater(_onboard(rig, atSign), throwsA(anything));
+  await expectLater(_onboard(rig, atSign), throwsA(thrown));
   expect(rig.tap.dropped, isNotEmpty, reason: 'the network was cut');
   print('LIVE cut at: ${rig.tap.dropped.first.split(' ').first}');
   rig.tap.severed = false;
