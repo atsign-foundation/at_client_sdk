@@ -123,7 +123,7 @@ List<int> _aad(String atSign, String typ, Uint8List iv) =>
           when PasskeyRecordType.values.any((t) => t.name == typ) =>
         (typ: typ, iv: _b64(iv), ct: _b64(ct)),
       {'v': final v} when v != _v => throw UnsupportedPasskeyRecordException(
-          'unknown version ${clipForMessage('$v')}'),
+          'unknown version "${clipForMessage('$v', quote: '"')}"'),
       _ => throw UnsupportedPasskeyRecordException(
           'unknown alg/kdf or malformed record'),
     };
@@ -141,6 +141,6 @@ Uint8List _b64(String value) {
     return base64Decode(value);
   } on FormatException {
     throw UnsupportedPasskeyRecordException(
-        'not base64: ${clipForMessage(value)}');
+        'not base64: "${clipForMessage(value, quote: '"')}"');
   }
 }

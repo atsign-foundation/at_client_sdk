@@ -30,7 +30,7 @@ Future<String?> publicLookup(
         .buildCommand());
     if (response == null || !response.startsWith('data:')) {
       throw InvalidResponseException(
-          'unexpected lookup response: ${clipForMessage('$response')}');
+          'unexpected lookup response: "${clipForMessage('$response', quote: '"')}"');
     }
     final text = response.substring('data:'.length).trim();
     return text == 'null' ? null : text;

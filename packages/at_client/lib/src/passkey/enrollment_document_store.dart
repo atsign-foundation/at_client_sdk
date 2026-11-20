@@ -94,7 +94,7 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
     }
     if (response == null || !response.startsWith('data:')) {
       throw InvalidResponseException(
-          'unexpected llookup response: ${clipForMessage('$response')}');
+          'unexpected llookup response: "${clipForMessage('$response', quote: '"')}"');
     }
     final text = response.substring('data:'.length).trim();
     return text == 'null' ? null : text;

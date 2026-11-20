@@ -125,6 +125,17 @@ void main() {
         recordOver(refused).read(), throwsA(isA<UnAuthorizedException>()));
   });
 
+  test('read shows an unexpected response quoted and escaped in its error',
+      () async {
+    final odd = ScriptedAtLookUp((_) async => 'error:AT0011-a\nb"c');
+    await expectLater(
+        recordOver(odd).read(),
+        throwsA(isA<InvalidResponseException>().having(
+            (e) => e.message,
+            'message',
+            r'unexpected llookup response: "error:AT0011-a\u000ab\"c"')));
+  });
+
   test('read throws a typed error on a response without data', () async {
     final odd = ScriptedAtLookUp((_) async => 'error:AT0011-boom');
     await expectLater(

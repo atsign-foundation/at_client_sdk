@@ -81,7 +81,7 @@ class CompletionDueRecord {
     }
     if (response == null || !response.startsWith('data:')) {
       throw InvalidResponseException(
-          'unexpected llookup response: ${clipForMessage('$response')}');
+          'unexpected llookup response: "${clipForMessage('$response', quote: '"')}"');
     }
     return switch (response.substring('data:'.length).trim()) {
       'null' => null,

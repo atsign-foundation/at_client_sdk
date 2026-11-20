@@ -125,6 +125,19 @@ void main() {
           throwsA(isA<InvalidResponseException>()));
     });
 
+    test('an unexpected reply is shown quoted and escaped in the message',
+        () async {
+      final lookUps = RecordingLookUps((_) async => 'error:a\nb"c');
+      await expectLater(
+          publicLookup(
+              lookUps: lookUps.call,
+              rootDomain: AtRootDomain.atsignDomain,
+              atSign: _atSign,
+              key: 'k'),
+          throwsA(isA<InvalidResponseException>().having((e) => e.message,
+              'message', r'unexpected lookup response: "error:a\u000ab\"c"')));
+    });
+
     test('a long unexpected reply is shortened in the message', () async {
       final lookUps = RecordingLookUps((_) async => 'error:${'x' * 1000}');
       await expectLater(

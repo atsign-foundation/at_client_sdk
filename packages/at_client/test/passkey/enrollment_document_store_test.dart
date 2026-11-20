@@ -75,6 +75,17 @@ void main() {
     });
   }
 
+  test('get shows an unexpected response quoted and escaped in its error',
+      () async {
+    final odd = ScriptedAtLookUp((_) async => 'error:AT0011-a\nb"c');
+    await expectLater(
+        storeOver(odd).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>().having(
+            (e) => e.message,
+            'message',
+            r'unexpected llookup response: "error:AT0011-a\u000ab\"c"')));
+  });
+
   test('an unexpected response is not echoed whole into the error', () async {
     final odd = ScriptedAtLookUp((_) async => 'x' * 10000);
     await expectLater(

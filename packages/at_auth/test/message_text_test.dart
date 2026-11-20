@@ -49,12 +49,27 @@ void main() {
 
       await expectLater(
           PasskeyRecordCodec.open(_Sealer(), '@alice', PasskeyRecordType.eid,
-              jsonEncode({'v': 'x\ny\u2028z'})),
+              jsonEncode({'v': 'x\ny\u2028"z'})),
           throwsA(isA<UnsupportedPasskeyRecordException>().having(
               (e) => e.message,
               'message',
-              allOf(contains(r'x\u000ay\u2028z'), isNot(contains('\n')),
-                  isNot(contains('\u2028'))))));
+              allOf(contains(r'unknown version "x\u000ay\u2028\"z"'),
+                  isNot(contains('\n')), isNot(contains('\u2028'))))));
+      await expectLater(
+          PasskeyRecordCodec.open(
+              _Sealer(),
+              '@alice',
+              PasskeyRecordType.eid,
+              jsonEncode({
+                'v': 2,
+                'alg': 'A256GCM',
+                'kdf': 'HKDF-SHA256',
+                'typ': 'eid',
+                'iv': 'x\ny"z',
+                'ct': 'AAAA',
+              })),
+          throwsA(isA<UnsupportedPasskeyRecordException>().having(
+              (e) => e.message, 'message', r'not base64: "x\u000ay\"z"')));
     });
 
     test(
