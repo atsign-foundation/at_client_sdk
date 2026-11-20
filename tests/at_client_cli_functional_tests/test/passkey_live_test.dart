@@ -192,7 +192,10 @@ void main() {
     print('LIVE lock takes refused before the client took it: $refused');
     expect(refused, greaterThan(0), reason: 'the client found it held');
     final tap = rig.tap;
-    final client = tap.lines[_refusedTakeAfter(tap, mark)].connection;
+    final refusedTake = _refusedTakeAfter(tap, mark);
+    expect(refusedTake, greaterThan(-1),
+        reason: 'the client was refused a take of the lock');
+    final client = tap.lines[refusedTake].connection;
     final otherPut = _indexOn(tap, (c) => c != client, _isDocumentPut, mark);
     expect(otherPut, greaterThan(-1),
         reason: "the control: the other writer's put went on a connection of "
