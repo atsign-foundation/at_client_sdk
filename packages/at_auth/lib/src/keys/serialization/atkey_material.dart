@@ -396,7 +396,7 @@ List<CryptographicMaterial> parseAtKeysDocument(
     final seenRoles = <String>{};
     for (final part in materialJson.asMap().entries) {
       final partJson =
-          assurance.expectMap(part.value, '$fieldPrefix.material[${part.key}]');
+          assurance.expectMap(part.value, '$entryPrefix.material[${part.key}]');
       final material = CryptographicMaterial.fromJson(
         partJson,
         keyId: keyId,
