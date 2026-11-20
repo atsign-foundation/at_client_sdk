@@ -137,11 +137,21 @@ class RemoteSecondary implements Secondary {
             ExceptionScenario.remoteVerbExecutionFailed, e.message));
     } on AtLookUpException catch (e) {
       _reportFailure(e);
-      var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
+      final exception = _thrownFor(e);
       throw exception
         ..stack(AtChainedException(_getIntent(builder),
             ExceptionScenario.remoteVerbExecutionFailed, exception.message));
     }
+  }
+
+  /// What [e] is thrown to this secondary's callers as: the
+  /// [UnAuthenticatedException] it wraps, as the authenticator threw it, or
+  /// the exception [e]'s code stands for.
+  AtException _thrownFor(AtLookUpException e) {
+    final cause = e.cause;
+    return cause is UnAuthenticatedException
+        ? cause
+        : AtExceptionUtils.get(e.errorCode, e.errorMessage);
   }
 
   Future<String> executeAndParse(VerbBuilder builder) async {
@@ -179,7 +189,7 @@ class RemoteSecondary implements Secondary {
       rethrow;
     } on AtLookUpException catch (e) {
       _reportFailure(e);
-      var exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
+      final exception = AtExceptionUtils.get(e.errorCode, e.errorMessage);
       throw exception
         ..stack(AtChainedException(Intent.fetchData,
             ExceptionScenario.remoteVerbExecutionFailed, exception.message));
