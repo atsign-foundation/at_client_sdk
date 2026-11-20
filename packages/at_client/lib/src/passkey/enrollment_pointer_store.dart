@@ -23,8 +23,8 @@ abstract class EnrollmentPointerStore implements EnrollmentPointerReader {
 
 final _hex64 = RegExp(r'^[0-9a-f]{64}$');
 
-/// The atProtocol key of an enrollment pointer, without the `public:` scope:
-/// `_<lookupHex>.<ns>@<atsign>` with the atSign canonical.
+/// The Atsign Protocol key of an enrollment pointer, without the `public:`
+/// scope: `_<lookupHex>.<ns>@<atsign>` with the atSign canonical.
 ///
 /// Throws [ArgumentError] when [lookupHex] or [ns] is not 64 lowercase hex
 /// characters.

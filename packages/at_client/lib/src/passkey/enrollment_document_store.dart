@@ -34,7 +34,7 @@ void checkEnrollmentId(String enrollmentId) {
   }
 }
 
-/// The atProtocol key of an enrollment's document,
+/// The Atsign Protocol key of an enrollment's document,
 /// `atkeys.<enrollmentId>.a.__e@<atsign>` with the atSign canonical.
 ///
 /// Throws [ArgumentError] when [enrollmentId] is empty or holds a character

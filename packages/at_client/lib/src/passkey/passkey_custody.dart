@@ -554,15 +554,15 @@ class PasskeyCustody {
   /// [PublicKeyMismatchException], a `PrfUnavailableException` when the
   /// passkey gives no usable PRF output, an [Error] from reading a remembered
   /// id, or what reading the completion-due record, revoking the other
-  /// enrollments or finishing the activation throws; none leaves a session
-  /// open or the device's hints rewritten.
+  /// enrollments or finishing the activation throws; none of these leaves a
+  /// session open or the device's hints rewritten.
   ///
   /// The device's passkey hints are a convenience: a write of them that
   /// fails with an [Exception] is logged as a warning naming [atSign], and
   /// the open returns its session all the same, leaving the next open without
   /// hints to save them. One that fails with an [Error] is thrown, and the
-  /// session is closed; when the two ids go to separate stores, the first may
-  /// already be written.
+  /// session is closed; the ids are then stored or not as the hint store's
+  /// [PasskeyHintStore.putHint] left them, both or neither.
   ///
   /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException`
   /// means the prompt failed, and the user may simply have cancelled it. This
