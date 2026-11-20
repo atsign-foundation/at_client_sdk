@@ -693,6 +693,49 @@ void main() {
     });
   });
 
+  group('A group of tests for UpdateVerbBuilder omitMetadata flag', () {
+    test('omitMetadata is false by default and metadata is emitted', () {
+      var builder = UpdateVerbBuilder()
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice';
+      expect(builder.omitMetadata, false);
+      expect(
+          builder.buildCommand(), 'update:isEncrypted:false:phone@alice v\n');
+    });
+
+    test('omitMetadata=true emits no metadata fragment', () {
+      var builder = UpdateVerbBuilder()
+        ..omitMetadata = true
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice';
+      expect(builder.buildCommand(), 'update:phone@alice v\n');
+    });
+
+    test('omitMetadata=true keeps the public prefix and :nc', () {
+      var builder = UpdateVerbBuilder()
+        ..omitMetadata = true
+        ..noCommit = true
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.metadata.isPublic = true
+        ..atKey.sharedBy = '@alice';
+      expect(builder.buildCommand(), 'update:nc:public:phone@alice v\n');
+    });
+
+    test('omitMetadata does not change the json form', () {
+      var builder = UpdateVerbBuilder()
+        ..omitMetadata = true
+        ..isJson = true
+        ..value = 'v'
+        ..atKey.key = 'phone'
+        ..atKey.sharedBy = '@alice';
+      expect(builder.buildCommand(), startsWith('update:json:'));
+      expect(builder.buildCommand(), contains('isEncrypted'));
+    });
+  });
+
   group('A group of tests for UpdateVerbBuilder noCommit flag', () {
     test('noCommit is false by default and :nc is not emitted', () {
       var builder = UpdateVerbBuilder()
