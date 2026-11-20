@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/auth/client_config.dart'
+    show withClientConfigDefaults;
 import 'package:at_auth/src/auth/program_name.dart';
 import 'package:at_auth/src/auth/program_name_stub.dart' as no_io;
 import 'package:at_commons/at_builders.dart';
@@ -25,6 +27,7 @@ class _Spelt {
   String toString() => text;
 }
 
+/// Catalogue: features/at_client/from_names_program_and_sdk.feature
 void main() {
   const atSign = '@alice🛠';
   final atAuthVersion = pubspecVersion();
@@ -166,6 +169,39 @@ void main() {
               'matches neither separator, and JSON leaves both raw');
       expect(clientConfigFor(appName: 'acme\u2028chat\u2029app')['appName'],
           'acme chat app');
+    });
+  });
+
+  group('withClientConfigDefaults', () {
+    test(
+        'a version the caller gives that is null, empty or only whitespace is '
+        'not sent', () {
+      for (final version in [null, '', '  ', ' \t\u2028']) {
+        expect(withClientConfigDefaults({'version': version, 'clientId': '42'}),
+            allOf(isNot(contains('version')), containsPair('clientId', '42')),
+            reason: 'a blank version is no version: ${jsonEncode(version)}');
+      }
+    });
+
+    test('a version with text in it is kept, cut like the other values', () {
+      expect(withClientConfigDefaults({'version': '1.2'})['version'], '1.2');
+      expect(withClientConfigDefaults({'version': 'v${'9' * 80}'})['version'],
+          'v${'9' * 63}');
+    });
+
+    test(
+        'two keys that differ only by a line or paragraph separator become '
+        'one, and the later one wins', () {
+      final config = withClientConfigDefaults(
+          {'client\u2028id': 'first', 'client id': 'second'});
+
+      expect(config['client id'], 'second');
+      expect(
+          config.keys.where((key) => key.startsWith('client')), hasLength(1));
+      expect(
+          withClientConfigDefaults(
+              {'client id': 'first', 'client\u2029id': 'second'})['client id'],
+          'second');
     });
   });
 
