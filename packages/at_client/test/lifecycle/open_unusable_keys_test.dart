@@ -26,8 +26,8 @@ Matcher holdsNoRunOf(String value, {int window = 16}) => predicate<String>(
 
 /// Matches a refusal to decrypt that does not say the passphrase is wrong or
 /// missing.
-final notAPassphraseRefusal = allOf(isA<AtDecryptionException>(),
-    isNot(isA<AtKeysPassphraseException>()));
+final notAPassphraseRefusal = allOf(
+    isA<AtDecryptionException>(), isNot(isA<AtKeysPassphraseException>()));
 
 /// An atDirectory that records each atSign it is asked for and answers none.
 class _RecordingAtDirectory implements SecondaryAddressFinder {
@@ -451,8 +451,7 @@ void main() {
               File(path).writeAsStringSync(jsonEncode(envelope));
               return cost;
             },
-            reader:
-                FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+            reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
             reason: contains('must carry a positive integer kdfParams.$name'),
             error: notAPassphraseRefusal);
       });
