@@ -127,12 +127,12 @@ void main() {
           '@alice', loopbackPreference(),
           lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookup;
-      try {
-        await remoteSecondary.executeVerb(lookupVerbBuilder);
-      } on AtException catch (e) {
-        expect(e.getTraceMessage(),
-            'Failed to fetchData caused by\nConnection timeout');
-      }
+      await expectLater(
+          remoteSecondary.executeVerb(lookupVerbBuilder),
+          throwsA(isA<AtException>().having(
+              (e) => e.getTraceMessage(),
+              'trace message',
+              'Failed to fetchData caused by\nConnection timeout')));
     });
   });
 
