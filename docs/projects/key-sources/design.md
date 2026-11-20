@@ -433,8 +433,13 @@ Updating the document needs the same atomicity `update` has for a file, and
 devices sharing a synced passkey share one document. at_server trunk has no
 conditional update (nothing like a compare-and-swap in its verb handlers),
 and without one two devices updating at once lose a write; a lost
-signing root or nskey private can't be replaced. A conditional update on the
-atServer is a prerequisite for the server-backed store, not an open question.
+signing root or nskey private can't be replaced. So every write of the
+document holds the enrollment's lock, a server mutex with a short ttl, from
+before it reads the document until it puts. The lock is not a fence: a put
+sent while the lock is held can land after it expires, once another writer has
+taken the lock and put, and then drops that writer's material while both
+writers' read-backs match. The only guard is that a put needs at least half
+the lock's ttl left on its lease.
 
 This fits the WASM plan's key-material gates X-K1 to X-K4 in
 [`../wasm/acceptance.md`](../wasm/acceptance.md#9a1-confidentiality--key-material-new-the-existing-key-gates-measure-only-time),
@@ -467,4 +472,4 @@ atSign-wide encryption keys.
 | Does Chrome support the PRF extension with Google Password Manager passkeys, and give the same output across sessions? | A localhost page in Chrome that creates a passkey with PRF and derives twice              |
 | Does a non-extractable WebCrypto key survive reload, restart and storage pressure in Chrome and Safari?                | The WASM plan's X-K2 to X-K4                                                              |
 | Does a `public:_` record's name reach the owner's other clients through sync, or the commit log?                       | Answered: no. `public:_` gets no commit-log row; `public:__` does, and syncs               |
-| Can the atServer update a record conditionally?                                                                        | Not today; a prerequisite for the server-backed store ([section 8](#8-the-browser))        |
+| Can the atServer update a record conditionally?                                                                        | Not today; the server-backed store holds the enrollment's lock instead, which is not a fence ([section 8](#8-the-browser)) |
