@@ -345,7 +345,10 @@ class PasskeyCustody {
   /// passkey this call registered is reported to the platform as unknown,
   /// without waiting for the platform to take the report; the onboarding is
   /// then run again with the same [cram] and a new passkey while the CRAM
-  /// secret is live. Once the pointer is written, an [Exception] that stops
+  /// secret is live. A put of the pointer that throws may have stored the
+  /// pointer with its reply lost; running the onboarding again still
+  /// recovers, since its completion revokes the enrollment that pointer
+  /// names. Once the pointer is written, an [Exception] that stops
   /// the onboarding is thrown as a [PasskeyOnboardingIncompleteException]
   /// naming [atSign] in canonical form, whose cause is that exception, with
   /// its stack trace, and nothing is reported to the platform: [open] with

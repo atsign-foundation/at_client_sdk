@@ -48,11 +48,14 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 /// as it is, and any passkey it registered is reported to the browser as
 /// unknown. It is run again with the same [cram] while the CRAM secret is
 /// live, which registers a new passkey and revokes every other approved
-/// enrollment of the Atsign, the failed run's included.
+/// enrollment of the Atsign, the failed run's included. A put of the pointer
+/// that throws may have stored the pointer with its reply lost; running the
+/// onboarding again still recovers, since its completion revokes the
+/// enrollment that pointer names.
 ///
-/// One that fails with an exception once it has written the pointer, while
-/// it deletes the CRAM secret, records that, revokes, publishes, deletes the
-/// completion-due record or opens the client, throws a
+/// An onboarding that fails with an exception once it has written the
+/// pointer, while it deletes the CRAM secret, records that, revokes,
+/// publishes, deletes the completion-due record or opens the client, throws a
 /// [PasskeyOnboardingIncompleteException] naming the Atsign, whose cause is
 /// that failure, and reports nothing to the browser. [passkeyLogin] with the
 /// passkey then finishes the onboarding, unless its enrollment has been
