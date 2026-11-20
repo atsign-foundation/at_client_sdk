@@ -10,6 +10,7 @@ export 'src/auth/client_config.dart' show clientConfigFor;
 // CRAM activation as a parameter list: the verb at_client's `activate` builds
 // on, and the shape the request object above is being replaced by.
 export 'src/auth/activation.dart';
+export 'src/auth/complete_activation.dart';
 
 // Contains models related to onboarding and authentication requests and responses.
 export 'src/auth/models/retry_options.dart';

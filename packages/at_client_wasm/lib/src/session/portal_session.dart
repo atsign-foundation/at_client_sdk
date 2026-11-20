@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/memory.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/preference/posture_floor.dart';
+
+import 'session_open.dart' show openOnline;
+import 'session_queue.dart';
 
 /// How a session's connections reach atServers: [lookUps] builds each
 /// connection, [finder] resolves an atSign to its atServer, and [root] is the
@@ -147,20 +149,16 @@ Future<AtClient> portalSession({
   // `buildAtClient` checks for a live client and registers its own across
   // awaits, so two opens running together would both pass the check. It
   // files clients by (atSign, enrollment), so that is what opens queue on.
-  final lock = '$normalized $enrollmentId';
-  final previous = _opening[lock];
-  final done = Completer<void>();
-  _opening[lock] = done;
-  try {
-    if (previous != null) await previous.future;
+  return queuedOpen(openLock(normalized, enrollmentId), () async {
     if (prefs != null) _checkRoot(prefs, transport.root);
-    return await _open(normalized, app, keys, transport, prefs, keysIo);
-  } finally {
-    done.complete();
-    if (identical(_opening[lock], done)) {
-      _opening.remove(lock);
-    }
-  }
+    return openOnline(
+        atSign: normalized,
+        app: app,
+        keys: keysIo ?? SessionKeysIo(normalized, keys),
+        transport: transport,
+        prefs: prefs,
+        logger: 'portalSession');
+  });
 }
 
 /// Throws an [ArgumentError] naming `prefs` when [prefs] names a root other
@@ -176,50 +174,5 @@ void _checkRoot(AtClientPreference prefs, AtRootDomain root) {
         'prefs',
         "names a root other than the transport's "
             '(${root.rootDomain}:${root.rootPort})');
-  }
-}
-
-/// Completed when the newest open running for each (atSign, enrollment) ends,
-/// however it ends; it never completes with an error.
-final _opening = <String, Completer<void>>{};
-
-Future<AtClient> _open(
-  String atSign,
-  String app,
-  AtKeys keys,
-  SessionTransport transport,
-  AtClientPreference? prefs,
-  SessionKeysIo? keysIo,
-) async {
-  final preference = prefs ??
-      (AtClientPreference()
-        ..namespace = app
-        ..rootDomain = transport.root.rootDomain
-        ..rootPort = transport.root.rootPort
-        ..remoteLocalPref = RemoteLocalPref.remoteOnly
-        ..monitorAutoStart = false);
-  final client = await Atsign(atSign).open(
-    keys: keysIo ?? SessionKeysIo(atSign, keys),
-    preference: preference,
-    namespace: app,
-    storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
-    lookUps: transport.lookUps,
-    secondaryAddressFinder: transport.finder,
-  );
-  try {
-    final state = client.connection.current;
-    if (!state.isOnline) {
-      throw PortalSessionOfflineException(atSign, state);
-    }
-    return client;
-  } catch (_) {
-    // The open's own error is the one the caller needs, not a teardown's.
-    try {
-      await client.stop();
-    } catch (e, st) {
-      AtSignLogger('portalSession')
-          .warning('stopping the client of $atSign failed', e, st);
-    }
-    rethrow;
   }
 }

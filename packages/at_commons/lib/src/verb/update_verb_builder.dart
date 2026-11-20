@@ -53,6 +53,12 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
   /// metadata-fragment and the `update:json:...` forms.
   bool noCommit = false;
 
+  /// When true, the metadata-fragment form (not the `update:json:...` form)
+  /// carries no metadata fragment at all, so the command is
+  /// `update:<key> <value>`. Defaults to false, which emits the key's
+  /// metadata (including `:isEncrypted:false`) as before.
+  bool omitMetadata = false;
+
   @override
   String buildCommand() {
     String atKeyName = buildKey();
@@ -68,7 +74,8 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       var command = 'update$noCommitFragment:json:${jsonEncode(json)}\n';
       return command;
     } else {
-      var metadataFragment = atKey.metadata.toAtProtocolFragment();
+      var metadataFragment =
+          omitMetadata ? '' : atKey.metadata.toAtProtocolFragment();
       var command =
           'update$noCommitFragment$metadataFragment:$atKeyName $value\n';
       return command;

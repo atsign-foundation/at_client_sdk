@@ -1,3 +1,9 @@
+## 5.26.0
+
+- feat: `UpdateVerbBuilder.omitMetadata`, an opt-in that leaves the metadata
+  fragment out of the non-JSON `update:` command. Default output is
+  unchanged.
+
 ## 5.25.0
 
 - chore: `VerbSyntax.stream` and `Response.isStream` are deprecated:

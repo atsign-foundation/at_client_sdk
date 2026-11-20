@@ -15,15 +15,17 @@ export 'package:at_client/src/client/data_event.dart';
 export 'package:at_client/src/client/request_options.dart'
     hide useRemoteAtServerIfSet;
 export 'package:at_client/src/client/server_mutex.dart'
-    hide checkedServerMutexTtl;
+    hide checkedServerMutexTtl, takeServerMutex;
 export 'package:at_client/src/storage/at_client_storage.dart';
 export 'package:at_client/src/crypto/crypto.dart';
 export 'package:at_client/src/crypto/crypto_runtime.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_client/src/lifecycle/at_connection.dart';
-export 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+export 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
+    hide activateWithoutClient, scratchKeysIo;
 export 'package:at_client/src/lifecycle/enrollments.dart';
-export 'package:at_client/src/lifecycle/pending_enrollment.dart';
+export 'package:at_client/src/lifecycle/pending_enrollment.dart'
+    hide handshakeKeysIo;
 export 'package:at_client/src/listener/at_sign_change_listener.dart';
 export 'package:at_client/src/listener/switch_at_sign_event.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
