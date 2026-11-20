@@ -4,10 +4,9 @@
   that does not open it, throws `AtKeysPassphraseException`, an
   `AtDecryptionException`; every other refusal of an envelope is still a
   plain `AtDecryptionException` saying what is wrong.
-- fix: `FileAtKeysIo.describeSource` names the keyfile without throwing when
-  its path cannot be resolved, such as the default path on a platform with
-  no home directory, so the read failure is reported as
-  `AtKeysUnusableException`.
+- fix: where there is no home directory, `FileAtKeysIo`'s default keyfile
+  path throws an `AtException` saying so, which activation and open report
+  as unreadable keys (`AtKeysUnusableException`); give it a `filePath`.
 - feat: an atServer's `error:` reply to a `from:`, `pkam:` or `cram:` throws
   `AtAuthErrorReplyException`, an `UnAuthenticatedException` whose
   `errorCode` is the reply's code. `AtAuth.onboard` still reports a failed

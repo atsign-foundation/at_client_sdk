@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/src/keys/io/default_keyfile_path.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart' show AtAuthenticator, AtLookupMuxable;
@@ -221,18 +222,16 @@ void main() {
 
   test('A keyfile path that cannot be resolved is refused before connecting',
       () async {
-    // NOTE: as the default path resolves on a platform with no home
-    // directory.
-    const String? home = null;
-
     await expectLater(
         openUnconnected(
-            FileAtKeysIo(filePath: (a) => '${home!}/${a}_key.atKeys')),
+            FileAtKeysIo(filePath: (a) => defaultAtKeysFilePathUnder(null, a))),
         throwsA(isA<AtKeysUnusableException>()
             .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
             .having((e) => e.source, 'source',
-                'the atKeys file, whose path could not be resolved')
-            .having((e) => e.error, 'error', isA<TypeError>())));
+                'the atKeys file at an unresolved path')
+            .having((e) => e.message, 'message',
+                contains('there is no home directory to find the keyfile in'))
+            .having((e) => e.error, 'error', isA<AtException>())));
     expectNoConnection();
   });
 

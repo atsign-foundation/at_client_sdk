@@ -8,6 +8,7 @@ import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/default_keyfile_path.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_auth/src/keys/io/owner_only_mode_stub.dart'
     if (dart.library.ffi) 'package:at_auth/src/keys/io/owner_only_mode_ffi.dart';
@@ -24,9 +25,12 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   String Function(String)? filePath;
   String? passPhrase;
 
+  /// Keys kept in the keyfile [filePath] names for each atSign, by default
+  /// the one under the home directory; where there is no home directory,
+  /// every read and write of the default throws [AtException] saying so.
   FileAtKeysIo({this.filePath, this.passPhrase}) {
     filePath ??=
-        (atsign) => getDefaultAtKeysFilePath(getHomeDirectory()!, atsign);
+        (atsign) => defaultAtKeysFilePathUnder(getHomeDirectory(), atsign);
   }
 
   @override
@@ -50,16 +54,14 @@ class FileAtKeysIo extends WrittenAtKeysIo {
 
   /// The keyfile's path, or, when [filePath] cannot resolve it, such as the
   /// default path on a platform with no home directory, a description that
-  /// says so. It never throws, so a caller reporting a failed [read] can
-  /// name the source.
+  /// says so.
   @override
   String describeSource(String atsign) {
     try {
       return filePath!(atsign);
     } catch (_) {
-      // NOTE: safe to drop: read() fails on the same path and its error is
-      // the one reported; this only names where the keys were looked for.
-      return 'the atKeys file, whose path could not be resolved';
+      // NOTE: a fallback name only; this must not throw.
+      return 'the atKeys file at an unresolved path';
     }
   }
 

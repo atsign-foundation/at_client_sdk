@@ -9,6 +9,7 @@ import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
+import 'package:at_auth/src/keys/io/default_keyfile_path.dart';
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -295,21 +296,37 @@ void main() {
               holdsNoneOf(text, window: 16))));
       expectNothingSent();
     });
+  });
 
-    test('a keyfile path that cannot be resolved', () async {
-      // NOTE: as the default path resolves on a platform with no home
-      // directory.
-      const String? home = null;
+  test('A keyfile path that cannot be resolved is unreadable keys', () async {
+    await expectLater(
+        activate(
+            FileAtKeysIo(filePath: (a) => defaultAtKeysFilePathUnder(null, a))),
+        throwsA(unreadable(
+            'the atKeys file at an unresolved path',
+            'The keys for $atSign in the atKeys file at an unresolved path '
+                'could not be read: there is no home directory to find the '
+                "keyfile in; give FileAtKeysIo the keyfile's path as filePath.",
+            isA<AtException>())));
+    expectNothingSent();
+  });
 
-      await expectLater(
-          activate(FileAtKeysIo(filePath: (a) => '${home!}/${a}_key.atKeys')),
-          throwsA(unreadable(
-              'the atKeys file, whose path could not be resolved',
-              startsWith('The keys for $atSign in the atKeys file, whose path '
-                  'could not be resolved could not be read: '),
-              isA<TypeError>())));
-      expectNothingSent();
-    });
+  test(
+      'with no home directory, the default keyfile path refuses every read '
+      'and write, saying so', () async {
+    final keys =
+        FileAtKeysIo(filePath: (a) => defaultAtKeysFilePathUnder(null, a));
+    final saysSo = throwsA(isA<AtException>().having(
+        (e) => e.message, 'message', startsWith('there is no home directory')));
+
+    await expectLater(keys.read(atSign), saysSo);
+    await expectLater(keys.checkWritable(atSign), saysSo);
+    await expectLater(keys.write(atSign, AtKeys()), saysSo);
+    await expectLater(keys.flush(atSign.toAtsign(), AtKeys()), saysSo);
+    await expectLater(keys.update(atSign.toAtsign(), (_) => true), saysSo);
+    expect(defaultAtKeysFilePathUnder('/home/alice', atSign),
+        getDefaultAtKeysFilePath('/home/alice', atSign),
+        reason: 'the control: with a home directory, the default path');
   });
 
   group(

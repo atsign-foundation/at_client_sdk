@@ -16,8 +16,9 @@ sealed class AtKeysIo {
   /// Where [atsign]'s keys are kept, in words a message can show: a keyfile's
   /// path, or a name for a store that has none.
   ///
-  /// It names no key material. A name begins "the" or "this", as messages
-  /// put "in" before a name and "at" before a path.
+  /// It never throws, since a caller names the source while reporting another
+  /// failure, and names no key material. A name begins "the" or "this", as
+  /// messages put "in" before a name and "at" before a path.
   String describeSource(String atsign) => 'the keys store';
 }
 

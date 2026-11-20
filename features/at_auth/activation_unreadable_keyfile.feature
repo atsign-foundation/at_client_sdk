@@ -46,4 +46,4 @@ Feature: Activation refuses a keyfile it cannot read or write before it uses the
   Scenario: A keyfile path that cannot be resolved is unreadable keys
     Given a FileAtKeysIo whose path cannot be resolved, as the default path on a platform with no home directory
     When the app activates @alice with its CRAM secret
-    Then it throws AtKeysUnusableException with cause unreadable, saying the path could not be resolved, and sends nothing to the atServer
+    Then it throws AtKeysUnusableException with cause unreadable, saying there is no home directory to find the keyfile in, and sends nothing to the atServer
