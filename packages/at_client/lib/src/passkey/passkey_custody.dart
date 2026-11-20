@@ -77,6 +77,32 @@ class PasskeyLostException extends AtException {
   String toString() => 'PasskeyLostException: $reason for $atSign';
 }
 
+/// Thrown by [PasskeyCustody.onboard] when an [Exception] stops it once the
+/// new enrollment's pointer is written. [PasskeyCustody.open] with the
+/// passkey then finishes the onboarding, unless its enrollment has been
+/// revoked since or [PasskeyCustody.open] refuses another published
+/// encryption public key with [PublicKeyMismatchException]; it opens the
+/// onboarding's enrollment and saves the passkey hints if they are not
+/// saved. Another onboarding with the same CRAM secret while that secret is
+/// still live, or a login that finishes another attempt, revokes that
+/// enrollment, and [PasskeyCustody.open] with this passkey then throws
+/// [PasskeyLostException].
+///
+/// [cause] is that exception, and this one is thrown with its stack trace.
+/// The message names [atSign] and never carries the cause's message.
+class PasskeyOnboardingIncompleteException extends AtException {
+  PasskeyOnboardingIncompleteException(this.atSign, {required this.cause})
+      : super('the onboarding of $atSign did not finish; logging in with its '
+            'passkey finishes it unless its enrollment has been revoked '
+            'since');
+
+  final Atsign atSign;
+  final Exception cause;
+
+  @override
+  String toString() => 'PasskeyOnboardingIncompleteException: $message';
+}
+
 /// Thrown when an authenticated enrollment has no @keys document.
 class MissingAtKeysDocumentException extends AtException {
   MissingAtKeysDocumentException(this.enrollmentId)
@@ -315,22 +341,24 @@ class PasskeyCustody {
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
   /// the same atSign waits for the first.
   ///
-  /// An onboarding that fails before the CRAM secret is deleted is run again
-  /// with the same [cram] and a new passkey. The passkey this call registered
-  /// is reported to the platform as unknown when the failure comes before
-  /// the activation is completed, and the failure is thrown without waiting
-  /// for the platform to take the report; a failure while completing it, or
-  /// after, reports nothing. Once the CRAM secret is deleted the atSign is
-  /// onboarded, and a failure after that leaves [open] to log in: without
-  /// saved hints it completes the activation while the completion is due,
-  /// as [open] says, and it then saves the hints. Nothing is kept on the
-  /// device until the CRAM secret is deleted. The failing stage's error is
-  /// rethrown as it is, so it does not say whether the CRAM secret was
-  /// deleted: a caller retries with [open] first, which finishes the
-  /// onboarding when it succeeds. A [PasskeyLostException] from that [open]
-  /// does not say whether the passkey filed a pointer, since a cancelled
-  /// prompt throws it too, and onboarding again needs the CRAM secret still
-  /// live.
+  /// A failure before the pointer is written is thrown as it is, and the
+  /// passkey this call registered is reported to the platform as unknown,
+  /// without waiting for the platform to take the report; the onboarding is
+  /// then run again with the same [cram] and a new passkey while the CRAM
+  /// secret is live. A put of the pointer that throws may have stored the
+  /// pointer with its reply lost; running the onboarding again still
+  /// recovers, since its completion revokes the enrollment that pointer
+  /// names. Once the pointer is written, an [Exception] that stops
+  /// the onboarding is thrown as a [PasskeyOnboardingIncompleteException]
+  /// naming [atSign] in canonical form, whose cause is that exception, with
+  /// its stack trace, and nothing is reported to the platform: [open] with
+  /// the passkey then finishes the onboarding, as [open] says, unless its
+  /// enrollment has been revoked since or [open] refuses another published
+  /// encryption public key with [PublicKeyMismatchException]; it opens the
+  /// onboarding's enrollment and saves the hints if they are not saved. An
+  /// [Error] is thrown as it is wherever it happens, so it does not say
+  /// whether the pointer was written: a caller tries [open] with the passkey
+  /// first. Nothing is kept on the device until the CRAM secret is deleted.
   ///
   /// When the assertion after registering the new passkey fails or yields no
   /// usable PRF output, the new passkey is reported to the platform as
@@ -363,7 +391,13 @@ class PasskeyCustody {
         unawaited(prf.signalUnknownCredential(passkey.credentialId));
         rethrow;
       }
-      return _complete(canonical, passkey.credentialId, written);
+      try {
+        return await _complete(canonical, passkey.credentialId, written);
+      } on Exception catch (e, stackTrace) {
+        Error.throwWithStackTrace(
+            PasskeyOnboardingIncompleteException(canonical, cause: e),
+            stackTrace);
+      }
     });
   }
 
