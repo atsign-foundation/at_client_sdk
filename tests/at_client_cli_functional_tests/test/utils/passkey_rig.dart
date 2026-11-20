@@ -41,6 +41,14 @@ class WireTap implements AtTransportFactory {
 
   bool Function(String command)? dropOn;
 
+  /// Runs after each line, sent or received, is added to [lines].
+  void Function()? onLine;
+
+  void _add(WireLine line) {
+    lines.add(line);
+    onLine?.call();
+  }
+
   /// Whether the network is cut.
   var severed = false;
 
@@ -112,8 +120,7 @@ class _Tapped implements AtTransport {
     final parts = text.split('\n');
     _partial = parts.removeLast();
     for (final line in parts) {
-      _tap.lines
-          .add((connection: _id, sent: false, text: line, at: DateTime.now()));
+      _tap._add((connection: _id, sent: false, text: line, at: DateTime.now()));
     }
   }
 
@@ -134,8 +141,7 @@ class _Tapped implements AtTransport {
       _inner.destroy();
       throw AtIOException('network cut, as the test arranged');
     }
-    _tap.lines
-        .add((connection: _id, sent: true, text: text, at: DateTime.now()));
+    _tap._add((connection: _id, sent: true, text: text, at: DateTime.now()));
     _inner.add(bytes);
   }
 

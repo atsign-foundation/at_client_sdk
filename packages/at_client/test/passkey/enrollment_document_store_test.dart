@@ -95,11 +95,20 @@ void main() {
   });
 
   test('tryLock leases the lock record it creates, for the ttl', () async {
-    final lease = await storeOver(ScriptedAtLookUp((_) async => 'data:-1'))
-        .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10));
+    // Not the 10s a store uses by default, so a tryLock that ignored its ttl
+    // would be seen.
+    const ttl = Duration(seconds: 3);
+    final lookUp = ScriptedAtLookUp((_) async => 'data:-1');
+    final lease = await storeOver(lookUp).tryLock(_atSign, _eid, ttl: ttl);
     expect('${lease!.key}', 'atkeys-lock.$_eid.a.__e@alice');
+    expect(lookUp.commands.single.command,
+        startsWith('update:nc:ttl:${ttl.inMilliseconds}:'),
+        reason: 'the lock record is created for the ttl asked for');
     expect(lease.isSpent, isFalse);
-    expect(lease.expiresAt.isAfter(DateTime.now()), isTrue);
+    expect(lease.remaining, lessThanOrEqualTo(ttl),
+        reason: 'the lease is no longer than the lock record');
+    expect(lease.remaining, greaterThan(ttl - const Duration(seconds: 1)),
+        reason: 'the lease is as long as the lock record');
   });
 
   test('tryLock is null while the lock record exists', () async {
@@ -110,6 +119,28 @@ void main() {
             .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10)),
         isNull);
   });
+
+  test('tryLock is null when the atServer replies that the lock exists',
+      () async {
+    final held = ScriptedAtLookUp(
+        (_) async => 'error:AT0032-Immutable records may not be updated');
+    expect(
+        await storeOver(held)
+            .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10)),
+        isNull);
+  });
+
+  for (final (name, reply, error) in [
+    ('an error reply', 'error:AT0015-not found', isA<KeyNotFoundException>()),
+    ('an empty reply', '', isA<AtException>()),
+  ]) {
+    test('tryLock grants no lease on $name', () async {
+      await expectLater(
+          storeOver(ScriptedAtLookUp((_) async => reply))
+              .tryLock(_atSign, _eid, ttl: const Duration(seconds: 10)),
+          throwsA(error));
+    });
+  }
 
   test('tryLock propagates other errors', () async {
     final failing = ScriptedAtLookUp(

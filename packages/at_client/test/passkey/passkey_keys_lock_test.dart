@@ -148,11 +148,12 @@ void main() {
 
   AtServerAtKeysIo storeOf(String writer,
           {Duration lockTtl = const Duration(seconds: 1),
-          Duration lockWait = const Duration(seconds: 5)}) =>
+          Duration lockWait = const Duration(seconds: 5),
+          Future<String> Function(Map<String, dynamic> document)? seal}) =>
       AtServerAtKeysIo(
           documents: _Connection(server, writer),
           atSign: _atSign,
-          seal: (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
+          seal: seal ?? (d) => derived.vault.seal(PasskeyRecordType.atkeys, d),
           open: (r) => derived.vault.open(PasskeyRecordType.atkeys, r),
           enrollmentId: _eid,
           apkamKeyPair: pair,
@@ -449,6 +450,35 @@ void main() {
           hasLength(1),
           reason: slot);
     }
+  });
+
+  test(
+      'a lease that runs under half its ttl while the document is sealed is '
+      'not used for a put', () async {
+    final clocks = <_Clock>[];
+    server.leaseOf = (key, ttl) {
+      final clock = _Clock();
+      clocks.add(clock);
+      return ServerMutexLease.timed(key, DateTime.now().add(ttl), clock, ttl);
+    };
+    final io = storeOf('self', seal: (d) {
+      // A slow seal: the first lease runs down while it seals, not before.
+      if (clocks.length == 1) {
+        clocks.single.elapsed = const Duration(milliseconds: 501);
+      }
+      return derived.vault.seal(PasskeyRecordType.atkeys, d);
+    });
+
+    await addSymmetric(io);
+
+    final self = server.of('self');
+    final first = self.indexOf('lock');
+    final second = self.indexOf('lock', first + 1);
+    expect(second, greaterThan(first),
+        reason: 'the margin is measured once the document is sealed');
+    expect(self.sublist(first, second), isNot(contains('put')));
+    expect(self.indexOf('put'), greaterThan(second));
+    expect((await stored()).enrollmentSymmetricKey, isNotNull);
   });
 
   test('a lease with under half its ttl left is not used for a put', () async {
