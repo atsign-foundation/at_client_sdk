@@ -31,6 +31,33 @@ enum _AtDirectory { atServer, noEntry }
 /// neither.
 enum _PublicKey { held, absent, garbled }
 
+/// An atDirectory that answers with [address] after [delay] the first time
+/// it is asked, whatever timeout it is given, and at once after that.
+class _LateAtDirectory implements SecondaryAddressFinder {
+  _LateAtDirectory(this.address, this.delay);
+
+  final SecondaryAddress address;
+  final Duration delay;
+
+  /// How many times it has been asked.
+  int asked = 0;
+
+  final Completer<void> _answered = Completer<void>();
+
+  /// Completes once it has answered the first time.
+  Future<void> get answered => _answered.future;
+
+  @override
+  Future<SecondaryAddress> findSecondary(String atSign,
+      {Duration? timeout}) async {
+    if (asked++ == 0) {
+      await Future<void>.delayed(delay);
+      _answered.complete();
+    }
+    return address;
+  }
+}
+
 /// at_activate, run as a program with a home directory of the test's, and a
 /// program built on CLIBase, report a keys problem once.
 ///
@@ -44,6 +71,7 @@ void main() {
   const footer = 'Need help? support@atsign.com. Never send anyone your '
       '.atKeys file, support included.';
   late Directory certs;
+  late SecurityContext context;
   late String program;
   late SecureServerSocket atDirectory;
   late SecureServerSocket atServer;
@@ -72,7 +100,7 @@ void main() {
     ]);
     expect(made.exitCode, 0,
         reason: 'openssl made no test certificate: ${made.stderr}');
-    final context = SecurityContext()
+    context = SecurityContext()
       ..useCertificateChain('${certs.path}/cert.pem')
       ..usePrivateKey('${certs.path}/key.pem');
 
@@ -500,29 +528,108 @@ void main() {
     });
 
     test(
-        'closes its connection to an atServer that does not answer within '
-        '5 seconds', () async {
-      // NOTE: accepts TCP and never answers the TLS handshake.
-      final stalled = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(stalled.close);
-      final accepted = Completer<Socket>();
-      stalled.listen(accepted.complete, onError: (_) {});
-      atServerPort = stalled.port;
+        'stops its connection to an atServer that completes TLS and never '
+        'answers', () async {
+      final silent = await SecureServerSocket.bind(
+          InternetAddress.loopbackIPv4, 0, context);
+      addTearDown(silent.close);
+      final accepted = <SecureSocket>[];
+      addTearDown(() {
+        for (final socket in accepted) {
+          socket.destroy();
+        }
+      });
+      final commands = <String>[];
+      final hungUp = Completer<void>();
+      silent.listen((socket) {
+        accepted.add(socket);
+        utf8.decoder.bind(socket).transform(const LineSplitter()).listen(
+            commands.add,
+            onError: (_) {},
+            onDone: () => hungUp.isCompleted ? null : hungUp.complete());
+      }, onError: (_) {});
+      atServerPort = silent.port;
 
       expect(await absentKeysHint(atSign, atDirectoryRoot()),
           eitherKeysHint(atSign));
 
-      final socket = await accepted.future
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        fail('the control: the lookup did not reach the stalled atServer');
-      });
-      addTearDown(socket.destroy);
-      await socket.drain<void>().timeout(const Duration(seconds: 5),
-          onTimeout: () {
+      expect(commands, ['lookup:publickey$atSign'],
+          reason: 'the control: the lookup asked the atServer');
+      await hungUp.future.timeout(const Duration(seconds: 3), onTimeout: () {
         fail('the lookup left its connection open after the 5 seconds');
       });
     }, timeout: const Timeout(Duration(minutes: 1)));
+
+    test(
+        'closes its connection to an atDirectory that does not answer within '
+        '5 seconds', () async {
+      final before = silentSockets.length;
+
+      expect(
+          await absentKeysHint(atSign, '127.0.0.1:${silentAtDirectory.port}'),
+          eitherKeysHint(atSign));
+
+      expect(silentSockets, hasLength(before + 1),
+          reason: 'the control: the lookup reached the silent atDirectory');
+      await silentSockets.last.drain<void>().timeout(const Duration(seconds: 3),
+          onTimeout: () {
+        fail('the lookup left its atDirectory connection open after the 5 '
+            'seconds');
+      });
+    }, timeout: const Timeout(Duration(minutes: 1)));
+
+    test('opens no connection when the atDirectory answers after the 5 seconds',
+        () async {
+      final atServerSide =
+          await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(atServerSide.close);
+      final accepted = <Socket>[];
+      atServerSide.listen(accepted.add, onError: (_) {});
+      addTearDown(() {
+        for (final socket in accepted) {
+          socket.destroy();
+        }
+      });
+      final slow = _LateAtDirectory(
+          SecondaryAddress('127.0.0.1', atServerSide.port),
+          const Duration(seconds: 6));
+
+      expect(await absentKeysHint(atSign, atDirectoryRoot(), atDirectory: slow),
+          eitherKeysHint(atSign));
+      await slow.answered.timeout(const Duration(seconds: 5), onTimeout: () {
+        fail('the control: the atDirectory did not answer');
+      });
+      // NOTE: long enough for any connection the late answer sets off.
+      await Future<void>.delayed(const Duration(seconds: 2));
+
+      expect(accepted, isEmpty,
+          reason: 'no connection is opened once the 5 seconds are spent');
+      expect(slow.asked, 1, reason: 'the lookup asked the atDirectory no more');
+    }, timeout: const Timeout(Duration(minutes: 1)));
   });
+
+  test('The absent keys\' lookup with an atServer that does not answer',
+      () async {
+    // NOTE: accepts TCP and never answers the TLS handshake.
+    final stalled = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(stalled.close);
+    final accepted = Completer<Socket>();
+    stalled.listen(accepted.complete, onError: (_) {});
+    atServerPort = stalled.port;
+
+    expect(await absentKeysHint(atSign, atDirectoryRoot()),
+        eitherKeysHint(atSign));
+
+    final socket = await accepted.future.timeout(const Duration(seconds: 5),
+        onTimeout: () {
+      fail('the control: the lookup did not reach the stalled atServer');
+    });
+    addTearDown(socket.destroy);
+    await socket.drain<void>().timeout(const Duration(seconds: 5),
+        onTimeout: () {
+      fail('the lookup left its connection open after the 5 seconds');
+    });
+  }, timeout: const Timeout(Duration(minutes: 1)));
 
   test('A program built on CLIBase says the same', () async {
     final dir = Directory.systemTemp.createTempSync('keys_problems_cli_base_');

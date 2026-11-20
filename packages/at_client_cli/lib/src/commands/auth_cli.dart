@@ -617,42 +617,33 @@ const Duration _absentKeysHintBudget = Duration(seconds: 5);
 /// The next step for [atSign], whose keys are not on this machine, from
 /// whether the atServer the atDirectory at [rootServer] names for it holds
 /// its public key, looked up as [status] looks it up, within
-/// [_absentKeysHintBudget]. When the budget is spent, the lookup's
-/// connection is closed and no new one is started, so none outlives it.
+/// [_absentKeysHintBudget]. When the budget is spent, the lookup is stopped:
+/// its connection is closed, and it opens no other.
+///
+/// [atDirectory] stands in for the atDirectory at [rootServer].
 @visibleForTesting
-Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
+Future<List<String>> absentKeysHint(String atSign, String rootServer,
+    {SecondaryAddressFinder? atDirectory}) async {
   final AtRootDomain rootDomain;
   try {
     rootDomain = AtRootDomain.parse(rootServer);
   } catch (_) {
     return eitherKeysHint(atSign);
   }
-  AtLookUp? connection;
-  var budgetSpent = false;
-  final found = await _lookUpPublicKey(
-      atSign,
+  final finder = atDirectory ??
       CacheableSecondaryAddressFinder(
-          rootDomain.rootDomain, rootDomain.rootPort),
-      (atDirectory) {
-        if (budgetSpent) {
-          throw TimeoutException(
-              'the hint lookup for $atSign is past its budget',
-              _absentKeysHintBudget);
-        }
-        return connection = secureSocketLookUps()(
-          atSign: atSign,
-          rootDomain: rootDomain,
-          authenticator: null,
-          secondaryAddressFinder: atDirectory,
-        );
-      },
-      atDirectoryTimeout: _absentKeysHintBudget).timeout(_absentKeysHintBudget,
-      onTimeout: () {
-    budgetSpent = true;
-    // NOTE: closing ends the lookup still in flight, and any socket it is
-    // still opening; Future.timeout alone would leave both running.
-    unawaited(connection?.close().catchError((Object e) {
-      logger.finer('closing the hint lookup for $atSign failed: $e');
+          rootDomain.rootDomain, rootDomain.rootPort);
+  final lookUp = secureSocketLookUps()(
+    atSign: atSign,
+    rootDomain: rootDomain,
+    authenticator: null,
+    secondaryAddressFinder: finder,
+  );
+  final found = await _lookUpPublicKey(atSign, finder, (_) => lookUp,
+          atDirectoryTimeout: _absentKeysHintBudget)
+      .timeout(_absentKeysHintBudget, onTimeout: () {
+    unawaited(lookUp.stop().catchError((Object e) {
+      logger.finer('stopping the hint lookup for $atSign failed: $e');
     }));
     return (
       outcome: _PublicKey.atDirectoryUnreachable,
