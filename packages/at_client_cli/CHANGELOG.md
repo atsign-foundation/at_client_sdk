@@ -11,6 +11,9 @@
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - chore: requires at_client 4.1.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
+- fix: `at_activate status` asks the atDirectory once, prints no posture
+  notice, and says a refused atServer connection is unreachable rather than
+  an unexpected failure (it still returns 2).
 - fix: a `CLIBase` program whose atServer answers its PKAM with a server
   error, such as AT0011, or with no challenge to sign, retries as it does
   for an atServer not reached, and ends with
