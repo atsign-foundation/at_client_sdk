@@ -32,13 +32,6 @@ class _Persistence implements StoragePersistence {
 /// Every symbol `package:at_client/passkey.dart` exports, each used through
 /// that library alone, so a symbol dropped from it fails to compile here.
 void main() {
-  group('functions', () {
-    test('enrollmentDocumentKey names the document of an enrollment', () {
-      expect(enrollmentDocumentKey('eid1', 'alice'), 'atkeys.eid1.a.__e@alice');
-      expect(() => enrollmentDocumentKey('', '@alice'), throwsArgumentError);
-    });
-  });
-
   group('typedefs', () {
     test('ApkamKeyPair is the record the activator is handed', () async {
       const pair = (publicKey: 'cHVi', privateKey: 'cHJpdg==');

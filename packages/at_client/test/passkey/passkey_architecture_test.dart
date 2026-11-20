@@ -194,9 +194,10 @@ void main() {
     });
 
     test(
-        'the passkey library does not export the pointer key, the public '
-        'lookup or the passkey atSign check', () {
+        'the passkey library does not export the document or pointer key, the '
+        'public lookup or the passkey atSign check', () {
       for (final name in [
+        'enrollmentDocumentKey',
         'enrollmentPointerKey',
         'publicLookup',
         'public_lookup.dart',
