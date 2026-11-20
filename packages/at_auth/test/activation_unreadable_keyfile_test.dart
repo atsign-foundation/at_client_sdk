@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:at_auth/at_auth.dart';
@@ -327,6 +328,48 @@ void main() {
     expect(defaultAtKeysFilePathUnder('/home/alice', atSign),
         getDefaultAtKeysFilePath('/home/alice', atSign),
         reason: 'the control: with a home directory, the default path');
+  });
+
+  group('Given a process with no home directory', () {
+    /// What the support program prints after reading keys for [atSign]
+    /// through a `FileAtKeysIo` built with no file path, run with neither
+    /// HOME nor USERPROFILE set, or with the platform's one set to [home].
+    Future<String> readThroughTheDefaultPath({String? home}) async {
+      final environment = Map.of(Platform.environment)
+        ..remove('HOME')
+        ..remove('USERPROFILE');
+      if (home != null) {
+        environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'] = home;
+      }
+      final packageConfig = await Isolate.packageConfig;
+      final result = await Process.run(
+          Platform.resolvedExecutable,
+          [
+            if (packageConfig != null)
+              '--packages=${packageConfig.toFilePath()}',
+            File('test/support/read_keyfile_with_default_path.dart')
+                .absolute
+                .path,
+            atSign,
+          ],
+          environment: environment,
+          includeParentEnvironment: false);
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      return result.stdout as String;
+    }
+
+    test(
+        'when a FileAtKeysIo built with no file path reads keys, then it '
+        'refuses, saying there is no home directory', () async {
+      expect(
+          await readThroughTheDefaultPath(),
+          contains('AtException: there is no home directory to find the '
+              "keyfile in; give FileAtKeysIo the keyfile's path as filePath"));
+      expect(await readThroughTheDefaultPath(home: dir.path),
+          allOf(contains(dir.path), isNot(contains('no home directory'))),
+          reason: 'the control: with a home directory, the read looks under '
+              'it');
+    });
   });
 
   group(
