@@ -77,8 +77,8 @@ void main() {
         open(
             atSign,
             answering(() async =>
-                throw UnAuthenticatedException('Failed connecting to $atSign. '
-                    'error:AT0027:Apkam Access Revoked'))),
+                throw AtAuthErrorReplyException('Failed connecting to $atSign. '
+                    'error:AT0027:Apkam Access Revoked', errorCode: 'AT0027'))),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.atSign, 'atSign', atSign)
             .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)
@@ -113,8 +113,8 @@ void main() {
         open(
             atSign,
             answering(() async =>
-                throw UnAuthenticatedException('Failed connecting to $atSign. '
-                    'error:AT0027:Apkam Access Revoked'))),
+                throw AtAuthErrorReplyException('Failed connecting to $atSign. '
+                    'error:AT0027:Apkam Access Revoked', errorCode: 'AT0027'))),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)));
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
@@ -129,8 +129,8 @@ void main() {
         open(
             atSign,
             answering(() async =>
-                throw UnAuthenticatedException('Failed connecting to $atSign. '
-                    'error:AT0026:enrollment_id: e-1 is pending'))),
+                throw AtAuthErrorReplyException('Failed connecting to $atSign. '
+                    'error:AT0026:enrollment_id: e-1 is pending', errorCode: 'AT0026'))),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause',
                 AtConnectionCause.enrollmentNotApproved)
@@ -300,8 +300,9 @@ void main() {
       ]) {
         await submitRequest();
         final server = approvingAtServer(
-            decide: (_) async => throw UnAuthenticatedException(
-                'Failed connecting to $atSign. error:$code:$reason'),
+            decide: (_) async => throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:$code:$reason',
+                errorCode: code),
             wrapped: wrapped);
 
         await expectLater(openOver(server.lookUp, []),

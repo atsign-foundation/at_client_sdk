@@ -123,6 +123,27 @@ void main() {
   });
 
   test(
+      'a program running at_activate under its own name with no version is '
+      'sent as unknown', () async {
+    const newborn = '@newborn';
+    final activation = _activationServer();
+
+    await activate(
+        newborn,
+        await settingsFrom(newborn, 'my_tool',
+            cramSecret: 'the-one-time-secret'),
+        atLookUp: activation);
+
+    final onboarding = await _configsInstalledOn(activation, newborn);
+    expect(onboarding.length, greaterThanOrEqualTo(2),
+        reason: 'the control: the CRAM login, then the PKAM one');
+    for (final config in onboarding) {
+      expect(config['appName'], 'my_tool');
+      expect(config['appVersion'], 'unknown');
+    }
+  });
+
+  test(
       'Given an atSign at_register has registered, when onboardRegistered '
       'activates it, then it runs onboard with the atSign and CRAM secret, '
       'as at_register', () async {
