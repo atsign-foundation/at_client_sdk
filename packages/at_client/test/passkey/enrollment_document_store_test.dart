@@ -83,6 +83,18 @@ void main() {
             .having((e) => e.message.length, 'message length', lessThan(220))));
   });
 
+  test('a reply without a data prefix is not quoted, as it may be the document',
+      () async {
+    const sealed = '{"v":2,"iv":"SEALEDIVTEXT","ct":"SEALEDCTTEXT"}';
+    final odd = ScriptedAtLookUp((_) async => sealed);
+    await expectLater(
+        storeOver(odd).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>()
+            .having((e) => e.message, 'message',
+                contains('${sealed.length} characters'))
+            .having((e) => e.message, 'message', isNot(contains('SEALED')))));
+  });
+
   test('put sends update on the authenticated remote', () async {
     await store.put(_atSign, _eid, _document);
     expect(remoteLookUp.commands.single,

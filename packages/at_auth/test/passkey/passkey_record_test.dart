@@ -184,6 +184,19 @@ void main() {
               (e) => e.message.length, 'message length', lessThan(220))));
     });
 
+    for (final field in ['iv', 'ct']) {
+      test('a non-base64 $field is named, its text not quoted', () {
+        final text = '${'A' * 40}!${'B' * 40}';
+        expect(
+            PasskeyRecordCodec.open(aliceSealer, '@alice',
+                PasskeyRecordType.atkeys, withField(record, field, text)),
+            throwsA(isA<UnsupportedPasskeyRecordException>()
+                .having((e) => e.message, 'message', contains(field))
+                .having((e) => e.message, 'message', isNot(contains('AAAA')))
+                .having((e) => e.message, 'message', isNot(contains('BBBB')))));
+      });
+    }
+
     for (final MapEntry(key: name, value: mutate) in cases.entries) {
       test(name, () {
         expect(

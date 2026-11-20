@@ -9,7 +9,8 @@
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
 - fix: `PasskeyVault` holds its Atsign in canonical form, so a record sealed for `@Alice` opens for `@alice`.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
-- fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening.
+- fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening. It also wraps the text in double quotes and escapes quotes, backslashes and control and format characters, so a value read from the wire cannot add a line or look like the SDK's own text in a message.
+- fix: a passkey record whose `iv` or `ct` is not base64 is refused with a message that names the field and no longer quotes its value.
 - feat: `UnknownCredentialSignal` is a capability interface in `package:at_auth/passkey.dart` for a `PasskeyPort` that can tell the platform a passkey no longer belongs to an account. `PasskeyPrf.signalUnknownCredential` calls it when the port implements it, does nothing otherwise, and ignores a failing signal.
 - feat: `package:at_auth/passkey.dart` is a new library for passkey-held keys.
   It runs the passkey PRF ceremonies (register, then unlock) and keeps a

@@ -131,6 +131,19 @@ void main() {
         recordOver(odd).read(), throwsA(isA<InvalidResponseException>()));
   });
 
+  test('a reply with line breaks and format characters is quoted, escaped',
+      () async {
+    final rlo = String.fromCharCode(0x202e);
+    final odd =
+        ScriptedAtLookUp((_) async => 'error:x\r\n[INFO] login ok ${rlo}ab');
+    await expectLater(
+        recordOver(odd).read(),
+        throwsA(isA<InvalidResponseException>().having(
+            (e) => e.message,
+            'message',
+            endsWith(r'"error:x\u000d\u000a[INFO] login ok \u' '202eab"'))));
+  });
+
   test('clear sends delete on the authenticated remote', () async {
     await record.clear();
     expect(
