@@ -25,9 +25,10 @@ import 'package:test/test.dart';
 class FakeMuxable extends Fake implements AtLookupMuxable {
   // Recreated on demand, exactly as AtLookupImpl does: stopNotifications()
   // nulls AND closes the controllers, so the next read of `notifications`,
-  // `notificationConnectionUp` or `notificationRefusals` builds a fresh one. A fake that reused a single
-  // controller could not reproduce a stop-then-start race at all - the
-  // subscriptions would keep working and the bug would be invisible.
+  // `notificationConnectionUp` or `notificationRefusals` builds a fresh one. A
+  // fake that reused a single controller could not reproduce a stop-then-start
+  // race at all - the subscriptions would keep working and the bug would be
+  // invisible.
   /// Counted so a test can prove the back-pressure seam is actually reached,
   /// rather than inferring it from handling order.
   int pauses = 0;
@@ -129,6 +130,9 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   /// The atServer sends one.
   void deliver(String notification) => _notifications.add(notification);
+
+  /// The notification stream carries [error] as an error event.
+  void fail(Object error) => _notifications.addError(error);
 
   /// The atServer refuses a reconnect, reported as the real muxable does.
   void refuse(UnAuthenticatedException refusal) => _refusals.add(refusal);
@@ -739,6 +743,40 @@ void main() {
       expect(received, hasLength(2),
           reason: 'one bad notification must not deafen the client to every '
               'notification after it');
+    });
+
+    test(
+        'an error on the stream is logged at warning, and the next '
+        'notification still reaches handleNotification', () async {
+      final delivered = Completer<String>();
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) async => delivered.complete(n),
+        getLastNotificationTime: () async => null,
+      );
+      final warnings = <String>[];
+      final records = monitor.logger.logger.onRecord
+          .where((r) => r.level.name == 'WARNING')
+          .listen((r) => warnings.add(r.message));
+      addTearDown(records.cancel);
+      monitor.logger.level = 'warning';
+      final up = monitor.currentStateStream
+          .firstWhere((s) => s == NotificationListenerState.listening);
+      monitor.start();
+      await up.timeout(const Duration(seconds: 5));
+      expect(warnings, isEmpty);
+
+      muxable.fail(StateError('the transport failed'));
+      muxable.deliver('A');
+
+      expect(await delivered.future.timeout(const Duration(seconds: 5)), 'A',
+          reason: 'an error event does not end the subscription');
+      expect(warnings,
+          ['Error on the notification stream: Bad state: the transport failed'],
+          reason: 'an error event is logged at warning, as at_client 4.0.0 '
+              'logs it');
     });
   });
 
