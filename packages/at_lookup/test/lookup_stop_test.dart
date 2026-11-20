@@ -204,7 +204,14 @@ void main() {
       await expectLater(atLookup.notifications, emitsDone,
           reason: 'a stream read after stop() can never produce anything');
       await expectLater(atLookup.notificationConnectionUp, emitsDone);
-      await expectLater(atLookup.notificationRefusals, emitsDone);
+      expect(
+          await atLookup.notificationRefusals.toList().timeout(
+              const Duration(seconds: 5),
+              onTimeout: () =>
+                  fail('notificationRefusals read after stop() never ends')),
+          isEmpty,
+          reason: 'a refusals stream read after stop() can never produce '
+              'anything');
     });
   });
 
