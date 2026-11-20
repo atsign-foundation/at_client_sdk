@@ -135,7 +135,9 @@ class AtKeysPassphraseEnvelopeCodec {
   ///
   /// Throws [AtKeysPassphraseException] when [passPhrase] is missing or does
   /// not open the envelope, and a plain [AtDecryptionException] saying what
-  /// is wrong for any other envelope it cannot open.
+  /// is wrong for any other envelope it cannot open. Content corrupted in
+  /// transit or at rest, opened with the right passphrase, throws
+  /// [AtKeysPassphraseException] too, since the cipher is unauthenticated.
   Future<Map<String, dynamic>> decode(
     Map<String, dynamic> json, {
     String? passPhrase,

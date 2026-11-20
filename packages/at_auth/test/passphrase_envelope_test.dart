@@ -84,6 +84,61 @@ void main() {
     });
   });
 
+  group('a refusal for anything but the passphrase is not a passphrase refusal',
+      () {
+    const codec = AtKeysPassphraseEnvelopeCodec();
+    final notThePassphrase = throwsA(allOf(
+        isA<AtDecryptionException>(), isNot(isA<AtKeysPassphraseException>())));
+
+    /// A version 1 envelope under 'right', changed by [change].
+    Future<Map<String, dynamic>> envelopeWith(
+        void Function(Map<String, dynamic> envelope) change) async {
+      final envelope = jsonDecode(await codec.encode('{"keys":[]}', 'right'))
+          as Map<String, dynamic>;
+      change(envelope);
+      return envelope;
+    }
+
+    final cases = <String, void Function(Map<String, dynamic>)>{
+      'an empty iv': (e) => e['iv'] = '',
+      'an iv that is not base64': (e) => e['iv'] = '!not base64!',
+      'no content': (e) => e.remove('content'),
+      'content that is not base64': (e) => e['content'] = '!not base64!',
+      'a hashingAlgoType this build has no code for': (e) =>
+          e['hashingAlgoType'] = 'sha3',
+      'no salt': (e) => e.remove('salt'),
+      'a salt that is not base64': (e) => e['salt'] = '!not base64!',
+      'no kdfParams': (e) => e.remove('kdfParams'),
+      'a kdfParams cost below one': (e) =>
+          (e['kdfParams'] as Map)['memory'] = 0,
+      'a kdfParams memory below eight times its parallelism': (e) =>
+          (e['kdfParams'] as Map)
+            ..['memory'] = 8
+            ..['parallelism'] = 2,
+      'a key derivation this device cannot run': (e) =>
+          (e['kdfParams'] as Map)['memory'] = 4000000000000,
+    };
+    for (final MapEntry(key: name, value: change) in cases.entries) {
+      test(name, () async {
+        final envelope = await envelopeWith(change);
+        await expectLater(
+            codec.decode(envelope, passPhrase: 'right'), notThePassphrase);
+      });
+    }
+
+    test(
+        'a payload the right passphrase decrypts to something that is not a '
+        'JSON object is a passphrase refusal', () async {
+      for (final payload in ['42', 'not JSON']) {
+        final envelope = jsonDecode(await codec.encode(payload, 'right'))
+            as Map<String, dynamic>;
+        await expectLater(codec.decode(envelope, passPhrase: 'right'),
+            throwsA(isA<AtKeysPassphraseException>()),
+            reason: 'decrypted to $payload');
+      }
+    });
+  });
+
   group('version 1 salting', () {
     const codec = AtKeysPassphraseEnvelopeCodec();
     const doc = '{"aesPkamPublicKey":"abc","x":1}';
