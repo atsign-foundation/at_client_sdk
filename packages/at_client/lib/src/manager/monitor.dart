@@ -276,8 +276,7 @@ class Monitor {
       _armSilenceTimer();
       logger.info('monitor started');
     } catch (e) {
-      if (_targetState != NotificationListenerState.listening ||
-          stops != _stops) {
+      if (stops != _stops) {
         logger.info('stop() arrived while starting, which ended the start');
         return;
       }
