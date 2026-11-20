@@ -51,8 +51,13 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   Future<int?> Function()? heldWatermarkSource;
 
   /// Set to make [startNotifications] fail, as an unreachable or rejecting
-  /// atServer does.
+  /// atServer does. Read as each start begins, so clearing it does not
+  /// rescue a start already held at [failGate].
   Object? startError;
+
+  /// Completed by the first [startNotifications], so a test can wait for an
+  /// attempt to be in flight.
+  final Completer<void> startBegan = Completer<void>();
 
   /// Awaited between the start and the watermark read, where the real
   /// muxable authenticates, so a test can land a stop() in that window.
@@ -85,9 +90,11 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     bool selfNotificationsEnabled = true,
   }) async {
     startCalls++;
-    if (startError != null) {
+    if (!startBegan.isCompleted) startBegan.complete();
+    final error = startError;
+    if (error != null) {
       if (failGate != null) await failGate;
-      throw startError!;
+      throw error;
     }
     started = true;
     if (startGate != null) await startGate;
@@ -395,6 +402,31 @@ void main() {
             reason: 'the caller stopped listening before the start failed, so '
                 'the attempt ends as a stop does, with nothing reported');
         expect(delays, isEmpty, reason: 'and nothing is retried');
+      });
+
+      test(
+          'a refused start that fails after stop() then start() is not '
+          'reported or retried', () async {
+        final failing = Completer<void>();
+        muxable
+          ..startError = revoked()
+          ..failGate = failing.future;
+        monitor.start();
+        await muxable.startBegan.future;
+        monitor.stop();
+        monitor.start();
+        muxable.startError = null;
+        final restarted = reaches(NotificationListenerState.listening);
+        failing.complete();
+        await restarted;
+
+        expect(connection.refusals, isEmpty,
+            reason: 'the stop ended the failing attempt, so its refusal is '
+                'not reported over the restart');
+        expect(delays, isEmpty,
+            reason: 'and it arms no retry that the restart never cancels');
+        expect(muxable.startCalls, 2,
+            reason: 'the failed attempt and the restart, nothing more');
       });
     });
   });

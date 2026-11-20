@@ -119,6 +119,10 @@ class Monitor {
   Timer? _startRetry;
   int _startRetryIx = 0;
 
+  /// Bumped by every [stop], so a start can tell a stop that landed while it
+  /// was in flight even when a [start] has since put `targetState` back.
+  int _stops = 0;
+
   /// The same backoff at_lookup uses for a lost connection, so a failed first
   /// connect and a dropped one recover on one schedule rather than two.
   ///
@@ -246,6 +250,7 @@ class Monitor {
       }
     }
 
+    final stops = _stops;
     try {
       await lookUp.startNotifications(
           getLastNotificationTime: currentWatermark);
@@ -263,7 +268,8 @@ class Monitor {
       _armSilenceTimer();
       logger.info('monitor started');
     } catch (e) {
-      if (_targetState != NotificationListenerState.listening) {
+      if (_targetState != NotificationListenerState.listening ||
+          stops != _stops) {
         logger.info('stop() arrived while starting, which ended the start');
         return;
       }
@@ -414,6 +420,7 @@ class Monitor {
   void stop() {
     logger.info('stop() called. Setting targetState to notConnected');
     _targetState = NotificationListenerState.notConnected;
+    _stops++;
     _startRetry?.cancel();
     _startRetry = null;
     _startRetryIx = 0;
