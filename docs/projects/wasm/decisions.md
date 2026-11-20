@@ -1105,11 +1105,11 @@ A key store hands its lifetime to the client by implementing `ClosableAtKeysIo` 
 
 **Hardening (2026-11-18).** Behaviour only: a sealed record opens only for the atSign and record type it was sealed for (both are bound into its authentication data); an opened @keys document is refused when its flat APKAM public key is not the passkey-derived one, as well as when its encryption public key is not the published one; discarding a pending onboarding also clears the atSign's remembered passkey and enrollment hints; and the passkey entry points (onboard, open, discard) accept only an atSign with one leading `@` and no other, and refuse a bare or doubled one as invalid.
 
-### D-31 — A key store may read a sealed @keys document through an injected document store (2026-11-16)
+### D-31 — A key store may keep a sealed @keys document on the atServer through an injected document store (2026-11-16)
 
-**Proposed.** Not yet ruled; gkc to rule. Would amend invariant A8; until it is accepted, `AtServerAtKeysIo` sits outside A8.
+**Accepted.** Accepted by: gkc, 2026-11-20 ('Accept all nine (Recommended)'), with invariant A8 amended to match. Its row is in [`docs/architecture/decisions.md`](../../architecture/decisions.md).
 
-A key store may read a sealed @keys document through a document store the session injects, as `AtServerAtKeysIo` does. It still never connects: a key store that opens or holds its own connection, or that fetches plaintext keys, remains outside A8.
+A key store may keep its keys on the atServer as a sealed @keys document, reaching it only through a document store the session injects, as `AtServerAtKeysIo` does: it takes the enrollment's lock, reads, writes and reads back the sealed document there, and seals and opens it through functions it is given. It still never connects: a key store that opens or holds its own connection, or that sends or receives keys unsealed, remains outside A8.
 
 ### D-32 — IndexedDB also holds one pending record per atSign until onboarding finishes (2026-11-17)
 
