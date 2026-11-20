@@ -57,14 +57,32 @@ void main() {
   });
 
   test(
-      'exports the session the passkey entry points return and the lock '
-      'refusal they throw', () {
+      'exports the session the passkey entry points return and the '
+      'exceptions they throw', () {
     final barrel = File('lib/at_client_web_web.dart').readAsStringSync();
+    final shown = RegExp(
+            r"^export 'package:at_client/passkey\.dart'\s+show([^;]*);",
+            multiLine: true)
+        .firstMatch(barrel)![1]!
+        .split(',')
+        .map((name) => name.trim())
+        .toSet();
+    expect(
+        shown,
+        containsAll([
+          'AtServerAtKeysLockedException',
+          'MissingAtKeysDocumentException',
+          'PasskeyLostException',
+          'PasskeyOnboardingIncompleteException',
+          'PasskeySession',
+          'PkamRefusedException',
+          'PublicKeyMismatchException',
+        ]));
     expect(
         barrel,
         matches(RegExp(
-            r"^export 'package:at_client/passkey\.dart'\s+show[^;]*"
-            r'\bAtServerAtKeysLockedException\b[^;]*\bPasskeySession\b',
+            r"^export 'package:at_auth/passkey\.dart'\s+show[^;]*"
+            r'\bPrfUnavailableException\b',
             multiLine: true)));
   });
 
@@ -74,24 +92,23 @@ void main() {
     }
   });
 
+  test('re-exports the core API and in-memory storage completely', () {
+    final barrel = File('lib/at_client_web_web.dart').readAsStringSync();
+    for (final library in ['at_client.dart', 'memory.dart']) {
+      expect(barrel, contains("export 'package:at_client/$library';\n"),
+          reason: 'package:at_client/$library is re-exported with no show '
+              'or hide');
+    }
+  });
+
   test(
-      'exports nothing the core libraries already export beyond the types '
-      'the passkey entry points name', () {
+      'no exported file but the barrel re-exports a core library, and the '
+      'passkey internals stay unexported', () {
     final reExport =
-        RegExp(r"^export 'package:at_(auth|client)/[^;]*;", multiLine: true);
-    final space = RegExp(r'\s+');
+        RegExp(r"^export 'package:at_(auth|client)/", multiLine: true);
     for (final MapEntry(:key, :value) in sources.entries) {
-      final found =
-          reExport.allMatches(value).map((m) => m[0]!.replaceAll(space, ' '));
-      expect(
-          found,
-          key == 'at_client_web_web.dart'
-              ? [
-                  "export 'package:at_client/passkey.dart' "
-                      'show AtServerAtKeysLockedException, PasskeySession;'
-                ]
-              : isEmpty,
-          reason: key);
+      if (key == 'at_client_web_web.dart') continue;
+      expect(value, isNot(matches(reExport)), reason: key);
     }
     expect(files, isNot(contains('src/session/session_open.dart')));
     expect(files, isNot(contains('src/keys/web_crypto_passkey.dart')));
