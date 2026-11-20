@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:at_client_cli/at_client_cli.dart' show AtActivate, AuthCliArgs;
 import 'package:at_client_cli/src/commands/auth_cli.dart' show status;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:mocktail/mocktail.dart' show Fake;
 import 'package:test/test.dart';
 
@@ -175,6 +176,15 @@ void main() {
     final root = await atDirectory('127.0.0.1:${await refusedPort()}');
     final lookUp = _ClosingFails();
     final written = _Written();
+    final logged = _Logged();
+    final level = AtSignLogger.root_level;
+    final handler = AtSignLogger.defaultLoggingHandler;
+    AtSignLogger.root_level = 'finer';
+    AtSignLogger.defaultLoggingHandler = logged;
+    addTearDown(() {
+      AtSignLogger.root_level = level;
+      AtSignLogger.defaultLoggingHandler = handler;
+    });
 
     final code = await IOOverrides.runZoned(
         () => status(
@@ -191,6 +201,15 @@ void main() {
         reason: 'the connection answered with @alice\'s public key, and a '
             'failure to close it afterwards changes nothing it found; status '
             'wrote: ${written.text}');
+    expect(
+        logged.records,
+        contains((
+          level: 'FINER',
+          message: 'closing the public key lookup for @alice failed: '
+              'Bad state: the connection could not be closed'
+        )),
+        reason: 'a close that fails is logged at finer, naming the atSign and '
+            'the failure; logged: ${logged.records}');
   });
 
   group(
@@ -431,6 +450,15 @@ class _ClosingFails extends Fake implements AtLookUp {
     closes++;
     throw StateError('the connection could not be closed');
   }
+}
+
+/// Collects the level and message of each log record.
+class _Logged implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) =>
+      records.add((level: record.level.name, message: '${record.message}'));
 }
 
 /// Collects what at_activate writes on stderr.
