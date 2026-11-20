@@ -189,27 +189,25 @@ class KeychainStorage {
   ///
   /// Writes in this isolate take turns; one from another isolate still wins
   /// over this, or loses to it, whole, since the keychain offers no
-  /// compare-and-swap.
+  /// compare-and-swap. On Windows, where the entry is written in parts, a
+  /// write that fails partway is undone before it is thrown, unless undoing
+  /// it fails too, which is logged.
   Future<void> updateAtKeysInKeychain({
     required String atSign,
     required AtKeys keys,
     void Function(AtKeys existing)? assureUpdate,
     bool requireExisting = false,
   }) => _writes.synchronized(() async {
-    final atKeysData = await readAtKeysData();
-    final index = atKeysData == null ? -1 : _indexOf(atKeysData, atSign);
+    final previous = await _readAtKeysDataRaw();
+    final atKeysData = previous == null
+        ? AtKeysData(keys: [])
+        : _decodeAtKeysData(previous);
+    final index = _indexOf(atKeysData, atSign);
     if (index == -1 && requireExisting) {
       throw AtKeysSourceAbsentException(
         'The keychain no longer holds keys for $atSign, so nothing was '
         'written',
       );
-    }
-    if (atKeysData == null) {
-      await _write(
-        biometricStoreName: (await AtKeysStore.getName()),
-        keychainData: AtKeysData(keys: [keys]),
-      );
-      return;
     }
     if (index == -1) {
       atKeysData.keys.add(keys);
@@ -217,8 +215,9 @@ class KeychainStorage {
       assureUpdate?.call(atKeysData.keys[index]);
       atKeysData.keys[index] = keys;
     }
-    await _write(
-      biometricStoreName: (await AtKeysStore.getName()),
+    await _replaceEntry(
+      name: await AtKeysStore.getName(),
+      previous: previous,
       keychainData: atKeysData,
     );
   });
@@ -547,23 +546,41 @@ class KeychainStorage {
   /// [previous], or nothing when it is null.
   ///
   /// On Windows the entry is a header and segments written one at a time, so
-  /// a write that fails partway is undone before the failure is rethrown:
-  /// [previous] is written back, or the entry deleted when it held nothing.
-  /// A failure to undo it is logged, and the write's own failure thrown.
+  /// a write to the store that fails partway is undone before the failure is
+  /// rethrown: [previous] is written back, or the entry deleted when it held
+  /// nothing, and the segments the failed write added past it are deleted. A
+  /// failure to undo it is logged, and the write's own failure thrown. The
+  /// undo is a write too, so it overwrites a write another isolate made
+  /// since [previous] was read. A write that succeeds deletes the segments
+  /// [previous] had past its own.
   Future<void> _replaceEntry({
     required String name,
     required String? previous,
     required KeychainData keychainData,
   }) async {
+    final data = jsonEncode(keychainData.toJson());
     try {
-      await _write(biometricStoreName: name, keychainData: keychainData);
+      await _writeText(biometricStoreName: name, data: data);
     } catch (e, s) {
-      if (isWindows) await _undoWrite(name, previous);
+      if (isWindows) await _undoWrite(name, previous, attempted: data);
       Error.throwWithStackTrace(e, s);
+    }
+    if (isWindows) {
+      await _deleteSegments(
+        name,
+        from: _segmentCountOf(data),
+        to: _segmentCountOf(previous),
+      );
     }
   }
 
-  Future<void> _undoWrite(String name, String? previous) async {
+  /// Puts the entry named [name] back as [previous] after a failed write of
+  /// [attempted], and deletes the segments [attempted] had past it.
+  Future<void> _undoWrite(
+    String name,
+    String? previous, {
+    required String attempted,
+  }) async {
     try {
       if (previous == null) {
         await _delete(keychainStoreName: name);
@@ -577,6 +594,36 @@ class KeychainStorage {
         e,
         s,
       );
+    }
+    await _deleteSegments(
+      name,
+      from: _segmentCountOf(previous),
+      to: _segmentCountOf(attempted),
+    );
+  }
+
+  /// How many Windows segments [text] is written in; none for null.
+  int _segmentCountOf(String? text) =>
+      text == null ? 0 : _splitString(text, _kWindowSegmentDataLength).length;
+
+  /// Deletes the Windows segments of the entry named [name] numbered [from]
+  /// up to [to], logging each that cannot be deleted.
+  Future<void> _deleteSegments(
+    String name, {
+    required int from,
+    required int to,
+  }) async {
+    for (var i = from; i < to; i++) {
+      final segmentName = '${name}_segment_$i';
+      try {
+        await (await _getBiometricStorageFile(segmentName)).delete();
+      } catch (e, s) {
+        _logger.warning(
+          'Failed to delete Windows keychain segment "$segmentName"',
+          e,
+          s,
+        );
+      }
     }
   }
 
