@@ -1084,6 +1084,33 @@ void main() {
               'it says the connection recovered');
     });
 
+    test(
+        'a refusal after a restart reaches the refusals read for it, and not '
+        'those read before the stop', () async {
+      final taken = <Duration>[];
+      final atLookup =
+          recording([_Attempt.accept, _Attempt.accept, _Attempt.refuse], taken);
+      atLookup.notifications.listen((_) {});
+      final before = <UnAuthenticatedException>[];
+      atLookup.notificationRefusals.listen(before.add);
+      await atLookup.startNotifications();
+      await atLookup.stopNotifications();
+
+      await atLookup.startNotifications();
+      atLookup.notifications.listen((_) {});
+      final after = <UnAuthenticatedException>[];
+      atLookup.notificationRefusals.listen(after.add);
+      await transport().serverCloses();
+      await until(
+          () => taken.length == 2 && !atLookup.isReconnectingNotifications,
+          'one refused reconnect and the accepted one');
+
+      expect(after, hasLength(1),
+          reason: 'a refusal of the restarted session reaches the stream '
+              'read for it');
+      expect(before, isEmpty, reason: 'and not the one read before the stop');
+    });
+
     test('a failure that is not a refusal is not reported as one', () async {
       final taken = <Duration>[];
       final atLookup = recording([

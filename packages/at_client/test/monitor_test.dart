@@ -294,6 +294,27 @@ void main() {
               'so the attempt ends as a stop does, with nothing reported');
     });
 
+    test('a refused reconnect after stop() and start() is reported', () async {
+      final up = reaches(NotificationListenerState.listening);
+      monitor.start();
+      await up;
+      final stopped = reaches(NotificationListenerState.notConnected);
+      monitor.stop();
+      await stopped;
+      final restarted = reaches(NotificationListenerState.listening);
+      monitor.start();
+      await restarted;
+      final down = reaches(NotificationListenerState.notConnected);
+      await muxable.dropConnection();
+      await down;
+      await refuseReconnect();
+
+      expect(
+          connection.refusals.map((r) => r.cause), [AtConnectionCause.revoked],
+          reason: 'the restart subscribes to the refusals of the session it '
+              'starts');
+    });
+
     test(
         'a refused reconnect from before stop() then start() is not '
         'reported', () async {
