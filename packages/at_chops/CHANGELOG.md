@@ -27,6 +27,9 @@
 - perf: `ChaCha20Poly1305Algo.encrypt` builds the ciphertext and tag in one
   buffer, which is faster for plaintexts from 32 bytes to 1.1 MB. The output
   is unchanged.
+- feat: `AesGcm256EncryptionAlgo.withCipher` and
+  `ChaCha20Poly1305Algo.withCipher` (`@visibleForTesting`) take the cipher
+  to use, so a test can check how `encrypt` assembles its output.
 
 ## 3.7.1
 

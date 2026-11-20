@@ -23,3 +23,10 @@ Feature: ChaCha20-Poly1305 encryption builds its output in one buffer
     Given the 256-bit key, 96-bit nonce, plaintext and associated data of a published ChaCha20-Poly1305 test vector
     When at_chops encrypts it with ChaCha20Poly1305Algo
     Then the output is the vector's ciphertext followed by its 16-byte tag
+
+  Scenario: ChaCha20-Poly1305 encryption copies the ciphertext and tag into one buffer of exactly their length
+    Given a 1000-byte plaintext, a key and a nonce
+    And a cipher whose ciphertext and tag fail the test if concatenated or copied into a new list
+    When at_chops encrypts it with ChaCha20Poly1305Algo using that cipher
+    Then the output is the bytes ChaCha20Poly1305Algo returns with its own cipher
+    And the output owns a buffer of exactly the ciphertext and tag length

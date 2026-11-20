@@ -12,6 +12,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:cryptography/dart.dart';
 import 'package:test/test.dart';
 
+import 'no_concat_cipher.dart';
+
 /// Catalogue: features/at_chops/aes_gcm_output.feature
 void main() {
   test('AES-256-GCM encryption returns the ciphertext followed by the tag',
@@ -76,6 +78,25 @@ void main() {
         reason: "FFI output is not the vector's ciphertext and tag");
     expect(pureOut, expected,
         reason: "pure-Dart output is not the vector's ciphertext and tag");
+  });
+
+  test(
+      'AES-256-GCM pure-Dart encryption copies the ciphertext and tag into one buffer of exactly their length',
+      () async {
+    final AESKey key =
+        AESKey(base64Encode(List<int>.generate(32, (int i) => i)));
+    final InitialisationVector iv = InitialisationVector(
+        Uint8List.fromList(List<int>.generate(12, (int i) => 0xa0 + i)));
+    final Uint8List plain =
+        Uint8List.fromList(List<int>.generate(1000, (int i) => i & 0xff));
+
+    final Uint8List expected =
+        await AesGcm256EncryptionAlgo(key).encrypt(plain, iv: iv);
+    final Uint8List out = await AesGcm256EncryptionAlgo.withCipher(
+            key, NoConcatCipher(AesGcm.with256bits()))
+        .encrypt(plain, iv: iv);
+
+    expectExactLengthOutput(out, expected);
   });
 
   // A shorter length leaves the tag inside the output buffer; a longer one
