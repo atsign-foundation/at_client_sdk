@@ -152,8 +152,6 @@ void main() {
       _fileOn(keys, 'f0otherwriter', 'other');
       return true;
     });
-    final otherPut =
-        rig.tap.lines.lastIndexWhere((l) => l.sent && _isDocumentPut(l.text));
     final mark = rig.tap.lines.length;
 
     await _file(session.client, atSign, 'f0client', 'client');
@@ -162,7 +160,7 @@ void main() {
     print('LIVE lock takes refused before the client took it: $refused');
     expect(refused, greaterThan(0), reason: 'the client found it held');
     final put = rig.tap.indexOfSent(_isDocumentPut, from: mark);
-    expect(put, greaterThan(otherPut));
+    expect(put, greaterThan(-1), reason: 'the client put the document');
     final took = _acceptedTakeAfter(rig.tap, mark);
     expect(took, allOf(greaterThan(-1), lessThan(put)),
         reason: 'it took the lock before it put');
