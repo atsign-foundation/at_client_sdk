@@ -7,10 +7,12 @@
 #     decoded ciphertext (systemd then rejects the file while base64-decoding
 #     it, before any AES-GCM tag check, so the arm cannot support the
 #     integrity row it is cited for);
-#   * an unbound `HKDF(prf, "atkeys-kek")` label drifting from the profile's
-#     atSign-bound `HKDF(prf, salt, "atkeys-kek|<atSign>")`;
+#   * a custody HKDF label without the atSign in its info, or one of the
+#     `atkeys-*` labels no code derives with, drifting from the code's
+#     `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")`;
 #   * the passkey userHandle used as the WebAuthn PRF input, which arrives only
-#     in the get() response and so costs a second prompt;
+#     in the get() response and so costs a second prompt, or as the HKDF salt,
+#     where the code takes an empty one;
 #   * the threat table marking whole-record rollback as fixed by AES-GCM;
 #   * "eviction loses nothing" claimed while the enrollment id (assigned by
 #     the atServer at enroll:request, needed by PKAM, the private record name
@@ -90,22 +92,31 @@ PY
 
 cd "$DOCS"
 
-# 2a. No unbound or unsalted custody labels: they drift from the atSign-bound
-#     labels with salt and reopen the cross-atSign linkage the profile records as fixed.
-if grep -n 'HKDF(prf, "atkeys-kek")\|HKDF(prf, "atkeys-record-id")' \
+# 2a. Every custody label carries the atSign in its info, as the code derives
+#     it: an unbound label reopens the cross-atSign linkage the profile records
+#     as fixed. The `atkeys-*` labels are not the code's.
+for doc in design.md apkam-custody.md prf-server-keys-blob.md; do
+  grep -q '"at_auth/custody/kek/v1|<atSign>"' "$doc" \
+    || fail "$doc does not show the atSign-bound kek label the code derives with"
+done
+if grep -En '"at_auth/custody/[a-z-]+/v1"' \
     design.md apkam-custody.md prf-server-keys-blob.md; then
-  fail "unbound 'atkeys-kek'/'atkeys-record-id' label: bind it to the atSign"
+  fail "custody label without the atSign in its info: bind it to the atSign"
 fi
-if grep -En 'HKDF\(prf,\s*"atkeys-kek|HKDF\(prf,\s*"atkeys-record-id|HKDF\(prf,\s*"at_auth/custody/auth-seed' \
+if grep -En 'HKDF\([^)]*"atkeys-' \
     design.md apkam-custody.md prf-server-keys-blob.md; then
-  fail "custody HKDF derivation drops the salt"
+  fail "an atkeys-* HKDF label; the code derives with at_auth/custody/<name>/v1"
 fi
 
-# 2b. The userHandle must not be the WebAuthn PRF input: it arrives only in the
-#     get() response, so it can only be the HKDF salt.
+# 2b. The userHandle is neither the WebAuthn PRF input (it arrives only in the
+#     get() response) nor the HKDF salt (the code's salt is empty).
 if grep -n 'PRF(userHandle\|PRF(device secret, userHandle' \
     design.md apkam-custody.md prf-server-keys-blob.md; then
-  fail "userHandle used as the PRF input; it must be the HKDF salt"
+  fail "userHandle used as the PRF input"
+fi
+if grep -En -i 'salt = userHandle|is the HKDF salt|userHandle \(HKDF salt\)|HKDF\(prf, salt, "at_auth/custody' \
+    design.md apkam-custody.md prf-server-keys-blob.md; then
+  fail "a custody derivation with a salt; the code's salt is empty"
 fi
 
 # 2c. Whole-record rollback must not be listed as fixed by the AEAD alone.

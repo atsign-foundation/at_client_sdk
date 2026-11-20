@@ -380,8 +380,9 @@ The browser has to bootstrap before it holds a PKAM key, so the bootstrap
 needs a gate of its own. There are two, and they can be combined.
 
 The first is a record whose name is derived from the passkey, for example
-`public:_<HKDF(prf, salt, "atkeys-record-id|<atSign>")>`, domain-separated from
-the `HKDF(prf, salt, "atkeys-kek|<atSign>")` that wraps the document's data key.
+`public:_<HKDF(prf, ∅, "at_auth/custody/record-id/v1|<atSign>")>`, domain-separated from
+the `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")` that wraps the document's data key,
+each with an empty salt.
 The atSign in both labels keeps two atSigns on one device from sharing a record
 name or a kek; the `<atSign>` in each label is in canonical form, as `toAtsign()` returns it
 (lower-case, leading `@`, dots removed, e.g. `@colinconstable`).
