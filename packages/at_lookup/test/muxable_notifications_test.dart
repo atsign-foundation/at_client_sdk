@@ -1022,6 +1022,28 @@ void main() {
               'accepted');
     });
 
+    test('a refused attempt nobody listens for is logged at warning', () async {
+      final taken = <Duration>[];
+      final atLookup = recording([_Attempt.accept, _Attempt.refuse], taken);
+      atLookup.notifications.listen((_) {});
+      await atLookup.startNotifications();
+      recorded.records.clear();
+
+      await transport().serverCloses();
+      await until(
+          () => taken.length == 2 && !atLookup.isReconnectingNotifications,
+          'the refused reconnect and the accepted one');
+
+      expect(
+          recorded.at('WARNING').where((m) =>
+              m.startsWith('Reconnect attempt 1 failed: ') &&
+              m.contains('Failed connecting to @alice') &&
+              m.contains('error:AT0027')),
+          hasLength(1),
+          reason: 'nothing listens on notificationRefusals, so the log line '
+              'is the one record of the refusal');
+    });
+
     /// Catalogue: features/at_client/refused_notification_connection.feature
     test('a program reading notifications keeps receiving through a refusal',
         () async {
