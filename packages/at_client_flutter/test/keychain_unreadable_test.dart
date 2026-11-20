@@ -525,5 +525,85 @@ void main() {
         );
       });
     }
+
+    /// The current entry's text, its segments joined.
+    String entryHeld() => [
+      for (var i = 0; i < headerCount(); i++) held['${current}_segment_$i']!,
+    ].join();
+
+    /// Moves the current entry to the legacy store and its segments, under a
+    /// header of [count].
+    void heldAsLegacy(String count) {
+      final segments = headerCount();
+      held.remove(current);
+      for (var i = 0; i < segments; i++) {
+        held['test_data_$i'] = held.remove('${current}_segment_$i')!;
+      }
+      held[legacy] = count;
+    }
+
+    for (final (name, count) in const [
+      ('-1', '-1'),
+      ('one over the bound', '2561'),
+      ('not a whole number', 'two'),
+    ]) {
+      group('Given a legacy header whose segment count is $name', () {
+        test(
+          'when the keychain is read, then it is refused as '
+          'AtKeysFormatException holding none of the entry\'s text',
+          () async {
+            final storage = windowsKeychain();
+            await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+            final entry = entryHeld();
+            heldAsLegacy('${headerCount()}');
+            expect(
+              '${(await storage.readAtKeysData())!.keys.single.atsign}',
+              atSign,
+              reason: 'the control: the legacy entry reads under its count',
+            );
+            held.removeWhere((name, _) => name.startsWith(current));
+            held[legacy] = count;
+
+            final Object? error = await storage.readAtKeysData().then(
+              (_) => null,
+              onError: (Object e) => e,
+            );
+
+            expect(error, isA<AtKeysFormatException>());
+            final format = error as AtKeysFormatException;
+            for (final text in ['$format', format.message, format.reason]) {
+              expect(
+                text,
+                allOf(
+                  isNot(contains(count)),
+                  predicate<String>(
+                    (t) => !Iterable.generate(
+                      entry.length - 15,
+                      (i) => entry.substring(i, i + 16),
+                    ).any(t.contains),
+                    'no 16-character run of the entry',
+                  ),
+                ),
+              );
+            }
+          },
+        );
+      });
+    }
+
+    group('Given a legacy header whose segment count is over the bound', () {
+      test('when every atSign\'s keys are deleted, then no more segments '
+          'than the bound are deleted', () async {
+        held[legacy] = '2561';
+        for (var i = 0; i <= 2560; i++) {
+          held['test_data_$i'] = 'segment $i';
+        }
+        final storage = windowsKeychain();
+
+        await storage.deleteAllAtKeysData();
+
+        expect(held.keys, ['test_data_2560']);
+      });
+    });
   });
 }

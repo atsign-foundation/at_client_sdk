@@ -86,12 +86,17 @@ class KeychainStorage {
     return json;
   }
 
-  /// The segment count a Windows store's header [text] records.
+  /// The segment count a Windows store's header [text] records: the whole
+  /// number a legacy header is, or a JSON object's `segmentCount`.
   ///
-  /// A header that is not a JSON object, or whose `segmentCount` is not a
-  /// whole number from zero to [_kMaxWindowSegments], throws
-  /// [AtKeysFormatException].
+  /// A header that is neither a whole number from zero to
+  /// [_kMaxWindowSegments] nor a JSON object whose `segmentCount` is one
+  /// throws [AtKeysFormatException].
   static int _segmentCountIn(String text) {
+    final legacy = int.tryParse(text);
+    if (legacy != null && legacy >= 0 && legacy <= _kMaxWindowSegments) {
+      return legacy;
+    }
     const what = 'the keychain atKeys entry header';
     final count = _decodeObject(text, what)['segmentCount'];
     if (count is! int || count < 0 || count > _kMaxWindowSegments) {
@@ -482,7 +487,7 @@ class KeychainStorage {
           segmentPrefix = '${keychainStoreName}_segment';
         } else {
           // legacy
-          segmentCount = int.tryParse(storedData) ?? 0;
+          segmentCount = _segmentCountIn(storedData);
           String packageName = await getPackageName();
           segmentPrefix = '${packageName}_data';
         }
@@ -524,18 +529,13 @@ class KeychainStorage {
     try {
       final storedData = await store.read();
       if (storedData != null && storedData.isNotEmpty) {
-        final int segmentCount;
-        final String segmentPrefix;
-        if (storedData.startsWith('{')) {
-          segmentPrefix = '${keychainStoreName}_segment';
-          segmentCount = await _deletableSegmentCount(
-            storedData,
-            segmentPrefix,
-          );
-        } else {
-          segmentCount = int.tryParse(storedData) ?? 0;
-          segmentPrefix = '${await getPackageName()}_data';
-        }
+        final segmentPrefix = storedData.startsWith('{')
+            ? '${keychainStoreName}_segment'
+            : '${await getPackageName()}_data';
+        final segmentCount = await _deletableSegmentCount(
+          storedData,
+          segmentPrefix,
+        );
         for (int i = 0; i < segmentCount; i++) {
           segmentNames.add('${segmentPrefix}_$i');
         }

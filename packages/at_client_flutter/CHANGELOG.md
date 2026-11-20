@@ -10,7 +10,8 @@
 - fix: on Windows, a keychain read logs the store name and the length of
   what it read, never the text.
 - fix: on Windows, a keychain entry whose header's segment count is missing,
-  not a whole number or out of range is refused as `AtKeysFormatException`.
+  not a whole number or out of range, legacy headers included, is refused as
+  `AtKeysFormatException`.
 - fix: `KeychainStorage.removeAtsignFromKeychain` and
   `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
   legacy-named store cannot be read or written, or its entry is not a JSON
