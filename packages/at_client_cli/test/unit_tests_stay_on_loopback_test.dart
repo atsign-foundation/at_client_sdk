@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:at_client_cli/at_client_cli.dart' show AtRootDomain;
 import 'package:test/test.dart';
+
+import 'lifecycle_rig.dart' show loopbackLookUps;
 
 /// The test trees the scan reads, named from this package's directory, each
 /// with the fewest Dart files it is known to hold.
@@ -22,6 +25,10 @@ const _atClientSamples = '../at_client/test/samples/';
 
 /// The one test file that may extend `AtsignFlows`.
 const _loopbackFlows = '../at_client_flutter/test/loopback_flows.dart';
+
+/// The test that names each connection factory at_client_cli's barrel
+/// exports, building each and invoking none.
+const _barrel = 'test/barrel_test.dart';
 
 /// The arguments naming an atDirectory host that a test may build a finder
 /// with.
@@ -113,9 +120,10 @@ List<String> offTheLoopbackIn(String source, {String path = ''}) => [
           in RegExp('\\b($_finders)\\.new\\b|extends\\s+($_finders)\\b')
               .allMatches(source))
         'a finder torn off or subclassed at offset ${m.start}',
-      for (final m in RegExp('\\b($_factories)\\s*\\(').allMatches(source))
-        if (_factoryWithoutFinder(source, m.end) case final offence?)
-          '${m.group(1)} $offence',
+      if (path != _barrel)
+        for (final m in RegExp('\\b($_factories)\\s*\\(').allMatches(source))
+          if (_factoryWithoutFinder(source, m.end) case final offence?)
+            '${m.group(1)} $offence',
       for (final m
           in RegExp(r'AtLookUp\.withSecureSocket\s*\(').allMatches(source))
         if (!_namesFinder(bracketedAt(source, m.end)))
@@ -364,6 +372,10 @@ void main() {
           reason: atActivate);
     }
 
+    const factory = 'final AtLookUpFactory lookUps = secureSocketLookUps();';
+    expect(offTheLoopbackIn(factory, path: _barrel), isEmpty);
+    expect(offTheLoopbackIn(factory, path: 'test/a_test.dart'), hasLength(1));
+
     const subclass = 'class _Real extends AtsignFlows { const _Real(); }';
     expect(offTheLoopbackIn(subclass, path: _loopbackFlows), isEmpty);
     expect(offTheLoopbackIn(subclass, path: 'test/loopback_flows.dart'),
@@ -394,6 +406,29 @@ void main() {
         samplesOffencesIn('../at_client/test/a_test.dart',
             "import 'test_utils/transport.dart';"),
         isEmpty);
+  });
+
+  group("Given the rig's loopbackLookUps", () {
+    test(
+        'when a connection with no finder is asked for a root off the '
+        'loopback interface, then it throws StateError', () {
+      expect(
+          () => loopbackLookUps()(
+              atSign: '@alice',
+              rootDomain: AtRootDomain('root.atsign.org', 64),
+              authenticator: null),
+          throwsA(isA<StateError>().having(
+              (e) => e.message, 'message', contains('root.atsign.org:64'))));
+    });
+
+    test('when the root is on the loopback interface, then it builds one',
+        () async {
+      final lookUp = loopbackLookUps()(
+          atSign: '@alice',
+          rootDomain: AtRootDomain('127.0.0.1', 1),
+          authenticator: null);
+      await lookUp.close();
+    });
   });
 
   test(
