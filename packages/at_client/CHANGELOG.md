@@ -8,6 +8,9 @@
   longer reads as a refusal: connecting reports offline carrying the error,
   a verb that meets it leaves the connection state as it was, a first open
   hands back its client, and `Atsign.authenticatesAs` throws the error.
+- fix: `Atsign.activate` over an `atLookUp` of your own that you stop while
+  it authenticates by PKAM throws `StoppedException`, not
+  `AtAuthenticationException`.
 - feat: a PKAM the atServer refuses with AT0028 reports the connection
   refused with cause `invalidEnrollment`, as AT0029 does, and
   `PendingEnrollment` removes an expired request's pending keys on either

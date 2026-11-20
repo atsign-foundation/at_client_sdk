@@ -206,7 +206,9 @@ extension AtsignLifecycle on Atsign {
   /// runs on a connection [lookUps] builds to the atServer
   /// [secondaryAddressFinder] finds,
   /// or on a supplied [atLookUp], which is taken as having already reached
-  /// the atServer, so the provisioning wait is skipped.
+  /// the atServer, so the provisioning wait is skipped. A supplied [atLookUp]
+  /// that its caller stops during the activation ends it with
+  /// [StoppedException].
   Future<AtClient> activate({
     required String cramSecret,
     required WrittenAtKeysIo keys,
