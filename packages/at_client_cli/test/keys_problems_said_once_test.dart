@@ -306,6 +306,34 @@ void main() {
     expect(directoryConnections, 0, reason: 'only absent keys are looked up');
   }, timeout: const Timeout(Duration(minutes: 2)));
 
+  test(
+      'A passphrase-protected keyfile refused for something other than its '
+      'passphrase', () async {
+    const passPhrase = 'passphrase-5a0e3c';
+    final envelope = jsonDecode(await const AtKeysPassphraseEnvelopeCodec()
+        .encode(jsonEncode({'selfEncryptionKey': AESKey.generate(32).key}),
+            passPhrase)) as Map<String, dynamic>;
+    envelope['v'] = 3;
+    File(defaultKeyfile())
+      ..createSync(recursive: true)
+      ..writeAsStringSync(jsonEncode(envelope));
+
+    final run = await atActivate(
+        ['otp', '-a', atSign, '-P', passPhrase, '-r', atDirectoryRoot()]);
+
+    expect(
+        run.stderr,
+        holdsOnceInOrder([
+          'The keys for $atSign at ${defaultKeyfile()} could not be read: '
+              'this atKeys file declares an envelope version this build has '
+              'no code for \u2014 refusing rather than guessing at how its key '
+              'was derived.',
+          footer,
+        ]));
+    expect(run.stderr.join('\n'), isNot(contains('passphrase')));
+    expect(run.exitCode, 1);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('A keyfile for another atSign', () async {
     final path = '${home.path}/bob_key.atKeys';
     final apkam = RsaKeyPair.generate();
