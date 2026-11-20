@@ -54,7 +54,7 @@ void main() {
   test('a legacy keyfile runs the client as its flat stored enrollment',
       () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: await keyfile(flatEnrollmentId: 'stored-1'),
         storage: hiveStoreFor(atSign, pref()));
@@ -63,7 +63,7 @@ void main() {
 
   test('a disagreeing id is ignored and the keys win', () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: await keyfile(flatEnrollmentId: 'stored-1'),
         enrollmentId: 'somebody-else',
@@ -81,7 +81,7 @@ void main() {
     final io = InMemoryAtKeysIo();
     await io.write(atSign, AtKeys());
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: io,
         enrollmentId: 'apkam-1',
@@ -94,7 +94,7 @@ void main() {
   test('a keyfile that predates enrollments runs the client as primary',
       () async {
     final client = await AtClientImpl.create(atSign, 'wavi', pref(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: await keyfile(),
         storage: hiveStoreFor(atSign, pref()));
@@ -108,13 +108,13 @@ void main() {
             bool? exactEnrollment}) =>
         exactEnrollment == null
             ? AtClientImpl.create(atSign, 'wavi', pref(),
-                lookUps: secureSocketLookUps(),
+                lookUps: loopbackLookUps(),
                 secondaryAddressFinder: defaultAtDirectory,
                 atKeysIo: noKeysFor(atSign),
                 enrollmentId: enrollmentId,
                 storage: storage)
             : AtClientImpl.create(atSign, 'wavi', pref(),
-                lookUps: secureSocketLookUps(),
+                lookUps: loopbackLookUps(),
                 secondaryAddressFinder: defaultAtDirectory,
                 atKeysIo: noKeysFor(atSign),
                 enrollmentId: enrollmentId,

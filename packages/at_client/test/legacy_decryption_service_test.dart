@@ -9,6 +9,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/transport.dart';
 
 class MockGetRequestTransformer extends Mock implements GetRequestTransformer {}
 
@@ -123,8 +124,8 @@ void main() {
         'Test to verify exception gets stacked in remote secondary executeVerb',
         () async {
       RemoteSecondary remoteSecondary = RemoteSecondary(
-          '@alice', AtClientPreference(),
-          lookUps: secureSocketLookUps());
+          '@alice', loopbackPreference(),
+          lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookup;
       try {
         await remoteSecondary.executeVerb(lookupVerbBuilder);

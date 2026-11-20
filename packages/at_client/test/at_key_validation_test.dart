@@ -45,7 +45,7 @@ void main() {
             atSign: atSign,
             namespace: namespace,
             preference: preference,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: keys,
             storage: storage),

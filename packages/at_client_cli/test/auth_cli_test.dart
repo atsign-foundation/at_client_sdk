@@ -439,7 +439,7 @@ void postureArgumentTests() {
               'the CRAM secret');
 
       for (final named in [
-        ['onboard', '-a', '@alice'],
+        ['onboard', '-a', '@alice', '-r', '127.0.0.1:1'],
         ['--version'],
         ['-h'],
         ['--help'],

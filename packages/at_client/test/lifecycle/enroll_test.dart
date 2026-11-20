@@ -178,7 +178,7 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: store,
           preference: await preference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
@@ -220,7 +220,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server);
     expect(File(path).existsSync(), isTrue,
@@ -251,7 +251,7 @@ void main() {
         () async => Atsign(atSign).open(
             keys: store,
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtEnrollmentPendingException>()
@@ -271,7 +271,7 @@ void main() {
             .open(
                 keys: store,
                 preference: await preference(),
-                lookUps: secureSocketLookUps(),
+                lookUps: loopbackLookUps(),
                 secondaryAddressFinder: finder,
                 storage: hiveStoreFor(Atsign(atSign), await preference()))
             .timeout(const Duration(seconds: 2)),
@@ -293,7 +293,7 @@ void main() {
         device: 'phone',
         keys: store,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref));
     expect(resumed?.enrollmentId, enrollmentId);
     expect(resumed?.signingAlgo, SigningAlgoType.rsa2048);
@@ -305,7 +305,7 @@ void main() {
             device: 'tablet',
             keys: store,
             preference: pref,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'another device\'s request is not this one');
@@ -315,7 +315,7 @@ void main() {
             device: 'phone',
             keys: InMemoryAtKeysIo(),
             preference: pref,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'and a store holding nothing resumes nothing');
@@ -451,7 +451,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: denying);
 
@@ -472,7 +472,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: atServer(decide: (_) async => true));
     expect(
@@ -542,7 +542,7 @@ void main() {
           ..rootDomain = InternetAddress.loopbackIPv4.address
           ..rootPort = 1
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         keyExchangeMode: keyExchangeMode,
         signingAlgo: signingAlgo,
@@ -809,7 +809,7 @@ void main() {
               keys: store,
               preference: pref,
               atLookUp: server,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref)),
           isNull,
           reason: 'an approval afterwards leaves nothing to resume');
@@ -942,7 +942,7 @@ void main() {
         .open(
             keys: store,
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: atServer(decide: (_) async => true),
             storage: hiveStoreFor(Atsign(atSign), await preference()))
@@ -1171,7 +1171,7 @@ void main() {
           keys: store,
           preference: pref,
           atLookUp: server,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref));
     }
 
@@ -1395,7 +1395,7 @@ void main() {
       final resumed = await Atsign(atSign).resumeEnrollment(
           keys: store,
           preference: pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref));
 
       expect(resumed?.enrollmentId, enrollmentId);
@@ -1414,7 +1414,7 @@ void main() {
               // ignore: invalid_use_of_visible_for_testing_member
               keys: InMemoryAtKeysIo.holding(atSign, twoPending()),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref));
 
       await expectLater(
@@ -1440,7 +1440,7 @@ void main() {
               // ignore: invalid_use_of_visible_for_testing_member
               keys: InMemoryAtKeysIo.holding(atSign, keys),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref)),
           throwsA(isA<AtEnrollmentPendingException>()
               .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
@@ -1628,7 +1628,7 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: InMemoryAtKeysIo(),
           preference: await named(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
@@ -1649,7 +1649,7 @@ void main() {
       final resumed = await Atsign(atSign).resumeEnrollment(
           keys: store,
           preference: await named(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
@@ -1680,7 +1680,7 @@ void main() {
           particulars: AtClientParticulars()
             ..appName = 'acme_chat'
             ..appVersion = '2.3.1',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory());
 
       await built.awaitApproval(
@@ -1706,7 +1706,7 @@ void main() {
           signingAlgo: submitted.signingAlgo,
           keyExchangeMode: submitted.keyExchangeMode,
           atLookUp: server,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory());
 
       await built.awaitApproval(

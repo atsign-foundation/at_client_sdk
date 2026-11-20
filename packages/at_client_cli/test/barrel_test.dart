@@ -22,7 +22,7 @@ void main() {
       final preference = AtClientPreference()..namespace = 'my_app';
       final FileAtKeysIo keys = CliKeys.fileFor('@alice');
       final store = CliKeys.storageFor('@alice', program: 'my_app');
-      final AtLookUpFactory lookUps = secureSocketLookUps();
+      final AtLookUpFactory Function() lookUps = secureSocketLookUps;
       final SecondaryAddressFinder atDirectory =
           CacheableSecondaryAddressFinder('127.0.0.1', preference.rootPort);
 
@@ -31,7 +31,7 @@ void main() {
       expect(store, isA<HiveAtClientStorage>());
       expect(lookUps, isNotNull);
       // ignore: deprecated_member_use_from_same_package
-      expect(proxyLookUps(), isNotNull);
+      expect(proxyLookUps, isA<AtLookUpFactory Function()>());
       expect(atDirectory, isNotNull);
     });
 
