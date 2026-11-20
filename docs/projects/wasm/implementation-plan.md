@@ -609,12 +609,13 @@ D-12. Independent of the P series, which is `at_server`-side.
     the PKAM handler's enrollment refusals among them, stays `error:<code>:<text>`.
     at_lookup reads the code of
     every `error:` reply to `executeVerb`, `executeCommand` or a proxy root's `from:` in
-    the plain, colon and JSON forms, and so do the readers that match a refusal's code as
-    text: the enrollment wait in at_auth, and at_client's expired-request cleanup and
-    connection-failure classification, through one internal reader in each package.
-    `DefaultResponseParser` reads only `<code>-<text>`, but no atServer `error:` reply
-    reaches it: every remote path to it goes through at_lookup's `executeVerb`, which
-    throws on such a reply first.
+    the plain, colon and JSON forms, and at_auth reads an authentication step's reply the
+    same way, throwing it as an `AtAuthErrorReplyException` that carries the code. The
+    enrollment wait in at_auth and at_client's connection-failure classification read
+    the code from that exception, never from a message's text. `DefaultResponseParser`
+    reads every form as a lookup does, though no atServer `error:` reply reaches it: every
+    remote path to it goes through at_lookup's `executeVerb`, which throws on such a reply
+    first.
   - **`Monitor` is arguably no longer required.** It is not exported from at_client's barrel,
     has exactly one consumer, and that consumer uses five members — `currentState`,
     `targetState`, `currentStateStream`, `start()`, `stop()`. What is left in it is
