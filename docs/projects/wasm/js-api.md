@@ -209,7 +209,7 @@ product; the compiler is a packaging decision.*
 ## 4. Where the facade lives
 
 **Inside `at_client_web`.** No new Dart package;
-[`decisions.md`](decisions.md) D-4 stands (amended 2026-10-18 for the package name only).
+[`decisions.md`](decisions.md) D-4 stands.
 
 1. **The npm package is not a Dart package.** It is a build artifact — the compiled Dart
    `.js` engine plus a wrapper **authored once in TypeScript**, from which both the
@@ -228,7 +228,7 @@ product; the compiler is a packaging decision.*
 
 ```
 packages/at_client_web/
-  lib/at_client_web.dart        # Dart-facing platform impls — unchanged by this doc
+  lib/at_client_web.dart         # Dart-facing platform impls — unchanged by this doc
   lib/src/js/                   # the @JSExport facade, marshalling, error mapping
   lib/src/collections/          # js_collections_adapter.dart: Dart-side translation onto
                                 #   AtCollection, unexported, VM-tested (§5.5)

@@ -100,7 +100,7 @@ The tiers:
 ```
 at_client / at_lookup / at_utils / at_auth / at_chops     ← interfaces only
         ▲                    ▲                    ▲
-at_client_web           *_io barrels         at_client_flutter
+at_client_web            *_io barrels         at_client_flutter
 (WebSocket,            (SecureSocket,        (keychain, app dirs)
  IndexedDB keys)        file keystore,       — a consumer today,
                         file logging)          an implementer later
@@ -219,7 +219,7 @@ published to npm. Design in [`js-api.md`](js-api.md); rulings D-7..D-9 in
                     ▲
         the @JSExport facade — packages/at_client_web/lib/src/js/
                     ▲
-at_client_web      *_io barrels      at_client_flutter
+at_client_web       *_io barrels      at_client_flutter
                     ▲
         at_client / at_lookup / at_utils / at_auth / at_chops
 ```
@@ -227,7 +227,7 @@ at_client_web      *_io barrels      at_client_flutter
 Two things about this tier are worth stating at roadmap level:
 
 - **It adds no Dart package.** The facade is an entry point inside `at_client_web`, and
-  the npm artifact is a build output, not a pub package — so D-4 stands (amended 2026-10-18 for the package name only).
+  the npm artifact is a build output, not a pub package — so D-4 stands.
 - **Node is a target, not just the browser.** Node supplies `WebSocket`,
   `crypto.subtle`, `fetch` and `navigator`, but **no `indexedDB` and no `localStorage`**,
   so a Node consumer supplies storage from TypeScript. This works because a JS object can

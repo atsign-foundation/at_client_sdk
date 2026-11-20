@@ -8,7 +8,7 @@ import 'package:at_client_web/src/session/web_setup_lock.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('the wasm lock name is the pinned string', () {
+  test('the setup lock name is the pinned string', () {
     expect(setupLockName(WebSetupLock.namePrefix, '@alice'),
         'at_client_web:setup:@alice');
   });
