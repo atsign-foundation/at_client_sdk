@@ -187,7 +187,10 @@ root or nskey private can't be replaced. at_server trunk has no
 compare-and-swap, so the server-backed store takes a server mutex on
 `atkeys-lock.<enrollmentId>.a.__e@<atSign>` from before it reads the record
 until it puts, and still refuses a write that would drop stored material and
-reads each write back.
+reads each write back. The lock is not a fence: a put sent while the lease is
+held can land after it expires, once another writer has taken the lock and
+put, and then drops that writer's material while both read-backs match. The
+only guard is that a put needs at least half the lock's ttl left on its lease.
 
 ## Decisions
 
@@ -245,7 +248,7 @@ From an adversarial review of the first draft of this doc (33 findings).
 | PRF output differs with and without user verification | Pin UV to `required`; never auto-recreate on failure |
 | Same construction across platforms | Version byte and test vectors |
 | recordId in atServer logs: `LookupVerbHandler` logs the key at `finer` | Stop logging `public:_` names, or log a hash; until then a log reader can fetch the bootstrap record and learn the enrollment id. Rotation means moving the record |
-| Concurrent writers lose updates | Every write holds the enrollment's lock, a server mutex, from before it reads the record until it puts (see [Handing the restored keys to a client](#handing-the-restored-keys-to-a-client)) |
+| Concurrent writers lose updates | Every write holds the enrollment's lock, a server mutex, from before it reads the record until it puts (see [Handing the restored keys to a client](#handing-the-restored-keys-to-a-client)). The lock is not a fence: a put sent while the lease is held can land after it expires, once another writer has taken the lock and put, and then drops that writer's material while both read-backs match. The only guard is that a put needs at least half the lock's ttl left on its lease |
 
 ### Better than today
 

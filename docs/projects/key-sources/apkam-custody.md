@@ -312,7 +312,10 @@ filed. A dropped root or nskey private can't be replaced. at_server trunk has
 no compare-and-swap, so the store takes a server mutex on
 `atkeys-lock.<enrollmentId>.a.__e@<atSign>` from before it reads the record
 until it puts, and still refuses a write that would drop stored material and
-reads each write back.
+reads each write back. The lock is not a fence: a put sent while the lease is
+held can land after it expires, once another writer has taken the lock and
+put, and then drops that writer's material while both read-backs match. The
+only guard is that a put needs at least half the lock's ttl left on its lease.
 
 Each platform reports whether it achieved per-operation, per-session or no
 prompting, so policy can see what it got.
