@@ -549,17 +549,9 @@ Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(
     );
   }
 
-  final AtLookUp al;
-  try {
-    // NOTE: a public key lookup needs no authentication, and no credential is
-    // held here.
-    al = connect(atDirectory);
-  } catch (e) {
-    return (
-      outcome: _PublicKey.atServerUnreachable,
-      detail: 'Caught unexpected ${e.runtimeType} : $e'
-    );
-  }
+  // NOTE: a public key lookup needs no authentication, and no credential is
+  // held here.
+  final al = connect(atDirectory);
   final found = await _publicKeyFrom(al, atSign);
   try {
     await al.close();
