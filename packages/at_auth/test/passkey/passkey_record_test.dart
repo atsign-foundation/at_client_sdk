@@ -184,6 +184,29 @@ void main() {
               (e) => e.message.length, 'message length', lessThan(220))));
     });
 
+    test('a non-base64 ct is named, and none of its text is quoted', () {
+      final ct = '${'A' * 100}${'Q' * 49}!${'B' * 50}';
+      final bad = withField(record, 'ct', ct);
+      expect(
+          PasskeyRecordCodec.open(
+              aliceSealer, '@alice', PasskeyRecordType.atkeys, bad),
+          throwsA(isA<UnsupportedPasskeyRecordException>()
+              .having((e) => e.message, 'message', 'ct is not base64')));
+    });
+
+    test('an unknown v is quoted with its line breaks and bidi escaped', () {
+      const bs = r'\';
+      final bad = withField(
+          record, 'v', 'x\n[INFO] ok${String.fromCharCode(0x202e)}');
+      expect(
+          PasskeyRecordCodec.open(
+              aliceSealer, '@alice', PasskeyRecordType.atkeys, bad),
+          throwsA(isA<UnsupportedPasskeyRecordException>().having(
+              (e) => e.message,
+              'message',
+              'unknown version "x${bs}u000a[INFO] ok${bs}u202e"')));
+    });
+
     for (final MapEntry(key: name, value: mutate) in cases.entries) {
       test(name, () {
         expect(
