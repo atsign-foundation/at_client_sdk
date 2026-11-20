@@ -1108,8 +1108,9 @@ void main() {
               'must not reach the stream the restart opened');
     });
 
-    test('a refusal that arrives after stopNotifications is not reported',
-        () async {
+    test(
+        'a refusal that arrives after stopNotifications is not reported, even '
+        'on the stream read again for the next start', () async {
       final attemptStarted = Completer<void>();
       final release = Completer<void>();
       var calls = 0;
@@ -1133,12 +1134,17 @@ void main() {
       await transport().serverCloses();
       await attemptStarted.future.timeout(const Duration(seconds: 5));
       await atLookup.stopNotifications();
+      final nextRefusals = <UnAuthenticatedException>[];
+      atLookup.notificationRefusals.listen(nextRefusals.add);
       release.complete();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(done, isTrue, reason: 'the stop closed the stream');
       expect(refusals, isEmpty,
           reason: 'a stopped session reports nothing more');
+      expect(nextRefusals, isEmpty,
+          reason: 'the refusal belongs to the session the stop ended, so it '
+              'must not reach the stream read again after the stop');
       expect(calls, 2,
           reason: 'and the stop ended reconnecting: no attempt follows the '
               'refused one');
