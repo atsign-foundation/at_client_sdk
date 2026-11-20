@@ -354,6 +354,27 @@ void main() {
           error: notAPassphraseRefusal);
     });
 
+    for (final (name, field, says) in [
+      ('salt', 'salt', 'must carry a salt'),
+      ('key derivation parameters', 'kdfParams', 'must carry kdfParams'),
+    ]) {
+      test('an envelope that carries no $name', () async {
+        await refusedAfterOnline(
+            passPhrase: passPhrase,
+            unreadable: () async {
+              final envelope = jsonDecode(File(path).readAsStringSync())
+                  as Map<String, dynamic>;
+              expect(envelope.remove(field), isNotNull,
+                  reason: 'the precondition: the envelope carried $field');
+              File(path).writeAsStringSync(jsonEncode(envelope));
+              return envelope['content'] as String;
+            },
+            reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+            reason: contains(says),
+            error: notAPassphraseRefusal);
+      });
+    }
+
     test('a role that appears twice for one keyId', () async {
       final value = randomBase64(24);
       await refusedAfterOnline(
