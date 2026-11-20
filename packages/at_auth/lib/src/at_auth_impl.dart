@@ -221,7 +221,7 @@ class AtAuthImpl implements AtAuth {
           "onboarding",
           "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
           ProgressEventType.error);
-      throw AtAuthenticationException('Pkam auth failed - $e ');
+      throw AtAuthenticationException('Pkam auth failed - $e');
     }
 
     //6b. Store the keys
