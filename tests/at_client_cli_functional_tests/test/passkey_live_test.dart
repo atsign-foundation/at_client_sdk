@@ -131,12 +131,13 @@ void main() {
       expect(await replies.moveNext(), isTrue);
       done.add(replies.current as List);
     }
+    expect(done.map((d) => d[0]), everyElement('ok'),
+        reason: 'each writer reports how its write went, not an error');
     for (final d in done) {
       print('LIVE writer ${d[1]}: ${d[0]} after ${d[2]} ms, '
           '${d[3]} lock takes refused');
     }
 
-    expect(done.map((d) => d[0]), everyElement('ok'));
     expect(
         done.map((d) => d[3] as int).fold(0, (a, b) => a + b), greaterThan(0),
         reason: 'one writer found the lock the other held');
