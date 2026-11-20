@@ -9,10 +9,13 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 /// For an [AtNoCredentialException], it says this device's enrollment ended
 /// or never completed, and to enroll the device again. For an
 /// [AtEnrollmentPendingException], it says the enrollment is still waiting
-/// for approval, and to enroll again from this app. For any other
+/// for approval, and to enroll again from this app, unless several pending
+/// enrollments matched, when it is the first line of that exception's
+/// message, which says to name the app and the device. For any other
 /// [AtKeysUnusableException], it is the first line of that exception's
-/// message. For an atServer's refusal, or an atSign not in the atDirectory,
-/// it is the cause in plain words. For a wait that ran out, it is [timedOut].
+/// message. For an atServer's refusal, wrapped or as thrown and classified by
+/// the client's connection, or an atSign not in the atDirectory, it is the
+/// cause in plain words. For a wait that ran out, it is [timedOut].
 /// For any other failure to reach a server, as the client's connection
 /// classifies one, it is [unreachable], which defaults to saying the atServer
 /// for [atSign] could not be reached. For anything else, it says something
@@ -30,7 +33,7 @@ String failureMessage(
         'expired, or never completed. Enroll this device again to use '
         '$atSign here.';
   }
-  if (error is AtEnrollmentPendingException) {
+  if (error is AtEnrollmentPendingException && !error.severalMatched) {
     return "This device's enrollment for $atSign is still waiting for "
         'approval and cannot be completed here. Enroll this device again '
         'from this app to carry on.';
@@ -40,10 +43,11 @@ String failureMessage(
   final refusal = switch (error) {
     AtOpenRefusedException(:final state) => _refusal(atSign, state.cause),
     AtCredentialRefusedException(:final state) => _refusal(atSign, state.cause),
-    _ when classified?.cause == AtConnectionCause.noAtServer => _refusal(
-      atSign,
-      AtConnectionCause.noAtServer,
-    ),
+    _
+        when classified != null &&
+            (classified.isRefused ||
+                classified.cause == AtConnectionCause.noAtServer) =>
+      _refusal(atSign, classified.cause),
     _ => null,
   };
   if (refusal != null) return refusal;

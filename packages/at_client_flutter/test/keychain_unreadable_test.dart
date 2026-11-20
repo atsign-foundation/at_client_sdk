@@ -149,9 +149,12 @@ void main() {
         ),
         throwsA(
           unreadable(
-            message: startsWith(
-              "The keys for $atSign in this device's keychain could not be "
-              'read: ',
+            message: allOf(
+              startsWith(
+                "The keys for $atSign in this device's keychain could not be "
+                'read: ',
+              ),
+              isNot(contains('Every Atsign')),
             ),
             error: isA<PlatformException>(),
           ),
@@ -189,7 +192,12 @@ void main() {
           preference: await loopbackPreference(),
           lookUps: silentLookUps,
         ),
-        throwsA(unreadable(message: anything, error: isA<PlatformException>())),
+        throwsA(
+          unreadable(
+            message: isNot(contains('Every Atsign')),
+            error: isA<PlatformException>(),
+          ),
+        ),
       );
       expectNothingSent();
       expect(changed, isEmpty, reason: 'nothing is written or deleted');

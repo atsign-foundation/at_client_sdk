@@ -23,6 +23,10 @@ part 'keychain_store.dart';
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
+/// The most Windows keychain segments deleting an entry looks for when its
+/// header does not say how many there are: 1024 segments, about 2.5 MB.
+const int _kMaxWindowSegmentsScanned = 1024;
+
 /// Service to manage keychain CRUD operations for Atsigns and SPPs
 class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
@@ -508,8 +512,11 @@ class KeychainStorage {
         final int segmentCount;
         final String segmentPrefix;
         if (storedData.startsWith('{')) {
-          segmentCount = _segmentCountIn(storedData);
           segmentPrefix = '${keychainStoreName}_segment';
+          segmentCount = await _deletableSegmentCount(
+            storedData,
+            segmentPrefix,
+          );
         } else {
           segmentCount = int.tryParse(storedData) ?? 0;
           segmentPrefix = '${await getPackageName()}_data';
@@ -540,6 +547,37 @@ class KeychainStorage {
     }
 
     await store.delete();
+  }
+
+  /// The number of segments named `[segmentPrefix]_i` to delete for the
+  /// Windows header [header].
+  ///
+  /// A header whose segment count cannot be read, such as one that is not a
+  /// JSON object, still has segments holding the atKeys text, so they are
+  /// found by reading `[segmentPrefix]_0` onwards until one is absent or
+  /// empty, up to [_kMaxWindowSegmentsScanned].
+  Future<int> _deletableSegmentCount(
+    String header,
+    String segmentPrefix,
+  ) async {
+    try {
+      return _segmentCountIn(header);
+    } catch (e, s) {
+      _logger.warning(
+        'Windows keychain header has no readable segment count; '
+        'scanning for its segments to delete them',
+        e,
+        s,
+      );
+    }
+    var count = 0;
+    while (count < _kMaxWindowSegmentsScanned) {
+      final segment = await _getBiometricStorageFile('${segmentPrefix}_$count');
+      final value = await segment.read();
+      if (value == null || value.isEmpty) break;
+      count++;
+    }
+    return count;
   }
 
   /// Writes [keychainData] to the keys entry named [name], which held

@@ -24,6 +24,11 @@ Matcher holdsNoRunOf(String value, {int window = 16}) => predicate<String>(
         .any((i) => text.contains(value.substring(i, i + window))),
     'text holding no $window-character run of what was read');
 
+/// Matches a refusal to decrypt that does not say the passphrase is wrong or
+/// missing.
+final notAPassphraseRefusal = allOf(isA<AtDecryptionException>(),
+    isNot(isA<AtKeysPassphraseException>()));
+
 /// An atDirectory that records each atSign it is asked for and answers none.
 class _RecordingAtDirectory implements SecondaryAddressFinder {
   final List<String> asked = [];
@@ -432,23 +437,42 @@ void main() {
           error: isA<AtKeysParseException>());
     });
 
-    test('a key derivation cost below one', () async {
-      final cost = '-${random.nextInt(900000000) + 100000000}'
-          '${random.nextInt(900000000) + 100000000}';
+    for (final name in const ['memory', 'iterations', 'parallelism']) {
+      test('a key derivation $name below one', () async {
+        final cost = '-${random.nextInt(900000000) + 100000000}'
+            '${random.nextInt(900000000) + 100000000}';
+        await refusedAfterOnline(
+            passPhrase: passPhrase,
+            unreadable: () async {
+              final envelope = jsonDecode(File(path).readAsStringSync())
+                  as Map<String, dynamic>;
+              (envelope['kdfParams'] as Map<String, dynamic>)[name] =
+                  int.parse(cost);
+              File(path).writeAsStringSync(jsonEncode(envelope));
+              return cost;
+            },
+            reader:
+                FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+            reason: contains('must carry a positive integer kdfParams.$name'),
+            error: notAPassphraseRefusal);
+      });
+    }
+
+    test('a key derivation memory and parallelism of zero', () async {
       await refusedAfterOnline(
           passPhrase: passPhrase,
           unreadable: () async {
             final envelope = jsonDecode(File(path).readAsStringSync())
                 as Map<String, dynamic>;
-            (envelope['kdfParams'] as Map<String, dynamic>)['iterations'] =
-                int.parse(cost);
+            final kdfParams = envelope['kdfParams'] as Map<String, dynamic>;
+            kdfParams['memory'] = 0;
+            kdfParams['parallelism'] = 0;
             File(path).writeAsStringSync(jsonEncode(envelope));
-            return cost;
+            return passPhrase;
           },
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
-          reason:
-              contains('must carry a positive integer kdfParams.iterations'),
-          error: isA<AtDecryptionException>());
+          reason: contains('must carry a positive integer kdfParams.memory'),
+          error: notAPassphraseRefusal);
     });
 
     test('a key derivation memory below eight times its parallelism', () async {
@@ -468,7 +492,7 @@ void main() {
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: contains('kdfParams.memory of at least 8 times its '
               'kdfParams.parallelism'),
-          error: isA<AtDecryptionException>());
+          error: notAPassphraseRefusal);
     });
 
     test('a key derivation this device cannot run', () async {
@@ -491,7 +515,7 @@ void main() {
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: startsWith('this atKeys file asks for a key derivation this '
               'device could not run'),
-          error: isA<AtDecryptionException>());
+          error: notAPassphraseRefusal);
     });
 
     test('a hashing algorithm this build has no code for', () async {
@@ -508,7 +532,7 @@ void main() {
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: startsWith('this atKeys file names a hashingAlgoType this '
               'build has no code for'),
-          error: isA<AtDecryptionException>());
+          error: notAPassphraseRefusal);
     });
   });
 

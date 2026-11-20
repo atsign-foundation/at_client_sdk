@@ -414,6 +414,32 @@ void main() {
     });
   });
 
+  group('A keyfile path that is a directory', () {
+    test('is refused as not writable, leaving the directory as it was',
+        () async {
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      Directory(path).createSync();
+
+      await expectLater(
+          FileAtKeysIo(filePath: (_) => path).checkWritable(atSign),
+          throwsA(isA<FileSystemException>()
+              .having((e) => e.path, 'path', path)
+              .having((e) => e.message, 'message',
+                  startsWith('Cannot write the atKeys file: '))));
+      expect(dir.listSync().map((e) => e.path), [path],
+          reason: 'the check leaves no probe file behind');
+    });
+
+    test('is refused before anything is sent to the atServer', () async {
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      Directory(path).createSync();
+
+      await expectLater(activate(FileAtKeysIo(filePath: (_) => path)),
+          throwsA(isA<FileSystemException>()));
+      expectNothingSent();
+    });
+  });
+
   /// The probe files each check run through [probing] creates.
   final probes = <String>[];
 
