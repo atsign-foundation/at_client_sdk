@@ -93,6 +93,61 @@ void main() {
     });
   });
 
+  group('Given the characters at and beside each end of each escaped range',
+      () {
+    const ranges = [
+      (0x00, 0x1f),
+      (0x7f, 0x9f),
+      (0xad, 0xad),
+      (0x0600, 0x0605),
+      (0x061c, 0x061c),
+      (0x06dd, 0x06dd),
+      (0x070f, 0x070f),
+      (0x0890, 0x0891),
+      (0x08e2, 0x08e2),
+      (0x180e, 0x180e),
+      (0x200b, 0x200f),
+      (0x2028, 0x202e),
+      (0x2060, 0x206f),
+      (0xd800, 0xdfff),
+      (0xfeff, 0xfeff),
+      (0xfff9, 0xfffb),
+      (0x110bd, 0x110bd),
+      (0x110cd, 0x110cd),
+      (0x13430, 0x1343f),
+      (0x1bca0, 0x1bca3),
+      (0x1d173, 0x1d17a),
+      (0xe0000, 0xe007f),
+    ];
+    String hex(int rune) => 'U+${rune.toRadixString(16)}';
+
+    test(
+        'when the first or last character of a range is clipped, then it is '
+        'shown as an escape', () {
+      for (final (first, last) in ranges) {
+        for (final rune in {first, last}) {
+          final escape = rune > 0xffff
+              ? '\\u{${rune.toRadixString(16)}}'
+              : '\\u${rune.toRadixString(16).padLeft(4, '0')}';
+          expect(
+              clipForMessage('a${String.fromCharCode(rune)}b'), 'a${escape}b',
+              reason: hex(rune));
+        }
+      }
+    });
+
+    test(
+        'when the character just before or after a range is clipped, then it '
+        'is shown as itself', () {
+      for (final (first, last) in ranges) {
+        for (final rune in [if (first > 0) first - 1, last + 1]) {
+          final text = 'a${String.fromCharCode(rune)}b';
+          expect(clipForMessage(text), text, reason: hex(rune));
+        }
+      }
+    });
+  });
+
   group('Given a quote character', () {
     test('when the text holds it, then each one is shown escaped', () {
       expect(clipForMessage('a"b"', quote: '"'), r'a\"b\"');
