@@ -31,7 +31,8 @@
   wrong with <atSign>: <message>", never a stack trace.
 - fix: `PkamDialog` tells the user in plain words to enroll the device again
   when its keys hold no credential, or only enrollments awaiting approval
-  that it cannot wait on.
+  that it cannot wait on, and says why when the device has asked more than
+  once.
 
 ## 2.0.0
 
