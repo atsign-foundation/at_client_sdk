@@ -1,4 +1,3 @@
-import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:at_commons/at_builders.dart'
     show LLookupVerbBuilder, UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart'
@@ -93,8 +92,9 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
       return null;
     }
     if (response == null || !response.startsWith('data:')) {
-      throw InvalidResponseException(
-          'unexpected llookup response: "${clipForMessage('$response', quote: '"')}"');
+      // NOTE: the reply may be the sealed document, so its text is never shown.
+      throw InvalidResponseException('unexpected llookup response of '
+          '${response?.length ?? 0} characters');
     }
     final text = response.substring('data:'.length).trim();
     return text == 'null' ? null : text;

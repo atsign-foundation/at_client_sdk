@@ -75,15 +75,12 @@ void main() {
     });
   }
 
-  test('get shows an unexpected response quoted and escaped in its error',
-      () async {
+  test('get names an unexpected response by its length in its error', () async {
     final odd = ScriptedAtLookUp((_) async => 'error:AT0011-a\nb"c');
     await expectLater(
         storeOver(odd).get(_atSign, _eid),
-        throwsA(isA<InvalidResponseException>().having(
-            (e) => e.message,
-            'message',
-            r'unexpected llookup response: "error:AT0011-a\u000ab\"c"')));
+        throwsA(isA<InvalidResponseException>().having((e) => e.message,
+            'message', 'unexpected llookup response of 18 characters')));
   });
 
   test('an unexpected response is not echoed whole into the error', () async {
@@ -92,6 +89,18 @@ void main() {
         storeOver(odd).get(_atSign, _eid),
         throwsA(isA<InvalidResponseException>()
             .having((e) => e.message.length, 'message length', lessThan(220))));
+  });
+
+  test('a reply without a data prefix is not quoted, as it may be the document',
+      () async {
+    const sealed = '{"v":2,"iv":"SEALEDIVTEXT","ct":"SEALEDCTTEXT"}';
+    final odd = ScriptedAtLookUp((_) async => sealed);
+    await expectLater(
+        storeOver(odd).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>()
+            .having((e) => e.message, 'message',
+                contains('${sealed.length} characters'))
+            .having((e) => e.message, 'message', isNot(contains('SEALED')))));
   });
 
   test('put sends update on the authenticated remote', () async {
