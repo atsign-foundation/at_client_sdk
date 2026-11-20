@@ -19,6 +19,10 @@ class _FakeListParams extends Fake implements EnrollmentListRequestParam {}
 
 class _FakeDecision extends Fake implements EnrollmentRequestDecision {}
 
+/// The command line for @alice, naming a root on the loopback interface that
+/// the mocked client never asks.
+const _alice = ['-a', '@alice', '-r', '127.0.0.1:1'];
+
 /// Collects what `at_activate` prints.
 class _CapturedStdout extends Fake implements Stdout {
   final List<String> written = [];
@@ -101,8 +105,7 @@ void main() {
           ..value =
               jsonEncode({'appName': appName, 'deviceName': deviceName})));
     final args = AuthCliArgs().createAutoApproveCommandParser().parse([
-      '-a',
-      '@alice',
+      ..._alice,
       '--${AuthCliArgs.argNameAppNameRegex}',
       'wavi',
       '--${AuthCliArgs.argNameDeviceNameRegex}',
@@ -127,8 +130,7 @@ void main() {
             shouldDecrypt: any(named: 'shouldDecrypt')))
         .thenAnswer((_) => Stream.fromIterable(arriving));
     final args = AuthCliArgs().createAutoApproveCommandParser().parse([
-      '-a',
-      '@alice',
+      ..._alice,
       '--${AuthCliArgs.argNameAppNameRegex}',
       'wavi',
       '--${AuthCliArgs.argNameDeviceNameRegex}',
@@ -148,7 +150,7 @@ void main() {
     test('approve', () async {
       serveB(expiresAt: '2026-10-17T07:00:00.000Z');
       final args = AuthCliArgs().createApproveCommandParser().parse(
-          ['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
+          [..._alice, '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
       final out = _CapturedStdout();
 
       await IOOverrides.runZoned(() => auth_cli.approve(args, client),
@@ -176,7 +178,7 @@ void main() {
       () async {
     serveB();
     final args = AuthCliArgs().createApproveCommandParser().parse(
-        ['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
+        [..._alice, '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.approve(args, client),
@@ -192,7 +194,7 @@ void main() {
       'approval', () async {
     serveB(expiresAt: '2026-10-17T07:00:00.000Z', statusAfter: 'revoked');
     final args = AuthCliArgs().createApproveCommandParser().parse(
-        ['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
+        [..._alice, '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.approve(args, client),
@@ -352,7 +354,7 @@ void main() {
     /// stderr.
     Future<String> approveB() async {
       final args = AuthCliArgs().createApproveCommandParser().parse(
-          ['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
+          [..._alice, '--${AuthCliArgs.argNameAppNameRegex}', 'wavi']);
       final out = _CapturedStdout();
       final err = _CapturedStdout();
       await IOOverrides.runZoned(() => auth_cli.approve(args, client),
