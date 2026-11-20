@@ -149,13 +149,14 @@ void main() {
   /// path written with [passPhrase], then leaves the keyfile as [unreadable]
   /// makes it and opens [atSign] from what [reader] reads; expects the open
   /// to fail with [cause] and a message that [says] what is wrong, whose
-  /// reason matches [reason], holding no 16-character run of the text
+  /// reason matches [reason], holding no [window]-character run of the text
   /// [unreadable] returns.
   Future<void> refusedAfterOnline(
       {String? passPhrase,
       AtKeysUnusableCause cause = AtKeysUnusableCause.unreadable,
       String says = 'could not be read',
       required Future<String> Function() unreadable,
+      int window = 16,
       required AtKeysIo reader,
       required Matcher reason,
       Matcher error = anything}) async {
@@ -196,7 +197,8 @@ void main() {
                         (m) => reason.matches(
                             m.substring(prefix.length, m.length - 1), {}),
                         'a reason that $reason')))
-            .having((e) => e.message, 'what was read', holdsNoRunOf(secret))));
+            .having((e) => e.message, 'what was read',
+                holdsNoRunOf(secret, window: window))));
     expectNoConnection();
   }
 
@@ -214,6 +216,23 @@ void main() {
                 'No keys for $atSign at $path, so this device cannot '
                     'authenticate as $atSign. Activate $atSign, enroll this '
                     'device, or use the keyfile it already has.')));
+    expectNoConnection();
+  });
+
+  test('A keyfile path that cannot be resolved is refused before connecting',
+      () async {
+    // NOTE: as the default path resolves on a platform with no home
+    // directory.
+    const String? home = null;
+
+    await expectLater(
+        openUnconnected(
+            FileAtKeysIo(filePath: (a) => '${home!}/${a}_key.atKeys')),
+        throwsA(isA<AtKeysUnusableException>()
+            .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+            .having((e) => e.source, 'source',
+                'the atKeys file, whose path could not be resolved')
+            .having((e) => e.error, 'error', isA<TypeError>())));
     expectNoConnection();
   });
 
@@ -466,8 +485,11 @@ void main() {
             kdfParams['memory'] = memory;
             kdfParams['parallelism'] = 1;
             File(path).writeAsStringSync(jsonEncode(envelope));
-            return '${memory * 1024}';
+            // NOTE: the file's value and the byte count it asks for; a
+            // 13-character window fits inside either.
+            return '$memory ${memory * 1024}';
           },
+          window: 13,
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: startsWith('this atKeys file asks for a key derivation this '
               'device could not run'),

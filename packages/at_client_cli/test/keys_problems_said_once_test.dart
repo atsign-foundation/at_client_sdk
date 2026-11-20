@@ -15,6 +15,7 @@ import 'package:at_chops/at_chops.dart'
     show AESEncryptionAlgo, AESKey, InitialisationVector, RsaKeyPair;
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart' show absentKeysHint;
+import 'package:at_client_cli/src/util/keys_problem.dart' show eitherKeysHint;
 import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:test/test.dart';
 
@@ -198,7 +199,7 @@ void main() {
             holdsOnceInOrder([
               'No keys for $atSign at ${defaultKeyfile()}.',
               '$atSign has not been activated yet. To activate it: '
-                  'at_activate onboard -a $atSign',
+                  'at_activate onboard -a $atSign -r ${atDirectoryRoot()}',
               footer,
             ]));
         expect(run.exitCode, 1);
@@ -484,7 +485,7 @@ void main() {
 
       expect(await absentKeysHint(atSign, atDirectoryRoot()), [
         '$atSign has not been activated yet. To activate it: at_activate '
-            'onboard -a $atSign'
+            'onboard -a $atSign -r ${atDirectoryRoot()}'
       ]);
       await hungUp.timeout(const Duration(seconds: 5));
     });
@@ -494,9 +495,33 @@ void main() {
 
       expect(await absentKeysHint(atSign, atDirectoryRoot()), [
         '$atSign has not been activated yet. To activate it: at_activate '
-            'onboard -a $atSign'
+            'onboard -a $atSign -r ${atDirectoryRoot()}'
       ]);
     });
+
+    test(
+        'closes its connection to an atServer that does not answer within '
+        '5 seconds', () async {
+      // NOTE: accepts TCP and never answers the TLS handshake.
+      final stalled = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(stalled.close);
+      final accepted = Completer<Socket>();
+      stalled.listen(accepted.complete, onError: (_) {});
+      atServerPort = stalled.port;
+
+      expect(await absentKeysHint(atSign, atDirectoryRoot()),
+          eitherKeysHint(atSign));
+
+      final socket = await accepted.future
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        fail('the control: the lookup did not reach the stalled atServer');
+      });
+      addTearDown(socket.destroy);
+      await socket.drain<void>().timeout(const Duration(seconds: 5),
+          onTimeout: () {
+        fail('the lookup left its connection open after the 5 seconds');
+      });
+    }, timeout: const Timeout(Duration(minutes: 1)));
   });
 
   test('A program built on CLIBase says the same', () async {

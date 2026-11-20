@@ -1,5 +1,13 @@
 ## 4.1.0-rc.1
 
+- feat: a passphrase envelope refused for its passphrase, missing or one
+  that does not open it, throws `AtKeysPassphraseException`, an
+  `AtDecryptionException`; every other refusal of an envelope is still a
+  plain `AtDecryptionException` saying what is wrong.
+- fix: `FileAtKeysIo.describeSource` names the keyfile without throwing when
+  its path cannot be resolved, such as the default path on a platform with
+  no home directory, so the read failure is reported as
+  `AtKeysUnusableException`.
 - feat: an atServer's `error:` reply to a `from:`, `pkam:` or `cram:` throws
   `AtAuthErrorReplyException`, an `UnAuthenticatedException` whose
   `errorCode` is the reply's code. `AtAuth.onboard` still reports a failed

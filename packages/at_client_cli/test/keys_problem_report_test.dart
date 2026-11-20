@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart' show AtKeysPassphraseException;
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/util/keys_problem.dart';
 import 'package:test/test.dart';
@@ -109,6 +110,45 @@ void main() {
           stderrOf(() => reportKeysProblem(noCredential, absentHint: const []));
 
       expect(lines, [noCredential.message, keysProblemFooter]);
+    });
+  });
+
+  group('Given a passphrase-protected keyfile that could not be read', () {
+    const keyfile = '/keys/alice.atKeys';
+
+    test('when its passphrase was refused, then the report says to pass it',
+        () {
+      final lines = stderrOf(() => reportKeysProblem(
+          AtKeysUnusableException.unreadable(atSign,
+              source: keyfile,
+              error: AtKeysPassphraseException(
+                  'Failed to decrypt atKeys file - passphrase may be '
+                  'incorrect')),
+          absentHint: const []));
+
+      expect(lines, [
+        'Could not read the keys for $atSign at $keyfile: the passphrase is '
+            'wrong or missing.',
+        '  If the keyfile has a passphrase, pass it with -P.',
+        keysProblemFooter,
+      ]);
+    });
+
+    test(
+        'when it declares an envelope version this build has no code for, '
+        'then the report gives that reason and does not blame the passphrase',
+        () {
+      final unusable = AtKeysUnusableException.unreadable(atSign,
+          source: keyfile,
+          error: AtDecryptionException('this atKeys file declares an envelope '
+              'version this build has no code for'));
+
+      final lines =
+          stderrOf(() => reportKeysProblem(unusable, absentHint: const []));
+
+      expect(lines, [unusable.message, keysProblemFooter]);
+      expect(lines.first, contains('envelope version this build has no code'));
+      expect(lines.join('\n'), isNot(contains('passphrase')));
     });
   });
 }

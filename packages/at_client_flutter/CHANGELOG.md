@@ -13,6 +13,13 @@
   `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
   legacy-named store cannot be read or written, or its entry is not a JSON
   object; `deleteAllAtKeysData` clears a keychain whose entry does not parse.
+  On Windows, where an entry is written in parts, a write that fails partway
+  is undone before it is thrown, so it leaves the keychain as it was; only
+  when undoing it fails too, which is logged, can the entry be left partly
+  written.
+- fix: `RegistrarCramDialog` says the registrar could not be reached when
+  its request gets no response, as package:http reports one, rather than
+  "Something went wrong". at_client_flutter now depends on http directly.
 - fix: reading the keychain throws when its legacy-named store cannot be
   read, rather than reading as a keychain that holds no keys.
 - fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry is not

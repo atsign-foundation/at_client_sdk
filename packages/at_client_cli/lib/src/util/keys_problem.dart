@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysPassphraseEnvelopeCodec;
+import 'package:at_auth/at_auth.dart' show AtKeysPassphraseException;
 import 'package:at_client/at_client.dart'
     show
-        AtDecryptionException,
         AtEnrollmentPendingException,
         AtKeysUnusableCause,
         AtKeysUnusableException;
@@ -33,9 +31,9 @@ void reportKeysProblem(AtKeysUnusableException e,
         'No keys for ${e.atSign} at ${e.source}.',
         ...absentHint,
       ],
-    AtKeysUnusableCause.unreadable
-        when e.error is AtDecryptionException &&
-            _isPassphraseProtected(e.source) =>
+    // NOTE: only a refused passphrase; any other envelope refusal, such as a
+    // version this build has no code for, keeps its own reason below.
+    AtKeysUnusableCause.unreadable when e.error is AtKeysPassphraseException =>
       [
         'Could not read the keys for ${e.atSign} at ${e.source}: the '
             'passphrase is wrong or missing.',
@@ -73,16 +71,4 @@ String _waitForApproval(AtEnrollmentPendingException e) {
       : '$keyfile holds only pending enrollment requests for '
           '${e.atSign} (ids ${ids.join(', ')}). Once one is approved, run the '
           'at_activate enroll command that made it again to finish it.';
-}
-
-/// Whether the keyfile at [path] is a passphrase envelope.
-bool _isPassphraseProtected(String? path) {
-  if (path == null) return false;
-  try {
-    final json = jsonDecode(File(path).readAsStringSync());
-    return json is Map<String, dynamic> &&
-        const AtKeysPassphraseEnvelopeCodec().isEnvelope(json);
-  } catch (_) {
-    return false;
-  }
 }

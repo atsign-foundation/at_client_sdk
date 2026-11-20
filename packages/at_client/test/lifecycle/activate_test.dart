@@ -7,7 +7,7 @@ import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_utils.dart' show LoggingHandler;
+import 'package:at_utils/at_utils.dart' show LoggingHandler, LogLevel;
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtCommandExecutor;
 import 'package:mocktail/mocktail.dart';
@@ -33,10 +33,27 @@ void main() {
   const enrollmentId = 'first-1';
   const cramSecret = 'the-one-time-secret';
   late Directory dir;
+  late _KeptLogs logs;
+  late String rootLevel;
+  late LoggingHandler handler;
 
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
     registerFallbackValue((AtCommandExecutor _) async => true);
+    // NOTE: an AtSignLogger binds the handler and root level when it is made,
+    // and a library's top-level one is made at its first use, in whichever
+    // test that is; so every one this file makes is bound here, before any
+    // test, to a handler that passes on what the console would have shown.
+    rootLevel = AtSignLogger.root_level;
+    handler = AtSignLogger.defaultLoggingHandler;
+    logs = _KeptLogs(handler, LogLevel.level[rootLevel]);
+    AtSignLogger.defaultLoggingHandler = logs;
+    AtSignLogger.root_level = 'finest';
+  });
+
+  tearDownAll(() {
+    AtSignLogger.root_level = rootLevel;
+    AtSignLogger.defaultLoggingHandler = handler;
   });
 
   setUp(() {
@@ -374,15 +391,7 @@ void main() {
 
   /// Catalogue: features/at_client/open_unusable_keys.feature
   test("An activation failure's message holds no stack trace", () async {
-    final logs = _KeptLogs();
-    final level = AtSignLogger.root_level;
-    final handler = AtSignLogger.defaultLoggingHandler;
-    AtSignLogger.root_level = 'finest';
-    AtSignLogger.defaultLoggingHandler = logs;
-    addTearDown(() {
-      AtSignLogger.root_level = level;
-      AtSignLogger.defaultLoggingHandler = handler;
-    });
+    final records = logs.keep();
     final server = atServer(
         onPkam: () async => throw UnAuthenticatedException(
             'Failed connecting to $atSign. error:{"errorCode":"AT0401",'
@@ -413,7 +422,7 @@ void main() {
                 allOf(isNot(contains('\n')), isNot(contains('#0')),
                     isNot(contains('package:'))))
             .having((e) => '$e', 'text', isNot(contains('#0'))));
-    final fine = logs.records.where((r) =>
+    final fine = records.where((r) =>
         '${r.level.name}' == 'FINE' &&
         '${r.message}'.contains('pkam auth failed for $atSign'));
     expect(fine, isNotEmpty, reason: 'the failure is logged at fine');
@@ -465,11 +474,32 @@ void main() {
 }
 
 /// Every record logged through it, kept with its error and stack trace.
+/// The logging handler of every AtSignLogger this file makes: it passes each
+/// record at or above [passOnFrom] on to [passOn], and keeps every record
+/// while a test that called [keep] runs.
 class _KeptLogs implements LoggingHandler {
-  final List<dynamic> records = [];
+  _KeptLogs(this.passOn, this.passOnFrom);
+
+  final LoggingHandler passOn;
+
+  /// The least level passed on; null passes every record on.
+  final dynamic passOnFrom;
+
+  List<dynamic>? _kept;
+
+  /// The records logged from now until the calling test ends.
+  List<dynamic> keep() {
+    final kept = <dynamic>[];
+    _kept = kept;
+    addTearDown(() => _kept = null);
+    return kept;
+  }
 
   @override
-  void call(dynamic record) => records.add(record);
+  void call(dynamic record) {
+    _kept?.add(record);
+    if (passOnFrom == null || record.level >= passOnFrom) passOn(record);
+  }
 }
 
 /// Answers `from:` with a challenge, and `cram:` with success only for the
