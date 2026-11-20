@@ -135,18 +135,20 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
   /// PKAM as [enrollmentId] with [pair] on a connection of its own, whose
   /// `from:` carries at_client's clientConfig.
   ///
-  /// Throws [PkamRefusedException] when the run of the authenticator that
-  /// failed sent a `pkam:` and [classifyConnectionFailure] reads the failure
-  /// as a refusal whose cause is [AtConnectionCause.unauthenticated],
-  /// [AtConnectionCause.revoked], [AtConnectionCause.enrollmentDenied] or
-  /// [AtConnectionCause.invalidEnrollment]. Any other failure, one before the
-  /// `pkam:` or a refusal as [AtConnectionCause.enrollmentNotApproved]
-  /// included, propagates as it is.
+  /// Throws [PkamRefusedException] when the failure is the one a run of the
+  /// authenticator threw after sending a `pkam:`, and
+  /// [classifyConnectionFailure] reads it as a refusal whose cause is
+  /// [AtConnectionCause.unauthenticated], [AtConnectionCause.revoked],
+  /// [AtConnectionCause.enrollmentDenied] or
+  /// [AtConnectionCause.invalidEnrollment]. Any other failure propagates as it
+  /// is: one before the `pkam:`, one outside the authenticator's runs, such as
+  /// a proxy's error reply to the `from:` of a reconnect, and a refusal as
+  /// [AtConnectionCause.enrollmentNotApproved].
   Future<EnrollmentSession> _authenticated(
       String atSign, String enrollmentId, ApkamKeyPair pair,
       {required AtKeys? keys}) async {
     final lookUp = _lookUp(atSign);
-    var pkamSent = false;
+    Object? pkamFailure;
     try {
       final signingKeys =
           withApkamKey(AtKeys(atsign: Atsign(atSign)), enrollmentId, pair);
@@ -154,9 +156,15 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
           handshakeKeysIo(atSign, signingKeys), atSign,
           enrollmentId: enrollmentId, clientConfig: clientConfigOf(null));
       // NOTE: only a reply to the pkam: can be a refusal.
-      lookUp.authenticator = (executor) {
-        pkamSent = false;
-        return authenticate(_NotingPkam(executor, () => pkamSent = true));
+      lookUp.authenticator = (executor) async {
+        var pkamSent = false;
+        try {
+          return await authenticate(
+              _NotingPkam(executor, () => pkamSent = true));
+        } catch (e) {
+          if (pkamSent) pkamFailure = e;
+          rethrow;
+        }
       };
       if (!await lookUp.pkamAuthenticate()) {
         throw UnAuthenticatedException('Failed connecting to $atSign. The '
@@ -164,7 +172,7 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
       }
     } catch (e) {
       await _closeQuietly(lookUp);
-      if (pkamSent &&
+      if (identical(e, pkamFailure) &&
           _enrollmentRefusals.contains(classifyConnectionFailure(e)?.cause)) {
         throw PkamRefusedException(enrollmentId);
       }

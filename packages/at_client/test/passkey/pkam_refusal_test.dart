@@ -26,6 +26,7 @@ import '../test_utils/fake_at_server.dart' show FakeAtServerSocket;
 const _atSign = '@alice🛠';
 const _eid = 'b6f0c3de-0b8e-4f6a-9d1e-6c2f3a8e5b71';
 const _uuid = '123e4567-e89b-12d3-a456-426614174000';
+const _proxyRoot = AtRootDomain('proxy:127.0.0.1', 64);
 final _credential = Uint8List.fromList([1]);
 
 /// The PRF output of the one passkey, fresh each call: deriving wipes it.
@@ -121,11 +122,12 @@ void main() {
     keys.vault.close();
   });
 
-  AtAuthEnrollmentGateway gateway(AtLookUpFactory lookUps) =>
+  AtAuthEnrollmentGateway gateway(AtLookUpFactory lookUps,
+          {AtRootDomain root = AtRootDomain.atsignDomain}) =>
       AtAuthEnrollmentGateway(
           lookUps: lookUps,
           finder: FixedSecondaryAddressFinder('127.0.0.1', 1),
-          root: AtRootDomain.atsignDomain,
+          root: root,
           app: 'wavi',
           device: 'browser',
           clientOpener: (
@@ -140,12 +142,13 @@ void main() {
                   required apkamKeyPair}) async =>
               withApkamKey(AtKeys(atsign: Atsign(atSign)), _eid, apkamKeyPair));
 
-  PasskeyCustody custody(AtLookUpFactory lookUps, FakeHints hints) =>
+  PasskeyCustody custody(AtLookUpFactory lookUps, FakeHints hints,
+          {AtRootDomain root = AtRootDomain.atsignDomain}) =>
       PasskeyCustody(
           prf: PasskeyPrf(passkeys),
           deriver: const BytesPasskeyKeyDeriver(),
           pointerReader: pointers,
-          gateway: gateway(lookUps),
+          gateway: gateway(lookUps, root: root),
           credentials: hints,
           enrollmentIds: hints,
           setupLock: FakeSetupLock(),
@@ -290,6 +293,45 @@ void main() {
             'was lost');
     expect(atServer.froms, hasLength(2),
         reason: 'the connection made the attempt again');
+  });
+
+  test(
+      'A proxy\'s error reply to the from: of a reconnect after the pkam: is '
+      'not a refusal', () async {
+    final reply = _at0401['dash']!;
+    FakeAtServerSocket? firstConnection;
+    final proxy = _PkamServer(
+        onFrom: (socket) {
+          firstConnection ??= socket;
+          return identical(socket, firstConnection)
+              ? _challenge(socket)
+              : _replies(reply)(socket);
+        },
+        onPkam: (socket) => socket.serverCloses());
+
+    await expectLater(
+        custody(proxy.lookUps, FakeHints(), root: _proxyRoot)
+            .open(atSign: _atSign),
+        throwsA(allOf(
+            isA<AtLookUpException>()
+                .having((e) => e.errorCode, 'errorCode', 'AT0401')
+                .having((e) => e.errorMessage, 'errorMessage',
+                    'Exception: pkam authentication failed'),
+            isNot(isA<PasskeyLostException>()),
+            isNot(isA<PkamRefusedException>()))),
+        reason: 'the open throws what the proxy answered the reconnect\'s '
+            'from: with');
+    expect(proxy.froms.first, 'from:$_atSign\n',
+        reason: 'the control: the proxy root sends its from: first on a '
+            'connection');
+    expect(proxy.pkams, hasLength(1),
+        reason: 'the pkam: was sent before the connection was lost');
+    expect(proxy.froms, hasLength(3),
+        reason: 'the first connection carried the proxy\'s from: and the '
+            'PKAM\'s, and the reconnect stopped at its proxy from:');
+    expect(proxy.froms.last, 'from:$_atSign\n',
+        reason: 'the error answered the reconnect\'s proxy from:, not a '
+            'from: of the PKAM');
   });
 
   const outline4 = 'A PKAM failure that is not a refusal propagates as it is';

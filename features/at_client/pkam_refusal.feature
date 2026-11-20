@@ -28,8 +28,10 @@ Feature: A refused PKAM is read by the client's one classifier
   service: a failure that is not a refusal keeps the device's hints, so a
   failure that whoever answers at the address can cause at will costs no
   second prompt and offers no Reset. Races: whether the pkam: was sent is
-  recorded for one attempt, and an attempt the connection makes again
-  starts afresh. Replay: nothing here is stored or resent.
+  recorded for one attempt, an attempt the connection makes again starts
+  afresh, and only the failure of the attempt that sent the pkam: is read,
+  never one from the reconnect between attempts, such as a proxy's error
+  reply to its from:. Replay: nothing here is stored or resent.
 
   Scenario Outline: A PKAM the atServer refuses for the passkey's enrollment is a lost passkey
     Given the atServer refuses the passkey enrollment's PKAM with <code> because <reason>
@@ -82,6 +84,12 @@ Feature: A refused PKAM is read by the client's one classifier
     And the atServer answers the from: of the attempt the connection makes again with error:AT0401
     When the app logs in to @alice🛠 on a device that remembers nothing for it
     Then that failure propagates as it is
+
+  @race
+  Scenario: A proxy's error reply to the from: of a reconnect after the pkam: is not a refusal
+    Given a passkey login through a proxy root, whose pkam: was written before the socket closed with no reply
+    When the proxy answers the reconnect's from: with error:AT0401
+    Then passkeyLogin passes on the proxy's AtLookUpException, not PasskeyLostException
 
   Scenario Outline: A PKAM failure that is not a refusal propagates as it is
     Given the atServer <failure> for the passkey enrollment's PKAM
