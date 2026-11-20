@@ -525,9 +525,6 @@ class KeychainStorage {
       int oldSegmentCount = 0;
       ({int count, String prefix})? legacyLayout;
       try {
-      int oldSegmentCount = 0;
-      ({int count, String prefix})? legacyLayout;
-      try {
         final oldHeader = await store.read();
         if (oldHeader != null && oldHeader.isNotEmpty) {
           final layout = await _segmentLayout(biometricStoreName, oldHeader);
