@@ -18,7 +18,18 @@ Feature: at_activate status says whether an Atsign's public key can be looked up
       | not in the atDirectory  | the atDirectory has no record for @alice                         | 3    |
       | atDirectory unreachable | nothing answers at the root                                      | 4    |
 
-  Scenario: at_activate status closes its connection to the atServer
-    Given an atDirectory naming an atServer that holds @alice's public key
+  Scenario Outline: at_activate status closes its connection to the atServer when <case>
+    Given <setup>
     When at_activate status -a @alice runs
-    Then it returns 0, and its connection to the atServer is closed
+    Then its connection to the atServer is closed
+    Examples:
+      | case                               | setup                                                                   |
+      | found                              | an atDirectory naming an atServer that holds @alice's public key        |
+      | absent                             | an atDirectory naming an atServer that holds no public key for @alice   |
+      | the atServer answers with an error | an atDirectory naming an atServer that answers the lookup with an error |
+
+  Scenario: at_activate status returns 0 when its connection to the atServer fails to close
+    Given an atDirectory naming an atServer that holds @alice's public key
+    And closing the connection to that atServer fails
+    When at_activate status -a @alice runs
+    Then it returns 0

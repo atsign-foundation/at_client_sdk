@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client_cli/at_client_cli.dart' show AtActivate, AuthCliArgs;
+import 'package:at_client_cli/src/commands/auth_cli.dart' show status;
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:mocktail/mocktail.dart' show Fake;
 import 'package:test/test.dart';
 
@@ -58,8 +61,9 @@ void main() {
 
   tearDownAll(() => certs.deleteSync(recursive: true));
 
-  Future<_AtServer> atServer({String? publicKey}) async {
-    final server = await _AtServer.bind(serving, publicKey: publicKey);
+  Future<_AtServer> atServer({String? publicKey, String? error}) async {
+    final server =
+        await _AtServer.bind(serving, publicKey: publicKey, error: error);
     atServers.add(server);
     return server;
   }
@@ -131,21 +135,81 @@ void main() {
         reason: 'nothing answers at the root; status wrote: ${run.stderr}');
   });
 
-  test('at_activate status closes its connection to the atServer', () async {
-    final server = await atServer(publicKey: _alicePublicKey);
+  /// Runs status against [server] and expects [code], and that status ends
+  /// its one connection to [server] once it has the answer.
+  Future<void> closesItsConnection(_AtServer server, int code) async {
     final root = await atDirectory('127.0.0.1:${server.port}');
 
     final run = await _status(root.port);
 
-    expect(run.code, 0,
-        reason: 'the premise: the atServer holds @alice\'s public key; status '
-            'wrote: ${run.stderr}');
+    expect(run.code, code,
+        reason: 'the premise: status returns $code against this atServer; '
+            'status wrote: ${run.stderr}');
     final connection = server.connections.single;
     expect(connection.received, ['lookup:publickey@alice'],
         reason: 'the premise: the lookup is answered on this connection');
     expect(await connection.endedWithin(const Duration(seconds: 5)), isTrue,
         reason: 'status closes its connection to the atServer once it has '
             'read the answer');
+  }
+
+  test('at_activate status closes its connection to the atServer when found',
+      () async {
+    await closesItsConnection(await atServer(publicKey: _alicePublicKey), 0);
+  });
+
+  test('at_activate status closes its connection to the atServer when absent',
+      () async {
+    await closesItsConnection(await atServer(), 1);
+  });
+
+  test(
+      'at_activate status closes its connection to the atServer when the '
+      'atServer answers with an error', () async {
+    await closesItsConnection(
+        await atServer(error: 'error:AT0011-Internal server exception'), 2);
+  });
+
+  test(
+      'at_activate status returns 0 when its connection to the atServer '
+      'fails to close', () async {
+    final root = await atDirectory('127.0.0.1:${await refusedPort()}');
+    final lookUp = _ClosingFails();
+    final written = _Written();
+    final logged = _Logged();
+    final level = AtSignLogger.root_level;
+    final handler = AtSignLogger.defaultLoggingHandler;
+    AtSignLogger.root_level = 'finer';
+    AtSignLogger.defaultLoggingHandler = logged;
+    addTearDown(() {
+      AtSignLogger.root_level = level;
+      AtSignLogger.defaultLoggingHandler = handler;
+    });
+
+    final code = await IOOverrides.runZoned(
+        () => status(
+            AuthCliArgs()
+                .createStatusCommandParser()
+                .parse(_statusArguments(root.port)),
+            atLookUp: lookUp),
+        stderr: () => written);
+
+    expect(lookUp.closes, 1,
+        reason: 'the premise: status closes the connection it looked the key '
+            'up over; status wrote: ${written.text}');
+    expect(code, 0,
+        reason: 'the connection answered with @alice\'s public key, and a '
+            'failure to close it afterwards changes nothing it found; status '
+            'wrote: ${written.text}');
+    expect(
+        logged.records,
+        contains((
+          level: 'FINER',
+          message: 'closing the public key lookup for @alice failed: '
+              'Bad state: the connection could not be closed'
+        )),
+        reason: 'a close that fails is logged at finer, naming the atSign and '
+            'the failure; logged: ${logged.records}');
   });
 
   group(
@@ -289,22 +353,25 @@ class _AtDirectory {
 }
 
 /// An atServer on the loopback interface that answers a lookup of @alice's
-/// public key with [publicKey], or as holding none when that is null.
+/// public key with [error] when that is set, else with [publicKey], or as
+/// holding none when that is null.
 class _AtServer {
-  _AtServer._(this._server, this.publicKey) {
+  _AtServer._(this._server, this.publicKey, this.error) {
     _server.listen(_serve, onError: (_) {});
   }
 
   /// An atServer bound to a free port, serving TLS under [context].
   static Future<_AtServer> bind(SecurityContext context,
-          {String? publicKey}) async =>
+          {String? publicKey, String? error}) async =>
       _AtServer._(
           await SecureServerSocket.bind(
               InternetAddress.loopbackIPv4, 0, context),
-          publicKey);
+          publicKey,
+          error);
 
   final SecureServerSocket _server;
   final String? publicKey;
+  final String? error;
 
   /// Each connection accepted, in order.
   final List<_Connection> connections = [];
@@ -332,6 +399,8 @@ class _AtServer {
     if (command != 'lookup:publickey@alice') {
       return 'error:AT0003-unexpected command\n@';
     }
+    final refusal = error;
+    if (refusal != null) return '$refusal\n@';
     final key = publicKey;
     return key == null
         ? 'error:AT0015-key not found : public:publickey@alice does not '
@@ -365,6 +434,31 @@ class _Connection {
     if (!_ended.isCompleted) _ended.complete();
     _socket.destroy();
   }
+}
+
+/// A connection to the atServer that answers with @alice's public key and
+/// fails when it is closed.
+class _ClosingFails extends Fake implements AtLookUp {
+  int closes = 0;
+
+  @override
+  Future<String?> executeCommand(String command, {bool auth = false}) async =>
+      'data:$_alicePublicKey';
+
+  @override
+  Future<void> close() async {
+    closes++;
+    throw StateError('the connection could not be closed');
+  }
+}
+
+/// Collects the level and message of each log record.
+class _Logged implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) =>
+      records.add((level: record.level.name, message: '${record.message}'));
 }
 
 /// Collects what at_activate writes on stderr.
