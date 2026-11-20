@@ -619,10 +619,12 @@ extension AtsignLifecycle on Atsign {
     final pendingId = existing.pendingEnrollmentIds.firstOrNull;
     if (pendingId != null) {
       final info = existing.enrollmentInfo(pendingId);
+      final app = info?.appName;
+      final device = info?.deviceName;
       throw AtEnrollmentException('$this already holds the pending '
-          'enrollment $pendingId for ${info?.appName} on '
-          '${info?.deviceName}: resume it with resumeEnrollment rather than '
-          'submitting another');
+          'enrollment $pendingId${app == null ? '' : ' for $app'}'
+          '${device == null ? '' : ' on $device'}: resume it with '
+          'resumeEnrollment rather than submitting another');
     }
   }
 

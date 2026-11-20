@@ -350,6 +350,39 @@ void main() {
     });
   }
 
+  group('Given a store whose pending enrollment records no app and no device',
+      () {
+    test(
+        'when another enrollment is asked for, then it is refused naming the '
+        'enrollment alone, before anything is sent', () async {
+      final filed = InMemoryAtKeysIo();
+      await submit(filed, atServer(decide: (_) async => true));
+      final json = (await filed.read(atSign)).toJson();
+      for (final entry in json['enrollments'] as List) {
+        (entry as Map)
+          ..remove('appName')
+          ..remove('deviceName');
+      }
+      final store = InMemoryAtKeysIo();
+      await store.write(atSign, AtKeys.fromJson(json));
+      final info = (await store.read(atSign)).enrollmentInfo(enrollmentId);
+      expect((info?.appName, info?.deviceName), (null, null));
+      final untouched = atServer(decide: (_) async => true);
+
+      await expectLater(
+          () => submit(store, untouched),
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('pending enrollment $enrollmentId: resume it with '
+                      'resumeEnrollment'),
+                  isNot(contains('null'))))));
+      verifyZeroInteractions(untouched);
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
+    });
+  });
+
   test(
       'approval completes the store, moves the keys to active, and opens a '
       'client', () async {
