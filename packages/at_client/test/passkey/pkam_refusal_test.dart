@@ -171,6 +171,37 @@ void main() {
   final refusedToSign = isA<UnAuthenticatedException>().having((e) => e.message,
       'message', startsWith('Refusing to sign a malformed from: challenge'));
 
+  _PkamServer proxyFailingReconnect() {
+    FakeAtServerSocket? firstConnection;
+    return _PkamServer(
+        onFrom: (socket) {
+          firstConnection ??= socket;
+          return identical(socket, firstConnection)
+              ? _challenge(socket)
+              : _replies(_at0401['dash']!)(socket);
+        },
+        onPkam: (socket) => socket.serverCloses());
+  }
+
+  final proxyFailure = allOf(
+      isA<AtLookUpException>()
+          .having((e) => e.errorCode, 'errorCode', 'AT0401')
+          .having((e) => e.errorMessage, 'errorMessage',
+              'Exception: pkam authentication failed'),
+      isNot(isA<PasskeyLostException>()),
+      isNot(isA<PkamRefusedException>()));
+
+  void expectReconnectFailedAtProxyFrom(_PkamServer proxy) {
+    expect(proxy.pkams, hasLength(1),
+        reason: 'the pkam: was sent before the connection was lost');
+    expect(proxy.froms, hasLength(3),
+        reason: 'the first connection carried the proxy\'s from: and the '
+            'PKAM\'s, and the reconnect stopped at its proxy from:');
+    expect(proxy.froms.last, 'from:$_atSign\n',
+        reason: 'the error answered the reconnect\'s proxy from:, not a '
+            'from: of the PKAM');
+  }
+
   Future<void> expectLostPasskey(_PkamServer atServer, String why) async {
     await expectLater(
         custody(atServer.lookUps, FakeHints()).open(atSign: _atSign),
@@ -315,40 +346,39 @@ void main() {
   test(
       'A proxy\'s error reply to the from: of a reconnect after the pkam: is '
       'not a refusal', () async {
-    final reply = _at0401['dash']!;
-    FakeAtServerSocket? firstConnection;
-    final proxy = _PkamServer(
-        onFrom: (socket) {
-          firstConnection ??= socket;
-          return identical(socket, firstConnection)
-              ? _challenge(socket)
-              : _replies(reply)(socket);
-        },
-        onPkam: (socket) => socket.serverCloses());
+    final proxy = proxyFailingReconnect();
 
     await expectLater(
         custody(proxy.lookUps, FakeHints(), root: _proxyRoot)
             .open(atSign: _atSign),
-        throwsA(allOf(
-            isA<AtLookUpException>()
-                .having((e) => e.errorCode, 'errorCode', 'AT0401')
-                .having((e) => e.errorMessage, 'errorMessage',
-                    'Exception: pkam authentication failed'),
-            isNot(isA<PasskeyLostException>()),
-            isNot(isA<PkamRefusedException>()))),
+        throwsA(proxyFailure),
         reason: 'the open throws what the proxy answered the reconnect\'s '
             'from: with');
     expect(proxy.froms.first, 'from:$_atSign\n',
         reason: 'the control: the proxy root sends its from: first on a '
             'connection');
-    expect(proxy.pkams, hasLength(1),
-        reason: 'the pkam: was sent before the connection was lost');
-    expect(proxy.froms, hasLength(3),
-        reason: 'the first connection carried the proxy\'s from: and the '
-            'PKAM\'s, and the reconnect stopped at its proxy from:');
-    expect(proxy.froms.last, 'from:$_atSign\n',
-        reason: 'the error answered the reconnect\'s proxy from:, not a '
-            'from: of the PKAM');
+    expectReconnectFailedAtProxyFrom(proxy);
+  });
+
+  test(
+      'A proxy\'s error reply to the from: of a reconnect after the pkam: '
+      'keeps a device\'s passkey hints', () async {
+    final proxy = proxyFailingReconnect();
+    final hints = savedHints();
+
+    await expectLater(
+        custody(proxy.lookUps, hints, root: _proxyRoot).open(atSign: _atSign),
+        throwsA(proxyFailure),
+        reason: 'the open throws what the proxy answered the reconnect\'s '
+            'from: with');
+    expect(passkeys.gets, 1, reason: 'the passkey was asked for once');
+    expect(pointers.pointerReads, 0,
+        reason: 'the hints were not set aside for the pointer');
+    expect(hints.credentials[_atSign], _credential,
+        reason: 'the device keeps its credential hint');
+    expect(hints.ids[_atSign], _eid,
+        reason: 'the device keeps its enrollment hint');
+    expectReconnectFailedAtProxyFrom(proxy);
   });
 
   const outline4 = 'A PKAM failure that is not a refusal propagates as it is';

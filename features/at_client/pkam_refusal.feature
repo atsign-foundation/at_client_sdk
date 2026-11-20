@@ -98,6 +98,13 @@ Feature: A refused PKAM is read by the client's one classifier
     When the proxy answers the reconnect's from: with error:AT0401
     Then passkeyLogin passes on the proxy's AtLookUpException, not PasskeyLostException
 
+  @race
+  Scenario: A proxy's error reply to the from: of a reconnect after the pkam: keeps a device's passkey hints
+    Given a device that remembers @alice🛠's passkey and enrollment
+    And a passkey login through a proxy root, whose pkam: was written before the socket closed with no reply
+    When the proxy answers the reconnect's from: with error:AT0401
+    Then that failure propagates as it is, the passkey is asked for once, and the device's passkey hints are kept
+
   Scenario Outline: A PKAM failure that is not a refusal propagates as it is
     Given the atServer <failure> for the passkey enrollment's PKAM
     When the app logs in to @alice🛠 with that passkey
