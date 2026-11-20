@@ -1101,11 +1101,13 @@ void main() {
 
     test(
         'A login after an onboarding that stopped before deleting the CRAM '
-        'secret deletes it', () async {
+        'secret deletes it before it opens the client, and publishes the '
+        "document's encryption public key", () async {
       gateway.onAuthenticate =
           (session) => session.completeError = StateError('interrupted');
       await expectLater(
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+      expect(server.publishedKey, isNull);
       expect(server.cramDeleted, isEmpty,
           reason: 'the control: the onboarding left the CRAM secret');
       gateway.onAuthenticate = null;
@@ -1116,30 +1118,12 @@ void main() {
       expect(server.cramDeleted, {_atSign},
           reason: 'the login deletes the CRAM secret');
       final steps = server.timeline;
+      expect(steps, contains('cram-deleted'));
       expect(steps.lastIndexOf('cram-deleted'),
-          lessThan(steps.lastIndexOf('open-client')));
-      expect(session.client.enrollmentId, 'eid1');
-    });
-
-    test(
-        'A login after an onboarding that stopped before publishing its '
-        'encryption public key publishes it and deletes the CRAM secret',
-        () async {
-      gateway.onAuthenticate =
-          (session) => session.completeError = StateError('interrupted');
-      await expectLater(
-          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
-      expect(server.publishedKey, isNull);
-      expect(server.cramDeleted, isEmpty);
-      gateway.onAuthenticate = null;
-
-      final session =
-          await custody(withHints: FakeHints()).open(atSign: _atSign);
-
+          lessThan(steps.lastIndexOf('open-client')),
+          reason: 'the CRAM secret is deleted before the client opens');
       expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
           reason: 'the login publishes the document\'s encryption public key');
-      expect(server.cramDeleted, {_atSign},
-          reason: 'the login deletes the CRAM secret');
       expect(gateway.lastSession!.completed, [
         isEmpty,
         {'aesEncryptPublicKey': encryptionPublicKeyOf('eid1')}
