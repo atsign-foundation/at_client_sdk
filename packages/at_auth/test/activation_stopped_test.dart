@@ -1,3 +1,5 @@
+import 'dart:io' show SocketException;
+
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/retry_options.dart';
@@ -132,5 +134,33 @@ void main() {
         reason: 'the caller stopped the connection, so the activation says '
             'so, not that its wait timed out');
     expectNoKeysWritten();
+  });
+
+  group('Given an activation of @alice whose atServer does not answer', () {
+    test(
+        'when it waits for its atServer, then it asks again until its '
+        'deadline and throws AtTimeoutException', () async {
+      var checks = 0;
+      Future<String?> unanswered() async {
+        checks++;
+        throw const SocketException('connection refused');
+      }
+
+      const waitFor1s = RetryOptions(
+          maxRetries: 10,
+          retryDelay: Duration(milliseconds: 100),
+          overallTimeout: Duration(seconds: 1));
+
+      final thrown = await activate(() => fail('the wait never ended'),
+              publicKeyCheck: unanswered, retryOptions: waitFor1s)
+          .then<Object?>((_) => null, onError: (Object e) => e);
+
+      expect(checks, greaterThan(1),
+          reason: 'only a stop ends the wait early; an atServer that does not '
+              'answer is asked again until the deadline');
+      expect(thrown, isA<AtTimeoutException>(),
+          reason: 'a wait that runs out says so; thrown: $thrown');
+      expectNoKeysWritten();
+    });
   });
 }
