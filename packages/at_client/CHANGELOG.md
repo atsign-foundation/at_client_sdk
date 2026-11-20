@@ -144,6 +144,7 @@
   first activation in place of a minted one; a pair that does not sign under
   the activation's algorithm is refused with `AtSigningException` before
   anything is enrolled. Requires at_auth 4.1.0-rc.1.
+- feat: `ownGrantsOf` is now exported from `package:at_client/at_client.dart`.
 
 ## 4.0.0
 
