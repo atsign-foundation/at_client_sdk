@@ -109,15 +109,22 @@ if grep -En 'HKDF\([^)]*"atkeys-' \
 fi
 
 # 2b. The userHandle is neither the WebAuthn PRF input (it arrives only in the
-#     get() response) nor the HKDF salt (the code's salt is empty).
+#     get() response) nor the HKDF salt, and the passkey derivation the code
+#     implements takes an empty salt. A native source's stored salt is the
+#     custody doc's section 4 and is not checked here.
 if grep -n 'PRF(userHandle\|PRF(device secret, userHandle' \
     design.md apkam-custody.md prf-server-keys-blob.md; then
   fail "userHandle used as the PRF input"
 fi
-if grep -En -i 'salt = userHandle|is the HKDF salt|userHandle \(HKDF salt\)|HKDF\(prf, salt, "at_auth/custody' \
+if grep -En -i 'salt = userHandle|is the HKDF salt|userHandle \(HKDF salt\)' \
     design.md apkam-custody.md prf-server-keys-blob.md; then
-  fail "a custody derivation with a salt; the code's salt is empty"
+  fail "the userHandle as the HKDF salt; the passkey derivation's salt is empty"
 fi
+for label in record-id kek; do
+  grep -qF "HKDF(ikm, salt = ∅, info = \"at_auth/custody/$label/v1|<atSign>\")" \
+      prf-server-keys-blob.md \
+    || fail "the profile's passkey derivation does not show an empty salt for $label"
+done
 
 # 2c. Whole-record rollback must not be listed as fixed by the AEAD alone.
 if grep -n 'rolled back | Envelope v2: AES-GCM, AAD = atSign, enrollmentId, version |$' \

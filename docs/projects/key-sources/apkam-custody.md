@@ -202,9 +202,13 @@ final class SecurityPlatformKeySource implements AtKeysKeySource {
   public key, which needs no prompt, and unwraps through
   `session.decapsulate`.
 - **PRF-backed sources** (WebAuthn PRF, TPM HMAC, Keystore HMAC, Secure Enclave
-  ECDH) wrap with AES-256-GCM under `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")`,
-  the atSign-bound label [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)
-  and `design.md` section 8 use. The atSign in the label is what keeps two
+  ECDH) wrap with AES-256-GCM under a key derived with the atSign-bound label
+  `at_auth/custody/kek/v1|<atSign>`, which
+  [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation) and `design.md`
+  section 8 use. WebAuthn PRF derives it as the passkey code does,
+  `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")`; a native source takes the
+  random per-enrollment salt that
+  [section 4](#4-custody-tiers-and-the-ranking-rule) keeps in the keychain. The atSign in the label is what keeps two
   atSigns on one device from sharing a recordId or a kek. For the HMAC-based
   PRFs the key is symmetric, so it is already post-quantum. Secure Enclave ECDH
   against a fixed
