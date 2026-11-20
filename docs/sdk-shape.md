@@ -26,8 +26,8 @@ and the **foundation** libraries beneath it never assume a platform at all.
   are deprecated re-exports of it.
 - **at_client_flutter** covers Flutter apps on mobile, desktop and embedded
   devices.
-- **at_client_web** covers browser apps. It doesn't exist yet; the browser
-  work under way as at_client_wasm takes this name when it's rebuilt.
+- **at_client_web** covers browser apps. It is still being built, and is not
+  published.
 
 ## The rules
 
