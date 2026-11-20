@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
     show
+        AtAuthErrorReplyException,
         CryptographicMaterial,
         CryptographicMaterialAlgorithm,
         CryptographicMaterialRole,
@@ -342,8 +343,9 @@ void main() {
     // exercised, not skipped.
     final server = atServer(
         decide: (attempt) async => attempt == 1
-            ? throw UnAuthenticatedException(
-                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed')
+            ? throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+                errorCode: 'AT0026')
             : true);
     final pending = await submit(store, server);
 
@@ -384,8 +386,9 @@ void main() {
       'for the next request', () async {
     final store = InMemoryAtKeysIo();
     final denying = atServer(
-        decide: (_) async => throw UnAuthenticatedException(
-            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied'));
+        decide: (_) async => throw AtAuthErrorReplyException(
+            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied',
+            errorCode: 'AT0025'));
     final pending = await submit(store, denying);
 
     await expectLater(
@@ -419,9 +422,10 @@ void main() {
     final pending = await submit(
         store,
         atServer(
-            decide: (_) async => throw UnAuthenticatedException(
+            decide: (_) async => throw AtAuthErrorReplyException(
                 'Failed connecting to $atSign. error:AT0025:Apkam Auth '
-                'Denied')));
+                'Denied',
+                errorCode: 'AT0025')));
     store.failing = true;
 
     await expectLater(
@@ -438,8 +442,9 @@ void main() {
     final path = '${dir.path}/${atSign}_key.atKeys';
     final store = FileAtKeysIo(filePath: (_) => path);
     final denying = atServer(
-        decide: (_) async => throw UnAuthenticatedException(
-            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied'));
+        decide: (_) async => throw AtAuthErrorReplyException(
+            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied',
+            errorCode: 'AT0025'));
     final pending = await Atsign(atSign).enroll(
         otp: 'ABC123',
         app: 'wavi',
@@ -629,8 +634,9 @@ void main() {
       }
     }
 
-    Never notYetDecided() => throw UnAuthenticatedException(
-        'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed');
+    Never notYetDecided() => throw AtAuthErrorReplyException(
+        'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+        errorCode: 'AT0026');
 
     const pollEvery = Duration(milliseconds: 10);
 
@@ -1343,9 +1349,10 @@ void main() {
         final pending = await submit(
             store,
             atServer(
-                decide: (_) async => throw UnAuthenticatedException(
+                decide: (_) async => throw AtAuthErrorReplyException(
                     'Failed connecting to $atSign. error:$code:enrollment_id: '
-                    '$enrollmentId is expired or invalid')));
+                    '$enrollmentId is expired or invalid',
+                    errorCode: code)));
 
         await expectLater(pending.awaitApproval(retryInterval: pollEvery),
             throwsA(isA<AtEnrollmentExpiredException>()),
@@ -1367,8 +1374,9 @@ void main() {
       final pending = await submit(
           store,
           atServer(
-              decide: (_) async => throw UnAuthenticatedException(
-                  'Failed connecting to $atSign. error:$reply')));
+              decide: (_) async => throw AtAuthErrorReplyException(
+                  'Failed connecting to $atSign. error:$reply',
+                  errorCode: 'AT0028')));
 
       await expectLater(pending.awaitApproval(retryInterval: pollEvery),
           throwsA(isA<AtEnrollmentExpiredException>()));
@@ -1543,8 +1551,9 @@ void main() {
         });
       });
 
-      Never denied() => throw UnAuthenticatedException(
-          'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied');
+      Never denied() => throw AtAuthErrorReplyException(
+          'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied',
+          errorCode: 'AT0025');
 
       Future<void> removedOnce(InMemoryAtKeysIo store) async {
         expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);

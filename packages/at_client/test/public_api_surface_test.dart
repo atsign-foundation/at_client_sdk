@@ -93,6 +93,14 @@ void main() {
     });
   });
 
+  group('a refusal and its code are reachable through the barrel', () {
+    test('an app names AtAuthErrorReplyException and reads its code', () {
+      final refusal =
+          AtAuthErrorReplyException('pkam: refused', errorCode: 'AT0027');
+      expect(refusal.errorCode, 'AT0027');
+    });
+  });
+
   // The group above catches a surface REMOVAL; this one catches the opposite,
   // an `src/` file exported by accident. Every change to what a barrel exports
   // is a deliberate diff against a checked-in set — an intended change updates

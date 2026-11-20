@@ -1,4 +1,8 @@
 ## 4.1.0-rc.1
+- feat: `errorResponseCode` reads the code an atServer's `error:` reply
+  names, in any form, and `errorResponseException` the exception a lookup
+  throws for that reply.
+- feat: `AtLookUpException.cause` holds the failure `executeVerb` wrapped.
 - feat: a lookup built with a `proxy:<host>` root domain sends
   `from:<atSign>` first on each connection it opens, ahead of any
   `onConnect`, as it already resolves every atSign to the proxy. A caller that
