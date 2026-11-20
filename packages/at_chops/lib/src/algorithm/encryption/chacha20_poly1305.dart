@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 /// ChaCha20-Poly1305 AEAD (RFC 8439), keyed and nonced per call.
 ///
@@ -20,7 +21,17 @@ final class ChaCha20Poly1305Algo {
 
   static final crypto.Chacha20 _algo = crypto.Chacha20.poly1305Aead();
 
-  const ChaCha20Poly1305Algo();
+  final crypto.Cipher? _cipher;
+
+  const ChaCha20Poly1305Algo() : _cipher = null;
+
+  /// Seals and opens with [cipher] in place of ChaCha20-Poly1305, so a test
+  /// can observe how [encrypt] assembles the ciphertext and tag it returns.
+  @visibleForTesting
+  const ChaCha20Poly1305Algo.withCipher(crypto.Cipher cipher)
+      : _cipher = cipher;
+
+  crypto.Cipher get _cipherInUse => _cipher ?? _algo;
 
   /// Seals [plaintext] under [key] and [nonce], returning
   /// `ciphertext || tag`.
@@ -31,7 +42,7 @@ final class ChaCha20Poly1305Algo {
     List<int> aad = const [],
   }) async {
     _check(key, nonce);
-    final box = await _algo.encrypt(
+    final box = await _cipherInUse.encrypt(
       plaintext,
       secretKey: crypto.SecretKey(key),
       nonce: nonce,
@@ -63,7 +74,7 @@ final class ChaCha20Poly1305Algo {
     final cipherText = sealed.sublist(0, sealed.length - tagLength);
     final tag = sealed.sublist(sealed.length - tagLength);
     try {
-      final plain = await _algo.decrypt(
+      final plain = await _cipherInUse.decrypt(
         crypto.SecretBox(cipherText, nonce: nonce, mac: crypto.Mac(tag)),
         secretKey: crypto.SecretKey(key),
         aad: aad,
