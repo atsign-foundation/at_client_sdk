@@ -150,5 +150,10 @@ void main() {
         reason: 'no version error is thrown');
     expect(thrown, isA<PasskeyLostException>(),
         reason: 'the login fails only because no passkey answered');
+
+    final after = await _rawOpen(_entryPointDb, _newerVersion);
+    addTearDown(() => after.close());
+    expect(after.version, _newerVersion,
+        reason: 'the database stays at the version the newer build left');
   });
 }

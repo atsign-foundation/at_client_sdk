@@ -409,6 +409,84 @@ void main() {
       });
     });
 
+    group('the at_client_wasm database earlier builds used', () {
+      const retired = 'at_client_wasm';
+
+      setUp(() => addTearDown(() => deleteDb(retired)));
+
+      /// The object store names of [retired], read on a connection that
+      /// creates it empty when it is gone.
+      Future<List<String>> retiredStoreNames() async {
+        final completer = Completer<IDBDatabase>();
+        final request = window.indexedDB.open(retired);
+        request.onsuccess = (Event e) {
+          completer.complete(request.result as IDBDatabase);
+        }.toJS;
+        request.onerror = (Event e) {
+          completer.completeError(Exception('raw open failed'));
+        }.toJS;
+        final raw = await completer.future;
+        try {
+          final names = raw.objectStoreNames;
+          return [for (var i = 0; i < names.length; i++) names.item(i)!];
+        } finally {
+          raw.close();
+        }
+      }
+
+      test('is deleted with its key and pending-record stores on open',
+          () async {
+        final old = await _rawOpen(retired, 3, upgrade: (db) {
+          db.createObjectStore('at_client_wasm_keys');
+          db.createObjectStore('at_client_wasm_pending');
+        });
+        await _rawPut(old, 'at_client_wasm_keys', '@alice', [9, 9]);
+        await _rawPut(old, 'at_client_wasm_pending', '@alice', [1, 2, 3]);
+        old.close();
+
+        final store = await open();
+        expect(await store.credentialId('@alice'), isNull);
+
+        expect(await retiredStoreNames(), isEmpty,
+            reason: 'the earlier database and its stores are gone');
+      });
+
+      test('held open by another connection does not stop the open',
+          () async {
+        warnings.messages.clear();
+        final old = await _rawOpen(retired, 3, upgrade: (db) {
+          db.createObjectStore('at_client_wasm_keys');
+        });
+        try {
+          final store = await open();
+          await store.putEnrollmentId('@alice', 'e1');
+          expect(await store.enrollmentId('@alice'), 'e1');
+          expect(warnings.messages,
+              contains(contains('waits for another connection')));
+        } finally {
+          old.close();
+        }
+      }, timeout: const Timeout(Duration(seconds: 5)));
+
+      test('a failed delete is logged and does not stop the open', () async {
+        warnings.messages.clear();
+        final factory = window.indexedDB as JSObject;
+        factory['deleteDatabase'] = ((JSAny? name) {
+          final request = JSObject()
+            ..['error'] = DOMException('denied', 'UnknownError');
+          Timer.run(() => (request['onerror'] as JSFunction)
+              .callAsFunction(request, Event('error')));
+          return request;
+        }).toJS;
+        addTearDown(() => factory.delete('deleteDatabase'.toJS));
+
+        final store = await open();
+        await store.putEnrollmentId('@alice', 'e1');
+        expect(await store.enrollmentId('@alice'), 'e1');
+        expect(warnings.messages, contains(contains('UnknownError')));
+      }, timeout: const Timeout(Duration(seconds: 5)));
+    });
+
     test('a store closed by the caller does not reopen', () async {
       final store = await open();
       store.close();

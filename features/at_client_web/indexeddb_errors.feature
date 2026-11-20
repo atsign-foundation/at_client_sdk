@@ -25,6 +25,7 @@ Feature: IndexedDB failures reach the app as AtExceptions
     When the app logs in to @alice🛠 with a passkey
     Then the device's passkey hints are read from that database
     And no version error is thrown
+    And the database stays at the version the newer build left
 
   Scenario: A failed IndexedDB write of the passkey hints during onboarding returns the session, and a login then saves the hints
     Given this origin's IndexedDB refuses the write of the passkey hints

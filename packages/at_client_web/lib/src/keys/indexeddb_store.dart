@@ -40,21 +40,55 @@ class IndexedDbHintStore implements PasskeyHintStore {
   static const _enrollmentsStore = 'at_client_web_enrollments';
   static const _defaultDbName = 'at_client_web';
 
+  /// The database builds named at_client_wasm used, whose pending-record and
+  /// key stores held sealed keys; [open] deletes it.
+  static const _retiredDbName = 'at_client_wasm';
+
   /// The schema version this code creates; a database already at a higher
   /// version is opened as it is.
   static const _schemaVersion = 4;
 
-  /// Opens the passkey database, creating its object stores when it is absent
+  /// Deletes the database earlier builds used, with everything it holds, then
+  /// opens the passkey database, creating its object stores when it is absent
   /// or below the schema version this code creates; a database at a higher
   /// version opens as it is.
+  ///
+  /// A failed delete of the earlier database is logged as a warning and does
+  /// not fail the open. When another connection holds that database open, the
+  /// browser keeps the delete pending until it closes, and the open goes on.
   ///
   /// Fails with [IndexedDbException] when the browser refuses the open or
   /// another connection holds the database open and blocks an upgrade.
   static Future<IndexedDbHintStore> open(
       {String dbName = _defaultDbName}) async {
+    await _deleteRetiredDatabase();
     final db = await _openDatabase(dbName, _schemaVersion);
     return IndexedDbHintStore._(dbName, db);
   }
+
+  /// Asks the browser to delete [_retiredDbName], and completes when it is
+  /// deleted, the delete fails or another connection blocks it.
+  static Future<void> _deleteRetiredDatabase() =>
+      _guarded('delete of the earlier database', () {
+        final request = window.indexedDB.deleteDatabase(_retiredDbName);
+        final done = Completer<void>();
+        request.onsuccess = (Event event) {
+          if (!done.isCompleted) done.complete();
+        }.toJS;
+        request.onerror = (Event event) {
+          if (done.isCompleted) return;
+          _logger.warning('the database $_retiredDbName earlier builds used '
+              'was not deleted: ${_errorName(() => request.error)}');
+          done.complete();
+        }.toJS;
+        request.onblocked = (Event event) {
+          if (done.isCompleted) return;
+          _logger.warning('the delete of the database $_retiredDbName earlier '
+              'builds used waits for another connection to close it');
+          done.complete();
+        }.toJS;
+        return done.future;
+      });
 
   /// Opens [dbName] at [version], or at the version it has when [version] is
   /// null or below it.
