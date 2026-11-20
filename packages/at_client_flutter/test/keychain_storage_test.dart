@@ -654,6 +654,28 @@ void main() {
         ).thenAnswer((_) async => legacySegment0);
         when(() => legacySegment0.delete()).thenAnswer((_) async {});
 
+        // Each segment holds its part, and none follows the last.
+        for (final segment in [
+          currentSegment0,
+          currentSegment1,
+          legacySegment0,
+        ]) {
+          when(() => segment.read()).thenAnswer((_) async => 'part');
+        }
+        final absent = MockBiometricStorageFile();
+        when(() => absent.read()).thenAnswer((_) async => null);
+        for (final name in [
+          '@atsigns:test_segment_2',
+          '@atsigns_test_segment_1',
+        ]) {
+          when(
+            () => mockBiometricStorage.getStorage(
+              name,
+              options: any(named: 'options'),
+            ),
+          ).thenAnswer((_) async => absent);
+        }
+
         await keyChainStorage.deleteAllAtKeysData();
 
         verify(() => mockBiometricStorageFile.delete()).called(1);

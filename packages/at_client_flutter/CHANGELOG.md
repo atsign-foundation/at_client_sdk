@@ -9,6 +9,11 @@
   none of the entry's text.
 - fix: on Windows, a keychain read logs the store name and the length of
   what it read, never the text.
+- fix: on Windows, an entry written over a longer one, as removing an Atsign
+  or undoing a failed write does, deletes the longer entry's later
+  segments, and `deleteAllAtKeysData` deletes every segment even when the
+  entry's header does not parse. A header whose `segmentCount` is not a
+  whole number is refused as `AtKeysFormatException`.
 - fix: `KeychainStorage.removeAtsignFromKeychain` and
   `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
   legacy-named store cannot be read or written, or its entry is not a JSON

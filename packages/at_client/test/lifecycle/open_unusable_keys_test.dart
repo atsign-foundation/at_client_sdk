@@ -249,6 +249,11 @@ void main() {
             ? 'root reads whatever the mode says'
             : false;
 
+    /// An envelope refused for something other than its passphrase, which
+    /// must not be reported as the passphrase being wrong or missing.
+    final notForThePassphrase = allOf(isA<AtDecryptionException>(),
+        isNot(isA<AtKeysPassphraseException>()));
+
     test('permission denied', () async {
       await refusedAfterOnline(
           unreadable: () async {
@@ -347,7 +352,7 @@ void main() {
           },
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: contains('an envelope version this build has no code for'),
-          error: isA<AtDecryptionException>());
+          error: notForThePassphrase);
     });
 
     test('a role that appears twice for one keyId', () async {
@@ -449,7 +454,7 @@ void main() {
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason:
               contains('must carry a positive integer kdfParams.iterations'),
-          error: isA<AtDecryptionException>());
+          error: notForThePassphrase);
     });
 
     test('a key derivation memory below eight times its parallelism', () async {
@@ -469,7 +474,7 @@ void main() {
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: contains('kdfParams.memory of at least 8 times its '
               'kdfParams.parallelism'),
-          error: isA<AtDecryptionException>());
+          error: notForThePassphrase);
     });
 
     test('a key derivation this device cannot run', () async {
@@ -493,7 +498,7 @@ void main() {
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: startsWith('this atKeys file asks for a key derivation this '
               'device could not run'),
-          error: isA<AtDecryptionException>());
+          error: notForThePassphrase);
     });
 
     test('a hashing algorithm this build has no code for', () async {
@@ -510,7 +515,7 @@ void main() {
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: startsWith('this atKeys file names a hashingAlgoType this '
               'build has no code for'),
-          error: isA<AtDecryptionException>());
+          error: notForThePassphrase);
     });
   });
 

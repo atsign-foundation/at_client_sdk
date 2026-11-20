@@ -338,8 +338,7 @@ void main() {
     expect(changed, isEmpty);
   });
 
-  group('On Windows, a keychain write that fails partway leaves the keychain '
-      'as it was', () {
+  group('On Windows', () {
     late Map<String, String> held;
 
     /// The name of the store whose next write fails, once.
@@ -388,39 +387,128 @@ void main() {
         ),
       );
 
-    test('removing an atSign from a keychain holding others', () async {
+    /// The segments of the current entry held, by name.
+    Iterable<String> segmentsHeld() =>
+        held.keys.where((name) => name.startsWith('${current}_segment_'));
+
+    /// The segment count the current entry's header records.
+    int headerCount() => jsonDecode(held[current]!)['segmentCount'] as int;
+
+    test('removing an atSign leaves no segment of the longer entry', () async {
       final storage = windowsKeychain();
       await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
       await storage.appendAtKeysToKeychain(keys: largeKeys('@bob'));
-      expect(
-        held.keys,
-        contains('${current}_segment_4'),
-        reason: 'the control: the entry spans five segments',
-      );
-      failNextWriteOf = '${current}_segment_1';
+      final longer = headerCount();
 
-      await expectLater(
-        storage.removeAtsignFromKeychain(atSign),
-        throwsA(isA<PlatformException>()),
-      );
+      await storage.removeAtsignFromKeychain('@bob');
 
+      expect(headerCount(), lessThan(longer), reason: 'the control');
+      expect(segmentsHeld(), hasLength(headerCount()));
       expect(
         (await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'),
-        [atSign, '@bob'],
+        [atSign],
       );
     });
 
-    test('adding the first keys to an empty keychain', () async {
+    test('undoing a failed longer write leaves no segment of it', () async {
       final storage = windowsKeychain();
-      failNextWriteOf = '${current}_segment_1';
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      final shorter = headerCount();
+      failNextWriteOf = '${current}_segment_${shorter + 1}';
 
       await expectLater(
-        storage.appendAtKeysToKeychain(keys: largeKeys(atSign)),
+        storage.appendAtKeysToKeychain(keys: largeKeys('@bob')),
         throwsA(isA<PlatformException>()),
       );
 
-      expect(await storage.readAtKeysData(), isNull);
-      expect(held, isEmpty, reason: 'nothing is left of the failed write');
+      expect(headerCount(), shorter);
+      expect(segmentsHeld(), hasLength(shorter));
+    });
+
+    test('deleting every atSign\'s keys clears the segments of an entry whose '
+        'header does not parse', () async {
+      final storage = windowsKeychain();
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      expect(segmentsHeld(), isNotEmpty, reason: 'the control');
+      held[current] = '{bad';
+
+      await storage.deleteAllAtKeysData();
+
+      expect(held, isEmpty);
+    });
+
+    test('a header with no segment count is refused as not the keychain\'s '
+        'format, for every Atsign', () async {
+      held[current] = '{"x":1}';
+      final storage = windowsKeychain();
+
+      await expectLater(
+        storage.readAtKeysData(),
+        throwsA(
+          isA<AtKeysFormatException>().having(
+            (e) => e.reason,
+            'reason',
+            'a JSON object whose segmentCount is not a whole number from 0 '
+                'to 2560',
+          ),
+        ),
+      );
+      await expectLater(
+        const LoopbackFlows().open(
+          atSign,
+          keys: KeychainAtKeysIo(keychainStorage: storage),
+          preference: await loopbackPreference(),
+          lookUps: recordingLookUps,
+        ),
+        throwsA(
+          unreadable(
+            message: equals(
+              "The keys for $atSign in this device's keychain could not be "
+              'read: it is a JSON object whose segmentCount is not a whole '
+              'number from 0 to 2560. Every Atsign stored there is affected.',
+            ),
+          ),
+        ),
+      );
+      expect(built, isEmpty, reason: 'no connection is built');
+    });
+
+    group('a keychain write that fails partway leaves the keychain as it '
+        'was', () {
+      test('removing an atSign from a keychain holding others', () async {
+        final storage = windowsKeychain();
+        await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+        await storage.appendAtKeysToKeychain(keys: largeKeys('@bob'));
+        expect(
+          held.keys,
+          contains('${current}_segment_4'),
+          reason: 'the control: the entry spans five segments',
+        );
+        failNextWriteOf = '${current}_segment_1';
+
+        await expectLater(
+          storage.removeAtsignFromKeychain(atSign),
+          throwsA(isA<PlatformException>()),
+        );
+
+        expect(
+          (await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'),
+          [atSign, '@bob'],
+        );
+      });
+
+      test('adding the first keys to an empty keychain', () async {
+        final storage = windowsKeychain();
+        failNextWriteOf = '${current}_segment_1';
+
+        await expectLater(
+          storage.appendAtKeysToKeychain(keys: largeKeys(atSign)),
+          throwsA(isA<PlatformException>()),
+        );
+
+        expect(await storage.readAtKeysData(), isNull);
+        expect(held, isEmpty, reason: 'nothing is left of the failed write');
+      });
     });
   });
 }

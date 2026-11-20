@@ -31,20 +31,22 @@ class AtKeysParseException extends AtException {
   AtKeysParseException(super.message);
 }
 
-/// An atKeys document that is not a JSON object: [reason] says why, in the
-/// JSON parser's words when it did not parse, and [position] is the 1-based
-/// character where the parser stopped.
+/// An atKeys document that is not a JSON object, or not one of the shape it
+/// must have: [reason] says why, in the JSON parser's words when it did not
+/// parse, and [position] is the 1-based character where the parser stopped.
 ///
 /// It holds none of the document's text, in its fields or its message.
 class AtKeysFormatException extends FormatException {
-  /// Why the document is not a JSON object.
+  /// Why the document is refused: the parser's words, or, when [isJson],
+  /// what the document is, such as "not a JSON object".
   final String reason;
 
   /// The 1-based character where the parser stopped; null when the document
-  /// parsed, as JSON that is not an object, or the parser named none.
+  /// parsed as JSON, or the parser named none.
   final int? position;
 
-  /// Whether the document parsed, as JSON that is not an object.
+  /// Whether the document parsed, as JSON that is not an object or not one
+  /// of the shape it must have.
   final bool isJson;
 
   // NOTE: source stays null; the parser's source is the document's text.
@@ -69,6 +71,14 @@ class AtKeysFormatException extends FormatException {
   factory AtKeysFormatException.notAnObject(String what) =>
       AtKeysFormatException._(
           '$what is not a JSON object', 'not a JSON object', null, true);
+
+  /// [what] parsed, as a JSON object whose [field] is missing or not
+  /// [requirement].
+  factory AtKeysFormatException.badField(
+      String what, String field, String requirement) {
+    final reason = 'a JSON object whose $field is not $requirement';
+    return AtKeysFormatException._('$what is $reason', reason, null, true);
+  }
 
   @override
   String toString() => 'AtKeysFormatException: $message';

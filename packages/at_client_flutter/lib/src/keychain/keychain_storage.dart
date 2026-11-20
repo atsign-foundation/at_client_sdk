@@ -23,6 +23,11 @@ part 'keychain_store.dart';
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
+/// The most segments a Windows keys entry is read or cleared in: far more
+/// than any keychain holds (about 6MB), and the bound on the search for
+/// segments left behind by a longer earlier entry.
+const int _kMaxWindowsSegments = 2560;
+
 /// Service to manage keychain CRUD operations for Atsigns and SPPs
 class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
@@ -82,8 +87,22 @@ class KeychainStorage {
   }
 
   /// The segment count a Windows store's header [text] records.
-  static int _segmentCountIn(String text) =>
-      _decodeObject(text, 'the keychain atKeys entry header')['segmentCount'];
+  ///
+  /// A header that is not a JSON object, or whose `segmentCount` is not a
+  /// whole number from zero to [_kMaxWindowsSegments], throws
+  /// [AtKeysFormatException].
+  static int _segmentCountIn(String text) {
+    const what = 'the keychain atKeys entry header';
+    final count = _decodeObject(text, what)['segmentCount'];
+    if (count is! int || count < 0 || count > _kMaxWindowsSegments) {
+      throw AtKeysFormatException.badField(
+        what,
+        'segmentCount',
+        'a whole number from 0 to $_kMaxWindowsSegments',
+      );
+    }
+    return count;
+  }
 
   // Current behaviour:
   // 2.x.x (current):
@@ -502,19 +521,21 @@ class KeychainStorage {
       return;
     }
 
+    // NOTE: the header is not trusted for the count of current-format
+    // segments: one that does not parse, or a shorter entry written over a
+    // longer one, would leave segments holding keys behind. Every segment
+    // present is deleted instead.
+    await _deleteSegmentsFrom('${keychainStoreName}_segment', 0);
+
     final segmentNames = <String>[];
     try {
       final storedData = await store.read();
-      if (storedData != null && storedData.isNotEmpty) {
-        final int segmentCount;
-        final String segmentPrefix;
-        if (storedData.startsWith('{')) {
-          segmentCount = _segmentCountIn(storedData);
-          segmentPrefix = '${keychainStoreName}_segment';
-        } else {
-          segmentCount = int.tryParse(storedData) ?? 0;
-          segmentPrefix = '${await getPackageName()}_data';
-        }
+      if (storedData != null &&
+          storedData.isNotEmpty &&
+          !storedData.startsWith('{')) {
+        // legacy
+        final segmentCount = int.tryParse(storedData) ?? 0;
+        final segmentPrefix = '${await getPackageName()}_data';
         for (int i = 0; i < segmentCount; i++) {
           segmentNames.add('${segmentPrefix}_$i');
         }
@@ -613,6 +634,48 @@ class KeychainStorage {
         //    false);
         // log('  => WRITE: segmentValue was ${dataList[i]}', false);
         await segmentStore.write(dataList[i]);
+      }
+      // A longer entry written here before left segments past these, which
+      // hold its keys.
+      await _deleteSegmentsFrom(
+        '${biometricStoreName}_segment',
+        dataList.length,
+      );
+    }
+  }
+
+  /// Deletes the Windows segments `<prefix>_<first>` onward, stopping at the
+  /// first one that is absent or empty, or at [_kMaxWindowsSegments].
+  ///
+  /// Segments are written from 0 up with none skipped, so those present are
+  /// contiguous. A segment that cannot be read or deleted is logged, and the
+  /// search stops at one that cannot be read.
+  Future<void> _deleteSegmentsFrom(String prefix, int first) async {
+    for (int i = first; i < _kMaxWindowsSegments; i++) {
+      final name = '${prefix}_$i';
+      final BiometricStorageFile segment;
+      final String? value;
+      try {
+        segment = await _getBiometricStorageFile(name);
+        value = await segment.read();
+      } catch (e, s) {
+        _logger.severe(
+          'Could not read Windows keychain segment "$name"; it and any after '
+          'it are left in place',
+          e,
+          s,
+        );
+        return;
+      }
+      if (value == null || value.isEmpty) return;
+      try {
+        await segment.delete();
+      } catch (e, s) {
+        _logger.severe(
+          'Failed to delete Windows keychain segment "$name"',
+          e,
+          s,
+        );
       }
     }
   }
