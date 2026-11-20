@@ -66,7 +66,7 @@ class _Capture implements LoggingHandler {
 void main() {
   final logs = RecordedLogs();
   setUpAll(logs.installOn);
-  final finder = FixedSecondaryAddressFinder('atserver.test', 1);
+  final finder = FixedSecondaryAddressFinder('127.0.0.1', 1);
   late Wire wire;
   late ({String publicKey, String privateKey}) derived;
   late List<
