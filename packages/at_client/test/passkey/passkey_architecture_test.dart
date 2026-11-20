@@ -137,6 +137,8 @@ void main() {
         "warning('revoking enrollment",
         // The refusal of a revoke (AT0031) that is left to the list.
         'e is AtEnrollmentRevokeException',
+        // A PKAM refused because the enrollment is revoked.
+        'AtConnectionCause.revoked',
       ]) {
         expect(allowed.allMatches(rest), hasLength(1), reason: allowed);
         rest = rest.replaceAll(allowed, '');

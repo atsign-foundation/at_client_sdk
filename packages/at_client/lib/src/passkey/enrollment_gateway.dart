@@ -6,6 +6,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show AtConnectionCause, classifyConnectionFailure;
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
 import 'package:at_client/src/lifecycle/pending_enrollment.dart'
     show handshakeKeysIo;
@@ -123,57 +125,57 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
       authenticator: null,
       secondaryAddressFinder: finder);
 
-  /// Whether [e] carries the atServer's reply to the `pkam:` command saying it
-  /// refuses [enrollmentId]: `error:AT0401` (the signature did not verify), or
-  /// `error:AT0025`, `AT0027` or `AT0028` (the enrollment is denied, revoked,
-  /// or expired or unknown) naming `enrollment_id: ID`. The atServer
-  /// replies `error:CODE:MESSAGE` and at_auth wraps it as `Failed
-  /// connecting to ATSIGN. REPLY`. AT0028 also stands for a throttled
-  /// client, so a code without this enrollment's id is not a refusal; nor is
-  /// AT0026 (pending). Any other failed handshake (a server error, a throttled
-  /// or empty reply, an authenticator that reports failure) says nothing about
-  /// the enrollment and is not a refusal.
-  static bool _isPkamRefusal(UnAuthenticatedException e, String enrollmentId) {
-    final reply = RegExp(r'\. error:(AT\d{4})\b(.*)$', dotAll: true)
-        .firstMatch(e.message);
-    if (reply == null) return false;
-    switch (reply.group(1)) {
-      case 'AT0401':
-        return true;
-      case 'AT0025' || 'AT0027' || 'AT0028':
-        return RegExp('enrollment_id: ${RegExp.escape(enrollmentId)}(\\s|\$)')
-            .hasMatch(reply.group(2)!);
-      default:
-        return false;
-    }
-  }
+  static const _enrollmentRefusals = {
+    AtConnectionCause.unauthenticated,
+    AtConnectionCause.revoked,
+    AtConnectionCause.enrollmentDenied,
+    AtConnectionCause.invalidEnrollment,
+  };
 
-  /// PKAM as [enrollmentId] with [pair] on a connection of its own.
+  /// PKAM as [enrollmentId] with [pair] on a connection of its own, whose
+  /// `from:` carries at_client's clientConfig.
   ///
-  /// Throws [PkamRefusedException] only when the atServer explicitly refuses
-  /// the signature; other failures propagate as they are.
+  /// Throws [PkamRefusedException] when the failure is the one a run of the
+  /// authenticator threw after sending a `pkam:`, and
+  /// [classifyConnectionFailure] reads it as a refusal whose cause is
+  /// [AtConnectionCause.unauthenticated], [AtConnectionCause.revoked],
+  /// [AtConnectionCause.enrollmentDenied] or
+  /// [AtConnectionCause.invalidEnrollment]. Any other failure propagates as it
+  /// is: one before the `pkam:`, one outside the authenticator's runs, such as
+  /// a proxy's error reply to the `from:` of a reconnect, and a refusal as
+  /// [AtConnectionCause.enrollmentNotApproved].
   Future<EnrollmentSession> _authenticated(
       String atSign, String enrollmentId, ApkamKeyPair pair,
       {required AtKeys? keys}) async {
     final lookUp = _lookUp(atSign);
+    Object? pkamFailure;
     try {
       final signingKeys =
           withApkamKey(AtKeys(atsign: Atsign(atSign)), enrollmentId, pair);
-      lookUp.authenticator = authenticatorFor(
+      final authenticate = authenticatorFor(
           handshakeKeysIo(atSign, signingKeys), atSign,
-          enrollmentId: enrollmentId);
+          enrollmentId: enrollmentId, clientConfig: clientConfigOf(null));
+      // NOTE: only a reply to the pkam: can be a refusal.
+      lookUp.authenticator = (executor) async {
+        var pkamSent = false;
+        try {
+          return await authenticate(
+              _NotingPkam(executor, () => pkamSent = true));
+        } catch (e) {
+          if (pkamSent) pkamFailure = e;
+          rethrow;
+        }
+      };
       if (!await lookUp.pkamAuthenticate()) {
         throw UnAuthenticatedException('Failed connecting to $atSign. The '
             'authenticator reported failure');
       }
-    } on UnAuthenticatedException catch (e) {
+    } catch (e) {
       await _closeQuietly(lookUp);
-      if (_isPkamRefusal(e, enrollmentId)) {
+      if (identical(e, pkamFailure) &&
+          _enrollmentRefusals.contains(classifyConnectionFailure(e)?.cause)) {
         throw PkamRefusedException(enrollmentId);
       }
-      rethrow;
-    } catch (_) {
-      await _closeQuietly(lookUp);
       rethrow;
     }
     return _PkamSession(this, lookUp, atSign, enrollmentId, keys);
@@ -202,6 +204,23 @@ class AtAuthEnrollmentGateway implements EnrollmentGateway {
         completeActivation: false,
         clientConfig: clientConfigOf(preference.atClientParticulars));
     return filing.read(atSign);
+  }
+}
+
+/// [_executor], calling [_onPkam] as each `pkam:` is sent through it.
+class _NotingPkam implements AtCommandExecutor {
+  _NotingPkam(this._executor, this._onPkam);
+
+  final AtCommandExecutor _executor;
+  final void Function() _onPkam;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) {
+    if (command.startsWith('pkam:')) _onPkam();
+    return _executor.sendSync(command,
+        maxWaitMilliSeconds: maxWaitMilliSeconds,
+        transientWaitTimeMillis: transientWaitTimeMillis);
   }
 }
 
