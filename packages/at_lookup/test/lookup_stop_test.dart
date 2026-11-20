@@ -204,6 +204,7 @@ void main() {
       await expectLater(atLookup.notifications, emitsDone,
           reason: 'a stream read after stop() can never produce anything');
       await expectLater(atLookup.notificationConnectionUp, emitsDone);
+      await expectLater(atLookup.notificationRefusals, emitsDone);
     });
   });
 

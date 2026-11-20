@@ -756,6 +756,9 @@ void main() {
       await atLookup.startNotifications();
       var done = false;
       atLookup.notifications.listen((_) {}, onDone: () => done = true);
+      var refusalsDone = false;
+      atLookup.notificationRefusals
+          .listen((_) {}, onDone: () => refusalsDone = true);
       await transport().settle();
 
       await atLookup.stopNotifications();
@@ -765,6 +768,7 @@ void main() {
       expect(done, isTrue,
           reason: 'a stream that can never produce another event must close, '
               'not hang');
+      expect(refusalsDone, isTrue, reason: 'and so must the refusals');
       expect(transport().destroyed, isTrue);
     });
   });
@@ -851,7 +855,7 @@ void main() {
         _Attempt.accept,
         ...List.filled(6, _Attempt.refuse),
       ], taken);
-      atLookup.notifications.listen((_) {}, onError: (_) {});
+      atLookup.notifications.listen((_) {});
       await atLookup.startNotifications();
 
       await transport().serverCloses();
@@ -888,7 +892,7 @@ void main() {
         _Attempt.timeOut,
         _Attempt.timeOut,
       ], taken);
-      atLookup.notifications.listen((_) {}, onError: (_) {});
+      atLookup.notifications.listen((_) {});
       await atLookup.startNotifications();
 
       await transport().serverCloses();
@@ -916,7 +920,7 @@ void main() {
           afterRefusal: [
             for (final n in [20, 21, 22, 23, 24, 25]) ms(n),
           ]);
-      atLookup.notifications.listen((_) {}, onError: (_) {});
+      atLookup.notifications.listen((_) {});
       await atLookup.startNotifications();
 
       await transport().serverCloses();
@@ -936,7 +940,8 @@ void main() {
 
     test(
         'a reconnect whose connection preamble fails with a refusal code is '
-        'retried on the network schedule and adds no error', () async {
+        'retried on the network schedule and is not reported as a refusal',
+        () async {
       var connects = 0;
       final atLookup = AtLookUp.withSecureSocket(
         atSign: '@alice',
@@ -954,8 +959,9 @@ void main() {
       final taken = <Duration>[];
       (atLookup as AtLookupImpl).onNotificationReconnectDelay = taken.add;
       addTearDown(atLookup.stopNotifications);
-      final errors = <Object>[];
-      atLookup.notifications.listen((_) {}, onError: errors.add);
+      final refusals = <UnAuthenticatedException>[];
+      atLookup.notifications.listen((_) {});
+      atLookup.notificationRefusals.listen(refusals.add);
       await atLookup.startNotifications();
 
       await transport().serverCloses();
@@ -970,13 +976,12 @@ void main() {
           reason: 'only an UnAuthenticatedException is a refusal; any other '
               'failure, whatever code it carries, waits on the network '
               'schedule');
-      expect(errors, isEmpty,
-          reason: 'and is not reported on the stream as a refusal');
+      expect(refusals, isEmpty, reason: 'and is not reported as a refusal');
     });
 
     test(
-        'each refused attempt arrives as an error on notifications, which '
-        'stays open', () async {
+        'each refused attempt arrives on notificationRefusals, and '
+        'notifications carries no error', () async {
       final taken = <Duration>[];
       final atLookup = recording([
         _Attempt.accept,
@@ -988,6 +993,8 @@ void main() {
       var done = false;
       atLookup.notifications
           .listen(seen.add, onError: errors.add, onDone: () => done = true);
+      final refusals = <UnAuthenticatedException>[];
+      atLookup.notificationRefusals.listen(refusals.add);
       await atLookup.startNotifications();
 
       await transport().serverCloses();
@@ -997,14 +1004,15 @@ void main() {
       await transport().serverSends('notification: {"id":"after"}\n');
       await transport().settle();
 
-      expect(errors, hasLength(2),
-          reason: 'one error event per refused attempt');
+      expect(refusals, hasLength(2), reason: 'one per refused attempt');
       expect(
-          errors,
+          refusals,
           everyElement(isA<UnAuthenticatedException>()
               .having((e) => e.message, 'message', contains('error:AT0027'))),
-          reason: 'the error is the refusal itself, carrying what the '
-              'atServer answered');
+          reason: 'each is the refusal itself, carrying what the atServer '
+              'answered');
+      expect(errors, isEmpty,
+          reason: 'notifications carries no error events, as in 4.0');
       expect(done, isFalse,
           reason: 'a refusal does not close the stream: reconnecting carries '
               'on, and a subscriber whose stream ended would have to know to '
@@ -1014,15 +1022,40 @@ void main() {
               'accepted');
     });
 
-    test('a failure that is not a refusal adds no error', () async {
+    test(
+        'a subscriber to both streams hears a refusal before the up of the '
+        'reconnect accepted after it', () async {
+      final taken = <Duration>[];
+      final atLookup = recording([_Attempt.accept, _Attempt.refuse], taken);
+      final heard = <Object>[];
+      atLookup.notifications.listen((_) {});
+      atLookup.notificationConnectionUp.listen(heard.add);
+      atLookup.notificationRefusals.listen(heard.add);
+      await atLookup.startNotifications();
+
+      await transport().serverCloses();
+      await until(
+          () => taken.length == 2 && !atLookup.isReconnectingNotifications,
+          'one refused reconnect and the accepted one');
+      await transport().settle();
+
+      expect(heard, [true, false, isA<UnAuthenticatedException>(), true],
+          reason: 'the two streams are separate, so a subscriber that keeps '
+              'the latest of either reads the order they arrive in: the '
+              'refusal comes while the connection is down, and the up after '
+              'it says the connection recovered');
+    });
+
+    test('a failure that is not a refusal is not reported as one', () async {
       final taken = <Duration>[];
       final atLookup = recording([
         _Attempt.accept,
         _Attempt.timeOut,
         _Attempt.timeOut,
       ], taken);
-      final errors = <Object>[];
-      atLookup.notifications.listen((_) {}, onError: errors.add);
+      final refusals = <UnAuthenticatedException>[];
+      atLookup.notifications.listen((_) {});
+      atLookup.notificationRefusals.listen(refusals.add);
       await atLookup.startNotifications();
 
       await transport().serverCloses();
@@ -1030,13 +1063,13 @@ void main() {
           () => taken.length == 3 && !atLookup.isReconnectingNotifications,
           'two timed-out reconnects and the accepted one');
 
-      expect(errors, isEmpty,
-          reason: 'only a refusal is reported on the stream; a network '
-              'failure is retried as it always was');
+      expect(refusals, isEmpty,
+          reason: 'only a refusal is reported; a network failure is retried '
+              'as it always was');
     });
 
     test(
-        'a refusal that arrives after a restart adds no error to the '
+        'a refusal that arrives after a restart is not reported on the '
         'restarted stream', () async {
       final attemptStarted = Completer<void>();
       final release = Completer<void>();
@@ -1052,15 +1085,16 @@ void main() {
       })
         ..heartbeatInterval = const Duration(hours: 1);
       addTearDown(atLookup.stopNotifications);
-      atLookup.notifications.listen((_) {}, onError: (_) {});
+      atLookup.notifications.listen((_) {});
       await atLookup.startNotifications();
 
       await transport().serverCloses();
       await attemptStarted.future.timeout(const Duration(seconds: 5));
       await atLookup.stopNotifications();
       final restarting = atLookup.startNotifications();
-      final errors = <Object>[];
-      atLookup.notifications.listen((_) {}, onError: errors.add);
+      final refusals = <UnAuthenticatedException>[];
+      atLookup.notifications.listen((_) {});
+      atLookup.notificationRefusals.listen(refusals.add);
       release.complete();
       await restarting;
       await transport().settle();
@@ -1069,12 +1103,12 @@ void main() {
           reason: 'the restart has to have completed, or nothing here says '
               'what the stale refusal did to it');
       expect(calls, 3, reason: 'the stale attempt and the restart');
-      expect(errors, isEmpty,
+      expect(refusals, isEmpty,
           reason: 'the refusal belongs to the session the stop ended, so it '
               'must not reach the stream the restart opened');
     });
 
-    test('a refusal that arrives after stopNotifications adds no error',
+    test('a refusal that arrives after stopNotifications is not reported',
         () async {
       final attemptStarted = Completer<void>();
       final release = Completer<void>();
@@ -1089,10 +1123,11 @@ void main() {
         return true;
       })
         ..heartbeatInterval = const Duration(hours: 1);
-      final errors = <Object>[];
+      final refusals = <UnAuthenticatedException>[];
       var done = false;
-      atLookup.notifications
-          .listen((_) {}, onError: errors.add, onDone: () => done = true);
+      atLookup.notifications.listen((_) {});
+      atLookup.notificationRefusals
+          .listen(refusals.add, onDone: () => done = true);
       await atLookup.startNotifications();
 
       await transport().serverCloses();
@@ -1102,7 +1137,8 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(done, isTrue, reason: 'the stop closed the stream');
-      expect(errors, isEmpty, reason: 'a stopped session reports nothing more');
+      expect(refusals, isEmpty,
+          reason: 'a stopped session reports nothing more');
       expect(calls, 2,
           reason: 'and the stop ended reconnecting: no attempt follows the '
               'refused one');

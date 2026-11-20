@@ -213,6 +213,10 @@ class _StubMuxable extends Fake implements AtLookupMuxable {
   Stream<bool> get notificationConnectionUp => _up.stream;
 
   @override
+  Stream<UnAuthenticatedException> get notificationRefusals =>
+      const Stream.empty();
+
+  @override
   Future<void> startNotifications({
     String? regex,
     Future<int?> Function()? getLastNotificationTime,

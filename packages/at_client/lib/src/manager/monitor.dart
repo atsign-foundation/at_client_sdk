@@ -72,6 +72,7 @@ class Monitor {
 
   StreamSubscription<String>? _notificationSubscription;
   StreamSubscription<bool>? _connectionSubscription;
+  StreamSubscription<UnAuthenticatedException>? _refusalSubscription;
 
   /// Rebuilds a connection that answers heartbeats while delivering nothing.
   ///
@@ -205,9 +206,11 @@ class Monitor {
     // miss the very "up" this call is about to cause.
     _connectionSubscription ??=
         lookUp.notificationConnectionUp.listen(_onConnectionState);
+    _refusalSubscription ??= lookUp.notificationRefusals.listen(_onRefusal);
     _notificationSubscription ??= lookUp.notifications.listen(
       _onNotification,
-      onError: _onNotificationStreamError,
+      onError: (Object e) =>
+          logger.warning('Error on the notification stream: $e'),
     );
 
     // Its own guard: reading the watermark is a local keystore operation, not
@@ -272,14 +275,10 @@ class Monitor {
     }
   }
 
-  /// Reports a reconnect the atServer refused to [connection]; any other
-  /// error on the notification stream is logged.
-  void _onNotificationStreamError(Object e) {
+  /// Reports a reconnect the atServer refused to [connection].
+  void _onRefusal(UnAuthenticatedException e) {
     final refusal = _failureIn(e).refusal;
-    if (refusal == null) {
-      logger.warning('Error on the notification stream: $e');
-      return;
-    }
+    if (refusal == null) return;
     if (_targetState != NotificationListenerState.listening) {
       logger.info('stop() arrived before this refusal, which is not '
           'reported: $e');
@@ -448,6 +447,8 @@ class Monitor {
     _notificationSubscription = null;
     await _connectionSubscription?.cancel();
     _connectionSubscription = null;
+    await _refusalSubscription?.cancel();
+    _refusalSubscription = null;
     _connectedAt = null;
     _setCurrentState(NotificationListenerState.notConnected);
   }

@@ -73,6 +73,10 @@ class WireLookUp implements AtLookupMuxable {
   Stream<bool> get notificationConnectionUp => const Stream.empty();
 
   @override
+  Stream<UnAuthenticatedException> get notificationRefusals =>
+      const Stream.empty();
+
+  @override
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
     if (_wire.connectFails) throw StateError('connection refused');
