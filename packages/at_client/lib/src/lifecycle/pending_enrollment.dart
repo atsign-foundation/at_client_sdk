@@ -19,6 +19,12 @@ import 'package:at_utils/at_progress.dart';
 
 final Object _clientCallKey = Object();
 
+/// A key source holding [keys] for one handshake, never a keyfile: it serves
+/// a fixed key set to the authenticator and is not a store a client runs on.
+AtKeysIo handshakeKeysIo(String atSign, AtKeys keys) =>
+    // ignore: invalid_use_of_visible_for_testing_member
+    InMemoryAtKeysIo.holding(atSign, keys);
+
 /// An enrollment this device has submitted and the atSign's manager has not
 /// yet decided.
 ///
@@ -127,9 +133,7 @@ class PendingEnrollment {
       session: AtAuthSession(
           atSign: atSign,
           rootDomain: rootDomain,
-          // NOTE: a key source for the handshake alone, never a keyfile.
-          // ignore: invalid_use_of_visible_for_testing_member
-          atKeysIo: InMemoryAtKeysIo.holding(atSign, handshakeKeys),
+          atKeysIo: handshakeKeysIo(atSign, handshakeKeys),
           enrollmentId: enrollmentId),
       apkamSymmetricKeyResolver: keyExchangeMode == EnrollmentKeyExchangeMode.pq
           ? enrollmentApkamSymmetricKeyResolver(atSign)
@@ -178,6 +182,9 @@ class PendingEnrollment {
     // or after it.
     var written = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      written = false;
       if (_ended.isCompleted) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
@@ -423,6 +430,9 @@ class PendingEnrollment {
   Future<void> _discard(String why) async {
     var removed = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      removed = false;
       if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
       stored
         ..discardEnrollment(enrollmentId)
