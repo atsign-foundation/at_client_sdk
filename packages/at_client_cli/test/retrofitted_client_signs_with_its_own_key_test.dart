@@ -102,7 +102,7 @@ void main() {
         storage:
             CliKeys.storageFor(atSign, program: namespace, path: storage.path),
         atLookUp: own,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: FixedSecondaryAddressFinder(
             InternetAddress.loopbackIPv4.address, port));
     expect(client.connection.current.isOnline, isFalse,

@@ -14,9 +14,8 @@ Future<void> main() async {
       keys: InMemoryAtKeysIo.holding(atSign, AtKeys()),
       preference: preference,
       storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
-      lookUps: webSocketLookUps(),
-      secondaryAddressFinder:
-          HttpsSecondaryAddressFinder(preference.rootDomain));
+      lookUps: fixedAddressWebSocketLookUps(host: '127.0.0.1', port: 1),
+      secondaryAddressFinder: HttpsSecondaryAddressFinder('127.0.0.1'));
   final phone =
       AtKey.self('phone', namespace: 'wavi', sharedBy: atSign).build();
   await client.put(phone, '+44 7700 900000');

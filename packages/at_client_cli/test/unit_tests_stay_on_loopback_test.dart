@@ -1,0 +1,467 @@
+import 'dart:io';
+
+import 'package:at_client_cli/at_client_cli.dart' show AtRootDomain;
+import 'package:test/test.dart';
+
+import 'lifecycle_rig.dart' show loopbackLookUps;
+
+/// The test trees the scan reads, named from this package's directory, each
+/// with the fewest Dart files it is known to hold.
+const _trees = {
+  'test': 20,
+  '../at_auth/test': 20,
+  '../at_client/test': 100,
+  '../at_client_flutter/test': 10,
+};
+
+/// This file, whose controls hold every spelling the scan forbids.
+const _self = 'test/unit_tests_stay_on_loopback_test.dart';
+
+/// at_client's helper that refuses an atDirectory off the loopback interface.
+const _atClientTransport = '../at_client/test/test_utils/transport.dart';
+
+/// at_client's hand-run samples, which name the environment they run against.
+const _atClientSamples = '../at_client/test/samples/';
+
+/// The one test file that may extend `AtsignFlows`.
+const _loopbackFlows = '../at_client_flutter/test/loopback_flows.dart';
+
+/// The test that names each connection factory at_client_cli's barrel
+/// exports, building each and invoking none.
+const _barrel = 'test/barrel_test.dart';
+
+/// The arguments naming an atDirectory host that a test may build a finder
+/// with.
+const _loopbackArguments = {
+  "'127.0.0.1'",
+  '"127.0.0.1"',
+  "'localhost'",
+  'InternetAddress.loopbackIPv4.address',
+};
+
+/// The finders that ask an atDirectory where an atSign's atServer is.
+const _finders =
+    'CacheableSecondaryAddressFinder|SecondaryUrlFinder|HttpsSecondaryAddressFinder';
+
+/// The connection factories that, invoked with no finder, build one for the
+/// root they are given.
+const _factories =
+    'secureSocketLookUps|lookUpsFor|proxyLookUps|webSocketLookUps';
+
+/// The at_activate commands that open a connection to the atDirectory the
+/// command line names, or to root.atsign.org when it names none.
+const _connectingCommands =
+    'onboard|enroll|otp|list|approve|spp|fetch|deny|revoke|unrevoke|delete|'
+    'interactive|auto|status';
+
+/// The dialogs that run the lifecycle verbs, through `flows`.
+const _dialogs = ['PkamDialog', 'CramDialog', 'ApkamActivationDialog'];
+
+/// The text of the bracketed list or argument list that opens just before
+/// [start] in [source], up to the bracket that closes it.
+String bracketedAt(String source, int start,
+    {String open = '(', String close = ')'}) {
+  var depth = 1;
+  for (var i = start; i < source.length; i++) {
+    final c = source[i];
+    if (c == open) depth++;
+    if (c == close && --depth == 0) return source.substring(start, i);
+  }
+  return source.substring(start);
+}
+
+/// [arguments] with everything inside a nested bracket taken out, leaving
+/// the top-level arguments' names.
+String topLevel(String arguments) {
+  final out = <String>[];
+  var depth = 0;
+  for (final c in arguments.split('')) {
+    if ('([{'.contains(c)) depth++;
+    if (depth == 0) out.add(c);
+    if (')]}'.contains(c)) depth--;
+  }
+  return out.join();
+}
+
+/// The hosts a test may name its atDirectory on.
+const _loopbackHosts = {'127.0.0.1', 'localhost', '::1'};
+
+/// Whether [root], an atDirectory named as `host`, `host:port` or
+/// `[host]:port`, any of them after `proxy:`, is on a loopback host.
+bool _loopbackRoot(String root) {
+  final address = root.startsWith('proxy:') ? root.substring(6) : root;
+  final host = RegExp(r'^\[([^\]]*)\](?::|$)').firstMatch(address)?.group(1) ??
+      (address == '::1' ? address : address.split(':').first);
+  return _loopbackHosts.contains(host);
+}
+
+/// Whether [path] is in at_client_cli's own tree, or names no file.
+bool _atActivateTree(String path) => !path.startsWith('../');
+
+/// What in [source], the text of the test file at [path], could make a test
+/// reach an atDirectory off the loopback interface: a finder built for
+/// another host, or by a tear-off or a subclass; a connection factory
+/// invoked with no finder, or passed on to be invoked later, when it is given
+/// none; the real lifecycle verbs without `LoopbackFlows`, through
+/// `AtsignFlows` itself, a subclass, an implementation that is no `Mock`, or
+/// a dialog built without its own `flows`; and, in at_client_cli's own tree,
+/// a root named off the loopback interface, or one left to its default of
+/// root.atsign.org: a command line, for a connecting command (unless it is
+/// the value an `expect` call expects) or given to
+/// `CLIBase.fromCommandLineArgs`, that names an atSign and no root,
+/// `createAtClient` with no `rootDomain`, or `EnrollerSettings` on an
+/// `AtClientPreference` built there with no root.
+List<String> offTheLoopbackIn(String source, {String path = ''}) => [
+      for (final m in RegExp('\\b($_finders)\\s*\\(\\s*([^,)]+)')
+          .allMatches(source))
+        if (!_loopbackArguments.contains(m.group(2)!.trim()))
+          'a ${m.group(1)} for ${m.group(2)!.trim()}',
+      for (final m
+          in RegExp('\\b($_finders)\\.new\\b|extends\\s+($_finders)\\b')
+              .allMatches(source))
+        'a finder torn off or subclassed at offset ${m.start}',
+      if (path != _barrel)
+        for (final m in RegExp('\\b($_factories)\\s*\\(').allMatches(source))
+          if (_factoryWithoutFinder(source, m.end) case final offence?)
+            '${m.group(1)} $offence',
+      for (final m
+          in RegExp(r'AtLookUp\.withSecureSocket\s*\(').allMatches(source))
+        if (!_namesFinder(bracketedAt(source, m.end)))
+          'AtLookUp.withSecureSocket with no finder',
+      if (_atActivateTree(path)) ...[
+        for (final m in RegExp(
+                r'''(?:'-r'|"-r"|'--root-server'|"--root-server"|rootDomain:|\.rootDomain\s*=|AtRootDomain(?:\.parse)?\()\s*,?\s*(['"])(.*?)\1''')
+            .allMatches(source))
+          if (!_loopbackRoot(m.group(2)!)) 'the root ${m.group(2)}',
+        for (final m in RegExp('''\\[\\s*['"]($_connectingCommands)['"]''')
+            .allMatches(source))
+          if (_callEnclosing(source, m.start) != 'expect' &&
+              _commandLineWithoutRoot(
+                  bracketedAt(source, m.start + 1, open: '[', close: ']')))
+            'at_activate ${m.group(1)} with no root',
+        for (final m in RegExp(r'\bfromCommandLineArgs\s*\(\s*\[')
+            .allMatches(source))
+          if (_commandLineWithoutRoot(
+              bracketedAt(source, m.end, open: '[', close: ']')))
+            'CLIBase.fromCommandLineArgs with no root at offset ${m.start}',
+        for (final m in RegExp(r'\bcreateAtClient\s*\(').allMatches(source))
+          if (!RegExp(r'(^|[,\s])rootDomain\s*:\s*(?!null\b)\S')
+              .hasMatch(topLevel(bracketedAt(source, m.end))))
+            'createAtClient with no root at offset ${m.start}',
+        for (final m in RegExp(r'\bEnrollerSettings\s*\(').allMatches(source))
+          if (topLevel(bracketedAt(source, m.end)).split(',').first.trim()
+              case final preference
+              when preference.startsWith('AtClientPreference') &&
+                  !preference.contains('..rootDomain'))
+            'EnrollerSettings on a preference with no root at offset '
+                '${m.start}',
+      ],
+      for (final m
+          in RegExp(r'\bAtsignFlows\s*(?:\(|\.new\b)').allMatches(source))
+        'the real verbs at offset ${m.start}',
+      if (path != _loopbackFlows)
+        for (final m in RegExp(r'extends\s+AtsignFlows\b').allMatches(source))
+          'a subclass of AtsignFlows at offset ${m.start}',
+      for (final m in RegExp(
+              r'class\s+\w+\s+(?:extends\s+(\w+)\s+)?implements\s+AtsignFlows\b')
+          .allMatches(source))
+        if (m.group(1) != 'Mock')
+          'AtsignFlows implemented at offset ${m.start}',
+      for (final dialog in _dialogs)
+        for (final m in RegExp('\\b$dialog(\\.show)?\\(').allMatches(source))
+          if (m.group(1) != null)
+            '$dialog.show at offset ${m.start}'
+          else if (!RegExp(r'(^|[,\s])flows\s*:')
+              .hasMatch(topLevel(bracketedAt(source, m.end))))
+            '$dialog with no flows at offset ${m.start}',
+    ];
+
+/// Whether [list], the elements of a list literal, is a command line naming
+/// an atSign and no root.
+bool _commandLineWithoutRoot(String list) =>
+    RegExp(r'''['"](-a|--atsign)['"]''').hasMatch(list) &&
+    !RegExp(r'''['"](-r|--root-server)['"]''').hasMatch(list);
+
+/// The name of the function whose argument list holds [index] in [source]
+/// directly, not inside a nested bracket, or null when no call does.
+String? _callEnclosing(String source, int index) {
+  var depth = 0;
+  for (var i = index - 1; i >= 0; i--) {
+    final c = source[i];
+    if (')]}'.contains(c)) depth++;
+    if ('([{'.contains(c) && depth-- == 0) {
+      return c == '('
+          ? RegExp(r'(\w+)\s*$').firstMatch(source.substring(0, i))?.group(1)
+          : null;
+    }
+  }
+  return null;
+}
+
+/// What is wrong with the factory whose arguments open at [start] in
+/// [source]: invoked at once with arguments naming no finder, or passed on,
+/// where whatever invokes it may give it none; null when it is invoked at
+/// once with a finder.
+String? _factoryWithoutFinder(String source, int start) {
+  final factoryArguments = bracketedAt(source, start);
+  final after = start + factoryArguments.length + 1;
+  final rest = source.substring(after);
+  if (!rest.trimLeft().startsWith('(')) {
+    return 'passed on, to be invoked with no finder';
+  }
+  final open = after + rest.indexOf('(') + 1;
+  return _namesFinder(bracketedAt(source, open))
+      ? null
+      : 'invoked with no finder';
+}
+
+/// Whether [arguments] give a `secondaryAddressFinder` other than null.
+bool _namesFinder(String arguments) =>
+    RegExp(r'secondaryAddressFinder\s*:\s*(?!null\b)\S').hasMatch(arguments);
+
+/// What is wrong with the test file at [path], whose text is [source], as to
+/// the hand-run samples: a test among them, or a file outside them that
+/// imports their finder.
+List<String> samplesOffencesIn(String path, String source) {
+  if (path.startsWith(_atClientSamples)) {
+    // NOTE: samples are run by hand against the environment they name;
+    // dart test runs only *_test.dart files, so none may be one.
+    return [
+      if (path.endsWith('_test.dart')) 'a test among the hand-run samples'
+    ];
+  }
+  return [
+    if (source.contains('sample_transport.dart'))
+      "imports the hand-run samples' finder"
+  ];
+}
+
+/// Everything wrong with the test file at [path], one of the scanned trees
+/// followed by the file's path within it, whose text is [source].
+List<String> offencesIn(String path, String source) => [
+      ...samplesOffencesIn(path, source),
+      if (path != _atClientTransport && !path.startsWith(_atClientSamples))
+        ...offTheLoopbackIn(source, path: path),
+    ];
+
+/// No unit test in at_auth, at_client, at_client_cli or at_client_flutter
+/// reaches an atDirectory off the loopback interface, runs at_activate
+/// somewhere that uses root.atsign.org, or reaches the lifecycle verbs
+/// without `LoopbackFlows`.
+void main() {
+  test('the scan catches each way to another atDirectory, and passes loopback',
+      () {
+    expect(
+        offTheLoopbackIn([
+          "CacheableSecondaryAddressFinder('root.atsign.org', 64)",
+          'final f = SecondaryUrlFinder.new;',
+          'lookUpsFor(root)(atSign: a, rootDomain: r, authenticator: null)',
+          "CLIBase(atSign: a, nameSpace: n, rootDomain: 'root.atsign.org')",
+          "['otp', '-a', '@alice']",
+          "['-a', '@alice', '-r', 'root.atsign.wtf']",
+          'AtLookUp.withSecureSocket(atSign: a, rootDomain: r)',
+          'const AtsignFlows();',
+          'class _Fake implements AtsignFlows {}',
+          'CramDialog(atSign: a, preference: f(flows: x));',
+          'PkamDialog.show(context, atSign: a);',
+          "HttpsSecondaryAddressFinder('root.atsign.org')",
+          'lookUps: secureSocketLookUps(),',
+          'lookUps: lookUpsFor(preference.rootDomain),',
+          'webSocketLookUps()(atSign: a, rootDomain: r, authenticator: null)',
+          'AtLookUp.withSecureSocket(atSign: a, secondaryAddressFinder: null)',
+          "['onboard', '-a', '@alice', '-c', 'secret']",
+          "['enroll', '-a', '@alice', '-s', 'ABC123', '-p', 'app']",
+          "CLIBase.fromCommandLineArgs(['-a', '@alice', '-k', p, '-s', d])",
+          'createAtClient(atSign: a, atKeysFilePath: p)',
+          'createAtClient(atSign: a, rootDomain: null)',
+          "activate('@a', EnrollerSettings(AtClientPreference(), "
+              'atKeysFilePath: p))',
+          "AtRootDomain.parse('root.atsign.org')",
+        ].join('\n')),
+        hasLength(23));
+    expect(offTheLoopbackIn("for (final c in ['otp', 'list']) {}"), isEmpty,
+        reason: 'a list of command names is no command line');
+    expect(
+        offTheLoopbackIn(
+            "expect(run.arguments, ['onboard', '-a', '@alice'], reason: r)"),
+        isEmpty,
+        reason: 'the command line an expect expects is never run');
+    expect(
+        offTheLoopbackIn(
+            "expect(run.arguments, f(['onboard', '-a', '@alice']), reason: r)"),
+        hasLength(1),
+        reason: 'only a list that is itself the expected value is exempt');
+    expect(
+        offTheLoopbackIn('final t = CacheableSecondaryAddressFinder;'), isEmpty,
+        reason: 'a type literal constructs nothing: only .new tears off the '
+            'constructor');
+    expect(
+        offTheLoopbackIn([
+          "['otp', '-a', '@alice', '-r', '127.0.0.1:\$port']",
+          "CLIBase(atSign: a, rootDomain: 'proxy:127.0.0.1:\${server.port}')",
+          "['onboard', '-a', '@alice', '-y', '-r', '127.0.0.1:\$port']",
+          "CLIBase.fromCommandLineArgs(['-a', a, '-r', '127.0.0.1:\$port'])",
+          "createAtClient(atSign: a, rootDomain: '127.0.0.1:\$port')",
+          "EnrollerSettings(AtClientPreference()..rootDomain = '127.0.0.1', "
+              'atKeysFilePath: p)',
+          'lookUps: loopbackLookUps(),',
+          'final AtLookUpFactory Function() f = secureSocketLookUps;',
+          "CacheableSecondaryAddressFinder('127.0.0.1', port)",
+          "HttpsSecondaryAddressFinder('127.0.0.1')",
+          'secureSocketLookUps()(atSign: a, rootDomain: r, authenticator: '
+              'null, secondaryAddressFinder: f)',
+          'AtLookUp.withSecureSocket(atSign: a, secondaryAddressFinder: f)',
+          'PkamDialog(atSign: a, keys: k, flows: f(x))',
+          'class _Mock extends Mock implements AtsignFlows {}',
+          'isA<CacheableSecondaryAddressFinder>()',
+        ].join('\n')),
+        isEmpty);
+  });
+
+  test(
+      'the scan judges a root by its whole host, reads a root set by '
+      'assignment, and catches each spelling of the real verbs', () {
+    for (final (example, reason) in [
+      (
+        "CLIBase(atSign: a, rootDomain: 'localhost.example.com')",
+        'a host that begins with localhost is not localhost'
+      ),
+      (
+        "['-a', '@alice', '-r', '127.0.0.1.nip.io:64']",
+        'a host that begins with 127.0.0.1 is not 127.0.0.1'
+      ),
+      (
+        "AtClientPreference()..rootDomain = 'root.atsign.org'",
+        'a root assigned in a cascade is judged by its host'
+      ),
+      ('final f = AtsignFlows.new;', 'a tear-off constructs the real verbs'),
+      ('const AtsignFlows ( );', 'whitespace before the arguments'),
+      ('flows: AtsignFlows(\n),', 'a constructor call split across lines'),
+    ]) {
+      expect(offTheLoopbackIn(example), hasLength(1), reason: reason);
+    }
+    for (final (example, reason) in [
+      ("..rootDomain = '127.0.0.1'", 'a loopback root assigned in a cascade'),
+      (
+        '..rootDomain = InternetAddress.loopbackIPv4.address',
+        'a root that is no literal is not judged'
+      ),
+      ("rootDomain: 'localhost:64'", 'localhost with a port'),
+      ("rootDomain: '[::1]:\$port'", 'a bracketed IPv6 loopback with a port'),
+      ('final flows = MockAtsignFlows();', 'a mock of the real verbs'),
+      ('flows: const LoopbackFlows(),', 'the verbs that refuse off loopback'),
+    ]) {
+      expect(offTheLoopbackIn(example), isEmpty, reason: reason);
+    }
+  });
+
+  test('the scan keeps each exemption, and the at_activate rules, to its tree',
+      () {
+    for (final atActivate in [
+      "AtRootDomain('example.com')",
+      "['otp', '-a', '@alice']",
+      "CLIBase.fromCommandLineArgs(['-a', '@alice', '-k', p])",
+      'createAtClient(atSign: a)',
+      'EnrollerSettings(AtClientPreference(), atKeysFilePath: p)',
+    ]) {
+      expect(
+          offTheLoopbackIn(atActivate, path: 'test/a_test.dart'), hasLength(1),
+          reason: atActivate);
+      expect(offTheLoopbackIn(atActivate, path: '../at_auth/test/a_test.dart'),
+          isEmpty,
+          reason: atActivate);
+    }
+
+    const factory = 'final AtLookUpFactory lookUps = secureSocketLookUps();';
+    expect(offTheLoopbackIn(factory, path: _barrel), isEmpty);
+    expect(offTheLoopbackIn(factory, path: 'test/a_test.dart'), hasLength(1));
+
+    const subclass = 'class _Real extends AtsignFlows { const _Real(); }';
+    expect(offTheLoopbackIn(subclass, path: _loopbackFlows), isEmpty);
+    expect(offTheLoopbackIn(subclass, path: 'test/loopback_flows.dart'),
+        hasLength(1));
+
+    const finder = "CacheableSecondaryAddressFinder('example.com', 64)";
+    expect(offencesIn(_atClientTransport, finder), isEmpty);
+    expect(offencesIn('${_atClientSamples}lookup.dart', finder), isEmpty);
+    for (final path in [
+      'test/test_utils/transport.dart',
+      '../at_auth/test/test_utils/transport.dart',
+      '../at_client/test/test_utils/mocks.dart',
+      '../at_client_flutter/test/samples/lookup.dart',
+    ]) {
+      expect(offencesIn(path, finder), hasLength(1), reason: path);
+    }
+  });
+
+  test('the scan keeps the hand-run samples to themselves', () {
+    expect(
+        samplesOffencesIn('${_atClientSamples}a_test.dart', ''), hasLength(1));
+    expect(samplesOffencesIn('${_atClientSamples}a.dart', ''), isEmpty);
+    expect(
+        samplesOffencesIn('../at_client/test/a_test.dart',
+            "import 'samples/sample_transport.dart';"),
+        hasLength(1));
+    expect(
+        samplesOffencesIn('../at_client/test/a_test.dart',
+            "import 'test_utils/transport.dart';"),
+        isEmpty);
+  });
+
+  group("Given the rig's loopbackLookUps", () {
+    test(
+        'when a connection with no finder is asked for a root off the '
+        'loopback interface, then it throws StateError', () {
+      expect(
+          () => loopbackLookUps()(
+              atSign: '@alice',
+              rootDomain: AtRootDomain('root.atsign.org', 64),
+              authenticator: null),
+          throwsA(isA<StateError>().having(
+              (e) => e.message, 'message', contains('root.atsign.org:64'))));
+    });
+
+    test('when the root is on the loopback interface, then it builds one',
+        () async {
+      final lookUp = loopbackLookUps()(
+          atSign: '@alice',
+          rootDomain: AtRootDomain('127.0.0.1', 1),
+          authenticator: null);
+      await lookUp.close();
+    });
+  });
+
+  test(
+      'nothing in a test in any of the four packages reaches an atDirectory '
+      'off the loopback interface', () {
+    final read = <String, int>{};
+    final offenders = <String>[];
+    for (final MapEntry(key: tree, value: atLeast) in _trees.entries) {
+      final root = Directory(tree).resolveSymbolicLinksSync();
+      final files = [
+        for (final file in Directory(root).listSync(recursive: true))
+          if (file is File && file.path.endsWith('.dart'))
+            (
+              path: '$tree/${file.path.substring(root.length + 1)}'
+                  .replaceAll(Platform.pathSeparator, '/'),
+              file: file,
+            ),
+      ].where((f) => f.path != _self).toList();
+      read[tree] = files.length;
+      expect(files.length, greaterThan(atLeast),
+          reason: 'the scan reads $tree: ${files.length} files');
+      for (final f in files) {
+        for (final found in offencesIn(f.path, f.file.readAsStringSync())) {
+          offenders.add('${f.path}: $found');
+        }
+      }
+    }
+    expect(read.keys, [
+      'test',
+      '../at_auth/test',
+      '../at_client/test',
+      '../at_client_flutter/test',
+    ]);
+    expect(offenders, isEmpty, reason: 'files read in each tree: $read');
+  });
+}
