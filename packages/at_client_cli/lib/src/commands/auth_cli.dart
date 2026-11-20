@@ -538,13 +538,23 @@ Future<int> status(ArgResults ar,
     return 2;
   }
 
-  if (pk == null || !pk.startsWith("data:")) {
+  if (!holdsPublicKey(pk)) {
     stderr.writeln('returning 1: response was $pk');
     return 1;
   }
 
   stderr.writeln('returning 0: found public:publickey$atSign OK');
   return 0;
+}
+
+/// Whether [response] to `lookup:publickey@<atsign>` carries a key: a
+/// `data:` reply whose value is neither empty nor `null`, which an atServer
+/// that is provisioned but not activated answers.
+@visibleForTesting
+bool holdsPublicKey(String? response) {
+  if (response == null || !response.startsWith('data:')) return false;
+  final value = response.substring('data:'.length).trim();
+  return value.isNotEmpty && value != 'null';
 }
 
 /// How often a client waiting for its enrollment to be approved asks again,
@@ -687,10 +697,7 @@ Future<bool> _isActivated(
     try {
       final response = await connection
           .executeCommand('lookup:publickey$atSign\n', auth: false);
-      return response != null &&
-          response.startsWith('data:') &&
-          !response.contains('null') &&
-          response.trim().length > 'data:'.length;
+      return holdsPublicKey(response);
     } catch (e) {
       logger.info('lookup:publickey$atSign failed, so $atSign is taken as '
           'not activated: $e');

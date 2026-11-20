@@ -226,6 +226,57 @@ void main() {
       expect(string, equals(dummyAtKeysData));
     });
 
+    test(
+      'removeAtsignFromKeychain on Windows deletes the segments the smaller'
+      ' document no longer uses',
+      () async {
+        KeychainStorage.isWindows = true;
+        final entries = <String, String>{};
+        when(
+          () => mockBiometricStorage.getStorage(
+            any(),
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((invocation) async {
+          final name = invocation.positionalArguments[0] as String;
+          final file = MockBiometricStorageFile();
+          when(() => file.read()).thenAnswer((_) async => entries[name]);
+          when(() => file.write(any())).thenAnswer((i) async {
+            entries[name] = i.positionalArguments[0] as String;
+          });
+          when(() => file.delete()).thenAnswer((_) async {
+            entries.remove(name);
+          });
+          return file;
+        });
+        AtKeys keysFor(String atSign, {String padding = ''}) =>
+            AtKeys.legacy(
+                apkamPrivateKey: 'privateKey12',
+                apkamPublicKey: 'publicKey123',
+                selfEncryptionKey: 'selfEncKey12',
+                encryptionPrivateKey: 'encPrivateKey123',
+                encryptionPublicKey: 'encPublicKey',
+              )
+              ..metadata['name'] = atSign
+              ..metadata['padding'] = padding;
+
+        await keyChainStorage.appendAtKeysToKeychain(keys: keysFor('@alice'));
+        await keyChainStorage.appendAtKeysToKeychain(
+          keys: keysFor('@bob', padding: 'b' * 6000),
+        );
+        expect(entries.keys, contains('@atsigns:test_segment_2'));
+
+        await keyChainStorage.removeAtsignFromKeychain('@bob');
+
+        expect(
+          entries.keys.where((k) => k.startsWith('@atsigns:test_segment_')),
+          ['@atsigns:test_segment_0'],
+        );
+        expect(entries.values.join(), isNot(contains('bbbb')));
+        expect(await keyChainStorage.getAllAtsigns(), ['@alice']);
+      },
+    );
+
     tearDown(() {
       KeychainStorage.isWindows = false;
       reset(mockBiometricStorage);

@@ -18,6 +18,23 @@ void main() {
 
   postureArgumentTests();
 
+  group('holdsPublicKey: what status and activate take as a published key',
+      () {
+    test('a key is held', () {
+      expect(holdsPublicKey('data:MIIBIjANBgkqhkiG9w0BAQEFAAOC'), isTrue);
+    });
+    test('data:null, as a provisioned but unactivated atServer answers, is not',
+        () {
+      expect(holdsPublicKey('data:null'), isFalse);
+      expect(holdsPublicKey('data:null\n'), isFalse);
+    });
+    test('an empty value, a non-data reply or no reply is not', () {
+      expect(holdsPublicKey('data:'), isFalse);
+      expect(holdsPublicKey('error:AT0015-key not found'), isFalse);
+      expect(holdsPublicKey(null), isFalse);
+    });
+  });
+
   group('A group of tests to verify write permission of apkam file path', () {
     final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
 

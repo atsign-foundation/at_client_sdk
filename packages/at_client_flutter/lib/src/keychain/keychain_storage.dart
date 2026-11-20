@@ -434,28 +434,9 @@ class KeychainStorage {
           return null;
         }
 
-        final int segmentCount;
-        final String segmentPrefix;
-        if (storedData.startsWith('{')) {
-          final Map m = jsonDecode(storedData);
-          segmentCount = m['segmentCount'];
-          segmentPrefix = '${keychainStoreName}_segment';
-          //log(
-          //  '  => READ: Got segmentCount $segmentCount'
-          //  ', and inferred RELATIVE segmentPrefix $segmentPrefix,'
-          //  ' from storedData $storedData',
-          //   false);
-        } else {
-          // legacy
-          segmentCount = int.tryParse(storedData) ?? 0;
-          String packageName = await getPackageName();
-          segmentPrefix = '${packageName}_data';
-          //log(
-          //    '  => READ: Got segmentCount $segmentCount'
-          //     ', and inferred LEGACY, BUGGY segmentPrefix $segmentPrefix,'
-          //     ' from storedData $storedData',
-          //     false);
-        }
+        final layout = await _segmentLayout(keychainStoreName, storedData);
+        final segmentCount = layout.count;
+        final segmentPrefix = layout.prefix;
         final results = <String>[];
         for (int i = 0; i < segmentCount; i++) {
           final segmentStore = await _getBiometricStorageFile(
@@ -495,18 +476,9 @@ class KeychainStorage {
     try {
       final storedData = await store.read();
       if (storedData != null && storedData.isNotEmpty) {
-        final int segmentCount;
-        final String segmentPrefix;
-        if (storedData.startsWith('{')) {
-          final Map metadata = jsonDecode(storedData);
-          segmentCount = metadata['segmentCount'];
-          segmentPrefix = '${keychainStoreName}_segment';
-        } else {
-          segmentCount = int.tryParse(storedData) ?? 0;
-          segmentPrefix = '${await getPackageName()}_data';
-        }
-        for (int i = 0; i < segmentCount; i++) {
-          segmentNames.add('${segmentPrefix}_$i');
+        final layout = await _segmentLayout(keychainStoreName, storedData);
+        for (int i = 0; i < layout.count; i++) {
+          segmentNames.add('${layout.prefix}_$i');
         }
       }
     } catch (e, s) {
@@ -547,6 +519,28 @@ class KeychainStorage {
     } else {
       //log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
+      final segmentPrefix = '${biometricStoreName}_segment';
+      // A shorter document leaves the old document's trailing segments
+      // behind; note how many there were so they can be deleted below.
+      int oldSegmentCount = 0;
+      try {
+        final oldHeader = await store.read();
+        if (oldHeader != null && oldHeader.isNotEmpty) {
+          final layout = await _segmentLayout(biometricStoreName, oldHeader);
+          if (layout.prefix == segmentPrefix) {
+            oldSegmentCount = layout.count;
+          }
+        }
+      } catch (e, s) {
+        // The write itself can still succeed; only the stale segments of an
+        // unreadable header are left in place.
+        _logger.warning(
+          'Failed to read Windows keychain segment metadata before write;'
+          ' stale segments of "$biometricStoreName" may remain',
+          e,
+          s,
+        );
+      }
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
       //log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);
       await store.write(segmentCountInfo);
@@ -560,7 +554,37 @@ class KeychainStorage {
         // log('  => WRITE: segmentValue was ${dataList[i]}', false);
         await segmentStore.write(dataList[i]);
       }
+
+      // These hold fragments of key material that is no longer in the
+      // document (for example an atSign just removed), so a failed delete
+      // fails the write rather than leaving them behind silently.
+      for (int i = dataList.length; i < oldSegmentCount; i++) {
+        final staleSegment = await _getBiometricStorageFile(
+          '${segmentPrefix}_$i',
+        );
+        await staleSegment.delete();
+      }
     }
+  }
+
+  /// Parses the Windows header [storedData] of [keychainStoreName] into the
+  /// number of segments it points at and the name prefix they use.
+  Future<({int count, String prefix})> _segmentLayout(
+    String keychainStoreName,
+    String storedData,
+  ) async {
+    if (storedData.startsWith('{')) {
+      final Map metadata = jsonDecode(storedData);
+      return (
+        count: metadata['segmentCount'] as int,
+        prefix: '${keychainStoreName}_segment',
+      );
+    }
+    // legacy
+    return (
+      count: int.tryParse(storedData) ?? 0,
+      prefix: '${await getPackageName()}_data',
+    );
   }
 
   Future<BiometricStorageFile> _getBiometricStorageFile(
