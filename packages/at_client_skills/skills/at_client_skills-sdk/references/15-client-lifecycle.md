@@ -208,6 +208,13 @@ await client.connection.awaitOnline(budget: const Duration(seconds: 30),
 | `offline` | `stopped`                                                         | `stop()` ran; the last change emitted                                                  |
 | `refused` | `revoked`, `unauthenticated`, `invalidEnrollment`, `enrollmentNotApproved`, `enrollmentDenied`, `otherRefusal` | The atServer rejected the keys; revocation landing mid-life arrives here too |
 
+When the atServer answers a connection's `from:`, `pkam:` or `cram:` with an
+`error:` reply, at_auth's authenticators raise `AtAuthErrorReplyException`
+(exported by at_client 4.1.0), whose `errorCode` is the reply's code, or null
+when it names none. A refusal code gives its `refused` cause and a reply
+naming no code gives `unauthenticated`; any other code is not a refusal. A
+verb sent through `getRemoteSecondary()` that meets such a reply throws it.
+
 Every verb the client runs on its own connection keeps the state current, so
 an app rarely needs `attempt()`; it subscribes to `changes` and renders.
 **Flutter:** subscribe once (in `initState`), cancel in `dispose`, and follow

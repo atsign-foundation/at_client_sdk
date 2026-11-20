@@ -507,7 +507,11 @@ await client.connection.attempt();                  // try again now
   across restarts.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
   `enrollmentNotApproved`, `enrollmentDenied`): the atServer rejected the keys
-  — the app decides.
+  — the app decides. An `error:` reply to a connection's `from:`, `pkam:` or
+  `cram:` is an `AtAuthErrorReplyException` (exported by at_client 4.1.0)
+  whose `errorCode` is the reply's code, or null when it names none: a
+  refusal code gives the cause and no code gives `unauthenticated`. A verb
+  sent through `getRemoteSecondary()` that meets one throws it.
   The one refusal that **throws** (`AtOpenRefusedException`) is the first open
   of these keys on a device: nothing is held locally, so there is nothing to
   serve. Keys holding only a pending enrollment throw

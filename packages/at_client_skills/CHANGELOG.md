@@ -154,6 +154,10 @@
   one the atServer keeps answering without a decision, a server error
   included, stays pending for `resumeEnrollment` (`SKILL.md`;
   `references/14`, `15`).
+- An `error:` reply to a connection's `from:`, `pkam:` or `cram:` is an
+  `AtAuthErrorReplyException` (at_client 4.1.0) carrying the reply's code as
+  `errorCode`, and a refusal code gives the refused cause (`SKILL.md`;
+  `references/15`).
 
 ## 1.3.0 — 2026-07-31
 
