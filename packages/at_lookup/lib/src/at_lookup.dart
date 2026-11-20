@@ -2,8 +2,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/at_connection.dart';
-import 'package:at_lookup/src/util/error_response.dart'
-    show errorResponseException;
 
 /// Performs one authentication on a connection that is already open, using
 /// [executor] to speak to the atServer, and returns whether it succeeded.
@@ -176,6 +174,8 @@ abstract interface class AtLookUp {
 
   /// Runs [builder]'s command on the atServer, authenticating the connection
   /// first when the verb needs it, and returns the atServer's response.
+  /// An authenticator's failure is thrown as an [AtLookUpException] whose
+  /// [AtLookUpException.cause] is that failure.
   Future<String?> executeVerb(VerbBuilder builder);
 
   /// Sends [command] as written and returns the atServer's response; [auth]

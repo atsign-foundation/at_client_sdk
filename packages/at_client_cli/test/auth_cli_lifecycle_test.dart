@@ -228,8 +228,9 @@ void main() {
       final pref = await preference();
       // Submitted earlier and never approved: the keyfile holds it pending.
       final first = atServer(
-          decide: (_) async => throw UnAuthenticatedException(
-              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed'),
+          decide: (_) async => throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+              errorCode: 'AT0026'),
           wrapped: wrapped);
       await Atsign(atSign).enroll(
           otp: 'ABC123',
