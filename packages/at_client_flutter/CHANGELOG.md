@@ -33,9 +33,9 @@
   when its keys hold no credential, or only enrollments awaiting approval
   that it cannot wait on, and says why when the device has asked more than
   once.
-- fix: `ApkamActivationDialog` waits on the enrollment request its key store
-  already holds, even one filed under another device name, instead of asking
-  for a passcode the store cannot take.
+- fix: `ApkamActivationDialog` resumes the request its key store already
+  holds, even one filed under another device or app name, naming the old app
+  name when it differs.
 
 ## 2.0.0
 

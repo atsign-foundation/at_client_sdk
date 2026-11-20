@@ -1,5 +1,7 @@
 ## 1.1.0
 
+- fix: `at_activate enroll` resumes the request its keyfile already holds,
+  even one filed under another app or device name, and says which.
 - feat: `at_activate` and `at_register` name themselves, at at_client_cli's
   version, on every `from:` their clients send to authenticate, and
   `createAtClient` takes optional `appName` and `appVersion` to name yours.

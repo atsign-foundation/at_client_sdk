@@ -3,6 +3,7 @@
 - fix: `Atsign.enroll` refuses a keys store already waiting on an
   enrollment for the Atsign, whatever that enrollment's app and device,
   before anything is sent, and names it: resume it with `resumeEnrollment`.
+  at_client_flutter 2.1.0's `ApkamActivationDialog` resumes such a request.
 - feat: `AtKeysPassphraseException` is exported: it is an unreadable
   keyfile's `error` when its passphrase is missing or does not open it.
 - fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (after the first, from the document it last read, with no atServer round trip), and never stores the private half in the `@keys` document, nor the public half as typed authentication material. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `close()` zeroes the private key and a read after it throws. A write still running at `close()` finishes whole; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its Atsign and type, and accepts only an Atsign with one leading `@` (`alice` and `left@right` are refused as invalid).
