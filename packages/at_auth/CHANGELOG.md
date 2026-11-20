@@ -21,8 +21,9 @@
   derivation of a PRF output: it names the record and pointer namespace, seals
   and opens records, and lends the APKAM auth seed to callers until `close()`,
   which overwrites the seed with zeroes and closes the sealer; a derivation
-  whose auth seed is not 32 bytes is refused with `ArgumentError`, its seed
-  zeroed and its sealer closed. The setup lock and `PasskeyHintStore`, which keeps a passkey's credential id and
+  whose auth seed is not 32 bytes is refused with `ArgumentError`, and an
+  atSign that is not one with `InvalidAtSignException`, either way with the
+  seed zeroed and the sealer closed. The setup lock and `PasskeyHintStore`, which keeps a passkey's credential id and
   the enrollment id per atSign and writes the two in one `putHint` call, are
   ports the caller implements. `setupLockName(prefix, atSign)` takes its prefix from the
   caller, and `recordPrfSalt()` is synchronous. The four HKDF labels (record id,
