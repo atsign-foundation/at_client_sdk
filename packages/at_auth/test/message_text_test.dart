@@ -68,8 +68,8 @@ void main() {
                 'iv': 'x\ny"z',
                 'ct': 'AAAA',
               })),
-          throwsA(isA<UnsupportedPasskeyRecordException>().having(
-              (e) => e.message, 'message', r'not base64: "x\u000ay\"z"')));
+          throwsA(isA<UnsupportedPasskeyRecordException>()
+              .having((e) => e.message, 'message', 'iv is not base64')));
     });
 
     test(

@@ -11,6 +11,9 @@ const maxMessageTextLength = 180;
 /// cutting inside an escape or a character; when any are left out, `...`
 /// follows.
 ///
+/// Never pass key material, its ciphertext or a secret: name the field
+/// instead.
+///
 /// Throws [ArgumentError] when [quote] is not one character, or is a
 /// backslash or one of the characters shown as an escape.
 String clipForMessage(String text,
