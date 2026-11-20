@@ -34,26 +34,32 @@ void main() {
             authenticator: null),
         throwsA(isA<StateError>().having(
             (e) => e.message, 'message', contains('root.atsign.org:64'))));
-    for (final (reason, lookUp) in [
-      (
-        'the control: a loopback root is asked',
-        loopbackLookUps()(
-            atSign: '@alice',
-            rootDomain: AtRootDomain(InternetAddress.loopbackIPv4.address, 1),
-            authenticator: null)
-      ),
-      (
-        'the control: a finder given is used, whatever the root',
-        loopbackLookUps()(
-            atSign: '@alice',
-            rootDomain: AtRootDomain('root.atsign.org', 64),
-            authenticator: null,
-            secondaryAddressFinder: defaultAtDirectory)
-      ),
-    ]) {
-      expect(lookUp.secondaryAddressFinder, isA<SecondaryAddressFinder>(),
-          reason: reason);
-      await lookUp.close();
-    }
+    final loopbackRoot = loopbackLookUps()(
+        atSign: '@alice',
+        rootDomain: AtRootDomain(InternetAddress.loopbackIPv4.address, 1),
+        authenticator: null);
+    await loopbackRoot.close();
+
+    final given = defaultAtDirectory;
+    final givenFinder = loopbackLookUps()(
+        atSign: '@alice',
+        rootDomain: AtRootDomain('root.atsign.org', 64),
+        authenticator: null,
+        secondaryAddressFinder: given);
+    expect(givenFinder.secondaryAddressFinder, same(given),
+        reason: 'the control: a finder given is used, whatever the root');
+    await givenFinder.close();
+  });
+
+  group('Given the shared loopback helpers', () {
+    test(
+        'when a test takes the default atDirectory or preference, then each '
+        'names port 1 on 127.0.0.1', () {
+      expect(loopbackHosts, {'127.0.0.1', 'localhost', '::1'});
+      expect(loopbackPreference().rootDomain, '127.0.0.1');
+      expect(loopbackPreference().rootPort, 1);
+      expect(() => defaultAtDirectory, returnsNormally,
+          reason: 'the default atDirectory is built through the refusal');
+    });
   });
 }

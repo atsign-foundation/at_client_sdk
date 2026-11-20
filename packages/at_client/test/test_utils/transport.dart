@@ -43,7 +43,7 @@ AtLookUpFactory loopbackLookUps() => (
 /// An atDirectory on the loopback interface, at port 1, where nothing
 /// listens, for a test that names one and never reaches it.
 SecondaryAddressFinder get defaultAtDirectory =>
-    CacheableSecondaryAddressFinder(InternetAddress.loopbackIPv4.address, 1);
+    _loopbackAtDirectory(InternetAddress.loopbackIPv4.address, 1);
 
 /// A preference naming the atDirectory [defaultAtDirectory] is: port 1 on
 /// the loopback interface, where nothing listens.
@@ -57,6 +57,5 @@ Future<SecondaryAddressFinder> refusingAtDirectory() async {
   final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
   final port = socket.port;
   await socket.close();
-  return CacheableSecondaryAddressFinder(
-      InternetAddress.loopbackIPv4.address, port);
+  return _loopbackAtDirectory(InternetAddress.loopbackIPv4.address, port);
 }
