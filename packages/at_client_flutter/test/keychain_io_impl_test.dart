@@ -103,6 +103,27 @@ void main() {
     },
   );
 
+  test(
+    'On Windows, an entry header that is neither JSON nor a segment count '
+    'is refused as corrupt, not read as absent, and is not written over',
+    () async {
+      KeychainStorage.isWindows = true;
+      addTearDown(() => KeychainStorage.isWindows = false);
+      blob = 'xyz';
+
+      await expectLater(
+        () => io.read('@alice'),
+        throwsA(isA<FormatException>()),
+        reason: 'absent would let an enrollment start and replace the entry',
+      );
+      await expectLater(
+        () => io.write('@alice', keysFor('@alice')),
+        throwsA(isA<FormatException>()),
+      );
+      expect(blob, 'xyz', reason: 'the corrupt entry is left as it was');
+    },
+  );
+
   test('write refuses an atSign that already has an entry', () async {
     await io.write('@alice', keysFor('@alice'));
     expect(entryCount(), 1);
