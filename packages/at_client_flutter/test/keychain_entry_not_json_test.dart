@@ -328,6 +328,48 @@ void main() {
         reason: 'the recorder hears the Windows read of the current store',
       );
     });
+
+    test(
+      'Deleting all atKeys data with a header that does not parse deletes its segments',
+      () async {
+        KeychainStorage.isWindows = true;
+        addTearDown(() => KeychainStorage.isWindows = false);
+        const header = '@atsigns:test';
+        final held = <String, String>{
+          header: '{bad',
+          '${header}_segment_0': entry.substring(0, 20),
+          '${header}_segment_1': entry.substring(20),
+        };
+        final biometricStorage = _MockBiometricStorage();
+        when(
+          () => biometricStorage.getStorage(
+            any(),
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer((invocation) async {
+          final file = _MockBiometricStorageFile();
+          final name = invocation.positionalArguments.first as String;
+          when(file.read).thenAnswer((_) async => held[name]);
+          when(file.delete).thenAnswer((_) async {
+            held.remove(name);
+            changed.add(name);
+          });
+          return file;
+        });
+
+        await KeychainStorage(
+          biometricStorage: biometricStorage,
+        ).deleteAllAtKeysData();
+
+        expect(
+          held,
+          isEmpty,
+          reason: 'the header and every segment holding atKeys are deleted',
+        );
+        expect(changed, isNot(contains('${header}_segment_2')));
+        expectNoLogHoldsEntry();
+      },
+    );
   });
 
   test(

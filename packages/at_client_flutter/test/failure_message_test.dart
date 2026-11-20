@@ -103,10 +103,42 @@ void main() {
         SecondaryNotFoundException('No entry in atDirectory for alice'),
         '@alice is not in the atDirectory.',
       ),
+      'a wrong CRAM secret, as at_lookup throws it': (
+        UnAuthenticatedException(
+          'AT0401-Exception: CRAM authentication failed',
+        ),
+        "The atServer for @alice did not accept this device's keys.",
+      ),
+      'a revoked enrollment, as at_lookup throws it': (
+        AtLookUpException('AT0027', 'enrollment revoked'),
+        "This device's access to @alice has been revoked.",
+      ),
+      'a denied enrollment, as at_lookup throws it': (
+        AtLookUpException('AT0025', 'enrollment denied'),
+        "This device's enrollment for @alice was denied.",
+      ),
     };
     for (final MapEntry(key: name, value: (error, message)) in cases.entries) {
       test(name, () => expect(shown(error), message));
     }
+  });
+
+  group('an enrollment still waiting for approval', () {
+    test('says to enroll again from this app', () {
+      expect(
+        shown(AtEnrollmentPendingException(atSign, ['e1'])),
+        contains('Enroll this device again from this app'),
+      );
+    });
+
+    test('that matched several pending ones says to name the app and device, '
+        'not to enroll again', () {
+      final shownForSeveral = shown(
+        AtEnrollmentPendingException.several(atSign, ['e1', 'e2']),
+      );
+      expect(shownForSeveral, contains('name both the app and the device'));
+      expect(shownForSeveral, isNot(contains('Enroll this device again')));
+    });
   });
 
   test("anything else shows its message's first line, and no FormatException "

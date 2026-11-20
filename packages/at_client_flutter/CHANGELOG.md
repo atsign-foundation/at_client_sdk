@@ -9,6 +9,11 @@
   none of the entry's text.
 - fix: on Windows, a keychain read logs the store name and the length of
   what it read, never the text.
+- fix: on Windows, an entry written over a longer one, as removing an Atsign
+  or undoing a failed write does, deletes the longer entry's later
+  segments, and `deleteAllAtKeysData` deletes every segment even when the
+  entry's header does not parse. A header whose `segmentCount` is not a
+  whole number is refused as `AtKeysFormatException`.
 - fix: `KeychainStorage.removeAtsignFromKeychain` and
   `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
   legacy-named store cannot be read or written, or its entry is not a JSON
@@ -35,6 +40,19 @@
 - fix: `PkamDialog` tells the user in plain words to enroll the device again
   when its keys hold no credential, or only enrollments awaiting approval
   that it cannot wait on.
+- fix: the dialogs' failure messages put an atServer's raw refusal into
+  plain words, such as a wrong CRAM secret, a revoked enrollment or a denied
+  one, and, when several pending enrollments match, show the message that
+  says to name both the app and the device instead of saying to enroll
+  again.
+- fix: on Windows, a legacy keychain header whose segment count does not
+  parse, is below 0 or is above 2560 is refused as `AtKeysFormatException`,
+  as a bad `segmentCount` in a JSON header is, whether the entry is read,
+  deleted or written over.
+- fix: on Windows, deleting or rewriting an entry deletes every segment its
+  header names even when one cannot be read, and an empty segment no longer
+  ends the search for the segments after it; a failure to delete one is
+  logged at severe.
 
 ## 2.0.0
 
