@@ -59,6 +59,12 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     When the approval arrives and the client opens
     Then the confirmation closes, nothing is cancelled, and the dialog returns the client
 
+  Scenario: The enrollment dialog waits on the request its store already holds, under any device name
+    Given a key store holding one pending enrollment for @alice, filed by this app under device name "old-phone"
+    When ApkamActivationDialog opens @alice with device name "phone"
+    Then it shows "Resuming enrollment <id>.." and Cancel, without asking for a passcode
+    And once the request is approved, the dialog returns the client
+
   Scenario: PkamDialog resumes a pending keychain entry
     Given a keychain entry for an atSign holding only an enrollment awaiting approval
     When the user logs in with it through PkamDialog

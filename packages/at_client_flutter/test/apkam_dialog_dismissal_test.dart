@@ -403,6 +403,58 @@ void main() {
     });
   });
 
+  testWidgets('The enrollment dialog waits on the request its store already '
+      'holds, under any device name', (tester) async {
+    when(
+      () => flows.resumeEnrollment(
+        any(),
+        app: any(named: 'app'),
+        device: any(named: 'device'),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        lookUps: any(named: 'lookUps'),
+      ),
+    ).thenAnswer(
+      (invocation) async =>
+          invocation.namedArguments[#app] == null &&
+              invocation.namedArguments[#device] == null
+          ? pending
+          : null,
+    );
+    final opened = clientAnswers();
+    stopEnds(opened);
+    final client = MockAtClient();
+    final results = await open(tester);
+
+    expect(find.text('Resuming enrollment enroll-1..'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+    verifyNever(
+      () => flows.enroll(
+        any(),
+        otp: any(named: 'otp'),
+        app: any(named: 'app'),
+        device: any(named: 'device'),
+        namespaces: any(named: 'namespaces'),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        signingAlgo: any(named: 'signingAlgo'),
+        keyExchangeMode: any(named: 'keyExchangeMode'),
+        lookUps: any(named: 'lookUps'),
+      ),
+    );
+
+    opened.complete(client);
+    await frames(tester);
+
+    expect(
+      results,
+      [client],
+      reason:
+          'the request filed under another device name is this '
+          "store's, and its approval opens the client here",
+    );
+  });
+
   group('Given approval lands just as the dialog is dismissed', () {
     testWidgets('when pending.client() returns after the dismissal, then that '
         'client is stopped, so the next open of the atSign succeeds', (

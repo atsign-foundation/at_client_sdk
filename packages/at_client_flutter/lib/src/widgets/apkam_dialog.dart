@@ -141,19 +141,16 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     _resumeIfPending();
   }
 
-  /// A request already in the key store for this app and device is waited on
-  /// again rather than asking for a passcode it has already spent.
+  /// A request already in the key store is waited on again rather than asking
+  /// for a passcode it has already spent: this app and device's own, or else
+  /// the one request the store holds under other names, since `enroll`
+  /// refuses a store that already holds one.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
-      pending = await widget.flows.resumeEnrollment(
-        widget.atSign,
-        app: widget.appName,
-        device: widget.deviceName,
-        keys: _keys,
-        preference: under(widget.preference, widget.rootDomain),
-        lookUps: widget.lookUps,
-      );
+      pending =
+          await _resume(app: widget.appName, device: widget.deviceName) ??
+          await _resume();
     } catch (e) {
       // An unreadable store is reported when the request goes out.
       return;
@@ -165,6 +162,16 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     });
     await _awaitAndOpen(pending);
   }
+
+  Future<PendingEnrollment?> _resume({String? app, String? device}) =>
+      widget.flows.resumeEnrollment(
+        widget.atSign,
+        app: app,
+        device: device,
+        keys: _keys,
+        preference: under(widget.preference, widget.rootDomain),
+        lookUps: widget.lookUps,
+      );
 
   Future<PendingEnrollment> _sendEnrollment(String otp) => widget.flows.enroll(
     widget.atSign,
