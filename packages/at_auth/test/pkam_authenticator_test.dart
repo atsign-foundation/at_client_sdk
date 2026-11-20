@@ -25,6 +25,9 @@ void main() {
     AtSignLogger.root_level = 'finest';
   });
 
+  // NOTE: each test sees only what it logged.
+  setUp(logs.records.clear);
+
   group('PkamAuthenticator tests', () {
     late PkamAuthenticator pkamAuthenticator;
     late MockAtLookup mockAtLookup;
@@ -69,7 +72,8 @@ void main() {
                   isNot(contains('#0'))))));
       final fine = logs.records.where((r) =>
           '${r.level.name}' == 'FINE' &&
-          '${r.message}'.contains('pkam auth failed for $atSign'));
+          '${r.message}'.contains('pkam auth failed for $atSign') &&
+          '${r.error}'.contains('the atServer said no'));
       expect(fine, isNotEmpty, reason: 'the failure is logged at fine');
       expect(fine.first.stackTrace, isNotNull, reason: 'with its trace');
     });

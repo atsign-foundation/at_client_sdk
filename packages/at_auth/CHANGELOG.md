@@ -1,5 +1,7 @@
 ## 4.1.0-rc.1
 
+- feat: `AtKeysFormatException.badField` reports a JSON object whose field
+  is missing or of the wrong kind.
 - feat: a passphrase envelope refused for its passphrase, missing or one
   that does not open it, throws `AtKeysPassphraseException`, an
   `AtDecryptionException`; every other refusal of an envelope is still a

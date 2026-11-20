@@ -1,6 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysSourceAbsentException;
+import 'package:at_auth/at_auth.dart'
+    show
+        AtKeysSourceAbsentException,
+        CryptographicMaterial,
+        CryptographicMaterialAlgorithm,
+        CryptographicMaterialRole;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtLookupImpl, AtLookupMuxable;
@@ -338,5 +344,140 @@ void main() {
   test('removing an atSign from an empty keychain writes nothing', () async {
     await keychain({}).removeAtsignFromKeychain(atSign);
     expect(changed, isEmpty);
+  });
+
+  group('On Windows', () {
+    late Map<String, String> held;
+
+    /// The name of the store whose next write fails, once.
+    String? failNextWriteOf;
+
+    setUp(() {
+      KeychainStorage.isWindows = true;
+      addTearDown(() => KeychainStorage.isWindows = false);
+      held = {};
+      failNextWriteOf = null;
+    });
+
+    /// A keychain whose stores hold what is written to them, in [held].
+    KeychainStorage windowsKeychain() {
+      final biometricStorage = _MockBiometricStorage();
+      when(
+        () =>
+            biometricStorage.getStorage(any(), options: any(named: 'options')),
+      ).thenAnswer((invocation) async {
+        final name = invocation.positionalArguments.first as String;
+        final file = _MockBiometricStorageFile();
+        when(file.read).thenAnswer((_) async => held[name]);
+        when(() => file.write(any())).thenAnswer((invocation) async {
+          if (failNextWriteOf == name) {
+            failNextWriteOf = null;
+            throw PlatformException(code: 'WriteFailed');
+          }
+          held[name] = invocation.positionalArguments.first as String;
+        });
+        when(file.delete).thenAnswer((_) async => held.remove(name));
+        return file;
+      });
+      return KeychainStorage(biometricStorage: biometricStorage);
+    }
+
+    /// Keys for [atSign] whose entry spans several Windows segments.
+    AtKeys largeKeys(String atSign) => AtKeys()
+      ..atsign = atSign.toAtsign()
+      ..addKey(
+        CryptographicMaterial(
+          keyId: 'enc:rsa2048:1',
+          role: CryptographicMaterialRole.of('publicEncryption'),
+          algorithm: CryptographicMaterialAlgorithm.of('rsa2048'),
+          bytes: AtBytes.fromString(base64Encode(List.filled(6000, 7))),
+          createdAt: DateTime.utc(2026),
+        ),
+      );
+
+    /// The segments of the current entry held, by name.
+    Iterable<String> segmentsHeld() =>
+        held.keys.where((name) => name.startsWith('${current}_segment_'));
+
+    /// The segment count the current entry's header records.
+    int headerCount() => jsonDecode(held[current]!)['segmentCount'] as int;
+
+    test('removing an atSign leaves no segment of the longer entry', () async {
+      final storage = windowsKeychain();
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      await storage.appendAtKeysToKeychain(keys: largeKeys('@bob'));
+      final longer = headerCount();
+
+      await storage.removeAtsignFromKeychain('@bob');
+
+      expect(headerCount(), lessThan(longer), reason: 'the control');
+      expect(segmentsHeld(), hasLength(headerCount()));
+      expect((await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'), [
+        atSign,
+      ]);
+    });
+
+    test('undoing a failed longer write leaves no segment of it', () async {
+      final storage = windowsKeychain();
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      final shorter = headerCount();
+      failNextWriteOf = '${current}_segment_${shorter + 1}';
+
+      await expectLater(
+        storage.appendAtKeysToKeychain(keys: largeKeys('@bob')),
+        throwsA(isA<PlatformException>()),
+      );
+
+      expect(headerCount(), shorter);
+      expect(segmentsHeld(), hasLength(shorter));
+    });
+
+    test('deleting every atSign\'s keys clears the segments of an entry whose '
+        'header does not parse', () async {
+      final storage = windowsKeychain();
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      expect(segmentsHeld(), isNotEmpty, reason: 'the control');
+      held[current] = '{bad';
+
+      await storage.deleteAllAtKeysData();
+
+      expect(held, isEmpty);
+    });
+
+    test('a header with no segment count is refused as not the keychain\'s '
+        'format, for every Atsign', () async {
+      held[current] = '{"x":1}';
+      final storage = windowsKeychain();
+
+      await expectLater(
+        storage.readAtKeysData(),
+        throwsA(
+          isA<AtKeysFormatException>().having(
+            (e) => e.reason,
+            'reason',
+            'a JSON object whose segmentCount is not a whole number from 0 '
+                'to 2560',
+          ),
+        ),
+      );
+      await expectLater(
+        const LoopbackFlows().open(
+          atSign,
+          keys: KeychainAtKeysIo(keychainStorage: storage),
+          preference: await loopbackPreference(),
+          lookUps: recordingLookUps,
+        ),
+        throwsA(
+          unreadable(
+            message: equals(
+              "The keys for $atSign in this device's keychain could not be "
+              'read: it is a JSON object whose segmentCount is not a whole '
+              'number from 0 to 2560. Every Atsign stored there is affected.',
+            ),
+          ),
+        ),
+      );
+      expect(built, isEmpty, reason: 'no connection is built');
+    });
   });
 }

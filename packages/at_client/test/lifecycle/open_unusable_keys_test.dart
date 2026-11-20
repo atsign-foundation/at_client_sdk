@@ -351,7 +351,7 @@ void main() {
           },
           reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
           reason: contains('an envelope version this build has no code for'),
-          error: isA<AtDecryptionException>());
+          error: notAPassphraseRefusal);
     });
 
     test('a role that appears twice for one keyId', () async {

@@ -23,9 +23,10 @@ part 'keychain_store.dart';
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
-/// The most Windows keychain segments deleting an entry looks for when its
-/// header does not say how many there are: 1024 segments, about 2.5 MB.
-const int _kMaxWindowSegmentsScanned = 1024;
+/// The most segments a Windows keychain entry is read in: a header that
+/// records more is refused, and deleting an entry whose header records no
+/// count it can use looks for no more than this.
+const int _kMaxWindowSegments = 2560;
 
 /// Service to manage keychain CRUD operations for Atsigns and SPPs
 class KeychainStorage {
@@ -86,8 +87,22 @@ class KeychainStorage {
   }
 
   /// The segment count a Windows store's header [text] records.
-  static int _segmentCountIn(String text) =>
-      _decodeObject(text, 'the keychain atKeys entry header')['segmentCount'];
+  ///
+  /// A header that is not a JSON object, or whose `segmentCount` is not a
+  /// whole number from zero to [_kMaxWindowSegments], throws
+  /// [AtKeysFormatException].
+  static int _segmentCountIn(String text) {
+    const what = 'the keychain atKeys entry header';
+    final count = _decodeObject(text, what)['segmentCount'];
+    if (count is! int || count < 0 || count > _kMaxWindowSegments) {
+      throw AtKeysFormatException.badField(
+        what,
+        'segmentCount',
+        'a whole number from 0 to $_kMaxWindowSegments',
+      );
+    }
+    return count;
+  }
 
   // Current behaviour:
   // 2.x.x (current):
@@ -555,7 +570,7 @@ class KeychainStorage {
   /// A header whose segment count cannot be read, such as one that is not a
   /// JSON object, still has segments holding the atKeys text, so they are
   /// found by reading `[segmentPrefix]_0` onwards until one is absent or
-  /// empty, up to [_kMaxWindowSegmentsScanned].
+  /// empty, up to [_kMaxWindowSegments].
   Future<int> _deletableSegmentCount(
     String header,
     String segmentPrefix,
@@ -571,7 +586,7 @@ class KeychainStorage {
       );
     }
     var count = 0;
-    while (count < _kMaxWindowSegmentsScanned) {
+    while (count < _kMaxWindowSegments) {
       final segment = await _getBiometricStorageFile('${segmentPrefix}_$count');
       final value = await segment.read();
       if (value == null || value.isEmpty) break;
