@@ -441,6 +441,28 @@ void main() {
             reason: 'and a reconnect would not report it');
       });
 
+      test('a refusal after a start that was retried is reported once',
+          () async {
+        Monitor.startRetryDelays = const [Duration(milliseconds: 1)];
+        muxable.startError = AtLookUpException('AT0013', 'no route to host');
+        final up = reaches(NotificationListenerState.listening);
+        monitor.start();
+        await muxable.startBegan.future;
+        muxable.startError = null;
+        await up;
+        final down = reaches(NotificationListenerState.notConnected);
+        await muxable.dropConnection();
+        await down;
+        await refuseReconnect();
+
+        expect(muxable.startCalls, 2,
+            reason: 'the failed start and the retry that succeeded');
+        expect(connection.refusals.map((r) => r.cause),
+            [AtConnectionCause.revoked],
+            reason: 'the retry keeps the refusal subscription the failed '
+                'start made rather than adding a second');
+      });
+
       test('a refused start that fails after stop() is not reported', () async {
         final failing = Completer<void>();
         muxable
