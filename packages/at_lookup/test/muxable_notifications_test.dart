@@ -975,8 +975,49 @@ void main() {
     });
 
     test(
-        'each refused attempt arrives as an error on notifications, which '
-        'stays open', () async {
+        'without reportRefusals, refused attempts add no error, so an await '
+        'for loop keeps receiving', () async {
+      final taken = <Duration>[];
+      final atLookup = recording([
+        _Attempt.accept,
+        _Attempt.refuse,
+        _Attempt.refuse,
+      ], taken);
+      final seen = <String>[];
+      Object? thrown;
+      var loopEnded = false;
+      unawaited(() async {
+        try {
+          await for (final n in atLookup.notifications) {
+            seen.add(n);
+          }
+        } catch (e) {
+          // Recorded for the expectation below: a throw here is the failure.
+          thrown = e;
+        } finally {
+          loopEnded = true;
+        }
+      }());
+      await atLookup.startNotifications();
+
+      await transport().serverCloses();
+      await until(
+          () => taken.length == 3 && !atLookup.isReconnectingNotifications,
+          'two refused reconnects and the accepted one');
+      await transport().serverSends('notification: {"id":"after"}\n');
+      await transport().settle();
+
+      expect(thrown, isNull,
+          reason: 'a listener written for a stream without errors gets none '
+              'unless it asks for refusals');
+      expect(loopEnded, isFalse, reason: 'the loop is still listening');
+      expect(seen, ['notification: {"id":"after"}'],
+          reason: 'and receives once a reconnect is accepted');
+    });
+
+    test(
+        'with reportRefusals, each refused attempt arrives as an error on '
+        'notifications, which stays open', () async {
       final taken = <Duration>[];
       final atLookup = recording([
         _Attempt.accept,
@@ -988,7 +1029,7 @@ void main() {
       var done = false;
       atLookup.notifications
           .listen(seen.add, onError: errors.add, onDone: () => done = true);
-      await atLookup.startNotifications();
+      await atLookup.startNotifications(reportRefusals: true);
 
       await transport().serverCloses();
       await until(
@@ -1053,12 +1094,12 @@ void main() {
         ..heartbeatInterval = const Duration(hours: 1);
       addTearDown(atLookup.stopNotifications);
       atLookup.notifications.listen((_) {}, onError: (_) {});
-      await atLookup.startNotifications();
+      await atLookup.startNotifications(reportRefusals: true);
 
       await transport().serverCloses();
       await attemptStarted.future.timeout(const Duration(seconds: 5));
       await atLookup.stopNotifications();
-      final restarting = atLookup.startNotifications();
+      final restarting = atLookup.startNotifications(reportRefusals: true);
       final errors = <Object>[];
       atLookup.notifications.listen((_) {}, onError: errors.add);
       release.complete();
@@ -1074,8 +1115,9 @@ void main() {
               'must not reach the stream the restart opened');
     });
 
-    test('a refusal that arrives after stopNotifications adds no error',
-        () async {
+    test(
+        'a refusal that arrives after stopNotifications adds no error, even '
+        'to the stream read again for the next start', () async {
       final attemptStarted = Completer<void>();
       final release = Completer<void>();
       var calls = 0;
@@ -1093,16 +1135,23 @@ void main() {
       var done = false;
       atLookup.notifications
           .listen((_) {}, onError: errors.add, onDone: () => done = true);
-      await atLookup.startNotifications();
+      await atLookup.startNotifications(reportRefusals: true);
 
       await transport().serverCloses();
       await attemptStarted.future.timeout(const Duration(seconds: 5));
       await atLookup.stopNotifications();
+      // Read again before any start, as a caller about to restart may: this
+      // opens a fresh stream, which the stale attempt must not reach.
+      final nextErrors = <Object>[];
+      atLookup.notifications.listen((_) {}, onError: nextErrors.add);
       release.complete();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(done, isTrue, reason: 'the stop closed the stream');
       expect(errors, isEmpty, reason: 'a stopped session reports nothing more');
+      expect(nextErrors, isEmpty,
+          reason: 'the refusal belongs to the session the stop ended, so it '
+              'must not reach the stream opened after it');
       expect(calls, 2,
           reason: 'and the stop ended reconnecting: no attempt follows the '
               'refused one');

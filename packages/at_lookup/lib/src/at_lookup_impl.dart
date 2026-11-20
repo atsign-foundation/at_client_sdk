@@ -734,6 +734,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Future<int?> Function()? _getLastNotificationTime;
   bool _notifySelfNotifications = true;
 
+  /// Whether a reconnect the atServer turns away is added to [notifications]
+  /// as an error, as the start that began notifying asked.
+  bool _reportRefusals = false;
+
   int _reconnectIx = 0;
   bool _reconnecting = false;
 
@@ -835,9 +839,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     }
   }
 
-  /// Adds [refusal] to [notifications] as an error, leaving the stream open.
-  void _reportRefusal(UnAuthenticatedException refusal) =>
-      _notificationController?.addError(refusal);
+  /// Adds [refusal] to [notifications] as an error, leaving the stream open,
+  /// when the caller asked for refusals; otherwise the log line is all.
+  void _reportRefusal(UnAuthenticatedException refusal) {
+    if (_reportRefusals) _notificationController?.addError(refusal);
+  }
 
   void _startHeartbeat() {
     _stopHeartbeat();
@@ -909,7 +915,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   bool get isNotifying => _isNotifying;
 
   /// See [AtLookupMuxable.notifications]. A reconnect attempt the atServer
-  /// turns away is added to this stream as an error, and the stream stays open.
+  /// turns away is added to this stream as an error only when
+  /// [startNotifications] was asked to `reportRefusals`.
   @override
   Stream<String> get notifications {
     if (_stopped) return const Stream.empty();
@@ -968,16 +975,19 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     String? regex,
     Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
+    bool reportRefusals = false,
   }) =>
       _unlessStopped(() => _startNotifications(
           regex: regex,
           getLastNotificationTime: getLastNotificationTime,
-          selfNotificationsEnabled: selfNotificationsEnabled));
+          selfNotificationsEnabled: selfNotificationsEnabled,
+          reportRefusals: reportRefusals));
 
   Future<void> _startNotifications({
     String? regex,
     Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
+    bool reportRefusals = false,
   }) async {
     if (_isNotifying) {
       logger.info('startNotifications: already notifying, nothing sent');
@@ -992,7 +1002,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     final done = _beginNotifications(generation,
         regex: regex,
         getLastNotificationTime: getLastNotificationTime,
-        selfNotificationsEnabled: selfNotificationsEnabled);
+        selfNotificationsEnabled: selfNotificationsEnabled,
+        reportRefusals: reportRefusals);
     _starting = (generation: generation, done: done);
     try {
       await done;
@@ -1008,6 +1019,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     required String? regex,
     required Future<int?> Function()? getLastNotificationTime,
     required bool selfNotificationsEnabled,
+    required bool reportRefusals,
   }) async {
     // Reading this getter is what creates the controller and installs the
     // seam, so it must happen before `monitor:` goes out - otherwise the first
@@ -1026,6 +1038,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _notifyRegex = regex;
     _getLastNotificationTime = getLastNotificationTime;
     _notifySelfNotifications = selfNotificationsEnabled;
+    _reportRefusals = reportRefusals;
 
     if (!await _openNotificationStream(generation)) return;
     // NOTE: a stopNotifications() that landed while `monitor:` went out owns

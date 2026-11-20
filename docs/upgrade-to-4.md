@@ -391,11 +391,14 @@ and `withTransport` take no `clientConfig:` either.
 `package:at_lookup/at_lookup_io.dart`, and a failed write throws
 `AtIOException` rather than `SocketException`.
 
-From at_lookup 4.1.0, `notifications` carries an error event, an
-`UnAuthenticatedException`, for each notification reconnect the atServer
-turns away, answering without letting the client in, and stays open while
-reconnecting goes on. Listen with an `onError`: without one, each is an
-uncaught error.
+From at_lookup 4.1.0, `startNotifications(reportRefusals: true)` makes
+`notifications` carry an error event, an `UnAuthenticatedException`, for each
+notification reconnect the atServer turns away, answering without letting the
+client in. The stream stays open while reconnecting goes on, for a listener
+with an `onError` that does not cancel on error: an `await for` loop ends at
+the first such error. Without the flag the stream carries no errors, as in
+4.0. An implementation of `AtLookupMuxable` adds `reportRefusals` to its
+`startNotifications`.
 
 ### A test double for the atServer
 

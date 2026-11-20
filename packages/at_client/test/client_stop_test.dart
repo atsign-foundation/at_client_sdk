@@ -47,6 +47,7 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
     String? regex,
     Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
+    bool reportRefusals = false,
   }) async {
     calls.add('start');
     try {

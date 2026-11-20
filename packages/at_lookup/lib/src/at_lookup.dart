@@ -281,21 +281,32 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// Listen as soon as you read it: until a listener arrives, notifications
   /// are held without bound, and none of that back-pressure applies.
   ///
-  /// While notifying, each reconnect attempt the atServer turns away, one
-  /// that fails with an [UnAuthenticatedException], arrives here as that
-  /// exception in an error event, and the stream stays open: reconnecting
-  /// carries on, waiting longer after each, up to 5 minutes between attempts.
-  /// Listen with an `onError`, or each is an unhandled error.
+  /// While notifying, reconnecting carries on after each reconnect attempt the
+  /// atServer turns away, one that fails with an [UnAuthenticatedException],
+  /// waiting longer after each, up to 5 minutes between attempts. This stream
+  /// carries no error events unless [startNotifications] was asked to
+  /// `reportRefusals`.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.
   ///
   /// Connects and authenticates if required, then sends `monitor:`. Safe to
   /// call when already notifying: it returns without re-sending.
+  ///
+  /// With [reportRefusals], each reconnect attempt the atServer turns away
+  /// arrives on [notifications] as that [UnAuthenticatedException] in an error
+  /// event, and the stream stays open only for a listener that passes an
+  /// `onError` and does not cancel on error: an `await for` loop, `first`, or
+  /// `cancelOnError: true` ends the subscription at the first such error, and
+  /// a listener with no `onError` gets each as an unhandled error. Off by
+  /// default, so a listener written for a stream without errors keeps working.
+  /// The call that starts notifying sets it, and it holds until
+  /// [stopNotifications].
   Future<void> startNotifications({
     String? regex,
     Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
+    bool reportRefusals = false,
   });
 
   /// Stop notifications by dropping the connection carrying them.

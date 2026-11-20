@@ -78,11 +78,16 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     String? regex,
     Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
+    bool reportRefusals = false,
   }) async {
     startCalls++;
-    if (startError != null) {
+    _reportRefusals = reportRefusals;
+    // Read once, so a test can clear it for the next start while this one
+    // is held at [failGate].
+    final error = startError;
+    if (error != null) {
       if (failGate != null) await failGate;
-      throw startError!;
+      throw error;
     }
     started = true;
     if (startGate != null) await startGate;
@@ -110,8 +115,14 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// The atServer sends one.
   void deliver(String notification) => _notifications.add(notification);
 
-  /// The atServer refuses a reconnect, reported as the real muxable does.
-  void refuse(Object refusal) => _notifications.addError(refusal);
+  /// Whether the last start asked for refusals on [notifications].
+  bool _reportRefusals = false;
+
+  /// The atServer refuses a reconnect, reported as the real muxable does:
+  /// only to a start that asked for refusals.
+  void refuse(Object refusal) {
+    if (_reportRefusals) _notifications.addError(refusal);
+  }
 
   /// The connection drops under us - the muxable reports it and reconnects.
   @override
@@ -335,6 +346,33 @@ void main() {
             reason: 'the caller stopped listening before the start failed, so '
                 'the attempt ends as a stop does, with nothing reported');
         expect(delays, isEmpty, reason: 'and nothing is retried');
+      });
+
+      test(
+          'a refused start that fails after stop() then start() is not '
+          'reported or retried', () async {
+        final failing = Completer<void>();
+        muxable
+          ..startError = revoked()
+          ..failGate = failing.future;
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+        monitor.stop();
+        monitor.start();
+        // The restart is accepted; only the attempt already in flight fails.
+        muxable.startError = null;
+        failing.complete();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(monitor.currentState, NotificationListenerState.listening,
+            reason: 'the restart has to have completed');
+        expect(connection.current.isRefused, isFalse,
+            reason: 'the stop ended the failing attempt, so its refusal is '
+                'not reported over the restart');
+        expect(delays, isEmpty,
+            reason: 'and it arms no retry that the restart never cancels');
+        expect(muxable.startCalls, 2,
+            reason: 'the failed attempt and the restart, nothing more');
       });
     });
   });

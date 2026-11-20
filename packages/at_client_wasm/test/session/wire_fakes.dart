@@ -102,7 +102,8 @@ class WireLookUp implements AtLookupMuxable {
   Future<void> startNotifications(
       {String? regex,
       Future<int?> Function()? getLastNotificationTime,
-      bool selfNotificationsEnabled = true}) async {
+      bool selfNotificationsEnabled = true,
+      bool reportRefusals = false}) async {
     notificationStarts++;
   }
 

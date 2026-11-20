@@ -118,6 +118,10 @@ class Monitor {
   Timer? _startRetry;
   int _startRetryIx = 0;
 
+  /// Bumped by every [stop], so a start can tell a stop that landed while it
+  /// was in flight even when a [start] has since put `targetState` back.
+  int _stops = 0;
+
   /// The same backoff at_lookup uses for a lost connection, so a failed first
   /// connect and a dropped one recover on one schedule rather than two.
   ///
@@ -243,9 +247,10 @@ class Monitor {
       }
     }
 
+    final stops = _stops;
     try {
       await lookUp.startNotifications(
-          getLastNotificationTime: currentWatermark);
+          getLastNotificationTime: currentWatermark, reportRefusals: true);
       // Re-checked AFTER the await, not only before it. stop() can land while
       // this is in flight - it sets targetState and tears down, and then this
       // await completes and puts the connection straight back up. The old
@@ -260,7 +265,11 @@ class Monitor {
       _armSilenceTimer();
       logger.info('monitor started');
     } catch (e) {
-      if (_targetState != NotificationListenerState.listening) {
+      // NOTE: the count, not only targetState: a stop() then start() puts
+      // targetState back to listening, and the restart queued behind this
+      // attempt owns reporting and retrying now.
+      if (_targetState != NotificationListenerState.listening ||
+          stops != _stops) {
         logger.info('stop() arrived while starting, which ended the start');
         return;
       }
@@ -415,6 +424,7 @@ class Monitor {
   void stop() {
     logger.info('stop() called. Setting targetState to notConnected');
     _targetState = NotificationListenerState.notConnected;
+    _stops++;
     _startRetry?.cancel();
     _startRetry = null;
     _startRetryIx = 0;
