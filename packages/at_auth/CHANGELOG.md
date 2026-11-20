@@ -93,7 +93,7 @@
 - feat: `AtKeysUnusableException` says why an atSign's keys cannot be used
   (`cause`) and where they were looked for (`source`).
 - feat: `AtKeysFormatException.isJson` says whether the document parsed, as
-  JSON that is not an object.
+  JSON that is not an object or not one of the shape it must have.
 - fix: `activateAtSign` throws before sending anything when `keys` holds keys
   it cannot read (`AtKeysUnusableException`, naming the store and why) or
   when a `FileAtKeysIo` keyfile cannot be written there

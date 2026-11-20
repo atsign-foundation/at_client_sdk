@@ -479,5 +479,51 @@ void main() {
       );
       expect(built, isEmpty, reason: 'no connection is built');
     });
+
+    for (final (name, count) in const [
+      ('-1', '-1'),
+      ('one over the bound', '2561'),
+      ('the string "3"', '"3"'),
+      ('2.0', '2.0'),
+    ]) {
+      group('Given a header whose segment count is $name', () {
+        test(
+          'when the keychain is read, then it is refused as '
+          'AtKeysFormatException holding none of the entry\'s text',
+          () async {
+            const headerMark = 'header-5f1c9e2a7b';
+            const segmentMark = 'segment-8d3a6c0e4f';
+            final storage = windowsKeychain();
+            await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+            held[current] = '{"segmentCount":$count,"mark":"$headerMark"}';
+            held['${current}_segment_0'] =
+                '$segmentMark${held['${current}_segment_0']}';
+
+            final Object? error = await storage.readAtKeysData().then(
+              (_) => null,
+              onError: (Object e) => e,
+            );
+
+            expect(
+              error,
+              isA<AtKeysFormatException>()
+                  .having((e) => e.isJson, 'isJson', isTrue)
+                  .having((e) => e.reason, 'reason', contains('segmentCount')),
+            );
+            final format = error as AtKeysFormatException;
+            for (final text in ['$format', format.message, format.reason]) {
+              expect(
+                text,
+                allOf(
+                  isNot(contains(headerMark)),
+                  isNot(contains(segmentMark)),
+                  isNot(contains(count)),
+                ),
+              );
+            }
+          },
+        );
+      });
+    }
   });
 }
