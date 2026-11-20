@@ -11,7 +11,7 @@ import '../support/passkey_fakes.dart';
 /// PRF output 0..31, iv 0..11, document [_atKeys]. Generated once with an
 /// independent HKDF and AES-GCM implementation; changing the wire format or
 /// the kek label breaks it.
-const _legacyAliceRecord =
+const _goldenAliceRecord =
     '{"v":2,"alg":"A256GCM","kdf":"HKDF-SHA256","typ":"atkeys",'
     '"iv":"AAECAwQFBgcICQoL","ct":"f3rZoUxXXO/L6zydQWw5shl+FShvyys3jiWO87nV9/Ld76zW/yGNcsCxxQsU13TMQ+vh3FlObhquNMt2lCtEo/UDGN5tDs6/jwEWrGHR81Oog/N0Tip3bFpXpqN3KO8YofwHq1CW3fSD0ESC/1h6Wlaeu+U="}';
 
@@ -48,7 +48,7 @@ void main() {
       () async {
     expect(
         await PasskeyRecordCodec.open(
-            alice, '@alice', PasskeyRecordType.atkeys, _legacyAliceRecord),
+            alice, '@alice', PasskeyRecordType.atkeys, _goldenAliceRecord),
         _atKeys);
   });
 
@@ -73,7 +73,7 @@ void main() {
     final aad = utf8.encode('{"alg":"A256GCM","atSign":"@alice",'
         '"iv":"AAECAwQFBgcICQoL","kdf":"HKDF-SHA256","typ":"atkeys","v":2}');
     final ct = await alice.seal(iv, utf8.encode(jsonEncode(_atKeys)), aad);
-    expect(base64Encode(ct), fields(_legacyAliceRecord)['ct']);
+    expect(base64Encode(ct), fields(_goldenAliceRecord)['ct']);
   });
 
   test('a flipped ciphertext byte does not open', () async {
@@ -121,7 +121,7 @@ void main() {
   test('another passkey sealer does not open it', () async {
     expect(
         PasskeyRecordCodec.open(
-            bob, '@alice', PasskeyRecordType.atkeys, _legacyAliceRecord),
+            bob, '@alice', PasskeyRecordType.atkeys, _goldenAliceRecord),
         throwsA(isA<PasskeyRecordAuthenticationException>()));
   });
 
