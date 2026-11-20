@@ -33,8 +33,13 @@ Feature: AES-256-GCM encryption builds its output in one buffer
     When at_chops encrypts it with the FFI implementation and with the pure-Dart implementation
     Then each output is the vector's ciphertext followed by its 16-byte tag
 
-  Scenario: AES-256-GCM FFI encryption refuses a reported ciphertext length that differs from the plaintext length
+  Scenario Outline: AES-256-GCM FFI encryption refuses a reported ciphertext length that differs from the plaintext length
     Given a 60-byte plaintext, a key and a nonce
-    And the ciphertext length EVP_EncryptUpdate reports is taken as one byte less than it is
+    And the ciphertext length EVP_EncryptUpdate reports is taken as one byte <direction> than it is
     When at_chops encrypts it with the FFI implementation
-    Then encryption fails with a StateError naming EVP_EncryptUpdate, the 59-byte length and the expected 60
+    Then encryption fails with a StateError naming EVP_EncryptUpdate, the <length>-byte length and the expected 60
+
+    Examples:
+      | direction | length |
+      | less      | 59     |
+      | more      | 61     |
