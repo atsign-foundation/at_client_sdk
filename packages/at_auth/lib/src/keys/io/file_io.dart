@@ -63,8 +63,9 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
   }
 
-  /// Throws [FileSystemException] naming the keyfile's path unless a new
-  /// file can be created beside it.
+  /// Throws [FileSystemException] naming the keyfile's path when anything,
+  /// such as a directory, is already at that path, or unless a new file can
+  /// be created beside it.
   ///
   /// It creates the keyfile's directory when missing, which the write needs
   /// and which stays, and deletes the file it creates to find out before it
@@ -72,6 +73,15 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   @override
   Future<void> checkWritable(String atsign) async {
     final path = filePath!(atsign);
+    final existing = await FileSystemEntity.type(path);
+    if (existing != FileSystemEntityType.notFound) {
+      // NOTE: write() creates the keyfile and renames it into place, which
+      // fails onto anything already there, such as a directory that read()
+      // reported absent because it is not a file.
+      throw FileSystemException(
+          'Cannot write the atKeys file: a $existing is already at its path',
+          path);
+    }
     final probe = File(
         '$path.writable.$pid.${_random.nextInt(1 << 32).toRadixString(16)}');
     var created = false;
