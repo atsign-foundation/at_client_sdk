@@ -37,6 +37,7 @@ export 'package:at_auth/at_auth.dart'
     show
         ApskSigningKey,
         AtAuthErrorReplyException,
+        AtEnrollmentDeniedException,
         AtEnrollmentExpiredException,
         AtKeys,
         AtKeysFormatException,

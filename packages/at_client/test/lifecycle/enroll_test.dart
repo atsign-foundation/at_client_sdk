@@ -395,7 +395,7 @@ void main() {
         () async => pending.client(await preference(),
             retryInterval: const Duration(milliseconds: 10),
             storage: hiveStoreFor(pending.atSign, await preference())),
-        throwsA(isA<AtEnrollmentException>()
+        throwsA(isA<AtEnrollmentDeniedException>()
             .having((e) => e.message, 'message', contains('denied'))));
 
     final stored = await store.read(atSign);
@@ -431,7 +431,7 @@ void main() {
     await expectLater(
         () => pending.awaitApproval(
             retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentException>()
+        throwsA(isA<AtEnrollmentDeniedException>()
             .having((e) => e.message, 'message', contains('denied'))));
   });
 
@@ -478,6 +478,28 @@ void main() {
         atLookUp: atServer(decide: (_) async => true));
     expect(
         (await store.read(atSign)).pendingEnrollmentIds, [again.enrollmentId]);
+  });
+
+  test(
+      'A refusal the wait cannot resolve leaves the pending keys, even when '
+      'its text says denied', () async {
+    final store = InMemoryAtKeysIo();
+    final pending = await submit(
+        store,
+        atServer(
+            decide: (_) async => throw UnAuthenticatedException(
+                'Failed connecting to $atSign. error:AT0011:Internal server '
+                'exception: permission denied')));
+
+    await expectLater(
+        pending.awaitApproval(
+            retryInterval: const Duration(milliseconds: 10), maxRetries: 1),
+        throwsA(allOf(
+            isA<AtEnrollmentException>().having(
+                (e) => e.message, 'message', contains('cannot resolve')),
+            isNot(isA<AtEnrollmentDeniedException>()))));
+    expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+        reason: 'only an AT0025 denial removes the pending keys');
   });
 
   test(

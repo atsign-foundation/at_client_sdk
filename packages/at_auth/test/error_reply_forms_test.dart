@@ -374,7 +374,7 @@ void main() {
 
           await expectLater(
               waitOver(server),
-              throwsA(isA<AtEnrollmentException>()
+              throwsA(isA<AtEnrollmentDeniedException>()
                   .having((e) => e.message, 'message', contains('denied'))));
           expect(polls(server), 1);
         });
@@ -442,6 +442,28 @@ void main() {
         }
 
         expect(caught, isNot(isA<AtEnrollmentExpiredException>()));
+        expect(
+            caught,
+            isA<AtEnrollmentException>().having(
+                (e) => e.message, 'message', contains('cannot resolve')));
+        expect(polls(server), maxRetries + 1);
+      });
+
+      test(
+          'Given AT0011 saying "permission denied" on every poll, when it '
+          'waits, then it ends as a refusal it cannot resolve, not as denied',
+          () async {
+        final server = await atServer(List.filled(maxRetries + 2,
+            'error:AT0011:Internal server exception: permission denied'));
+
+        Object? caught;
+        try {
+          await waitOver(server);
+        } on AtEnrollmentException catch (e) {
+          caught = e;
+        }
+
+        expect(caught, isNot(isA<AtEnrollmentDeniedException>()));
         expect(
             caught,
             isA<AtEnrollmentException>().having(

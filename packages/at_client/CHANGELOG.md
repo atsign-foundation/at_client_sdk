@@ -1,5 +1,10 @@
 ## 4.1.0-rc.1
 
+- fix: `PendingEnrollment` removes a request's pending keys as denied only
+  on the atServer's AT0025 denial, `AtEnrollmentDeniedException`, not on
+  any refusal whose text says "denied"; such a refusal ends the wait and
+  leaves the keys for a later wait. `AtEnrollmentDeniedException` is
+  exported.
 - fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (after the first, from the document it last read, with no atServer round trip), and never stores the private half in the `@keys` document, nor the public half as typed authentication material. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `close()` zeroes the private key and a read after it throws. A write still running at `close()` finishes whole; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its Atsign and type, and accepts only an Atsign with one leading `@` (`alice` and `left@right` are refused as invalid).
 - fix: the passkey vault's auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and stopping the passkey session zeroes what it can. The APKAM private key (an immutable `String` in the authenticator) and the `@keys` private keys stay in memory for the session and cannot be wiped in Dart.
 - fix: `AtServerAtKeysIo.update` builds on a fresh read of the stored document, not the copy read at login, so a second tab's update after another tab's write lands.

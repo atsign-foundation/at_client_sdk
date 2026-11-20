@@ -17,6 +17,10 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   An expired request, which the atServer answers with AT0028 or AT0029, has
   its pending keys removed as a denial does.
 
+  Only the atServer's AT0025 denial removes the pending keys as a denial. A
+  refusal the wait cannot resolve, whatever its text says, ends the wait and
+  leaves them for a later wait.
+
   A store a cancel, a denial or an expiry left with no credential is refused
   by Atsign.open at once with AtNoCredentialException, which says to enroll
   again, before it writes anything or opens a connection.
@@ -166,6 +170,11 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a pending enrollment whose request the atServer reports as expired, with AT0028 or AT0029
     When the wait polls
     Then awaitApproval throws AtEnrollmentExpiredException, and the enrollment's pending keys are gone from the store
+
+  Scenario: A refusal the wait cannot resolve leaves the pending keys, even when its text says denied
+    Given a pending enrollment whose wait polls an atServer that answers AT0011 with text saying permission denied
+    When awaitApproval spends its retry budget on that refusal
+    Then it throws an AtEnrollmentException saying the refusal cannot be resolved, not AtEnrollmentDeniedException, and the enrollment's pending keys stay in the store
 
   Scenario: The one pending enrollment resumes with no names
     Given a store holding one pending enrollment
