@@ -127,9 +127,10 @@ Future<List<String>> fileRequest(
     required String namespace}) async {
   final wrapped = <String>[];
   final undecided = approvingAtServer(
-      decide: (_) async => throw UnAuthenticatedException(
+      decide: (_) async => throw AtAuthErrorReplyException(
           'Failed connecting to $approvingAtSign. '
-          'error:AT0026:Apkam Auth Failed'),
+          'error:AT0026:Apkam Auth Failed',
+          errorCode: 'AT0026'),
       wrapped: wrapped);
   await Atsign(approvingAtSign).enroll(
       otp: 'ABC123',

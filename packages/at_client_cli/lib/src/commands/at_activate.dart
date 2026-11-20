@@ -5,8 +5,8 @@ import 'package:at_client_cli/src/commands/auth_cli.dart' as auth_cli;
 /// clients send to authenticate.
 abstract final class AtActivate {
   /// Runs at_activate with [args] as [program] at [programVersion], and
-  /// answers its exit code; at_client_cli's version when [programVersion] is
-  /// null.
+  /// answers its exit code. With no [programVersion], at_activate names
+  /// at_client_cli's version and any other [program] names `unknown`.
   static Future<int> main(List<String> args,
           {String program = 'at_activate', String? programVersion}) =>
       auth_cli.main(args, program: program, programVersion: programVersion);

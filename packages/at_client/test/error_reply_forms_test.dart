@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:at_auth/at_auth.dart'
+    show AtAuthErrorReplyException, authenticatorFor;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -80,11 +82,32 @@ void main() {
 
           test(
               'when a verb connection is refused with $code, then the failure '
-              'is classified as ${cause.name}', () {
-            final failure = AtLookUpException('AT0401',
-                'Exception: Failed connecting to $atSign. ${refusal(code, pkamRefused)}');
+              'is classified as ${cause.name}', () async {
+            final server =
+                FakeAtServer(atSign: atSign, runsClientAuthenticator: true)
+                  ..refuseClientAuth = (_) => refusal(code, pkamRefused);
+            final lookUp = server.lookUps(
+                atSign: atSign,
+                rootDomain: const AtRootDomain('127.0.0.1', 64),
+                authenticator: authenticatorFor(keys, atSign));
+            addTearDown(lookUp.close);
 
-            expect(classifyConnectionFailure(failure)?.cause, cause);
+            final failure = await lookUp
+                .executeVerb(LLookupVerbBuilder()
+                  ..atKey = (AtKey()
+                    ..key = 'phone'
+                    ..sharedBy = atSign))
+                .then<Object?>((_) => null, onError: (Object e) => e);
+
+            expect(
+                failure,
+                isA<AtLookUpException>()
+                    .having((e) => e.cause, 'cause',
+                        isA<AtAuthErrorReplyException>())
+                    .having((e) => e.errorCode, 'errorCode', 'AT0401'),
+                reason: 'the control: executeVerb wrapped the refusal as a '
+                    'failed authentication');
+            expect(classifyConnectionFailure(failure!)?.cause, cause);
           });
         });
 
@@ -178,5 +201,66 @@ void main() {
     expect(connection.current.cause, AtConnectionCause.revoked);
     expect(server.connectCount, 1,
         reason: 'the refusal came on the connection the enrollment opened');
+  });
+
+  group(
+      'A verb refused while it authenticates throws the exception at_auth '
+      'raised', () {
+    forms.forEach((form, refusal) {
+      test(
+          'Given an atServer that refuses a PKAM in the $form form, when the '
+          'client sends a verb, then the verb throws the refusal with its code',
+          () async {
+        final server =
+            FakeAtServer(atSign: atSign, runsClientAuthenticator: true)
+              ..refuseClientAuth = (_) => refusal('AT0027', pkamRefused);
+        final remote = RemoteSecondary(
+            atSign,
+            AtClientPreference()
+              ..namespace = 'wavi'
+              ..rootDomain = '127.0.0.1',
+            atKeysIo: keys,
+            lookUps: server.lookUps,
+            secondaryAddressFinder: server.addressFinder);
+        addTearDown(remote.closeConnection);
+
+        await expectLater(
+            remote.executeVerb(LLookupVerbBuilder()
+              ..atKey = (AtKey()
+                ..key = 'phone'
+                ..sharedBy = atSign)),
+            throwsA(isA<AtAuthErrorReplyException>()
+                .having((e) => e.errorCode, 'errorCode', 'AT0027')));
+        expect(server.socket.written.where((c) => c.startsWith('pkam:')),
+            hasLength(1),
+            reason: 'the control: the refusal answered a PKAM');
+      });
+
+      test(
+          'Given an atServer that refuses a PKAM in the $form form, when the '
+          'client sends a command that needs authentication, then the command '
+          'throws the refusal with its code', () async {
+        final server =
+            FakeAtServer(atSign: atSign, runsClientAuthenticator: true)
+              ..refuseClientAuth = (_) => refusal('AT0027', pkamRefused);
+        final remote = RemoteSecondary(
+            atSign,
+            AtClientPreference()
+              ..namespace = 'wavi'
+              ..rootDomain = '127.0.0.1',
+            atKeysIo: keys,
+            lookUps: server.lookUps,
+            secondaryAddressFinder: server.addressFinder);
+        addTearDown(remote.closeConnection);
+
+        await expectLater(
+            remote.executeCommand('llookup:phone$atSign\n', auth: true),
+            throwsA(isA<AtAuthErrorReplyException>()
+                .having((e) => e.errorCode, 'errorCode', 'AT0027')));
+        expect(server.socket.written.where((c) => c.startsWith('pkam:')),
+            hasLength(1),
+            reason: 'the control: the refusal answered a PKAM');
+      });
+    });
   });
 }
