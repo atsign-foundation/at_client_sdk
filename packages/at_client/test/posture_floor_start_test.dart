@@ -88,7 +88,7 @@ void main() {
     AtClientImpl.atClientInstanceMap.removeWhere((key, _) =>
         key == atSign || (key is String && key.startsWith('$atSign|')));
     final client = await AtClientImpl.create(atSign, 'buzz', preference,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             remoteSecondary: remote,
             atKeysIo: io,
@@ -360,7 +360,7 @@ void main() {
     final client = await start(preference, io, atServer().remote);
 
     final again = await AtClientImpl.create(atSign, 'buzz', preference,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: io,
         enrollmentId: enrollmentId,
@@ -389,7 +389,7 @@ void main() {
 
     final again = await AtClientImpl.create(
         atSign, 'buzz', client.getPreferences()!,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: io,
         enrollmentId: enrollmentId,
@@ -415,7 +415,7 @@ void main() {
         throwsArgumentError);
     await expectLater(
         AtClientImpl.create(atSign, 'buzz', configured(PqPosture.pqActive),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atKeysIo: io,
             enrollmentId: enrollmentId,

@@ -37,7 +37,7 @@ void main() {
       CLIBase(
           atSign: '@juliet',
           nameSpace: 'sensor',
-          rootDomain: 'root.atsign.org',
+          rootDomain: '127.0.0.1:1',
           homeDir: home.path);
       final sdk = AtSignLogger('NotificationServiceImpl');
       sdk.warning('Dropping notification @juliet:reading.d1.sensor@india');

@@ -50,7 +50,7 @@ void main() {
       AtClientPreference()
         ..syncRegex = ''
         ..hiveStoragePath = path,
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: defaultAtDirectory,
       atKeysIo: noKeysFor(atSign),
       storage: hiveStoreAt(atSign, path),

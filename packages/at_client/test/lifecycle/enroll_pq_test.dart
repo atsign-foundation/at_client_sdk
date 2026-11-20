@@ -110,7 +110,7 @@ void main() {
               ..hiveStoragePath = dir.path
               ..namespace = 'lifecycle',
             signingAlgo: SigningAlgoType.rsa2048,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: lookUp),
         throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
@@ -157,7 +157,7 @@ void main() {
           ..rootPort = await refusedPort()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp);
 
@@ -235,7 +235,7 @@ void main() {
           ..rootPort = await refusedPort()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp);
     expect(pending.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
