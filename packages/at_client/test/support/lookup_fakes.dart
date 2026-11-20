@@ -1,5 +1,6 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_commons/at_commons.dart' show AtConstants;
 import 'package:at_lookup/at_lookup.dart';
 
 class ScriptedAtLookUp implements AtLookupMuxable {
@@ -22,9 +23,11 @@ class ScriptedAtLookUp implements AtLookupMuxable {
   /// decides from the builder: a lookup or a scan as its own `auth` says, an
   /// enroll request unauthenticated, any other verb it handles authenticated.
   /// A builder it does not handle sends nothing and fails, as `AtLookupImpl`
-  /// reports it timed out.
+  /// reports it timed out. The reply is handled as `AtLookupImpl` handles
+  /// it: an empty one throws `AT0014` and an `error:` one throws the
+  /// [AtLookUpException] it names; any other is returned.
   @override
-  Future<String?> executeVerb(VerbBuilder builder) async {
+  Future<String> executeVerb(VerbBuilder builder) async {
     final bool auth = switch (builder) {
       LookupVerbBuilder(:final auth) || ScanVerbBuilder(:final auth) => auth,
       EnrollVerbBuilder(operation: EnrollOperationEnum.request) => false,
@@ -45,7 +48,16 @@ class ScriptedAtLookUp implements AtLookupMuxable {
         true,
       _ => throw AtLookUpException('AT0014', 'Request timed out'),
     };
-    return executeCommand(builder.buildCommand(), auth: auth);
+    final command = builder is UpdateVerbBuilder &&
+            builder.operation == AtConstants.updateMeta
+        ? builder.buildCommandForMeta()
+        : builder.buildCommand();
+    final reply = await executeCommand(command, auth: auth);
+    if (reply == null || reply.isEmpty) {
+      throw AtLookUpException('AT0014', 'Request timed out');
+    }
+    if (reply.startsWith('error:')) throw errorResponseException(reply);
+    return reply;
   }
 
   @override

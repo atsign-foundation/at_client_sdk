@@ -99,9 +99,21 @@ void main() {
 
     final results = ReceivePort();
     final replies = StreamIterator(results);
+    final writers = <Isolate>[];
+    // On any path out of the test, the writers are killed, which closes the
+    // sessions they hold, and the port is closed.
+    addTearDown(() {
+      for (final writer in writers) {
+        writer.kill(priority: Isolate.immediate);
+      }
+      results.close();
+    });
     for (final tag in ['one', 'two']) {
-      await Isolate.spawn(
-          _isolateWriter, [results.sendPort, atSign, credential, prf, tag]);
+      // An error the writer does not catch arrives as a reply that is not
+      // 'ready', so the test fails rather than waits for it.
+      writers.add(await Isolate.spawn(
+          _isolateWriter, [results.sendPort, atSign, credential, prf, tag],
+          onError: results.sendPort));
     }
     final goes = <SendPort>[];
     for (var i = 0; i < 2; i++) {
@@ -119,7 +131,6 @@ void main() {
       expect(await replies.moveNext(), isTrue);
       done.add(replies.current as List);
     }
-    results.close();
     for (final d in done) {
       print('LIVE writer ${d[1]}: ${d[0]} after ${d[2]} ms, '
           '${d[3]} lock takes refused');
@@ -146,15 +157,35 @@ void main() {
     final prf = Uint8List.fromList(rig.currentPrf);
     await Future<void>.delayed(_pastTheLock);
 
-    final other = await _otherWriter(rig, atSign, enrollmentId, prf);
+    // The other writer holds the lock and its put until the client has found
+    // the lock held, so a client that read before it took the lock would
+    // have read a document without the other writer's change.
+    final putReached = Completer<void>();
+    final releasePut = Completer<void>();
+    final other = await _otherWriter(rig, atSign, enrollmentId, prf,
+        wrap: (documents) =>
+            _HeldPut(documents, reached: putReached, release: releasePut));
     addTearDown(other.close);
-    await other.store.update(atSign.toAtsign(), (keys) {
+    final otherWrite = other.store.update(atSign.toAtsign(), (keys) {
       _fileOn(keys, 'f0otherwriter', 'other');
       return true;
     });
+    await Future.any([putReached.future, otherWrite]);
+    expect(putReached.isCompleted, isTrue,
+        reason: 'the control: the other writer reached its put');
     final mark = rig.tap.lines.length;
+    rig.tap.onLine = () {
+      if (!releasePut.isCompleted && _answeredRefusals(rig.tap, mark) > 0) {
+        releasePut.complete();
+      }
+    };
+    addTearDown(() => rig.tap.onLine = null);
 
-    await _file(session.client, atSign, 'f0client', 'client');
+    await Future.wait(
+        [otherWrite, _file(session.client, atSign, 'f0client', 'client')],
+        eagerError: true);
+    expect(releasePut.isCompleted, isTrue,
+        reason: 'the other put waited until the client found the lock held');
 
     final refused = _refusedTakes(rig.tap, from: mark);
     print('LIVE lock takes refused before the client took it: $refused');
@@ -508,10 +539,16 @@ void main() {
   }, timeout: _timeout);
 
   test(
-      "The retry publishes its own encryption public key over an "
-      "interrupted attempt's", () async {
+      'The retry of an interrupted onboarding publishes its own encryption '
+      'public key over one already published', () async {
     const atSign = '@relay2';
     final rig = PasskeyRig(salt: 52);
+    // An attempt cut at its delete of the CRAM secret leaves its enrollment
+    // approved and its completion-due record, and the CRAM secret, for the
+    // retry. Every attempt deletes the CRAM secret before it publishes, so a
+    // key published by now is one published over CRAM, as another tool does.
+    await _interrupted(rig, atSign, _isCramDelete);
+    final earlier = _requestedEnrollmentId(rig.tap)!;
     final otherTools = _b("another tool's key");
     expect(await _publishOverCram(atSign, otherTools), startsWith('data:'),
         reason: 'another tool published a key over a CRAM connection');
@@ -520,10 +557,15 @@ void main() {
     final session = await _onboard(rig, atSign);
     addTearDown(session.stop);
 
+    expect(session.client.enrollmentId, isNot(earlier),
+        reason: 'the control: the retry made an enrollment of its own');
     final own = (await rig.storedDocument(atSign, session.client.enrollmentId!,
         rig.currentPrf))['aesEncryptPublicKey'];
     expect(own, isNot(otherTools));
     expect(await publicLookupReply(atSign, 'publickey'), 'data:$own');
+    expect(
+        await _approved(session.client, atSign), {session.client.enrollmentId},
+        reason: "the retry revoked the interrupted attempt's enrollment");
   }, timeout: _timeout);
 
   test('A passkey left by an interrupted onboarding is refused as lost',
@@ -548,7 +590,14 @@ void main() {
     final rig = PasskeyRig(salt: 54);
     await _interrupted(
         rig, atSign, (_) => rig.tap.indexOfSent(_isCramDelete) >= 0);
-    final onboarded = _requestedEnrollmentId(rig.tap);
+    final onboarded = _requestedEnrollmentId(rig.tap)!;
+    bool isRecord(String c, String verb) =>
+        c.startsWith('$verb:completion-due.$onboarded.a.__e@');
+    expect(rig.tap.dropped.first,
+        allOf(startsWith('update:completion-due.'), endsWith(' cram-deleted')),
+        reason: "the control: the record still says only 'activated', so the "
+            'login finishes the activation from that state');
+    final mark = rig.tap.lines.length;
 
     final session =
         await rig.custody(hints: MemoryHints()).open(atSign: atSign);
@@ -556,6 +605,22 @@ void main() {
 
     expect(session.client.connection.current.isOnline, isTrue);
     expect(session.client.enrollmentId, onboarded);
+    final tap = rig.tap;
+    final publish = tap.indexOfSent((c) => _publishes(c, atSign), from: mark);
+    final clear = tap.indexOfSent((c) => isRecord(c, 'delete'), from: mark);
+    expect([publish, clear], everyElement(greaterThan(-1)),
+        reason: tap.transcript());
+    expect(_accepted(tap, publish), isTrue);
+    expect(_replyIndex(tap, publish), lessThan(clear),
+        reason: 'the record is deleted once the key is published');
+    expect(_accepted(tap, clear), isTrue,
+        reason: 'the login deleted the completion-due record');
+    final own = (await rig.storedDocument(
+        atSign, onboarded, rig.currentPrf))['aesEncryptPublicKey'];
+    expect(await publicLookupReply(atSign, 'publickey'), 'data:$own',
+        reason: "the login published the document's key");
+    expect(await _cramLogin(atSign), startsWith('refused'),
+        reason: 'the CRAM secret stays deleted');
   }, timeout: _timeout);
 
   test(
@@ -736,6 +801,22 @@ int _refusedTakes(WireTap tap, {required int from}) {
   return refused;
 }
 
+/// How many takes of the @keys lock sent at or after [from] the atServer has
+/// answered with a refusal; a take not yet answered is not counted.
+int _answeredRefusals(WireTap tap, int from) {
+  var refused = 0;
+  for (var i = from; i < tap.lines.length; i++) {
+    final l = tap.lines[i];
+    if (l.sent &&
+        l.text.contains('atkeys-lock.') &&
+        _replyIndex(tap, i) >= 0 &&
+        !_accepted(tap, i)) {
+      refused++;
+    }
+  }
+  return refused;
+}
+
 /// The enrollment id the atServer gave the first `enroll:request`.
 String? _requestedEnrollmentId(WireTap tap) {
   final reply =
@@ -832,15 +913,18 @@ Future<void> _file(
     });
 
 /// A second writer of [enrollmentId]'s document: a connection of its own
-/// and a store over it, as another device of the enrollment holds.
+/// and a store over it, as another device of the enrollment holds. The store
+/// uses the documents [wrap] returns for the session's, when given.
 Future<({AtServerAtKeysIo store, Future<void> Function() close})> _otherWriter(
-    PasskeyRig rig, String atSign, String enrollmentId, Uint8List prf) async {
+    PasskeyRig rig, String atSign, String enrollmentId, Uint8List prf,
+    {EnrollmentDocumentStore Function(EnrollmentDocumentStore documents)?
+        wrap}) async {
   final keys = await deriveFor(prf, atSign);
   final pair = await apkamKeyPairFromSeed(keys.authSeed);
   final session = await rig.gateway().authenticate(
       atSign: atSign, enrollmentId: enrollmentId, apkamKeyPair: pair);
   final store = AtServerAtKeysIo(
-      documents: session.documents,
+      documents: wrap?.call(session.documents) ?? session.documents,
       atSign: atSign,
       seal: (d) => keys.vault.seal(PasskeyRecordType.atkeys, d),
       open: (r) => keys.vault.open(PasskeyRecordType.atkeys, r),
@@ -893,6 +977,32 @@ Future<void> _isolateWriter(List<Object> args) async {
     _refusedTakes(rig.tap, from: mark)
   ]);
   await session.stop();
+}
+
+/// [_inner], whose put completes [reached] and then waits for [release]
+/// before it is sent.
+class _HeldPut implements EnrollmentDocumentStore {
+  _HeldPut(this._inner, {required this.reached, required this.release});
+
+  final EnrollmentDocumentStore _inner;
+  final Completer<void> reached;
+  final Completer<void> release;
+
+  @override
+  Future<String?> get(String atSign, String enrollmentId) =>
+      _inner.get(atSign, enrollmentId);
+
+  @override
+  Future<void> put(String atSign, String enrollmentId, String document) async {
+    if (!reached.isCompleted) reached.complete();
+    await release.future;
+    return _inner.put(atSign, enrollmentId, document);
+  }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) =>
+      _inner.tryLock(atSign, enrollmentId, ttl: ttl);
 }
 
 /// A gateway whose activations, each time they write their completion-due

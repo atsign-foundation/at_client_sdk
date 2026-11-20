@@ -261,6 +261,9 @@ void main() {
       expect(hints.credentials[_atSign], Uint8List.fromList([1]));
       // Once before the activation, once when the hints are written.
       expect(persistence.requests, 2);
+      expect(server.timeline.indexOf('request-persist'),
+          lessThan(server.timeline.indexOf('activate:eid1')),
+          reason: 'persistence is asked for before the activation');
     });
   });
 
@@ -1215,6 +1218,52 @@ void main() {
           reason: 'the control: the login used the saved enrollment');
       expect(gateway.lastSession!.closed, isTrue);
       expect(server.publishedKey, 'cm90YXRlZA==');
+    });
+
+    test(
+        'a login with saved hints that finds no encryption public key '
+        'published logs in', () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      expect(hints.ids, {_atSign: 'eid1'},
+          reason: 'the control: the login has saved hints');
+      server.publishedKey = null;
+      final mark = server.timeline.length;
+
+      final session = await custody().open(atSign: _atSign);
+
+      expect(session.client.enrollmentId, 'eid1');
+      expect(server.timeline.skip(mark), contains('lookup-publickey'),
+          reason: 'the control: the login looked at the published key');
+      expect(completionSteps(from: mark), isEmpty,
+          reason: 'a login with saved hints publishes nothing');
+    });
+
+    test(
+        'A login whose completion-due record says activated, with the '
+        "document's key already published, finishes the activation", () async {
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      // As a hint-less login leaves it when its delete of the record fails
+      // after it published the document's key.
+      server.completionDue['eid1'] = CompletionDue.activated;
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
+          reason: "the control: the document's key is published");
+      final mark = server.timeline.length;
+      final device = FakeHints();
+
+      final session = await custody(withHints: device).open(atSign: _atSign);
+
+      expect(session.client.enrollmentId, 'eid1');
+      expect(server.timeline.skip(mark), contains('read-completion-due:eid1'),
+          reason: 'the control: the login read the record');
+      expect(completionAndRecordSteps(from: mark), [
+        'cram-deleted',
+        'revoke-others',
+        'publish:${encryptionPublicKeyOf('eid1')}',
+        'cram-deleted',
+        'clear-completion-due:eid1',
+      ]);
+      expect(server.completionDue, isEmpty);
+      expect(device.ids, {_atSign: 'eid1'});
     });
 
     test('an interrupted onboarding leaves no hints on the device', () async {

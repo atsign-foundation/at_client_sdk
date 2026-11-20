@@ -22,9 +22,6 @@ class PasskeyAtServer implements AtTransportFactory {
 
   final records = <String, String>{};
 
-  /// When each entry of [commands] arrived.
-  final arrived = <DateTime>[];
-
   /// Whether a create of an immutable record is refused while an earlier
   /// create of it is within its ttl, as an atServer refuses it.
   var immutableHolds = false;
@@ -81,7 +78,6 @@ class PasskeyAtServer implements AtTransportFactory {
     final line = command.trimRight();
     final connection = sockets.indexOf(socket);
     commands.add('$connection: $line');
-    arrived.add(DateTime.now());
     final held = _held;
     if (held != null && connection != _heldOn && line.contains('atkeys')) {
       _held = null;

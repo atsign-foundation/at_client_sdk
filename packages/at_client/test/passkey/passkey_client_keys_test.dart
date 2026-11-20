@@ -259,10 +259,9 @@ void main() {
       expect(taken, isNotEmpty, reason: 'write $write took no lock of its own');
       expect(command(taken.last),
           startsWith('update:nc:ttl:10000:isEncrypted:false:immutable:true:'));
-      expect(server.arrived[write].difference(server.arrived[taken.last]),
-          lessThan(const Duration(seconds: 5)),
-          reason: 'the lease had at least half its ttl left when the document '
-              'was put');
+      // That the lease has half its ttl left when the document is put is
+      // pinned with a clock this in-memory atServer has not got, in
+      // passkey_keys_lock_test.dart.
     }
   });
 
