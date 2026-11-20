@@ -55,17 +55,17 @@ void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 /// completion-due record or opens the client, throws a
 /// [PasskeyOnboardingIncompleteException] naming the Atsign, whose cause is
 /// that failure, and reports nothing to the browser. [passkeyLogin] with the
-/// passkey then finishes the onboarding, unless it refuses another published
-/// encryption public key with [PublicKeyMismatchException]; it opens the
-/// onboarding's enrollment and saves the passkey hints if they are not
-/// saved. An [Error] is thrown as it is wherever it happens, so it does not
-/// say whether the pointer was written: try [passkeyLogin] with the passkey
-/// first. A failed write of the hints does not fail the onboarding: it is
-/// logged as a warning, the session is returned, and the next
-/// [passkeyLogin] saves them.
-/// [passkeyLogin] also finishes an onboarding that stopped after writing the
-/// document and pointer, while its completion is due. Nothing is kept in
-/// this browser until the CRAM secret is deleted.
+/// passkey then finishes the onboarding, unless its enrollment has been
+/// revoked since or [passkeyLogin] refuses another published encryption
+/// public key with [PublicKeyMismatchException]; it opens the onboarding's
+/// enrollment and saves the passkey hints if they are not saved. An [Error]
+/// is thrown as it is wherever it happens, so it does not say whether the
+/// pointer was written: try [passkeyLogin] with the passkey first. A failed
+/// write of the hints does not fail the onboarding: it is logged as a
+/// warning, the session is returned, and the next [passkeyLogin] saves them.
+/// [passkeyLogin] also finishes, on the same terms, an onboarding that
+/// stopped after writing the document and pointer, while its completion is
+/// due. Nothing is kept in this browser until the CRAM secret is deleted.
 ///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup

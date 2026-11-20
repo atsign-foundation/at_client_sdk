@@ -132,6 +132,7 @@ void main() {
         'EnrollOperationEnum.revoke',
         "'a revoke was refused",
         "after revoking them'",
+        "its enrollment has been revoked '",
         // The warning each revoke logs.
         "warning('revoking enrollment",
         // The refusal of a revoke (AT0031) that is left to the list.

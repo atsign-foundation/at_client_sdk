@@ -1478,7 +1478,10 @@ void main() {
               .having(
                   (e) => e.message,
                   'message',
-                  allOf(contains(_atSign), contains('logging in'),
+                  allOf(
+                      contains(_atSign),
+                      contains('logging in'),
+                      contains('unless its enrollment has been revoked since'),
                       isNot(contains(failure.message))))
               .having((e) => e.toString(), 'toString',
                   isNot(contains(failure.message)))));
