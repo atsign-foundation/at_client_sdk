@@ -143,12 +143,15 @@ void main() {
       );
     });
 
-    test('that matched several pending ones says to name the app and device, '
-        'not to enroll again', () {
+    test('that matched several pending ones says this device asked more than '
+        'once, not to enroll again', () {
       final shownForSeveral = shown(
         AtEnrollmentPendingException.several(atSign, ['e1', 'e2']),
       );
-      expect(shownForSeveral, contains('name both the app and the device'));
+      expect(
+        shownForSeveral,
+        startsWith('This device has asked to enroll @alice more than once'),
+      );
       expect(shownForSeveral, isNot(contains('Enroll this device again')));
     });
   });
