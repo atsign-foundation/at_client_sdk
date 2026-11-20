@@ -24,7 +24,9 @@ import 'package:flutter/services.dart';
 /// - [keys]: where this enrollment's keys are filed and read back from, the
 ///   platform keychain by default. It is also the resume record: a request
 ///   submitted earlier for the same app and device is waited on again rather
-///   than repeated, so the passcode is only asked for when nothing is pending.
+///   than repeated, so the passcode is only asked for when no request for
+///   this app and device is pending. A store already waiting on a request
+///   for another app or device is refused once the passcode is sent.
 /// - [storage]: the client's local storage; with none, a Hive store under the
 ///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how

@@ -903,7 +903,8 @@ Future<bool> enroll(ArgResults argResults,
 ///
 /// The keyfile [settings] names is the resume record: a request submitted
 /// earlier for the same app and device is waited on again rather than
-/// repeated, and a keyfile already holding live keys is refused.
+/// repeated, and a keyfile already holding live keys, or waiting on a request
+/// for another app or device, is refused.
 @visibleForTesting
 Future<AtClient> enrolDevice({
   required String atSign,
