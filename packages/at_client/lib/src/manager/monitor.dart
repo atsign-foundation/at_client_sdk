@@ -218,7 +218,8 @@ class Monitor {
     // miss the very "up" this call is about to cause.
     _connectionSubscription ??=
         lookUp.notificationConnectionUp.listen(_onConnectionState);
-    _refusalSubscription ??= lookUp.notificationRefusals.listen(_onRefusal);
+    _refusalSubscription ??= lookUp.notificationRefusals
+        .listen((refusal) => _onRefusal(refusal, stops));
     _notificationSubscription ??= lookUp.notifications.listen(
       _onNotification,
       onError: (Object e) =>
@@ -288,11 +289,13 @@ class Monitor {
     }
   }
 
-  /// Reports a reconnect the atServer refused to [connection].
-  void _onRefusal(UnAuthenticatedException e) {
+  /// Reports a reconnect the atServer refused to [connection], unless a
+  /// [stop] has come since [stops] was read where the start that subscribed
+  /// was queued.
+  void _onRefusal(UnAuthenticatedException e, int stops) {
     final refusal = _failureIn(e).refusal;
     if (refusal == null) return;
-    if (_targetState != NotificationListenerState.listening) {
+    if (stops != _stops) {
       logger.info('stop() arrived before this refusal, which is not '
           'reported: $e');
       return;
