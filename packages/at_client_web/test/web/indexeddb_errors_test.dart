@@ -26,10 +26,6 @@ const _entryPointDb = 'at_client_web';
 /// A version above the one this build creates, as a newer build leaves it.
 const _newerVersion = 5;
 
-/// A store earlier versions created, which an upgrade to this build's
-/// version deletes.
-const _retiredStore = 'at_client_wasm_pending';
-
 /// A root no lookup can reach, so no test leaves the browser.
 final _transport =
     SessionTransportOptions(root: AtRootDomain('root.example', 6464));
@@ -120,14 +116,12 @@ void main() {
     final newer = await _rawOpen(_entryPointDb, _newerVersion, upgrade: (db) {
       db.createObjectStore('at_client_web_credentials');
       db.createObjectStore('at_client_web_enrollments');
-      db.createObjectStore(_retiredStore);
     });
     addTearDown(() => _deleteDb(_entryPointDb));
     addTearDown(() => newer.close());
     await _rawPut(newer, 'at_client_web_credentials', _atSign, credentialId);
     await _rawPut(newer, 'at_client_web_enrollments', _atSign,
         utf8.encode('remembered-enrollment'));
-    await _rawPut(newer, _retiredStore, _atSign, [1, 2, 3]);
     newer.close();
 
     final asked = <Uint8List?>[];
@@ -156,15 +150,5 @@ void main() {
         reason: 'no version error is thrown');
     expect(thrown, isA<PasskeyLostException>(),
         reason: 'the login fails only because no passkey answered');
-
-    final after = await _rawOpen(_entryPointDb, _newerVersion);
-    addTearDown(() => after.close());
-    expect(after.version, _newerVersion,
-        reason: 'the database stays at the version the newer build left');
-    final names = after.objectStoreNames;
-    expect([for (var i = 0; i < names.length; i++) names.item(i)!],
-        contains(_retiredStore),
-        reason: 'no upgrade ran: an upgrade deletes the stores earlier '
-            'versions created');
   });
 }

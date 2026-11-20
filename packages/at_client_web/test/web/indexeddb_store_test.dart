@@ -393,60 +393,6 @@ void main() {
     }, timeout: const Timeout(Duration(seconds: 5)));
 
     group('an upgrade to version 4', () {
-      /// The object store names of the database, read on a raw connection
-      /// that asks for no upgrade.
-      Future<List<String>> storeNames() async {
-        final raw = await _rawOpen(currentDbName!, 4);
-        try {
-          final names = raw.objectStoreNames;
-          return [for (var i = 0; i < names.length; i++) names.item(i)!];
-        } finally {
-          raw.close();
-        }
-      }
-
-      test(
-          'deletes a version 3 database\'s pending records and keeps its hints',
-          () async {
-        final old = await _rawOpen(currentDbName!, 3, upgrade: (db) {
-          db.createObjectStore('at_client_web_credentials');
-          db.createObjectStore('at_client_web_enrollments');
-          db.createObjectStore('at_client_wasm_pending');
-        });
-        await _rawPut(old, 'at_client_web_credentials', '@alice', [4, 2]);
-        await _rawPut(
-            old, 'at_client_web_enrollments', '@alice', utf8.encode('e1'));
-        await _rawPut(old, 'at_client_wasm_pending', '@alice', [1, 2, 3]);
-        old.close();
-
-        final store = await open();
-        expect(await store.credentialId('@alice'), [4, 2]);
-        expect(await store.enrollmentId('@alice'), 'e1');
-        store.close();
-
-        expect(
-            await storeNames(),
-            unorderedEquals(
-                ['at_client_web_credentials', 'at_client_web_enrollments']));
-      });
-
-      test('deletes a version 1 database\'s keys store', () async {
-        final old = await _rawOpen(currentDbName!, 1, upgrade: (db) {
-          db.createObjectStore('at_client_wasm_keys');
-        });
-        await _rawPut(old, 'at_client_wasm_keys', '@alice', [9, 9]);
-        old.close();
-
-        final store = await open();
-        expect(await store.credentialId('@alice'), isNull);
-        store.close();
-
-        expect(
-            await storeNames(),
-            unorderedEquals(
-                ['at_client_web_credentials', 'at_client_web_enrollments']));
-      });
-
       test('keeps a version 2 database\'s hints', () async {
         final old = await _rawOpen(currentDbName!, 2, upgrade: (db) {
           db.createObjectStore('at_client_web_credentials');

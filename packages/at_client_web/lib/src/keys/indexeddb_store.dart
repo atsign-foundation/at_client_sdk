@@ -40,21 +40,13 @@ class IndexedDbHintStore implements PasskeyHintStore {
   static const _enrollmentsStore = 'at_client_web_enrollments';
   static const _defaultDbName = 'at_client_web';
 
-  /// The object stores earlier versions created, which an upgrade deletes
-  /// with whatever they hold.
-  static const _retiredStores = [
-    'at_client_wasm_pending',
-    'at_client_wasm_keys'
-  ];
-
   /// The schema version this code creates; a database already at a higher
   /// version is opened as it is.
   static const _schemaVersion = 4;
 
-  /// Opens the passkey database, creating its object stores and deleting the
-  /// ones earlier versions created when it is absent or below the schema
-  /// version this code creates; a database at a higher version opens as it
-  /// is.
+  /// Opens the passkey database, creating its object stores when it is absent
+  /// or below the schema version this code creates; a database at a higher
+  /// version opens as it is.
   ///
   /// Fails with [IndexedDbException] when the browser refuses the open or
   /// another connection holds the database open and blocks an upgrade.
@@ -74,11 +66,6 @@ class IndexedDbHintStore implements PasskeyHintStore {
 
         request.onupgradeneeded = (Event event) {
           final db = request.result as IDBDatabase;
-          for (final retired in _retiredStores) {
-            if (db.objectStoreNames.contains(retired)) {
-              db.deleteObjectStore(retired);
-            }
-          }
           if (!db.objectStoreNames.contains(_credentialsStore)) {
             db.createObjectStore(_credentialsStore);
           }
