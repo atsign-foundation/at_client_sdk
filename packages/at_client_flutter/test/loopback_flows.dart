@@ -55,22 +55,26 @@ class LoopbackFlows extends AtsignFlows {
     AtLookUpFactory? lookUps,
     Duration? connectBudget,
   }) async =>
-      await Function.apply(super.activate, [atSign], {
-            #cramSecret: cramSecret,
-            #keys: keys,
-            #preference: _onLoopback(preference),
-            #namespace: namespace,
-            #storage: storage,
-            #app: ?app,
-            #device: ?device,
-            #mintLegacyMaterial: mintLegacyMaterial,
-            #signingAlgo: signingAlgo,
-            #provisioningBudget: provisioningBudget,
-            #provisioningPollInterval: ?provisioningPollInterval,
-            #onProgress: onProgress,
-            #lookUps: lookUps,
-            #connectBudget: ?connectBudget,
-          })
+      await Function.apply(
+            super.activate,
+            [atSign],
+            {
+              #cramSecret: cramSecret,
+              #keys: keys,
+              #preference: _onLoopback(preference),
+              #namespace: namespace,
+              #storage: storage,
+              #app: ?app,
+              #device: ?device,
+              #mintLegacyMaterial: mintLegacyMaterial,
+              #signingAlgo: signingAlgo,
+              #provisioningBudget: provisioningBudget,
+              #provisioningPollInterval: ?provisioningPollInterval,
+              #onProgress: onProgress,
+              #lookUps: lookUps,
+              #connectBudget: ?connectBudget,
+            },
+          )
           as AtClient;
 
   @override
