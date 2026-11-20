@@ -171,8 +171,15 @@ void main() {
         throwsA(isA<AtException>()));
   });
 
-  test('put rejects a document with a newline', () {
-    expect(store.put(_atSign, _eid, '{\n}'), throwsArgumentError);
+  test(
+      'put rejects a document with a newline, naming the field and none of '
+      'its text', () async {
+    await expectLater(
+        store.put(_atSign, _eid, '{"iv":"SEALEDIV",\n"ct":"SEALEDCT"}'),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'document')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => '$e', 'text', isNot(contains('SEALED')))));
     expect(remoteLookUp.commands, isEmpty);
   });
 }
