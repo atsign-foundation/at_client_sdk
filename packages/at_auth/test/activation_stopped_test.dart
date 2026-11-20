@@ -1,5 +1,6 @@
 import 'package:at_auth/src/at_auth_impl.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
+import 'package:at_auth/src/auth/models/retry_options.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
 import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
@@ -30,8 +31,11 @@ class _FakeFinder implements SecondaryAddressFinder {
       SecondaryAddress('abcd', 123);
 }
 
-/// Activations of @alice whose PKAM, run once the atServer has accepted the
-/// CRAM secret, is stopped or refused.
+Future<String?> _notActivated() async =>
+    throw AtLookUpException('AT0015', 'none');
+
+/// Activations of @alice stopped while they wait for the atServer or
+/// authenticate by PKAM, or whose PKAM the atServer refuses.
 ///
 /// Catalogue: features/at_auth/activation_stopped.feature
 void main() {
@@ -45,13 +49,14 @@ void main() {
 
   setUp(() => keys = InMemoryAtKeysIo());
 
-  Future<void> activate(Never Function() pkam) {
+  Future<void> activate(Never Function() pkam,
+      {Future<String?> Function() publicKeyCheck = _notActivated,
+      RetryOptions retryOptions = RetryOptions.defaultRetryOptions}) {
     final lookUp = _MockAtLookUp();
     final enrollment = _MockAtEnrollment();
     when(() => lookUp.secondaryAddressFinder).thenReturn(_FakeFinder());
     when(() => lookUp.executeCommand(any(that: startsWith('lookup:publickey')),
-            auth: any(named: 'auth')))
-        .thenAnswer((_) async => throw AtLookUpException('AT0015', 'none'));
+        auth: any(named: 'auth'))).thenAnswer((_) => publicKeyCheck());
     var cramAccepted = false;
     when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
       if (!cramAccepted) return cramAccepted = true;
@@ -61,11 +66,11 @@ void main() {
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => enrollment.submit(any(), lookUp)).thenAnswer(
         (_) async => AtEnrollmentResponse('abc123', EnrollmentStatus.approved));
-    final request =
-        AtOnboardingRequest('@alice', signingAlgoType: SigningAlgoType.rsa2048)
-          ..atKeysIo = keys
-          ..appName = 'wavi'
-          ..deviceName = 'phone';
+    final request = AtOnboardingRequest('@alice',
+        signingAlgoType: SigningAlgoType.rsa2048, retryOptions: retryOptions)
+      ..atKeysIo = keys
+      ..appName = 'wavi'
+      ..deviceName = 'phone';
     return AtAuthImpl(
         atLookUp: lookUp,
         pkamAuthenticator: PkamAuthenticator(),
@@ -98,6 +103,34 @@ void main() {
             errorCode: 'AT0027')),
         throwsA(isA<AtAuthenticationException>()),
         reason: 'a refusal is still a failed login');
+    expectNoKeysWritten();
+  });
+
+  test(
+      'An activation whose connection is stopped while it waits for its '
+      'atServer throws StoppedException', () async {
+    final stopped = StoppedException('the lookup for @alice has been stopped');
+    var checks = 0;
+    Future<String?> stoppedCheck() async {
+      checks++;
+      throw stopped;
+    }
+
+    const waitFor3s = RetryOptions(
+        maxRetries: 10,
+        retryDelay: Duration(milliseconds: 100),
+        overallTimeout: Duration(seconds: 3));
+
+    final thrown = await activate(() => fail('the wait never ended'),
+            publicKeyCheck: stoppedCheck, retryOptions: waitFor3s)
+        .then<Object?>((_) => null, onError: (Object e) => e);
+
+    expect(checks, 1,
+        reason: 'a stop ends the wait, so the atServer is asked once; a retry '
+            'would ask again within 100ms of a 3s deadline');
+    expect(thrown, same(stopped),
+        reason: 'the caller stopped the connection, so the activation says '
+            'so, not that its wait timed out');
     expectNoKeysWritten();
   });
 }

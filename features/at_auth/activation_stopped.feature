@@ -30,3 +30,11 @@ Feature: An activation whose connection is stopped says it was stopped
     When the atServer refuses its PKAM
     Then the activation throws AtAuthenticationException
     And no keys for @alice are written
+
+  Scenario: An activation whose connection is stopped while it waits for its atServer throws StoppedException
+    # packages/at_auth/test/activation_stopped_test.dart
+    #   test 'An activation whose connection is stopped while it waits for its atServer throws StoppedException'
+    Given an activation of @alice that waits for its atServer to answer
+    When the caller stops the activation's connection while it waits
+    Then the activation throws StoppedException, without waiting out its deadline
+    And no keys for @alice are written
