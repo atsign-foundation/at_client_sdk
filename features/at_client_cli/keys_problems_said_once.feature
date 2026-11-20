@@ -40,8 +40,8 @@ Feature: A CLI program says what is wrong with the keys once, and what to do nex
 
   Scenario: No keys and the atDirectory unreachable
     Given no keyfile for @alice at <path>, and an atDirectory that cannot be reached
-    When the user runs "at_activate otp -a @alice"
-    Then stderr holds, once, "No keys for @alice at <path>." then "  Not activated yet?             at_activate onboard -a @alice" then "  Activated on another machine?  Run this command there, or enroll this machine first." then the footer, and it exits 1
+    When the user runs "at_activate otp -a @alice -r <root>"
+    Then stderr holds, once, "No keys for @alice at <path>." then "  Not activated yet?             at_activate onboard -a @alice -r <root>" then "  Activated on another machine?  Run this command there, or enroll this machine first." then the footer, and it exits 1
 
   Scenario: The absent keys' lookup with an atServer that does not answer
     Given no keyfile for @alice at <path>, and @alice's atServer accepts a connection and never answers

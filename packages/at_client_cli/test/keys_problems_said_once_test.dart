@@ -277,7 +277,8 @@ void main() {
         run.stderr,
         holdsOnceInOrder([
           'No keys for $atSign at ${defaultKeyfile()}.',
-          '  Not activated yet?             at_activate onboard -a $atSign',
+          '  Not activated yet?             at_activate onboard -a $atSign -r '
+              '127.0.0.1:$unreachablePort',
           '  Activated on another machine?  Run this command there, or enroll '
               'this machine first.',
           footer,
@@ -495,7 +496,8 @@ void main() {
         run.stderr,
         holdsOnceInOrder([
           'No keys for $atSign at ${defaultKeyfile()}.',
-          '  Not activated yet?             at_activate onboard -a $atSign',
+          '  Not activated yet?             at_activate onboard -a $atSign -r '
+              '127.0.0.1:${silentAtDirectory.port}',
           '  Activated on another machine?  Run this command there, or enroll '
               'this machine first.',
           footer,
@@ -551,7 +553,7 @@ void main() {
       atServerPort = silent.port;
 
       expect(await absentKeysHint(atSign, atDirectoryRoot()),
-          eitherKeysHint(atSign));
+          eitherKeysHint(atSign, atDirectoryRoot()));
 
       expect(commands, ['lookup:publickey$atSign'],
           reason: 'the control: the lookup asked the atServer');
@@ -567,7 +569,7 @@ void main() {
 
       expect(
           await absentKeysHint(atSign, '127.0.0.1:${silentAtDirectory.port}'),
-          eitherKeysHint(atSign));
+          eitherKeysHint(atSign, '127.0.0.1:${silentAtDirectory.port}'));
 
       expect(silentSockets, hasLength(before + 1),
           reason: 'the control: the lookup reached the silent atDirectory');
@@ -595,7 +597,7 @@ void main() {
           const Duration(seconds: 6));
 
       expect(await absentKeysHint(atSign, atDirectoryRoot(), atDirectory: slow),
-          eitherKeysHint(atSign));
+          eitherKeysHint(atSign, atDirectoryRoot()));
       await slow.answered.timeout(const Duration(seconds: 5), onTimeout: () {
         fail('the control: the atDirectory did not answer');
       });
@@ -618,7 +620,7 @@ void main() {
     atServerPort = stalled.port;
 
     expect(await absentKeysHint(atSign, atDirectoryRoot()),
-        eitherKeysHint(atSign));
+        eitherKeysHint(atSign, atDirectoryRoot()));
 
     final socket = await accepted.future.timeout(const Duration(seconds: 5),
         onTimeout: () {
@@ -666,6 +668,13 @@ void main() {
         .split('\n');
     expect(lines.where((l) => l == 'No keys for $atSign at $keysPath.'),
         hasLength(1));
+    expect(
+        lines.where((l) =>
+            l ==
+            '  Not activated yet?             at_activate onboard -a $atSign '
+                '-r 127.0.0.1:$unreachablePort'),
+        hasLength(1),
+        reason: 'the hint names the root the program was given');
     expect(built, 0, reason: 'no connection is built');
   });
 

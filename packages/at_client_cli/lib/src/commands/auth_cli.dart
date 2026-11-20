@@ -628,7 +628,7 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer,
   try {
     rootDomain = AtRootDomain.parse(rootServer);
   } catch (_) {
-    return eitherKeysHint(atSign);
+    return eitherKeysHint(atSign, rootServer);
   }
   final finder = atDirectory ??
       CacheableSecondaryAddressFinder(
@@ -665,7 +665,7 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer,
       ],
     _PublicKey.atServerUnreachable ||
     _PublicKey.atDirectoryUnreachable =>
-      eitherKeysHint(atSign),
+      eitherKeysHint(atSign, rootServer),
   };
 }
 

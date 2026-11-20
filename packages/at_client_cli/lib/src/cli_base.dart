@@ -353,7 +353,9 @@ class CLIBase {
       } on AtEnrollmentPendingException {
         rethrow;
       } on AtKeysUnusableException catch (e) {
-        reportKeysProblem(e, absentHint: eitherKeysHint(atSign));
+        reportKeysProblem(e,
+            absentHint: eitherKeysHint(
+                atSign, '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'));
         rethrow;
       }
     }

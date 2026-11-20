@@ -13,9 +13,11 @@ const String keysProblemFooter = 'Need help? support@atsign.com. Never send '
     'anyone your .atKeys file, support included.';
 
 /// The next steps for keys absent from this machine when whether [atSign]
-/// has been activated is not known.
-List<String> eitherKeysHint(String atSign) => [
-      '  Not activated yet?             at_activate onboard -a $atSign',
+/// has been activated is not known; [root] is the atDirectory to activate it
+/// in, as `-r` takes it.
+List<String> eitherKeysHint(String atSign, String root) => [
+      '  Not activated yet?             at_activate onboard -a $atSign -r '
+          '$root',
       '  Activated on another machine?  Run this command there, or enroll '
           'this machine first.',
     ];

@@ -27,8 +27,9 @@
   once, naming the keyfile and the next step to take where there is one.
 - feat: when an atSign's keys are absent, at_activate looks up its public
   key, for up to 5 seconds, to say whether to activate it or enroll this
-  machine. The activate command it gives names the `-r` it looked in, and a
-  lookup still running after 5 seconds has its connection closed.
+  machine. The activate command it gives, and the one programs built on
+  `CLIBase` give, names the root they were given with `-r`, and a lookup
+  still running after 5 seconds has its connections closed.
 - fix: a passphrase-protected keyfile is reported as having a wrong or
   missing passphrase only when the passphrase was refused; any other reason
   it cannot be opened, such as an envelope version this build has no code
