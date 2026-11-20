@@ -32,6 +32,14 @@ The connection to the proxy is the whole Atsign Protocol session, so the proxy:
 
 Direct mode has no such intermediary: the only parties on the path are the root (an HTTPS lookup of the Atsign's address) and the atServer.
 
+## PRF trust statement
+
+| Question | Answer |
+|---|---|
+| What the PRF output protects | The key that seals the @keys document and the seed of the enrollment's APKAM key. Both are derived from it and never stored |
+| What it relies on | The authenticator keeping its PRF secret, user verification at each use (both ceremonies ask for it as `required`), and the relying-party id (`rpId`): a different `rpId` gives a different output |
+| With no PRF | `onboardNewAtSign` refuses (`PrfUnavailableException`) before any ceremony when PRF is known to be unsupported, and before any key is derived when the output that comes back is missing or all zeroes. v1 has no passphrase fallback |
+
 ## Facts checked (2026-11-02, on the pre-trunk branch)
 - Production root sends `access-control-allow-origin: *` on 200 and 404.
 - A production atServer upgrades `/ws` for a foreign Origin (101).
