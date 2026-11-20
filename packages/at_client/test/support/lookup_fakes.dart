@@ -1,6 +1,5 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_commons/at_commons.dart' show AtConstants;
 import 'package:at_lookup/at_lookup.dart';
 
 class ScriptedAtLookUp implements AtLookupMuxable {
