@@ -246,6 +246,7 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
           atKey.metadata.expiresAt == other.atKey.metadata.expiresAt &&
           atKey.metadata.availableAt == other.atKey.metadata.availableAt &&
           noCommit == other.noCommit &&
+          omitMetadata == other.omitMetadata &&
           atKey.metadata.dataSignature == other.atKey.metadata.dataSignature &&
           atKey.metadata.sharedKeyStatus ==
               other.atKey.metadata.sharedKeyStatus &&
@@ -281,6 +282,7 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       atKey.metadata.expiresAt.hashCode ^
       atKey.metadata.availableAt.hashCode ^
       noCommit.hashCode ^
+      omitMetadata.hashCode ^
       atKey.metadata.dataSignature.hashCode ^
       atKey.metadata.sharedKeyStatus.hashCode ^
       atKey.metadata.sharedKeyEnc.hashCode ^
