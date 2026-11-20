@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysPassphraseException;
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/util/keys_problem.dart';
 import 'package:test/test.dart';

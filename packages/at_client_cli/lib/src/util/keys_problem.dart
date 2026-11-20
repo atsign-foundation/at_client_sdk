@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysPassphraseException;
 import 'package:at_client/at_client.dart'
     show
         AtEnrollmentPendingException,
+        AtKeysPassphraseException,
         AtKeysUnusableCause,
         AtKeysUnusableException;
 import 'package:chalkdart/chalk.dart';

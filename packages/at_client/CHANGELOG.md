@@ -1,5 +1,7 @@
 ## 4.1.0-rc.1
 
+- feat: `AtKeysPassphraseException` is exported: it is an unreadable
+  keyfile's `error` when its passphrase is missing or does not open it.
 - fix: an atServer whose answer to `from:` holds no challenge to sign
   leaves the connection offline with cause `unreachable`, not refused,
   and a first open hands back its client. The client still signs
