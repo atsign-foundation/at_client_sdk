@@ -7,6 +7,8 @@ import 'package:at_chops/at_chops.dart' show AESKey;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_client/passkey.dart';
+import 'package:at_client/src/passkey/enrollment_pointer_store.dart'
+    show enrollmentPointerKey;
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show withApkamKey;
 import 'package:at_lookup/at_lookup.dart';

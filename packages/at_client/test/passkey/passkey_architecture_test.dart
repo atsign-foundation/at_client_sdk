@@ -180,7 +180,6 @@ void main() {
         'completion_due_record.dart',
         'enrollment_document_store.dart',
         'enrollment_pointer_store.dart',
-        'public_lookup.dart',
         'at_server_at_keys_io.dart',
         'passkey_custody.dart',
       ]) {
@@ -192,6 +191,19 @@ void main() {
     test('the passkey library does not export the wire-bound store classes',
         () {
       expect(exported, isNot(contains('RemoteEnrollment')));
+    });
+
+    test(
+        'the passkey library does not export the pointer key, the public '
+        'lookup or the passkey atSign check', () {
+      for (final name in [
+        'enrollmentPointerKey',
+        'publicLookup',
+        'public_lookup.dart',
+        'canonicalPasskeyAtSign',
+      ]) {
+        expect(exported, isNot(contains(name)), reason: name);
+      }
     });
 
     test('at_client.dart does not export the passkey library', () {
