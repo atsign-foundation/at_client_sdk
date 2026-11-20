@@ -1093,9 +1093,9 @@ Concurrent writers are the expected case: synced devices share one enrollment, a
 
 ### D-29 — The browser seals with a non-extractable WebCrypto key; no default sealer in at_auth (2026-11-16)
 
-**Proposed.** Not yet ruled; gkc to rule.
+**Accepted.** Accepted by: gkc, 2026-11-20 ('Accept all nine (Recommended)'), with the text below corrected to the code. Its row is in [`docs/architecture/decisions.md`](../../architecture/decisions.md).
 
-The browser seals the @keys document with a WebCrypto key created `extractable: false` and used for encrypt and decrypt only. `at_auth` has no default sealer; the browser injects this one.
+The browser seals the @keys document with a WebCrypto AES-GCM-256 key that it imports, rather than creates: HKDF derives 32 bytes from the passkey's PRF output under the `at_auth/custody/kek/v1` label, and the browser imports them `extractable: false`, for encrypt and decrypt only, then overwrites them with zeroes. The bytes pass through Dart memory before the import, and the copies HKDF makes while computing them stay there until they are garbage collected; once imported, the key is a handle the page cannot read back. `at_auth` has no default sealer; the browser's `PasskeyKeyDeriver` returns this one in the derivation it hands the vault.
 
 ### D-30 — A client closes its key store through `ClosableAtKeysIo` (2026-11-16)
 
@@ -1546,3 +1546,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-19 | **D-33 accepted** (gkc, 2026-11-19, 'Approve both (Recommended)'): once its pointer is written, a failed onboarding throws `PasskeyOnboardingIncompleteException` for an `Exception`; an `Error` and any earlier failure are thrown as they are. Its row is in `docs/architecture/decisions.md`. |
 | 2026-11-20 | **Dart package renamed `at_client_web`**, the name D-4 gave it; amends the 2026-10-18 amendment. The browser's saved names move with it (gkc, 2026-11-20, 'Rename them now (Recommended)'): the IndexedDB database and its stores, the PRF-miss `localStorage` key and the setup Web Lock prefix, with no migration. A browser that ran an earlier build keeps its old data unused. The npm facade name is unchanged. |
 | 2026-11-20 | **D-31 accepted** (gkc, 2026-11-20, 'Accept all nine (Recommended)'): a key store may keep a sealed @keys document on the atServer, locking, reading, writing and reading it back only through a document store the session injects, as `AtServerAtKeysIo` does; one that opens or holds its own connection, or sends or receives keys unsealed, stays outside A8. Invariant A8 amended to match. Its row is D-33 in `docs/architecture/decisions.md`. |
+| 2026-11-20 | **D-29 accepted** (gkc, 2026-11-20, 'Accept all nine (Recommended)'), its text corrected to the code: the browser imports the 32 bytes HKDF derives under the seal-key label as a non-extractable AES-GCM key for encrypt and decrypt only, rather than creating a key, and the bytes pass through Dart memory first. Its row is D-34 in `docs/architecture/decisions.md`. |
