@@ -91,13 +91,12 @@ void main() {
         reason: 'a failure closes every key store it built');
   }
 
-  PasskeyCustody custody({LegacyHints? withHints}) => PasskeyCustody(
+  PasskeyCustody custody({FakeHints? withHints}) => PasskeyCustody(
       prf: PasskeyPrf(authenticator),
       deriver: const BytesPasskeyKeyDeriver(),
       pointerReader: server,
       gateway: gateway,
-      credentials: withHints ?? hints,
-      enrollmentIds: withHints ?? hints,
+      hints: withHints ?? hints,
       persistence: persistence,
       now: () => _enrolledAt,
       retryDelay: Duration.zero,
@@ -1086,7 +1085,7 @@ void main() {
         'A login after an onboarding interrupted once the CRAM secret is '
         'deleted opens its enrollment', () async {
       gateway.openErrorForNext = StateError('tab closed');
-      hints.failPairWrites = true;
+      hints.failWrites = true;
       await expectLater(
           custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       expect(server.cramDeleted, {_atSign});
@@ -1846,73 +1845,24 @@ void main() {
     });
 
     group('remembering', () {
-      test('a combined store receives both ids in one write', () async {
-        final combined = FakeHints();
-        await custody(withHints: combined).open(atSign: _atSign);
-        expect(combined.pairWrites, 1);
-        expect(combined.singleWrites, 0);
-      });
-
-      test('separate stores receive one write each', () async {
-        final separate = LegacyHints();
-        await custody(withHints: separate).open(atSign: _atSign);
-        expect(separate.singleWrites, 2);
-        expect(separate.ids[_atSign], 'eid1');
-        expect(separate.credentials[_atSign], Uint8List.fromList([1]));
+      test('the hint store receives both ids in one write', () async {
+        final device = FakeHints();
+        await custody(withHints: device).open(atSign: _atSign);
+        expect(device.pairWrites, 1);
+        expect(device.ids[_atSign], 'eid1');
+        expect(device.credentials[_atSign], Uint8List.fromList([1]));
       });
 
       test(
-          'a failed combined write leaves neither id, and the open asks for '
+          'a failed hint write leaves neither id, and the open asks for '
           'persistence and returns its session', () async {
-        final combined = FakeHints()..failPairWrites = true;
-        final session =
-            await custody(withHints: combined).open(atSign: _atSign);
+        final device = FakeHints()..failWrites = true;
+        final session = await custody(withHints: device).open(atSign: _atSign);
         expect(session.client.enrollmentId, 'eid1');
-        expect(combined.credentials, isEmpty);
-        expect(combined.ids, isEmpty);
+        expect(device.credentials, isEmpty);
+        expect(device.ids, isEmpty);
         expect(persistence.requests, 1,
             reason: 'a dropped hint write still asks for persistence');
-      });
-
-      test(
-          'separate stores whose first put fails keep neither id, and the '
-          'open returns its session', () async {
-        final separate = LegacyHints()..failWrites = true;
-        final session =
-            await custody(withHints: separate).open(atSign: _atSign);
-        expect(session.client.enrollmentId, 'eid1');
-        expect(separate.credentials, isEmpty);
-        expect(separate.ids, isEmpty);
-      });
-
-      test(
-          'separate stores whose second put fails leave a new credential id '
-          'beside the old enrollment id, and the next login replaces both',
-          () async {
-        server.revoked.add('eid-old');
-        final separate = LegacyHints()
-          ..credentials[_atSign] = Uint8List.fromList([9])
-          ..ids[_atSign] = 'eid-old'
-          ..failEnrollmentIdWrites = true;
-
-        final first = await custody(withHints: separate).open(atSign: _atSign);
-
-        expect(first.client.enrollmentId, 'eid1');
-        expect(separate.credentials[_atSign], Uint8List.fromList([1]),
-            reason: 'the first put landed');
-        expect(separate.ids[_atSign], 'eid-old',
-            reason: 'the second put did not');
-        separate.failEnrollmentIdWrites = false;
-        gateway.authenticated.clear();
-
-        final second = await custody(withHints: separate).open(atSign: _atSign);
-
-        expect(gateway.authenticated, ['eid-old', 'eid1'],
-            reason: 'PKAM refuses the mixed pair, and the retry without hints '
-                'reads the pointer');
-        expect(second.client.enrollmentId, 'eid1');
-        expect(separate.ids[_atSign], 'eid1');
-        expect(separate.credentials[_atSign], Uint8List.fromList([1]));
       });
     });
 
@@ -2103,7 +2053,7 @@ void main() {
     });
 
     for (final (read, breakRead)
-        in <(String, void Function(LegacyHints, Object))>[
+        in <(String, void Function(FakeHints, Object))>[
       ('credential id', (hints, e) => hints.credentialIdReadFailure = e),
       ('enrollment id', (hints, e) => hints.enrollmentIdReadFailure = e),
     ]) {
@@ -2135,7 +2085,7 @@ void main() {
       });
     }
 
-    for (final (read, breakRead) in <(String, void Function(LegacyHints))>[
+    for (final (read, breakRead) in <(String, void Function(FakeHints))>[
       (
         'credential id',
         (hints) => hints.credentialIdReadFailure =

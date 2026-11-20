@@ -20,9 +20,9 @@
   derivation of a PRF output: it names the record and pointer namespace, seals
   and opens records, and lends the APKAM auth seed to callers until `close()`,
   which overwrites the seed with zeroes and closes the sealer. The
-  setup lock and the credential-hint and enrollment-id stores are ports the
-  caller implements; a store that is both can also be a `PasskeyHintStore`,
-  which writes the two ids in one `putHint` call. `setupLockName(prefix, atSign)` takes its prefix from the
+  setup lock and `PasskeyHintStore`, which keeps a passkey's credential id and
+  the enrollment id per atSign and writes the two in one `putHint` call, are
+  ports the caller implements. `setupLockName(prefix, atSign)` takes its prefix from the
   caller, and `recordPrfSalt()` is synchronous. The four HKDF labels (record id,
   pointer namespace, seal key, auth seed) share the form
   `at_auth/custody/<name>/v1`.

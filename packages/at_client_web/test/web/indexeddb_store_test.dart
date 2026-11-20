@@ -136,10 +136,7 @@ void main() {
       addTearDown(() => raw.close());
       final store = IndexedDbHintStore.forDatabase(raw);
       final operations = <String, Future<Object?> Function()>{
-        'putCredentialId': () =>
-            store.putCredentialId('@alice', Uint8List.fromList([1])),
         'credentialId': () => store.credentialId('@alice'),
-        'putEnrollmentId': () => store.putEnrollmentId('@alice', 'eid-1'),
         'enrollmentId': () => store.enrollmentId('@alice'),
         'putHint': () =>
             store.putHint('@alice', Uint8List.fromList([1]), 'eid-1'),
@@ -267,7 +264,7 @@ void main() {
       final credId = Uint8List.fromList([4, 5, 6]);
 
       expect(await store.credentialId('@alice'), isNull);
-      await store.putCredentialId('@alice', credId);
+      await store.putHint('@alice', credId, 'eid-1');
 
       expect(await store.credentialId('@alice'), credId);
       expect(await store.credentialId('@bob'), isNull);
@@ -277,7 +274,7 @@ void main() {
         'an enrollment id whose stored bytes are not UTF-8 reads as none, '
         'with a warning that names the atSign and not the bytes', () async {
       final store = await open();
-      await store.putCredentialId('@alice', Uint8List.fromList([7]));
+      await store.putHint('@alice', Uint8List.fromList([7]), 'eid-1');
       final stored = [...utf8.encode('eid'), 0xff, 0xfe];
       final raw = await _rawOpen(currentDbName!, 4);
       await _rawPut(raw, 'at_client_web_enrollments', '@alice', stored);
@@ -306,7 +303,7 @@ void main() {
       final store = await open();
 
       expect(await store.enrollmentId('@alice'), isNull);
-      await store.putEnrollmentId('@alice', 'e1d2c3');
+      await store.putHint('@alice', Uint8List.fromList([1]), 'e1d2c3');
       expect(await store.enrollmentId('@alice'), 'e1d2c3');
       expect(await store.enrollmentId('@bob'), isNull);
     });
@@ -314,7 +311,7 @@ void main() {
     test('stored credential bytes are a copy of the bytes given', () async {
       final store = await open();
       final credId = Uint8List.fromList([4, 5, 6]);
-      await store.putCredentialId('@alice', credId);
+      await store.putHint('@alice', credId, 'eid-1');
 
       credId[0] = 99;
 
@@ -323,7 +320,7 @@ void main() {
 
     test('read credential bytes are a copy of the stored bytes', () async {
       final store = await open();
-      await store.putCredentialId('@alice', Uint8List.fromList([4, 5, 6]));
+      await store.putHint('@alice', Uint8List.fromList([4, 5, 6]), 'eid-1');
 
       (await store.credentialId('@alice'))![0] = 99;
 
@@ -338,15 +335,15 @@ void main() {
       final aborting = JSObject()
         ..setProperty(
             'transaction'.toJS,
-            ((JSAny? stores, JSAny? mode) {
-              final tx = raw.transaction(stores as JSString, 'readwrite');
+            ((JSAny stores, JSAny? mode) {
+              final tx = raw.transaction(stores, 'readwrite');
               Future.microtask(() => tx.abort());
               return tx;
             }).toJS);
       final store = IndexedDbHintStore.forDatabase(aborting as IDBDatabase);
 
       await expectLater(
-          store.putCredentialId('@alice', Uint8List.fromList([1])),
+          store.putHint('@alice', Uint8List.fromList([1]), 'eid-1'),
           throwsA(isA<IndexedDbException>()));
       raw.close();
     }, timeout: const Timeout(Duration(seconds: 5)));
@@ -371,13 +368,13 @@ void main() {
     test('a store closed for a newer version reopens on its next operation',
         () async {
       final store = await open();
-      await store.putEnrollmentId('@alice', 'e1');
+      await store.putHint('@alice', Uint8List.fromList([1]), 'e1');
 
       final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
 
       expect(await store.enrollmentId('@alice'), 'e1');
-      await store.putCredentialId('@alice', Uint8List.fromList([7]));
+      await store.putHint('@alice', Uint8List.fromList([7]), 'e1');
       expect(await store.credentialId('@alice'), [7]);
     }, timeout: const Timeout(Duration(seconds: 5)));
 
@@ -388,7 +385,7 @@ void main() {
       final newer = await _rawOpen(currentDbName!, 5);
       newer.close();
 
-      await store.putEnrollmentId('@alice', 'e2');
+      await store.putHint('@alice', Uint8List.fromList([1]), 'e2');
       expect(await store.enrollmentId('@alice'), 'e2');
     }, timeout: const Timeout(Duration(seconds: 5)));
 
@@ -404,7 +401,7 @@ void main() {
         final store = await open();
 
         expect(await store.credentialId('@alice'), [4, 2]);
-        await store.putEnrollmentId('@alice', 'e1');
+        await store.putHint('@alice', Uint8List.fromList([4, 2]), 'e1');
         expect(await store.enrollmentId('@alice'), 'e1');
       });
     });

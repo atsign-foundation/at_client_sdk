@@ -82,8 +82,7 @@ void main() {
           rootDomain: _root,
           secondaryAddressFinder: server.finder),
       gateway: gateway(),
-      credentials: hints,
-      enrollmentIds: hints,
+      hints: hints,
       retryDelay: Duration.zero,
       setupLock: FakeSetupLock(),
       setupLockPrefix: 'test:setup');

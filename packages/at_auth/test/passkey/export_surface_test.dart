@@ -60,33 +60,13 @@ class _Lock implements SetupLock {
   Future<T> run<T>(String name, Future<T> Function() body) => body();
 }
 
-class _Hints implements CredentialHintStore {
-  @override
-  Future<Uint8List?> credentialId(String atSign) async => null;
-  @override
-  Future<void> putCredentialId(String atSign, Uint8List id) async {}
-}
-
-class _Enrollments implements EnrollmentIdStore {
-  @override
-  Future<String?> enrollmentId(String atSign) async => null;
-  @override
-  Future<void> putEnrollmentId(String atSign, String id) async {}
-}
-
-class _Combined implements PasskeyHintStore {
+class _Hints implements PasskeyHintStore {
   Uint8List? credential;
   String? enrollment;
   @override
   Future<Uint8List?> credentialId(String atSign) async => credential;
   @override
-  Future<void> putCredentialId(String atSign, Uint8List id) async =>
-      credential = id;
-  @override
   Future<String?> enrollmentId(String atSign) async => enrollment;
-  @override
-  Future<void> putEnrollmentId(String atSign, String id) async =>
-      enrollment = id;
   @override
   Future<void> putHint(
       String atSign, Uint8List credentialId, String enrollmentId) async {
@@ -119,16 +99,11 @@ void main() {
     expect(PasskeyRecordAuthenticationException().message, isNotEmpty);
   });
 
-  test('PasskeyHintStore is both hint ports and writes the pair together',
-      () async {
-    final store = _Combined();
-    final CredentialHintStore credentials = store;
-    final EnrollmentIdStore enrollments = store;
+  test('PasskeyHintStore reads each id and writes the pair together', () async {
+    final PasskeyHintStore store = _Hints();
     await store.putHint('@a', Uint8List.fromList([1]), 'e1');
-    expect(await credentials.credentialId('@a'), [1]);
-    expect(await enrollments.enrollmentId('@a'), 'e1');
-    // A store that is only the two ports still compiles and is not combined.
-    expect(_Hints(), isNot(isA<PasskeyHintStore>()));
+    expect(await store.credentialId('@a'), [1]);
+    expect(await store.enrollmentId('@a'), 'e1');
   });
 
   test('PrfSecret wipes its output', () {
@@ -197,6 +172,6 @@ void main() {
     expect(setupLockName('app:setup', '@alice'), 'app:setup:@alice');
     expect(await _Lock().run('n', () async => 5), 5);
     expect(await _Hints().credentialId('@alice'), isNull);
-    expect(await _Enrollments().enrollmentId('@alice'), isNull);
+    expect(await _Hints().enrollmentId('@alice'), isNull);
   });
 }

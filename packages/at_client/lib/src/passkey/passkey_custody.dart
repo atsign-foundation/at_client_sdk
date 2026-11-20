@@ -275,8 +275,7 @@ class PasskeyCustody {
       {required this.prf,
       required this.pointerReader,
       required this.gateway,
-      required this.credentials,
-      required this.enrollmentIds,
+      required this.hints,
       required this.setupLock,
       required this.setupLockPrefix,
       this.persistence,
@@ -288,8 +287,7 @@ class PasskeyCustody {
   final PasskeyPrf prf;
   final EnrollmentPointerReader pointerReader;
   final EnrollmentGateway gateway;
-  final CredentialHintStore credentials;
-  final EnrollmentIdStore enrollmentIds;
+  final PasskeyHintStore hints;
   final SetupLock setupLock;
 
   /// The prefix of every setup lock name: the lock guarding [atSign]'s first
@@ -621,7 +619,7 @@ class PasskeyCustody {
   Future<_Hints?> _savedHints(String canonical, {required bool warn}) async {
     final Uint8List? credentialId;
     try {
-      credentialId = await credentials.credentialId(canonical);
+      credentialId = await hints.credentialId(canonical);
     } on Exception catch (e) {
       // NOTE: the warning never carries the exception's message.
       if (warn) {
@@ -632,7 +630,7 @@ class PasskeyCustody {
     }
     final String? enrollmentId;
     try {
-      enrollmentId = await enrollmentIds.enrollmentId(canonical);
+      enrollmentId = await hints.enrollmentId(canonical);
     } on Exception catch (e) {
       // NOTE: the warning never carries the exception's message.
       if (warn) {
@@ -851,22 +849,15 @@ class PasskeyCustody {
     return flat == null || flat == pair.publicKey;
   }
 
-  /// Remembers the passkey and enrollment of [atSign] at the end of [flow]:
-  /// both ids in one write when the hint stores are one [PasskeyHintStore],
-  /// otherwise one put each. A write that fails with an [Exception] is logged
+  /// Remembers the passkey and enrollment of [atSign] at the end of [flow],
+  /// both ids in one write. A write that fails with an [Exception] is logged
   /// as a warning and dropped, so the flow goes on without saved hints; one
   /// that fails with an [Error] is thrown.
   Future<void> _remember(
       String atSign, Uint8List credentialId, String enrollmentId,
       {required _Flow flow}) async {
     try {
-      final combined = credentials;
-      if (combined is PasskeyHintStore && identical(combined, enrollmentIds)) {
-        await combined.putHint(atSign, credentialId, enrollmentId);
-      } else {
-        await credentials.putCredentialId(atSign, credentialId);
-        await enrollmentIds.putEnrollmentId(atSign, enrollmentId);
-      }
+      await hints.putHint(atSign, credentialId, enrollmentId);
     } on Exception catch (e) {
       // NOTE: the warning never carries the exception's message or the
       // enrollment id.
