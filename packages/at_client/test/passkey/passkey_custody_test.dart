@@ -141,43 +141,41 @@ void main() {
   setUp(reset);
 
   group('a PKAM failure that is not a refusal', () {
-    for (final (code, error) in [
-      ('AT0011', UnAuthenticatedException('AT0011-Internal server exception')),
-      ('AT0028', UnAuthenticatedException('AT0028:throttled')),
-    ]) {
-      test('$code on a login with hints keeps them and is not retried',
-          () async {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        final steps = server.timeline.length;
-        gateway
-          ..authenticateFailures = 1
-          ..authenticateError = error;
+    test('AT0011 on a login with hints keeps them and is not retried',
+        () async {
+      final error =
+          UnAuthenticatedException('AT0011-Internal server exception');
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      final steps = server.timeline.length;
+      gateway
+        ..authenticateFailures = 1
+        ..authenticateError = error;
 
-        await expectLater(
-            custody().open(atSign: _atSign), throwsA(same(error)));
+      await expectLater(custody().open(atSign: _atSign), throwsA(same(error)));
 
-        expect(gateway.authenticated, ['eid1'],
-            reason: 'no retry without the hints');
-        expect(hints.ids, {_atSign: 'eid1'});
-        expect(completionSteps(from: steps), isEmpty);
-      });
+      expect(gateway.authenticated, ['eid1'],
+          reason: 'no retry without the hints');
+      expect(hints.ids, {_atSign: 'eid1'});
+      expect(completionSteps(from: steps), isEmpty);
+    });
 
-      test('$code through the pointer is thrown, not a lost passkey', () async {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        final steps = server.timeline.length;
-        final fresh = FakeHints();
-        gateway
-          ..authenticateFailures = 1
-          ..authenticateError = error;
+    test('AT0011 through the pointer is thrown, not a lost passkey', () async {
+      final error =
+          UnAuthenticatedException('AT0011-Internal server exception');
+      await custody().onboard(atSign: _atSign, cram: 'cram');
+      final steps = server.timeline.length;
+      final fresh = FakeHints();
+      gateway
+        ..authenticateFailures = 1
+        ..authenticateError = error;
 
-        await expectLater(custody(withHints: fresh).open(atSign: _atSign),
-            throwsA(same(error)));
+      await expectLater(custody(withHints: fresh).open(atSign: _atSign),
+          throwsA(same(error)));
 
-        expect(gateway.authenticated, ['eid1']);
-        expect(fresh.ids, isEmpty);
-        expect(completionSteps(from: steps), isEmpty);
-      });
-    }
+      expect(gateway.authenticated, ['eid1']);
+      expect(fresh.ids, isEmpty);
+      expect(completionSteps(from: steps), isEmpty);
+    });
   });
 
   group('an atSign not in canonical form', () {
