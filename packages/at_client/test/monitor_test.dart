@@ -67,6 +67,10 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// event between a stop() and the teardown it queues.
   Future<void>? stopGate;
 
+  /// Called as [stopNotifications] begins, as an atServer whose answer
+  /// changes once the client stops.
+  void Function()? onStopNotifications;
+
   /// Awaited before [startError] is thrown, so a test can land a stop()
   /// while a start that is failing is still in flight.
   Future<void>? failGate;
@@ -107,6 +111,7 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   @override
   Future<void> stopNotifications() async {
+    onStopNotifications?.call();
     if (stopGate != null) await stopGate;
     started = false;
     if (!_up.isClosed) _up.add(false);
@@ -427,6 +432,28 @@ void main() {
             reason: 'and it arms no retry that the restart never cancels');
         expect(muxable.startCalls, 2,
             reason: 'the failed attempt and the restart, nothing more');
+      });
+
+      test(
+          'a refused start queued before stop() then start() is not '
+          'reported or retried', () async {
+        muxable
+          ..startError = revoked()
+          ..onStopNotifications = () => muxable.startError = null;
+        final restarted = reaches(NotificationListenerState.listening);
+        monitor.start();
+        monitor.stop();
+        monitor.start();
+        await restarted;
+
+        expect(connection.refusals, isEmpty,
+            reason: 'the stop queued behind the first start ended it, so a '
+                'refusal it met is not reported over the restart');
+        expect(delays, isEmpty,
+            reason: 'and it arms no retry that the restart never cancels');
+        expect(muxable.startCalls, 1,
+            reason: 'the start the stop superseded makes no attempt of its '
+                'own; only the restart reaches the atServer');
       });
     });
   });

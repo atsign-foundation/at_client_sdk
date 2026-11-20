@@ -119,8 +119,8 @@ class Monitor {
   Timer? _startRetry;
   int _startRetryIx = 0;
 
-  /// Bumped by every [stop], so a start can tell a stop that landed while it
-  /// was in flight even when a [start] has since put `targetState` back.
+  /// Bumped by every [stop], so a start can tell a stop that came after it
+  /// was queued, even when a [start] has since put `targetState` back.
   int _stops = 0;
 
   /// The same backoff at_lookup uses for a lost connection, so a failed first
@@ -200,10 +200,18 @@ class Monitor {
       return;
     }
     _targetState = NotificationListenerState.listening;
-    _enqueue(_start);
+    final stops = _stops;
+    _enqueue(() => _start(stops));
   }
 
-  Future<void> _start() async {
+  /// Starts notifications, unless a [stop] has come since [stops] was read
+  /// where this start was queued.
+  Future<void> _start(int stops) async {
+    if (stops != _stops) {
+      logger.info('stop() arrived after this start was queued, which ended '
+          'the start');
+      return;
+    }
     // Subscribed before `monitor:` goes out, not after. The notification
     // stream buffers, so nothing is lost either way, but the connection-state
     // stream is broadcast and does not replay - attaching afterwards would
@@ -250,7 +258,6 @@ class Monitor {
       }
     }
 
-    final stops = _stops;
     try {
       await lookUp.startNotifications(
           getLastNotificationTime: currentWatermark);
@@ -334,9 +341,10 @@ class Monitor {
     _startRetryIx++;
     onStartRetryDelay?.call(delay);
     logger.info('retrying the notification start in ${delay.inSeconds}s');
+    final stops = _stops;
     _startRetry = Timer(delay, () {
       if (_targetState == NotificationListenerState.listening) {
-        _enqueue(_start);
+        _enqueue(() => _start(stops));
       }
     });
   }
@@ -370,12 +378,13 @@ class Monitor {
     if (last != null && now.difference(last) <= budget) return;
     logger.warning('nothing received for $budget on a connection that is up '
         '- rebuilding it');
-    _enqueue(_rebuild);
+    final stops = _stops;
+    _enqueue(() => _rebuild(stops));
   }
 
-  Future<void> _rebuild() async {
+  Future<void> _rebuild(int stops) async {
     await _teardown();
-    await _start();
+    await _start(stops);
   }
 
   Future<void> _onNotification(String notification) async {
