@@ -839,6 +839,8 @@ Future<bool> _isActivated(
 ///     If atKeys file doesn't exist, then this is a new enrollment
 ///     If it holds a request submitted earlier for this app and device, the
 ///         wait for approval resumes from it
+///     If it is already waiting on a request for another app or device, it
+///         is refused, naming that request
 ///
 /// [atLookUp] is a connection to enrol over, for a test.
 @visibleForTesting

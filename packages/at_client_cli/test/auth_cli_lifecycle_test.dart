@@ -293,5 +293,39 @@ void main() {
           enrollmentId);
       await client.stop();
     });
+
+    for (final (app, device) in const [('buzz', 'phone'), ('wavi', 'tablet')]) {
+      test(
+          'a keyfile already waiting on a request for another app or device '
+          'is refused, naming it, and nothing is sent: $app on $device',
+          () async {
+        final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+        final pref = await preference();
+        final filing = atServer(decide: (_) async => true, wrapped: []);
+        await Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: app,
+            device: device,
+            namespaces: {app: 'rw'},
+            keys: FileAtKeysIo(filePath: (_) => keysPath),
+            preference: pref,
+            atLookUp: filing.lookUp,
+            lookUps: settingsFor(pref, keysPath).lookUps,
+            secondaryAddressFinder:
+                settingsFor(pref, keysPath).secondaryAddressFinder);
+        final untouched = atServer(decide: (_) async => true, wrapped: []);
+
+        await expectLater(
+            () => enrol(pref, keysPath, untouched.lookUp),
+            throwsA(isA<AtEnrollmentException>().having(
+                (e) => e.message,
+                'message',
+                contains('pending enrollment $enrollmentId for $app on '
+                    '$device'))));
+        verifyZeroInteractions(untouched.lookUp);
+        expect(await pendingIn(keysPath, atSign), [enrollmentId],
+            reason: 'the keyfile keeps the request it held');
+      });
+    }
   });
 }
