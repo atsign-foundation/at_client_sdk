@@ -11,11 +11,15 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   Races: leaving stops the wait before the dialog goes, so a dialog reopened
   at once waits alone; an approval that lands as the user leaves is not
   written, and the next resume completes it, while a client opened on an
-  approval already written is stopped.
+  approval already written is stopped; a request another process on this
+  device completes or abandons first is found as it then is.
   Replay: none arises; leaving and Cancel send nothing.
   DoS: no poll runs once the user has left.
   Forgery and impersonation: the dialogs resume only what the store they are
-  given holds for their atSign, and abandoning needs a confirmed Cancel.
+  given holds for their atSign, and abandoning needs a confirmed Cancel; the
+  dialog adopts only a request in the store it is given, which only programs
+  on this device write; the app name it shows is the one the request was
+  filed under.
 
   Scenario: Leaving the waiting screen keeps the request
     Given the dialog waiting for approval
@@ -64,6 +68,18 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     When ApkamActivationDialog opens @alice with device name "phone"
     Then it shows "Resuming enrollment <id>.." and Cancel, without asking for a passcode
     And once the request is approved, the dialog returns the client
+
+  Scenario: The enrollment dialog adopts the request its store holds under another app name
+    Given a key store holding one pending enrollment <id> for @alice, filed by app "wavi-old" on device "phone"
+    When ApkamActivationDialog opens @alice for app "wavi"
+    Then it shows "Resuming enrollment <id>, filed as wavi-old.." and Cancel, without asking for a passcode
+    And it logs a warning naming wavi-old and wavi
+    And once the request is approved, the dialog returns the client
+
+  Scenario: The enrollment dialog waits on its own request when its store holds several
+    Given a key store holding two pending enrollments for @alice, one filed by this app under device name "phone" and one under "old-phone"
+    When ApkamActivationDialog opens @alice with device name "phone"
+    Then it shows "Resuming enrollment <the phone request's id>.." and Cancel, without asking for a passcode
 
   Scenario: PkamDialog resumes a pending keychain entry
     Given a keychain entry for an atSign holding only an enrollment awaiting approval

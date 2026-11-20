@@ -4,6 +4,7 @@ import 'dart:io' show FileSystemException;
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/apkam_dialog.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -17,6 +18,46 @@ class MockPendingEnrollment extends Mock implements PendingEnrollment {}
 class FakeAtClientPreference extends Fake implements AtClientPreference {}
 
 class FakeAtClientStorage extends Fake implements AtClientStorage {}
+
+/// Every record logged, as its level's name and its message.
+class _RecordedLogs implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) => records.add((
+    level: '${record.level.name}',
+    message: '${record.message}',
+  ));
+
+  /// Makes this the handler every logger built from now on binds, until the
+  /// test ends.
+  void installUntilTearDown() {
+    final handler = AtSignLogger.defaultLoggingHandler;
+    final level = AtSignLogger.root_level;
+    AtSignLogger.defaultLoggingHandler = this;
+    AtSignLogger.root_level = 'info';
+    addTearDown(() {
+      AtSignLogger.defaultLoggingHandler = handler;
+      AtSignLogger.root_level = level;
+    });
+  }
+}
+
+/// A request filed in a key store under [enrollmentId] by [app] on [device],
+/// which has not been decided.
+MockPendingEnrollment filed(
+  String enrollmentId, {
+  required String app,
+  required String device,
+}) {
+  final request = MockPendingEnrollment();
+  when(() => request.enrollmentId).thenReturn(enrollmentId);
+  when(() => request.app).thenReturn(app);
+  when(() => request.device).thenReturn(device);
+  when(() => request.progress).thenAnswer((_) => const Stream.empty());
+  when(() => request.approved).thenReturn(false);
+  return request;
+}
 
 /// Leaving the APKAM dialog before it hands back a client stops the wait and
 /// keeps the request; only a confirmed Cancel abandons it, and a client
@@ -35,28 +76,60 @@ void main() {
   late MockPendingEnrollment pending;
   setUp(() {
     flows = MockAtsignFlows();
-    pending = MockPendingEnrollment();
-    when(() => pending.enrollmentId).thenReturn('enroll-1');
-    when(() => pending.progress).thenAnswer((_) => const Stream.empty());
-    when(() => pending.approved).thenReturn(false);
+    pending = filed('enroll-1', app: 'app', device: 'device');
   });
 
-  /// What `pending.client()` answers with. Built inside each test body, so
-  /// that it completes in the widget test's zone and `pump` delivers it.
-  Completer<AtClient> clientAnswers() {
+  /// What `request.client()`, `pending`'s by default, answers with. Built
+  /// inside each test body, so that it completes in the widget test's zone
+  /// and `pump` delivers it.
+  Completer<AtClient> clientAnswers([PendingEnrollment? request]) {
+    final waiting = request ?? pending;
     final opened = Completer<AtClient>();
     when(
-      () => pending.client(any(), storage: any(named: 'storage')),
+      () => waiting.client(any(), storage: any(named: 'storage')),
     ).thenAnswer((_) => opened.future);
     return opened;
   }
 
-  /// `pending.stop()` ends [opened]'s wait, as the real one does.
-  void stopEnds(Completer<AtClient> opened) =>
-      when(() => pending.stop()).thenAnswer((_) async {
-        if (!opened.isCompleted) {
-          opened.completeError(StoppedException('stopped'));
+  /// `request.stop()`, `pending`'s by default, ends [opened]'s wait, as the
+  /// real one does.
+  void stopEnds(Completer<AtClient> opened, [PendingEnrollment? request]) {
+    final waiting = request ?? pending;
+    when(() => waiting.stop()).thenAnswer((_) async {
+      if (!opened.isCompleted) {
+        opened.completeError(StoppedException('stopped'));
+      }
+    });
+  }
+
+  /// `flows.resumeEnrollment` answers as `Atsign.resumeEnrollment` does over
+  /// a key store holding [requests]: each name given narrows the search, and
+  /// more than one request left throws.
+  void holding(List<PendingEnrollment> requests) =>
+      when(
+        () => flows.resumeEnrollment(
+          any(),
+          app: any(named: 'app'),
+          device: any(named: 'device'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).thenAnswer((invocation) async {
+        final app = invocation.namedArguments[#app] as String?;
+        final device = invocation.namedArguments[#device] as String?;
+        final matching = [
+          for (final request in requests)
+            if ((app == null || request.app == app) &&
+                (device == null || request.device == device))
+              request,
+        ];
+        if (matching.length > 1) {
+          throw AtEnrollmentPendingException.several('@alice', [
+            for (final request in matching) request.enrollmentId,
+          ]);
         }
+        return matching.isEmpty ? null : matching.single;
       });
 
   void resumes(PendingEnrollment? request) => when(
@@ -70,8 +143,13 @@ void main() {
     ),
   ).thenAnswer((_) async => request);
 
-  /// Opens the dialog from a button and records what `showDialog` returns.
-  Future<List<Object?>> open(WidgetTester tester) async {
+  /// Opens the dialog for [appName] on [deviceName] from a button and records
+  /// what `showDialog` returns.
+  Future<List<Object?>> open(
+    WidgetTester tester, {
+    String appName = 'app',
+    String deviceName = 'device',
+  }) async {
     final results = <Object?>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -85,8 +163,8 @@ void main() {
                     builder: (context) => ApkamActivationDialog(
                       atSign: '@alice',
                       rootDomain: AtRootDomain.atsignDomain,
-                      appName: 'app',
-                      deviceName: 'device',
+                      appName: appName,
+                      deviceName: deviceName,
                       namespaces: const {'*': 'rw'},
                       preference: AtClientPreference(),
                       keys: InMemoryAtKeysIo(),
@@ -403,45 +481,33 @@ void main() {
     });
   });
 
+  void neverEnrolls() => verifyNever(
+    () => flows.enroll(
+      any(),
+      otp: any(named: 'otp'),
+      app: any(named: 'app'),
+      device: any(named: 'device'),
+      namespaces: any(named: 'namespaces'),
+      keys: any(named: 'keys'),
+      preference: any(named: 'preference'),
+      signingAlgo: any(named: 'signingAlgo'),
+      keyExchangeMode: any(named: 'keyExchangeMode'),
+      lookUps: any(named: 'lookUps'),
+    ),
+  );
+
   testWidgets('The enrollment dialog waits on the request its store already '
       'holds, under any device name', (tester) async {
-    when(
-      () => flows.resumeEnrollment(
-        any(),
-        app: any(named: 'app'),
-        device: any(named: 'device'),
-        keys: any(named: 'keys'),
-        preference: any(named: 'preference'),
-        lookUps: any(named: 'lookUps'),
-      ),
-    ).thenAnswer(
-      (invocation) async =>
-          invocation.namedArguments[#app] == null &&
-              invocation.namedArguments[#device] == null
-          ? pending
-          : null,
-    );
-    final opened = clientAnswers();
-    stopEnds(opened);
+    final request = filed('enroll-1', app: 'app', device: 'old-phone');
+    holding([request]);
+    final opened = clientAnswers(request);
+    stopEnds(opened, request);
     final client = MockAtClient();
-    final results = await open(tester);
+    final results = await open(tester, deviceName: 'phone');
 
     expect(find.text('Resuming enrollment enroll-1..'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
-    verifyNever(
-      () => flows.enroll(
-        any(),
-        otp: any(named: 'otp'),
-        app: any(named: 'app'),
-        device: any(named: 'device'),
-        namespaces: any(named: 'namespaces'),
-        keys: any(named: 'keys'),
-        preference: any(named: 'preference'),
-        signingAlgo: any(named: 'signingAlgo'),
-        keyExchangeMode: any(named: 'keyExchangeMode'),
-        lookUps: any(named: 'lookUps'),
-      ),
-    );
+    neverEnrolls();
 
     opened.complete(client);
     await frames(tester);
@@ -453,6 +519,58 @@ void main() {
           'the request filed under another device name is this '
           "store's, and its approval opens the client here",
     );
+  });
+
+  testWidgets('The enrollment dialog adopts the request its store holds under '
+      'another app name', (tester) async {
+    final logs = _RecordedLogs()..installUntilTearDown();
+    final request = filed('enroll-1', app: 'wavi-old', device: 'phone');
+    holding([request]);
+    final opened = clientAnswers(request);
+    stopEnds(opened, request);
+    final client = MockAtClient();
+    final results = await open(tester, appName: 'wavi', deviceName: 'phone');
+
+    expect(
+      find.text('Resuming enrollment enroll-1, filed as wavi-old..'),
+      findsOneWidget,
+    );
+    expect(find.text('Cancel'), findsOneWidget);
+    neverEnrolls();
+    final warnings = [
+      for (final record in logs.records)
+        if (record.level == 'WARNING') record.message,
+    ];
+    expect(warnings, [
+      allOf(
+        contains('enroll-1'),
+        contains('@alice'),
+        contains('wavi-old'),
+        contains('phone'),
+        matches(RegExp(r'\bwavi\b(?!-)')),
+      ),
+    ], reason: 'one warning, naming the request and both app names');
+
+    opened.complete(client);
+    await frames(tester);
+
+    expect(results, [
+      client,
+    ], reason: 'the adopted request\'s approval opens the client here');
+  });
+
+  testWidgets('The enrollment dialog waits on its own request when its store '
+      'holds several', (tester) async {
+    final phone = filed('enroll-phone', app: 'app', device: 'phone');
+    final oldPhone = filed('enroll-old-phone', app: 'app', device: 'old-phone');
+    holding([phone, oldPhone]);
+    stopEnds(clientAnswers(phone), phone);
+    await open(tester, deviceName: 'phone');
+
+    expect(find.text('Resuming enrollment enroll-phone..'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+    neverEnrolls();
+    verifyNever(() => oldPhone.client(any(), storage: any(named: 'storage')));
   });
 
   group('Given approval lands just as the dialog is dismissed', () {

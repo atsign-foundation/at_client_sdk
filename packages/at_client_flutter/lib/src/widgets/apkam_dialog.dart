@@ -23,10 +23,12 @@ import 'package:flutter/services.dart';
 /// Optional Parameters:
 /// - [keys]: where this enrollment's keys are filed and read back from, the
 ///   platform keychain by default. It is also the resume record: a request
-///   submitted earlier for the same app and device is waited on again rather
-///   than repeated, so the passcode is only asked for when no request for
-///   this app and device is pending. A store already waiting on a request
-///   for another app or device is refused once the passcode is sent.
+///   submitted earlier is waited on again rather than repeated. This app and
+///   device's own comes first, else this app's under any device name, else
+///   the store's one request whatever app name it was filed under, which
+///   the dialog adopts, showing that name. The passcode is asked for only
+///   when the store holds no request, or several it cannot choose between,
+///   and Cancel abandons the request the dialog waits on.
 /// - [storage]: the client's local storage; with none, a Hive store under the
 ///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how
@@ -43,6 +45,10 @@ import 'package:flutter/services.dart';
 class ApkamActivationDialog extends StatefulWidget {
   final String atSign;
   final AtRootDomain rootDomain;
+
+  /// The app name the atSign's manager sees the request under and approves
+  /// it as. Keep it constant from one run of the app to the next: a request
+  /// filed under an earlier name is still adopted, and shown with that name.
   final String appName;
   final String deviceName;
   final Map<String, String> namespaces;
@@ -142,23 +148,35 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   }
 
   /// A request already in the key store is waited on again rather than asking
-  /// for a passcode it has already spent: this app and device's own, or else
-  /// the one request the store holds under other names, since `enroll`
-  /// refuses a store that already holds one.
+  /// for a passcode it has already spent: this app and device's own, else
+  /// this app's under any device name, else the one request the store holds
+  /// under another app name, since `enroll` refuses a store that already
+  /// holds one. Adopting another app name's request is logged as a warning.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
       pending =
           await _resume(app: widget.appName, device: widget.deviceName) ??
+          await _resume(app: widget.appName) ??
           await _resume();
     } catch (e) {
       // An unreadable store is reported when the request goes out.
       return;
     }
     if (pending == null || !mounted) return;
+    final adopted = pending.app != widget.appName;
+    if (adopted) {
+      _logger.warning(
+        'Adopting enrollment ${pending.enrollmentId} of ${widget.atSign}, '
+        'filed by app ${pending.app} on device ${pending.device}, for app '
+        '${widget.appName}',
+      );
+    }
     setState(() {
       _isLoading = true;
-      _status = 'Resuming enrollment ${pending!.enrollmentId}..';
+      _status =
+          'Resuming enrollment ${pending!.enrollmentId}'
+          '${adopted ? ', filed as ${pending.app}' : ''}..';
     });
     await _awaitAndOpen(pending);
   }
