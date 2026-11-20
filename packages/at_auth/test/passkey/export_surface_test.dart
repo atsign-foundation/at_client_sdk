@@ -161,13 +161,6 @@ void main() {
     expect(sealer, isNotNull);
   });
 
-  test('PasskeyRecordCodec rejects a record of unknown shape', () async {
-    await expectLater(
-        PasskeyRecordCodec.open(
-            _Sealer(), '@alice', PasskeyRecordType.atkeys, '{"v":99}'),
-        throwsA(isA<UnsupportedPasskeyRecordException>()));
-  });
-
   test('SetupLock, setupLockName and the stores', () async {
     expect(setupLockName('app:setup', '@alice'), 'app:setup:@alice');
     expect(await _Lock().run('n', () async => 5), 5);

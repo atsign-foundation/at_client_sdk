@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
+import 'package:at_auth/src/passkey/passkey_record.dart'
+    show PasskeyRecordCodec;
 import 'package:test/test.dart';
 
 import '../support/bytes_passkey_sealer.dart';

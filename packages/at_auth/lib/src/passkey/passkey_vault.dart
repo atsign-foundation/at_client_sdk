@@ -79,8 +79,10 @@ class PasskeyVault {
 
   /// The document in [record], opened as type [typ].
   ///
-  /// Throws [UnsupportedPasskeyRecordException] or
-  /// [PasskeyRecordAuthenticationException] as [PasskeyRecordCodec.open] does.
+  /// Throws [UnsupportedPasskeyRecordException] for a malformed or unknown
+  /// record, or one whose type is not [typ];
+  /// [PasskeyRecordAuthenticationException] when it does not open, as when it
+  /// was sealed for another atSign.
   Future<Map<String, dynamic>> open(
           PasskeyRecordType typ, String record) async =>
       PasskeyRecordCodec.open(_open(), atSign, typ, record);

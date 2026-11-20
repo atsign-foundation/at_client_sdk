@@ -7,7 +7,7 @@
 - feat: `PrfSecret(...)` throws `ArgumentError` for 32 zero bytes, and `PrfSecret.output` throws `StateError` once `wipe()` has run.
 - feat: `prfUnsupportedMessage` reads "This platform or authenticator does not support passkey PRF. Use one that does."
 - feat: `passkeyDisplayName` and `passkeyDisplayNameMaxBytes` in `package:at_auth/passkey.dart` are the display-name rule for a passkey, which the browser's passkey port uses and another platform's port can: the enrollment time in UTC to the minute, then the device name, within 64 UTF-8 bytes.
-- feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
+- feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and its `seal` and `open` take the record type.
 - feat: `PasskeyVault` holds its Atsign in canonical form, so a record sealed for `@Alice` opens for `@alice`.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
 - feat: passkey error messages show control characters as escapes and stay on one line: text from outside the process is shown with each backslash and each control, format and line-separator character escaped, and is cut after 180 characters, escapes included. `clipForMessage` in `package:at_auth/passkey.dart` does this, and can escape a quote character as well.
