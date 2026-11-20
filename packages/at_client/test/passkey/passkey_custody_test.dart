@@ -140,10 +140,13 @@ void main() {
 
   setUp(reset);
 
+  // The fake gateway throws the error as it is, so these cases cover how
+  // custody treats a failure the gateway did not classify as a refusal. Which
+  // replies are refusals (a throttled AT0028 is not) is tested against the
+  // real classifier in enrollment_gateway_test.dart.
   group('a PKAM failure that is not a refusal', () {
     for (final (code, error) in [
       ('AT0011', UnAuthenticatedException('AT0011-Internal server exception')),
-      ('AT0028', UnAuthenticatedException('AT0028:throttled')),
     ]) {
       test('$code on a login with hints keeps them and is not retried',
           () async {
@@ -1229,12 +1232,11 @@ void main() {
 
     group('a failed onboarding and the platform', () {
       test(
-          'A passkey whose onboarding fails before it completes the '
-          'activation is reported as unknown', () async {
+          'A passkey whose onboarding fails before it sends its pointer is '
+          'reported as unknown', () async {
         for (final fail in <void Function()>[
           () => gateway.activateRefusal = StateError('CRAM refused'),
           () => server.documentPutFailures = 99,
-          () => server.pointerPutFailures = 1,
         ]) {
           reset();
           fail();
@@ -1243,6 +1245,47 @@ void main() {
           expect(authenticator.signalled, [authenticator.current],
               reason: 'the registered credential is reported');
         }
+      });
+
+      test(
+          'A passkey whose onboarding fails at its pointer put is not '
+          'reported', () async {
+        for (final MapEntry(key: point, value: fail)
+            in <String, void Function()>{
+          'the pointer put fails': () => server.pointerPutFailures = 1,
+          'the pointer is stored and the reply is lost': () =>
+              server.pointerPutRepliesLost = 1,
+        }.entries) {
+          reset();
+          fail();
+          await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+              throwsStateError,
+              reason: point);
+          expect(server.timeline, contains('put-pointer'),
+              reason: 'the control: the pointer was sent when $point');
+          expect(authenticator.signalled, isEmpty,
+              reason: 'nothing is reported when $point');
+        }
+      });
+
+      test(
+          'An onboarding whose pointer reply is lost is finished by open on '
+          'the same passkey, which is not reported', () async {
+        server.pointerPutRepliesLost = 1;
+        await expectLater(
+            custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
+        expect(server.cramDeleted, isEmpty,
+            reason: 'the control: the onboarding failed before completing');
+
+        final session =
+            await custody(withHints: FakeHints()).open(atSign: _atSign);
+
+        expect(server.cramDeleted, {_atSign},
+            reason: 'open completes the activation on this passkey');
+        expect(authenticator.signalled, isEmpty,
+            reason: 'the passkey the onboarding is finished on is not '
+                'reported unknown');
+        await session.stop();
       });
 
       test(

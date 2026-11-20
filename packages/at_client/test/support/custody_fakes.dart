@@ -92,6 +92,10 @@ class FakeServer implements EnrollmentPointerReader {
   /// Pointer puts that throw before one is accepted.
   var pointerPutFailures = 0;
 
+  /// Pointer puts that store the pointer and then throw, as a put whose reply
+  /// is lost does.
+  var pointerPutRepliesLost = 0;
+
   /// Runs when a pointer put arrives, before it is accepted.
   void Function()? onPointerPut;
 
@@ -388,6 +392,10 @@ class _Pointers implements EnrollmentPointerStore {
     if (!session.server.dropPointerWrites) {
       session.server.pointers[lookupHex] = record;
       session.server.pointerNamespaces[lookupHex] = ns;
+    }
+    if (session.server.pointerPutRepliesLost > 0) {
+      session.server.pointerPutRepliesLost--;
+      throw StateError('pointer put reply lost');
     }
   }
 }

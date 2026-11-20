@@ -189,6 +189,16 @@ compare-and-swap, so the server-backed store takes a server mutex on
 until it puts, and still refuses a write that would drop stored material and
 reads each write back.
 
+**The lock is not a fence, so the store does not ship without
+compare-and-swap.** Nothing bounds when a put lands: a put sent while the
+lease is held can land after the lease expires, once another writer has taken
+the lock, read the old record and put its own. The later put then drops the
+other writer's material, and both read-backs can still match, since each
+compares only with its own write. So the server-backed store does not ship
+until every atServer it runs against has a compare-and-swap (a conditional
+update) and its writes use it; the lock, the refusal and the read-back narrow
+the window but do not close it.
+
 ## Decisions
 
 1. Replace local `.atKeys` files with an envelope v2 on the atServer.

@@ -318,9 +318,11 @@ class PasskeyCustody {
   /// An onboarding that fails before the CRAM secret is deleted is run again
   /// with the same [cram] and a new passkey. The passkey this call registered
   /// is reported to the platform as unknown when the failure comes before
-  /// the activation is completed, and the failure is thrown without waiting
-  /// for the platform to take the report; a failure while completing it, or
-  /// after, reports nothing. Once the CRAM secret is deleted the atSign is
+  /// its pointer is sent, and the failure is thrown without waiting for the
+  /// platform to take the report. A failure from the pointer's put, while
+  /// completing the activation, or after, reports nothing: a pointer put
+  /// that throws may have been stored with its reply lost, and then [open]
+  /// finishes the onboarding on this passkey. Once the CRAM secret is deleted the atSign is
   /// onboarded, and a failure after that leaves [open] to log in: without
   /// saved hints it completes the activation while the completion is due,
   /// as [open] says, and it then saves the hints. Nothing is kept on the
@@ -357,10 +359,17 @@ class PasskeyCustody {
       final passkey = await prf.register(canonical,
           enrolledAt: now(), deviceName: gateway.device);
       final _Written written;
+      var pointerSent = false;
       try {
-        written = await _activateAndWrite(canonical, cram, passkey.secret);
+        written = await _activateAndWrite(canonical, cram, passkey.secret,
+            beforePointerPut: () => pointerSent = true);
       } on Object {
-        unawaited(prf.signalUnknownCredential(passkey.credentialId));
+        // Once the pointer is sent it may be stored though the put threw, and
+        // [open] would then finish the onboarding on this passkey, so it is
+        // reported unknown only before that.
+        if (!pointerSent) {
+          unawaited(prf.signalUnknownCredential(passkey.credentialId));
+        }
         rethrow;
       }
       return _complete(canonical, passkey.credentialId, written);
@@ -369,9 +378,11 @@ class PasskeyCustody {
 
   /// Activates [canonical] with [cram], completion deferred, records that the
   /// completion is due, and writes the new enrollment's document and pointer.
-  /// Everything it built is closed when it throws.
+  /// Everything it built is closed when it throws. [beforePointerPut] runs
+  /// just before the pointer is sent.
   Future<_Written> _activateAndWrite(
-      String canonical, String cram, PrfSecret secret) async {
+      String canonical, String cram, PrfSecret secret,
+      {required void Function() beforePointerPut}) async {
     final vault = await _deriveAndWipe(secret, canonical);
     EnrollmentSession? session;
     AtServerAtKeysIo? store;
@@ -386,6 +397,7 @@ class PasskeyCustody {
       await _putDocument(canonical, keysIo, atKeys);
       final pointer = await vault.seal(
           PasskeyRecordType.eid, {'enrollmentId': activated.enrollmentId});
+      beforePointerPut();
       await activated.pointers
           .put(canonical, vault.lookupHex, pointer, ns: vault.ns);
       return (vault: vault, session: activated, store: keysIo, atKeys: atKeys);

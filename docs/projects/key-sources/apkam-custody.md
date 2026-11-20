@@ -312,7 +312,11 @@ filed. A dropped root or nskey private can't be replaced. at_server trunk has
 no compare-and-swap, so the store takes a server mutex on
 `atkeys-lock.<enrollmentId>.a.__e@<atSign>` from before it reads the record
 until it puts, and still refuses a write that would drop stored material and
-reads each write back.
+reads each write back. The lock is not a fence: a put sent while the lease is
+held can land after it expires, once another writer has taken the lock and
+put, and the later put then drops the other's material while both read-backs
+match. So the server-backed store does not ship until every atServer it runs
+against has a compare-and-swap (a conditional update) and its writes use it.
 
 Each platform reports whether it achieved per-operation, per-session or no
 prompting, so policy can see what it got.
@@ -404,7 +408,7 @@ be converted to compact hex. A pin test still guards it
 | at_client_flutter | A federated `at_security_platform` plugin for Darwin (CryptoKit), Android (Keystore) and Windows (NCrypt); `KeychainAtKeysIo` keeps only references and public halves |
 | at_client_web | `WebAuthnSecurityPlatform`, as in [section 9](#9-the-browser-as-the-only-device) |
 | at_commons, at_lookup | none; the PKAM grammar already carries `ecc_secp256r1` and `mldsa65` |
-| at_server | a pin test that ecc PKAM signatures are compact hex |
+| at_server | a pin test that ecc PKAM signatures are compact hex; a compare-and-swap (conditional update), which the server-backed store needs before it ships |
 | docs | a trusted-devices decision record that separates APKAM custody from the device-assertion credential, which must never be a PKAM key, and holds the tier rule: chosen once at enrollment, recorded, never run below |
 
 `PasskeyVault` in at_auth is the passkey core. It does not implement `CustodySession`: `prf()` returns raw bytes, which would put kek material in Dart memory.
