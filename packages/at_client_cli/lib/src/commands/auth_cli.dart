@@ -480,7 +480,10 @@ Future<int> wrappedMain(List<String> arguments,
 ///  - 2 if the atSign exists but the atServer cannot be reached
 ///  - 1 if the atServer is reachable but there is no `public:publickey@<atsign>`
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
-Future<int> status(ArgResults ar) async {
+///
+/// [atLookUp] is a connection to look the public key up over, for a test; a
+/// run connects to the atServer the atDirectory names.
+Future<int> status(ArgResults ar, {AtLookUp? atLookUp}) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -499,7 +502,9 @@ Future<int> status(ArgResults ar) async {
       atSign,
       CacheableSecondaryAddressFinder(
           rootDomain.rootDomain, rootDomain.rootPort),
-      (atDirectory) => secureSocketLookUps()(
+      (atDirectory) =>
+          atLookUp ??
+          secureSocketLookUps()(
             atSign: atSign,
             rootDomain: rootDomain,
             authenticator: null,
