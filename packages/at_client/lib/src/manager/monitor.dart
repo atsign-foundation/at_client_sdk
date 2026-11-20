@@ -4,7 +4,8 @@ import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_commons/at_commons.dart' show StoppedException;
+import 'package:at_commons/at_commons.dart'
+    show StoppedException, UnAuthenticatedException;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
@@ -135,6 +136,19 @@ class Monitor {
     Duration(seconds: 34),
   ];
 
+  /// The delays a first start the atServer turned away waits on: at_lookup's
+  /// [AtLookupImpl.notificationRefusalReconnectDelays], so a start and a
+  /// reconnect turned away slow down alike. Settable so a test of several
+  /// such attempts does not wait minutes.
+  @visibleForTesting
+  List<Duration> startRefusalRetryDelays =
+      AtLookupImpl.notificationRefusalReconnectDelays;
+
+  /// Told the delay chosen before each retry of the first connect, so a test
+  /// can see which schedule it came from.
+  @visibleForTesting
+  void Function(Duration delay)? onStartRetryDelay;
+
   void _enqueue(Future<void> Function() step) {
     _lifecycle =
         _lifecycle.then((_) => step()).catchError((Object e, StackTrace st) {
@@ -149,8 +163,10 @@ class Monitor {
   /// The client's connection state, told `online` each time this monitor
   /// reaches `listening`: a monitor that is receiving is an authenticated
   /// connection to the atServer, and it is the one connection a passive
-  /// client keeps open, so it is how the network's return gets noticed. A
-  /// monitor built without one tells nobody.
+  /// client keeps open, so it is how the network's return gets noticed. It is
+  /// told `refused`, with the cause, each time the atServer refuses this
+  /// monitor's connection, and nothing when an attempt fails any other way.
+  /// A monitor built without one tells nobody.
   final AtConnection? connection;
 
   Monitor({
@@ -191,8 +207,7 @@ class Monitor {
         lookUp.notificationConnectionUp.listen(_onConnectionState);
     _notificationSubscription ??= lookUp.notifications.listen(
       _onNotification,
-      onError: (Object e) =>
-          logger.warning('Error on the notification stream: $e'),
+      onError: _onNotificationStreamError,
     );
 
     // Its own guard: reading the watermark is a local keystore operation, not
@@ -250,17 +265,69 @@ class Monitor {
         return;
       }
       logger.warning('Failed to start notifications: $e');
-      _scheduleStartRetry();
+      final failure = _failureIn(e);
+      final refusal = failure.refusal;
+      if (refusal != null) unawaited(connection?.report(refusal));
+      _scheduleStartRetry(turnedAway: failure.turnedAway);
     }
   }
 
-  /// Tries the first connect again, while the caller still wants to listen.
-  void _scheduleStartRetry() {
+  /// Reports a reconnect the atServer refused to [connection]; any other
+  /// error on the notification stream is logged.
+  void _onNotificationStreamError(Object e) {
+    final refusal = _failureIn(e).refusal;
+    if (refusal == null) {
+      logger.warning('Error on the notification stream: $e');
+      return;
+    }
+    if (_targetState != NotificationListenerState.listening) {
+      logger.info('stop() arrived before this refusal, which is not '
+          'reported: $e');
+      return;
+    }
+    // NOTE: reported only while the connection is down. One that arrives
+    // after it is back up belongs to an attempt the recovery superseded.
+    if (_currentState == NotificationListenerState.listening) {
+      logger.info('the connection recovered before this refusal arrived, '
+          'so it is not reported: $e');
+      return;
+    }
+    unawaited(connection?.report(refusal));
+  }
+
+  /// What a failed attempt to open this monitor's connection says, for a
+  /// first start and a reconnect alike.
+  ///
+  /// [turnedAway] when the atServer answered without letting this client in,
+  /// an [UnAuthenticatedException], which [lookUp] too waits longer after;
+  /// [refusal] is the refused state to report when that answer refused the
+  /// credentials, as [classifyConnectionFailure] reads it, and null for any
+  /// other failure.
+  ({bool turnedAway, AtConnectionState? refusal}) _failureIn(Object error) {
+    if (error is! UnAuthenticatedException) {
+      return (turnedAway: false, refusal: null);
+    }
+    final state = classifyConnectionFailure(error);
+    return (
+      turnedAway: true,
+      refusal: state != null && state.isRefused ? state : null,
+    );
+  }
+
+  /// Tries the first connect again, while the caller still wants to listen,
+  /// waiting longer when the atServer [turnedAway] the last attempt.
+  void _scheduleStartRetry({required bool turnedAway}) {
     _startRetry?.cancel();
     if (_targetState != NotificationListenerState.listening) return;
-    final delay =
-        startRetryDelays[_startRetryIx.clamp(0, startRetryDelays.length - 1)];
+    // NOTE: held at the network schedule's last step, so the waits after the
+    // attempts turned away that follow grow from there.
+    if (!turnedAway) {
+      _startRetryIx = _startRetryIx.clamp(0, startRetryDelays.length - 1);
+    }
+    final delays = turnedAway ? startRefusalRetryDelays : startRetryDelays;
+    final delay = delays[_startRetryIx.clamp(0, delays.length - 1)];
     _startRetryIx++;
+    onStartRetryDelay?.call(delay);
     logger.info('retrying the notification start in ${delay.inSeconds}s');
     _startRetry = Timer(delay, () {
       if (_targetState == NotificationListenerState.listening) {

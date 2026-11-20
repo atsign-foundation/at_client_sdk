@@ -15,6 +15,13 @@ import 'package:at_lookup/src/connection/at_connection.dart';
 /// so a closure held for an instance's life must decide afresh each time what
 /// credential applies: an instance that CRAM-onboards and then PKAM-
 /// authenticates is one instance and two answers.
+///
+/// Return false, or throw [UnAuthenticatedException], when the atServer
+/// answered without letting the client in, by refusing the credential or
+/// by any other answer: only those count as turned away, which
+/// [AtLookupMuxable.notifications] reports and a notification reconnect waits
+/// longer after. A reconnect retries any other exception as a failure to
+/// reach the atServer.
 typedef AtAuthenticator = Future<bool> Function(AtCommandExecutor executor);
 
 /// The narrow view of a connection that an [AtAuthenticator] is given: enough
@@ -273,6 +280,12 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   ///
   /// Listen as soon as you read it: until a listener arrives, notifications
   /// are held without bound, and none of that back-pressure applies.
+  ///
+  /// While notifying, each reconnect attempt the atServer turns away, one
+  /// that fails with an [UnAuthenticatedException], arrives here as that
+  /// exception in an error event, and the stream stays open: reconnecting
+  /// carries on, waiting longer after each, up to 5 minutes between attempts.
+  /// Listen with an `onError`, or each is an unhandled error.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.
