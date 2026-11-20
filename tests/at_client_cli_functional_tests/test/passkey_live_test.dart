@@ -190,14 +190,23 @@ void main() {
     final refused = _refusedTakes(rig.tap, from: mark);
     print('LIVE lock takes refused before the client took it: $refused');
     expect(refused, greaterThan(0), reason: 'the client found it held');
-    final put = rig.tap.indexOfSent(_isDocumentPut, from: mark);
+    final tap = rig.tap;
+    final client = tap.lines[_refusedTakeAfter(tap, mark)].connection;
+    final otherPut = _indexOn(tap, (c) => c != client, _isDocumentPut, mark);
+    expect(otherPut, greaterThan(-1),
+        reason: "the control: the other writer's put went on a connection of "
+            'its own');
+    final put = _indexOn(tap, (c) => c == client, _isDocumentPut, mark);
+    final took =
+        _indexOn(tap, (c) => c == client, _isLockTake, mark, accepted: true);
+    print('LIVE client connection $client took the lock at $took and put at '
+        '$put; the other writer put at $otherPut');
     expect(put, greaterThan(-1), reason: 'the client put the document');
-    final took = _acceptedTakeAfter(rig.tap, mark);
     expect(took, allOf(greaterThan(-1), lessThan(put)),
         reason: 'it took the lock before it put');
-    expect(
-        rig.tap.indexOfSent((c) => c.startsWith('llookup:atkeys.'), from: took),
-        allOf(greaterThan(took), lessThan(put)),
+    final reread = _indexOn(
+        tap, (c) => c == client, (t) => t.startsWith('llookup:atkeys.'), took);
+    expect(reread, allOf(greaterThan(took), lessThan(put)),
         reason: 'it re-read the document once it held the lock, before it '
             'put');
     final stored =
@@ -771,11 +780,33 @@ bool _isAcceptedTake(WireTap tap, int i) =>
     tap.lines[i].text.contains('atkeys-lock.') &&
     _accepted(tap, i);
 
-/// The index of the first granted take of the @keys lock at or after [from],
-/// or -1.
-int _acceptedTakeAfter(WireTap tap, int from) {
+bool _isLockTake(String c) =>
+    c.startsWith('update:') && c.contains('atkeys-lock.');
+
+/// The index of the first take of the @keys lock at or after [from] that the
+/// atServer refused, or -1.
+int _refusedTakeAfter(WireTap tap, int from) {
   for (var i = from; i < tap.lines.length; i++) {
-    if (_isAcceptedTake(tap, i)) return i;
+    final l = tap.lines[i];
+    if (l.sent && _isLockTake(l.text) && !_accepted(tap, i)) return i;
+  }
+  return -1;
+}
+
+/// The index of the first command at or after [from] sent on a connection
+/// [on] picks that [matches], and that the atServer accepted when [accepted]
+/// is true; or -1.
+int _indexOn(WireTap tap, bool Function(int connection) on,
+    bool Function(String command) matches, int from,
+    {bool accepted = false}) {
+  for (var i = from; i < tap.lines.length; i++) {
+    final l = tap.lines[i];
+    if (l.sent &&
+        on(l.connection) &&
+        matches(l.text) &&
+        (!accepted || _accepted(tap, i))) {
+      return i;
+    }
   }
   return -1;
 }
