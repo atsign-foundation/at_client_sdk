@@ -296,6 +296,23 @@ void main() {
   });
 
   test(
+      'A PKAM refused on the attempt the connection makes again is a lost '
+      'passkey', () async {
+    final reply = _at0401['dash']!;
+    late final _PkamServer atServer;
+    atServer = _PkamServer(
+        onPkam: (socket) => atServer.pkams.length == 1
+            ? socket.serverCloses()
+            : _replies(reply)(socket));
+
+    await expectLostPasskey(
+        atServer, 'the second attempt\'s pkam: was refused');
+    expect(atServer.pkams, hasLength(2),
+        reason: 'the first attempt sent its pkam: before the connection '
+            'was lost, and the connection made the attempt again');
+  });
+
+  test(
       'A proxy\'s error reply to the from: of a reconnect after the pkam: is '
       'not a refusal', () async {
     final reply = _at0401['dash']!;

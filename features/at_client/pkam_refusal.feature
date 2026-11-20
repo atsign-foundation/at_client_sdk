@@ -86,6 +86,13 @@ Feature: A refused PKAM is read by the client's one classifier
     Then that failure propagates as it is
 
   @race
+  Scenario: A PKAM refused on the attempt the connection makes again is a lost passkey
+    Given the passkey enrollment's first PKAM attempt sent its pkam:, and the connection was lost before the reply
+    And the atServer refuses the pkam: of the attempt the connection makes again with error:AT0401
+    When the app logs in to @alice🛠 on a device that remembers nothing for it
+    Then the passkey is reported lost
+
+  @race
   Scenario: A proxy's error reply to the from: of a reconnect after the pkam: is not a refusal
     Given a passkey login through a proxy root, whose pkam: was written before the socket closed with no reply
     When the proxy answers the reconnect's from: with error:AT0401
