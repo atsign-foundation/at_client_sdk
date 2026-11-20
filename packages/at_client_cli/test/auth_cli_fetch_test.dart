@@ -58,7 +58,7 @@ void main() {
     });
     final args = AuthCliArgs()
         .createFetchCommandParser()
-        .parse(['-a', '@alice', '-i', b]);
+        .parse(['-a', '@alice', '-r', '127.0.0.1:1', '-i', b]);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.fetch(args, client),
