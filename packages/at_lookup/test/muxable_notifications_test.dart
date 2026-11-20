@@ -1022,6 +1022,44 @@ void main() {
               'accepted');
     });
 
+    /// Catalogue: features/at_client/refused_notification_connection.feature
+    test('a program reading notifications keeps receiving through a refusal',
+        () async {
+      final taken = <Duration>[];
+      final atLookup = recording([
+        _Attempt.accept,
+        _Attempt.refuse,
+        _Attempt.refuse,
+      ], taken);
+      final seen = <String>[];
+      Object? thrown;
+      var loopEnded = false;
+      unawaited(() async {
+        try {
+          await for (final n in atLookup.notifications) {
+            seen.add(n);
+          }
+        } catch (e) {
+          thrown = e;
+        } finally {
+          loopEnded = true;
+        }
+      }());
+      await atLookup.startNotifications();
+
+      await transport().serverCloses();
+      await until(
+          () => taken.length == 3 && !atLookup.isReconnectingNotifications,
+          'two refused reconnects and the accepted one');
+      await transport().serverSends('notification: {"id":"after"}\n');
+      await transport().settle();
+
+      expect(thrown, isNull, reason: 'no refusal reaches the loop');
+      expect(loopEnded, isFalse, reason: 'the loop is still reading');
+      expect(seen, ['notification: {"id":"after"}'],
+          reason: 'and receives once a reconnect is accepted');
+    });
+
     test(
         'a subscriber to both streams hears a refusal before the up of the '
         'reconnect accepted after it', () async {

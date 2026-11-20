@@ -87,6 +87,12 @@ Feature: A notification connection the atServer does not let in is retried less 
     Then the app's existing subscription receives the next notification for @alice
     And the client's connection is online
 
+  Scenario: a program reading notifications keeps receiving through a refusal
+    Given a program reading @alice's notifications in an await for loop
+    And the atServer refuses the notification reconnect
+    When the atServer accepts that connection again
+    Then the program's loop receives the next notification for @alice
+
   Scenario: a dropped notification connection to an unreachable atServer is retried as before
     Given a client of @alice listening for notifications
     When the notification connection drops and the atServer cannot be reached
