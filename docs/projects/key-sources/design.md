@@ -7,7 +7,9 @@ TPM, a systemd credential, a cloud KMS, the OS keychain, DPAPI, or a passkey.
 
 ## Status
 
-Draft, 2026-09-29. Nothing here is built, and none of it is ruled. The
+Draft, 2026-09-29. Of what this describes, only the browser passkey path is
+built, as [atkeys-derivation.md](../wasm/atkeys-derivation.md) records; the
+rest is neither built nor ruled. The
 measurements in [section 3](#3-measurements) were taken on 2026-09-28 and
 2026-09-29 with the probes in [`probes/`](probes/), and each one names the
 probe that reproduces it. Claims not yet measured are marked as such, and

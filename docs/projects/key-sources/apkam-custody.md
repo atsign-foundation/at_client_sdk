@@ -9,7 +9,9 @@ version 2 envelope that only that hardware can open. The hardware plugs into
 
 ## Status
 
-Draft, 2026-10-01. Nothing here is built. The hardware capabilities in
+Draft, 2026-10-01. Of what this describes, only the browser passkey path is
+built, as [atkeys-derivation.md](../wasm/atkeys-derivation.md) records; the
+rest is not built. The hardware capabilities in
 [section 2](#2-what-the-hardware-offers) are taken from vendor documentation
 and haven't been probed; [section 10](#10-open-questions) lists what would
 settle them. The at_server claims were read from trunk. Updated 2026-11-02 to match

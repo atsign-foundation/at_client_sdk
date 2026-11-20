@@ -37,11 +37,11 @@ and the **foundation** libraries beneath it never assume a platform at all.
    own platform pieces. Nothing an app needs takes a second SDK import.
 3. **A default for everything that differs by platform:**
 
-   | | at_client_cli | at_client_flutter | at_client_web |
+   | | at_client_cli | at_client_flutter | at_client_web (unpublished) |
    |---|---|---|---|
    | Storage | Hive under `~/.atsign/storage/` | Hive in the app support directory | memory (a durable browser store later) |
    | Transport and atDirectory | TLS socket; cached TCP atDirectory finder | TLS socket; cached TCP atDirectory finder | `wss`; HTTPS atDirectory finder |
-   | Keys | the `.atKeys` file | the OS keychain | a browser key store |
+   | Keys | the `.atKeys` file | the OS keychain | sealed on the atServer under a passkey-derived key; the browser keeps none at rest |
    | Logging | stderr, or a file, in a `CLIBase` program; warnings to stdout in others | the console | the browser console |
    | Onboarding and enrollment | `at_activate`, `CLIBase`, `CliKeys` | dialogs and widgets | passkey onboarding and login (`onboardNewAtSign`, `passkeyLogin`) |
 
