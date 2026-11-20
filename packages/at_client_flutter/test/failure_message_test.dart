@@ -51,15 +51,27 @@ void main() {
               'refused (OS Error: Connection refused, errno = 61)',
         ),
         'AtLookUpException AT0021': AtLookUpException('AT0021', 'refused'),
-        'a registrar request with no response, as package:http reports it':
-            http.ClientException(
-              'SocketException: Failed host lookup: \'my.atsign.com\'',
-              Uri.https('my.atsign.com', '/api/app/v3/activate'),
-            ),
       };
       for (final MapEntry(key: name, value: error) in cases.entries) {
         test(name, () => expect(shown(error), unreachable));
       }
+
+      test('a request package:http makes to a port that refuses it', () async {
+        final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final port = closed.port;
+        await closed.close();
+
+        final error = await http
+            .get(Uri.http('127.0.0.1:$port', '/api/app/v3/activate'))
+            .then<Object?>((_) => null, onError: (Object e) => e);
+
+        expect(
+          error,
+          allOf(isA<http.ClientException>(), isA<SocketException>()),
+          reason: 'the control: package:http refused it as a socket failure',
+        );
+        expect(shown(error!), unreachable);
+      });
 
       test('in the words the dialog gives', () {
         expect(

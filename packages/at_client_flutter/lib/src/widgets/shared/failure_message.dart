@@ -3,7 +3,6 @@ import 'dart:io' show SocketException;
 
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
-import 'package:http/http.dart' as http;
 
 /// What a dialog shows when its operation on [atSign] failed with [error].
 ///
@@ -15,8 +14,7 @@ import 'package:http/http.dart' as http;
 /// message. For an atServer's refusal, or an atSign not in the atDirectory,
 /// it is the cause in plain words. For a wait that ran out, it is [timedOut].
 /// For any other failure to reach a server, as the client's connection
-/// classifies one, or a request package:http sent that got no response, as
-/// the registrar's does, it is [unreachable], which defaults to saying the atServer
+/// classifies one, it is [unreachable], which defaults to saying the atServer
 /// for [atSign] could not be reached. For anything else, it says something
 /// went wrong, with the first line of the error's message.
 ///
@@ -50,10 +48,7 @@ String failureMessage(
   };
   if (refusal != null) return refusal;
   if (_isTimeout(error)) return timedOut;
-  // NOTE: http.ClientException is how package:http, which the registrar
-  // client uses, reports a request that never got a response.
   if (error is SocketException ||
-      error is http.ClientException ||
       classified?.cause == AtConnectionCause.unreachable) {
     return unreachable ??
         'The atServer for $atSign could not be reached. Please check your '

@@ -17,9 +17,6 @@
   before it is thrown, so the keychain reads back as it did, unless undoing
   it fails too, which is logged. Removing an Atsign leaves none of its keys
   behind in the keychain.
-- fix: `RegistrarCramDialog` says the registrar could not be reached when
-  its request gets no response, as package:http reports one, rather than
-  "Something went wrong". at_client_flutter now depends on http directly.
 - fix: reading the keychain throws when its legacy-named store cannot be
   read, rather than reading as a keychain that holds no keys.
 - fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry is not
