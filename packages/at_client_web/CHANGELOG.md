@@ -1,5 +1,6 @@
 ## 0.1.0
 
+- The passkey formats a browser login depends on (at_auth's HKDF labels and sealed record layout, and at_client's names for the records on the atServer) are promised from the first stable release: after it they change only with a compatibility path.
 - Renamed `at_client_web` (it was `at_client_wasm`): apps import `package:at_client_web/at_client_web_web.dart`. A browser that ran an earlier build no longer finds the passkey hints it saved, and logs in as one that does not remember the Atsign; what the earlier build saved stays until the site's data is cleared.
 - `at_client_web_web.dart` re-exports at_client's core API and in-memory storage completely, with `PasskeySession`, which `onboardNewAtSign` and `passkeyLogin` return, and the exceptions they throw: `PasskeyLostException`, `PasskeyOnboardingIncompleteException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException`, `PkamRefusedException`, `AtServerAtKeysLockedException` and at_auth's `PrfUnavailableException`. A browser app needs no other SDK import.
 - `clearPrfMiss()` clears a recorded PRF miss, so in a browser that cannot report PRF support onboarding tries the passkey again rather than refusing for 30 days. A passkey that onboarding creates but cannot use (its second prompt cancelled, or no usable PRF output) is reported to the browser as unknown where the browser supports it.
