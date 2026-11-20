@@ -76,6 +76,13 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// while a start that is failing is still in flight.
   Future<void>? failGate;
 
+  /// Set to keep the refusals stream open across [stopNotifications], as an
+  /// implementation that does not close it would.
+  bool keepRefusalsOnStop = false;
+
+  /// Whether anything listens for refusals.
+  bool get refusalsHeard => _refusals.hasListener;
+
   @override
   Stream<String> get notifications => _notifications.stream;
 
@@ -122,10 +129,12 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     final r = _refusals;
     _notifications = _newNotifications();
     _up = StreamController<bool>.broadcast();
-    _refusals = StreamController<UnAuthenticatedException>.broadcast();
     unawaited(n.close());
     unawaited(u.close());
-    unawaited(r.close());
+    if (!keepRefusalsOnStop) {
+      _refusals = StreamController<UnAuthenticatedException>.broadcast();
+      unawaited(r.close());
+    }
   }
 
   /// The atServer sends one.
@@ -240,6 +249,29 @@ void main() {
         connection: connection,
       );
       monitor.logger.level = 'severe';
+    });
+
+    group(
+        'Given a lookup that leaves its refusals stream open after '
+        'stopNotifications', () {
+      test('when the monitor stops, then it no longer listens for refusals',
+          () async {
+        muxable.keepRefusalsOnStop = true;
+        final up = reaches(NotificationListenerState.listening);
+        monitor.start();
+        await up;
+        expect(muxable.refusalsHeard, isTrue,
+            reason: 'the control: a running monitor listens for refusals');
+
+        final stopped = reaches(NotificationListenerState.notConnected);
+        monitor.stop();
+        await stopped;
+        await pumpEventQueue();
+
+        expect(muxable.refusalsHeard, isFalse,
+            reason: 'a stopped monitor cancels its own refusal subscription, '
+                'whether or not the lookup closes the stream');
+      });
     });
 
     test('is told online when the monitor reaches listening', () async {
