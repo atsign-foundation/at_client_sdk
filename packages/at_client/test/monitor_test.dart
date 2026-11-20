@@ -166,6 +166,11 @@ void main() {
   group('the client connection state', () {
     late AtConnection connection;
 
+    AtAuthErrorReplyException revoked() => AtAuthErrorReplyException(
+        'Failed connecting to @alice. '
+        'error:AT0027:enrollment_id: e1 is revoked',
+        errorCode: 'AT0027');
+
     setUp(() {
       connection = AtConnection(
           atSign: '@alice',
@@ -210,8 +215,7 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 20));
       await muxable.dropConnection();
       await Future.delayed(const Duration(milliseconds: 20));
-      muxable.refuse(UnAuthenticatedException('Failed connecting to @alice. '
-          'error:AT0027:enrollment_id: e1 is revoked'));
+      muxable.refuse(revoked());
       await Future.delayed(const Duration(milliseconds: 20));
 
       expect(connection.current.isRefused, isTrue);
@@ -222,13 +226,14 @@ void main() {
         () async {
       monitor.start();
       await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
       final gate = Completer<void>();
       muxable.stopGate = gate.future;
 
       monitor.stop();
       await Future.delayed(const Duration(milliseconds: 20));
-      muxable.refuse(UnAuthenticatedException('Failed connecting to @alice. '
-          'error:AT0027:enrollment_id: e1 is revoked'));
+      muxable.refuse(revoked());
       await Future.delayed(const Duration(milliseconds: 20));
       gate.complete();
       await Future.delayed(const Duration(milliseconds: 20));
@@ -256,8 +261,7 @@ void main() {
       muxable.deliver('A');
       await Future.delayed(const Duration(milliseconds: 20));
       await muxable.dropConnection();
-      muxable.refuse(UnAuthenticatedException('Failed connecting to @alice. '
-          'error:AT0027:enrollment_id: e1 is revoked'));
+      muxable.refuse(revoked());
       muxable.reconnected();
       await Future.delayed(const Duration(milliseconds: 20));
       handling.complete();
@@ -292,8 +296,7 @@ void main() {
       test(
           'an UnAuthenticatedException is retried on the refusal schedule and '
           'reported refused', () async {
-        muxable.startError = UnAuthenticatedException('Failed connecting to '
-            '@alice. error:AT0027:enrollment_id: e1 is revoked');
+        muxable.startError = revoked();
         monitor.start();
         await Future.delayed(const Duration(milliseconds: 20));
 
@@ -320,8 +323,7 @@ void main() {
       test('a refused start that fails after stop() is not reported', () async {
         final failing = Completer<void>();
         muxable
-          ..startError = UnAuthenticatedException('Failed connecting to '
-              '@alice. error:AT0027:enrollment_id: e1 is revoked')
+          ..startError = revoked()
           ..failGate = failing.future;
         monitor.start();
         await Future.delayed(const Duration(milliseconds: 20));
