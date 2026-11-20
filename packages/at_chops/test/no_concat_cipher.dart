@@ -82,6 +82,9 @@ class _NoConcatList extends ListBase<int> {
       fail('the $_name was concatenated into a new list');
 
   @override
+  Iterator<int> get iterator => fail('the $_name was iterated');
+
+  @override
   List<int> toList({bool growable = true}) =>
       fail('the $_name was copied into a new list');
 }
