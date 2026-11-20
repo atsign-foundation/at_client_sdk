@@ -90,7 +90,7 @@ void main() {
     preference ??= AtClientPreference();
     if (remoteLocalPref != null) preference.remoteLocalPref = remoteLocalPref;
     final client = await AtClientImpl.create(atSign, 'testing', preference,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atKeysIo: noKeysFor(atSign),
             remoteSecondary: buildRecordingRemote(
