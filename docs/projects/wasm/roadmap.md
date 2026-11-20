@@ -4,7 +4,7 @@
 seam designs, the build sequence, the acceptance gates, and the decision log.
 **Scope:** making `AtClient` — and every package beneath it — free of platform
 implementations, so that a browser WasmGC build runs without runtime failures. The
-`at_client_wasm` platform package is the first consumer of the result.
+`at_client_web` platform package is the first consumer of the result.
 **Written against:** `trunk` at `20f7f4da5`, 2026-08-13. Status refreshed against
 `9d9e5f7d7`, 2026-08-27, and against `gkc-client-lifecycle` on 2026-09-13 for the
 transport leg; phase table and document map refreshed 2026-10-18, browser at-keys custody 2026-10-27. Supersedes the single-file `plan.md` (deleted; recoverable at
@@ -100,13 +100,13 @@ The tiers:
 ```
 at_client / at_lookup / at_utils / at_auth / at_chops     ← interfaces only
         ▲                    ▲                    ▲
-at_client_wasm           *_io barrels         at_client_flutter
+at_client_web           *_io barrels         at_client_flutter
 (WebSocket,            (SecureSocket,        (keychain, app dirs)
  IndexedDB keys)        file keystore,       — a consumer today,
                         file logging)          an implementer later
 ```
 
-`SQLite-wasm` was listed in `at_client_wasm` until 2026-09-02. **D-17 took it out of the
+`SQLite-wasm` was listed in `at_client_web` until 2026-09-02. **D-17 took it out of the
 default**, and did not remove the capability: V1 ships a remote-only bundle, so nothing in
 the default payload needs a local store to back. A consumer may still inject a SQLite
 bundle (`package:at_client/sqlite.dart`, D-12); it becomes the browser default in V2, as a
@@ -184,7 +184,7 @@ A platform implementer supplies the three legs of the platform bundle
 `AtClientStorage` and an `AtLookUpFactory` — and hands them to at_client's entry points.
 at_client is not forked, and nothing below its doors names a platform type.
 
-- **`at_client_wasm`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
+- **`at_client_web`** — new, built by this project. A WebSocket-backed `AtLookupMuxable`
   behind an `AtLookUpFactory`, `InMemoryAtClientStorage` for the V1 session
   (**D-18**, reversed 2026-11-13), IndexedDB-backed `WrittenAtKeysIo` (credential hint per the K-6 clarification, retained under K-10/K-11; independent of the storage bundle), `navigator.onLine` connectivity,
   console logging.
@@ -210,23 +210,23 @@ at_client is not forked, and nothing below its doors names a platform type.
 
 ### Tier 4 — non-Dart consumers
 
-A JavaScript/TypeScript facade compiled from `at_client_wasm`'s own entry point and
+A JavaScript/TypeScript facade compiled from `at_client_web`'s own entry point and
 published to npm. Design in [`js-api.md`](js-api.md); rulings D-7..D-9 in
 [`decisions.md`](decisions.md).
 
 ```
         JS / TS apps  (npm: browser SPA · Node service · TS agent)
                     ▲
-        the @JSExport facade — packages/at_client_wasm/lib/src/js/
+        the @JSExport facade — packages/at_client_web/lib/src/js/
                     ▲
-at_client_wasm      *_io barrels      at_client_flutter
+at_client_web      *_io barrels      at_client_flutter
                     ▲
         at_client / at_lookup / at_utils / at_auth / at_chops
 ```
 
 Two things about this tier are worth stating at roadmap level:
 
-- **It adds no Dart package.** The facade is an entry point inside `at_client_wasm`, and
+- **It adds no Dart package.** The facade is an entry point inside `at_client_web`, and
   the npm artifact is a build output, not a pub package — so D-4 stands (amended 2026-10-18 for the package name only).
 - **Node is a target, not just the browser.** Node supplies `WebSocket`,
   `crypto.subtle`, `fetch` and `navigator`, but **no `indexedDB` and no `localStorage`**,
@@ -243,7 +243,7 @@ Two things about this tier are worth stating at roadmap level:
    resolves a platform conditional. Enforced structurally, in CI.
 2. **No runtime failures on web.** The client's logic executes under a WasmGC
    embedding — verified by running the test suites there, not by compiling them.
-3. **`at_client_wasm` exists** and drives a real atServer from a browser: onboard,
+3. **`at_client_web` exists** and drives a real atServer from a browser: onboard,
    read, write, sync, share cross-atSign.
 4. **Behavioural non-regression on native.** Native code paths keep their current
    behaviour, and the native suites stay green at every commit boundary.
@@ -290,7 +290,7 @@ and `at_chops`.
 
 This project therefore owns: `at_lookup`, `at_client`, `at_utils`,
 `at_server_status`, the at_chops dependency verification, the persistence work in
-`at_server`, and `at_client_wasm`. It **depends on** S-5 rather than duplicating it.
+`at_server`, and `at_client_web`. It **depends on** S-5 rather than duplicating it.
 
 `at_auth` also sets the pattern this project follows — the `_io` barrel shape, and the
 ruling that a removed default is preferable to a conditional default.
@@ -304,7 +304,7 @@ ruling that a removed default is preferable to a conditional default.
 | **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup | **Landed** ([#2399], via #2415) — at_lookup 4.0.0 on trunk and on pub.dev; web transport `at_lookup_web.dart` |
 | **3 — Storage**         | V1: the injected storage bundle and the remote-only default. V2: web SQLite, SimpleOPFS per (atSign, enrollmentId) (D-26).         | T2 for storage   | **V1 partly landed** — the `hive.dart`/`memory.dart`/`sqlite.dart` barrels, `at_client` 4.0.0 and the wasm gate are on trunk; the remote-only classes (`RemoteOnlyAtClientStorage`, `NoopSyncQueueStore`, `RemoteWriteThroughKeyStore`, `remote_only`) were deleted from #2430 on 2026-11-13 (D-18 reversed): the V1 session runs on `InMemoryAtClientStorage` (open: #2258–#2261, #2273–#2276, #2336) — PB-3 ([`pb3-storage-bundle.md`](superseded/pb3-storage-bundle.md), superseded). V2 decided, not built |
 | **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 | **Landed** — `at_utils` and `at_client` 4.0.0 |
-| **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_wasm`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-18 (K-6, K-8 superseded; K-10 pointer + K-11 document); first live sessions ran (proxy 2026-10-27, direct on production 2026-11-03, [`at-talk-demo.md`](at-talk-demo.md)) — see [`implementation-plan.md`](implementation-plan.md) §5b |
+| **5 — Browser package** | Web crypto, web lookups, key envelope, passkey sessions, first live browser session. Built as `packages/at_client_web`.           | T3, T4           | **Built to a dev harness, in review** (PB-4, PB-5, [#2338], [#2341]); keys to be reworked to K-1..K-18 (K-6, K-8 superseded; K-10 pointer + K-11 document); first live sessions ran (proxy 2026-10-27, direct on production 2026-11-03, [`at-talk-demo.md`](at-talk-demo.md)) — see [`implementation-plan.md`](implementation-plan.md) §5b |
 | **6 — JS/TS facade**    | The `@JSExport` facade and its TypeScript entry point; the npm package. See [`js-api.md`](js-api.md).                              | T6               | Dev harness only; the `@atsign/at-client-web` facade is a draft plan, gated on OQ-16      |
 | **7 — Deferred**        | File transfer on web, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. Browser onboarding is **no longer deferred** (K-1..K-18). | —                | —                                                                                        |
 
