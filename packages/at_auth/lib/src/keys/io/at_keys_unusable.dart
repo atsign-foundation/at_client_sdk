@@ -104,7 +104,7 @@ String _reasonFor(Object error) {
   final text = switch (error) {
     AtKeysFormatException(:final isJson, :final reason, :final position) =>
       isJson
-          ? 'it is not a JSON object'
+          ? 'it is $reason'
           : 'it is not valid JSON: $reason'
               '${position == null ? '' : ' (at character $position)'}',
     // NOTE: a FormatException's text carries its source, which here is what

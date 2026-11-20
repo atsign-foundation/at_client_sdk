@@ -10,6 +10,7 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtLookupImpl, AtLookupMuxable;
+import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,15 @@ class _MockBiometricStorage extends Mock implements BiometricStorage {}
 class _MockBiometricStorageFile extends Mock implements BiometricStorageFile {}
 
 class _MockAtLookUp extends Mock implements AtLookupImpl {}
+
+/// The level and message of every record logged.
+class _RecordedLogs implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) =>
+      records.add((level: '${record.level}', message: record.message));
+}
 
 /// A keychain the platform refuses to read, or whose one document does not
 /// parse, is refused as unreadable, and nothing is written or sent.
@@ -52,7 +62,14 @@ void main() {
   /// The lookups an activation built, each answering nothing but close.
   late List<_MockAtLookUp> builtLookUps;
 
-  setUpAll(() => KeychainStorage.isWindows = false);
+  final logs = _RecordedLogs();
+
+  setUpAll(() {
+    KeychainStorage.isWindows = false;
+    // NOTE: before anything logs; a logger binds the handler on first use.
+    AtSignLogger.defaultLoggingHandler = logs;
+    AtSignLogger.root_level = 'all';
+  });
 
   setUp(() {
     support = Directory.systemTemp.createTempSync('keychain_unreadable_');
@@ -155,9 +172,12 @@ void main() {
         ),
         throwsA(
           unreadable(
-            message: startsWith(
-              "The keys for $atSign in this device's keychain could not be "
-              'read: ',
+            message: allOf(
+              startsWith(
+                "The keys for $atSign in this device's keychain could not be "
+                'read: ',
+              ),
+              isNot(contains('Every Atsign')),
             ),
             error: isA<PlatformException>(),
           ),
@@ -195,7 +215,12 @@ void main() {
           preference: await loopbackPreference(),
           lookUps: silentLookUps,
         ),
-        throwsA(unreadable(message: anything, error: isA<PlatformException>())),
+        throwsA(
+          unreadable(
+            message: isNot(contains('Every Atsign')),
+            error: isA<PlatformException>(),
+          ),
+        ),
       );
       expectNothingSent();
       expect(changed, isEmpty, reason: 'nothing is written or deleted');
@@ -338,18 +363,30 @@ void main() {
     expect(changed, isEmpty);
   });
 
-  group('On Windows, a keychain write that fails partway leaves the keychain '
-      'as it was', () {
+  group('On Windows', () {
     late Map<String, String> held;
 
     /// The name of the store whose next write fails, once.
     String? failNextWriteOf;
+
+    /// The names of stores whose read throws while they hold something.
+    late Set<String> unreadableStores;
+
+    /// The names of stores whose delete returns and leaves them in place.
+    late Set<String> undeletableStores;
+
+    /// Every store name the keychain asked for.
+    late List<String> touched;
 
     setUp(() {
       KeychainStorage.isWindows = true;
       addTearDown(() => KeychainStorage.isWindows = false);
       held = {};
       failNextWriteOf = null;
+      unreadableStores = {};
+      undeletableStores = {};
+      touched = [];
+      logs.records.clear();
     });
 
     /// A keychain whose stores hold what is written to them, in [held].
@@ -360,8 +397,14 @@ void main() {
             biometricStorage.getStorage(any(), options: any(named: 'options')),
       ).thenAnswer((invocation) async {
         final name = invocation.positionalArguments.first as String;
+        touched.add(name);
         final file = _MockBiometricStorageFile();
-        when(file.read).thenAnswer((_) async => held[name]);
+        when(file.read).thenAnswer((_) async {
+          if (unreadableStores.contains(name) && held.containsKey(name)) {
+            throw PlatformException(code: 'ReadFailed');
+          }
+          return held[name];
+        });
         when(() => file.write(any())).thenAnswer((invocation) async {
           if (failNextWriteOf == name) {
             failNextWriteOf = null;
@@ -369,7 +412,9 @@ void main() {
           }
           held[name] = invocation.positionalArguments.first as String;
         });
-        when(file.delete).thenAnswer((_) async => held.remove(name));
+        when(file.delete).thenAnswer((_) async {
+          if (!undeletableStores.contains(name)) held.remove(name);
+        });
         return file;
       });
       return KeychainStorage(biometricStorage: biometricStorage);
@@ -388,39 +433,266 @@ void main() {
         ),
       );
 
-    test('removing an atSign from a keychain holding others', () async {
+    /// The segments of the current entry held, by name.
+    Iterable<String> segmentsHeld() =>
+        held.keys.where((name) => name.startsWith('${current}_segment_'));
+
+    /// The segment count the current entry's header records.
+    int headerCount() => jsonDecode(held[current]!)['segmentCount'] as int;
+
+    test('removing an atSign leaves no segment of the longer entry', () async {
       final storage = windowsKeychain();
       await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
       await storage.appendAtKeysToKeychain(keys: largeKeys('@bob'));
-      expect(
-        held.keys,
-        contains('${current}_segment_4'),
-        reason: 'the control: the entry spans five segments',
-      );
-      failNextWriteOf = '${current}_segment_1';
+      final longer = headerCount();
 
-      await expectLater(
-        storage.removeAtsignFromKeychain(atSign),
-        throwsA(isA<PlatformException>()),
-      );
+      await storage.removeAtsignFromKeychain('@bob');
 
-      expect(
-        (await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'),
-        [atSign, '@bob'],
-      );
+      expect(headerCount(), lessThan(longer), reason: 'the control');
+      expect(segmentsHeld(), hasLength(headerCount()));
+      expect((await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'), [
+        atSign,
+      ]);
     });
 
-    test('adding the first keys to an empty keychain', () async {
+    test('undoing a failed longer write leaves no segment of it', () async {
       final storage = windowsKeychain();
-      failNextWriteOf = '${current}_segment_1';
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      final shorter = headerCount();
+      failNextWriteOf = '${current}_segment_${shorter + 1}';
 
       await expectLater(
-        storage.appendAtKeysToKeychain(keys: largeKeys(atSign)),
+        storage.appendAtKeysToKeychain(keys: largeKeys('@bob')),
         throwsA(isA<PlatformException>()),
       );
 
-      expect(await storage.readAtKeysData(), isNull);
-      expect(held, isEmpty, reason: 'nothing is left of the failed write');
+      expect(headerCount(), shorter);
+      expect(segmentsHeld(), hasLength(shorter));
+    });
+
+    test('deleting every atSign\'s keys clears the segments of an entry whose '
+        'header does not parse', () async {
+      final storage = windowsKeychain();
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      expect(segmentsHeld(), isNotEmpty, reason: 'the control');
+      held[current] = '{bad';
+
+      await storage.deleteAllAtKeysData();
+
+      expect(held, isEmpty);
+    });
+
+    group('segments are found and deleted the same way', () {
+      /// The highest segment index any store asked for named.
+      int highestIndexTouched() => touched
+          .map((name) => RegExp(r'_(\d+)$').firstMatch(name))
+          .whereType<RegExpMatch>()
+          .map((m) => int.parse(m[1]!))
+          .fold(-1, (a, b) => a > b ? a : b);
+
+      Iterable<String> severeLogs() =>
+          logs.records.where((r) => r.level == 'SEVERE').map((r) => r.message);
+
+      test('a remove whose read of one segment throws still deletes every '
+          'segment the header names', () async {
+        held[current] = '{"segmentCount":3}';
+        for (var i = 0; i < 3; i++) {
+          held['${current}_segment_$i'] = 'part$i';
+        }
+        unreadableStores.add('${current}_segment_1');
+
+        await windowsKeychain().deleteAllAtKeysData();
+
+        expect(held, isEmpty, reason: 'the header and all 3 segments go');
+      });
+
+      test('a remove whose header cannot be read still deletes the segments '
+          'present', () async {
+        held[current] = '{"segmentCount":2}';
+        held['${current}_segment_0'] = 'a';
+        held['${current}_segment_1'] = 'b';
+        unreadableStores.add(current);
+
+        await windowsKeychain().deleteAllAtKeysData();
+
+        expect(held, isEmpty);
+        expect(severeLogs(), isNotEmpty, reason: 'the failure is logged');
+      });
+
+      test('an empty segment does not end the search for the next', () async {
+        held[current] = '{bad';
+        held['${current}_segment_0'] = '';
+        held['${current}_segment_1'] = 'kept?';
+
+        await windowsKeychain().deleteAllAtKeysData();
+
+        expect(held, isEmpty);
+      });
+
+      test('a remove whose segment stays stored logs it at severe and still '
+          'deletes the header', () async {
+        held[current] = '{"segmentCount":2}';
+        held['${current}_segment_0'] = 'a';
+        held['${current}_segment_1'] = 'b';
+        undeletableStores.add('${current}_segment_1');
+
+        await windowsKeychain().deleteAllAtKeysData();
+
+        expect(held.keys, contains('${current}_segment_1'));
+        expect(held, isNot(contains(current)), reason: 'the header is gone');
+        expect(severeLogs(), isNotEmpty);
+      });
+
+      test('a rewrite deletes the stale trailing segments, an empty one '
+          'among them', () async {
+        final storage = windowsKeychain();
+        await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+        final live = headerCount();
+        held['${current}_segment_$live'] = '';
+        held['${current}_segment_${live + 1}'] = 'stale';
+
+        await storage.updateAtKeysInKeychain(
+          atSign: atSign,
+          keys: largeKeys(atSign),
+        );
+
+        expect(segmentsHeld(), hasLength(headerCount()));
+        expect(held.values, isNot(contains('stale')));
+      });
+
+      test('a rewrite whose stale segment stays stored logs it at severe, '
+          'and the write stands', () async {
+        final storage = windowsKeychain();
+        await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+        final live = headerCount();
+        held['${current}_segment_$live'] = 'stale';
+        undeletableStores.add('${current}_segment_$live');
+        logs.records.clear();
+
+        await storage.updateAtKeysInKeychain(
+          atSign: atSign,
+          keys: largeKeys(atSign),
+        );
+
+        expect(severeLogs(), isNotEmpty);
+        expect(headerCount(), live);
+      });
+
+      for (final bad in ['2561', '-1', 'abc']) {
+        test('a legacy header "$bad" is refused on read', () async {
+          held[current] = bad;
+
+          await expectLater(
+            windowsKeychain().readAtKeysData(),
+            throwsA(
+              isA<AtKeysFormatException>().having(
+                (e) => e.reason,
+                'reason',
+                'a legacy segment header whose segmentCount is not a whole '
+                    'number from 0 to 2560',
+              ),
+            ),
+          );
+          expect(highestIndexTouched(), lessThan(2560));
+        });
+      }
+
+      test('a delete over an oversized legacy header clears what is there '
+          'and looks at no segment past the bound', () async {
+        held[current] = '2561';
+        held['${current}_segment_0'] = 'a';
+
+        await windowsKeychain().deleteAllAtKeysData();
+
+        expect(held, isEmpty);
+        expect(highestIndexTouched(), lessThan(2560));
+        expect(severeLogs(), isNotEmpty);
+      });
+
+      test('a write over an oversized legacy header succeeds and looks at '
+          'no segment past the bound', () async {
+        const spp = '@alice_@spp';
+        held[spp] = '2561';
+
+        await windowsKeychain().saveSpp(atSign, Passcode('code', null));
+
+        expect(jsonDecode(held[spp]!)['segmentCount'], 1);
+        expect(highestIndexTouched(), lessThan(2560));
+      });
+    });
+
+    test('a header with no segment count is refused as not the keychain\'s '
+        'format, for every Atsign', () async {
+      held[current] = '{"x":1}';
+      final storage = windowsKeychain();
+
+      await expectLater(
+        storage.readAtKeysData(),
+        throwsA(
+          isA<AtKeysFormatException>().having(
+            (e) => e.reason,
+            'reason',
+            'a JSON object whose segmentCount is not a whole number from 0 '
+                'to 2560',
+          ),
+        ),
+      );
+      await expectLater(
+        const LoopbackFlows().open(
+          atSign,
+          keys: KeychainAtKeysIo(keychainStorage: storage),
+          preference: await loopbackPreference(),
+          lookUps: recordingLookUps,
+        ),
+        throwsA(
+          unreadable(
+            message: equals(
+              "The keys for $atSign in this device's keychain could not be "
+              'read: it is a JSON object whose segmentCount is not a whole '
+              'number from 0 to 2560. Every Atsign stored there is affected.',
+            ),
+          ),
+        ),
+      );
+      expect(built, isEmpty, reason: 'no connection is built');
+    });
+
+    group('a keychain write that fails partway leaves the keychain as it '
+        'was', () {
+      test('removing an atSign from a keychain holding others', () async {
+        final storage = windowsKeychain();
+        await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+        await storage.appendAtKeysToKeychain(keys: largeKeys('@bob'));
+        expect(
+          held.keys,
+          contains('${current}_segment_4'),
+          reason: 'the control: the entry spans five segments',
+        );
+        failNextWriteOf = '${current}_segment_1';
+
+        await expectLater(
+          storage.removeAtsignFromKeychain(atSign),
+          throwsA(isA<PlatformException>()),
+        );
+
+        expect(
+          (await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'),
+          [atSign, '@bob'],
+        );
+      });
+
+      test('adding the first keys to an empty keychain', () async {
+        final storage = windowsKeychain();
+        failNextWriteOf = '${current}_segment_1';
+
+        await expectLater(
+          storage.appendAtKeysToKeychain(keys: largeKeys(atSign)),
+          throwsA(isA<PlatformException>()),
+        );
+
+        expect(await storage.readAtKeysData(), isNull);
+        expect(held, isEmpty, reason: 'nothing is left of the failed write');
+      });
     });
   });
 }

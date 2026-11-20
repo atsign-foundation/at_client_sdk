@@ -23,6 +23,11 @@ part 'keychain_store.dart';
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
 
+/// The most segments a Windows keys entry is read or cleared in: far more
+/// than any keychain holds (about 6MB), and the bound on the search for
+/// segments left behind by a longer earlier entry.
+const int _kMaxWindowsSegments = 2560;
+
 /// Service to manage keychain CRUD operations for Atsigns and SPPs
 class KeychainStorage {
   static final _logger = AtSignLogger('KeychainStorage');
@@ -82,8 +87,22 @@ class KeychainStorage {
   }
 
   /// The segment count a Windows store's header [text] records.
-  static int _segmentCountIn(String text) =>
-      _decodeObject(text, 'the keychain atKeys entry header')['segmentCount'];
+  ///
+  /// A header that is not a JSON object, or whose `segmentCount` is not a
+  /// whole number from zero to [_kMaxWindowsSegments], throws
+  /// [AtKeysFormatException].
+  static int _segmentCountIn(String text) {
+    const what = 'the keychain atKeys entry header';
+    final count = _decodeObject(text, what)['segmentCount'];
+    if (count is! int || count < 0 || count > _kMaxWindowsSegments) {
+      throw AtKeysFormatException.badField(
+        what,
+        'segmentCount',
+        'a whole number from 0 to $_kMaxWindowsSegments',
+      );
+    }
+    return count;
+  }
 
   // Current behaviour:
   // 2.x.x (current):
@@ -457,17 +476,9 @@ class KeychainStorage {
           return null;
         }
 
-        final int segmentCount;
-        final String segmentPrefix;
-        if (storedData.startsWith('{')) {
-          segmentCount = _segmentCountIn(storedData);
-          segmentPrefix = '${keychainStoreName}_segment';
-        } else {
-          // legacy
-          segmentCount = int.tryParse(storedData) ?? 0;
-          String packageName = await getPackageName();
-          segmentPrefix = '${packageName}_data';
-        }
+        final layout = await _segmentLayout(keychainStoreName, storedData);
+        final segmentCount = layout.count;
+        final segmentPrefix = layout.prefix;
         final results = <String>[];
         for (int i = 0; i < segmentCount; i++) {
           final segmentStore = await _getBiometricStorageFile(
@@ -502,45 +513,77 @@ class KeychainStorage {
       return;
     }
 
-    final segmentNames = <String>[];
+    // NOTE: the header is not trusted alone for what to delete: one that
+    // does not parse, or a shorter entry written over a longer one, would
+    // leave segments holding keys behind. The segments it names are deleted
+    // whatever a read of them says, and any present beyond them too. A failure
+    // is logged and the header still deleted, so a retry finds nothing of the
+    // entry it could not clear.
+    final currentPrefix = '${keychainStoreName}_segment';
+    var currentCount = 0;
+    ({int count, String prefix})? legacyLayout;
     try {
       final storedData = await store.read();
       if (storedData != null && storedData.isNotEmpty) {
-        final int segmentCount;
-        final String segmentPrefix;
-        if (storedData.startsWith('{')) {
-          segmentCount = _segmentCountIn(storedData);
-          segmentPrefix = '${keychainStoreName}_segment';
+        final layout = await _segmentLayout(keychainStoreName, storedData);
+        if (layout.prefix == currentPrefix) {
+          currentCount = layout.count;
         } else {
-          segmentCount = int.tryParse(storedData) ?? 0;
-          segmentPrefix = '${await getPackageName()}_data';
-        }
-        for (int i = 0; i < segmentCount; i++) {
-          segmentNames.add('${segmentPrefix}_$i');
+          legacyLayout = layout;
         }
       }
     } catch (e, s) {
-      _logger.warning(
-        'Failed to read Windows keychain segment metadata for deletion',
+      _logger.severe(
+        'Failed to read the Windows keychain header of "$keychainStoreName" '
+        'for deletion; deleting the segments found',
+        e,
+        s,
+      );
+    }
+    try {
+      await _deleteSegmentsFrom(currentPrefix, 0, atLeast: currentCount);
+      if (legacyLayout != null) {
+        await _deleteSegmentsFrom(
+          legacyLayout.prefix,
+          0,
+          atLeast: legacyLayout.count,
+        );
+      }
+    } catch (e, s) {
+      _logger.severe(
+        'Failed to delete the Windows keychain segments of '
+        '"$keychainStoreName"',
         e,
         s,
       );
     }
 
-    for (final segmentName in segmentNames) {
-      try {
-        final segmentStore = await _getBiometricStorageFile(segmentName);
-        await segmentStore.delete();
-      } catch (e, s) {
-        _logger.warning(
-          'Failed to delete Windows keychain segment "$segmentName"',
-          e,
-          s,
-        );
-      }
-    }
-
     await store.delete();
+  }
+
+  /// Deletes the Windows segments `<prefix>_<first>` onward: every one stored
+  /// from [first] up to the first that is not, and every one below [atLeast]
+  /// whether stored or not, never reaching [_kMaxWindowsSegments].
+  ///
+  /// Segments are written from 0 up with none skipped, so those present are
+  /// contiguous; a stored segment, an empty one included, does not end the
+  /// search. They are deleted from the top down, so any left by a failure sit
+  /// directly above the live ones where the next search looks for them.
+  /// Throws on the first segment that cannot be read or deleted, or that is
+  /// still stored after its delete.
+  Future<void> _deleteSegmentsFrom(
+    String prefix,
+    int first, {
+    int atLeast = 0,
+  }) async {
+    int end = first;
+    while (end < _kMaxWindowsSegments &&
+        (end < atLeast || await _isStored('${prefix}_$end'))) {
+      end++;
+    }
+    for (int i = end - 1; i >= first; i--) {
+      await _deleteSegment('${prefix}_$i');
+    }
   }
 
   /// Writes [keychainData] to the keys entry named [name], which held
@@ -601,6 +644,31 @@ class KeychainStorage {
     } else {
       //log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
+      final segmentPrefix = '${biometricStoreName}_segment';
+      // A shorter document leaves the old document's trailing segments
+      // behind; note how many there were so they can be deleted below.
+      int oldSegmentCount = 0;
+      ({int count, String prefix})? legacyLayout;
+      try {
+        final oldHeader = await store.read();
+        if (oldHeader != null && oldHeader.isNotEmpty) {
+          final layout = await _segmentLayout(biometricStoreName, oldHeader);
+          if (layout.prefix == segmentPrefix) {
+            oldSegmentCount = layout.count;
+          } else {
+            legacyLayout = layout;
+          }
+        }
+      } catch (e, s) {
+        // The write itself can still succeed; only the stale segments of an
+        // unreadable header are left in place.
+        _logger.warning(
+          'Failed to read Windows keychain segment metadata before write;'
+          ' stale segments of "$biometricStoreName" may remain',
+          e,
+          s,
+        );
+      }
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
       //log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);
       await store.write(segmentCountInfo);
@@ -614,7 +682,69 @@ class KeychainStorage {
         // log('  => WRITE: segmentValue was ${dataList[i]}', false);
         await segmentStore.write(dataList[i]);
       }
+
+      // NOTE: a failure is logged, not thrown: the new document is already
+      // written. Segments left over sit directly above the live ones, where
+      // the next write looks for them.
+      try {
+        if (legacyLayout != null) {
+          await _deleteSegmentsFrom(
+            legacyLayout.prefix,
+            0,
+            atLeast: legacyLayout.count,
+          );
+        }
+        await _deleteSegmentsFrom(
+          segmentPrefix,
+          dataList.length,
+          atLeast: oldSegmentCount,
+        );
+      } catch (e, s) {
+        _logger.severe(
+          'Failed to delete stale Windows keychain segments of'
+          ' "$biometricStoreName": $e',
+          e,
+          s,
+        );
+      }
     }
+  }
+
+  Future<bool> _isStored(String name) async =>
+      await (await _getBiometricStorageFile(name)).read() != null;
+
+  /// Deletes the Windows segment [name], throwing [StateError] if it is still
+  /// stored afterwards.
+  Future<void> _deleteSegment(String name) async {
+    await (await _getBiometricStorageFile(name)).delete();
+    if (await _isStored(name)) {
+      throw StateError('Windows keychain segment "$name" is still stored');
+    }
+  }
+
+  /// Parses the Windows header [storedData] of [keychainStoreName] into the
+  /// number of segments it points at and the name prefix they use.
+  Future<({int count, String prefix})> _segmentLayout(
+    String keychainStoreName,
+    String storedData,
+  ) async {
+    if (storedData.startsWith('{')) {
+      return (
+        count: _segmentCountIn(storedData),
+        prefix: '${keychainStoreName}_segment',
+      );
+    }
+    // legacy
+    final count = int.tryParse(storedData);
+    if (count == null || count < 0 || count > _kMaxWindowsSegments) {
+      throw AtKeysFormatException.badField(
+        'the keychain atKeys entry header',
+        'segmentCount',
+        'a whole number from 0 to $_kMaxWindowsSegments',
+        kind: 'a legacy segment header',
+      );
+    }
+    return (count: count, prefix: '${await getPackageName()}_data');
   }
 
   Future<BiometricStorageFile> _getBiometricStorageFile(

@@ -214,9 +214,9 @@ void main() {
 
         expect(
           shown(tester),
-          "This device's enrollment for $atSign is still waiting for approval "
-          'and cannot be completed here. Enroll this device again from this '
-          'app to carry on.',
+          '$atSign holds several pending enrollments that match: e-1, e-2. To '
+          'resume one, name both the app and the device',
+          reason: 'enrolling again would only add another pending enrollment',
         );
         expect(result(), isNull, reason: 'the dialog returns no client');
       });

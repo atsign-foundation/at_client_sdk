@@ -28,18 +28,37 @@ Feature: The onboarding dialogs say what failed
     Examples:
       | hold                                            | message                                                                                                                                             |
       | hold no credential                              | This device's enrollment for @alice was denied, cancelled or expired, or never completed. Enroll this device again to use @alice here.              |
-      | hold only several enrollments awaiting approval | This device's enrollment for @alice is still waiting for approval and cannot be completed here. Enroll this device again from this app to carry on. |
+      | hold only one enrollment awaiting approval      | This device's enrollment for @alice is still waiting for approval and cannot be completed here. Enroll this device again from this app to carry on. |
+
+  Scenario: Several pending enrollments that match say to name the app and the device
+    Given keys for @alice that hold only several pending enrollments that match, e-1 and e-2
+    When PkamDialog opens @alice
+    Then it shows "@alice holds several pending enrollments that match: e-1, e-2. To resume one, name both the app and the device" and returns no client
+    And it does not say to enroll again, which would only add another pending enrollment
 
   Scenario Outline: An atServer refusal shows its cause in plain words
     Given keys for @alice the atServer refuses with cause <cause>, on a device that has never held @alice online
     When PkamDialog opens @alice
     Then it shows "<message>" and returns no client
     Examples:
-      | cause                 | message                                                   |
-      | revoked               | This device's access to @alice has been revoked.          |
+      | cause                 | message                                                        |
+      | revoked               | This device's access to @alice has been revoked.               |
       | enrollmentNotApproved | This device's enrollment for @alice has not been approved yet. |
-      | enrollmentDenied      | This device's enrollment for @alice was denied.           |
-      | noAtServer            | @alice is not in the atDirectory.                         |
+      | enrollmentDenied      | This device's enrollment for @alice was denied.                |
+      | invalidEnrollment     | This device's enrollment for @alice has expired.               |
+      | unauthenticated       | The atServer for @alice did not accept this device's keys.     |
+      | otherRefusal          | The atServer for @alice refused this device.                   |
+      | noAtServer            | @alice is not in the atDirectory.                              |
+
+  Scenario Outline: A raw atServer refusal, as at_lookup throws it, shows the same words
+    Given an operation on @alice that fails with <raw refusal>
+    When a dialog shows its failure
+    Then it shows "<message>" and no error code or exception type
+    Examples:
+      | raw refusal                                        | message                                                    |
+      | UnAuthenticatedException "AT0401 CRAM authentication failed" | The atServer for @alice did not accept this device's keys. |
+      | AtLookUpException AT0027 "enrollment revoked"      | This device's access to @alice has been revoked.           |
+      | AtLookUpException AT0025 "enrollment denied"       | This device's enrollment for @alice was denied.            |
 
   Scenario: A network failure still says to check the connection
     Given an activation whose atServer cannot be reached

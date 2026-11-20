@@ -1,5 +1,10 @@
 ## 4.1.0-rc.1
 
+- fix: `FileAtKeysIo.checkWritable` refuses when anything, including a
+  directory, already exists at the keyfile path, so the onboard is refused
+  before anything is sent.
+- feat: `AtKeysFormatException.badField` reports a JSON object whose field
+  is missing or of the wrong kind.
 - feat: a passphrase envelope refused for its passphrase, missing or one
   that does not open it, throws `AtKeysPassphraseException`, an
   `AtDecryptionException`; every other refusal of an envelope is still a

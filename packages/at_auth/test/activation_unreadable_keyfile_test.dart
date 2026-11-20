@@ -96,8 +96,7 @@ class _ProbeFile implements File {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// A platform's refusal to read its keychain, as a plugin reports one.
@@ -397,6 +396,32 @@ void main() {
     });
   });
 
+  group('A keyfile path that is a directory', () {
+    test('is refused as not writable, leaving the directory as it was',
+        () async {
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      Directory(path).createSync();
+
+      await expectLater(
+          FileAtKeysIo(filePath: (_) => path).checkWritable(atSign),
+          throwsA(isA<FileSystemException>()
+              .having((e) => e.path, 'path', path)
+              .having((e) => e.message, 'message',
+                  startsWith('Cannot write the atKeys file: '))));
+      expect(dir.listSync().map((e) => e.path), [path],
+          reason: 'the check leaves no probe file behind');
+    });
+
+    test('is refused before anything is sent to the atServer', () async {
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      Directory(path).createSync();
+
+      await expectLater(activate(FileAtKeysIo(filePath: (_) => path)),
+          throwsA(isA<FileSystemException>()));
+      expectNothingSent();
+    });
+  });
+
   group('The writability check removes the file it creates to find out', () {
     late String path;
     late List<String> probes;
@@ -419,8 +444,9 @@ void main() {
         });
 
     test('and leaves nothing behind once it is deleted', () async {
-      await probing(() => FileAtKeysIo(filePath: (_) => path)
-          .checkWritable(atSign), deletable: true);
+      await probing(
+          () => FileAtKeysIo(filePath: (_) => path).checkWritable(atSign),
+          deletable: true);
 
       expect(probes, hasLength(1),
           reason: 'the control: the check created a probe file');
