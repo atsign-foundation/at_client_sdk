@@ -523,12 +523,15 @@ class KeychainStorage {
       // A shorter document leaves the old document's trailing segments
       // behind; note how many there were so they can be deleted below.
       int oldSegmentCount = 0;
+      ({int count, String prefix})? legacyLayout;
       try {
         final oldHeader = await store.read();
         if (oldHeader != null && oldHeader.isNotEmpty) {
           final layout = await _segmentLayout(biometricStoreName, oldHeader);
           if (layout.prefix == segmentPrefix) {
             oldSegmentCount = layout.count;
+          } else {
+            legacyLayout = layout;
           }
         }
       } catch (e, s) {
@@ -555,15 +558,44 @@ class KeychainStorage {
         await segmentStore.write(dataList[i]);
       }
 
-      // These hold fragments of key material that is no longer in the
-      // document (for example an atSign just removed), so a failed delete
-      // fails the write rather than leaving them behind silently.
-      for (int i = dataList.length; i < oldSegmentCount; i++) {
-        final staleSegment = await _getBiometricStorageFile(
-          '${segmentPrefix}_$i',
+      // NOTE: stale segments are deleted from the top down, stopping at the
+      // first that stays, so any left over sit directly above the live ones
+      // where the next write looks for them. A failure is logged, not thrown:
+      // the new document is already written.
+      try {
+        if (legacyLayout != null) {
+          for (int i = 0; i < legacyLayout.count; i++) {
+            await _deleteSegment('${legacyLayout.prefix}_$i');
+          }
+        }
+        int end = dataList.length;
+        while (end < oldSegmentCount ||
+            await _isStored('${segmentPrefix}_$end')) {
+          end++;
+        }
+        for (int i = end - 1; i >= dataList.length; i--) {
+          await _deleteSegment('${segmentPrefix}_$i');
+        }
+      } catch (e, s) {
+        _logger.warning(
+          'Failed to delete stale Windows keychain segments of'
+          ' "$biometricStoreName": $e',
+          e,
+          s,
         );
-        await staleSegment.delete();
       }
+    }
+  }
+
+  Future<bool> _isStored(String name) async =>
+      await (await _getBiometricStorageFile(name)).read() != null;
+
+  /// Deletes the Windows segment [name], throwing [StateError] if it is still
+  /// stored afterwards.
+  Future<void> _deleteSegment(String name) async {
+    await (await _getBiometricStorageFile(name)).delete();
+    if (await _isStored(name)) {
+      throw StateError('Windows keychain segment "$name" is still stored');
     }
   }
 
