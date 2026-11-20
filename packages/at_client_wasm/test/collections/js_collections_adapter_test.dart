@@ -15,6 +15,16 @@ import 'adapter_test_utils.dart';
 const _ns = 'todos.demo';
 const _day = Duration(days: 1);
 
+/// Data with [levels] nested containers, the data object itself being the
+/// first. Built in a loop, never by literal nesting.
+Map<String, dynamic> _nested(int levels) {
+  Object? inner = 'leaf';
+  for (var i = 0; i < levels; i++) {
+    inner = <String, dynamic>{'k': inner};
+  }
+  return inner! as Map<String, dynamic>;
+}
+
 /// A CEvent subtype the adapter does not know, standing in for one a later
 /// at_client adds.
 final class _LaterEvent extends CEvent {
@@ -81,6 +91,7 @@ void main() {
           CollectionErrorCodes.unreadable: 'COLLECTION_ITEM_UNREADABLE',
           CollectionErrorCodes.hasSubItems: 'COLLECTION_ITEM_HAS_SUB_ITEMS',
           CollectionErrorCodes.wrongType: 'COLLECTION_ITEM_WRONG_TYPE',
+          CollectionErrorCodes.tooDeep: 'COLLECTION_ITEM_TOO_DEEP',
         }.entries.every((e) => e.key == e.value),
         isTrue);
   });
@@ -531,6 +542,124 @@ void main() {
         todos.get(bobs('b1')),
         _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
       );
+    });
+
+    test(
+        'A list reports an item nested deeper than 64 levels as unreadable with COLLECTION_ITEM_TOO_DEEP',
+        () async {
+      final todos = await open();
+      await todos.create({'title': 'a'}, id: 'a1');
+      await bobShares('deep', _nested(65));
+
+      final listing = await todos.list();
+
+      expect(ids(listing.items), ['a1']);
+      expect(listing.unreadable,
+          [(id: 'deep', owner: '@bob', code: CollectionErrorCodes.tooDeep)]);
+    });
+
+    test(
+        'A query reports an item nested deeper than 64 levels as unreadable with COLLECTION_ITEM_TOO_DEEP',
+        () async {
+      final todos = await open();
+      await todos.create({'title': 'a'}, id: 'a1');
+      await bobShares('deep', _nested(65));
+
+      final listing =
+          await todos.query([(path: 'title', op: '==', value: 'a')]);
+
+      expect(ids(listing.items), ['a1']);
+      expect(listing.unreadable,
+          [(id: 'deep', owner: '@bob', code: CollectionErrorCodes.tooDeep)]);
+    });
+
+    test('A list returns an item nested exactly 64 levels deep', () async {
+      await bobShares('edge', _nested(64));
+      final todos = await open();
+
+      final listing = await todos.list();
+
+      expect(ids(listing.items), ['edge']);
+      expect(listing.unreadable, isEmpty);
+      expect(await todos.get(bobs('edge')), isNotNull);
+    });
+
+    test(
+        'A get of an item nested deeper than 64 levels rejects with COLLECTION_ITEM_TOO_DEEP',
+        () async {
+      await bobShares('deep', _nested(65));
+      final todos = await open();
+
+      await expectLater(
+          todos.get(bobs('deep')),
+          _rejectsWith(CollectionErrorCodes.tooDeep,
+              id: 'deep', owner: '@bob'));
+    });
+
+    /// @alice's own item [id], rewritten as another client would store it,
+    /// with data nested 65 levels.
+    Future<void> seedOwnDeep(String id) async {
+      final todos = await open();
+      await todos.create({'title': 'x'}, id: id);
+      server.overwriteValues(
+        (key) => key.sharedBy?.toAtsign() == '@alice'.toAtsign(),
+        '{"type":"Todo","obj":${'{"k":' * 65}1${'}' * 65}}',
+      );
+    }
+
+    test('A remove of an own item nested deeper than 64 levels resolves',
+        () async {
+      await seedOwnDeep('mine');
+      final todos = await open();
+
+      await todos.remove(mine('mine'));
+
+      expect(await rawCollection(alice, _ns).getItems(), isEmpty);
+    });
+
+    test(
+        'A share of an own item nested deeper than 64 levels rejects with COLLECTION_ITEM_TOO_DEEP and writes nothing',
+        () async {
+      await seedOwnDeep('mine');
+      final todos = await open();
+
+      await expectLater(todos.share(mine('mine'), ['@bob']),
+          _rejectsWith(CollectionErrorCodes.tooDeep, id: 'mine'));
+
+      final stored = await rawCollection(alice, _ns).get('mine', alice.atSign);
+      expect(stored.sharedWith, isEmpty);
+    });
+
+    test(
+        'An update of an own item nested deeper than 64 levels replaces its data and resolves',
+        () async {
+      await seedOwnDeep('mine');
+      final todos = await open();
+
+      final updated = await todos.update(mine('mine'), {'title': 'fixed'});
+
+      expect(updated['data'], {'title': 'fixed'});
+      expect((await todos.get(mine('mine')))?['data'], {'title': 'fixed'});
+    });
+
+    test(
+        'A list reports an item nested 100000 levels deep without overflowing the stack',
+        () async {
+      await bobShares('huge', {'title': 'x'});
+      const depth = 100000;
+      server.overwriteValues(
+        (key) =>
+            key.sharedBy?.toAtsign() == '@bob'.toAtsign() &&
+            key.sharedWith?.toAtsign() == '@alice'.toAtsign(),
+        '{"type":"Todo","obj":${'{"k":' * depth}1${'}' * depth}}',
+      );
+      final todos = await open();
+
+      final listing = await todos.list();
+
+      expect(listing.items, isEmpty);
+      expect(listing.unreadable,
+          [(id: 'huge', owner: '@bob', code: CollectionErrorCodes.tooDeep)]);
     });
 
     test(
@@ -1035,6 +1164,26 @@ void main() {
         todos.get(bobs('b1')),
         _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
       );
+    });
+
+    test(
+        'An event for an item nested deeper than 64 levels is delivered with its id and owner',
+        () async {
+      await bobShares('deep', _nested(65));
+      final todos = await open();
+      final events = <JsEvent>[];
+      final errors = <JsCollectionsError>[];
+
+      final cancel = todos.watch(events.add, onError: errors.add);
+      await settle();
+      alice.dataEvents.add(DataUpdated(AtKey.fromString('deep.$_ns@bob')));
+      await settle();
+      await cancel();
+
+      expect(events, [
+        {'type': 'updated', 'id': 'deep', 'owner': '@bob'}
+      ]);
+      expect(errors, isEmpty);
     });
 
     test('Events for other type tags and missing items are delivered',

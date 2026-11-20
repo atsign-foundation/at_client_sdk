@@ -28,6 +28,38 @@ typedef JsListing = ({List<JsItem> items, List<JsUnreadable> unreadable});
 /// event type. See [JsCollectionsAdapter.watch].
 typedef JsEvent = Map<String, Object?>;
 
+/// The deepest nesting of item data that reaches JS, counted in containers
+/// (maps and lists) with the data object itself the first level. The bridge
+/// refuses a `data` argument nested deeper, and no read returns data nested
+/// deeper.
+const maxItemDataDepth = 64;
+
+/// Whether [value] nests containers deeper than [maxItemDataDepth] levels.
+/// Iterative, so data of any depth is measured without recursing.
+bool nestsTooDeep(Object? value) {
+  final pending = <(Object?, int)>[(value, 1)];
+  while (pending.isNotEmpty) {
+    final (current, level) = pending.removeLast();
+    final children = switch (current) {
+      Map<Object?, Object?>(:final values) => values,
+      Iterable<Object?>() => current,
+      _ => null,
+    };
+    if (children == null) continue;
+    if (level > maxItemDataDepth) return true;
+    for (final child in children) {
+      pending.add((child, level + 1));
+    }
+  }
+  return false;
+}
+
+/// The error for an item whose data nests deeper than [maxItemDataDepth].
+JsCollectionsError itemTooDeep({String? id, String? owner}) =>
+    JsCollectionsError(CollectionErrorCodes.tooDeep,
+        'item data nests deeper than $maxItemDataDepth levels',
+        id: id, owner: owner);
+
 /// The collection error codes a [JsCollectionsError] carries (js-api.md §6.1).
 abstract final class CollectionErrorCodes {
   /// A malformed argument: an unknown eventSource or operator, a
@@ -63,6 +95,12 @@ abstract final class CollectionErrorCodes {
 
   /// Any other failure; [JsCollectionsError.kind] names it.
   static const failed = 'COLLECTION_FAILED';
+
+  /// An item whose data nests deeper than [maxItemDataDepth] levels. A
+  /// `list` or `query` reports it as an `unreadable` entry with this code
+  /// and still returns every other item; a `get` of it rejects with this
+  /// code; no path hands its data to JS.
+  static const tooDeep = 'COLLECTION_ITEM_TOO_DEEP';
 }
 
 /// The single error shape every adapter operation rejects with.
@@ -235,7 +273,7 @@ final class JsCollectionsAdapter implements JsCollection {
         await _collection.update(next, unshareWithOthers: false);
         // The stored creation time, not the draft's.
         next.createdAt = current.createdAt;
-        return next;
+        return _item(next);
       });
 
   /// Adds [atSigns] to the recipients of the item at [address]. Never
@@ -243,22 +281,25 @@ final class JsCollectionsAdapter implements JsCollection {
   @override
   Future<JsItem> share(JsItemAddress address, List<String> atSigns) =>
       _write(address, (current) async {
+        // The result carries the item's data, so an item that cannot be
+        // returned is refused before anything is written.
+        if (nestsTooDeep(current.obj)) {
+          throw itemTooDeep(id: current.id, owner: current.owner.toString());
+        }
         await _collection.updateSharedWith(
           current,
           {...current.sharedWith, for (final a in atSigns) a.toAtsign()},
           unshareWithOthers: false,
         );
-        return current;
+        return _item(current);
       });
 
   /// Deletes the item at [address]. Rejects with [CollectionErrorCodes.hasSubItems] when it
   /// has sub-items and [cascade] is false.
   @override
-  Future<void> remove(JsItemAddress address, {bool cascade = false}) =>
-      _write(address, (current) async {
-        await _collection.delete(current, cascade: cascade);
-        return current;
-      }, stateError: CollectionErrorCodes.hasSubItems);
+  Future<void> remove(JsItemAddress address, {bool cascade = false}) => _write(
+      address, (current) => _collection.delete(current, cascade: cascade),
+      stateError: CollectionErrorCodes.hasSubItems);
 
   /// Calls [onEvent] with each AtCollection event and [onError] with each
   /// error on the event stream, until the returned function is called; its
@@ -282,11 +323,13 @@ final class JsCollectionsAdapter implements JsCollection {
     return subscription.cancel;
   }
 
-  Future<JsItem> _write(
+  /// Runs [write] on the item at [address] as just re-read, after the owner
+  /// check, and returns what it returns. A [write] that returns the item
+  /// converts it with [_item] itself, so a `remove` never fails after it
+  /// deleted.
+  Future<R> _write<R>(
     JsItemAddress address,
-    Future<CItem<Map<String, dynamic>>> Function(
-            CItem<Map<String, dynamic>> current)
-        write, {
+    Future<R> Function(CItem<Map<String, dynamic>> current) write, {
     String stateError = CollectionErrorCodes.notFound,
   }) =>
       _guard(
@@ -298,7 +341,7 @@ final class JsCollectionsAdapter implements JsCollection {
                 id: _errorId(address.id), owner: owner);
           }
           final current = await _collection.get(address.id, owner);
-          return _item(await write(current));
+          return await write(current);
         },
         id: _errorId(address.id),
         owner: address.owner,
@@ -311,11 +354,11 @@ final class JsCollectionsAdapter implements JsCollection {
   /// unreadable record whose key names no Atsign is left out, and a warning
   /// names its key.
   Future<JsListing> _read(List<Predicate> predicates) async {
-    final readable = <CItem<Map<String, dynamic>>>[];
+    final all = <CItem<Map<String, dynamic>>>[];
     final unreadable = <JsUnreadable>[];
     final done = Completer<void>();
     final subscription = _collection.getItemsAsStream().listen(
-      readable.add,
+      all.add,
       onError: (Object error, StackTrace stack) {
         if (error is CItemReadException) {
           final entry = _unreadable(error);
@@ -338,6 +381,20 @@ final class JsCollectionsAdapter implements JsCollection {
       await done.future;
     } finally {
       await subscription.cancel();
+    }
+    // An item nested too deep is reported whatever the predicates say, as an
+    // unreadable record is.
+    final readable = <CItem<Map<String, dynamic>>>[];
+    for (final item in all) {
+      if (nestsTooDeep(item.obj)) {
+        unreadable.add((
+          id: item.id,
+          owner: item.owner.toAtsign(),
+          code: CollectionErrorCodes.tooDeep,
+        ));
+      } else {
+        readable.add(item);
+      }
     }
     final List<CItem<Map<String, dynamic>>> matching;
     try {
@@ -426,7 +483,14 @@ final class JsCollectionsAdapter implements JsCollection {
     return field.isNotNull.and(compare(value as Comparable<dynamic>));
   }
 
-  static JsItem _item(CItem<Map<String, dynamic>> item) => {
+  static JsItem _item(CItem<Map<String, dynamic>> item) {
+    if (nestsTooDeep(item.obj)) {
+      throw itemTooDeep(id: item.id, owner: item.owner.toString());
+    }
+    return _itemOf(item);
+  }
+
+  static JsItem _itemOf(CItem<Map<String, dynamic>> item) => {
         'id': item.id,
         'owner': item.owner,
         'type': item.type,

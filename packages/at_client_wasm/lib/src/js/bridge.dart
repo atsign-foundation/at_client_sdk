@@ -152,9 +152,9 @@ List<String> _strings(JSAny? value, String name) {
 final JSObject _objectClass = globalContext['Object']! as JSObject;
 final JSObject _arrayClass = globalContext['Array']! as JSObject;
 
-/// The deepest nesting [_fromJs] accepts. A cyclic page object reaches it
-/// instead of recursing until the stack overflows.
-const _maxJsDepth = 64;
+/// The deepest nesting [_fromJs] accepts and [_jsValue] returns. A cyclic
+/// page object reaches it instead of recursing until the stack overflows.
+const _maxJsDepth = maxItemDataDepth;
 
 /// The JS value [value] as plain Dart values: strings, bools, numbers
 /// (integral ones as `int`), lists and string-keyed maps. Anything else, a
@@ -199,21 +199,28 @@ Object? _fromJs(JSAny? value, String name, [int depth = 0]) {
 
 /// [value] (Dart values, as [_fromJs] makes them) as JS values. A map
 /// becomes an object with no prototype, so a key such as `__proto__` or
-/// `toString` is data and never reaches `Object.prototype`.
-JSAny? _jsValue(Object? value) => switch (value) {
-      null => null,
-      String s => s.toJS,
-      bool b => b.toJS,
-      num n => n.toDouble().toJS,
-      Map<Object?, Object?> m => _bareObject(m),
-      Iterable<Object?> l => [for (final item in l) _jsValue(item)].toJS,
-      _ => throw StateError('not a plain value: ${value.runtimeType}'),
-    };
+/// `toString` is data and never reaches `Object.prototype`. Nesting past
+/// [_maxJsDepth] containers, counted as in [_fromJs], throws
+/// [itemTooDeep] before any recursion goes deeper.
+JSAny? _jsValue(Object? value, [int depth = 0]) {
+  final isContainer = value is Map<Object?, Object?> || value is Iterable;
+  if (isContainer && depth >= _maxJsDepth) throw itemTooDeep();
+  return switch (value) {
+    null => null,
+    String s => s.toJS,
+    bool b => b.toJS,
+    num n => n.toDouble().toJS,
+    Map<Object?, Object?> m => _bareObject(m, depth + 1),
+    Iterable<Object?> l =>
+      [for (final item in l) _jsValue(item, depth + 1)].toJS,
+    _ => throw StateError('not a plain value: ${value.runtimeType}'),
+  };
+}
 
-JSObject _bareObject(Map<Object?, Object?> map) {
+JSObject _bareObject(Map<Object?, Object?> map, int depth) {
   final object =
       _objectClass.callMethodVarArgs('create'.toJS, [null])! as JSObject;
-  map.forEach((k, v) => object[k! as String] = _jsValue(v));
+  map.forEach((k, v) => object[k! as String] = _jsValue(v, depth));
   return object;
 }
 
@@ -387,15 +394,16 @@ class BridgeCollection {
     return _fromJs(value, 'data')! as Map<String, dynamic>;
   }
 
+  /// The item as an object whose `data` is converted from depth 0, so the
+  /// cap counts the data's own levels and not the envelope around it.
   JSObject _item(JsItem item) => _envelope(item);
 
-  JSObject _listing(JsListing listing) => _envelope({
-        'items': [for (final item in listing.items) item],
-        'unreadable': [
-          for (final u in listing.unreadable)
-            {'id': u.id, 'owner': u.owner.toString(), 'code': u.code}
-        ],
-      });
+  JSObject _listing(JsListing listing) => JSObject()
+    ..['items'] = [for (final item in listing.items) _item(item)].toJS
+    ..['unreadable'] = _jsValue([
+      for (final u in listing.unreadable)
+        {'id': u.id, 'owner': u.owner.toString(), 'code': u.code}
+    ]);
 
   /// Creates an item from `data`; `opts` may name its `id` and who it is
   /// `sharedWith`.

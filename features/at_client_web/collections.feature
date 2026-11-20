@@ -77,6 +77,41 @@ Feature: Collections store, read and share items through the session
     When create or update is called with an array as the data, or create with data nested 100 levels deep or with a cyclic object
     Then each rejects with code internal and a message naming data
 
+  Scenario: collection item data nested deeper than 64 levels rejects with COLLECTION_ITEM_TOO_DEEP
+    Given a collection whose item data nests 65 levels, and one that nests 64
+    When get is called
+    Then the 65-level item rejects with COLLECTION_ITEM_TOO_DEEP and the 64-level item resolves
+
+  Scenario: A list reports an item nested deeper than 64 levels as unreadable with COLLECTION_ITEM_TOO_DEEP
+    Given an item another atSign shared whose data nests 65 levels
+    When list is called
+    Then the other items are returned and unreadable holds that item with code COLLECTION_ITEM_TOO_DEEP
+
+  Scenario: A query reports an item nested deeper than 64 levels as unreadable with COLLECTION_ITEM_TOO_DEEP
+    Given an item another atSign shared whose data nests 65 levels
+    When query is called
+    Then the matching items are returned and unreadable holds that item with code COLLECTION_ITEM_TOO_DEEP
+
+  Scenario: A remove of an own item nested deeper than 64 levels resolves
+    Given an item of the session's own whose data nests 65 levels
+    When remove is called
+    Then the item is deleted and the call resolves
+
+  Scenario: A share of an own item nested deeper than 64 levels rejects with COLLECTION_ITEM_TOO_DEEP and writes nothing
+    Given an item of the session's own whose data nests 65 levels
+    When share is called
+    Then the call rejects with COLLECTION_ITEM_TOO_DEEP and the item's recipients are unchanged
+
+  Scenario: An update of an own item nested deeper than 64 levels replaces its data and resolves
+    Given an item of the session's own whose data nests 65 levels
+    When update is called with new data
+    Then the data is replaced and the call resolves with the new data
+
+  Scenario: A list reports an item nested 100000 levels deep without overflowing the stack
+    Given an item another atSign shared whose data nests 100000 levels
+    When list is called
+    Then the call resolves and unreadable holds that item with code COLLECTION_ITEM_TOO_DEEP
+
   Scenario: collection watch delivers events, including unknown, and unsubscribes (T6.5, T6.8)
     Given a collection watch with an event and an error callback
     When an updated event, an event of an unknown type and an error arrive, and the returned function is then called

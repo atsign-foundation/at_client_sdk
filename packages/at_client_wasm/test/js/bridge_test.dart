@@ -217,6 +217,16 @@ Future<_Rejected> _rejected(JSAny? promise) async {
   return settled as _Rejected;
 }
 
+/// Data with [levels] nested containers, the data object itself being the
+/// first. Built in a loop, never by literal nesting.
+Map<String, Object?> _nested(int levels) {
+  Object? inner = 'leaf';
+  for (var i = 0; i < levels; i++) {
+    inner = <String, Object?>{'k': inner};
+  }
+  return inner! as Map<String, Object?>;
+}
+
 JSObject _obj(Map<String, Object?> map) => map.jsify()! as JSObject;
 
 JSAny? _call(JSObject target, String name, [List<JSAny?> args = const []]) =>
@@ -872,6 +882,51 @@ void main() {
         expect(adapter.last, [('a.b', '>=', 3), ('c', 'isNull', null)]);
       });
 
+      test(
+          'collection item data nested deeper than 64 levels rejects with COLLECTION_ITEM_TOO_DEEP',
+          () async {
+        adapter.item = {...adapter.item, 'data': _nested(65)};
+
+        final r = await _rejected(_call(c, 'get', [
+          _obj({'id': 'i1'})
+        ]));
+
+        expect(r.code, CollectionErrorCodes.tooDeep);
+        expect(r.message, isNot(contains('internal')));
+      });
+
+      test('collection item data nested exactly 64 levels deep resolves',
+          () async {
+        adapter.item = {...adapter.item, 'data': _nested(64)};
+        adapter.listing = (items: [adapter.item], unreadable: const []);
+
+        final got = (await _resolved(_call(c, 'get', [
+          _obj({'id': 'i1'})
+        ])))! as JSObject;
+        final listed = (await _resolved(_call(c, 'list')))! as JSObject;
+
+        var levels = 0;
+        JSAny? at = got['data'];
+        while (at.isA<JSObject>()) {
+          levels++;
+          at = (at! as JSObject)['k'];
+        }
+        expect(levels, 64);
+        expect((listed['items']! as JSArray).length, 1);
+      });
+
+      test(
+          'collection item data nested 100000 levels deep rejects without overflowing the stack',
+          () async {
+        adapter.item = {...adapter.item, 'data': _nested(100000)};
+
+        final r = await _rejected(_call(c, 'get', [
+          _obj({'id': 'i1'})
+        ]));
+
+        expect(r.code, CollectionErrorCodes.tooDeep);
+      });
+
       test('collection update, share and remove map their arguments', () async {
         await _resolved(_call(c, 'update', [
           _obj({'id': 'i1'}),
@@ -931,6 +986,7 @@ void main() {
           CollectionErrorCodes.hasSubItems,
           CollectionErrorCodes.invalidArgument,
           CollectionErrorCodes.failed,
+          CollectionErrorCodes.tooDeep,
         ]) {
           adapter.failure = JsCollectionsError(code, 'm');
           expect((await _rejected(_call(c, 'list'))).code, code);

@@ -478,7 +478,7 @@ rejects with `COLLECTION_INVALID_ARGUMENT` before any write when the id is empty
 starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When
 `create` is given no id, `AtCollection` generates one.
 
-**Item data.** `data` for `create` and `update` must be a plain object, not an array, at most 64 levels deep and free of cycles; otherwise the call rejects with code `internal`, naming `data`. Arrays nested inside `data` are valid.
+**Item data.** `data` for `create` and `update` must be a plain object, not an array, at most 64 levels deep and free of cycles; otherwise the call rejects with code `internal`, naming `data`. Arrays nested inside `data` are valid. Item data returned to JS nests at most 64 levels, the data object being the first. An item nested deeper (another client can write one) is reported as unreadable with `COLLECTION_ITEM_TOO_DEEP`: `list` and `query` add an `unreadable` entry and return every other item; `get` and `share` of it reject with that code, and `share` writes nothing; `update` replaces its data and resolves; `remove` deletes it and resolves.
 
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
@@ -620,6 +620,7 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 | `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
 | `COLLECTION_ITEM_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
 | `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing, or leave it out with a warning naming its key when the key names no Atsign | `CItemReadException`. The message names the id and, when the key names one, the owner, not the cause |
+| `COLLECTION_ITEM_TOO_DEEP` | an item whose data nests deeper than 64 levels: rejects `get` and `share` of it (`share` writes nothing); `update` replaces its data and `remove` deletes it, both resolving; `list` and `query` report it as an `unreadable` entry with this code instead of failing | The message names no data; id and owner are set where known |
 | `COLLECTION_ITEM_WRONG_TYPE` | update of an item whose stored type tag is another type's. An untagged (`n/a`) item is adopted. Share and remove work on an item of any type | adapter check on the item as just re-read |
 | `COLLECTION_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
 | `COLLECTION_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
