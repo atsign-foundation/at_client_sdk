@@ -18,16 +18,20 @@ class PasskeyVault {
   /// Takes ownership of [derivation]'s auth seed and sealer, for the [atSign]
   /// it was derived for, which the vault holds in canonical form.
   ///
-  /// Throws [ArgumentError] when the auth seed is not exactly 32 bytes.
+  /// Throws [ArgumentError] when the auth seed is not exactly 32 bytes, after
+  /// overwriting that seed with zeroes and closing the sealer.
   PasskeyVault(PasskeyDerivation derivation, {required String atSign})
       : atSign = atSign.toAtsign(),
         lookupHex = derivation.lookupHex,
         ns = derivation.ns,
-        _authSeed = _checkedSeed(derivation.authSeed),
+        _authSeed = _checkedSeed(derivation),
         _sealer = derivation.sealer;
 
-  static Uint8List _checkedSeed(Uint8List seed) {
+  static Uint8List _checkedSeed(PasskeyDerivation derivation) {
+    final seed = derivation.authSeed;
     if (seed.length != 32) {
+      seed.fillRange(0, seed.length, 0);
+      derivation.sealer.close();
       throw ArgumentError.value(
           seed.length, 'authSeed.length', 'auth seed must be 32 bytes');
     }

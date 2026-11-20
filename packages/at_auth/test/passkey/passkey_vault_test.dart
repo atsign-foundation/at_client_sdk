@@ -155,6 +155,28 @@ void main() {
             throwsArgumentError);
       });
     }
+
+    test(
+        'Given a derivation whose auth seed is not 32 bytes, when a vault is '
+        'built from it, then it throws an ArgumentError, zeroes that seed and '
+        'closes the sealer', () {
+      for (final length in [31, 33]) {
+        final seed = Uint8List(length)..fillRange(0, length, 7);
+        final sealer = SpyRecordSealer(bytesSealer);
+        expect(
+            () => PasskeyVault((
+                  lookupHex: 'a' * 64,
+                  ns: 'b' * 64,
+                  authSeed: seed,
+                  sealer: sealer,
+                ), atSign: '@alice'),
+            throwsArgumentError,
+            reason: 'a $length-byte seed');
+        expect(seed, everyElement(0), reason: 'a $length-byte seed is zeroed');
+        expect(sealer.closeCalls, 1,
+            reason: 'the sealer of a $length-byte seed is closed');
+      }
+    });
   });
 
   group('close while withAuthSeed is in flight', () {
