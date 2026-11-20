@@ -182,6 +182,9 @@ class PendingEnrollment {
     // or after it.
     var written = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      written = false;
       if (_ended.isCompleted) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
@@ -427,6 +430,9 @@ class PendingEnrollment {
   Future<void> _discard(String why) async {
     var removed = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      removed = false;
       if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
       stored
         ..discardEnrollment(enrollmentId)

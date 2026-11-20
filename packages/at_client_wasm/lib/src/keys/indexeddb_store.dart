@@ -4,23 +4,18 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
-import 'package:at_auth/passkey.dart'
-    show
-        PasskeyHintStore,
-        PendingOnboardingRecord,
-        PendingOnboardingStore,
-        UnsupportedPasskeyRecordException;
+import 'package:at_auth/passkey.dart' show PasskeyHintStore;
+import 'package:at_client/at_client.dart' show AtSignLogger;
 import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:web/web.dart';
 
-/// A [PasskeyHintStore] and [PendingOnboardingStore] that persist to
-/// IndexedDB.
+final _logger = AtSignLogger('indexedDbHintStore');
+
+/// A [PasskeyHintStore] that persists to IndexedDB.
 ///
-/// Holds a passkey's credential id and the enrollment id per atSign, and, while
-/// an onboarding is unfinished, its pending record. That record's keys are
-/// sealed by the passkey and hold no APKAM private key; nothing else here is
+/// Holds a passkey's credential id and the enrollment id per atSign, and no
 /// key material.
-class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
+class IndexedDbHintStore implements PasskeyHintStore {
   IndexedDbHintStore._(this._dbName, IDBDatabase db) : _db = db {
     _watchVersionChange(db);
   }
@@ -43,16 +38,23 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
 
   static const _credentialsStore = 'at_client_wasm_credentials';
   static const _enrollmentsStore = 'at_client_wasm_enrollments';
-  static const _pendingStore = 'at_client_wasm_pending';
   static const _defaultDbName = 'at_client_wasm';
+
+  /// The object stores earlier versions created, which an upgrade deletes
+  /// with whatever they hold.
+  static const _retiredStores = [
+    'at_client_wasm_pending',
+    'at_client_wasm_keys'
+  ];
 
   /// The schema version this code creates; a database already at a higher
   /// version is opened as it is.
-  static const _schemaVersion = 3;
+  static const _schemaVersion = 4;
 
-  /// Opens the passkey database, creating its object stores when it is absent
-  /// or below the schema version this code creates; a database at a higher
-  /// version opens as it is.
+  /// Opens the passkey database, creating its object stores and deleting the
+  /// ones earlier versions created when it is absent or below the schema
+  /// version this code creates; a database at a higher version opens as it
+  /// is.
   ///
   /// Fails with [IndexedDbException] when the browser refuses the open or
   /// another connection holds the database open and blocks an upgrade.
@@ -72,14 +74,16 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
 
         request.onupgradeneeded = (Event event) {
           final db = request.result as IDBDatabase;
+          for (final retired in _retiredStores) {
+            if (db.objectStoreNames.contains(retired)) {
+              db.deleteObjectStore(retired);
+            }
+          }
           if (!db.objectStoreNames.contains(_credentialsStore)) {
             db.createObjectStore(_credentialsStore);
           }
           if (!db.objectStoreNames.contains(_enrollmentsStore)) {
             db.createObjectStore(_enrollmentsStore);
-          }
-          if (!db.objectStoreNames.contains(_pendingStore)) {
-            db.createObjectStore(_pendingStore);
           }
         }.toJS;
 
@@ -158,19 +162,13 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
         await _transactionToFuture(tx);
       });
 
-  /// The value stored under [atSign] in [storeName], as IndexedDB holds it.
-  Future<JSAny?> _read(String storeName, String atSign) =>
+  Future<Uint8List?> _get(String storeName, String atSign) =>
       _guarded('read', () async {
         final db = await _connection();
         final tx = db.transaction(storeName.toJS, 'readonly');
         final store = tx.objectStore(storeName);
         final request = store.get(atSign.toJS);
-        return await _requestToFuture<JSAny?>(request);
-      });
-
-  Future<Uint8List?> _get(String storeName, String atSign) =>
-      _guarded('read', () async {
-        final result = await _read(storeName, atSign);
+        final result = await _requestToFuture<JSAny?>(request);
         if (result == null) return null;
         final jsArray = result as JSUint8Array;
         return Uint8List.fromList(jsArray.toDart);
@@ -209,24 +207,6 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
         await done;
       });
 
-  /// Deletes the passkey credential id and the enrollment id of the [atSign]
-  /// in one transaction; none is fine. Other atSigns' hints stay.
-  Future<void> deleteHints(String atSign) => _guarded('delete', () async {
-        final db = await _connection();
-        final tx = db.transaction(
-            [_credentialsStore.toJS, _enrollmentsStore.toJS].toJS, 'readwrite');
-        final done = _transactionToFuture(tx);
-        try {
-          tx.objectStore(_credentialsStore).delete(atSign.toJS);
-          tx.objectStore(_enrollmentsStore).delete(atSign.toJS);
-        } on Object {
-          tx.abort();
-          await done.catchError((_) {});
-          rethrow;
-        }
-        await done;
-      });
-
   /// Retrieves the passkey credential ID for the [atSign].
   @override
   Future<Uint8List?> credentialId(String atSign) =>
@@ -237,52 +217,21 @@ class IndexedDbHintStore implements PasskeyHintStore, PendingOnboardingStore {
   Future<void> putEnrollmentId(String atSign, String id) =>
       _put(_enrollmentsStore, atSign, utf8.encode(id));
 
-  /// Retrieves the enrollment id for the [atSign].
+  /// Retrieves the enrollment id for the [atSign], or null when there is none
+  /// or its stored bytes are not UTF-8, which is logged as a warning.
   @override
   Future<String?> enrollmentId(String atSign) async {
     final bytes = await _get(_enrollmentsStore, atSign);
-    return bytes == null ? null : utf8.decode(bytes);
-  }
-
-  /// The pending onboarding record of the [atSign], or null when there is none.
-  ///
-  /// Throws [UnsupportedPasskeyRecordException] when the stored value is not
-  /// a pending onboarding record, including when it is not bytes.
-  @override
-  Future<PendingOnboardingRecord?> get(String atSign) async {
-    final value = await _read(_pendingStore, atSign);
-    if (value == null) return null;
-    if (!value.isA<JSUint8Array>()) {
-      throw UnsupportedPasskeyRecordException(
-          'pending onboarding record is not bytes');
-    }
-    final bytes = (value as JSUint8Array).toDart;
-    Object? json;
+    if (bytes == null) return null;
     try {
-      json = jsonDecode(utf8.decode(bytes));
+      return utf8.decode(bytes);
     } on FormatException {
-      // Falls through to the shape check below.
+      // NOTE: the warning never carries the stored bytes.
+      _logger.warning('the remembered enrollment id of $atSign is not UTF-8; '
+          'it counts as none');
+      return null;
     }
-    if (json is! Map<String, dynamic>) {
-      throw UnsupportedPasskeyRecordException(
-          'pending onboarding record is not a JSON object');
-    }
-    return PendingOnboardingRecord.fromJson(json);
   }
-
-  /// Stores the pending onboarding [record] of the [atSign], replacing any.
-  @override
-  Future<void> put(String atSign, PendingOnboardingRecord record) =>
-      _put(_pendingStore, atSign, utf8.encode(jsonEncode(record.toJson())));
-
-  /// Deletes the pending onboarding record of the [atSign]; none is fine.
-  @override
-  Future<void> delete(String atSign) => _guarded('delete', () async {
-        final db = await _connection();
-        final tx = db.transaction(_pendingStore.toJS, 'readwrite');
-        tx.objectStore(_pendingStore).delete(atSign.toJS);
-        await _transactionToFuture(tx);
-      });
 
   /// Closes the database connection; the store does not reopen afterwards.
   void close() {

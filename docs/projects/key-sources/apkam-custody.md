@@ -304,12 +304,18 @@ client running on a store that forgets would mint a signing root whose private
 is lost. Trunk's guard is the store's type: a client on any other `AtKeysIo`
 mints no root, signing keys or key package and skips the enrollment snapshot.
 
-The server-backed store needs a conditional update on the atServer before it
-ships. Devices that share a synced passkey share one enrollment and one record
+Every write of the server-backed store holds the enrollment's lock. Devices
+that share a synced passkey share one enrollment and one record
 ([section 9](#9-the-browser-as-the-only-device)), so two of them can write it at
 once, and with a plain `update` the later write drops what the earlier one
 filed. A dropped root or nskey private can't be replaced. at_server trunk has
-no compare-and-swap today.
+no compare-and-swap, so the store takes a server mutex on
+`atkeys-lock.<enrollmentId>.a.__e@<atSign>` from before it reads the record
+until it puts, and still refuses a write that would drop stored material and
+reads each write back. The lock is not a fence: a put sent while the lease is
+held can land after it expires, once another writer has taken the lock and
+put, and then drops that writer's material while both read-backs match. The
+only guard is that a put needs at least half the lock's ttl left on its lease.
 
 Each platform reports whether it achieved per-operation, per-session or no
 prompting, so policy can see what it got.
@@ -401,7 +407,7 @@ be converted to compact hex. A pin test still guards it
 | at_client_flutter | A federated `at_security_platform` plugin for Darwin (CryptoKit), Android (Keystore) and Windows (NCrypt); `KeychainAtKeysIo` keeps only references and public halves |
 | at_client_web | `WebAuthnSecurityPlatform`, as in [section 9](#9-the-browser-as-the-only-device) |
 | at_commons, at_lookup | none; the PKAM grammar already carries `ecc_secp256r1` and `mldsa65` |
-| at_server | a conditional update (compare-and-swap) on a record, a prerequisite for the server-backed store ([section 8](#8-opening-a-session)); a pin test that ecc PKAM signatures are compact hex |
+| at_server | a pin test that ecc PKAM signatures are compact hex |
 | docs | a trusted-devices decision record that separates APKAM custody from the device-assertion credential, which must never be a PKAM key, and holds the tier rule: chosen once at enrollment, recorded, never run below |
 
 `PasskeyVault` in at_auth is the passkey core. It does not implement `CustodySession`: `prf()` returns raw bytes, which would put kek material in Dart memory.

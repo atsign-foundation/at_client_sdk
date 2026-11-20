@@ -54,11 +54,6 @@ class _Lock implements SetupLock {
   Future<T> run<T>(String name, Future<T> Function() body) => body();
 }
 
-class _NoPendingRecord extends Fake implements PendingOnboardingStore {
-  @override
-  Future<PendingOnboardingRecord?> get(String atSign) async => null;
-}
-
 class _Gateway extends Fake implements EnrollmentGateway {
   @override
   String get device => 'Test Device';
@@ -197,7 +192,6 @@ void main() {
           gateway: _Gateway(),
           credentials: hints,
           enrollmentIds: hints,
-          pendingStore: _NoPendingRecord(),
           setupLock: _Lock(),
           setupLockPrefix: 'test:setup',
           deriver: _Deriver());

@@ -6,6 +6,7 @@ import 'package:at_commons/at_commons.dart'
 import 'package:at_commons/atsign.dart';
 
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/client/server_mutex.dart';
 
 /// Reads and writes an enrollment's sealed @keys document over that
 /// enrollment's authenticated connection.
@@ -15,6 +16,11 @@ abstract class EnrollmentDocumentStore {
 
   /// Writes [document], replacing any document of that name.
   Future<void> put(String atSign, String enrollmentId, String document);
+
+  /// Takes the lock on the document of [enrollmentId] for [ttl], or returns
+  /// null while it is held. Every other failure is thrown.
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+      {required Duration ttl});
 }
 
 final _enrollmentId = RegExp(r'^[a-z0-9_-]+$');
@@ -48,8 +54,27 @@ AtKey _documentKey(String enrollmentId, String atSign) {
     ..sharedBy = atSign.toAtsign();
 }
 
+/// The name of the lock on an enrollment's document,
+/// `atkeys-lock.<enrollmentId>.a.__e@<atsign>` with the atSign canonical.
+///
+/// Throws [ArgumentError] when [enrollmentId] is empty or holds a character
+/// outside `a-z 0-9 _ -`.
+String enrollmentLockKey(String enrollmentId, String atSign) =>
+    '${_lockKey(enrollmentId, atSign)}';
+
+/// The [AtKey] of the lock on the document of [enrollmentId] at [atSign]: a
+/// self record in the enrollment's own namespace, beside the document.
+AtKey _lockKey(String enrollmentId, String atSign) {
+  checkEnrollmentId(enrollmentId);
+  return AtKey()
+    ..key = 'atkeys-lock.$enrollmentId.a'
+    ..namespace = '__e'
+    ..sharedBy = atSign.toAtsign();
+}
+
 /// Reads and writes documents on [remote], the enrollment's own
-/// PKAM-authenticated connection, which it leaves open.
+/// PKAM-authenticated connection, which it leaves open, and takes their
+/// locks there as server mutexes.
 class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
   RemoteEnrollmentDocumentStore(this.remote);
 
@@ -88,4 +113,13 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
         .buildCommand();
     await remote.executeCommand(command, auth: true);
   }
+
+  @override
+  Future<ServerMutexLease?> tryLock(String atSign, String enrollmentId,
+          {required Duration ttl}) async =>
+      takeServerMutex(remote,
+          atSign: atSign.toAtsign(),
+          enrollmentId: enrollmentId,
+          key: _lockKey(enrollmentId, atSign),
+          ttl: ttl);
 }

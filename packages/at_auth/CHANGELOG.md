@@ -1,19 +1,16 @@
 ## 4.1.0-rc.1
 
+- docs: `WrittenAtKeysIo.update` says an implementation may run its mutate more than once, each time on a fresh read, keeping only the last run's changes.
+- feat: `completeActivationOf` finishes an activation started with `completeActivation: false`, on a connection the caller holds: it publishes the encryption public key it is given, when it is given one, and deletes the CRAM secret. It refuses a key holding a carriage return or a line feed before it sends anything, and counts a CRAM secret the atServer reports as not found as deleted. `AtAuth.completeActivation()` now behaves the same, so it no longer throws when the atServer reports the CRAM secret as not found, and it refuses a multi-line key before it sends anything.
 - fix: passkey registration and unlock refuse a PRF output that is missing, the wrong length or all zeroes, with `PrfUnavailableException` and the one message "The authenticator did not return a usable PRF result". A passkey that registration created but could not use is reported to the platform as unknown where the port supports it, without delaying the error.
 - fix: `PrfSecret(...)` throws `ArgumentError` for 32 zero bytes, and `PrfSecret.output` throws `StateError` once `wipe()` has run.
 - fix: `prfUnsupportedMessage` now reads "This platform or authenticator does not support passkey PRF. Use one that does." and no longer names the browser.
 - feat: `passkeyDisplayName` and `passkeyDisplayNameMaxBytes` in `package:at_auth/passkey.dart` are the display-name rule for a passkey, which the browser's passkey port uses and another platform's port can: the enrollment time in UTC to the minute, then the device name, within 64 UTF-8 bytes.
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and `PasskeyRecordCodec.seal` and `open` take the atSign and the record type.
+- fix: `PasskeyVault` holds its Atsign in canonical form, so a record sealed for `@Alice` opens for `@alice`.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
 - fix: long untrusted values in passkey error messages are now shortened, and `clipForMessage` is a new helper in `package:at_auth/passkey.dart` that does the shortening.
 - feat: `UnknownCredentialSignal` is a capability interface in `package:at_auth/passkey.dart` for a `PasskeyPort` that can tell the platform a passkey no longer belongs to an account. `PasskeyPrf.signalUnknownCredential` calls it when the port implements it, does nothing otherwise, and ignores a failing signal.
-- feat: `PendingOnboardingStore` is a new port in `package:at_auth/passkey.dart`
-  for the one sealed record per atSign that an activation in progress keeps,
-  with `PendingOnboardingRecord` (credential id, enrollment id, the minted
-  public encryption key and the sealed body). Its sealed body uses the new
-  `PasskeyRecordType.pending`. A record that cannot be read back throws
-  `UnsupportedPasskeyRecordException`.
 - feat: `package:at_auth/passkey.dart` is a new library for passkey-held keys.
   It runs the passkey PRF ceremonies (register, then unlock) and keeps a
   PRF-unavailable flag, which is set only when the platform definitely reports
@@ -29,12 +26,6 @@
   caller, and `recordPrfSalt()` is synchronous. The four HKDF labels (record id,
   pointer namespace, seal key, auth seed) share the form
   `at_auth/custody/<name>/v1`.
-- feat: `ClosableAtKeysIo` is a new interface, exported with `AtKeysIo`, for a
-  key store that holds something to release. It declares `closedByClient` and
-  `close()`; `AtKeysIo` and its subclasses gain no members, so a class that
-  implements them compiles as before. A client closes a key store only when it
-  is a `ClosableAtKeysIo` flagged `closedByClient`; any other store is lent to
-  it.
 - feat: an atServer's `error:` reply to a `from:`, `pkam:` or `cram:` throws
   `AtAuthErrorReplyException`, an `UnAuthenticatedException` whose
   `errorCode` is the reply's code. `AtAuth.onboard` still reports a failed

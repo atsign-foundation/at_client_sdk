@@ -14,28 +14,6 @@ sealed class AtKeysIo {
   FutureOr<AtKeys> read(String atsign);
 }
 
-/// A key store whose lifetime can be handed to the client that runs on it.
-///
-/// Implemented by a store that holds something to release (a key, a handle),
-/// on top of the [AtKeysIo] it is.
-/// A store that holds nothing does not implement it and is never closed by a
-/// client. A client closes a store only when it is a [ClosableAtKeysIo] and
-/// [closedByClient] is true; otherwise the store is lent to it, and closing it
-/// is the caller's job.
-abstract class ClosableAtKeysIo implements AtKeysIo {
-  /// Whether the client that runs on this store closes it when it stops.
-  ///
-  /// False means the store is lent: the client only reads and writes through
-  /// it. True hands the store's lifetime to the client, which closes it once
-  /// its connections have stopped.
-  bool get closedByClient;
-
-  /// Releases what this store holds. Idempotent.
-  ///
-  /// A client calls it on stop only when [closedByClient] is true.
-  FutureOr<void> close();
-}
-
 /// An interface that defines methods for AtKeys that can be written.
 /// It can be implemented by classes that write AtKeys to different sources,
 /// such as file system or keychain.
@@ -98,6 +76,10 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   /// how a caller that finds the material already there — re-delivery is the
   /// substrate's normal mode — avoids rewriting the store to say nothing.
   /// Throwing from it abandons the write too.
+  ///
+  /// An implementation may run [mutate] more than once, each time on a fresh
+  /// read, and writes only what the last run left. So [mutate] decides from
+  /// the [AtKeys] it is given, and resets anything it records outside them.
   ///
   /// **This never creates.** It is a read-modify-write of material that must
   /// already be there, and [read] throws when it is not — so an implementation

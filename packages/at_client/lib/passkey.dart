@@ -1,9 +1,14 @@
 /// The passkey custody surface: onboarding an atSign with a passkey, opening
-/// it again, and the enrollment gateway, stores and @keys IO they run on.
+/// it again, the session either returns, and the enrollment gateway, stores
+/// and @keys IO they run on.
 library;
 
 export 'src/passkey/at_server_at_keys_io.dart'
-    show AtServerAtKeysIo, AtServerAtKeysWriteException;
+    show
+        AtServerAtKeysIo,
+        AtServerAtKeysLockedException,
+        AtServerAtKeysWriteException;
+export 'src/passkey/completion_due_record.dart' show CompletionDue;
 export 'src/passkey/enrollment_document_store.dart'
     show EnrollmentDocumentStore, enrollmentDocumentKey;
 export 'src/passkey/enrollment_gateway.dart'
@@ -19,13 +24,13 @@ export 'src/passkey/passkey_custody.dart'
         EnrollmentGateway,
         EnrollmentSession,
         MissingAtKeysDocumentException,
-        OnboardingIncompleteException,
         PasskeyCustody,
         PasskeyLostException,
-        PendingOnboarding,
+        PasskeyOnboardingIncompleteException,
         PkamRefusedException,
         PublicKeyMismatchException,
+        PublishedEncryptionKey,
         StoragePersistence,
         canonicalPasskeyAtSign;
-export 'src/passkey/pending_keys_journal.dart' show PendingKeysJournal;
+export 'src/passkey/passkey_session.dart' show PasskeySession;
 export 'src/passkey/public_lookup.dart' show publicLookup;

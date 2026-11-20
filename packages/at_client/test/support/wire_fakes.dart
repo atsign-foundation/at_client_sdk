@@ -14,25 +14,31 @@ class Wire {
   final finders = <SecondaryAddressFinder?>[];
   final lookUpsBuilt = <WireLookUp>[];
 
-  /// What PKAM answers; false is a refusal.
+  /// Whether the authenticator succeeds. False is an authenticator reporting
+  /// failure, which PKAM returns as false.
   var pkamAccepted = true;
 
   /// Whether PKAM runs the authenticator the lookUp was built with, as a real
-  /// connection does: it reads the keys, answers `from:` with a challenge and
-  /// records each `pkam:` command in [pkamCommands]. Off, PKAM never calls it.
+  /// connection does: it reads the keys, answers `from:` with a challenge,
+  /// records each `pkam:` command in [pkamCommands] and answers it with
+  /// [pkamReply]. Off, PKAM never calls it.
   var runsAuthenticator = false;
 
   /// Every `pkam:` command an authenticator sent, in order.
   final pkamCommands = <String>[];
 
-  /// When set, PKAM throws it instead of answering.
-  Object? pkamThrows;
+  /// What a `pkam:` an authenticator sends is answered with.
+  var pkamReply = 'data:success';
 
   /// What a `lookup:` or `llookup:` command answers; null answers nothing.
+  /// An `error:<code>-<text>` answer is thrown as the [AtLookUpException] a
+  /// real `AtLookupImpl` throws for it, as one never returns an `error:`
+  /// reply.
   String? lookupAnswer;
 
-  /// One entry per PKAM, taken in order: that PKAM waits for it, then answers
-  /// its value. Once empty, PKAM answers [pkamAccepted] at once.
+  /// One entry per PKAM, taken in order: that PKAM waits for it, then goes by
+  /// its value as by [pkamAccepted]. Once empty, PKAM goes by [pkamAccepted]
+  /// at once.
   final pkamScript = Queue<Completer<bool>>();
 
   /// Whether the connection itself fails: PKAM throws instead of answering.
@@ -68,6 +74,8 @@ class Wire {
 class WireLookUp implements AtLookupMuxable {
   WireLookUp(this._wire);
 
+  static final _errorReply = RegExp(r'^error:(AT\d{4})[-:]?(.*)$');
+
   final Wire _wire;
 
   @override
@@ -86,6 +94,8 @@ class WireLookUp implements AtLookupMuxable {
   @override
   Stream<bool> get notificationConnectionUp => const Stream.empty();
 
+  /// Returns what the authenticator reports: an authenticator that reports
+  /// failure is a false, which [AtLookUp.pkamAuthenticate]'s contract permits.
   @override
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
@@ -94,9 +104,6 @@ class WireLookUp implements AtLookupMuxable {
     if (_wire.runsAuthenticator && run != null) {
       return run(_WireExecutor(_wire));
     }
-    final thrown = _wire.pkamThrows;
-    if (thrown != null) throw thrown;
-
     if (_wire.pkamScript.isNotEmpty) {
       return _wire.pkamScript.removeFirst().future;
     }
@@ -109,9 +116,11 @@ class WireLookUp implements AtLookupMuxable {
     commandsSent++;
     final isLookup =
         command.startsWith('lookup:') || command.startsWith('llookup:');
-    return isLookup && _wire.lookupAnswer != null
-        ? _wire.lookupAnswer
-        : _wire.answer?.call(command);
+    final lookupAnswer = _wire.lookupAnswer;
+    if (!isLookup || lookupAnswer == null) return _wire.answer?.call(command);
+    final error = _errorReply.firstMatch(lookupAnswer);
+    if (error != null) throw AtLookUpException(error[1]!, error[2]!);
+    return lookupAnswer;
   }
 
   @override
@@ -151,7 +160,7 @@ class WireLookUp implements AtLookupMuxable {
 }
 
 /// The connection an authenticator sees: answers `from:` with a challenge and
-/// accepts every `pkam:`, recording it.
+/// every `pkam:` with [Wire.pkamReply], recording it.
 class _WireExecutor implements AtCommandExecutor {
   _WireExecutor(this._wire);
 
@@ -168,7 +177,7 @@ class _WireExecutor implements AtCommandExecutor {
     }
     if (command.startsWith('pkam:')) {
       _wire.pkamCommands.add(command);
-      return 'data:success';
+      return _wire.pkamReply;
     }
     return 'error:unexpected $command';
   }

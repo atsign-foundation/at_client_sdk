@@ -12,7 +12,7 @@
 | B | **One PRF call, then HKDF; no stored salt** | Gary's model (second PRF call with a random salt stored in the blob); browser-onboarding's `R` |
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
-| C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27) | — |
+| C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27; amended 2026-11-19: a login without saved hints whose onboarding's own delete of the CRAM secret answered and whose completion is still due publishes the document's key over the other) | — |
 | D | **Third derivation, the auth seed**, seeds the enrollment's ML-DSA-65 APKAM key, never stored — the primary PKAM-key path (K-12). Fallbacks ruled by K-13 | #2295 (H-6 seed label) adopted; K-8's APKAM key generated and stored in the blob |
 | — | Rejected: a per-write data key (C3) | #2295 |
 
@@ -93,8 +93,8 @@ A separate label keeps the APKAM key independent of the lookup key (which the se
 |---|---|
 | API | `onboardNewAtSign`, `passkeyLogin` (`atSign` required), `prfSupported`, `clearPrfMiss`, each in `at_client_wasm_web.dart`; `onboardNewAtSign` and `passkeyLogin` take an optional `SessionTransportOptions` |
 | Derivation | `PasskeyPrf` runs the one PRF call; `PasskeyVault` holds the derived record key, pointer lookup, pointer namespace and auth seed, and seals and opens records |
-| Exceptions | `PrfUnavailableException`, `PasskeyLostException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException`, `OnboardingIncompleteException`, `SetupLockTimeoutException`, `IndexedDbException`; a refused PKAM is always `PasskeyLostException` with `PkamRefusedException` as its cause |
-| Setup lock | Per canonical atSign, held across onboarding; login takes it only with a pending record, with no saved hints, or for the stale-hints retry |
+| Exceptions | `PrfUnavailableException`, `PasskeyLostException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException`, `SetupLockTimeoutException`, `IndexedDbException`, `PasskeyOnboardingIncompleteException`; a refused PKAM is always `PasskeyLostException` with `PkamRefusedException` as its cause, and an `Exception` that stops `onboardNewAtSign` once the pointer is written is always the cause of a `PasskeyOnboardingIncompleteException` |
+| Setup lock | Per canonical atSign, held across onboarding; login takes it only with no saved hints, or for the stale-hints retry |
 | Write order | Document first, then the pointer |
 | APKAM key | `authSeed` seeds it on every open; never stored |
 | Key store | `AtServerAtKeysIo` reads and writes the sealed document through the enrollment's own connection |

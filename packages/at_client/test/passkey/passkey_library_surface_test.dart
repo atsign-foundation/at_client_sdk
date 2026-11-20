@@ -1,8 +1,6 @@
 import 'package:at_auth/at_auth.dart' show AtKeys, WrittenAtKeysIo;
 import 'package:at_client/at_client.dart' show AtClient;
 import 'package:at_client/passkey.dart';
-import 'package:at_client/src/passkey/passkey_custody.dart'
-    show ActivationUnfinishedException;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart' show Fake;
@@ -66,8 +64,7 @@ void main() {
       Future<AtKeys> activate(
           {required String atSign,
           required String cram,
-          required ApkamKeyPair apkamKeyPair,
-          WrittenAtKeysIo? keysIo}) async {
+          required ApkamKeyPair apkamKeyPair}) async {
         seen = apkamKeyPair;
         throw StateError('stop');
       }
@@ -100,14 +97,6 @@ void main() {
       expect(_PointerReader(), isA<EnrollmentPointerReader>());
       expect(_Pointers(), isA<EnrollmentPointerReader>());
       expect(_Pointers(), isA<EnrollmentPointerStore>());
-    });
-
-    test('PendingKeysJournal is exported as a WrittenAtKeysIo', () {
-      // The bound makes this fail to compile unless the exported class is a
-      // WrittenAtKeysIo.
-      Type journalType<T extends WrittenAtKeysIo>() => T;
-      expect(journalType<PendingKeysJournal>(), PendingKeysJournal);
-      expect(PendingKeysJournal.new, same(PendingKeysJournal.new));
     });
 
     test('StoragePersistence answers a persistence request', () async {
@@ -148,14 +137,16 @@ void main() {
       expect(gateway.device, 'browser');
     });
 
-    test('PasskeyCustody, PendingOnboarding and AtServerAtKeysIo are named',
-        () {
-      // NOTE: none is constructible without a vault or a passkey, so each is
-      // reached through a member the library hands out.
-      Future<void> Function() abandonOf(PendingOnboarding p) => p.abandon;
+    test('PasskeyCustody and AtServerAtKeysIo are named', () {
       final constructors = [PasskeyCustody.new, AtServerAtKeysIo.new];
-      expect(abandonOf, isA<Function>());
       expect(constructors, hasLength(2));
+    });
+  });
+
+  group('enums', () {
+    test('CompletionDue names what a completion-due record says', () {
+      expect(CompletionDue.values,
+          [CompletionDue.activated, CompletionDue.cramSecretDeleted]);
     });
   });
 
@@ -167,21 +158,21 @@ void main() {
         PasskeyLostException('@alice', 'no passkey'),
         MissingAtKeysDocumentException('eid1'),
         PublicKeyMismatchException(),
-        ActivationUnfinishedException('eid1',
-            atKeys: <String, dynamic>{}, cause: StateError('cause')),
+        AtServerAtKeysLockedException('locked'),
+        PasskeyOnboardingIncompleteException(canonicalPasskeyAtSign('@alice'),
+            cause: AtException('refused')),
       ];
       for (final e in exceptions) {
         expect(e.message, isNotEmpty, reason: '${e.runtimeType}');
       }
+      final incomplete = exceptions[6] as PasskeyOnboardingIncompleteException;
+      expect(incomplete.atSign, '@alice');
+      expect(incomplete.cause, isA<AtException>());
       expect((exceptions[1] as PkamRefusedException).enrollmentId, 'eid1');
       expect((exceptions[3] as MissingAtKeysDocumentException).enrollmentId,
           'eid1');
       expect((exceptions[2] as PasskeyLostException).atSign, '@alice');
-    });
-
-    test('OnboardingIncompleteException holds the pending onboarding', () {
-      PendingOnboarding pendingOf(OnboardingIncompleteException e) => e.pending;
-      expect(pendingOf, isA<Function>());
+      expect(exceptions[5], isA<AtServerAtKeysWriteException>());
     });
   });
 }

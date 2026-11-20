@@ -4,17 +4,20 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/passkey.dart';
+import 'package:at_auth/passkey.dart' show PasskeyRecordType;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
+import 'package:at_client/src/passkey/completion_due_record.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart';
 import 'package:at_client/src/passkey/passkey_custody.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_utils/at_logger.dart';
 import 'package:test/test.dart';
 
 import '../support/custody_fakes.dart' show DerivedKeys;
 import '../support/wire_fakes.dart';
+import '../test_utils/recorded_logs.dart';
 
 const _atSign = '@alice';
 const _eid = 'eid-1';
@@ -61,6 +64,8 @@ class _Capture implements LoggingHandler {
 }
 
 void main() {
+  final logs = RecordedLogs();
+  setUpAll(logs.installOn);
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
   late ({String publicKey, String privateKey}) derived;
@@ -91,10 +96,7 @@ void main() {
               required keysIo}) async =>
           throw UnimplementedError('no client in this test'),
       activator: (
-          {required atSign,
-          required cram,
-          required apkamKeyPair,
-          keysIo}) async {
+          {required atSign, required cram, required apkamKeyPair}) async {
         activations.add((atSign: atSign, cram: cram, pair: apkamKeyPair));
         return AtKeys(atsign: Atsign(atSign))
           ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.publicKey)
@@ -110,12 +112,20 @@ void main() {
               privateKey: apkamKeyPair.privateKey);
       });
 
-  Future<EnrollmentSession> activate() =>
-      gateway().activate(atSign: _atSign, authSeed: _seed, cram: 'cram-secret');
+  Future<EnrollmentSession> activate() => gateway()
+      .activate(atSign: _atSign, apkamKeyPair: derived, cram: 'cram-secret');
+
+  group('apkamKeyPairFromSeed', () {
+    test('derives the ML-DSA-65 key pair of the seed as base64', () async {
+      final pair = await apkamKeyPairFromSeed(_seed);
+
+      expect(pair.publicKey, derived.publicKey);
+      expect(pair.privateKey, derived.privateKey);
+    });
+  });
 
   group('activate', () {
-    test('activates with the derived key and the CRAM secret, minting none',
-        () async {
+    test('activates with the given key pair and the CRAM secret', () async {
       await activate();
 
       expect(activations, hasLength(1));
@@ -140,147 +150,40 @@ void main() {
       expect(keys, isNot(contains(derived.privateKey)));
       expect(keys, contains(_encPrivate));
     });
-  });
 
-  group('activation key retention', () {
-    test('a PKAM refusal after activation carries the activated keys',
-        () async {
+    test('a PKAM failure after activation is rethrown as it is', () async {
       wire.pkamAccepted = false;
 
-      await expectLater(
-          activate(),
-          throwsA(isA<ActivationUnfinishedException>()
-              .having((e) => e.enrollmentId, 'enrollmentId', _eid)
-              .having(
-                  (e) => jsonEncode(e.takeAtKeys()),
-                  'atKeys',
-                  allOf(contains(_encPrivate),
-                      isNot(contains(derived.privateKey))))
-              .having((e) => e.toString(), 'toString',
-                  isNot(contains(_encPrivate)))));
+      await expectLater(activate(), throwsA(isA<UnAuthenticatedException>()));
+      expect(activations, hasLength(1));
+      expect(wire.lookUpsBuilt.single.closed, isTrue);
     });
+  });
 
-    test('an activation that fails after filing keys keeps them resumable',
-        () async {
-      final cause = StateError('open failed');
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo();
+  group('authenticate', () {
+    Future<EnrollmentSession> authenticate() => gateway().authenticate(
+        atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
 
-      await expectLater(
-          activateKeepingKeys(keysIo, _atSign, () async {
-            await keysIo.write(
-                _atSign,
-                withApkamKey(
-                    AtKeys(atsign: Atsign(_atSign))
-                      ..defaultEncryptionPrivateKey =
-                          AtBytes.fromString(_encPrivate),
-                    _eid,
-                    derived));
-            throw cause;
-          }),
-          throwsA(isA<ActivationUnfinishedException>()
-              .having((e) => e.enrollmentId, 'enrollmentId', _eid)
-              .having((e) => e.cause, 'cause', same(cause))
-              .having(
-                  (e) => jsonEncode(e.takeAtKeys()),
-                  'atKeys',
-                  allOf(contains(_encPrivate),
-                      isNot(contains(derived.privateKey))))));
-    });
-
-    test('T7 the exception hands its keys over once and forgets them', () {
-      final keys = {'aesEncryptPrivateKey': _encPrivate};
-      final e = ActivationUnfinishedException(_eid,
-          atKeys: keys, cause: StateError('pkam failed'));
-
-      expect(e.takeAtKeys(), same(keys));
-      expect(e.takeAtKeys, throwsStateError);
-      expect(e.toString(), isNot(contains(_encPrivate)));
-    });
-
-    test('an activation that fails before filing keys rethrows its error',
-        () async {
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo();
-      final cause = StateError('cram refused');
-
-      await expectLater(
-          activateKeepingKeys(keysIo, _atSign, () async => throw cause),
-          throwsA(same(cause)));
-    });
-
-    test('a successful activation returns its keys and stops the client',
-        () async {
-      final held = AtKeys(atsign: Atsign(_atSign))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
-      var stopped = false;
-
-      final keys = await activateKeepingKeys(
-          keysIo, _atSign, () async => _StoppableClient(() => stopped = true));
-
-      expect(stopped, isTrue);
-      expect(keys.defaultEncryptionPrivateKey, AtBytes.fromString(_encPrivate));
-    });
-
-    test('a stop that throws still returns the keys read before it', () async {
-      final held = AtKeys(atsign: Atsign(_atSign))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
-      var stopped = false;
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
-
-      final keys = await readKeysThenStop(keysIo, _atSign, () async {
-        stopped = true;
-        throw StateError('stop failed');
-      });
-
-      expect(stopped, isTrue);
-      expect(keys.defaultEncryptionPrivateKey, AtBytes.fromString(_encPrivate));
-    });
-
-    test('a stop that throws is logged with its error and no key material',
-        () async {
-      final held = AtKeys(atsign: Atsign(_atSign))
-        ..defaultEncryptionPrivateKey = AtBytes.fromString(_encPrivate);
-      // ignore: invalid_use_of_visible_for_testing_member
-      final keysIo = InMemoryAtKeysIo.holding(_atSign, held);
-
-      final logs = await _warnings(() async {
-        await readKeysThenStop(
-            keysIo, _atSign, () async => throw StateError('stop failed'));
-      });
-
-      expect(logs, hasLength(1));
-      expect(logs.single, contains('stop failed'));
-      expect(logs.single, isNot(contains(_encPrivate)));
-    });
+    /// The atServer answers the authenticator's `pkam:` with [reply].
+    void pkamAnswers(String reply) {
+      wire
+        ..runsAuthenticator = true
+        ..pkamReply = reply;
+    }
 
     test('a lookUp that fails to close after a refusal is logged', () async {
-      wire
-        ..pkamThrows = UnAuthenticatedException(
-            'Failed connecting to $_atSign. error:AT0401-Client '
-            'authentication failed')
-        ..stopThrows = true;
+      pkamAnswers('error:AT0401-Client authentication failed');
+      wire.stopThrows = true;
 
       final logs = await _warnings(() async {
-        await expectLater(
-            gateway().authenticate(
-                atSign: _atSign, enrollmentId: _eid, authSeed: _seed),
-            throwsA(isA<PkamRefusedException>()));
+        await expectLater(authenticate(), throwsA(isA<PkamRefusedException>()));
       });
 
       expect(logs, hasLength(1));
       expect(logs.single, contains('close failed'));
     });
-  });
 
-  group('authenticate', () {
-    Future<EnrollmentSession> authenticate() => gateway()
-        .authenticate(atSign: _atSign, enrollmentId: _eid, authSeed: _seed);
-
-    test('runs PKAM on a fresh connection with the derived key', () async {
+    test('runs PKAM on a fresh connection with the given key pair', () async {
       final session = await authenticate();
 
       expect(session.enrollmentId, _eid);
@@ -291,9 +194,7 @@ void main() {
     });
 
     test('the atServer\'s PKAM refusal is a PkamRefusedException', () async {
-      wire.pkamThrows = UnAuthenticatedException(
-          'Failed connecting to $_atSign. error:AT0401-Client authentication '
-          'failed');
+      pkamAnswers('error:AT0401-Client authentication failed');
 
       await expectLater(
           authenticate(),
@@ -311,17 +212,28 @@ void main() {
     for (final reply in [
       'error:AT0011-Internal server exception',
       'error:AT0003-Invalid syntax',
-      'throttled',
-      ''
     ]) {
       test('a failed handshake reply "$reply" is not a refusal', () async {
-        wire.pkamThrows =
-            UnAuthenticatedException('Failed connecting to $_atSign. $reply');
+        pkamAnswers(reply);
 
         await expectLater(
-            authenticate(), throwsA(isA<UnAuthenticatedException>()));
+            authenticate(),
+            throwsA(isA<UnAuthenticatedException>().having((e) => e.message,
+                'message', 'Failed connecting to $_atSign. $reply')));
+        expect(wire.pkamCommands, hasLength(1),
+            reason: 'the reply answered the pkam:');
       });
     }
+
+    test('a PKAM reply naming no atServer code is a refusal', () async {
+      pkamAnswers('error:Client authentication failed');
+
+      await expectLater(
+          authenticate(),
+          throwsA(isA<PkamRefusedException>()
+              .having((e) => e.enrollmentId, 'enrollmentId', _eid)),
+          reason: 'an error: reply with no code is read as unauthenticated');
+    });
 
     // The atServer rejects a denied, revoked or unknown enrollment before it
     // checks the signature, replying `error:<code>:enrollment_id: <id> is
@@ -333,41 +245,36 @@ void main() {
       'AT0028': 'is expired or invalid',
     }.entries) {
       final code = reply.key;
-      String message(String id) => 'Failed connecting to $_atSign. '
-          'error:$code:enrollment_id: $id ${reply.value}';
 
       test('$code naming the presented enrollment is a refusal', () async {
-        wire.pkamThrows = UnAuthenticatedException(message(_eid));
+        pkamAnswers('error:$code:enrollment_id: $_eid ${reply.value}');
 
         await expectLater(
             authenticate(),
             throwsA(isA<PkamRefusedException>()
                 .having((e) => e.enrollmentId, 'enrollmentId', _eid)));
       });
-
-      test('$code naming another enrollment is not a refusal', () async {
-        wire.pkamThrows = UnAuthenticatedException(message('${_eid}9'));
-
-        await expectLater(
-            authenticate(), throwsA(isA<UnAuthenticatedException>()));
-      });
-
-      test('$code naming no enrollment is not a refusal', () async {
-        wire.pkamThrows = UnAuthenticatedException(
-            'Failed connecting to $_atSign. error:$code:${reply.value}');
-
-        await expectLater(
-            authenticate(), throwsA(isA<UnAuthenticatedException>()));
-      });
     }
 
+    test('a failure the classifier reads as an invalid enrollment is a refusal',
+        () async {
+      pkamAnswers('error:AT0029:Apkam Enrollment Expired');
+
+      await expectLater(
+          authenticate(),
+          throwsA(isA<PkamRefusedException>()
+              .having((e) => e.enrollmentId, 'enrollmentId', _eid)),
+          reason: 'AT0029 is classified invalidEnrollment, which ends the '
+              'enrollment');
+    });
+
     test('a pending enrollment (AT0026) is not a refusal', () async {
-      wire.pkamThrows =
-          UnAuthenticatedException('Failed connecting to $_atSign. '
-              'error:AT0026:enrollment_id: $_eid is pending');
+      pkamAnswers('error:AT0026:enrollment_id: $_eid is pending');
 
       await expectLater(
           authenticate(), throwsA(isA<UnAuthenticatedException>()));
+      expect(wire.pkamCommands, hasLength(1),
+          reason: 'the reply answered the pkam:');
     });
 
     test('an authenticator that reports failure is not a refusal', () async {
@@ -434,6 +341,28 @@ void main() {
       expect(wire.commands.single, startsWith('lookup:_'));
     });
 
+    test(
+        'the completion-due record is written, read and deleted on the PKAM '
+        'connection', () async {
+      final connection = wire.lookUpsBuilt.single;
+      wire.lookupAnswer = 'data:cram-deleted';
+
+      await session.recordCompletionDue(CompletionDue.activated);
+      await session.recordCompletionDue(CompletionDue.cramSecretDeleted);
+      final read = await session.completionDue();
+      await session.clearCompletionDue();
+
+      expect(read, CompletionDue.cramSecretDeleted);
+      expect(wire.dials, 1);
+      expect(wire.commands, [
+        'update:completion-due.$_eid.a.__e$_atSign activated\n',
+        'update:completion-due.$_eid.a.__e$_atSign cram-deleted\n',
+        'llookup:completion-due.$_eid.a.__e$_atSign\n',
+        'delete:completion-due.$_eid.a.__e$_atSign\n',
+      ]);
+      expect(connection.commandsSent, 4);
+    });
+
     test('close closes the PKAM connection', () async {
       await session.close();
 
@@ -456,95 +385,119 @@ void main() {
     });
   });
 
-  group('publicKeysMatch', () {
+  group('publishedEncryptionKey', () {
     Future<EnrollmentSession> sessionOver(Wire w) async {
       wire = w;
       return activate();
     }
 
-    test('is true when the published public key is the restored one', () async {
-      final session =
-          await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
-
-      expect(await session.publicKeysMatch({'aesEncryptPublicKey': _encPublic}),
-          isTrue);
-      expect(wire.commands.last, 'lookup:publickey$_atSign\n');
-    });
-
-    test('is false when the published public key differs', () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:other');
-
-      expect(await session.publicKeysMatch({'aesEncryptPublicKey': _encPublic}),
-          isFalse);
-    });
-
-    test('is false when nothing is published', () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
-
-      expect(await session.publicKeysMatch({'aesEncryptPublicKey': _encPublic}),
-          isFalse);
-    });
-
-    test('is false when the restored keys carry no public key to compare',
+    test('is the same when the published public key is the restored one',
         () async {
       final session =
           await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
 
-      expect(await session.publicKeysMatch({}), isFalse);
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.same);
+      expect(wire.commands.last, 'lookup:publickey$_atSign\n');
+    });
+
+    test('is different when the published public key differs', () async {
+      final session = await sessionOver(Wire()..lookupAnswer = 'data:other');
+
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.different);
+    });
+
+    test('is none when nothing is published', () async {
+      final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
+
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.none);
+    });
+
+    test('is none when the atServer has no publickey (AT0015)', () async {
+      final session = await sessionOver(
+          Wire()..lookupAnswer = 'error:AT0015-key not found : publickey');
+
+      expect(
+          await session
+              .publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+          PublishedEncryptionKey.none);
+    });
+
+    for (final (code, reply) in [
+      ('AT0011', 'error:AT0011-Internal server exception'),
+      ('AT0014', 'error:AT0014-Request timed out'),
+    ]) {
+      test(
+          'throws the lookup\'s $code failure, which is not the key not '
+          'found', () async {
+        final session = await sessionOver(Wire()..lookupAnswer = reply);
+
+        await expectLater(
+            session.publishedEncryptionKey({'aesEncryptPublicKey': _encPublic}),
+            throwsA(isA<AtLookUpException>()
+                .having((e) => e.errorCode, 'errorCode', code)));
+      });
+    }
+
+    test('is the same when the restored keys carry no public key to compare',
+        () async {
+      final session =
+          await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
+
+      expect(await session.publishedEncryptionKey({}),
+          PublishedEncryptionKey.same);
     });
   });
 
   group('completeActivation', () {
-    Future<EnrollmentSession> sessionOver(Wire w) async {
-      wire = w;
-      return activate();
-    }
-
-    final keys = {'aesEncryptPublicKey': _encPublic};
-
     test(
-        'publishes the public key when none is published, then deletes the CRAM',
-        () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
+        'publishes the encryption public key with ttr -1, then deletes the '
+        'CRAM secret, on the PKAM connection', () async {
+      final session = await activate();
 
-      await session.completeActivation(keys);
+      await session.completeActivation({'aesEncryptPublicKey': _encPublic});
 
-      final updates = wire.commands.where((c) => c.startsWith('update'));
-      expect(updates, hasLength(1));
-      expect(updates.single, contains('publickey$_atSign'));
-      expect(updates.single, endsWith('$_encPublic\n'));
-      expect(wire.commands.last, startsWith('delete:'));
-      expect(wire.commands.last, contains(AtConstants.atCramSecret));
+      expect(wire.commands, [
+        'update:ttr:-1:isEncrypted:false:public:publickey$_atSign $_encPublic\n',
+        'delete:privatekey:at_secret\n',
+      ]);
+      expect(wire.dials, 1);
     });
 
-    test('keeps the published public key when it is the restored one',
-        () async {
-      final session =
-          await sessionOver(Wire()..lookupAnswer = 'data:$_encPublic');
+    test('publishes without looking up the key already published', () async {
+      wire.lookupAnswer = 'data:other';
+      final session = await activate();
 
-      await session.completeActivation(keys);
+      await session.completeActivation({'aesEncryptPublicKey': _encPublic});
 
-      expect(wire.wroteToServer, isFalse);
-      expect(wire.commands.last, startsWith('delete:'));
+      expect(wire.commands.where((c) => c.contains('lookup:')), isEmpty);
+      expect(wire.commands.first, endsWith(' $_encPublic\n'));
     });
 
-    test('refuses a different published public key and keeps the CRAM',
+    test('with no encryption public key, deletes the CRAM secret only',
         () async {
-      final session = await sessionOver(Wire()..lookupAnswer = 'data:other');
+      final session = await activate();
 
-      await expectLater(session.completeActivation(keys),
-          throwsA(isA<PublicKeyMismatchException>()));
+      await session.completeActivation({});
 
-      expect(wire.wroteToServer, isFalse);
-      expect(wire.commands.where((c) => c.startsWith('delete:')), isEmpty);
+      expect(wire.commands, ['delete:privatekey:at_secret\n']);
     });
 
     for (final (name, value) in [
       ('a line feed', 'MIIB\nXYZ'),
       ('a carriage return', 'MIIB\rXYZ'),
     ]) {
-      test('refuses a public key with $name before any command', () async {
-        final session = await sessionOver(Wire()..lookupAnswer = 'data:null');
+      test('refuses an encryption public key with $name before any command',
+          () async {
+        final session = await activate();
         final sent = wire.commands.length;
 
         await expectLater(
@@ -555,14 +508,240 @@ void main() {
       });
     }
 
-    test('counts a CRAM secret that is already gone as deleted', () async {
-      final session = await sessionOver(Wire()
-        ..lookupAnswer = 'data:$_encPublic'
-        ..answer = (c) => c.startsWith('delete:')
-            ? throw KeyNotFoundException('gone')
-            : null);
+    test('counts a CRAM secret the atServer reports as not found as deleted',
+        () async {
+      final session = await activate();
+      wire.answer = (command) => command.startsWith('delete:')
+          ? throw AtLookUpException('AT0015', 'key not found')
+          : null;
 
-      await session.completeActivation(keys);
+      await session.completeActivation({});
+
+      expect(wire.commands.last, 'delete:privatekey:at_secret\n');
+    });
+  });
+
+  group('revokeOtherEnrollments', () {
+    const list = 'enroll:list:{"enrollmentStatusFilter":["approved"]}\n';
+    String revoke(String id) => 'enroll:revoke:{"enrollmentId":"$id"}\n';
+
+    /// An `enroll:list` reply holding [statuses] by enrollment id.
+    String listed(Map<String, String> statuses) => 'data:${jsonEncode({
+              for (final MapEntry(key: id, value: status) in statuses.entries)
+                '$id.new.enrollments.__manage$_atSign': {
+                  'appName': 'wavi',
+                  'deviceName': 'browser',
+                  'namespace': {'__manage': 'rw', '*': 'rw'},
+                  'status': status,
+                }
+            })}';
+
+    /// Answers the first `enroll:list` with [first] and every later one with
+    /// [then], and each revoke with [revoked].
+    void serve(Map<String, String> first, Map<String, String> then,
+        {String? Function(String command)? revoked}) {
+      var lists = 0;
+      wire.answer = (command) {
+        if (command.startsWith('enroll:list')) {
+          return listed(lists++ == 0 ? first : then);
+        }
+        if (command.startsWith('enroll:revoke')) {
+          return revoked?.call(command) ??
+              'data:{"enrollmentId":"x","status":"revoked"}';
+        }
+        return null;
+      };
+    }
+
+    test(
+        'revokes every approved enrollment but its own, on the PKAM '
+        'connection, then lists again', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved', 'eid-9': 'approved'},
+          {_eid: 'approved'});
+
+      await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, revoke('eid-0'), revoke('eid-9'), list]);
+      expect(wire.dials, 1);
+    });
+
+    test('A login that revokes names each enrollment it revokes in a warning',
+        () async {
+      const other = 'eid-9';
+      final session = await gateway().authenticate(
+          atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
+      serve({_eid: 'approved', other: 'approved'}, {_eid: 'approved'});
+      final from = logs.records.length;
+
+      await session.revokeOtherEnrollments();
+
+      final logged = logs.records.skip(from).toList();
+      expect(wire.commands, contains(revoke(other)),
+          reason: 'the control: the login revoked the other enrollment');
+      final named = [
+        for (final r in logged)
+          if (r.message.contains(other)) r
+      ];
+      expect(named, hasLength(1),
+          reason: 'one log names the enrollment the login revoked');
+      expect(named.single.level, 'WARNING', reason: 'it is a warning');
+      expect(named.single.message, contains(_atSign),
+          reason: 'and names the Atsign');
+      expect(logged.where((r) => r.message.contains(_eid)), isEmpty,
+          reason: "no log names the passkey's own enrollment");
+    });
+
+    test('revokes nothing that is listed but not approved', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'pending', 'eid-2': 'revoked'},
+          {_eid: 'approved'});
+
+      await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, list]);
+    });
+
+    // NOTE: the lookUp throws an atServer's error reply as an
+    // AtLookUpException, which the remote secondary maps by its code.
+    for (final code in ['AT0029', 'AT0031', 'AT0032']) {
+      test(
+          'a revoke the atServer refuses with $code, for an enrollment no '
+          'longer approved, is left to the list and is not a failure',
+          () async {
+        final session = await activate();
+        serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+            revoked: (_) => throw AtLookUpException(code, 'not approved'));
+
+        await session.revokeOtherEnrollments();
+
+        expect(wire.commands, [list, revoke('eid-0'), list],
+            reason: 'an atServer refusal of a revoke is left to the list '
+                'that follows');
+      });
+    }
+
+    test(
+        'Given another approved enrollment of @alice🛠 is gone by the time '
+        'the completion revokes it, when the atServer answers that revoke '
+        'with AT0028, then the revoke is left to the list that follows, and '
+        'the completion goes on when the list no longer shows it', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException(
+              'AT0028', 'enrollment_id: eid-0 is expired or invalid'));
+
+      await session.revokeOtherEnrollments();
+
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the atServer answers AT0028 to a revoke of an enrollment '
+              'that has expired or no longer exists');
+    });
+
+    test(
+        'an AT0028 answer to a revoke whose enrollment the list still shows '
+        'as approved makes the revoke throw', () async {
+      final session = await activate();
+      serve({_eid: 'approved', 'eid-0': 'approved'},
+          {_eid: 'approved', 'eid-0': 'approved'},
+          revoked: (_) => throw AtLookUpException(
+              'AT0028', 'enrollment_id: eid-0 is expired or invalid'));
+
+      await expectLater(session.revokeOtherEnrollments(),
+          throwsA(isA<AtEnrollmentException>()),
+          reason: 'the list that follows still shows eid-0 as approved');
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the list that follows decides');
+    });
+
+    test('throws when an approved enrollment other than its own remains',
+        () async {
+      final session = await activate();
+      serve({
+        _eid: 'approved',
+        'eid-0': 'approved'
+      }, {
+        _eid: 'approved',
+        'eid-0': 'approved'
+      }, revoked: (_) => throw AtLookUpException('AT0031', 'refused'));
+
+      await expectLater(session.revokeOtherEnrollments(),
+          throwsA(isA<AtEnrollmentException>()));
+      expect(wire.commands, [list, revoke('eid-0'), list],
+          reason: 'the list that follows throws, not the refused revoke');
+    });
+
+    test('a revoke that fails other than with an atServer refusal propagates',
+        () async {
+      // What a real lookUp throws for a lost connection, a timeout, a
+      // connect that fails, and an atServer that is failing, busy or paused.
+      for (final (code, failure) in [
+        ('AT0004', 'the connection was lost'),
+        ('AT0014', 'Request timed out'),
+        ('AT0021', 'wss connect failed'),
+        ('AT0011', 'internal server exception'),
+        ('AT0012', 'inbound connection limit exceeded'),
+        ('AT0024', 'server is paused'),
+      ]) {
+        wire.commands.clear();
+        final session = await activate();
+        serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+            revoked: (_) => throw AtLookUpException(code, failure));
+
+        await expectLater(
+            session.revokeOtherEnrollments(),
+            throwsA(isA<AtException>()
+                .having((e) => e.message, 'message', failure)),
+            reason: 'only an atServer refusal of a revoke is tolerated');
+        expect(wire.commands, [list, revoke('eid-0')], reason: code);
+      }
+    });
+
+    // NOTE: a real lookUp lets each of these failures out only as an
+    // AtLookUpException carrying its code, never as the exception itself.
+    test('a revoke that cannot reach the atServer propagates', () async {
+      final session = await activate();
+      const failure = 'Exception: $_atSign: unable to connect to atServer on '
+          'atserver.test:1 - SocketException: Connection refused';
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0021', failure));
+
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(isA<SecondaryConnectException>()
+              .having((e) => e.message, 'message', failure)),
+          reason: 'a revoke that never reached the atServer was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke whose answer does not come in time propagates', () async {
+      final session = await activate();
+      const failure = 'Exception: Full response not received after 90000 '
+          'millis from remote atServer';
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0023', failure));
+
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(isA<AtTimeoutException>()
+              .having((e) => e.message, 'message', failure)),
+          reason: 'a revoke whose answer never came was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
+    });
+
+    test('a revoke that fails with an I/O error propagates', () async {
+      final session = await activate();
+      const failure = 'Exception: connection to atserver.test:1 failed: '
+          'SocketException: Broken pipe';
+      serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
+          revoked: (_) => throw AtLookUpException('AT0004', failure));
+
+      await expectLater(
+          session.revokeOtherEnrollments(),
+          throwsA(
+              isA<AtException>().having((e) => e.message, 'message', failure)),
+          reason: 'a revoke that failed to send was not refused');
+      expect(wire.commands, [list, revoke('eid-0')]);
     });
   });
 
@@ -581,7 +760,7 @@ void main() {
                   required keysIo}) async =>
               throw StateError('client failed to open'));
       final session = await gateway.authenticate(
-          atSign: _atSign, enrollmentId: _eid, authSeed: _seed);
+          atSign: _atSign, enrollmentId: _eid, apkamKeyPair: derived);
       final vault = (await DerivedKeys.derive(
               Uint8List.fromList(List.generate(32, (i) => i + 7)), _atSign))
           .vault;
@@ -590,7 +769,9 @@ void main() {
       await expectLater(
           session.openClient(AtServerAtKeysIo(
               documents: session.documents,
-              vault: vault,
+              atSign: _atSign,
+              seal: (d) => vault.seal(PasskeyRecordType.atkeys, d),
+              open: (r) => vault.open(PasskeyRecordType.atkeys, r),
               enrollmentId: _eid,
               apkamKeyPair: await _derived())),
           throwsStateError);
@@ -601,109 +782,4 @@ void main() {
       expect(wire.lookUpsBuilt.single.closed, isTrue);
     });
   });
-
-  group('a client that owns the vault through its keys store', () {
-    late PasskeyVault vault;
-    late Uint8List heldSeed;
-    late EnrollmentSession session;
-    late Future<void> Function() stopClient;
-
-    setUp(() async {
-      vault = (await DerivedKeys.derive(
-              Uint8List.fromList(List.generate(32, (i) => i + 7)), _atSign))
-          .vault;
-      await vault.withAuthSeed((seed) async => heldSeed = seed);
-      final gateway = AtAuthEnrollmentGateway(
-          lookUps: wire.lookUps,
-          finder: finder,
-          root: AtRootDomain.atsignDomain,
-          app: 'wavi',
-          device: 'browser',
-          clientOpener: (
-                  {required lookUp,
-                  required atSign,
-                  required enrollmentId,
-                  required keysIo}) async =>
-              _KeysClosingClient(lookUp.close, keysIo));
-      session = await gateway.authenticate(
-          atSign: _atSign, enrollmentId: _eid, authSeed: _seed);
-      final client = await session.openClient(AtServerAtKeysIo(
-          documents: session.documents,
-          vault: vault,
-          enrollmentId: _eid,
-          apkamKeyPair: await _derived(),
-          closedByClient: true));
-      stopClient = client.stop;
-    });
-
-    test('stays usable while the client runs', () async {
-      expect(wire.lookUpsBuilt.single.closed, isFalse);
-      expect(heldSeed.every((b) => b == 0), isFalse);
-      await vault.withAuthSeed((_) async {});
-    });
-
-    test('stopping the client closes the vault through the keys store',
-        () async {
-      await stopClient();
-
-      expect(wire.lookUpsBuilt.single.closed, isTrue);
-      var ran = false;
-      await expectLater(
-          vault.withAuthSeed((_) async => ran = true), throwsStateError);
-      expect(ran, isFalse);
-      await expectLater(
-          vault.seal(PasskeyRecordType.atkeys, {'a': 1}), throwsStateError);
-      await expectLater(
-          vault.open(PasskeyRecordType.atkeys, '{}'), throwsStateError);
-      expect(heldSeed.every((b) => b == 0), isTrue);
-    });
-
-    test(
-        'closes the vault when the lookUp fails to close, and the error '
-        'propagates', () async {
-      wire.stopThrows = true;
-
-      await expectLater(stopClient(), throwsStateError);
-
-      expect(wire.lookUpsBuilt.single.closed, isTrue);
-      await expectLater(vault.withAuthSeed((_) async {}), throwsStateError);
-      expect(heldSeed.every((b) => b == 0), isTrue);
-    });
-  });
-}
-
-/// An [AtClient] whose only working member is [stop].
-class _StoppableClient implements AtClient {
-  _StoppableClient(this._onStop);
-
-  final void Function() _onStop;
-
-  @override
-  Future<void> stop() async => _onStop();
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-/// An [AtClient] that stops its lookUp, then closes a keys store flagged
-/// `closedByClient`, as a client's stop does.
-class _KeysClosingClient implements AtClient {
-  _KeysClosingClient(this._closeLookUp, this._keysIo);
-
-  final Future<void> Function() _closeLookUp;
-  final WrittenAtKeysIo _keysIo;
-
-  @override
-  Future<void> stop() async {
-    try {
-      await _closeLookUp();
-    } finally {
-      if (_keysIo case final ClosableAtKeysIo io when io.closedByClient) {
-        await io.close();
-      }
-    }
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

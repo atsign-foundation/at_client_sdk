@@ -40,7 +40,6 @@ void main() {
   late FakeServer server;
   late FakeGateway gateway;
   late _Authenticator authenticator;
-  late FakePendingStore pending;
   late _CountingDeriver deriver;
 
   PasskeyCustody custody() {
@@ -53,7 +52,6 @@ void main() {
         credentials: hints,
         enrollmentIds: hints,
         persistence: FakePersistence(),
-        pendingStore: pending,
         retryDelay: Duration.zero,
         setupLock: FakeSetupLock(),
         setupLockPrefix: 'test:setup');
@@ -63,7 +61,6 @@ void main() {
     server = FakeServer();
     gateway = FakeGateway(server);
     authenticator = _Authenticator();
-    pending = FakePendingStore();
     deriver = _CountingDeriver();
   });
 
@@ -118,7 +115,6 @@ void main() {
       ]);
       expect(gateway.activated, isEmpty);
       expect(deriver.derivations, 0);
-      expect(pending.records, isEmpty);
     });
   }
 }

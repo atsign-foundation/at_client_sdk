@@ -47,6 +47,22 @@ class _CapturingDeriver implements PasskeyKeyDeriver {
 bool _sealerClosed(PasskeyDerivation d) =>
     (d.sealer as BytesRecordSealer).closed;
 
+/// Derives as [BytesPasskeyKeyDeriver] does, from a copy of the PRF output, so
+/// the output it is handed stays as it was.
+class _CopyingDeriver implements PasskeyKeyDeriver {
+  @override
+  Future<PasskeyDerivation> derive(PrfSecret prf, String atSign) =>
+      const BytesPasskeyKeyDeriver()
+          .derive(PrfSecret(Uint8List.fromList(prf.output)), atSign);
+}
+
+/// Fails every derivation, leaving the PRF output as it was.
+class _FailingDeriver implements PasskeyKeyDeriver {
+  @override
+  Future<PasskeyDerivation> derive(PrfSecret prf, String atSign) async =>
+      throw StateError('derivation failed');
+}
+
 void main() {
   late FakeServer server;
   late FakeGateway gateway;
@@ -54,27 +70,25 @@ void main() {
   late FakeHints hints;
   late List<PasskeyDerivation> derived;
 
-  PasskeyCustody custody({FakeHints? withHints}) => PasskeyCustody(
-      prf: PasskeyPrf(authenticator),
-      pointerReader: server,
-      gateway: gateway,
-      credentials: withHints ?? hints,
-      enrollmentIds: withHints ?? hints,
-      persistence: FakePersistence(),
-      pendingStore: FakePendingStore(),
-      retryDelay: Duration.zero,
-      setupLock: FakeSetupLock(),
-      setupLockPrefix: 'test:setup',
-      deriver: _CapturingDeriver(derived));
+  PasskeyCustody custody({FakeHints? withHints, PasskeyKeyDeriver? deriver}) =>
+      PasskeyCustody(
+          prf: PasskeyPrf(authenticator),
+          pointerReader: server,
+          gateway: gateway,
+          credentials: withHints ?? hints,
+          enrollmentIds: withHints ?? hints,
+          persistence: FakePersistence(),
+          retryDelay: Duration.zero,
+          setupLock: FakeSetupLock(),
+          setupLockPrefix: 'test:setup',
+          deriver: deriver ?? _CapturingDeriver(derived));
 
   void forgetCaptured() {
     derived.clear();
     authenticator.issuedPrf.clear();
-    gateway.seedBuffers.clear();
   }
 
-  /// Every PRF output, kek and auth seed the flow touched is all zeroes
-  /// except [alive], which the flow handed to a still-open session.
+  /// Every PRF output, kek and auth seed the flow touched is all zeroes.
   void expectWiped() {
     expect(authenticator.issuedPrf, isNotEmpty);
     expect(derived, isNotEmpty);
@@ -85,16 +99,11 @@ void main() {
       expect(_sealerClosed(keys), isTrue, reason: 'kek');
       expect(_zeroed(keys.authSeed), isTrue, reason: 'auth seed');
     }
-    for (final seed in gateway.seedBuffers) {
-      {
-        expect(_zeroed(seed), isTrue, reason: 'auth seed given to gateway');
-      }
-    }
   }
 
-  /// The PRF outputs are all zeroes while the client holds the vault: its
-  /// auth seed is zeroed and its sealer open until the client stops.
-  void expectHeldByClient() {
+  /// The PRF outputs are all zeroes while a session holds the vault: its
+  /// auth seed is zeroed and its sealer open until the session stops.
+  void expectHeldBySession() {
     expect(authenticator.issuedPrf, isNotEmpty);
     for (final prf in authenticator.issuedPrf) {
       expect(_zeroed(prf), isTrue, reason: 'PRF output');
@@ -137,12 +146,12 @@ void main() {
     });
 
     test(
-        'wipes the PRF at handover, and the kek and seed when the client stops',
-        () async {
-      final client =
+        'wipes the PRF at handover, and the kek and seed when the session '
+        'stops', () async {
+      final session =
           await custody(withHints: FakeHints()).open(atSign: _atSign);
-      expectHeldByClient();
-      await client.stop();
+      expectHeldBySession();
+      await session.stop();
       expectWiped();
     });
 
@@ -170,21 +179,76 @@ void main() {
       expectWiped();
     });
 
-    test('wipes everything when remembering the device fails', () async {
-      final fresh = FakeHints()..failWrites = true;
-      await expectLater(
-          custody(withHints: fresh).open(atSign: _atSign), throwsStateError);
+    test('wipes everything when remembering the device fails with an Error',
+        () async {
+      final broken = StateError('the hint store is broken');
+      final fresh = FakeHints()
+        ..failWrites = true
+        ..writeFailure = broken;
+      await expectLater(custody(withHints: fresh).open(atSign: _atSign),
+          throwsA(same(broken)));
       expectWiped();
+    });
+
+    test(
+        'a session opened when remembering the device fails with an Exception '
+        'holds the vault until it stops', () async {
+      final fresh = FakeHints()..failWrites = true;
+      final session = await custody(withHints: fresh).open(atSign: _atSign);
+      expectHeldBySession();
+      await session.stop();
+      expectWiped();
+    });
+
+    test('wipes the auth seed before it authenticates', () async {
+      bool? seedZeroed;
+      gateway.onAuthenticate =
+          (_) => seedZeroed = _zeroed(derived.single.authSeed);
+      await (await custody(withHints: FakeHints()).open(atSign: _atSign))
+          .stop();
+      expect(seedZeroed, isTrue);
+    });
+  });
+
+  group('a deriver that leaves the PRF output as it was', () {
+    void expectPrfWiped() {
+      expect(authenticator.issuedPrf, isNotEmpty);
+      for (final prf in authenticator.issuedPrf) {
+        expect(_zeroed(prf), isTrue, reason: 'PRF output');
+      }
+    }
+
+    test('onboarding and open wipe the PRF output once it is derived',
+        () async {
+      final onboarded = await custody(deriver: _CopyingDeriver())
+          .onboard(atSign: _atSign, cram: 'cram');
+      expectPrfWiped();
+      await onboarded.stop();
+      forgetCaptured();
+
+      final opened =
+          await custody(withHints: FakeHints(), deriver: _CopyingDeriver())
+              .open(atSign: _atSign);
+      expectPrfWiped();
+      await opened.stop();
+    });
+
+    test('a derivation that fails still wipes the PRF output', () async {
+      await expectLater(
+          custody(deriver: _FailingDeriver())
+              .onboard(atSign: _atSign, cram: 'cram'),
+          throwsStateError);
+      expectPrfWiped();
     });
   });
 
   group('onboard', () {
     test(
-        'wipes the PRF at handover, and the kek and seed when the client stops',
-        () async {
-      final client = await custody().onboard(atSign: _atSign, cram: 'cram');
-      expectHeldByClient();
-      await client.stop();
+        'wipes the PRF at handover, and the kek and seed when the session '
+        'stops', () async {
+      final session = await custody().onboard(atSign: _atSign, cram: 'cram');
+      expectHeldBySession();
+      await session.stop();
       expectWiped();
     });
 
@@ -195,60 +259,34 @@ void main() {
       expectWiped();
     });
 
-    test('a resumable handle keeps its keys until the resumed client stops',
+    test('wipes the auth seed before it activates', () async {
+      bool? seedZeroed;
+      gateway.onActivate = () => seedZeroed = _zeroed(derived.single.authSeed);
+      await (await custody().onboard(atSign: _atSign, cram: 'cram')).stop();
+      expect(seedZeroed, isTrue);
+    });
+
+    test('wipes everything when the @keys document cannot be written',
         () async {
-      server.documentPutFailures = 3;
-      late OnboardingIncompleteException incomplete;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        incomplete = e;
-      }
-      expect(_sealerClosed(derived.single), isFalse);
-      final client = await incomplete.pending.resume();
-      expectHeldByClient();
-      await client.stop();
+      server.documentPutFailures = 99;
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       expectWiped();
     });
 
-    test('abandoning a handle wipes its keys', () async {
-      server.documentPutFailures = 3;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        await e.pending.abandon();
-      }
+    test('wipes everything when completing the activation fails', () async {
+      gateway.onAuthenticate =
+          (session) => session.completeError = StateError('interrupted');
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'), throwsStateError);
       expectWiped();
     });
 
-    test(
-        'an unfinished activation keeps the seed until the resumed client stops',
-        () async {
-      gateway.activationUnfinished = true;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        expect(_zeroed(derived.single.authSeed), isFalse);
-        expect(_sealerClosed(derived.single), isFalse);
-        final client = await e.pending.resume();
-        expectHeldByClient();
-        await client.stop();
-        expectWiped();
-      }
-    });
-
-    test('an unfinished activation wipes the seed when abandoned', () async {
-      gateway.activationUnfinished = true;
-      try {
-        await custody().onboard(atSign: _atSign, cram: 'cram');
-        fail('onboard completed');
-      } on OnboardingIncompleteException catch (e) {
-        expect(_zeroed(derived.single.authSeed), isFalse);
-        await e.pending.abandon();
-      }
+    test('wipes everything when the client cannot be opened', () async {
+      final openError = StateError('open failed');
+      gateway.openErrorForNext = openError;
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(openError)));
       expectWiped();
     });
   });

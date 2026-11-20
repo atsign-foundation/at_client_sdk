@@ -1,5 +1,4 @@
 import 'package:at_auth/passkey.dart';
-import 'package:at_client/at_client.dart';
 import 'package:at_client/passkey.dart';
 
 import '../keys/indexeddb_store.dart';
@@ -28,45 +27,58 @@ Future<bool> prfSupported() => PrfSupport(WebPrfEnvironment()).supported();
 /// decides by that report, recorded miss or not.
 void clearPrfMiss() => PrfSupport(WebPrfEnvironment()).tryAgain();
 
-/// Onboards a fresh [atSign] in this browser and returns its client, PKAM'd
-/// before return.
+/// Onboards a fresh [atSign] in this browser and returns its passkey session,
+/// whose client is PKAM'd before return.
 ///
 /// Registers a passkey (a random WebAuthn `user.id`; [atSign] only in the
 /// user name), derives the atSign's APKAM key, record key and pointer name
-/// from its PRF output, activates the atSign with [cram] and files the sealed
-/// @keys document and a public pointer on the atServer. The whole flow holds
-/// the atSign's setup lock, so a second tab waits.
+/// from its PRF output, activates the atSign with [cram], records on the
+/// atServer that the activation's completion is due, and writes the sealed
+/// @keys document and a public pointer there. Then it deletes the CRAM
+/// secret and, once that delete answers, records that it is deleted, then
+/// revokes every other approved enrollment, then publishes the encryption
+/// public key, then deletes the record that the completion is due. The whole
+/// flow holds the atSign's setup lock, so a second tab waits.
 ///
 /// [rpId] and [rpName] name the relying party; [app] is the client's
 /// namespace and [device] the enrollment's device name. [transport] says how
 /// connections reach atServers, by default directly.
 ///
+/// An onboarding that fails before it writes the pointer throws the failure
+/// as it is, and any passkey it registered is reported to the browser as
+/// unknown. It is run again with the same [cram] while the CRAM secret is
+/// live, which registers a new passkey and revokes every other approved
+/// enrollment of the Atsign, the failed run's included. A put of the pointer
+/// that throws may have stored the pointer with its reply lost; running the
+/// onboarding again still recovers, since its completion revokes the
+/// enrollment that pointer names.
+///
+/// An onboarding that fails with an exception once it has written the
+/// pointer, while it deletes the CRAM secret, records that, revokes,
+/// publishes, deletes the completion-due record or opens the client, throws a
+/// [PasskeyOnboardingIncompleteException] naming the Atsign, whose cause is
+/// that failure, and reports nothing to the browser. [passkeyLogin] with the
+/// passkey then finishes the onboarding, unless its enrollment has been
+/// revoked since or [passkeyLogin] refuses another published encryption
+/// public key with [PublicKeyMismatchException]; it opens the onboarding's
+/// enrollment and saves the passkey hints if they are not saved. An [Error]
+/// is thrown as it is wherever it happens, so it does not say whether the
+/// pointer was written: try [passkeyLogin] with the passkey first. A failed
+/// write of the hints does not fail the onboarding: it is logged as a
+/// warning, the session is returned, and the next [passkeyLogin] saves them.
+/// [passkeyLogin] also finishes, on the same terms, an onboarding that
+/// stopped after writing the document and pointer, while its completion is
+/// due. Nothing is kept in this browser until the CRAM secret is deleted.
+///
 /// Throws [PrfUnavailableException] when the browser or authenticator has no
 /// passkey PRF, [SetupLockTimeoutException] when another tab holds the setup
-/// lock too long, [IndexedDbException] when a failure of this browser's
-/// IndexedDB stops the onboarding before it registers a passkey, and the
-/// atServer's own errors when activation is refused. An
-/// [OnboardingIncompleteException] carries the pending onboarding to resume;
-/// when writing the device's passkey hints fails after this call activates
-/// the atSign, its cause is an [IndexedDbException].
-/// A client that fails to open after the records are written ends the
-/// onboarding: its own error propagates, the IndexedDB store is closed and
-/// the atSign is ready for [passkeyLogin].
+/// lock too long, [IndexedDbException] when this browser's passkey database
+/// will not open, before any passkey is registered, the atServer's own errors
+/// when activation is refused, and [PasskeyOnboardingIncompleteException] as
+/// above.
 ///
-/// An earlier onboarding that is still pending is resumed first, without
-/// [cram]. When the atServer explicitly refuses that onboarding's PKAM, its
-/// record is dropped and this onboarding carries on with [cram]. Any other
-/// failure keeps the record: a failed or cancelled prompt for its passkey is a
-/// [PasskeyLostException] whose cause is a `PasskeyCeremonyException` (the
-/// user may simply have cancelled it), and a PKAM refusal during an explicit
-/// [PendingOnboarding.resume] is a [PasskeyLostException] too. The app then
-/// offers "Try again" and "Discard" ([discardPendingOnboarding]) and never
-/// discards on its own; see `docs/projects/wasm/browser-onboarding.md`.
-///
-/// [SetupLockTimeoutException] is thrown as it is, and so is
-/// [PrfUnavailableException], except from the passkey of a pending
-/// onboarding, where it is the cause of a [PasskeyLostException].
-Future<AtClient> onboardNewAtSign(
+/// Stopping the session, or its client, closes the passkey vault it holds.
+Future<PasskeySession> onboardNewAtSign(
         {required String atSign,
         required String cram,
         required String app,
@@ -82,35 +94,41 @@ Future<AtClient> onboardNewAtSign(
         options: transport,
         run: (custody) => custody.onboard(atSign: atSign, cram: cram));
 
-/// Opens [atSign]'s client with its passkey and returns it, PKAM'd before
-/// return.
+/// Opens [atSign]'s client with its passkey and returns its passkey session,
+/// whose client is PKAM'd before return.
 ///
 /// [atSign] is always required: the passkey proves it, and a wrong one finds
 /// no pointer. A device that remembers [atSign]'s passkey and enrollment goes
 /// straight to PKAM; one that does not asserts any discoverable passkey and
-/// finds the enrollment through the public pointer.
+/// finds the enrollment through the public pointer. A remembered credential
+/// id or enrollment id that IndexedDB cannot read, or an enrollment id whose
+/// stored bytes are not UTF-8, counts as not remembered, and a failed write
+/// of the passkey hints is logged as a warning and the session returned.
 ///
 /// Throws [PasskeyLostException] when the passkey cannot open [atSign] (no
 /// credential, no pointer, PKAM refused), [PublicKeyMismatchException] when
-/// the restored public keys are not the published ones,
-/// [MissingAtKeysDocumentException] when the enrollment has no document,
-/// [SetupLockTimeoutException] when another tab holds the setup lock too long,
-/// and [IndexedDbException] when a failure of this browser's IndexedDB stops
-/// the login.
-///
-/// A pending onboarding the atServer explicitly refuses is dropped and the
-/// login carries on; any other failure to resume it keeps its record.
+/// the document's APKAM public key is not the passkey's, or when a published
+/// encryption public key is not the document's, unless the onboarding
+/// recorded that its own delete of the CRAM secret answered and its
+/// completion is still due, [MissingAtKeysDocumentException] when the
+/// enrollment has no document, [SetupLockTimeoutException] when another tab
+/// holds the setup lock too long, [IndexedDbException] when this browser's
+/// passkey database will not open, and what reading the completion-due
+/// record or finishing an unfinished onboarding throws, such as the
+/// `AtEnrollmentException` of a revoke that leaves another approved
+/// enrollment; the next login tries again.
 ///
 /// A [PasskeyLostException] whose cause is a `PasskeyCeremonyException` means
 /// the prompt failed, and the user may simply have cancelled it: WebAuthn
 /// reports a cancel and a missing passkey the same way. Nothing is deleted,
-/// revoked or cleared after a failed or cancelled prompt, so the app offers
-/// "Try again" and "Discard" ([discardPendingOnboarding]) and never discards
-/// on its own; see `docs/projects/wasm/browser-onboarding.md`.
+/// revoked or cleared after a failed or cancelled prompt, so the app can offer
+/// "Try again".
 ///
 /// [PrfUnavailableException] and [SetupLockTimeoutException] are thrown as
 /// they are, not wrapped in [PasskeyLostException].
-Future<AtClient> passkeyLogin(
+///
+/// Stopping the session, or its client, closes the passkey vault it holds.
+Future<PasskeySession> passkeyLogin(
         {required String atSign,
         required String app,
         required String rpId,
@@ -124,67 +142,21 @@ Future<AtClient> passkeyLogin(
         options: transport,
         run: (custody) => custody.open(atSign: atSign));
 
-/// Deletes [atSign]'s pending onboarding record: the "Discard" choice after a
-/// pending onboarding cannot be opened.
-///
-/// Runs no ceremony and makes no atServer call; it takes the atSign's setup
-/// lock and closes the IndexedDB store. Calling it with no pending record is
-/// a no-op: nothing is deleted and the hints stay. Otherwise it deletes the
-/// record, and deletes the atSign's remembered passkey and enrollment hints
-/// only when the stored enrollment id equals the record's enrollment id;
-/// hints naming another enrollment stay. A record this build cannot read, such
-/// as one a newer build wrote, is deleted and the hints stay. If no @keys
-/// document was written,
-/// the record held the only copy of the keys and the atSign must be reset
-/// with a new CRAM. Never call it without the user's choice.
-///
-/// Throws [SetupLockTimeoutException] when another tab holds the setup lock
-/// too long, and [IndexedDbException] when this browser's IndexedDB fails.
-Future<void> discardPendingOnboarding(String atSign) async =>
-    discardPendingOnboardingIn(await IndexedDbHintStore.open(), atSign);
-
-/// [discardPendingOnboarding] on an open [store], which it closes.
-///
-/// Public for tests; not exported from the package.
-Future<void> discardPendingOnboardingIn(
-        IndexedDbHintStore store, String atSign) =>
-    closingStoreAfter(store, () {
-      final canonical = canonicalPasskeyAtSign(atSign);
-      return WebSetupLock()
-          .run(setupLockName(WebSetupLock.namePrefix, canonical), () async {
-        final PendingOnboardingRecord? record;
-        try {
-          record = await store.get(canonical);
-        } on UnsupportedPasskeyRecordException {
-          // The record does not decode, so no enrollment id says whose the
-          // hints are: delete only the record, which is what blocks the atSign.
-          await store.delete(canonical);
-          return;
-        }
-        if (record == null) return;
-        await store.delete(canonical);
-        if (await store.enrollmentId(canonical) == record.enrollmentId) {
-          await store.deleteHints(canonical);
-        }
-      });
-    });
-
 const _defaultDevice = 'browser';
 
 /// Runs [run] on a [PasskeyCustody] over this browser's passkeys, IndexedDB,
 /// locks and atServer transport, and closes the IndexedDB store after.
-Future<AtClient> _withCustody(
+Future<PasskeySession> _withCustody(
     {required String app,
     required String rpId,
     required String rpName,
     required String device,
     required SessionTransportOptions? options,
-    required Future<AtClient> Function(PasskeyCustody) run}) async {
+    required Future<PasskeySession> Function(PasskeyCustody) run}) async {
   final server = passkeyServerSide(options: options, app: app, device: device);
-  final store = await IndexedDbHintStore.open();
-  return closingStoreAfter(
-      store,
-      () => run(PasskeyCustody(
+  return runClosingStore(
+      openEntryHintStore,
+      (store) => run(PasskeyCustody(
           prf: PasskeyPrf(WebPasskeyPort(rpId: rpId, rpName: rpName),
               prfSupport: PrfSupport(WebPrfEnvironment())),
           pointerReader: server.pointerReader,
@@ -194,26 +166,27 @@ Future<AtClient> _withCustody(
           setupLock: WebSetupLock(),
           setupLockPrefix: WebSetupLock.namePrefix,
           persistence: WebStoragePersistence(),
-          pendingStore: store,
           deriver: WebCryptoKeyDeriver())));
 }
 
-/// Runs [run] and closes [store] after, whether it returns or throws. An
-/// [OnboardingIncompleteException] keeps the store open for its pending
-/// onboarding, which closes it once resumed, abandoned or ended by a failed
-/// open.
+/// Opens the hint store [onboardNewAtSign] and [passkeyLogin] run on, this
+/// browser's passkey database by default.
 ///
-/// Public for tests; not exported from the package.
-Future<T> closingStoreAfter<T>(
-    IndexedDbHintStore store, Future<T> Function() run) async {
-  var handedOff = false;
+/// Public only so that tests can see the store an entry point opened; the
+/// package does not export it.
+Future<IndexedDbHintStore> Function() openEntryHintStore =
+    IndexedDbHintStore.open;
+
+/// Runs [run] on the hint store [openStore] opens, and closes that store once
+/// [run] has returned or thrown; what [run] throws propagates.
+///
+/// Public only so that tests reach it; the package does not export it.
+Future<T> runClosingStore<T>(Future<IndexedDbHintStore> Function() openStore,
+    Future<T> Function(IndexedDbHintStore store) run) async {
+  final store = await openStore();
   try {
-    return await run();
-  } on OnboardingIncompleteException catch (e) {
-    e.pending.releaseWith(store.close);
-    handedOff = true;
-    rethrow;
+    return await run(store);
   } finally {
-    if (!handedOff) store.close();
+    store.close();
   }
 }

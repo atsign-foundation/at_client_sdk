@@ -58,10 +58,10 @@ void main() {
   test('a record sealed as one type does not open as another', () async {
     final record = await PasskeyRecordCodec.seal(
         aliceSealer, '@alice', PasskeyRecordType.atkeys, atKeys);
-    final relabelled = withField(record, 'typ', 'pending');
+    final relabelled = withField(record, 'typ', 'eid');
     await expectLater(
         PasskeyRecordCodec.open(
-            aliceSealer, '@alice', PasskeyRecordType.pending, relabelled),
+            aliceSealer, '@alice', PasskeyRecordType.eid, relabelled),
         throwsA(isA<PasskeyRecordAuthenticationException>()));
   });
 

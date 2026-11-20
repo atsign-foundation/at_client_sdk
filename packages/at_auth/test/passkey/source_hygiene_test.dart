@@ -46,6 +46,23 @@ void main() {
     expect(hits, isEmpty);
   });
 
+  test('the library silences the visible-for-testing lint in three places', () {
+    final hits = [
+      for (final f in Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart')))
+        for (final _ in 'invalid_use_of_visible_for_testing_member'
+            .allMatches(f.readAsStringSync()))
+          f.path
+    ]..sort();
+    expect(hits, [
+      'lib/src/at_auth_impl.dart',
+      'lib/src/enroll/enrollment_handshake.dart',
+      'lib/src/enroll/enrollment_submitter.dart',
+    ]);
+  });
+
   test('no passkey source silences the visible-for-testing lint', () {
     final hits = <String>[];
     _sources().forEach((path, lines) {

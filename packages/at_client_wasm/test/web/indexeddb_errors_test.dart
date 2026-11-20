@@ -1,6 +1,5 @@
 // Scenarios: features/at_client_wasm/indexeddb_errors.feature. Each test is
-// named after its scenario; the onboarding one is in
-// passkey_custody_browser_test.dart, beside the fakes it onboards with.
+// named after its scenario.
 @TestOn('browser')
 library;
 
@@ -10,8 +9,9 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
-import 'package:at_client/at_client.dart' show AtClient, AtRootDomain;
-import 'package:at_client/passkey.dart' show PasskeyLostException;
+import 'package:at_client/at_client.dart' show AtRootDomain;
+import 'package:at_client/passkey.dart'
+    show PasskeyLostException, PasskeySession;
 import 'package:at_client_wasm/at_client_wasm_web.dart'
     show IndexedDbException, SessionTransportOptions, passkeyLogin;
 import 'package:at_commons/at_commons.dart' show AtException;
@@ -23,11 +23,18 @@ const _atSign = '@alice🛠';
 /// The database the passkey entry points open.
 const _entryPointDb = 'at_client_wasm';
 
+/// A version above the one this build creates, as a newer build leaves it.
+const _newerVersion = 5;
+
+/// A store earlier versions created, which an upgrade to this build's
+/// version deletes.
+const _retiredStore = 'at_client_wasm_pending';
+
 /// A root no lookup can reach, so no test leaves the browser.
 final _transport =
     SessionTransportOptions(root: AtRootDomain('root.example', 6464));
 
-Future<AtClient> _login() => passkeyLogin(
+Future<PasskeySession> _login() => passkeyLogin(
     atSign: _atSign,
     app: 'wavi',
     rpId: 'localhost',
@@ -110,16 +117,17 @@ void main() {
 
   test('A passkey database a newer build upgraded opens as it is', () async {
     final credentialId = Uint8List.fromList(utf8.encode('remembered-passkey'));
-    final newer = await _rawOpen(_entryPointDb, 4, upgrade: (db) {
+    final newer = await _rawOpen(_entryPointDb, _newerVersion, upgrade: (db) {
       db.createObjectStore('at_client_wasm_credentials');
       db.createObjectStore('at_client_wasm_enrollments');
-      db.createObjectStore('at_client_wasm_pending');
+      db.createObjectStore(_retiredStore);
     });
     addTearDown(() => _deleteDb(_entryPointDb));
     addTearDown(() => newer.close());
     await _rawPut(newer, 'at_client_wasm_credentials', _atSign, credentialId);
     await _rawPut(newer, 'at_client_wasm_enrollments', _atSign,
         utf8.encode('remembered-enrollment'));
+    await _rawPut(newer, _retiredStore, _atSign, [1, 2, 3]);
     newer.close();
 
     final asked = <Uint8List?>[];
@@ -148,5 +156,15 @@ void main() {
         reason: 'no version error is thrown');
     expect(thrown, isA<PasskeyLostException>(),
         reason: 'the login fails only because no passkey answered');
+
+    final after = await _rawOpen(_entryPointDb, _newerVersion);
+    addTearDown(() => after.close());
+    expect(after.version, _newerVersion,
+        reason: 'the database stays at the version the newer build left');
+    final names = after.objectStoreNames;
+    expect([for (var i = 0; i < names.length; i++) names.item(i)!],
+        contains(_retiredStore),
+        reason: 'no upgrade ran: an upgrade deletes the stores earlier '
+            'versions created');
   });
 }
