@@ -886,8 +886,8 @@ class PasskeyCustody {
 /// Throws [InvalidAtSignException] otherwise.
 Atsign canonicalPasskeyAtSign(String atSign) {
   if (!atSign.startsWith('@') || atSign.indexOf('@', 1) != -1) {
-    throw InvalidAtSignException(
-        'a passkey atSign has one leading "@" and no other: $atSign');
+    throw InvalidAtSignException('a passkey atSign has one leading "@" and no '
+        'other: "${clipForMessage(atSign, quote: '"')}"');
   }
   return atSign.toAtsign();
 }

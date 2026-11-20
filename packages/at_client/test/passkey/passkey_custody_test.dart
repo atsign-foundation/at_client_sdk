@@ -199,6 +199,20 @@ void main() {
         expect(setupLock.names, isEmpty);
       });
     }
+
+    test(
+        'one holding a line break is refused with a one-line message that '
+        'shows it quoted and escaped', () async {
+      final refused = throwsA(isA<InvalidAtSignException>().having(
+          (e) => e.message,
+          'message',
+          r'a passkey atSign has one leading "@" and no other: '
+              r'"left\u000a@right\""'));
+      final c = custody();
+      await expectLater(
+          c.onboard(atSign: 'left\n@right"', cram: 'cram'), refused);
+      await expectLater(c.open(atSign: 'left\n@right"'), refused);
+    });
   });
 
   group('onboard writes', () {
