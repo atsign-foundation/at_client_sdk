@@ -38,6 +38,10 @@
   `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
   `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
   AT0028 or AT0029, in any form.
+- fix: an activation whose connection is stopped while it authenticates by
+  PKAM, or while it waits for its atServer once the atDirectory has
+  answered, throws `StoppedException`, not `AtTimeoutException` or
+  `AtAuthenticationException`.
 - fix: a clientConfig given to an authenticator, `activateAtSign` or
   `AtEnrollment.create` whose top-level `version` is null, empty or only
   whitespace sends no `version`, as `clientConfigFor` already did.
