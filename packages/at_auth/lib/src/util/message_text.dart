@@ -11,11 +11,19 @@ const maxMessageTextLength = 180;
 /// cutting inside an escape or a character; when any are left out, `...`
 /// follows.
 ///
-/// Throws [ArgumentError] when [quote] is not one character.
+/// Throws [ArgumentError] when [quote] is not one character, or is a
+/// backslash or one of the characters shown as an escape.
 String clipForMessage(String text,
     {int maxLength = maxMessageTextLength, String? quote}) {
-  if (quote != null && quote.runes.length != 1) {
-    throw ArgumentError.value(quote, 'quote', 'must be one character');
+  if (quote != null &&
+      (quote.runes.length != 1 ||
+          quote.runes.single == 0x5c ||
+          _unprintable(quote.runes.single))) {
+    throw ArgumentError.value(
+        quote,
+        'quote',
+        'must be one character other than a backslash or a control, format, '
+            'line or paragraph separator character or a surrogate');
   }
   final quoteRune = quote?.runes.single;
   final out = StringBuffer();

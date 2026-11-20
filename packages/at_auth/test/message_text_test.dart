@@ -92,4 +92,43 @@ void main() {
       }
     });
   });
+
+  group('Given a quote character', () {
+    test('when the text holds it, then each one is shown escaped', () {
+      expect(clipForMessage('a"b"', quote: '"'), r'a\"b\"');
+      expect(clipForMessage("a'b", quote: "'"), r"a\'b");
+      expect(clipForMessage('a"b'), 'a"b',
+          reason: 'with no quote given, a quote is shown as it is');
+    });
+
+    test(
+        'when its escape would cross the clip, then the escape is left out '
+        'whole, never cut', () {
+      expect(clipForMessage('${'a' * 178}"', quote: '"'), '${'a' * 178}\\"',
+          reason: 'an escape that ends at the 180th character is kept whole');
+      expect(clipForMessage('${'a' * 179}"b', quote: '"'), '${'a' * 179}...');
+      expect(clipForMessage('ab"', maxLength: 3, quote: '"'), 'ab...');
+    });
+
+    test(
+        'when it is not one printable character other than a backslash, then '
+        'clipping throws ArgumentError', () {
+      for (final (name, quote) in [
+        ('no character', ''),
+        ('two characters', '""'),
+        ('a line feed', '\n'),
+        ('a C1 control character', '\u0085'),
+        ('a format character', '\u200b'),
+        ('a line separator', '\u2028'),
+        ('a paragraph separator', '\u2029'),
+        ('a lone surrogate', String.fromCharCode(0xd800)),
+        ('a backslash', r'\'),
+      ]) {
+        expect(() => clipForMessage('a', quote: quote), throwsArgumentError,
+            reason: name);
+      }
+      expect(clipForMessage('a\u{1f600}', quote: '\u{1f600}'), 'a\\\u{1f600}',
+          reason: 'one supplementary-plane character is one character');
+    });
+  });
 }
