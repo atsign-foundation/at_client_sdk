@@ -48,9 +48,20 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     }
   }
 
-  /// The keyfile's path.
+  /// The keyfile's path, or, when [filePath] cannot resolve it, such as the
+  /// default path on a platform with no home directory, a description that
+  /// says so. It never throws, so a caller reporting a failed [read] can
+  /// name the source.
   @override
-  String describeSource(String atsign) => filePath!(atsign);
+  String describeSource(String atsign) {
+    try {
+      return filePath!(atsign);
+    } catch (_) {
+      // NOTE: safe to drop: read() fails on the same path and its error is
+      // the one reported; this only names where the keys were looked for.
+      return 'the atKeys file, whose path could not be resolved';
+    }
+  }
 
   /// Throws [FileSystemException] naming the keyfile's path unless a new
   /// file can be created beside it.

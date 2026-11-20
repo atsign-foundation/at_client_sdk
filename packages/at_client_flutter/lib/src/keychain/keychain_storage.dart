@@ -128,8 +128,9 @@ class KeychainStorage {
         'Migrating AtKeysData from legacy keychain store '
         '"$keychainStorageImproperName" to "$currentName"',
       );
-      await _write(
-        biometricStoreName: currentName,
+      await _replaceEntry(
+        name: currentName,
+        previous: null,
         keychainData: _decodeAtKeysData(legacyData),
       );
       return legacyData;
@@ -263,24 +264,21 @@ class KeychainStorage {
   ///
   /// A failure to read or write the keychain, its legacy-named store
   /// included, is thrown, and a stored entry that is not a JSON object throws
-  /// [AtKeysFormatException], with nothing written.
+  /// [AtKeysFormatException], with nothing written. On Windows, where the
+  /// entry is written in parts, a write that fails partway is undone before
+  /// it is thrown, unless undoing it fails too, which is logged.
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) =>
       _writes.synchronized(() => _append(keys));
 
   Future<void> _append(AtKeys keys) async {
     final existingData = await _readAtKeysDataRaw();
-    if (existingData == null) {
-      final atKeysData = AtKeysData(keys: [keys]);
-      await _write(
-        biometricStoreName: (await AtKeysStore.getName()),
-        keychainData: atKeysData,
-      );
-      return;
-    }
-    final atKeysData = _decodeAtKeysData(existingData);
+    final atKeysData = existingData == null
+        ? AtKeysData(keys: [])
+        : _decodeAtKeysData(existingData);
     atKeysData.keys.add(keys);
-    await _write(
-      biometricStoreName: (await AtKeysStore.getName()),
+    await _replaceEntry(
+      name: await AtKeysStore.getName(),
+      previous: existingData,
       keychainData: atKeysData,
     );
   }
@@ -291,9 +289,11 @@ class KeychainStorage {
   ///
   /// A failure to read or write the keychain, its legacy-named store
   /// included, is thrown, and a stored entry that is not a JSON object throws
-  /// [AtKeysFormatException], with nothing written. An empty keychain is left
-  /// as it is. [deleteAllAtKeysData] is how a keychain whose entry does not
-  /// parse is cleared, removing every Atsign stored there.
+  /// [AtKeysFormatException], with nothing written. On Windows, where the
+  /// entry is written in parts, a write that fails partway is undone before
+  /// it is thrown, unless undoing it fails too, which is logged. An empty
+  /// keychain is left as it is. [deleteAllAtKeysData] is how a keychain whose
+  /// entry does not parse is cleared, removing every Atsign stored there.
   Future<void> removeAtsignFromKeychain(String atSign) =>
       _writes.synchronized(() => _remove(atSign));
 
@@ -305,8 +305,9 @@ class KeychainStorage {
     atKeysData.keys.removeWhere(
       (element) => _normalized(_atSignOf(element)) == wanted,
     );
-    await _write(
-      biometricStoreName: (await AtKeysStore.getName()),
+    await _replaceEntry(
+      name: await AtKeysStore.getName(),
+      previous: data,
       keychainData: atKeysData,
     );
   }
@@ -542,11 +543,55 @@ class KeychainStorage {
     await store.delete();
   }
 
+  /// Writes [keychainData] to the keys entry named [name], which held
+  /// [previous], or nothing when it is null.
+  ///
+  /// On Windows the entry is a header and segments written one at a time, so
+  /// a write that fails partway is undone before the failure is rethrown:
+  /// [previous] is written back, or the entry deleted when it held nothing.
+  /// A failure to undo it is logged, and the write's own failure thrown.
+  Future<void> _replaceEntry({
+    required String name,
+    required String? previous,
+    required KeychainData keychainData,
+  }) async {
+    try {
+      await _write(biometricStoreName: name, keychainData: keychainData);
+    } catch (e, s) {
+      if (isWindows) await _undoWrite(name, previous);
+      Error.throwWithStackTrace(e, s);
+    }
+  }
+
+  Future<void> _undoWrite(String name, String? previous) async {
+    try {
+      if (previous == null) {
+        await _delete(keychainStoreName: name);
+      } else {
+        await _writeText(biometricStoreName: name, data: previous);
+      }
+    } catch (e, s) {
+      _logger.severe(
+        'Undoing a failed write of keychain entry "$name" failed; it may be '
+        'left partly written',
+        e,
+        s,
+      );
+    }
+  }
+
   Future<void> _write({
     required String biometricStoreName,
     required KeychainData keychainData,
+  }) => _writeText(
+    biometricStoreName: biometricStoreName,
+    data: jsonEncode(keychainData.toJson()),
+  );
+
+  Future<void> _writeText({
+    required String biometricStoreName,
+    required String data,
   }) async {
-    final data = jsonEncode(keychainData.toJson());
     BiometricStorageFile store = await _getBiometricStorageFile(
       biometricStoreName,
     );

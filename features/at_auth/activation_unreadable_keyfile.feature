@@ -36,3 +36,14 @@ Feature: Activation refuses a keyfile it cannot read or write before it uses the
     When two checks that the keyfile can be written start together
     Then both succeed
     And nothing is left behind in the directory
+
+  Scenario: The writability check removes the file it creates to find out
+    Given a keyfile path in a directory this process can write
+    When the check creates its probe file and deletes it
+    Then nothing is left behind in the directory
+    And when that delete fails, the check throws naming the keyfile's path
+
+  Scenario: A keyfile path that cannot be resolved is unreadable keys
+    Given a FileAtKeysIo whose path cannot be resolved, as the default path on a platform with no home directory
+    When the app activates @alice with its CRAM secret
+    Then it throws AtKeysUnusableException with cause unreadable, saying the path could not be resolved, and sends nothing to the atServer

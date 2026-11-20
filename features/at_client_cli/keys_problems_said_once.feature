@@ -9,7 +9,8 @@ Feature: A CLI program says what is wrong with the keys once, and what to do nex
 
   Races: none arise; the lookup reads one public value once.
   Replay: none arise; the lookup is unauthenticated and nothing is signed.
-  DoS: one lookup, on an error path only.
+  DoS: one lookup, on an error path only, given 5 seconds; when they are
+  spent its connection is closed.
   Forgery: a spoofed atDirectory or atServer can change only the hint,
   never an authentication decision.
   Impersonation: none arise; no credential is used or sent.
@@ -19,8 +20,8 @@ Feature: A CLI program says what is wrong with the keys once, and what to do nex
 
   Scenario Outline: No keys and the atSign not yet activated
     Given no keyfile for @alice at <path>, and @alice's atServer holds no public key for @alice
-    When the user runs "at_activate <command> -a @alice"
-    Then stderr holds, once, "No keys for @alice at <path>." then "@alice has not been activated yet. To activate it: at_activate onboard -a @alice" then the footer, and it exits 1
+    When the user runs "at_activate <command> -a @alice -r <root>"
+    Then stderr holds, once, "No keys for @alice at <path>." then "@alice has not been activated yet. To activate it: at_activate onboard -a @alice -r <root>" then the footer, and it exits 1
     Examples:
       | command |
       | otp     |
@@ -42,10 +43,20 @@ Feature: A CLI program says what is wrong with the keys once, and what to do nex
     When the user runs "at_activate otp -a @alice"
     Then stderr holds, once, "No keys for @alice at <path>." then "  Not activated yet?             at_activate onboard -a @alice" then "  Activated on another machine?  Run this command there, or enroll this machine first." then the footer, and it exits 1
 
+  Scenario: The absent keys' lookup with an atServer that does not answer
+    Given no keyfile for @alice at <path>, and @alice's atServer accepts a connection and never answers
+    When the hint lookup has had 5 seconds
+    Then it gives both hints, and its connection to the atServer is closed
+
   Scenario: A passphrase-protected keyfile without its passphrase
     Given a passphrase-protected keyfile for @alice at <path>
     When the user runs "at_activate otp -a @alice" without -P
     Then stderr holds, once, "Could not read the keys for @alice at <path>: the passphrase is wrong or missing." then "  If the keyfile has a passphrase, pass it with -P." then the footer, and it exits 1
+
+  Scenario: A passphrase-protected keyfile refused for something other than its passphrase
+    Given a passphrase-protected keyfile for @alice at <path> declaring an envelope version this build has no code for
+    When it is reported
+    Then stderr holds the message open throws, which gives that reason, then the footer, and nothing about the passphrase
 
   Scenario: A keyfile for another atSign
     Given a keyfile at <path> whose atsign is @bob

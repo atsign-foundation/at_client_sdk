@@ -5,6 +5,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/widgets/shared/failure_message.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 /// What the dialogs show for each kind of failure, one failure at a time.
 void main() {
@@ -50,6 +51,11 @@ void main() {
               'refused (OS Error: Connection refused, errno = 61)',
         ),
         'AtLookUpException AT0021': AtLookUpException('AT0021', 'refused'),
+        'a registrar request with no response, as package:http reports it':
+            http.ClientException(
+              'SocketException: Failed host lookup: \'my.atsign.com\'',
+              Uri.https('my.atsign.com', '/api/app/v3/activate'),
+            ),
       };
       for (final MapEntry(key: name, value: error) in cases.entries) {
         test(name, () => expect(shown(error), unreachable));

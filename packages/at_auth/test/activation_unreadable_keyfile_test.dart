@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -64,6 +65,39 @@ class _ReadOnlyStore extends GeneratedAtKeysIo {
   @override
   AtKeys generateKeys(String publicKeyId) =>
       throw UnsupportedError('no keys are generated');
+}
+
+/// A real file whose delete is refused unless [deletable].
+class _ProbeFile implements File {
+  _ProbeFile(this._file, {required this.deletable});
+
+  final File _file;
+  final bool deletable;
+
+  @override
+  String get path => _file.path;
+
+  @override
+  Directory get parent => _file.parent;
+
+  @override
+  Future<File> create({bool recursive = false, bool exclusive = false}) async {
+    await _file.create(recursive: recursive, exclusive: exclusive);
+    return this;
+  }
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) async {
+    if (!deletable) {
+      throw FileSystemException(
+          'Cannot delete file', path, const OSError('refused by the test', 1));
+    }
+    return _file.delete(recursive: recursive);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
 }
 
 /// A platform's refusal to read its keychain, as a plugin reports one.
@@ -261,6 +295,21 @@ void main() {
               holdsNoneOf(text, window: 16))));
       expectNothingSent();
     });
+
+    test('a keyfile path that cannot be resolved', () async {
+      // NOTE: as the default path resolves on a platform with no home
+      // directory.
+      const String? home = null;
+
+      await expectLater(
+          activate(FileAtKeysIo(filePath: (a) => '${home!}/${a}_key.atKeys')),
+          throwsA(unreadable(
+              'the atKeys file, whose path could not be resolved',
+              startsWith('The keys for $atSign in the atKeys file, whose path '
+                  'could not be resolved could not be read: '),
+              isA<TypeError>())));
+      expectNothingSent();
+    });
   });
 
   group(
@@ -285,8 +334,6 @@ void main() {
               .having((e) => e.message, 'CRAM secret',
                   isNot(contains(cramSecret)))));
       expectNothingSent();
-      expect(Directory(locked).listSync(), isEmpty,
-          reason: 'the check leaves nothing in the directory it checked');
     }, skip: skipModes);
 
     test('a directory that does not exist and cannot be created', () async {
@@ -347,6 +394,52 @@ void main() {
           reason: 'two checks of one keyfile path at once each succeed');
       expect(dir.listSync(), isEmpty,
           reason: 'neither check leaves a file behind');
+    });
+  });
+
+  group('The writability check removes the file it creates to find out', () {
+    late String path;
+    late List<String> probes;
+
+    setUp(() {
+      path = '${dir.path}/${atSign}_key.atKeys';
+      probes = [];
+    });
+
+    /// Runs [check] with every probe file the check creates recorded in
+    /// [probes], and its delete refused unless [deletable].
+    Future<void> probing(Future<void> Function() check,
+            {required bool deletable}) =>
+        IOOverrides.runZoned(check, createFile: (p) {
+          // NOTE: the real file, made outside these overrides.
+          final file = Zone.root.run(() => File(p));
+          if (!p.startsWith('$path.writable.')) return file;
+          probes.add(p);
+          return _ProbeFile(file, deletable: deletable);
+        });
+
+    test('and leaves nothing behind once it is deleted', () async {
+      await probing(() => FileAtKeysIo(filePath: (_) => path)
+          .checkWritable(atSign), deletable: true);
+
+      expect(probes, hasLength(1),
+          reason: 'the control: the check created a probe file');
+      expect(dir.listSync(), isEmpty,
+          reason: 'the check leaves nothing in the directory it checked');
+    });
+
+    test('and says the keyfile cannot be written when that delete fails',
+        () async {
+      await expectLater(
+          probing(
+              () => FileAtKeysIo(filePath: (_) => path).checkWritable(atSign),
+              deletable: false),
+          throwsA(isA<FileSystemException>()
+              .having((e) => e.path, 'path', path)
+              .having((e) => e.message, 'message',
+                  startsWith('Cannot write the atKeys file: '))));
+      expect(probes, hasLength(1),
+          reason: 'the control: the check created a probe file');
     });
   });
 

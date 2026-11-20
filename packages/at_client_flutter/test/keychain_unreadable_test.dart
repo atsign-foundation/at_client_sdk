@@ -1,6 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysSourceAbsentException;
+import 'package:at_auth/at_auth.dart'
+    show
+        AtKeysSourceAbsentException,
+        CryptographicMaterial,
+        CryptographicMaterialAlgorithm,
+        CryptographicMaterialRole;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtLookupImpl, AtLookupMuxable;
@@ -192,6 +198,7 @@ void main() {
         throwsA(unreadable(message: anything, error: isA<PlatformException>())),
       );
       expectNothingSent();
+      expect(changed, isEmpty, reason: 'nothing is written or deleted');
     });
   });
 
@@ -252,6 +259,7 @@ void main() {
         ),
       );
       expectNothingSent();
+      expect(changed, isEmpty, reason: 'nothing is written or deleted');
     });
   });
 
@@ -328,5 +336,91 @@ void main() {
   test('removing an atSign from an empty keychain writes nothing', () async {
     await keychain({}).removeAtsignFromKeychain(atSign);
     expect(changed, isEmpty);
+  });
+
+  group('On Windows, a keychain write that fails partway leaves the keychain '
+      'as it was', () {
+    late Map<String, String> held;
+
+    /// The name of the store whose next write fails, once.
+    String? failNextWriteOf;
+
+    setUp(() {
+      KeychainStorage.isWindows = true;
+      addTearDown(() => KeychainStorage.isWindows = false);
+      held = {};
+      failNextWriteOf = null;
+    });
+
+    /// A keychain whose stores hold what is written to them, in [held].
+    KeychainStorage windowsKeychain() {
+      final biometricStorage = _MockBiometricStorage();
+      when(
+        () =>
+            biometricStorage.getStorage(any(), options: any(named: 'options')),
+      ).thenAnswer((invocation) async {
+        final name = invocation.positionalArguments.first as String;
+        final file = _MockBiometricStorageFile();
+        when(file.read).thenAnswer((_) async => held[name]);
+        when(() => file.write(any())).thenAnswer((invocation) async {
+          if (failNextWriteOf == name) {
+            failNextWriteOf = null;
+            throw PlatformException(code: 'WriteFailed');
+          }
+          held[name] = invocation.positionalArguments.first as String;
+        });
+        when(file.delete).thenAnswer((_) async => held.remove(name));
+        return file;
+      });
+      return KeychainStorage(biometricStorage: biometricStorage);
+    }
+
+    /// Keys for [atSign] whose entry spans several Windows segments.
+    AtKeys largeKeys(String atSign) => AtKeys()
+      ..atsign = atSign.toAtsign()
+      ..addKey(
+        CryptographicMaterial(
+          keyId: 'enc:rsa2048:1',
+          role: CryptographicMaterialRole.of('publicEncryption'),
+          algorithm: CryptographicMaterialAlgorithm.of('rsa2048'),
+          bytes: AtBytes.fromString(base64Encode(List.filled(6000, 7))),
+          createdAt: DateTime.utc(2026),
+        ),
+      );
+
+    test('removing an atSign from a keychain holding others', () async {
+      final storage = windowsKeychain();
+      await storage.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      await storage.appendAtKeysToKeychain(keys: largeKeys('@bob'));
+      expect(
+        held.keys,
+        contains('${current}_segment_4'),
+        reason: 'the control: the entry spans five segments',
+      );
+      failNextWriteOf = '${current}_segment_1';
+
+      await expectLater(
+        storage.removeAtsignFromKeychain(atSign),
+        throwsA(isA<PlatformException>()),
+      );
+
+      expect(
+        (await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'),
+        [atSign, '@bob'],
+      );
+    });
+
+    test('adding the first keys to an empty keychain', () async {
+      final storage = windowsKeychain();
+      failNextWriteOf = '${current}_segment_1';
+
+      await expectLater(
+        storage.appendAtKeysToKeychain(keys: largeKeys(atSign)),
+        throwsA(isA<PlatformException>()),
+      );
+
+      expect(await storage.readAtKeysData(), isNull);
+      expect(held, isEmpty, reason: 'nothing is left of the failed write');
+    });
   });
 }

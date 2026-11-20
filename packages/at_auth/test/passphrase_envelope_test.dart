@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_chops/at_chops.dart' show ArgonHashParams, HashingAlgoType;
 import 'package:at_commons/at_commons.dart';
@@ -34,7 +35,7 @@ void main() {
     test('throws when an envelope has no passphrase', () {
       expect(
         () => codec.decode({'iv': 'aXY=', 'content': 'x'}),
-        throwsA(isA<AtDecryptionException>()),
+        throwsA(isA<AtKeysPassphraseException>()),
       );
     });
 
@@ -44,15 +45,31 @@ void main() {
           {'iv': 'aXY=', 'content': 'x'},
           passPhrase: 'right',
         ),
-        throwsA(isA<AtDecryptionException>()),
+        throwsA(allOf(isA<AtDecryptionException>(),
+            isNot(isA<AtKeysPassphraseException>()))),
       );
     });
 
-    test('throws AtDecryptionException on an incorrect passphrase', () async {
+    test('throws AtKeysPassphraseException on an incorrect passphrase',
+        () async {
       final envelope = await envelopeFor('{"version":1,"keys":[]}');
       expect(
         () => codec.decode(envelope, passPhrase: 'wrong'),
-        throwsA(isA<AtDecryptionException>()),
+        throwsA(isA<AtKeysPassphraseException>()),
+      );
+    });
+
+    test(
+        'an envelope version this build has no code for is not refused as '
+        'a passphrase', () async {
+      final envelope = await envelopeFor('{"version":1,"keys":[]}')
+        ..['v'] = 3;
+      expect(
+        () => codec.decode(envelope, passPhrase: 'right'),
+        throwsA(allOf(
+            isA<AtDecryptionException>().having((e) => e.message, 'message',
+                contains('envelope version this build has no code for')),
+            isNot(isA<AtKeysPassphraseException>()))),
       );
     });
 

@@ -132,6 +132,10 @@ class AtKeysPassphraseEnvelopeCodec {
 
   /// Decrypts a passphrase envelope back to the JSON object it wraps.
   /// Returns [json] unchanged when it is not an envelope.
+  ///
+  /// Throws [AtKeysPassphraseException] when [passPhrase] is missing or does
+  /// not open the envelope, and a plain [AtDecryptionException] saying what
+  /// is wrong for any other envelope it cannot open.
   Future<Map<String, dynamic>> decode(
     Map<String, dynamic> json, {
     String? passPhrase,
@@ -140,7 +144,7 @@ class AtKeysPassphraseEnvelopeCodec {
       return json;
     }
     if (passPhrase.isNullOrEmpty) {
-      throw AtDecryptionException(
+      throw AtKeysPassphraseException(
           'Pass Phrase is required for password protected atKeys file');
     }
 
@@ -202,10 +206,10 @@ class AtKeysPassphraseEnvelopeCodec {
       }
       return decodedJson;
     } on AtKeysFormatException catch (e) {
-      throw AtDecryptionException(
+      throw AtKeysPassphraseException(
           'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
     } catch (_) {
-      throw AtDecryptionException(
+      throw AtKeysPassphraseException(
           'Failed to decrypt atKeys file - passphrase may be incorrect');
     }
   }

@@ -533,13 +533,15 @@ enum _PublicKey {
 
 /// Asks [atDirectory] for [atSign]'s atServer and that atServer, over the
 /// connection [connect] builds on the same [atDirectory], for its public key,
-/// unauthenticated; [detail] says what was found.
+/// unauthenticated; [detail] says what was found. [atDirectoryTimeout]
+/// bounds the atDirectory's answer, which otherwise has its default budget.
 Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(
     String atSign,
     SecondaryAddressFinder atDirectory,
-    AtLookUp Function(SecondaryAddressFinder atDirectory) connect) async {
+    AtLookUp Function(SecondaryAddressFinder atDirectory) connect,
+    {Duration? atDirectoryTimeout}) async {
   try {
-    await atDirectory.findSecondary(atSign);
+    await atDirectory.findSecondary(atSign, timeout: atDirectoryTimeout);
   } on SecondaryNotFoundException {
     return (
       outcome: _PublicKey.notInAtDirectory,
@@ -615,7 +617,8 @@ const Duration _absentKeysHintBudget = Duration(seconds: 5);
 /// The next step for [atSign], whose keys are not on this machine, from
 /// whether the atServer the atDirectory at [rootServer] names for it holds
 /// its public key, looked up as [status] looks it up, within
-/// [_absentKeysHintBudget].
+/// [_absentKeysHintBudget]. When the budget is spent, the lookup's
+/// connection is closed and no new one is started, so none outlives it.
 @visibleForTesting
 Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   final AtRootDomain rootDomain;
@@ -624,24 +627,42 @@ Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
   } catch (_) {
     return eitherKeysHint(atSign);
   }
+  AtLookUp? connection;
+  var budgetSpent = false;
   final found = await _lookUpPublicKey(
       atSign,
       CacheableSecondaryAddressFinder(
           rootDomain.rootDomain, rootDomain.rootPort),
-      (atDirectory) => secureSocketLookUps()(
-            atSign: atSign,
-            rootDomain: rootDomain,
-            authenticator: null,
-            secondaryAddressFinder: atDirectory,
-          )).timeout(_absentKeysHintBudget,
-      onTimeout: () => (
-            outcome: _PublicKey.atDirectoryUnreachable,
-            detail: 'no answer within $_absentKeysHintBudget'
-          ));
+      (atDirectory) {
+        if (budgetSpent) {
+          throw TimeoutException(
+              'the hint lookup for $atSign is past its budget',
+              _absentKeysHintBudget);
+        }
+        return connection = secureSocketLookUps()(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: null,
+          secondaryAddressFinder: atDirectory,
+        );
+      },
+      atDirectoryTimeout: _absentKeysHintBudget).timeout(_absentKeysHintBudget,
+      onTimeout: () {
+    budgetSpent = true;
+    // NOTE: closing ends the lookup still in flight, and any socket it is
+    // still opening; Future.timeout alone would leave both running.
+    unawaited(connection?.close().catchError((Object e) {
+      logger.finer('closing the hint lookup for $atSign failed: $e');
+    }));
+    return (
+      outcome: _PublicKey.atDirectoryUnreachable,
+      detail: 'no answer within $_absentKeysHintBudget'
+    );
+  });
   return switch (found.outcome) {
     _PublicKey.absent => [
         '$atSign has not been activated yet. To activate it: at_activate '
-            'onboard -a $atSign'
+            'onboard -a $atSign -r $rootServer'
       ],
     _PublicKey.found => [
         '$atSign is activated, but not on this machine. Run this command on '

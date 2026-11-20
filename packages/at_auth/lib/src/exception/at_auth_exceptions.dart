@@ -74,6 +74,14 @@ class AtKeysFormatException extends FormatException {
   String toString() => 'AtKeysFormatException: $message';
 }
 
+/// A passphrase envelope refused for its passphrase: none was given, or the
+/// one given does not open it. Every other refusal of an envelope, such as a
+/// version or key derivation this build cannot use, is a plain
+/// [AtDecryptionException] whose message says what is wrong.
+class AtKeysPassphraseException extends AtDecryptionException {
+  AtKeysPassphraseException(super.message);
+}
+
 class AtKeysValidationException extends AtException {
   AtKeysValidationException(super.message);
 }
