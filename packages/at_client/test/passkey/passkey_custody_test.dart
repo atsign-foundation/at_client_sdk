@@ -1467,6 +1467,30 @@ void main() {
     });
 
     test(
+        'An onboarding that waited for one whose CRAM secret delete failed '
+        'before the atServer deleted it revokes the first', () async {
+      final failure = AtException('the CRAM secret delete failed');
+      gateway.onAuthenticate = (session) => session.completeError = failure;
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), failure);
+      expect(server.cramDeleted, isEmpty,
+          reason: 'the control: the CRAM secret is still live');
+      final first = authenticator.current;
+      gateway.onAuthenticate = null;
+
+      final second = await custody().onboard(atSign: _atSign, cram: 'cram');
+
+      expect(second.client.enrollmentId, 'eid2',
+          reason: 'the second onboarding is not refused at activation');
+      expect(server.approved, {'eid2': _atSign},
+          reason: 'it revoked the first onboarding\'s enrollment');
+      authenticator.current = first;
+      await expectLater(custody(withHints: FakeHints()).open(atSign: _atSign),
+          throwsA(isA<PasskeyLostException>()),
+          reason: 'logging in with the first passkey does not finish it');
+    });
+
+    test(
         'its message names the Atsign and the login that finishes it, never '
         'the cause\'s message', () async {
       final failure = AtException('text only the cause holds');
@@ -1478,7 +1502,10 @@ void main() {
               .having(
                   (e) => e.message,
                   'message',
-                  allOf(contains(_atSign), contains('logging in'),
+                  allOf(
+                      contains(_atSign),
+                      contains('logging in'),
+                      contains('unless another onboarding'),
                       isNot(contains(failure.message))))
               .having((e) => e.toString(), 'toString',
                   isNot(contains(failure.message)))));

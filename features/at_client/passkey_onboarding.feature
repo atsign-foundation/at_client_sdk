@@ -61,6 +61,11 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
   registrar.
 
   Races: tabs of one origin onboarding one Atsign wait on its setup lock.
+  A tab that waited for an onboarding that threw a
+  PasskeyOnboardingIncompleteException because its CRAM secret's delete
+  failed before the atServer applied it finds the secret live: its own
+  onboarding succeeds and revokes the first's enrollment, and logging in
+  with the first passkey is then refused as a lost passkey.
   Two devices onboarding one Atsign with the same CRAM secret at once can
   revoke each other's enrollments, and in the worst order leave the Atsign
   activated with no usable enrollment until its registrar resets the CRAM
@@ -369,6 +374,13 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
       | how                                                   |
       | after the atServer deleted the secret                 |
       | before the atServer deleted the secret                |
+
+  @race
+  Scenario: An onboarding that waited for one whose CRAM secret delete failed before the atServer deleted it revokes the first
+    Given an onboarding of @alice🛠 threw a PasskeyOnboardingIncompleteException because its CRAM secret's delete failed before the atServer deleted the secret
+    When the app onboards @alice🛠 again with the same CRAM secret and a new passkey
+    Then the onboarding succeeds and revokes the first onboarding's enrollment
+    And logging in to @alice🛠 with the first passkey on a device with no saved hints throws a PasskeyLostException
 
   Scenario: PasskeyCustody.onboard in a browser throws the same PasskeyOnboardingIncompleteException
     Given the app onboards @alice🛠 in a browser through PasskeyCustody.onboard

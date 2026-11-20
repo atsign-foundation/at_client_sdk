@@ -1136,7 +1136,7 @@ It is dropped automatically only when the atServer explicitly refuses PKAM for t
 - **One wrapper for every failure, with a field naming the next call:** rejected. The field is computed at the same line, so it gives the app nothing this design does not, and every existing typed catch on `onboard` stops matching.
 - **No new type; the app always logs in first:** rejected. It costs a passkey prompt after every failure, including those where there is nothing to find (no passkey PRF, a lock timeout, a cancelled registration), and telling "no pointer" from "no credential" would rest on the wording of a reason string.
 - **Wrap an `Error` too:** rejected. It would tell the app that a login finishes a state the library did not reason about.
-- **Not covered:** a second onboarding with the same CRAM secret, in another tab or on another device, that waited for the first is refused at activation, before the pointer, and is thrown as it is. A re-run is promised only while the CRAM secret is live.
+- **Not covered:** a second onboarding with the same CRAM secret, in another tab or on another device, that waited for the first is refused at activation, before the pointer, and is thrown as it is, only when the CRAM secret is gone. When the first threw this exception because its delete of the CRAM secret failed before the atServer applied it, the secret is still live: the second activates, succeeds and revokes the first's enrollment, and a login with the first's passkey then throws `PasskeyLostException`. The second onboarding cannot tell the first's enrollment from one an interrupted attempt left, which it must revoke. A re-run is promised only while the CRAM secret is live.
 
 ---
 

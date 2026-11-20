@@ -82,14 +82,17 @@ class PasskeyLostException extends AtException {
 /// passkey then finishes the onboarding, unless it refuses another published
 /// encryption public key with [PublicKeyMismatchException]; it opens the
 /// onboarding's enrollment and saves the passkey hints if they are not
-/// saved.
+/// saved. When the CRAM secret was still live, another onboarding with it
+/// that has succeeded since revoked this onboarding's enrollment, and
+/// [PasskeyCustody.open] with this passkey throws [PasskeyLostException].
 ///
 /// [cause] is that exception, and this one is thrown with its stack trace.
 /// The message names [atSign] and never carries the cause's message.
 class PasskeyOnboardingIncompleteException extends AtException {
   PasskeyOnboardingIncompleteException(this.atSign, {required this.cause})
       : super('the onboarding of $atSign did not finish; logging in with its '
-            'passkey finishes it');
+            'passkey finishes it unless another onboarding of $atSign has '
+            'finished since');
 
   final Atsign atSign;
   final Exception cause;
@@ -334,7 +337,10 @@ class PasskeyCustody {
   /// to save them. One that fails with an [Error] fails the onboarding.
   ///
   /// The whole flow holds [atSign]'s setup lock, so a second tab onboarding
-  /// the same atSign waits for the first.
+  /// the same atSign waits for the first. When the first stopped while the
+  /// CRAM secret was still live (its delete failed before the atServer
+  /// applied it), the second activates with the same [cram], succeeds and
+  /// revokes the first's enrollment, so the first's passkey is then lost.
   ///
   /// A failure before the pointer is written is thrown as it is, and the
   /// passkey this call registered is reported to the platform as unknown,
