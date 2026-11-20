@@ -404,10 +404,10 @@ void main() {
         throwsA(isA<PlatformException>()),
       );
 
-      expect(
-        (await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'),
-        [atSign, '@bob'],
-      );
+      expect((await storage.readAtKeysData())!.keys.map((k) => '${k.atsign}'), [
+        atSign,
+        '@bob',
+      ]);
     });
 
     test('adding the first keys to an empty keychain', () async {
