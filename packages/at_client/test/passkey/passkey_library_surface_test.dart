@@ -159,10 +159,15 @@ void main() {
         MissingAtKeysDocumentException('eid1'),
         PublicKeyMismatchException(),
         AtServerAtKeysLockedException('locked'),
+        PasskeyOnboardingIncompleteException(canonicalPasskeyAtSign('@alice'),
+            cause: AtException('refused')),
       ];
       for (final e in exceptions) {
         expect(e.message, isNotEmpty, reason: '${e.runtimeType}');
       }
+      final incomplete = exceptions[6] as PasskeyOnboardingIncompleteException;
+      expect(incomplete.atSign, '@alice');
+      expect(incomplete.cause, isA<AtException>());
       expect((exceptions[1] as PkamRefusedException).enrollmentId, 'eid1');
       expect((exceptions[3] as MissingAtKeysDocumentException).enrollmentId,
           'eid1');

@@ -4,7 +4,7 @@
 [`docs/architecture/decisions.md`](../../architecture/decisions.md); until then it
 is a proposal, and [`docs/architecture/invariants.md`](../../architecture/invariants.md)
 outranks it.
-**Scope:** the rulings D-1..D-32 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-33 that govern the implementation-neutral `AtClient`
 work, the K-1..K-18 rulings on browser at-keys custody (K-6 and K-8 superseded; K-5 re-ruled and K-12 ruled 2026-10-27; K-13 ruled 2026-10-28; K-14..K-16 ruled 2026-10-30; K-17 amended K-10 2026-10-31; K-18 ruled 2026-11-05; K-5 amended 2026-11-19), the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
@@ -14,7 +14,7 @@ non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
-- [1. The rulings](#1-the-rulings) — D-1..D-32, then [K-1..K-18 browser at-keys custody](#browser-at-keys-custody--k-1k-18)
+- [1. The rulings](#1-the-rulings) — D-1..D-33, then [K-1..K-18 browser at-keys custody](#browser-at-keys-custody--k-1k-18)
 - [2. Measured findings](#2-measured-findings)
 - [3. Superseded positions](#3-superseded-positions)
 - [4. Corrections to the predecessor doc](#4-corrections-to-the-predecessor-doc)
@@ -1123,6 +1123,21 @@ It is dropped automatically only when the atServer explicitly refuses PKAM for t
 
 **If rejected:** an interrupted onboarding cannot be resumed and the user must re-enroll.
 
+### D-33 — Once its pointer is written, a failed onboarding throws `PasskeyOnboardingIncompleteException` (2026-11-19)
+
+**Accepted.** Accepted by: gkc, 2026-11-19 ('Approve both (Recommended)'), with the scenarios in [`features/at_client/passkey_onboarding.feature`](../../../features/at_client/passkey_onboarding.feature). Its row is in [`docs/architecture/decisions.md`](../../architecture/decisions.md).
+
+`PasskeyCustody.onboard`, and so `onboardNewAtSign`, throws `PasskeyOnboardingIncompleteException` for an `Exception` that stops it once the new enrollment's pointer is written. The exception names the Atsign in canonical form, carries that `Exception` as its `cause` and is thrown with the cause's stack trace; its message never carries the cause's message. An `Error`, wherever it happens, and any failure before the pointer is written, are thrown as they are. After this exception the app logs in with the passkey (`open`, `passkeyLogin`), which finishes the onboarding unless its enrollment has been revoked since or the login refuses another published encryption public key; after a failure thrown as it is, the app tries that login first when it cannot tell whether the pointer was written, and otherwise runs the onboarding again with the same CRAM secret while that secret is live.
+
+**Why:** once the pointer is written, a login without saved hints finishes the onboarding whatever its completion reached, unless its enrollment has been revoked since: it reads the completion-due record, deletes the CRAM secret (one already gone counts as deleted), revokes the other enrollments and publishes the document's key. A failed delete of the CRAM secret is the one step the app could not otherwise place: a delete whose reply was lost has deleted the secret, one that failed first has not, and the atServer answers a spent secret as it answers a wrong one, so running the onboarding again after a lost reply is refused at activation and leaves a passkey nothing uses. Putting the line at the pointer gives both cases the one answer that is right for both. Failures before the pointer keep the types apps already catch (`PrfUnavailableException`, `SetupLockTimeoutException`, a failed passkey prompt, `IndexedDbException`, the atServer's refusal of the CRAM secret). An `Error` is a defect in the library or the platform, not a state the library reasoned about, so it is not presented as an onboarding to finish.
+
+- **Wrap only after the CRAM secret's delete succeeds:** rejected. A failure of that delete stays ambiguous, since the code cannot tell a lost reply from a delete the atServer never applied; it moves the ambiguity rather than removing it.
+- **Wrap the failures before the pointer instead:** rejected. Every typed failure apps catch today would move inside a wrapper, and a type the app does not handle would default to the wrong next call.
+- **One wrapper for every failure, with a field naming the next call:** rejected. The field is computed at the same line, so it gives the app nothing this design does not, and every existing typed catch on `onboard` stops matching.
+- **No new type; the app always logs in first:** rejected. It costs a passkey prompt after every failure, including those where there is nothing to find (no passkey PRF, a lock timeout, a cancelled registration), and telling "no pointer" from "no credential" would rest on the wording of a reason string.
+- **Wrap an `Error` too:** rejected. It would tell the app that a login finishes a state the library did not reason about.
+- **Not covered:** when the CRAM secret is gone, a second onboarding with the same secret is refused at activation, before its pointer, and that failure is thrown as it is. When the first threw `PasskeyOnboardingIncompleteException` because its delete of the CRAM secret failed before the atServer applied it, the secret is still live, so the second activates and revokes the first's enrollment. A login with the first's passkey then throws `PasskeyLostException`. A re-run is promised only while the CRAM secret is live.
+
 ---
 
 ## 2. Measured findings
@@ -1528,3 +1543,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-16 | **D-28..D-31 proposed**: concurrent writers expected with refuse-and-stop in V1, the non-extractable WebCrypto sealer, the client closing its key store through `ClosableAtKeysIo`, and a sealed @keys document read through an injected document store. Not accepted until gkc rules and each has a row in `docs/architecture/decisions.md`. |
 | 2026-11-17 | **D-32 proposed**: per atSign, IndexedDB holds the hint plus at most one sealed pending onboarding record, deleted on completion, drop or discard. Not accepted until gkc rules and it has a row in `docs/architecture/decisions.md`. |
 | 2026-11-19 | **K-5 amended** (Gary, 2026-11-19, 'Approve R1 as written (Recommended)'). A login without saved hints whose onboarding's own delete of the CRAM secret answered and whose completion is still due publishes the document's key over the other instead of failing; the onboarding records that its delete answered in its `completion-due.<enrollmentId>.a.__e` record. Rejected: the hard fail for every such login, which left the Atsign needing a new CRAM secret from its registrar, and an exception for any login while the completion is due, which would publish over a key another tool published after it activated with the same CRAM secret and deleted it. The 2026-10-27 rows above keep the wording they were ruled with. |
+| 2026-11-19 | **D-33 accepted** (gkc, 2026-11-19, 'Approve both (Recommended)'): once its pointer is written, a failed onboarding throws `PasskeyOnboardingIncompleteException` for an `Exception`; an `Error` and any earlier failure are thrown as they are. Its row is in `docs/architecture/decisions.md`. |

@@ -6,6 +6,7 @@ import 'package:at_auth/passkey.dart';
 import 'package:at_commons/at_commons.dart'
     show
         AtEnrollmentException,
+        AtException,
         AtRootDomain,
         InvalidAtSignException,
         UnAuthenticatedException;
@@ -33,6 +34,15 @@ import '../test_utils/transport.dart' show defaultAtDirectory;
 const _atSign = '@alice';
 const _lockPrefix = 'test:setup';
 final _enrolledAt = DateTime.utc(2026, 11, 6, 14, 5);
+
+/// That [onboarding] throws a [PasskeyOnboardingIncompleteException] naming
+/// [_atSign], whose cause is [cause].
+Future<void> _expectIncomplete(Future<Object?> onboarding, Exception cause) =>
+    expectLater(
+        onboarding,
+        throwsA(isA<PasskeyOnboardingIncompleteException>()
+            .having((e) => e.atSign, 'atSign', _atSign)
+            .having((e) => e.cause, 'cause', same(cause))));
 
 AtLookupMuxable _idleLookUps({
   required String atSign,
@@ -510,12 +520,12 @@ void main() {
     test(
         'An onboarding whose record of the CRAM secret\'s deletion cannot be '
         'written fails, and a login finishes it', () async {
-      final refusal = StateError('the atServer refused the rewrite');
+      final refusal = AtException('the atServer refused the rewrite');
       server.completionDueWriteRefusals[CompletionDue.cramSecretDeleted] =
           refusal;
 
-      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
-          throwsA(same(refusal)));
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), refusal);
 
       final steps = server.timeline;
       expect(steps.indexOf('record-completion-due:eid1:cramSecretDeleted'),
@@ -626,13 +636,14 @@ void main() {
     });
 
     test(
-        'a revoke that fails during onboarding is thrown, reports nothing and '
-        'saves no hints, and a login then completes the activation', () async {
+        'a revoke that fails during onboarding is the cause of the exception '
+        'it throws, reports nothing and saves no hints, and a login then '
+        'completes the activation', () async {
       final remains = AtEnrollmentException(
           '1 approved enrollments other than eid1 remain after revoking them');
       gateway.onAuthenticate = (session) => session.revokeError = remains;
-      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
-          throwsA(same(remains)));
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), remains);
       expect(authenticator.signalled, isEmpty,
           reason: 'a failure while completing the activation reports nothing '
               'to the platform');
@@ -871,19 +882,19 @@ void main() {
     test(
         'A completion whose record delete fails saves no passkey hints, and '
         'the next login finishes it', () async {
-      final refusal = StateError('the atServer refused the delete');
+      final refusal = AtException('the atServer refused the delete');
       server
         ..completionDueClearFailures = 1
         ..completionDueClearError = refusal;
 
-      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
-          throwsA(same(refusal)));
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), refusal);
 
       final steps = server.timeline;
       expect(steps.indexOf('publish:${encryptionPublicKeyOf('eid1')}'),
           lessThan(steps.indexOf('clear-completion-due:eid1')),
-          reason: 'the onboarding throws the refusal after the encryption '
-              'public key is published');
+          reason: 'the onboarding throws after the encryption public key is '
+              'published');
       expect(server.publishedKey, encryptionPublicKeyOf('eid1'));
       expect(hints.credentials, isEmpty,
           reason: 'this device saves no passkey hints');
@@ -1032,8 +1043,8 @@ void main() {
       final remains = AtEnrollmentException(
           '1 approved enrollments other than eid1 remain after revoking them');
       gateway.onAuthenticate = (session) => session.revokeError = remains;
-      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
-          throwsA(same(remains)));
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), remains);
       final device = FakeHints();
 
       for (final login in ['the first login', 'the next login']) {
@@ -1361,6 +1372,183 @@ void main() {
         expect(authenticator.signalled, isEmpty);
         expect(gateway.activated, isEmpty);
       });
+    });
+
+    group(
+        'An onboarding that fails once its pointer is written throws a '
+        'PasskeyOnboardingIncompleteException', () {
+      final failure = AtException('the step failed');
+      final steps = <String, void Function()>{
+        'the CRAM secret\'s delete': () => gateway.onAuthenticate =
+            (session) => session.completeError = failure,
+        'the record that the CRAM secret is deleted': () =>
+            server.completionDueWriteRefusals[CompletionDue.cramSecretDeleted] =
+                failure,
+        'the revoke of the other enrollments': () =>
+            gateway.onAuthenticate = (session) => session.revokeError = failure,
+        'the publish of the encryption public key': () =>
+            gateway.onAuthenticate =
+                (session) => session.completeErrorAfterPublish = failure,
+        'the delete of the completion-due record': () => server
+          ..completionDueClearFailures = 1
+          ..completionDueClearError = failure,
+        'opening the client': () => gateway.openErrorForNext = failure,
+      };
+      for (final MapEntry(key: step, value: failAt) in steps.entries) {
+        test(
+            'An onboarding that fails once its pointer is written throws a '
+            'PasskeyOnboardingIncompleteException: $step', () async {
+          failAt();
+
+          await _expectIncomplete(
+              custody().onboard(atSign: _atSign, cram: 'cram'), failure);
+
+          expect(server.pointers, hasLength(1),
+              reason: 'the control: the pointer was written');
+          expect(authenticator.signalled, isEmpty,
+              reason: 'nothing is reported to the platform about the new '
+                  'credential');
+        });
+      }
+    });
+
+    test(
+        'an exception that is not an AtException once the pointer is written '
+        'is the cause of the exception onboarding throws', () async {
+      final timeout = TimeoutException('the revoke timed out');
+      gateway.onAuthenticate = (session) => session.revokeError = timeout;
+
+      await _expectIncomplete(
+          custody().onboard(atSign: _atSign, cram: 'cram'), timeout);
+
+      expect(server.pointers, hasLength(1),
+          reason: 'the control: the pointer was written');
+    });
+
+    test(
+        'An onboarding that fails before its pointer is written throws the '
+        'failure as it is', () async {
+      final failure = AtException('the pointer put failed');
+      server.onPointerPut = () => throw failure;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(failure)));
+
+      expect(server.timeline, contains('put-pointer'),
+          reason: 'the control: the pointer write was sent');
+      expect(server.pointers, isEmpty);
+      expect(authenticator.signalled, [authenticator.current],
+          reason: 'the new credential is reported to the platform as unknown');
+    });
+
+    test('An Error once the pointer is written is thrown as it is', () async {
+      final error = StateError('the publish failed');
+      gateway.onAuthenticate =
+          (session) => session.completeErrorAfterPublish = error;
+
+      await expectLater(custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(same(error)));
+
+      expect(server.pointers, hasLength(1),
+          reason: 'the control: the pointer was written');
+      expect(server.publishedKey, encryptionPublicKeyOf('eid1'),
+          reason: 'the control: the publish was sent');
+    });
+
+    group(
+        'A login finishes an onboarding whose CRAM secret delete failed, '
+        'whether or not the secret was deleted', () {
+      final failure = AtException('the CRAM secret delete failed');
+      final hows = <String, (void Function(FakeSession), bool)>{
+        'after the atServer deleted the secret': (
+          (session) => session.completeErrorAfterDelete = failure,
+          true,
+        ),
+        'before the atServer deleted the secret': (
+          (session) => session.completeError = failure,
+          false,
+        ),
+      };
+      for (final MapEntry(key: how, value: (failDelete, deleted))
+          in hows.entries) {
+        test(
+            'A login finishes an onboarding whose CRAM secret delete failed, '
+            'whether or not the secret was deleted: $how', () async {
+          server.approved['eid9'] = _atSign;
+          gateway.onAuthenticate = failDelete;
+          await _expectIncomplete(
+              custody().onboard(atSign: _atSign, cram: 'cram'), failure);
+          expect(server.cramDeleted, deleted ? {_atSign} : isEmpty,
+              reason: 'the control: the atServer had '
+                  '${deleted ? '' : 'not '}deleted the CRAM secret');
+          expect(server.completionDue, {'eid1': CompletionDue.activated},
+              reason: 'the control: the record says only that the completion '
+                  'is due');
+          gateway.onAuthenticate = null;
+          final mark = server.timeline.length;
+          final device = FakeHints();
+
+          final session =
+              await custody(withHints: device).open(atSign: _atSign);
+
+          expect(
+              completionAndRecordSteps(from: mark),
+              [
+                'cram-deleted',
+                'revoke-others',
+                'revoke:eid9',
+                'publish:${encryptionPublicKeyOf('eid1')}',
+                'cram-deleted',
+                'clear-completion-due:eid1',
+              ],
+              reason: 'the login deletes the CRAM secret, revokes the other '
+                  'enrollments, publishes the encryption public key and '
+                  'deletes the completion-due record');
+          expect(server.approved, {'eid1': _atSign});
+          expect(server.completionDue, isEmpty);
+          expect(session.client.enrollmentId, 'eid1',
+              reason: 'it opens the onboarding\'s enrollment');
+          expect(device.ids, {_atSign: 'eid1'});
+        });
+      }
+    });
+
+    test(
+        'its message names the Atsign and the login that finishes it, never '
+        'the cause\'s message', () async {
+      final failure = AtException('text only the cause holds');
+      gateway.onAuthenticate = (session) => session.revokeError = failure;
+
+      await expectLater(
+          custody().onboard(atSign: _atSign, cram: 'cram'),
+          throwsA(isA<PasskeyOnboardingIncompleteException>()
+              .having(
+                  (e) => e.message,
+                  'message',
+                  allOf(
+                      contains(_atSign),
+                      contains('logging in'),
+                      contains('unless its enrollment has been revoked since'),
+                      isNot(contains(failure.message))))
+              .having((e) => e.toString(), 'toString',
+                  isNot(contains(failure.message)))));
+    });
+
+    test('it is thrown with the stack trace of its cause', () async {
+      gateway.onAuthenticate =
+          (session) => session.revokeError = AtException('the revoke failed');
+
+      StackTrace? trace;
+      try {
+        await custody().onboard(atSign: _atSign, cram: 'cram');
+      } on PasskeyOnboardingIncompleteException catch (_, stackTrace) {
+        trace = stackTrace;
+      }
+
+      expect(trace, isNotNull,
+          reason: 'the control: the onboarding threw the exception');
+      expect('$trace', contains('FakeSession.revokeOtherEnrollments'),
+          reason: 'the trace is the one the revoke threw with');
     });
   });
 
