@@ -52,7 +52,8 @@ enum AtConnectionCause {
   /// The atServer answered `AT0025`: the enrollment was denied.
   enrollmentDenied,
 
-  /// A refusal the atServer gave no code this build knows for.
+  /// Reserved: nothing reports it. An answer with a code this build does not
+  /// know is not read as a refusal.
   otherRefusal,
 
   /// The client stopped itself: nothing is connected because nothing is
