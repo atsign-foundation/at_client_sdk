@@ -66,7 +66,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   }
 
   /// Throws [FileSystemException] naming the keyfile's path when anything,
-  /// such as a directory, is already at that path, or unless a new file can
+  /// such as a directory, is already at that path, or when a new file cannot
   /// be created beside it.
   ///
   /// It creates the keyfile's directory when missing, which the write needs
@@ -77,9 +77,6 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     final path = filePath!(atsign);
     final existing = await FileSystemEntity.type(path);
     if (existing != FileSystemEntityType.notFound) {
-      // NOTE: write() creates the keyfile and renames it into place, which
-      // fails onto anything already there, such as a directory that read()
-      // reported absent because it is not a file.
       throw FileSystemException(
           'Cannot write the atKeys file: a $existing is already at its path',
           path);
