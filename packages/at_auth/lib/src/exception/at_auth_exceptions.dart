@@ -4,6 +4,15 @@ class AtAuthenticationException extends AtException {
   AtAuthenticationException(super.message);
 }
 
+/// An atServer's `error:` reply to a `from:`, `pkam:` or `cram:`, which
+/// ended the authentication: the message carries the reply.
+class AtAuthErrorReplyException extends UnAuthenticatedException {
+  /// The code the reply names, or null when it names none.
+  final String? errorCode;
+
+  AtAuthErrorReplyException(super.message, {required this.errorCode});
+}
+
 /// The enrollment an enrollment wait was waiting on has expired, or its
 /// atServer no longer holds it, so no approval can follow.
 ///

@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/util/error_response.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -145,7 +144,16 @@ void main() {
       'a JSON object with no errorCode': '{"errorDescription":"key not found"}',
       'a JSON object whose errorCode is not a string':
           '{"errorCode":15,"errorDescription":"key not found"}',
+      'a JSON object whose errorCode is a list': '{"errorCode":["AT0015"]}',
+      'a JSON object naming a code only in its description':
+          '{"errorDescription":"AT0015 key not found"}',
+      'a JSON object with a number for errorCode and a code in its '
+              'description':
+          '{"errorCode":15,"errorDescription":"AT0015"}',
+      'a code that does not lead the body': 'Exception: AT0015-key not found',
       'malformed JSON': '{"errorCode":"AT0015",',
+      'JSON followed by other text':
+          '{"errorCode":"AT0015","errorDescription":"x"} trailing',
     };
     unknown.forEach((shape, body) {
       test('reads $shape as AT0014, holding the body', () {
@@ -156,5 +164,140 @@ void main() {
                 .having((e) => e.errorMessage, 'errorMessage', contains(body)));
       });
     });
+
+    group('Given a body that names no code', () {
+      unknown.forEach((shape, body) {
+        test('when it is $shape, then errorResponseCode reads none', () {
+          expect(errorResponseCode('error:$body'), isNull);
+        });
+      });
+    });
+
+    test("A reply's code and the exception a lookup throws for it agree", () {
+      const replies = {
+        'error:AT0027:enrollment_id: e-1 is revoked': 'AT0027',
+        'error:AT0015-key not found': 'AT0015',
+        'error:AT0015': 'AT0015',
+        'error:{"errorCode":"AT0401","errorDescription":"refused"}': 'AT0401',
+        'error:{"errorCode":"AT0015"}': 'AT0015',
+        'error:{"errorCode":"AT0027","errorDescription":"was error:AT0401"}':
+            'AT0027',
+      };
+      replies.forEach((reply, code) {
+        expect(errorResponseCode(reply), code, reason: reply);
+        expect(errorResponseException(reply).errorCode, code, reason: reply);
+      });
+      const namesNone = 'error:Exception: pkam authentication failed';
+      expect(errorResponseCode(namesNone), isNull);
+      expect(errorResponseException(namesNone).errorCode, 'AT0014');
+    });
+
+    test(
+        'A code is read only where a dash, a colon or the end of the reply '
+        'follows it', () {
+      expect(errorResponseCode('error:AT00271-x'), isNull);
+      expect(errorResponseCode('error:AT0027 enrollment revoked'), isNull);
+      expect(errorResponseCode('error:AT0027'), 'AT0027');
+    });
+
+    test('A JSON reply is read whole', () {
+      for (final reply in [
+        'error:{"errorCode":"AT0015","errorDescription":"x"} trailing',
+        'error:{"errorCode":"AT0015"',
+        'error:{"errorDescription":"AT0015 key not found"}',
+        'error:{"errorCode":15,"errorDescription":"AT0015"}',
+      ]) {
+        expect(errorResponseCode(reply), isNull, reason: reply);
+      }
+    });
+
+    test(
+        'Given a reply that is not an error: reply, when errorResponseCode '
+        'reads it, then it reads none', () {
+      for (final reply in [
+        'data:AT0015-key not found',
+        'AT0015-key not found',
+        ' error:AT0015-key not found',
+      ]) {
+        expect(errorResponseCode(reply), isNull, reason: reply);
+      }
+    });
   });
+
+  test(
+      'Given an authenticator that throws, when executeVerb wraps what it '
+      'threw, then the wrapper keeps it as its cause', () async {
+    final refusal = UnAuthenticatedException(
+        'Failed connecting to @alice. error:AT0027:enrollment_id: e-1 is '
+        'revoked');
+    final atLookup = AtLookUp.withTransport(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain('127.0.0.1', 64),
+      authenticator: (_) async => throw refusal,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transports),
+    );
+    addTearDown(atLookup.close);
+
+    await expectLater(
+        atLookup.executeVerb(LLookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@alice')),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0401')
+            .having((e) => e.cause, 'cause', same(refusal))));
+  });
+
+  test(
+      'Given an authenticator that throws a subtype of '
+      'UnAuthenticatedException, when executeVerb wraps it, then the wrapper '
+      'carries the code of a failed authentication', () async {
+    final refusal = _RefusalWithCode('Failed connecting to @alice. '
+        'error:AT0027:enrollment_id: e-1 is revoked');
+    final atLookup = AtLookUp.withTransport(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain('127.0.0.1', 64),
+      authenticator: (_) async => throw refusal,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transports),
+    );
+    addTearDown(atLookup.close);
+
+    await expectLater(
+        atLookup.executeVerb(LLookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@alice')),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0401')
+            .having((e) => e.cause, 'cause', same(refusal))));
+  });
+
+  test(
+      'Given an authenticator whose connection is lost, when executeVerb wraps '
+      'the ConnectionInvalidException, then the wrapper keeps it as its cause',
+      () async {
+    final lost = ConnectionInvalidException('the connection was closed');
+    final atLookup = AtLookUp.withTransport(
+      atSign: '@alice',
+      rootDomain: const AtRootDomain('127.0.0.1', 64),
+      authenticator: (_) async => throw lost,
+      secondaryAddressFinder: addressFinder,
+      transport: AtLookupTransport(transportFactory: transports),
+    );
+    addTearDown(atLookup.close);
+
+    await expectLater(
+        atLookup.executeVerb(LLookupVerbBuilder()
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@alice')),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.cause, 'cause', same(lost))));
+  });
+}
+
+class _RefusalWithCode extends UnAuthenticatedException {
+  _RefusalWithCode(super.message);
 }

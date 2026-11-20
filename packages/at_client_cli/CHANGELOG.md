@@ -5,7 +5,8 @@
   `createAtClient` takes optional `appName` and `appVersion` to name yours.
 - feat: `AtActivate.main` takes optional `program` and `programVersion`, so a
   program that runs at_activate names itself and its version on every
-  `from:` in place of at_activate's.
+  `from:` in place of at_activate's. With no `programVersion`, the version
+  named is `unknown`.
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - chore: requires at_client 4.1.0 and at_auth 4.1.0.

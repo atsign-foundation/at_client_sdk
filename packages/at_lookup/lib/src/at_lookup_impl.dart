@@ -11,8 +11,6 @@ import 'package:at_lookup/src/connection/base_connection.dart'
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
 import 'package:at_lookup/src/util/command_for_log.dart' show commandForLog;
-import 'package:at_lookup/src/util/error_response.dart'
-    show errorResponseException;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
 import 'package:meta/meta.dart' show internal;
@@ -249,11 +247,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // Already logged by the listener that failed the read; a connection
       // closed underneath a request is not an error in the verb.
       throw AtLookUpException(
-          AtLookUpExceptionUtil.getErrorCode(e), e.toString());
+          AtLookUpExceptionUtil.getErrorCode(e), e.toString(),
+          cause: e);
     } on Exception catch (e) {
       logger.severe('Error in remote verb execution ${e.toString()}');
       var errorCode = AtLookUpExceptionUtil.getErrorCode(e);
-      throw AtLookUpException(errorCode, e.toString());
+      throw AtLookUpException(errorCode, e.toString(), cause: e);
     }
     return _verbResponseHandler(verbResult);
   }

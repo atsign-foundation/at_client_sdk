@@ -1,12 +1,20 @@
 ## 4.1.0-rc.1
 
-- fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation is
-  thrown as an `UnAuthenticatedException` carrying the atServer's reply, so
-  its code can be read. Nothing is signed or digested.
+- feat: an atServer's `error:` reply to a `from:`, `pkam:` or `cram:` throws
+  `AtAuthErrorReplyException`, an `UnAuthenticatedException` whose
+  `errorCode` is the reply's code. `AtAuth.onboard` still reports a failed
+  PKAM as `AtAuthenticationException`. Requires at_lookup 4.1.0-rc.1.
+- fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation ends
+  it with that exception, and nothing is signed or digested.
+- fix: a failed PKAM during onboarding says what failed, with no stack
+  trace in its message; the trace is logged at fine.
 - feat: an enrollment's wait for approval ends at once with
   `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
   `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
   AT0028 or AT0029, in any form.
+- fix: a clientConfig given to an authenticator, `activateAtSign` or
+  `AtEnrollment.create` whose top-level `version` is null, empty or only
+  whitespace sends no `version`, as `clientConfigFor` already did.
 - feat: every `from:` at_auth sends names the program and the SDK in its
   clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
   caller's values win; absent or blank ones are the program file's name,
@@ -57,8 +65,6 @@
   (`FileSystemException` naming its path).
 - fix: `AtAuth.onboard` refuses a request with no `atKeysIo`, or a read-only
   one, before it sends anything to the atServer.
-- fix: a failed PKAM step during activation throws a message that holds no
-  stack trace; the trace is logged at fine.
 - fix: a message about an atKeys date that does not parse gives the
   parser's reason and holds none of the date's text.
 - fix: a message about an atKeys file that cannot be read quotes none of

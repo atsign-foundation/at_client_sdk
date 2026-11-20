@@ -264,7 +264,8 @@ Worked examples covering each flow are in [`example/bin/`](example/bin).
 A program that ships at_activate's commands under its own name runs
 `AtActivate.main(args, program: 'my_tool', programVersion: '1.2.3')`, so
 every connection its commands authenticate names `my_tool` at `1.2.3`
-rather than at_activate.
+rather than at_activate. With no `programVersion`, the version named is
+`unknown`.
 
 ## Moving from at_onboarding_cli and at_cli_commons
 

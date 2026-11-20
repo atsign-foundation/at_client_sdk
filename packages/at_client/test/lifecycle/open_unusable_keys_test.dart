@@ -675,8 +675,9 @@ void main() {
 
   test('An atServer refusal still says the atServer refused it', () async {
     final pref = await preference();
-    final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
-        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+    final revoked = lookUpAnswering(() async => throw AtAuthErrorReplyException(
+        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked',
+        errorCode: 'AT0027'));
 
     await expectLater(
         Atsign(atSign).open(
