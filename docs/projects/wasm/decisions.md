@@ -130,7 +130,7 @@ not an API-compatibility commitment.
 
 ### D-4 — `at_client_web` is the only new package for now (2026-08-13)
 
-**Amended 2026-10-18 — the package is `at_client_wasm`.** The Dart package is named `at_client_wasm`; every `at_client_web` in D-4, D-8, D-11, D-15, the open questions and the log below means it. The npm facade stays `@atsign/at-client-web`.
+**Amended 2026-10-18 and 2026-11-20 — the package is `at_client_web`.** The Dart package was named `at_client_wasm` from 2026-10-18 until 2026-11-20, when it was renamed `at_client_web`; `at_client_wasm` in older text and in the log below means it. The npm facade stays `@atsign/at-client-web`.
 
 Flutter and CLI platform-implementer packages are named as the eventual shape and
 deferred. `at_client_flutter` is in scope as a breaking-change **consumer**;
@@ -904,7 +904,7 @@ given no preference; the `dockerstats` example uses *connect*.
 
 > **Amended 2026-11-02 (browser notifications, [#2439](https://github.com/atsign-foundation/at_client_sdk/issues/2439); [rulings](https://github.com/atsign-foundation/at_client_sdk/issues/2439#issuecomment-6659633840)).**
 >
-> - **The browser default is now *connect*, not *window(1h)*.** A browser preset is to set `fetchOfflineNotifications = false`, so it needs no at_client change. Ruled, but where the preset lives, at_client or at_client_wasm, is still open, so none is on trunk: the `AtClientPreference.browser()` first built in [#2451](https://github.com/atsign-foundation/at_client_sdk/pull/2451) was taken out before it merged. Without a checkpoint, *window(1h)* replays the same hour on every reload.
+> - **The browser default is now *connect*, not *window(1h)*.** A browser preset is to set `fetchOfflineNotifications = false`, so it needs no at_client change. Ruled, but where the preset lives, at_client or at_client_web, is still open, so none is on trunk: the `AtClientPreference.browser()` first built in [#2451](https://github.com/atsign-foundation/at_client_sdk/pull/2451) was taken out before it merged. Without a checkpoint, *window(1h)* replays the same hour on every reload.
 > - **A reconnect supervisor goes with it.** While the tab is open, the monitor never gives up. It retries once the cause of the disconnect is fixed:
 >
 >   | Cause | Retry when |
@@ -1065,7 +1065,7 @@ The browser lane holds the atSign's @keys behind a passkey, derived from a singl
 J1 (an `AtEasy` Layer B facade with namespace auto-qualification, `expiration`
 defaulting, ordering and limits) and J1a (a `(name, type)` registry that enforces the tag
 at `collection()` call time) are cut to a smaller piece: `JsCollectionsAdapter`
-(`packages/at_client_wasm/lib/src/collections/js_collections_adapter.dart`), which only
+(`packages/at_client_web/lib/src/collections/js_collections_adapter.dart`), which only
 translates plain values onto `AtCollection` and back and passes `type` straight through
 as `writeTypeTag`. It is exported from no library under `lib/`.
 
@@ -1544,3 +1544,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-17 | **D-32 proposed**: per atSign, IndexedDB holds the hint plus at most one sealed pending onboarding record, deleted on completion, drop or discard. Not accepted until gkc rules and it has a row in `docs/architecture/decisions.md`. |
 | 2026-11-19 | **K-5 amended** (Gary, 2026-11-19, 'Approve R1 as written (Recommended)'). A login without saved hints whose onboarding's own delete of the CRAM secret answered and whose completion is still due publishes the document's key over the other instead of failing; the onboarding records that its delete answered in its `completion-due.<enrollmentId>.a.__e` record. Rejected: the hard fail for every such login, which left the Atsign needing a new CRAM secret from its registrar, and an exception for any login while the completion is due, which would publish over a key another tool published after it activated with the same CRAM secret and deleted it. The 2026-10-27 rows above keep the wording they were ruled with. |
 | 2026-11-19 | **D-33 accepted** (gkc, 2026-11-19, 'Approve both (Recommended)'): once its pointer is written, a failed onboarding throws `PasskeyOnboardingIncompleteException` for an `Exception`; an `Error` and any earlier failure are thrown as they are. Its row is in `docs/architecture/decisions.md`. |
+| 2026-11-20 | **Dart package renamed `at_client_web`**, the name D-4 gave it; amends the 2026-10-18 amendment. The browser's saved names move with it (gkc, 2026-11-20, 'Rename them now (Recommended)'): the IndexedDB database and its stores, the PRF-miss `localStorage` key and the setup Web Lock prefix, with no migration. A browser that ran an earlier build keeps its old data unused. The npm facade name is unchanged. |
