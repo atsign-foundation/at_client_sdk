@@ -282,10 +282,17 @@ void main() {
           [enrollmentId]);
 
       final second = atServer(decide: (_) async => true, wrapped: wrapped);
-      final client = await enrol(pref, keysPath, second.lookUp);
+      final err = _Captured();
+      final client = await IOOverrides.runZoned(
+          () => enrol(pref, keysPath, second.lookUp),
+          stderr: () => err);
 
       expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
           reason: 'the wait resumed from the keyfile; no second request');
+      expect(
+          err.text,
+          contains('Resuming enrollment $enrollmentId, submitted earlier from '
+              'this keyfile'));
       expect(client.enrollmentId, enrollmentId);
       expect(
           (await FileAtKeysIo(filePath: (_) => keysPath).read(atSign))
@@ -294,38 +301,60 @@ void main() {
       await client.stop();
     });
 
-    for (final (app, device) in const [('buzz', 'phone'), ('wavi', 'tablet')]) {
-      test(
-          'a keyfile already waiting on a request for another app or device '
-          'is refused, naming it, and nothing is sent: $app on $device',
-          () async {
-        final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
-        final pref = await preference();
-        final filing = atServer(decide: (_) async => true, wrapped: []);
-        await Atsign(atSign).enroll(
-            otp: 'ABC123',
-            app: app,
-            device: device,
-            namespaces: {app: 'rw'},
-            keys: FileAtKeysIo(filePath: (_) => keysPath),
-            preference: pref,
-            atLookUp: filing.lookUp,
-            lookUps: settingsFor(pref, keysPath).lookUps,
-            secondaryAddressFinder:
-                settingsFor(pref, keysPath).secondaryAddressFinder);
-        final untouched = atServer(decide: (_) async => true, wrapped: []);
+    test(
+        'enroll adopts the request its keyfile holds under another app or '
+        'device name', () async {
+      final wrapped = <String>[];
+      final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+      final pref = await preference();
+      final filing = atServer(
+          decide: (_) async => throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+              errorCode: 'AT0026'),
+          wrapped: wrapped);
+      await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'buzz',
+          device: 'phone',
+          namespaces: {'buzz': 'rw'},
+          keys: FileAtKeysIo(filePath: (_) => keysPath),
+          preference: pref,
+          atLookUp: filing.lookUp,
+          lookUps: settingsFor(pref, keysPath).lookUps,
+          secondaryAddressFinder:
+              settingsFor(pref, keysPath).secondaryAddressFinder);
+      final second = atServer(decide: (_) async => true, wrapped: wrapped);
+      final err = _Captured();
 
-        await expectLater(
-            () => enrol(pref, keysPath, untouched.lookUp),
-            throwsA(isA<AtEnrollmentException>().having(
-                (e) => e.message,
-                'message',
-                contains('pending enrollment $enrollmentId for $app on '
-                    '$device'))));
-        verifyZeroInteractions(untouched.lookUp);
-        expect(await pendingIn(keysPath, atSign), [enrollmentId],
-            reason: 'the keyfile keeps the request it held');
-      });
-    }
+      final client = await IOOverrides.runZoned(
+          () => enrol(pref, keysPath, second.lookUp),
+          stderr: () => err);
+
+      expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+          reason: 'the wait resumed from the keyfile; no second request');
+      expect(
+          err.text,
+          contains(
+              'Resuming enrollment $enrollmentId, filed as buzz on phone'));
+      expect(client.enrollmentId, enrollmentId,
+          reason: 'the approval of the request it waited on opens the client');
+      await client.stop();
+    });
   });
+}
+
+/// Stands in for stderr, keeping what is written to it.
+class _Captured implements Stdout {
+  final List<String> written = [];
+
+  String get text => written.join();
+
+  @override
+  void write(Object? object) => written.add('$object');
+
+  @override
+  void writeln([Object? object = '']) => written.add('$object\n');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }

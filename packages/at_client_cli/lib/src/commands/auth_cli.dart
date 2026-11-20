@@ -837,10 +837,9 @@ Future<bool> _isActivated(
 
 /// auth enroll : require atSign, app name, device name, otp, atKeys path
 ///     If atKeys file doesn't exist, then this is a new enrollment
-///     If it holds a request submitted earlier for this app and device, the
-///         wait for approval resumes from it
-///     If it is already waiting on a request for another app or device, it
-///         is refused, naming that request
+///     If it holds a request waiting for approval, whatever app or device it
+///         was filed under, the wait resumes from it; a request the manager
+///         denies, or that expires, is cleared from it by the next run
 ///
 /// [atLookUp] is a connection to enrol over, for a test.
 @visibleForTesting
@@ -900,10 +899,12 @@ Future<bool> enroll(ArgResults argResults,
 /// Enrols this device as [app] on [device], waits for the approval, and
 /// opens a client on the keys it completes, which the caller stops.
 ///
-/// The keyfile [settings] names is the resume record: a request submitted
-/// earlier for the same app and device is waited on again rather than
-/// repeated, and a keyfile already holding live keys, or waiting on a request
-/// for another app or device, is refused.
+/// The keyfile [settings] names is the resume record: a request waiting for
+/// approval there is waited on again rather than repeated, whatever app or
+/// device it was filed under: the one for [app] on [device] first, else the
+/// one for [app] on any device, else the keyfile's one request. A request the
+/// manager denies, or that expires, is cleared from the keyfile by the next
+/// run, and a keyfile already holding live keys is refused.
 @visibleForTesting
 Future<AtClient> enrolDevice({
   required String atSign,
@@ -922,17 +923,24 @@ Future<AtClient> enrolDevice({
   final preference = settings.preference;
   final atKeysFilePath = settings.atKeysFilePath;
   final keys = settings.keysFor(atSign);
-  var pending = await Atsign(atSign).resumeEnrollment(
-      app: app,
-      device: device,
-      keys: keys,
-      preference: preference,
-      atLookUp: atLookUp,
-      lookUps: settings.lookUps,
-      secondaryAddressFinder: settings.secondaryAddressFinder);
+  Future<PendingEnrollment?> resume({String? app, String? device}) =>
+      Atsign(atSign).resumeEnrollment(
+          app: app,
+          device: device,
+          keys: keys,
+          preference: preference,
+          atLookUp: atLookUp,
+          lookUps: settings.lookUps,
+          secondaryAddressFinder: settings.secondaryAddressFinder);
+  var pending = await resume(app: app, device: device) ??
+      await resume(app: app) ??
+      await resume();
   if (pending != null) {
+    final filed = pending.app == app && pending.device == device
+        ? 'submitted earlier from this keyfile'
+        : 'filed as ${pending.app} on ${pending.device}';
     stderr.writeln('${chalk.blue('[Information]')} Resuming enrollment '
-        '${pending.enrollmentId}, submitted earlier from this keyfile');
+        '${pending.enrollmentId}, $filed');
   } else {
     pending = await Atsign(atSign).enroll(
         otp: otp,
