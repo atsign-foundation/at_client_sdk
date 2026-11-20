@@ -533,8 +533,8 @@ catches it. Its `reason` is the JSON parser's own wording and its `position`
 the 1-based character where the parser stopped; its `source` is always null.
 A keyfile holding JSON that is not an object throws it too, with a null
 `position`, where it used to fail as a `TypeError`. A passphrase-protected
-keyfile whose decrypted content does not parse still fails as
-`AtDecryptionException`. An app that built its message from the old
+keyfile whose decrypted content does not parse fails as
+`AtKeysPassphraseException`, an `AtDecryptionException`. An app that built its message from the old
 exception's `source` or `offset` reads `reason` and `position` instead:
 
 ```dart after

@@ -484,8 +484,7 @@ void main() {
             kdfParams['memory'] = memory;
             kdfParams['parallelism'] = 1;
             File(path).writeAsStringSync(jsonEncode(envelope));
-            // NOTE: the file's value and the byte count it asks for; a
-            // 13-character window fits inside either.
+            // NOTE: both values; a 13-character window fits inside either.
             return '$memory ${memory * 1024}';
           },
           window: 13,

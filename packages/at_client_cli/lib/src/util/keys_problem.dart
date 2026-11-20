@@ -33,8 +33,7 @@ void reportKeysProblem(AtKeysUnusableException e,
         'No keys for ${e.atSign} at ${e.source}.',
         ...absentHint,
       ],
-    // NOTE: only a refused passphrase; any other envelope refusal, such as a
-    // version this build has no code for, keeps its own reason below.
+    // NOTE: a refused passphrase only; other refusals keep their reason.
     AtKeysUnusableCause.unreadable when e.error is AtKeysPassphraseException =>
       [
         'Could not read the keys for ${e.atSign} at ${e.source}: the '

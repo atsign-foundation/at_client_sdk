@@ -40,10 +40,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
     registerFallbackValue((AtCommandExecutor _) async => true);
-    // NOTE: an AtSignLogger binds the handler and root level when it is made,
-    // and a library's top-level one is made at its first use, in whichever
-    // test that is; so every one this file makes is bound here, before any
-    // test, to a handler that passes on what the console would have shown.
+    // NOTE: before any test; a logger binds its handler when it is made.
     rootLevel = AtSignLogger.root_level;
     handler = AtSignLogger.defaultLoggingHandler;
     logs = _KeptLogs(handler, LogLevel.level[rootLevel]);
@@ -473,7 +470,6 @@ void main() {
   });
 }
 
-/// Every record logged through it, kept with its error and stack trace.
 /// The logging handler of every AtSignLogger this file makes: it passes each
 /// record at or above [passOnFrom] on to [passOn], and keeps every record
 /// while a test that called [keep] runs.
