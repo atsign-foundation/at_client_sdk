@@ -303,9 +303,10 @@ extension AtsignLifecycle on Atsign {
   ///
   /// Returns at once with a [PendingEnrollment]: its `client` waits for the
   /// decision, and after a restart [resumeEnrollment] finds the same request
-  /// in [keys]. [keys] must hold nothing live for this atSign; a store that
-  /// already holds a pending enrollment for the same app and device is
-  /// refused in favour of resuming it.
+  /// in [keys]. [keys] must hold nothing live and nothing pending for this
+  /// atSign: a store that already holds a pending enrollment, whatever its
+  /// app and device, is refused with [AtEnrollmentException] naming it,
+  /// before anything is sent, in favour of resuming it.
   ///
   /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
   /// and [keyExchangeMode] how its symmetric key travels; both default to the
@@ -338,7 +339,7 @@ extension AtsignLifecycle on Atsign {
     final rootDomain = AtRootDomain(preference.rootDomain, preference.rootPort);
     final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
     final mode = keyExchangeMode ?? preference.posture.keyExchangeMode;
-    await _refuseUnlessEnrollable(keys, app, device);
+    await _refuseUnlessEnrollable(keys);
 
     // NOTE: the enrollment owns its signing key from its first byte: `_apsk`
     // advertises it and the key package is signed with it, so minting it at a
@@ -544,12 +545,12 @@ extension AtsignLifecycle on Atsign {
   Never _refuse(AtKeysUnusableException unusable, StackTrace stackTrace) =>
       Error.throwWithStackTrace(unusable, stackTrace);
 
-  /// A store [enroll] may write into: one holding nothing live for this
-  /// atSign. Live keys are refused, since enrolling again would overwrite the
-  /// credential this device already has, and so is a pending enrollment for
-  /// the same app and device, which is resumed rather than repeated.
-  Future<void> _refuseUnlessEnrollable(
-      WrittenAtKeysIo keys, String app, String device) async {
+  /// A store [enroll] may write into: one holding nothing live and nothing
+  /// pending for this atSign. Live keys are refused, since enrolling again
+  /// would overwrite the credential this device already has, and so is any
+  /// pending enrollment, whatever its app and device, which is resumed
+  /// rather than joined by another.
+  Future<void> _refuseUnlessEnrollable(WrittenAtKeysIo keys) async {
     final AtKeys existing;
     try {
       existing = await keys.read(this);
@@ -561,13 +562,13 @@ extension AtsignLifecycle on Atsign {
           'store, and enrolling again would overwrite the credential this '
           'device has: give a new enrollment a keys store of its own');
     }
-    for (final enrollmentId in existing.pendingEnrollmentIds) {
-      final info = existing.enrollmentInfo(enrollmentId);
-      if (info?.appName == app && info?.deviceName == device) {
-        throw AtEnrollmentException('$this already holds the pending '
-            'enrollment $enrollmentId for $app on $device: resume it with '
-            'resumeEnrollment rather than submitting another');
-      }
+    final pendingId = existing.pendingEnrollmentIds.firstOrNull;
+    if (pendingId != null) {
+      final info = existing.enrollmentInfo(pendingId);
+      throw AtEnrollmentException('$this already holds the pending '
+          'enrollment $pendingId for ${info?.appName} on '
+          '${info?.deviceName}: resume it with resumeEnrollment rather than '
+          'submitting another');
     }
   }
 

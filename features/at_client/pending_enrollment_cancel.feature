@@ -26,7 +26,9 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   removes the keys; cancel then stop changes nothing. An approval written first
   stands, and if a stop or a cancel lands before client() returns, the
   client it opened is stopped before the stop or cancel returns. A cancel and
-  a denial at once both remove the pending keys, once.
+  a denial at once both remove the pending keys, once. Two enroll calls into
+  one store at once can both pass the check and both file; only the device's
+  own processes can race it.
   Replay: none arises; stop and cancel send nothing, and a resume polls the
   same enrollment as before.
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
@@ -176,6 +178,16 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a store holding two pending requests for one app, from two devices
     When the app calls resumeEnrollment with only the app
     Then it throws AtEnrollmentPendingException naming both and saying to name the app and device, and naming a device as well resumes that one
+
+  Scenario Outline: A store already waiting on an enrollment for an Atsign refuses another, before anything is sent
+    Given a store holding a pending enrollment for @alice from app wavi on device phone
+    When app <app> on device <device> asks to enroll @alice into that store
+    Then enroll throws AtEnrollmentException naming that enrollment, wavi and phone, and nothing is sent to the atServer
+    Examples:
+      | app  | device |
+      | wavi | phone  |
+      | wavi | laptop |
+      | buzz | phone  |
 
   Scenario: A keyfile left empty by a denial or a cancel is refused at once
     Given a keyfile whose enrollment request was denied, or cancelled, and so holds no credential

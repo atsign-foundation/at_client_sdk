@@ -170,10 +170,10 @@ void main() {
 
   Future<PendingEnrollment> submit(
           InMemoryAtKeysIo store, MockAtLookupImpl server,
-          {String device = 'phone'}) async =>
+          {String app = 'wavi', String device = 'phone'}) async =>
       Atsign(atSign).enroll(
           otp: 'ABC123',
-          app: 'wavi',
+          app: app,
           device: device,
           namespaces: {'wavi': 'rw'},
           keys: store,
@@ -322,18 +322,32 @@ void main() {
         reason: 'and a store holding nothing resumes nothing');
   });
 
-  test(
-      'a second request for the same app and device is refused in favour of '
-      'resuming', () async {
-    final store = InMemoryAtKeysIo();
-    final server = atServer(decide: (_) async => true);
-    await submit(store, server);
+  for (final (app, device) in const [
+    ('wavi', 'phone'),
+    ('wavi', 'laptop'),
+    ('buzz', 'phone'),
+  ]) {
+    test(
+        'A store already waiting on an enrollment for an Atsign refuses '
+        'another, before anything is sent: $app on $device', () async {
+      final store = InMemoryAtKeysIo();
+      await submit(store, atServer(decide: (_) async => true));
+      final untouched = atServer(decide: (_) async => true);
 
-    await expectLater(
-        () => submit(store, server),
-        throwsA(isA<AtEnrollmentException>().having(
-            (e) => e.message, 'message', contains('resumeEnrollment'))));
-  });
+      await expectLater(
+          () => submit(store, untouched, app: app, device: device),
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('pending enrollment $enrollmentId for wavi on '
+                      'phone'),
+                  contains('resumeEnrollment')))));
+      verifyZeroInteractions(untouched);
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+          reason: 'the store keeps the one pending enrollment it held');
+    });
+  }
 
   test(
       'approval completes the store, moves the keys to active, and opens a '
