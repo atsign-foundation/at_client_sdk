@@ -1,0 +1,74 @@
+import 'dart:io';
+
+import 'package:at_auth/at_auth.dart' show AtKeysPassphraseException;
+import 'package:at_client/at_client.dart'
+    show
+        AtEnrollmentPendingException,
+        AtKeysUnusableCause,
+        AtKeysUnusableException;
+import 'package:chalkdart/chalk.dart';
+
+/// The line a command-line program ends every keys problem with.
+const String keysProblemFooter = 'Need help? support@atsign.com. Never send '
+    'anyone your .atKeys file, support included.';
+
+/// The next steps for keys absent from this machine when whether [atSign]
+/// has been activated is not known.
+List<String> eitherKeysHint(String atSign) => [
+      '  Not activated yet?             at_activate onboard -a $atSign',
+      '  Activated on another machine?  Run this command there, or enroll '
+          'this machine first.',
+    ];
+
+/// Writes [e] to stderr as one message, for a program whose atSign and
+/// keyfile are given with -a, -k and -P: what is wrong and where, the next
+/// step, and [keysProblemFooter]. [absentHint] are the lines that follow the
+/// first when the keys are absent.
+void reportKeysProblem(AtKeysUnusableException e,
+    {required List<String> absentHint}) {
+  final lines = switch (e.cause) {
+    AtKeysUnusableCause.absent => [
+        'No keys for ${e.atSign} at ${e.source}.',
+        ...absentHint,
+      ],
+    // NOTE: only a refused passphrase; any other envelope refusal, such as a
+    // version this build has no code for, keeps its own reason below.
+    AtKeysUnusableCause.unreadable when e.error is AtKeysPassphraseException =>
+      [
+        'Could not read the keys for ${e.atSign} at ${e.source}: the '
+            'passphrase is wrong or missing.',
+        '  If the keyfile has a passphrase, pass it with -P.',
+      ],
+    AtKeysUnusableCause.anotherAtsign => ['${e.message} Check -a and -k.'],
+    AtKeysUnusableCause.pendingEnrollment
+        when e is AtEnrollmentPendingException && !e.severalMatched =>
+      [_waitForApproval(e)],
+    AtKeysUnusableCause.noCredential when e.source != null => [
+        'The keyfile at ${e.source} holds no credential for ${e.atSign}: its '
+            'enrollment was denied, cancelled or expired, or never completed. '
+            'Enroll this machine again.',
+      ],
+    _ => [e.message],
+  };
+  stderr.writeln();
+  stderr.writeln(chalk.brightRed(lines.first));
+  for (final line in lines.skip(1)) {
+    stderr.writeln(line);
+  }
+  stderr.writeln(keysProblemFooter);
+}
+
+/// The line for keys holding only the pending enrollment requests [e] names:
+/// once one is approved, the enroll command that made it finishes it.
+String _waitForApproval(AtEnrollmentPendingException e) {
+  final ids = e.pendingEnrollmentIds;
+  final keyfile =
+      e.source == null ? 'This keyfile' : 'The keyfile at ${e.source}';
+  return ids.length == 1
+      ? '$keyfile holds only a pending enrollment request for '
+          '${e.atSign} (id ${ids.single}). Once it is approved, run the same '
+          'at_activate enroll command again to finish it.'
+      : '$keyfile holds only pending enrollment requests for '
+          '${e.atSign} (ids ${ids.join(', ')}). Once one is approved, run the '
+          'at_activate enroll command that made it again to finish it.';
+}

@@ -895,7 +895,7 @@ class AtKeys {
     final version = assurance.expectInt(json['version'], 'version');
     if (version != supportedVersion) {
       throw AtKeysUnsupportedVersionException(
-          'Unsupported atKeys version: $version');
+          'this atKeys file declares a version this build has no code for');
     }
     // The top-level `keys` array is written empty on every versioned
     // document, and typed material lives in enrollments[]/atsignKeys[].
@@ -987,8 +987,8 @@ class AtKeys {
     final json = assurance.expectMap(value, '$prefix.namespaces');
     return {
       for (final entry in json.entries)
-        entry.key: assurance.expectNonEmptyString(
-            entry.value, '$prefix.namespaces.${entry.key}'),
+        entry.key:
+            assurance.expectNonEmptyString(entry.value, '$prefix.namespaces'),
     };
   }
 

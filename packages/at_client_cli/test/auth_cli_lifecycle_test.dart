@@ -63,8 +63,9 @@ void main() {
 
     /// An atServer as the registrar leaves it, unless [activated], in which
     /// case an activation has already published an encryption public key.
+    /// [onPublicKeyLookup] runs before it answers a public key lookup.
     ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
-        {bool activated = false}) {
+        {bool activated = false, void Function()? onPublicKeyLookup}) {
       final lookUp = MockAtLookupImpl();
       final sent = <String>[];
       when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
@@ -73,6 +74,7 @@ void main() {
         final command = i.positionalArguments.first as String;
         sent.add(command);
         if (command.startsWith('lookup:publickey')) {
+          onPublicKeyLookup?.call();
           return activated
               ? 'data:${demo.encryptionPublicKeyMap['@alice🛠']}'
               : 'data:null';
@@ -156,6 +158,37 @@ void main() {
 
       expect(server.sent, isEmpty,
           reason: 'refused before the atServer was asked anything');
+    });
+
+    group(
+        'Given a keyfile that appears at the path after the check that the '
+        'path is free', () {
+      test(
+          'when a program calls onboard, then it throws '
+          'AtKeysUnusableException naming the keyfile', () async {
+        final keysPath = '${dir.path}/${atSign}_key.atKeys';
+        final server = atServer(
+            onPublicKeyLookup: () =>
+                File(keysPath).writeAsStringSync('{"keys":['));
+        final args = AuthCliArgs().createOnboardCommandParser().parse([
+          '-a', atSign, //
+          '-k', keysPath,
+          '-c', cramSecret,
+          '-r', '127.0.0.1:${await refusedPort()}',
+          '--posture', 'legacy',
+        ]);
+
+        await expectLater(
+            onboard(args,
+                program: 'at_activate',
+                programVersion: null,
+                atLookUp: server.lookUp),
+            throwsA(isA<AtKeysUnusableException>()
+                .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+                .having((e) => e.source, 'source', keysPath)));
+        expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+            reason: 'nothing is enrolled with keys that cannot be read');
+      });
     });
 
     /// Catalogue: features/at_client_cli/registrar_api_key.feature

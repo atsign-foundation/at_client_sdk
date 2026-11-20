@@ -7,6 +7,7 @@ import 'package:at_client/at_client_mixins.dart' show pqNativeOnboard;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
+import 'package:at_utils/at_utils.dart' show LoggingHandler, LogLevel;
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtCommandExecutor;
 import 'package:mocktail/mocktail.dart';
@@ -32,10 +33,27 @@ void main() {
   const enrollmentId = 'first-1';
   const cramSecret = 'the-one-time-secret';
   late Directory dir;
+  late _KeptLogs logs;
+  late String rootLevel;
+  late LoggingHandler handler;
 
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
     registerFallbackValue((AtCommandExecutor _) async => true);
+    // NOTE: an AtSignLogger binds the handler and root level when it is made,
+    // and a library's top-level one is made at its first use, in whichever
+    // test that is; so every one this file makes is bound here, before any
+    // test, to a handler that passes on what the console would have shown.
+    rootLevel = AtSignLogger.root_level;
+    handler = AtSignLogger.defaultLoggingHandler;
+    logs = _KeptLogs(handler, LogLevel.level[rootLevel]);
+    AtSignLogger.defaultLoggingHandler = logs;
+    AtSignLogger.root_level = 'finest';
+  });
+
+  tearDownAll(() {
+    AtSignLogger.root_level = rootLevel;
+    AtSignLogger.defaultLoggingHandler = handler;
   });
 
   setUp(() {
@@ -65,9 +83,11 @@ void main() {
     ..namespace = 'lifecycle';
 
   /// An unactivated atServer: it accepts [cramSecret] and nothing else,
-  /// approves the first enrollment on that connection, and records every
-  /// command and verb it was sent.
-  ({MockAtLookupImpl lookUp, List<String> sent}) atServer() {
+  /// approves the first enrollment on that connection, answers each PKAM
+  /// attempt after it with [onPkam] (accepting it when null), and records
+  /// every command and verb it was sent.
+  ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
+      {Future<bool> Function()? onPkam}) {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     final installed = <AtAuthenticator?>[];
@@ -102,7 +122,7 @@ void main() {
     when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async =>
         installed.length == 1
             ? installed.single!(_CramAtServer(cramSecret))
-            : true);
+            : onPkam == null || await onPkam());
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
@@ -369,6 +389,47 @@ void main() {
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
   });
 
+  /// Catalogue: features/at_client/open_unusable_keys.feature
+  test("An activation failure's message holds no stack trace", () async {
+    final records = logs.keep();
+    final server = atServer(
+        onPkam: () async => throw UnAuthenticatedException(
+            'Failed connecting to $atSign. error:{"errorCode":"AT0401",'
+            '"errorDescription":"Exception: pkam authentication failed"}'));
+
+    Object? thrown;
+    try {
+      await Atsign(atSign).activate(
+          cramSecret: cramSecret,
+          keys: InMemoryAtKeysIo(),
+          preference: await preference(),
+          lookUps: secureSocketLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory(),
+          atLookUp: server.lookUp,
+          storage: hiveStoreFor(Atsign(atSign), await preference()));
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(
+        thrown,
+        isA<AtException>()
+            .having((e) => e.message, 'message',
+                contains('pkam auth failed for $atSign'))
+            .having(
+                (e) => e.message,
+                'stack trace',
+                allOf(isNot(contains('\n')), isNot(contains('#0')),
+                    isNot(contains('package:'))))
+            .having((e) => '$e', 'text', isNot(contains('#0'))));
+    final fine = records.where((r) =>
+        '${r.level.name}' == 'FINE' &&
+        '${r.message}'.contains('pkam auth failed for $atSign'));
+    expect(fine, isNotEmpty, reason: 'the failure is logged at fine');
+    expect(fine.first.stackTrace, isNotNull,
+        reason: 'with its stack trace beside the message');
+  });
+
   test(
       'Given an app named in its particulars, when Atsign.activate '
       'authenticates with CRAM and then PKAM, then each from: names the app '
@@ -410,6 +471,35 @@ void main() {
       expect(config['version'], atClientVersion);
     }
   });
+}
+
+/// Every record logged through it, kept with its error and stack trace.
+/// The logging handler of every AtSignLogger this file makes: it passes each
+/// record at or above [passOnFrom] on to [passOn], and keeps every record
+/// while a test that called [keep] runs.
+class _KeptLogs implements LoggingHandler {
+  _KeptLogs(this.passOn, this.passOnFrom);
+
+  final LoggingHandler passOn;
+
+  /// The least level passed on; null passes every record on.
+  final dynamic passOnFrom;
+
+  List<dynamic>? _kept;
+
+  /// The records logged from now until the calling test ends.
+  List<dynamic> keep() {
+    final kept = <dynamic>[];
+    _kept = kept;
+    addTearDown(() => _kept = null);
+    return kept;
+  }
+
+  @override
+  void call(dynamic record) {
+    _kept?.add(record);
+    if (passOnFrom == null || record.level >= passOnFrom) passOn(record);
+  }
 }
 
 /// Answers `from:` with a challenge, and `cram:` with success only for the

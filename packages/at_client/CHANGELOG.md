@@ -140,6 +140,20 @@
   after a reconnect (latest 1024 ids capped per millisecond watermark).
   Conflicting duplicate IDs trigger warnings and are reported on
   `droppedEvents`.
+- fix: `Atsign.activate` and `pqNativeOnboard` throw before sending anything
+  when the keys store holds keys they cannot read, or its keyfile cannot be
+  written; the exception names the store.
+- fix: `Atsign.open` throws `AtKeysUnusableException` before connecting, on
+  every device, for keys it cannot use: absent, unreadable, holding no
+  keypair it can sign with, or for another atSign. `AtNoCredentialException`
+  and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
+- feat: `AtEnrollmentPendingException.severalMatched` says whether
+  `resumeEnrollment` threw it for several matching pending enrollments.
+- feat: `AtNoCredentialException` and `AtEnrollmentPendingException` say
+  which keys store they came from in `source` when `Atsign.open` or
+  `resumeEnrollment` throws them.
+- fix: `Atsign.enroll` refusing a keys store that holds live keys says to give
+  the new enrollment a keys store of its own.
 - feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
   first activation in place of a minted one; a pair that does not sign under
   the activation's algorithm is refused with `AtSigningException` before

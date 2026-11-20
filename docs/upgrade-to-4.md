@@ -159,6 +159,8 @@ Future<void> openAlice(AtClientPreference preference) async {
     print('@alice is ${client.connection.current}');
   } on AtEnrollmentPendingException catch (e) {
     print('awaiting approval of ${e.pendingEnrollmentIds}');
+  } on AtKeysUnusableException catch (e) {
+    print(e.message);
   } on AtOpenRefusedException catch (e) {
     print('refused: ${e.state}');
   }
@@ -171,11 +173,14 @@ atSign again as an enrollment whose client is still live throws a
 `StateError`; another enrollment of the atSign opens beside it.
 `AtClientImpl.liveClientsFor(atSign)` lists every live client of an atSign.
 
-On the first open of an atSign on a device, `Atsign.open` throws
-`AtEnrollmentPendingException` when the keys hold only an enrollment request
-that has not been approved, `AtNoCredentialException` at once when they hold
-no credential and no request, as a denial, a cancel or an expiry leaves them,
-and
+`Atsign.open` reads the keys first and throws `AtKeysUnusableException`
+before connecting, on any device, when they cannot be used: when they are
+absent, cannot be read, hold no authentication keypair this device can use
+or record another atSign, and, as its subclasses,
+`AtEnrollmentPendingException` when they hold only an enrollment request
+that has not been approved and `AtNoCredentialException` when they hold no
+credential and no request, as a denial, a cancel or an expiry leaves them.
+Its `cause` says which. On the first open of an atSign on a device it throws
 `AtOpenRefusedException` when the atServer refuses the keys or the atDirectory
 knows no atServer for the atSign; its `state` says which. Otherwise
 `Atsign.open` returns once its one attempt to reach the atServer has ended,
@@ -569,7 +574,8 @@ null passes a default in its place, such as
 add the members to any class implementing either. A `SyncService` of your own
 drops `setOnDone` and `sync`'s `onDone` and `onError`, and an `AtServiceFactory` of your own
 drops `atClient` and takes only the client in `notificationService` and
-`syncService`.
+`syncService`. A class that implements `WrittenAtKeysIo`, rather than
+extending it, adds `describeSource` and `checkWritable`.
 
 ### Changes the analyzer won't show
 
@@ -577,6 +583,8 @@ These compile and then fail when the code runs, usually first in a test:
 
 - A keyfile that is not valid JSON throws `AtKeysFormatException`, as
   [above](#a-keyfile-that-is-not-valid-json-throws-atkeysformatexception).
+- `CLIBase` throws `AtKeysUnusableException`, not `ArgumentError`, for a
+  missing keyfile, so a `catch` for `ArgumentError` no longer catches it.
 - `storage` cannot be null, so a mocktail stub that matches it with `any()`
   needs `registerFallbackValue` for `AtClientStorage` first, for instance an
   `InMemoryAtClientStorage`.

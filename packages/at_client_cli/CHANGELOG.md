@@ -9,8 +9,11 @@
   named is `unknown`.
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
-- chore: requires at_client 4.1.0.
+- chore: requires at_client 4.1.0 and at_auth 4.1.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
+- fix: `at_activate status` asks the atDirectory once, prints no posture
+  notice, and says a refused atServer connection is unreachable rather than
+  an unexpected failure (it still returns 2).
 - fix: a `CLIBase` program whose atServer answers its PKAM with a server
   error, such as AT0011, or with no challenge to sign, retries as it does
   for an atServer not reached, and ends with
@@ -20,6 +23,23 @@
   `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that
   reached a proxy without a `proxy:<host>` root must make it the root.
   Requires at_lookup 4.1.0.
+- fix: at_activate and programs built on `CLIBase` report a keys problem
+  once, naming the keyfile and the next step to take where there is one.
+- feat: when an atSign's keys are absent, at_activate looks up its public
+  key, for up to 5 seconds, to say whether to activate it or enroll this
+  machine. The activate command it gives names the `-r` it looked in, and a
+  lookup still running after 5 seconds has its connection closed.
+- fix: a passphrase-protected keyfile is reported as having a wrong or
+  missing passphrase only when the passphrase was refused; any other reason
+  it cannot be opened, such as an envelope version this build has no code
+  for, is reported as itself.
+- fix: at_activate and programs built on `CLIBase` name the keyfile that
+  holds no credential; at_activate also names one holding only a pending
+  enrollment request, and says to run the enroll command again once the
+  request is approved.
+- fix: `CLIBase` (for a missing keyfile) and `createAtClient` (for keys it
+  cannot use) throw `AtKeysUnusableException`, which is neither an
+  `ArgumentError` nor an `UnAuthenticatedException`; catch it for those cases.
 
 ## 1.0.0
 

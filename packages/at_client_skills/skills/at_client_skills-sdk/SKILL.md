@@ -505,10 +505,13 @@ await client.connection.attempt();                  // try again now
   — the app decides.
   The one refusal that **throws** (`AtOpenRefusedException`) is the first open
   of these keys on a device: nothing is held locally, so there is nothing to
-  serve. Keys holding only a pending enrollment throw
-  `AtEnrollmentPendingException` — call `resumeEnrollment`. Keys holding
-  neither, as a denial, a cancel or an expiry leaves them, throw
-  `AtNoCredentialException` at once — enroll again.
+  serve. Keys `open` cannot use throw `AtKeysUnusableException` before it
+  connects, on any device, its `cause` saying why: absent, unreadable,
+  holding no authentication keypair it can use, or for another atSign. Keys
+  holding only a pending enrollment throw its subclass
+  `AtEnrollmentPendingException` — call `resumeEnrollment`. Keys
+  holding neither, as a denial, a cancel or an expiry leaves them, throw its
+  subclass `AtNoCredentialException` — enroll again.
 - **`stopped`**: what `current` reads after `stop()`; `changes` is done.
 
 **Services — both belong to the client, start with it and stop with it:**

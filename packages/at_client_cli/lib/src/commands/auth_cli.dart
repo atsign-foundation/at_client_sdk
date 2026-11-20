@@ -9,6 +9,7 @@ import 'package:at_auth/at_auth_io.dart'
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/util/at_file_util.dart';
+import 'package:at_client_cli/src/util/keys_problem.dart';
 import 'package:at_client_cli/src/commands/parser_usage.dart';
 import 'package:at_client_cli/src/register/onboarding_util.dart';
 import 'package:at_client_cli/src/register/registrar_api_constants.dart';
@@ -247,8 +248,7 @@ Future<int> wrappedMain(List<String> arguments,
         break;
 
       case AuthCliCommand.status:
-        return await status(commandArgResults,
-            program: program, programVersion: programVersion);
+        return await status(commandArgResults);
 
       case AuthCliCommand.onboard:
         // First time an app is connecting to an atServer.
@@ -460,6 +460,13 @@ Future<int> wrappedMain(List<String> arguments,
     );
     aca.sharedArgsParser.printAllCommandsUsage();
     return 1;
+  } on AtKeysUnusableException catch (e) {
+    reportKeysProblem(e,
+        absentHint: e.cause == AtKeysUnusableCause.absent
+            ? await absentKeysHint(
+                e.atSign, commandArgResults[AuthCliArgs.argNameRootServer])
+            : const []);
+    return 1;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     stderr.writeln();
@@ -481,8 +488,7 @@ Future<int> wrappedMain(List<String> arguments,
 ///  - 2 if the atSign exists but the atServer cannot be reached
 ///  - 1 if the atServer is reachable but there is no `public:publickey@<atsign>`
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
-Future<int> status(ArgResults ar,
-    {required String program, required String? programVersion}) async {
+Future<int> status(ArgResults ar) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -497,54 +503,179 @@ Future<int> status(ArgResults ar,
     exit(1);
   }
 
-  SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
-      rootDomain.rootDomain, rootDomain.rootPort);
+  final found = await _lookUpPublicKey(
+      atSign,
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort),
+      (atDirectory) => secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: atDirectory,
+          ));
+  stderr.writeln('returning ${found.outcome.exitCode}: ${found.detail}');
+  return found.outcome.exitCode;
+}
+
+/// What looking up an atSign's public key found, with the exit code
+/// [status] returns for it.
+enum _PublicKey {
+  found(0),
+  absent(1),
+  atServerUnreachable(2),
+  notInAtDirectory(3),
+  atDirectoryUnreachable(4);
+
+  const _PublicKey(this.exitCode);
+
+  final int exitCode;
+}
+
+/// Asks [atDirectory] for [atSign]'s atServer and that atServer, over the
+/// connection [connect] builds on the same [atDirectory], for its public key,
+/// unauthenticated; [detail] says what was found. [atDirectoryTimeout]
+/// bounds the atDirectory's answer, which otherwise has its default budget.
+Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(
+    String atSign,
+    SecondaryAddressFinder atDirectory,
+    AtLookUp Function(SecondaryAddressFinder atDirectory) connect,
+    {Duration? atDirectoryTimeout}) async {
   try {
-    await saf.findSecondary(atSign);
+    await atDirectory.findSecondary(atSign, timeout: atDirectoryTimeout);
   } on SecondaryNotFoundException {
-    stderr.writeln('returning 3: atDirectory has no record for $atSign');
-    return 3;
+    return (
+      outcome: _PublicKey.notInAtDirectory,
+      detail: 'atDirectory has no record for $atSign'
+    );
   } catch (e) {
-    stderr.writeln('returning 4: Caught ${e.runtimeType} : $e');
-    return 4;
+    return (
+      outcome: _PublicKey.atDirectoryUnreachable,
+      detail: 'Caught ${e.runtimeType} : $e'
+    );
   }
 
-  String? pk;
+  final AtLookUp al;
   try {
     // NOTE: a public key lookup needs no authentication, and no credential is
     // held here.
-    final settings = enrollerSettingsFrom(ar,
-        program: program, programVersion: programVersion);
-    final AtLookUp al = settings.lookUps(
-      atSign: atSign,
-      rootDomain: rootDomain,
-      authenticator: null,
-      secondaryAddressFinder: settings.secondaryAddressFinder,
+    al = connect(atDirectory);
+  } catch (e) {
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'Caught unexpected ${e.runtimeType} : $e'
     );
+  }
+  final found = await _publicKeyFrom(al, atSign);
+  try {
+    await al.close();
+  } catch (e) {
+    logger.finer('closing the public key lookup for $atSign failed: $e');
+  }
+  return found;
+}
+
+/// What [al] answers for [atSign]'s public key.
+Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
+    AtLookUp al, String atSign) async {
+  ({_PublicKey outcome, String detail}) unreachable(AtException e) => (
+        outcome: _PublicKey.atServerUnreachable,
+        detail: 'atServer cannot be reached $atSign ($e)'
+      );
+  final String? pk;
+  try {
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
     } on AtLookUpException catch (e) {
-      final e1 = AtExceptionUtils.get(e.errorCode, e.errorMessage);
-      throw e1;
+      throw AtExceptionUtils.get(e.errorCode, e.errorMessage);
     }
   } on SecondaryServerConnectivityException catch (e) {
-    stderr.writeln('returning 2: atServer cannot be reached $atSign ($e)');
-    return 2;
+    return unreachable(e);
+  } on SecondaryConnectException catch (e) {
+    return unreachable(e);
   } on KeyNotFoundException catch (e) {
-    stderr.writeln('returning 1: $e');
-    return 1;
+    return (outcome: _PublicKey.absent, detail: '$e');
   } catch (e) {
-    stderr.writeln('returning 2: Caught unexpected ${e.runtimeType} : $e');
-    return 2;
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'Caught unexpected ${e.runtimeType} : $e'
+    );
   }
 
   if (pk == null || !pk.startsWith("data:")) {
-    stderr.writeln('returning 1: response was $pk');
-    return 1;
+    return (outcome: _PublicKey.absent, detail: 'response was $pk');
   }
+  return (
+    outcome: _PublicKey.found,
+    detail: 'found public:publickey$atSign OK'
+  );
+}
 
-  stderr.writeln('returning 0: found public:publickey$atSign OK');
-  return 0;
+/// How long at_activate waits for the absent keys' hint lookup before it
+/// gives both hints.
+const Duration _absentKeysHintBudget = Duration(seconds: 5);
+
+/// The next step for [atSign], whose keys are not on this machine, from
+/// whether the atServer the atDirectory at [rootServer] names for it holds
+/// its public key, looked up as [status] looks it up, within
+/// [_absentKeysHintBudget]. When the budget is spent, the lookup's
+/// connection is closed and no new one is started, so none outlives it.
+@visibleForTesting
+Future<List<String>> absentKeysHint(String atSign, String rootServer) async {
+  final AtRootDomain rootDomain;
+  try {
+    rootDomain = AtRootDomain.parse(rootServer);
+  } catch (_) {
+    return eitherKeysHint(atSign);
+  }
+  AtLookUp? connection;
+  var budgetSpent = false;
+  final found = await _lookUpPublicKey(
+      atSign,
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort),
+      (atDirectory) {
+        if (budgetSpent) {
+          throw TimeoutException(
+              'the hint lookup for $atSign is past its budget',
+              _absentKeysHintBudget);
+        }
+        return connection = secureSocketLookUps()(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: null,
+          secondaryAddressFinder: atDirectory,
+        );
+      },
+      atDirectoryTimeout: _absentKeysHintBudget).timeout(_absentKeysHintBudget,
+      onTimeout: () {
+    budgetSpent = true;
+    // NOTE: closing ends the lookup still in flight, and any socket it is
+    // still opening; Future.timeout alone would leave both running.
+    unawaited(connection?.close().catchError((Object e) {
+      logger.finer('closing the hint lookup for $atSign failed: $e');
+    }));
+    return (
+      outcome: _PublicKey.atDirectoryUnreachable,
+      detail: 'no answer within $_absentKeysHintBudget'
+    );
+  });
+  return switch (found.outcome) {
+    _PublicKey.absent => [
+        '$atSign has not been activated yet. To activate it: at_activate '
+            'onboard -a $atSign -r $rootServer'
+      ],
+    _PublicKey.found => [
+        '$atSign is activated, but not on this machine. Run this command on '
+            'the machine that activated it, or enroll this machine first.'
+      ],
+    _PublicKey.notInAtDirectory => [
+        '$atSign is not in the atDirectory at $rootServer. Check the '
+            'spelling, or -r.'
+      ],
+    _PublicKey.atServerUnreachable ||
+    _PublicKey.atDirectoryUnreachable =>
+      eitherKeysHint(atSign),
+  };
 }
 
 /// How often a client waiting for its enrollment to be approved asks again,
@@ -599,6 +730,8 @@ Future<bool> onboard(ArgResults argResults,
         maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
         atLookUp: atLookUp);
     return true;
+  } on AtKeysUnusableException {
+    rethrow;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     throw ('Onboarding failed : $e');
@@ -1517,10 +1650,11 @@ SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
 ///
 /// [rootDomain] is the atDirectory as `host:port`, `root.atsign.org` when
 /// null; one of the form `proxy:host:port` sends every connection through
-/// that proxy, and at_lookup names the atSign first on each connection to it. The connection is given
-/// [maxConnectAttempts] tries, three seconds apart, to come online; a client
-/// the atServer refuses, or that is still offline after that, is stopped and
-/// an [UnAuthenticatedException] says so.
+/// that proxy, and at_lookup names the atSign first on each connection to it.
+/// Keys it cannot use throw [AtKeysUnusableException] before it connects. The
+/// connection is given [maxConnectAttempts] tries, three seconds apart, to
+/// come online; a client the atServer refuses, or that is still offline after
+/// that, is stopped and an [UnAuthenticatedException] says so.
 ///
 /// [waitForPqStartup] holds the call until the client's post-quantum startup
 /// has finished, for at most 30 seconds; a command that reads what that

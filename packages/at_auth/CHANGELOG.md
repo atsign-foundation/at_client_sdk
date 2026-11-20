@@ -1,5 +1,13 @@
 ## 4.1.0-rc.1
 
+- feat: a passphrase envelope refused for its passphrase, missing or one
+  that does not open it, throws `AtKeysPassphraseException`, an
+  `AtDecryptionException`; every other refusal of an envelope is still a
+  plain `AtDecryptionException` saying what is wrong.
+- fix: `FileAtKeysIo.describeSource` names the keyfile without throwing when
+  its path cannot be resolved, such as the default path on a platform with
+  no home directory, so the read failure is reported as
+  `AtKeysUnusableException`.
 - feat: an atServer's `error:` reply to a `from:`, `pkam:` or `cram:` throws
   `AtAuthErrorReplyException`, an `UnAuthenticatedException` whose
   `errorCode` is the reply's code. `AtAuth.onboard` still reports a failed
@@ -7,7 +15,7 @@
 - fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation ends
   it with that exception, and nothing is signed or digested.
 - fix: a failed PKAM during onboarding says what failed, with no stack
-  trace in its message.
+  trace in its message; the trace is logged at fine.
 - feat: an enrollment's wait for approval ends at once with
   `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
   `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
@@ -50,6 +58,27 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- feat: `AtKeysIo.describeSource` says where an atSign's keys are kept (for
+  `FileAtKeysIo`, the keyfile path), and `WrittenAtKeysIo.checkWritable`
+  throws when the store could not take new keys now (`FileAtKeysIo` checks;
+  by default it checks nothing). A class that implements `WrittenAtKeysIo`
+  rather than extending it must add both.
+- feat: `AtKeysUnusableException` says why an atSign's keys cannot be used
+  (`cause`) and where they were looked for (`source`).
+- feat: `AtKeysFormatException.isJson` says whether the document parsed, as
+  JSON that is not an object.
+- fix: `activateAtSign` throws before sending anything when `keys` holds keys
+  it cannot read (`AtKeysUnusableException`, naming the store and why) or
+  when a `FileAtKeysIo` keyfile cannot be written there
+  (`FileSystemException` naming its path).
+- fix: `AtAuth.onboard` refuses a request with no `atKeysIo`, or a read-only
+  one, before it sends anything to the atServer.
+- fix: a message about an atKeys date that does not parse gives the
+  parser's reason and holds none of the date's text.
+- fix: a message about an atKeys file that cannot be read quotes none of
+  its values. A passphrase-protected file whose hashing algorithm is
+  unknown, or whose key derivation cannot run, says so rather than that
+  the passphrase may be incorrect.
 - feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
   activation enrolls in place of a freshly minted APKAM keypair, as
   `AtEnrollmentRequest` does. A pair that does not sign for its public half, or

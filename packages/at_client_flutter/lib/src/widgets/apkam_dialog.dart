@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
+import 'package:at_client_flutter/src/widgets/shared/failure_message.dart';
 import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
 import 'package:flutter/services.dart';
@@ -211,11 +212,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       // wrong. Surface it instead of leaking an unhandled exception, and keep
       // the dialog open so the user can retry (issue #1909).
       if (!mounted || e is AtEnrollmentCancelledException) return;
-      final message = e is AtTimeoutException
-          ? 'Activation timed out — the atServer could not be reached. '
-                'Please check your connection and try again.'
-          : 'Activation failed. Please check the code and your connection, '
-                'then try again.';
+      final message = _failureMessage(e);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -232,6 +229,15 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       }
     }
   }
+
+  /// What the dialog shows for [error], which ended the request or its wait.
+  String _failureMessage(Object error) => failureMessage(
+    widget.atSign,
+    error,
+    timedOut:
+        'Activation timed out — the atServer could not be reached. '
+        'Please check your connection and try again.',
+  );
 
   /// Stops [pending]'s wait and keeps the request. A failure is logged,
   /// since the dialog is gone and there is nobody to tell.
@@ -373,11 +379,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       // The request itself was refused (a wrong passcode, most often) or the
       // atServer could not be reached; keep the dialog open for a retry.
       if (!mounted) return;
-      final message = e is AtTimeoutException
-          ? 'Activation timed out — the atServer could not be reached. '
-                'Please check your connection and try again.'
-          : 'Activation failed. Please check the code and your connection, '
-                'then try again.';
+      final message = _failureMessage(e);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));

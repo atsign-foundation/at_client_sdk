@@ -92,7 +92,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, isNull, reason: 'the dialog popped with no client');
-      expect(find.textContaining('Authentication failed'), findsOneWidget);
+      expect(
+        find.text(
+          'Something went wrong with @alice: the atServer refused this device',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('CramDialog dismisses and shows snackbar on an activation '
@@ -127,7 +132,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, isNull);
-      expect(find.textContaining('Onboarding failed'), findsOneWidget);
+      expect(
+        find.text(
+          'Something went wrong with @alice: Registrar authentication failed',
+        ),
+        findsOneWidget,
+      );
       // The registrar's spelling of the key is unwrapped to the bare secret.
       verify(
         () => flows.activate(
@@ -204,7 +214,10 @@ void main() {
       // retry, so `result` is still unset only because showDialog hasn't
       // returned — not because of a pop(null).
       expect(result, 'unset');
-      expect(find.textContaining('Activation failed'), findsOneWidget);
+      expect(
+        find.text('Something went wrong with @alice: invalid otp'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('ApkamActivationDialog enrols towards the caller\'s keys and '

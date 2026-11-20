@@ -151,7 +151,11 @@ Future<void> main(List<String> args) async {
 
 `-a` names the atSign, `-k` its keyfile (`~/.atsign/keys/<atSign>_key.atKeys`
 by default), `-r` the atDirectory, `-s` the local store and `-P` the keyfile's
-pass-phrase; `--help` lists the rest. `fromCommandLineArgs` waits up to
+pass-phrase; `--help` lists the rest. Keys it cannot use (a keyfile that is
+missing or cannot be read, names another atSign, or holds no credential or no
+keypair it can sign with)
+throw `AtKeysUnusableException` before anything connects, once it has said on
+stderr what is wrong and what to do next. `fromCommandLineArgs` waits up to
 `--max-connect-attempts` tries, 3 seconds apart, for the client to come
 online. Otherwise it stops the client and throws:
 

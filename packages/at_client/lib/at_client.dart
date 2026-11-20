@@ -39,6 +39,8 @@ export 'package:at_auth/at_auth.dart'
         AtKeys,
         AtKeysFormatException,
         AtKeysIo,
+        AtKeysUnusableCause,
+        AtKeysUnusableException,
         EnrollmentKeyExchangeMode,
         InMemoryAtKeysIo,
         KeyEntryStatus,

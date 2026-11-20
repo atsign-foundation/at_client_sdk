@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
@@ -16,6 +17,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 final _logger = AtSignLogger('FileAtKeysIo');
+final _random = Random.secure();
 
 /// File-backed `.atKeys` storage.
 class FileAtKeysIo extends WrittenAtKeysIo {
@@ -45,6 +47,56 @@ class FileAtKeysIo extends WrittenAtKeysIo {
           'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
   }
+
+  /// The keyfile's path, or, when [filePath] cannot resolve it, such as the
+  /// default path on a platform with no home directory, a description that
+  /// says so. It never throws, so a caller reporting a failed [read] can
+  /// name the source.
+  @override
+  String describeSource(String atsign) {
+    try {
+      return filePath!(atsign);
+    } catch (_) {
+      // NOTE: safe to drop: read() fails on the same path and its error is
+      // the one reported; this only names where the keys were looked for.
+      return 'the atKeys file, whose path could not be resolved';
+    }
+  }
+
+  /// Throws [FileSystemException] naming the keyfile's path unless a new
+  /// file can be created beside it.
+  ///
+  /// It creates the keyfile's directory when missing, which the write needs
+  /// and which stays, and deletes the file it creates to find out before it
+  /// returns, leaving no file behind.
+  @override
+  Future<void> checkWritable(String atsign) async {
+    final path = filePath!(atsign);
+    final probe = File(
+        '$path.writable.$pid.${_random.nextInt(1 << 32).toRadixString(16)}');
+    var created = false;
+    try {
+      await probe.parent.create(recursive: true);
+      await probe.create();
+      created = true;
+    } on FileSystemException catch (e) {
+      throw _notWritable(path, e);
+    } finally {
+      if (created) await _deleteProbe(probe, path);
+    }
+  }
+
+  Future<void> _deleteProbe(File probe, String path) async {
+    try {
+      await probe.delete();
+    } on FileSystemException catch (e) {
+      throw _notWritable(path, e);
+    }
+  }
+
+  FileSystemException _notWritable(String path, FileSystemException cause) =>
+      FileSystemException('Cannot write the atKeys file: ${cause.message}',
+          path, cause.osError);
 
   @override
   Future write(String atsign, AtKeys atKeys) async {

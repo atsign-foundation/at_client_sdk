@@ -44,8 +44,12 @@ class AtKeysFormatException extends FormatException {
   /// parsed, as JSON that is not an object, or the parser named none.
   final int? position;
 
+  /// Whether the document parsed, as JSON that is not an object.
+  final bool isJson;
+
   // NOTE: source stays null; the parser's source is the document's text.
-  AtKeysFormatException._(String message, this.reason, this.position)
+  AtKeysFormatException._(
+      String message, this.reason, this.position, this.isJson)
       : super(message, null, position == null ? null : position - 1);
 
   /// [what] did not parse: [parserError] is the JSON parser's own exception.
@@ -57,16 +61,25 @@ class AtKeysFormatException extends FormatException {
         '$what is not valid JSON: ${parserError.message}'
         '${position == null ? '' : ' (at character $position)'}',
         parserError.message,
-        position);
+        position,
+        false);
   }
 
   /// [what] parsed, as JSON that is not an object.
   factory AtKeysFormatException.notAnObject(String what) =>
       AtKeysFormatException._(
-          '$what is not a JSON object', 'not a JSON object', null);
+          '$what is not a JSON object', 'not a JSON object', null, true);
 
   @override
   String toString() => 'AtKeysFormatException: $message';
+}
+
+/// A passphrase envelope refused for its passphrase: none was given, or the
+/// one given does not open it. Every other refusal of an envelope, such as a
+/// version or key derivation this build cannot use, is a plain
+/// [AtDecryptionException] whose message says what is wrong.
+class AtKeysPassphraseException extends AtDecryptionException {
+  AtKeysPassphraseException(super.message);
 }
 
 class AtKeysValidationException extends AtException {

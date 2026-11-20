@@ -4,6 +4,7 @@ import 'package:at_auth/at_auth.dart'
     show AtKeysFileOverwriteException, AtKeysIo, WrittenAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
+import 'package:at_client_flutter/src/widgets/shared/failure_message.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
 import 'package:flutter/material.dart';
 
@@ -30,7 +31,8 @@ import 'package:flutter/material.dart';
 ///
 /// The client comes back online, offline or refused, and its `connection`
 /// says which; only a refusal on a device that has never held the atSign
-/// online is a failure here.
+/// online is a failure here, beside keys `Atsign.open` cannot use. A failure
+/// shows a message chosen by what failed, and no stack trace.
 ///
 /// Keys holding only an enrollment awaiting approval, in a store that can be
 /// written, are waited on as `ApkamActivationDialog` waits: the client opens
@@ -137,11 +139,13 @@ class _PkamDialogState extends State<PkamDialog> {
       // (issue #1909).
       _logger.severe('Authentication via PKAM failed: $e');
       if (!mounted) return;
-      final message = e is AtTimeoutException
-          ? 'Authentication timed out — the atServer could not be reached. '
-                'Please check your connection and try again.'
-          : 'Authentication failed. Please check your atKeys and connection, '
-                'then try again.';
+      final message = failureMessage(
+        widget.atSign,
+        e,
+        timedOut:
+            'Authentication timed out — the atServer could not be reached. '
+            'Please check your connection and try again.',
+      );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));

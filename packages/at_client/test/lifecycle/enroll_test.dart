@@ -255,6 +255,7 @@ void main() {
             secondaryAddressFinder: await refusingAtDirectory(),
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtEnrollmentPendingException>()
+            .having((e) => e.severalMatched, 'severalMatched', isFalse)
             .having((e) => e.pendingEnrollmentIds, 'pending', [enrollmentId])));
   });
 
@@ -1422,6 +1423,7 @@ void main() {
           throwsA(isA<AtEnrollmentPendingException>()
               .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
                   unorderedEquals(['e-one', 'e-two']))
+              .having((e) => e.severalMatched, 'severalMatched', isTrue)
               .having((e) => e.message, 'message', namesBothAndAsksForNames)));
       expect(
           (await resume(app: 'wavi', device: 'e-two'))?.enrollmentId, 'e-two');
@@ -1445,6 +1447,10 @@ void main() {
           throwsA(isA<AtEnrollmentPendingException>()
               .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
                   unorderedEquals(['e-one', 'e-two']))
+              .having((e) => e.cause, 'cause',
+                  AtKeysUnusableCause.pendingEnrollment)
+              .having((e) => e.source, 'source', 'the keys store')
+              .having((e) => e.severalMatched, 'severalMatched', isTrue)
               .having((e) => e.message, 'message', namesBothAndAsksForNames)));
     });
 

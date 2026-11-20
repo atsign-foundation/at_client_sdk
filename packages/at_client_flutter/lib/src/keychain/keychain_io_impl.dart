@@ -38,6 +38,10 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
     return atsignKey;
   }
 
+  /// This device's keychain, which has no path to name.
+  @override
+  String describeSource(String atSign) => "this device's keychain";
+
   @override
   Future<void> write(String atSign, AtKeys atKeys) => keychainStorage.writing(
     () async {

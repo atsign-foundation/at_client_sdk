@@ -15,6 +15,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/at_keys_unusable.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_builders.dart';
@@ -88,6 +89,13 @@ class AtAuthImpl implements AtAuth {
   /// Onboard a new atSign using CRAM
   /// Requires an AtOnboardingRequest and a cramSecret
   ///
+  /// Nothing is sent until the request's `atKeysIo` has been read and checked
+  /// with [WrittenAtKeysIo.checkWritable]: a missing or read-only `atKeysIo`
+  /// throws [AtAuthenticationException], keys already there are refused, and
+  /// any read failure other than [AtKeysSourceAbsentException] throws
+  /// [AtKeysUnusableException] with cause [AtKeysUnusableCause.unreadable],
+  /// naming the source.
+  ///
   /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
   Future<AtOnboardingResponse> onboard(
@@ -98,16 +106,20 @@ class AtAuthImpl implements AtAuth {
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
 
-    //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
+    // NOTE: activation reads the keys source, and checks it can write it,
+    // before it sends the CRAM secret; only an absent source lets it go on.
+    final keysIo = atOnboardingRequest.atKeysIo;
     AtKeys? existingKeys;
     try {
-      existingKeys = await atOnboardingRequest.atKeysIo?.read(
-        atOnboardingRequest.atSign,
-      );
-    } catch (e) {
-      _logger.info(
-        'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
-      ); //swallow the error, we just want to know if keys exist or not
+      existingKeys = await keysIo?.read(atOnboardingRequest.atSign);
+    } catch (e, stackTrace) {
+      if (e is! AtKeysSourceAbsentException) {
+        Error.throwWithStackTrace(
+            AtKeysUnusableException.unreadable(atOnboardingRequest.atSign,
+                source: keysIo!.describeSource(atOnboardingRequest.atSign),
+                error: e),
+            stackTrace);
+      }
     }
 
     if (existingKeys != null) {
@@ -115,6 +127,22 @@ class AtAuthImpl implements AtAuth {
         'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
       );
     }
+    // Onboarding mints key material and must persist it, so a writable store
+    // is required. There is no default: the core cannot assume a filesystem.
+    if (keysIo == null) {
+      throw AtAuthenticationException(
+          'onboarding needs somewhere to persist the key material it mints: '
+          'set AtOnboardingRequest.atKeysIo. On a platform with a '
+          'filesystem that is usually FileAtKeysIo() from '
+          'package:at_auth/at_auth_io.dart');
+    }
+    if (keysIo is! WrittenAtKeysIo) {
+      throw AtAuthenticationException(
+          'onboarding mints key material and must write it, but the AtKeysIo '
+          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
+          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
+    }
+    await keysIo.checkWritable(atOnboardingRequest.atSign);
 
     // A supplied pair is judged before the atServer is contacted, so a bad
     // one costs no connection and no CRAM login. The canonical pair the check
@@ -145,22 +173,7 @@ class AtAuthImpl implements AtAuth {
         ' and try again (or) contact support@atsign.com',
       );
     }
-    //2. generate key pairs. Onboarding mints key material and must persist
-    // it, so a writable store is required. There is no default: the core
-    // cannot assume a filesystem.
-    if (atOnboardingRequest.atKeysIo == null) {
-      throw AtAuthenticationException(
-          'onboarding needs somewhere to persist the key material it mints: '
-          'set AtOnboardingRequest.atKeysIo. On a platform with a '
-          'filesystem that is usually FileAtKeysIo() from '
-          'package:at_auth/at_auth_io.dart');
-    }
-    if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
-      throw AtAuthenticationException(
-          'onboarding mints key material and must write it, but the AtKeysIo '
-          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
-          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
-    }
+    //2. generate key pairs.
     final OnboardingMint mint = await mintOnboardingKeys(
         signingAlgo: atOnboardingRequest.signingAlgoType,
         apkamKeyPair: checkedApkam,

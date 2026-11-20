@@ -4,7 +4,37 @@
 
 - feat: `package:at_client_flutter/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
-- chore: requires at_client 4.1.0.
+- fix: a keychain entry that is not valid JSON is reported as
+  `AtKeysFormatException`, as a keyfile is: its `reason` and `position`, and
+  none of the entry's text.
+- fix: on Windows, a keychain read logs the store name and the length of
+  what it read, never the text.
+- fix: `KeychainStorage.removeAtsignFromKeychain` and
+  `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
+  legacy-named store cannot be read or written, or its entry is not a JSON
+  object; `deleteAllAtKeysData` clears a keychain whose entry does not parse.
+  On Windows, where an entry is written in parts, a write that fails partway
+  is undone before it is thrown, so it leaves the keychain as it was; only
+  when undoing it fails too, which is logged, can the entry be left partly
+  written.
+- fix: `RegistrarCramDialog` says the registrar could not be reached when
+  its request gets no response, as package:http reports one, rather than
+  "Something went wrong". at_client_flutter now depends on http directly.
+- fix: reading the keychain throws when its legacy-named store cannot be
+  read, rather than reading as a keychain that holds no keys.
+- fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry is not
+  JSON or not a JSON object, saying every Atsign stored there is affected.
+- chore: requires at_client 4.1.0 and at_auth 4.1.0.
+- feat: `KeychainAtKeysIo.describeSource` returns "this device's keychain".
+- fix: `CramDialog` fails before sending anything when the keychain holds
+  keys it cannot read.
+- fix: `PkamDialog`, `CramDialog`, `ApkamActivationDialog` and
+  `RegistrarCramDialog` say what failed: a keys problem, an atServer refusal
+  in plain words, a server that could not be reached, or "Something went
+  wrong with <atSign>: <message>", never a stack trace.
+- fix: `PkamDialog` tells the user in plain words to enroll the device again
+  when its keys hold no credential, or only enrollments awaiting approval
+  that it cannot wait on.
 
 ## 2.0.0
 

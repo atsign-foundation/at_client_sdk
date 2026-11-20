@@ -154,6 +154,7 @@ void main() {
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
+      when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
       when(() => mockBiometricStorageFile.write(any())).thenThrow(Exception());
 
       expect(
@@ -480,37 +481,34 @@ void main() {
       },
     );
 
-    test(
-      'readAtKeysData returns null when the legacy store read throws',
-      () async {
-        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+    test('readAtKeysData throws when the legacy store read throws, and writes '
+        'nothing', () async {
+      MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
 
-        when(
-          () => mockBiometricStorage.getStorage(
-            '@atsigns:test',
-            options: any(named: 'options'),
-          ),
-        ).thenAnswer((_) async => mockBiometricStorageFile);
-        when(
-          () => mockBiometricStorageFile.read(),
-        ).thenAnswer((_) async => null);
+      when(
+        () => mockBiometricStorage.getStorage(
+          '@atsigns:test',
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => mockBiometricStorageFile);
+      when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
 
-        when(
-          () => mockBiometricStorage.getStorage(
-            '@atsigns_test',
-            options: any(named: 'options'),
-          ),
-        ).thenAnswer((_) async => legacyStorageFile);
-        when(() => legacyStorageFile.read()).thenThrow(Exception('boom'));
-        when(() => legacyStorageFile.write(any())).thenAnswer((_) async {});
+      when(
+        () => mockBiometricStorage.getStorage(
+          '@atsigns_test',
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => legacyStorageFile);
+      when(() => legacyStorageFile.read()).thenThrow(Exception('boom'));
+      when(() => legacyStorageFile.write(any())).thenAnswer((_) async {});
 
-        final result = await keyChainStorage.readAtKeysData();
-
-        expect(result, isNull);
-        verifyNever(() => mockBiometricStorageFile.write(any()));
-        verifyNever(() => legacyStorageFile.write(any()));
-      },
-    );
+      await expectLater(
+        keyChainStorage.readAtKeysData(),
+        throwsA(isA<Exception>()),
+      );
+      verifyNever(() => mockBiometricStorageFile.write(any()));
+      verifyNever(() => legacyStorageFile.write(any()));
+    });
 
     test(
       'readAtKeysData migrates legacy `_` delimited store data on Windows platform',

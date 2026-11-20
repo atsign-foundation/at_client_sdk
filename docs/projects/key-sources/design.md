@@ -46,7 +46,11 @@ can read one can read the other.
 The stores implement `WrittenAtKeysIo` in
 `packages/at_auth/lib/src/keys/io/at_keys_io.dart`, whose contract is a
 create-only `write`, a `flush` that must never lose material already stored,
-and an `update` that reads, mutates and writes as one operation.
+an `update` that reads, mutates and writes as one operation, and a
+`checkWritable` that throws unless `write` could create keys now (by default
+it checks nothing; `FileAtKeysIo` checks its keyfile's directory). Every
+store also has a `describeSource` that names it for messages: the keyfile
+path, "this device's keychain", or "the keys store" by default.
 
 | Store              | Where                                                       | How it meets the contract                                                                                                                                                                               |
 | ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
