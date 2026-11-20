@@ -120,7 +120,7 @@ void main() {
         cramSecret: cramSecret,
         keys: store,
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         app: 'wavi',
         device: 'laptop',
@@ -177,7 +177,7 @@ void main() {
         manager: manager,
         storage: hiveStoreAt(atSign, dir.path),
         atLookUp: server.lookUp,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory());
     expect(adopted, same(manager));
 
@@ -211,7 +211,7 @@ void main() {
         manager: AtClientManager(atSign),
         storage: hiveStoreAt(atSign, dir.path),
         atLookUp: server.lookUp,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory());
 
     final request = server.sent.where((c) => c.startsWith('enroll:')).single;
@@ -241,7 +241,7 @@ void main() {
           signingAlgo: signingAlgo,
           keys: store,
           preference: await preference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory(),
           apkamKeyPair: apkamKeyPair,
           atLookUp: server.lookUp,
@@ -336,7 +336,7 @@ void main() {
             cramSecret: cramSecret,
             keys: InMemoryAtKeysIo(),
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             provisioningBudget: const Duration(milliseconds: 600),
             provisioningPollInterval: const Duration(milliseconds: 100),
@@ -356,7 +356,7 @@ void main() {
             cramSecret: 'not-it',
             keys: store,
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: server.lookUp,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
@@ -382,7 +382,7 @@ void main() {
         cramSecret: cramSecret,
         keys: InMemoryAtKeysIo(),
         preference: named,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server.lookUp,
         storage: hiveStoreFor(Atsign(atSign), named));

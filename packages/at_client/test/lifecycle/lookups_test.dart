@@ -121,7 +121,7 @@ void main() {
         atSign: '@nofactory',
         namespace: 'wavi',
         preference: preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@nofactory'),
         storage: hiveStoreFor('@nofactory', preference())) as AtClientImpl;

@@ -234,7 +234,7 @@ void main() {
     test('and the cache actually asks it', () async {
       final storage = hiveStoreFor(atSign, signing());
       final first = await AtClientImpl.create(atSign, 'wavi', signing(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: storage);
@@ -242,7 +242,7 @@ void main() {
       await expectLater(
           AtClientImpl.create(atSign, 'wavi',
               signing(authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: defaultAtDirectory,
               atKeysIo: noKeysFor(atSign),
               storage: storage),
@@ -254,7 +254,7 @@ void main() {
       expect(
           identical(
               await AtClientImpl.create(atSign, 'wavi', signing(),
-                  lookUps: secureSocketLookUps(),
+                  lookUps: loopbackLookUps(),
                   secondaryAddressFinder: defaultAtDirectory,
                   atKeysIo: noKeysFor(atSign),
                   storage: storage),
@@ -267,7 +267,7 @@ void main() {
       // so accepting a replacement would leave the client reporting a stage it
       // never applied.
       final client = await AtClientImpl.create(atSign, 'wavi', preference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference()));
@@ -286,7 +286,7 @@ void main() {
     test('setPreferences throws its refusal to the caller, at the call',
         () async {
       final client = await AtClientImpl.create(atSign, 'wavi', preference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference()));

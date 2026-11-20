@@ -37,7 +37,7 @@ void main() {
         AtClientPreference()
           ..namespace = 'unit'
           ..rootDomain = 'test.atsign.wtf',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: remote,
         storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),

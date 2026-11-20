@@ -74,7 +74,7 @@ void main() {
       });
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
@@ -111,7 +111,7 @@ void main() {
       when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:-1');
       final atClient = await AtClientImpl.create(
           atSign, 'testing', AtClientPreference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,

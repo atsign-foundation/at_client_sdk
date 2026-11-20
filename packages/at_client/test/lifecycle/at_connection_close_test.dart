@@ -84,7 +84,7 @@ void main() {
           preference: AtClientPreference()
             ..hiveStoragePath = dir.path
             ..monitorAutoStart = false,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@stopquiet'),
           atLookUp: lookUp,

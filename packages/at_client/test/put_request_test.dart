@@ -185,7 +185,7 @@ void main() {
 
       AtClientImpl atClientImpl = await AtClientImpl.create(
               '@bob', 'wavi', AtClientPreference()..maxDataSize = 1,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: defaultAtDirectory,
               atKeysIo: noKeysFor('@bob'),
               remoteSecondary: mockRemoteSecondary,

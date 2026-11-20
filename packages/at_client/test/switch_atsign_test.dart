@@ -29,7 +29,7 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(aliceAtSign),
           atLookUp: mockAtLookUp,
@@ -48,7 +48,7 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference)));
@@ -59,7 +59,7 @@ void main() {
           atSign: bobAtSign,
           namespace: 'buzz',
           preference: bobPreference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference)));
@@ -77,7 +77,7 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference));
@@ -90,7 +90,7 @@ void main() {
           atSign: bobAtSign,
           namespace: 'buzz',
           preference: bobPreference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference));

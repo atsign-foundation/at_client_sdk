@@ -69,7 +69,7 @@ void main() {
     selfEncryptionKey = AESKey.generate(32).key;
     atClient = await AtClientImpl.create(currentAtSign, 'wavi',
         AtClientPreference()..hiveStoragePath = 'test/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         enrollmentId: enrollmentId,
         atKeysIo: await keyfileHolding(currentAtSign,
@@ -138,7 +138,7 @@ void main() {
           atSign: '@enrolledbuild',
           namespace: 'wavi',
           preference: pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@enrolledbuild'),
           enrollmentId: enrollmentId,
@@ -173,7 +173,7 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
@@ -219,7 +219,7 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: secondary,
@@ -259,7 +259,7 @@ void main() {
 
       final client = await AtClientImpl.create(currentAtsign, 'buzz',
           AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: secondary,
@@ -315,7 +315,7 @@ void main() {
           'buzz',
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: secondary,
@@ -401,7 +401,7 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace', pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
@@ -451,7 +451,7 @@ void main() {
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create(
           currentAtsign, 'random_namespace_1', pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
