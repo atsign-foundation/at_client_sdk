@@ -164,7 +164,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: atsign-foundation/at_server
-          ref: trunk
+          # Pinned to a commit (trunk on 2026-11-18); bump deliberately.
+          ref: a158b700d4b6aaaeb7e3d8ba56df8948157f0b1d
           path: at_server
           persist-credentials: false
           sparse-checkout: tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
@@ -175,13 +176,19 @@ jobs:
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
-      - name: Run at_client_wasm browser tests in Chrome
+      - name: Run at_client_wasm browser tests in Chrome (dart2js)
         working-directory: packages/at_client_wasm
         env:
           AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
         run: |
           dart pub get
           dart test -p chrome --concurrency=1
+
+      - name: Run at_client_wasm browser tests in Chrome (dart2wasm)
+        working-directory: packages/at_client_wasm
+        env:
+          AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
+        run: dart test -p chrome -c dart2wasm --concurrency=1
 
   unit_at_client_flutter:
     runs-on: ubuntu-latest

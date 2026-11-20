@@ -12,6 +12,19 @@ import 'wire_fakes.dart';
 const _atSign = '@alice';
 const _app = 'wavi';
 
+/// A session key store counting the reads it served.
+class _CountingKeysIo extends SessionKeysIo {
+  _CountingKeysIo(super.atSign, super.keys);
+
+  var reads = 0;
+
+  @override
+  FutureOr<AtKeys> read(String atsign) {
+    reads++;
+    return super.read(atsign);
+  }
+}
+
 void main() {
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
@@ -40,6 +53,19 @@ void main() {
     }
     AtClientImpl.atClientInstanceMap.clear();
     AtClientManager.getInstance().reset();
+  });
+
+  test('a portal session given a key store runs its client on it', () async {
+    final store = _CountingKeysIo(_atSign, classicalAtKeys());
+
+    await portalSession(
+        atSign: _atSign,
+        app: _app,
+        keys: classicalAtKeys(),
+        transport: transport(),
+        keysIo: store);
+
+    expect(store.reads, greaterThan(0));
   });
 
   test(
