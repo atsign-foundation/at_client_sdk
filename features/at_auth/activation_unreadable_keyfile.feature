@@ -41,7 +41,11 @@ Feature: Activation refuses a keyfile it cannot read or write before it uses the
     Given a keyfile path in a directory this process can write
     When the check creates its probe file and deletes it
     Then nothing is left behind in the directory
-    And when that delete fails, the check throws naming the keyfile's path
+
+  Scenario: A writability check whose probe cannot be deleted says so
+    Given a keyfile path in a directory where the check's probe file cannot be deleted
+    When the check runs
+    Then it throws naming the keyfile's path
 
   Scenario: A keyfile path that cannot be resolved is unreadable keys
     Given a FileAtKeysIo whose path cannot be resolved, as the default path on a platform with no home directory

@@ -414,50 +414,45 @@ void main() {
     });
   });
 
-  group('The writability check removes the file it creates to find out', () {
-    late String path;
-    late List<String> probes;
+  /// The probe files each check run through [probing] creates.
+  final probes = <String>[];
 
-    setUp(() {
-      path = '${dir.path}/${atSign}_key.atKeys';
-      probes = [];
+  /// Checks that [path] can be written, recording in [probes] each probe
+  /// file the check creates, whose delete is refused unless [deletable].
+  Future<void> probing(String path, {required bool deletable}) {
+    probes.clear();
+    return IOOverrides.runZoned(
+        () => FileAtKeysIo(filePath: (_) => path).checkWritable(atSign),
+        createFile: (p) {
+      // NOTE: the real file, made outside these overrides.
+      final file = Zone.root.run(() => File(p));
+      if (!p.startsWith('$path.writable.')) return file;
+      probes.add(p);
+      return _ProbeFile(file, deletable: deletable);
     });
+  }
 
-    /// Runs [check] with every probe file the check creates recorded in
-    /// [probes], and its delete refused unless [deletable].
-    Future<void> probing(Future<void> Function() check,
-            {required bool deletable}) =>
-        IOOverrides.runZoned(check, createFile: (p) {
-          // NOTE: the real file, made outside these overrides.
-          final file = Zone.root.run(() => File(p));
-          if (!p.startsWith('$path.writable.')) return file;
-          probes.add(p);
-          return _ProbeFile(file, deletable: deletable);
-        });
+  test('The writability check removes the file it creates to find out',
+      () async {
+    await probing('${dir.path}/${atSign}_key.atKeys', deletable: true);
 
-    test('and leaves nothing behind once it is deleted', () async {
-      await probing(() => FileAtKeysIo(filePath: (_) => path)
-          .checkWritable(atSign), deletable: true);
+    expect(probes, hasLength(1),
+        reason: 'the control: the check created a probe file');
+    expect(dir.listSync(), isEmpty,
+        reason: 'the check leaves nothing in the directory it checked');
+  });
 
-      expect(probes, hasLength(1),
-          reason: 'the control: the check created a probe file');
-      expect(dir.listSync(), isEmpty,
-          reason: 'the check leaves nothing in the directory it checked');
-    });
+  test('A writability check whose probe cannot be deleted says so', () async {
+    final path = '${dir.path}/${atSign}_key.atKeys';
 
-    test('and says the keyfile cannot be written when that delete fails',
-        () async {
-      await expectLater(
-          probing(
-              () => FileAtKeysIo(filePath: (_) => path).checkWritable(atSign),
-              deletable: false),
-          throwsA(isA<FileSystemException>()
-              .having((e) => e.path, 'path', path)
-              .having((e) => e.message, 'message',
-                  startsWith('Cannot write the atKeys file: '))));
-      expect(probes, hasLength(1),
-          reason: 'the control: the check created a probe file');
-    });
+    await expectLater(
+        probing(path, deletable: false),
+        throwsA(isA<FileSystemException>()
+            .having((e) => e.path, 'path', path)
+            .having((e) => e.message, 'message',
+                startsWith('Cannot write the atKeys file: '))));
+    expect(probes, hasLength(1),
+        reason: 'the control: the check created a probe file');
   });
 
   group('An absent keyfile still activates', () {
