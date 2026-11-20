@@ -370,6 +370,58 @@ void main() {
         expectNoLogHoldsEntry();
       },
     );
+
+    group(
+      'Given a header that parses but records no segment count, and three segments',
+      () {
+        test(
+          'when all atKeys data is deleted, then every segment is gone and none past them is deleted',
+          () async {
+            KeychainStorage.isWindows = true;
+            addTearDown(() => KeychainStorage.isWindows = false);
+            const header = '@atsigns:test';
+            final held = <String, String>{
+              header: '{}',
+              '${header}_segment_0': entry.substring(0, 15),
+              '${header}_segment_1': entry.substring(15, 30),
+              '${header}_segment_2': entry.substring(30),
+            };
+            final biometricStorage = _MockBiometricStorage();
+            when(
+              () => biometricStorage.getStorage(
+                any(),
+                options: any(named: 'options'),
+              ),
+            ).thenAnswer((invocation) async {
+              final file = _MockBiometricStorageFile();
+              final name = invocation.positionalArguments.first as String;
+              when(file.read).thenAnswer((_) async => held[name]);
+              when(file.delete).thenAnswer((_) async {
+                held.remove(name);
+                changed.add(name);
+              });
+              return file;
+            });
+
+            await KeychainStorage(
+              biometricStorage: biometricStorage,
+            ).deleteAllAtKeysData();
+
+            expect(
+              held,
+              isEmpty,
+              reason: 'the header and all three segments are deleted',
+            );
+            expect(
+              changed,
+              isNot(contains('${header}_segment_3')),
+              reason: 'no segment past the third is deleted',
+            );
+            expectNoLogHoldsEntry();
+          },
+        );
+      },
+    );
   });
 
   test(
