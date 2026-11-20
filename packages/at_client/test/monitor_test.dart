@@ -56,6 +56,14 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   /// muxable authenticates, so a test can land a stop() in that window.
   Future<void>? startGate;
 
+  /// Awaited before [stopNotifications] tears down, so a test can land an
+  /// event between a stop() and the teardown it queues.
+  Future<void>? stopGate;
+
+  /// Awaited before [startError] is thrown, so a test can land a stop()
+  /// while a start that is failing is still in flight.
+  Future<void>? failGate;
+
   @override
   Stream<String> get notifications => _notifications.stream;
 
@@ -72,7 +80,10 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     bool selfNotificationsEnabled = true,
   }) async {
     startCalls++;
-    if (startError != null) throw startError!;
+    if (startError != null) {
+      if (failGate != null) await failGate;
+      throw startError!;
+    }
     started = true;
     if (startGate != null) await startGate;
     // Invoked, as the real muxable does on every (re)connect - so these
@@ -84,6 +95,7 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   @override
   Future<void> stopNotifications() async {
+    if (stopGate != null) await stopGate;
     started = false;
     if (!_up.isClosed) _up.add(false);
     // Closed and replaced, as the real one does.
@@ -97,6 +109,9 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   /// The atServer sends one.
   void deliver(String notification) => _notifications.add(notification);
+
+  /// The atServer refuses a reconnect, reported as the real muxable does.
+  void refuse(Object refusal) => _notifications.addError(refusal);
 
   /// The connection drops under us - the muxable reports it and reconnects.
   @override
@@ -151,6 +166,11 @@ void main() {
   group('the client connection state', () {
     late AtConnection connection;
 
+    AtAuthErrorReplyException revoked() => AtAuthErrorReplyException(
+        'Failed connecting to @alice. '
+        'error:AT0027:enrollment_id: e1 is revoked',
+        errorCode: 'AT0027');
+
     setUp(() {
       connection = AtConnection(
           atSign: '@alice',
@@ -188,6 +208,134 @@ void main() {
       expect(connection.current.isOnline, isTrue,
           reason: 'a dropped monitor says nothing about whether the atServer '
               'is reachable; the next failing verb does');
+    });
+
+    test('a refused reconnect is reported refused', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.refuse(revoked());
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(connection.current.isRefused, isTrue);
+      expect(connection.current.cause, AtConnectionCause.revoked);
+    });
+
+    test('a refused reconnect that arrives after stop() is not reported',
+        () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
+      final gate = Completer<void>();
+      muxable.stopGate = gate.future;
+
+      monitor.stop();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.refuse(revoked());
+      await Future.delayed(const Duration(milliseconds: 20));
+      gate.complete();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(connection.current.isOnline, isTrue,
+          reason: 'the caller stopped listening before the refusal arrived, '
+              'so the attempt ends as a stop does, with nothing reported');
+    });
+
+    test(
+        'a refusal held back by a running handler is not reported once the '
+        'connection is back up', () async {
+      final handling = Completer<void>();
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) => handling.future,
+        getLastNotificationTime: () async => null,
+        connection: connection,
+      );
+      monitor.logger.level = 'severe';
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.deliver('A');
+      await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      muxable.refuse(revoked());
+      muxable.reconnected();
+      await Future.delayed(const Duration(milliseconds: 20));
+      handling.complete();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(monitor.currentState, NotificationListenerState.listening);
+      expect(connection.current.isOnline, isTrue,
+          reason: 'the refusal belongs to an attempt the recovery superseded, '
+              'so reporting it once the handler lets it through would leave '
+              'a connected client reading refused');
+    });
+
+    group('after a failed start', () {
+      late List<Duration> defaultStartRetries;
+      final delays = <Duration>[];
+
+      setUp(() {
+        defaultStartRetries = Monitor.startRetryDelays;
+        // Long enough that no retry runs inside a test.
+        Monitor.startRetryDelays = const [Duration(seconds: 10)];
+        delays.clear();
+        monitor
+          ..startRefusalRetryDelays = const [Duration(seconds: 20)]
+          ..onStartRetryDelay = delays.add;
+      });
+
+      tearDown(() {
+        monitor.stop();
+        Monitor.startRetryDelays = defaultStartRetries;
+      });
+
+      test(
+          'an UnAuthenticatedException is retried on the refusal schedule and '
+          'reported refused', () async {
+        muxable.startError = revoked();
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(delays, [const Duration(seconds: 20)]);
+        expect(connection.current.isRefused, isTrue);
+        expect(connection.current.cause, AtConnectionCause.revoked);
+      });
+
+      test(
+          'any other error is retried on the network schedule and not '
+          'reported, even when it carries a refusal code', () async {
+        muxable.startError =
+            AtLookUpException('AT0027', 'enrollment_id: e1 is revoked');
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(delays, [const Duration(seconds: 10)],
+            reason: 'a start counts as refused only what a reconnect does, an '
+                'UnAuthenticatedException, so the two back off alike');
+        expect(connection.current.isRefused, isFalse,
+            reason: 'and a reconnect would not report it');
+      });
+
+      test('a refused start that fails after stop() is not reported', () async {
+        final failing = Completer<void>();
+        muxable
+          ..startError = revoked()
+          ..failGate = failing.future;
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+        monitor.stop();
+        failing.complete();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(connection.current.isRefused, isFalse,
+            reason: 'the caller stopped listening before the start failed, so '
+                'the attempt ends as a stop does, with nothing reported');
+        expect(delays, isEmpty, reason: 'and nothing is retried');
+      });
     });
   });
 
