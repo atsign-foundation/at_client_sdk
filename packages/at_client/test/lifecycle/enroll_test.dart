@@ -481,6 +481,28 @@ void main() {
   });
 
   test(
+      'a wait ended by a refusal other than a denial leaves the pending keys, '
+      'even when the refusal says "denied"', () async {
+    final store = InMemoryAtKeysIo();
+    final pending = await submit(
+        store,
+        atServer(
+            decide: (_) async => throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:AT0011:access denied',
+                errorCode: 'AT0011')));
+
+    await expectLater(
+        pending.awaitApproval(
+            retryInterval: const Duration(milliseconds: 1), maxRetries: 1),
+        throwsA(allOf(
+            isA<AtEnrollmentException>()
+                .having((e) => e.message, 'message', contains('access denied')),
+            isNot(isA<AtEnrollmentDeniedException>()))));
+    expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+        reason: 'only the atServer\'s AT0025 removes the pending keys');
+  });
+
+  test(
       'a failure other than a denial after the atServer approved leaves the '
       'pending keys, and a later wait completes them', () async {
     final store = InMemoryAtKeysIo();

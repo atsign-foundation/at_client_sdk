@@ -374,7 +374,7 @@ void main() {
 
           await expectLater(
               waitOver(server),
-              throwsA(isA<AtEnrollmentException>()
+              throwsA(isA<AtEnrollmentDeniedException>()
                   .having((e) => e.message, 'message', contains('denied'))));
           expect(polls(server), 1);
         });
