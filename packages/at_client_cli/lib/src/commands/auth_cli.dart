@@ -1450,7 +1450,7 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
     }
   }, onError: (Object e) {
     stderr.writeln('The enrollment request notifications reported an '
-        'error: $e');
+        'error: ${clipForMessage('$e')}');
   });
 
   // await future then cancel the subscription
