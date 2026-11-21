@@ -1,4 +1,5 @@
 import 'package:at_client/src/response/default_response_parser.dart';
+import 'package:at_client/src/response/response.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -10,23 +11,80 @@ void main() {
       expect(response.isError, false);
     });
 
-    test('test error response', () {
-      expect(
-          () => DefaultResponseParser().parse('error:AT1234-Test Exception'),
-          throwsA(predicate((dynamic e) =>
-              e is AtClientException && e.message == 'Test Exception')));
+    test(
+        'Given an atServer error reply in the dash, colon or JSON form, when '
+        'DefaultResponseParser parses it, then it throws the exception that '
+        'code stands for, carrying the reply\'s text', () {
+      const replies = [
+        'error:AT0015-key not found',
+        'error:AT0015:key not found',
+        'error:{"errorCode":"AT0015","errorDescription":"key not found"}',
+      ];
+      for (final reply in replies) {
+        expect(
+            () => DefaultResponseParser().parse(reply),
+            throwsA(isA<KeyNotFoundException>()
+                .having((e) => e.message, 'message', 'key not found')),
+            reason: reply);
+      }
+    });
+
+    test(
+        'Given an atServer error reply in the dash, colon or JSON form, when '
+        'parseFailureResponse reads it, then the response carries its code '
+        'and text', () {
+      const replies = [
+        'error:AT0015-key not found',
+        'error:AT0015:key not found',
+        'error:{"errorCode":"AT0015","errorDescription":"key not found"}',
+      ];
+      for (final reply in replies) {
+        final response = AtResponse();
+        expect(
+            () => DefaultResponseParser().parseFailureResponse(reply, response),
+            throwsA(isA<KeyNotFoundException>()),
+            reason: reply);
+        expect(response.isError, isTrue, reason: reply);
+        expect(response.errorCode, 'AT0015', reason: reply);
+        expect(response.errorDescription, 'key not found', reason: reply);
+      }
+    });
+
+    test(
+        'Given a bare code, when DefaultResponseParser parses it, then it '
+        'throws the exception that code stands for', () {
+      expect(() => DefaultResponseParser().parse('error:AT0015'),
+          throwsA(isA<KeyNotFoundException>()));
+    });
+
+    test(
+        'Given a reply naming no code, or a code no typed exception stands '
+        'for, when DefaultResponseParser parses it, then it throws a plain '
+        'AtException, and the response carries its code and message', () {
+      const replies = {
+        'error:oops': ('AT0014', 'Unknown server error: oops'),
+        'error:AT0014-boom': ('AT0014', 'boom'),
+        'error:AT0026-boom': ('AT0026', 'boom'),
+      };
+      replies.forEach((reply, expected) {
+        final response = AtResponse();
+        expect(
+            () => DefaultResponseParser().parseFailureResponse(reply, response),
+            throwsA(isA<AtException>()
+                .having((e) => e.runtimeType, 'runtimeType', AtException)
+                .having((e) => e.message, 'message', expected.$2)),
+            reason: reply);
+        expect(response.errorCode, expected.$1, reason: reply);
+        expect(response.errorDescription, expected.$2, reason: reply);
+      });
     });
 
     test('test errors with unexpected response', () {
       expect(
           () =>
               DefaultResponseParser().parse('error:Unexpected response found'),
-          throwsA(predicate((dynamic e) => e is AtClientException)));
-    });
-
-    test('test error response without error code', () {
-      expect(() => DefaultResponseParser().parse('error:Exception'),
-          throwsA(predicate((dynamic e) => e is AtClientException)));
+          throwsA(isA<AtException>().having((e) => e.message, 'message',
+              contains('Unexpected response found'))));
     });
 
     test('test random response string', () {

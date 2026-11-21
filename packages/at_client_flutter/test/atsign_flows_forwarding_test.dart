@@ -7,6 +7,7 @@ import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtLookupImpl, AtLookupMuxable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'loopback_flows.dart';
 
 class _ScriptedLookUp extends Mock implements AtLookupImpl {}
 
@@ -113,19 +114,19 @@ void main() {
     final lookUps = handing(scriptedAtServer(sent));
     final storage = InMemoryAtClientStorage(atSign: atSign);
     final client = device == null
-        ? await const AtsignFlows().activate(
+        ? await const LoopbackFlows().activate(
             atSign,
             cramSecret: 'the-one-time-secret',
             keys: InMemoryAtKeysIo(),
-            preference: AtClientPreference(),
+            preference: await loopbackPreference(),
             storage: storage,
             lookUps: lookUps,
           )
-        : await const AtsignFlows().activate(
+        : await const LoopbackFlows().activate(
             atSign,
             cramSecret: 'the-one-time-secret',
             keys: InMemoryAtKeysIo(),
-            preference: AtClientPreference(),
+            preference: await loopbackPreference(),
             storage: storage,
             lookUps: lookUps,
             device: device,
@@ -134,7 +135,10 @@ void main() {
     return sent;
   }
 
-  Future<AtClient> opening({String? namespace, String? preferenceNamespace}) {
+  Future<AtClient> opening({
+    String? namespace,
+    String? preferenceNamespace,
+  }) async {
     const atSign = '@flowsopen';
     final keys = InMemoryAtKeysIo.holding(
       atSign,
@@ -146,10 +150,10 @@ void main() {
         selfEncryptionKey: base64Encode(utf8.encode('self')),
       ),
     );
-    return const AtsignFlows().open(
+    return const LoopbackFlows().open(
       atSign,
       keys: keys,
-      preference: AtClientPreference()..namespace = preferenceNamespace,
+      preference: (await loopbackPreference())..namespace = preferenceNamespace,
       storage: InMemoryAtClientStorage(atSign: atSign),
       lookUps: handing(scriptedAtServer([])),
       namespace: namespace,
@@ -158,14 +162,14 @@ void main() {
 
   Future<List<String>> enrolling({Duration? apkamKeysExpiry}) async {
     final sent = <String>[];
-    await const AtsignFlows().enroll(
+    await const LoopbackFlows().enroll(
       '@flowsenroll',
       otp: 'ABC123',
       app: 'my_app',
       device: 'my_phone',
       namespaces: {'my_app': 'rw'},
       keys: InMemoryAtKeysIo(),
-      preference: AtClientPreference(),
+      preference: await loopbackPreference(),
       lookUps: handing(scriptedAtServer(sent, enrollStatus: 'pending')),
       apkamKeysExpiry: apkamKeysExpiry,
     );

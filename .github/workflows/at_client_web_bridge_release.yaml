@@ -48,14 +48,14 @@ jobs:
       - name: Build the bridge bundle
         if: steps.tag.outputs.exists != 'true'
         run: |
-          cp packages/at_client_wasm/dart-workspace.lock pubspec.lock
-          cd packages/at_client_wasm
+          cp packages/at_client_web/dart-workspace.lock pubspec.lock
+          cd packages/at_client_web
           dart pub get --enforce-lockfile
-          tool/build.sh at_client_web_entry
+          tool/build.sh at_client_bridge_entry
 
       - name: Write the checksum
         if: steps.tag.outputs.exists != 'true'
-        working-directory: packages/at_client_wasm/build
+        working-directory: packages/at_client_web/build
         run: sha256sum at_client_web.js > at_client_web.js.sha256
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -63,8 +63,8 @@ jobs:
         with:
           name: at_client_web-bridge
           path: |
-            packages/at_client_wasm/build/at_client_web.js
-            packages/at_client_wasm/build/at_client_web.js.sha256
+            packages/at_client_web/build/at_client_web.js
+            packages/at_client_web/build/at_client_web.js.sha256
           if-no-files-found: error
           retention-days: 1
 

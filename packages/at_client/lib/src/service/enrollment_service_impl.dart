@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show AESKey;
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart' as privilege;
 import 'package:at_client/src/response/enrollment.dart';
@@ -33,37 +34,12 @@ class EnrollmentServiceImpl implements EnrollmentService {
 
   @override
   Future<List<Enrollment>> fetchEnrollmentRequests(
-      {EnrollmentListRequestParam? enrollmentListParams}) async {
-    EnrollVerbBuilder enrollBuilder = EnrollVerbBuilder()
-      ..operation = EnrollOperationEnum.list
-      ..appName = enrollmentListParams?.appName
-      ..deviceName = enrollmentListParams?.deviceName
-      ..enrollmentStatusFilter = enrollmentListParams?.enrollmentListFilter;
+          {EnrollmentListRequestParam? enrollmentListParams}) =>
+      listEnrollmentsOn(_atClient.getRemoteSecondary()!,
+          params: enrollmentListParams);
 
-    String? response = await _atClient
-        .getRemoteSecondary()!
-        .executeCommand(enrollBuilder.buildCommand(), auth: true);
-
-    return _formatEnrollListResponse(response!);
-  }
-
-  String extractEnrollmentId(String enrollmentKey) {
-    return enrollmentKey.split('.')[0];
-  }
-
-  List<Enrollment> _formatEnrollListResponse(String response) {
-    response = response.replaceFirst(RegExp('^data:'), '');
-    Map<String, dynamic> enrollRequests = jsonDecode(response);
-    List<Enrollment> enrollRequestsFormatted = [];
-    for (MapEntry enrollmentRequest in enrollRequests.entries) {
-      Enrollment enrollmentRequestResponse =
-          Enrollment.fromJSON(enrollmentRequest.value);
-      enrollmentRequestResponse.enrollmentId =
-          extractEnrollmentId(enrollmentRequest.key);
-      enrollRequestsFormatted.add(enrollmentRequestResponse);
-    }
-    return enrollRequestsFormatted;
-  }
+  String extractEnrollmentId(String enrollmentKey) =>
+      _enrollmentIdOf(enrollmentKey);
 
   /// Whether this client is configured to do post-quantum work at all.
   ///
@@ -239,20 +215,47 @@ class EnrollmentServiceImpl implements EnrollmentService {
         ..operation = EnrollOperationEnum.revoke
         ..force = enrollmentRequestDecision.force);
 
-  /// Runs a decision verb on the client's own connection and hands back the
-  /// enrollment and status the atServer answered with; anything but `data:`
-  /// is the atServer's refusal, thrown.
-  Future<AtEnrollmentResponse> _decide(EnrollVerbBuilder builder) async {
-    final command = builder.buildCommand();
-    final response = await _atClient.getRemoteSecondary()!.executeVerb(builder);
-    if (!response.startsWith('data:')) {
-      throw AtEnrollmentException(
-          '${command.trim()} for ${_atClient.getCurrentAtSign()} was '
-          'refused: $response');
-    }
-    final decoded = jsonDecode(response.substring('data:'.length).trim())
-        as Map<String, dynamic>;
-    return AtEnrollmentResponse(decoded['enrollmentId'] as String,
-        getEnrollStatusFromString(decoded['status'] as String));
+  Future<AtEnrollmentResponse> _decide(EnrollVerbBuilder builder) =>
+      decideEnrollmentOn(_atClient.getRemoteSecondary()!,
+          '${_atClient.getCurrentAtSign()}', builder);
+}
+
+/// The enrollments `enroll:list` reports on [remote], an authenticated
+/// connection, narrowed by [params].
+Future<List<Enrollment>> listEnrollmentsOn(RemoteSecondary remote,
+    {EnrollmentListRequestParam? params}) async {
+  final builder = EnrollVerbBuilder()
+    ..operation = EnrollOperationEnum.list
+    ..appName = params?.appName
+    ..deviceName = params?.deviceName
+    ..enrollmentStatusFilter = params?.enrollmentListFilter;
+  final response =
+      await remote.executeCommand(builder.buildCommand(), auth: true);
+  final listed = jsonDecode(response!.replaceFirst(RegExp('^data:'), ''))
+      as Map<String, dynamic>;
+  return [
+    for (final MapEntry(:key, :value) in listed.entries)
+      Enrollment.fromJSON(value)..enrollmentId = _enrollmentIdOf(key),
+  ];
+}
+
+String _enrollmentIdOf(String enrollmentKey) => enrollmentKey.split('.')[0];
+
+/// Runs the decision verb [builder] for [atSign] on [remote] and returns the
+/// enrollment and status the atServer answered with.
+///
+/// Throws [AtEnrollmentException] when the atServer answers anything but
+/// `data:`.
+Future<AtEnrollmentResponse> decideEnrollmentOn(
+    RemoteSecondary remote, String atSign, EnrollVerbBuilder builder) async {
+  final command = builder.buildCommand();
+  final response = await remote.executeVerb(builder);
+  if (!response.startsWith('data:')) {
+    throw AtEnrollmentException(
+        '${command.trim()} for $atSign was refused: $response');
   }
+  final decoded = jsonDecode(response.substring('data:'.length).trim())
+      as Map<String, dynamic>;
+  return AtEnrollmentResponse(decoded['enrollmentId'] as String,
+      getEnrollStatusFromString(decoded['status'] as String));
 }

@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import 'fake_path_provider.dart';
+import 'loopback_flows.dart';
 
 /// The CRAM and PKAM dialogs reach a client through [AtsignFlows], which
 /// opens this package's default store for an app that passes none.
@@ -48,10 +49,10 @@ void main() {
       );
 
       try {
-        await const AtsignFlows().open(
+        await const LoopbackFlows().open(
           atSign,
           keys: keys,
-          preference: AtClientPreference(),
+          preference: await loopbackPreference(),
         );
       } on Object {
         // NOTE: what happens once the store is open is not under test.
@@ -74,11 +75,11 @@ void main() {
       var connectionsAsked = 0;
 
       await expectLater(
-        const AtsignFlows().activate(
+        const LoopbackFlows().activate(
           '@flowsactivate',
           cramSecret: 'secret',
           keys: InMemoryAtKeysIo(),
-          preference: AtClientPreference(),
+          preference: await loopbackPreference(),
           lookUps:
               ({
                 required String atSign,

@@ -178,7 +178,7 @@ void main() {
               // runs no post-quantum startup, which is the startup under test.
               AtClientPreference(posture: PqPosture.pqReady)
                 ..hiveStoragePath = 'test/hive/evictionwiring',
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: defaultAtDirectory,
               atKeysIo: noKeysFor('@evictionwiring'),
               storage:

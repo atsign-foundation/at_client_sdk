@@ -30,8 +30,8 @@ void main() {
 
   Future<AtClient> clientWith({required InMemoryAtKeysIo keySource}) async =>
       AtClientImpl.create(atSign, 'unit', prefs(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(prefs()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           remoteSecondary: MockRemoteSecondary(),
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true),

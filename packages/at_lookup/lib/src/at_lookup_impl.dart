@@ -11,11 +11,9 @@ import 'package:at_lookup/src/connection/base_connection.dart'
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
 import 'package:at_lookup/src/util/command_for_log.dart' show commandForLog;
-import 'package:at_lookup/src/util/error_response.dart'
-    show errorResponseException;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
-import 'package:meta/meta.dart' show internal;
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:mutex/mutex.dart';
 
 /// The `from:` challenge an atServer issues a client, once the `data:` prefix
@@ -249,11 +247,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // Already logged by the listener that failed the read; a connection
       // closed underneath a request is not an error in the verb.
       throw AtLookUpException(
-          AtLookUpExceptionUtil.getErrorCode(e), e.toString());
+          AtLookUpExceptionUtil.getErrorCode(e), e.toString(),
+          cause: e);
     } on Exception catch (e) {
       logger.severe('Error in remote verb execution ${e.toString()}');
       var errorCode = AtLookUpExceptionUtil.getErrorCode(e);
-      throw AtLookUpException(errorCode, e.toString());
+      throw AtLookUpException(errorCode, e.toString(), cause: e);
     }
     return _verbResponseHandler(verbResult);
   }
@@ -686,6 +685,37 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     Duration(seconds: 34),
   ];
 
+  /// Delays between reconnect attempts after the atServer turned the last
+  /// one away, refusing the credential or answering without letting the
+  /// client in. Each such attempt moves one step on, starting from the step the
+  /// [notificationReconnectDelays] had reached, at most its last; the last
+  /// here is repeated indefinitely.
+  static const List<Duration> notificationRefusalReconnectDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+    Duration(seconds: 34),
+    Duration(seconds: 55),
+    Duration(seconds: 89),
+    Duration(seconds: 144),
+    Duration(seconds: 233),
+    Duration(seconds: 300),
+  ];
+
+  /// The [notificationRefusalReconnectDelays] this lookup waits on, settable
+  /// so a test of several attempts turned away does not wait minutes.
+  @visibleForTesting
+  List<Duration> refusalReconnectDelays = notificationRefusalReconnectDelays;
+
+  /// Told the delay chosen before each notification reconnect attempt, so a
+  /// test can see which schedule it came from.
+  @visibleForTesting
+  void Function(Duration delay)? onNotificationReconnectDelay;
+
   /// How often a quiet notification connection is probed, and how long the
   /// probe waits. Settable so a test does not have to wait 30 seconds.
   @override
@@ -738,6 +768,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     controller.add(up);
   }
 
+  StreamController<UnAuthenticatedException>? _refusalController;
+
+  @override
+  Stream<UnAuthenticatedException> get notificationRefusals {
+    if (_stopped) return const Stream.empty();
+    _refusalController ??=
+        StreamController<UnAuthenticatedException>.broadcast();
+    return _refusalController!.stream;
+  }
+
   void _onNotificationConnectionLost() {
     if (!_isNotifying || _reconnecting) return;
     // `warning`: the subscriber cannot see this any other way, and a silent
@@ -758,11 +798,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // that never went down.
     final generation = ++_notifyGeneration;
     _reconnecting = true;
+    var refused = false;
+    var step = 0;
     try {
       while (_isNotifying && generation == _notifyGeneration) {
-        final delay = notificationReconnectDelays[
-            min(_reconnectIx, notificationReconnectDelays.length - 1)];
+        final delays =
+            refused ? refusalReconnectDelays : notificationReconnectDelays;
+        final delay = delays[min(step, delays.length - 1)];
+        step++;
         _reconnectIx++;
+        onNotificationReconnectDelay?.call(delay);
         logger.info('Reconnecting notifications in ${delay.inSeconds}s '
             '(attempt $_reconnectIx)');
         await Future.delayed(delay);
@@ -783,6 +828,14 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         } catch (e) {
           if (generation != _notifyGeneration) return;
           logger.warning('Reconnect attempt $_reconnectIx failed: $e');
+          refused = e is UnAuthenticatedException;
+          if (e is UnAuthenticatedException) {
+            _reportRefusal(e);
+          } else {
+            // NOTE: held at the network schedule's last step, so the waits
+            // after the attempts turned away that follow grow from there.
+            step = min(step, notificationReconnectDelays.length - 1);
+          }
         }
       }
     } finally {
@@ -791,6 +844,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (generation == _notifyGeneration) _reconnecting = false;
     }
   }
+
+  /// Adds [refusal] to [notificationRefusals].
+  void _reportRefusal(UnAuthenticatedException refusal) =>
+      _refusalController?.add(refusal);
 
   void _startHeartbeat() {
     _stopHeartbeat();
@@ -1086,6 +1143,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     final up = _connectionUpController;
     _connectionUpController = null;
     unawaited(up?.close() ?? Future<void>.value());
+    final refusals = _refusalController;
+    _refusalController = null;
+    unawaited(refusals?.close() ?? Future<void>.value());
   }
 
   Future<void> _sendCommand(String command) async {

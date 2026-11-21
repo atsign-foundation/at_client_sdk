@@ -68,7 +68,7 @@ void main() {
     return Atsign(atSign).open(
         keys: keys,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUpOn(server, atSign),
         storage: hiveStoreFor(Atsign(atSign), pref));
