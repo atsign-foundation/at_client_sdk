@@ -143,6 +143,34 @@ void main() {
       });
     }
 
+    for (final entry in {
+      'a space': ' ',
+      'two spaces': '  ',
+      'a tab': '\t',
+      'a no-break space': '\u00A0',
+      'an escaped space': '%20',
+      'a dot': '.',
+      'two dots': '..',
+      'dots and spaces': ' . ',
+      'a space and a port': ' :8443',
+    }.entries) {
+      test(
+          'given a registrarUrl whose host is only ${entry.key}, when the '
+          'service is constructed, then it throws ArgumentError naming '
+          'registrarUrl', () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: entry.value,
+            superApiKey: _apiKey,
+            httpClient: _mockResponse({}),
+          ),
+          throwsA(
+            isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+          ),
+        );
+      });
+    }
+
     test('throws ArgumentError naming registrarUrl when it carries a scheme',
         () {
       expect(
@@ -399,6 +427,7 @@ void main() {
       '$_registrarUrl:+443': (host: _registrarUrl, port: 443),
       '$_registrarUrl: 443': (host: _registrarUrl, port: 443),
       '$_registrarUrl:0x1BB': (host: _registrarUrl, port: 443),
+      '%FF': (host: '%FF', port: 443),
     };
     for (final entry in acceptedRegistrarUrls.entries) {
       test(

@@ -99,8 +99,9 @@ class RegistrarAdminService {
   ///
   /// Throws [ArgumentError] if [superApiKey] contains a code unit outside
   /// `0x20`-`0x7E`, or if [registrarUrl] is not an authority [Uri.https]
-  /// accepts, names no host, carries user info, or has a port outside
-  /// 1-65535, or if [requestTimeout] is not positive.
+  /// accepts, names no host or one of only whitespace and dots, carries user
+  /// info, or has a port outside 1-65535, or if [requestTimeout] is not
+  /// positive.
   RegistrarAdminService({
     required this.registrarUrl,
     required String superApiKey,
@@ -135,11 +136,21 @@ class RegistrarAdminService {
     } on FormatException {
       throw ArgumentError(invalidMessage, 'registrarUrl');
     }
-    if (uri.host.isEmpty ||
+    if (_isBlankHost(uri.host) ||
         uri.userInfo.isNotEmpty ||
         uri.port < 1 ||
         uri.port > 65535) {
       throw ArgumentError(invalidMessage, 'registrarUrl');
+    }
+  }
+
+  /// Whether [host], with its percent-escapes decoded, holds only whitespace
+  /// and dots.
+  static bool _isBlankHost(String host) {
+    try {
+      return Uri.decodeComponent(host).replaceAll('.', '').trim().isEmpty;
+    } on FormatException {
+      return false;
     }
   }
 
