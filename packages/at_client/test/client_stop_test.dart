@@ -43,6 +43,10 @@ class _GatedMuxable extends Fake implements AtLookupMuxable {
   Stream<bool> get notificationConnectionUp => const Stream.empty();
 
   @override
+  Stream<UnAuthenticatedException> get notificationRefusals =>
+      const Stream.empty();
+
+  @override
   Future<void> startNotifications({
     String? regex,
     Future<int?> Function()? getLastNotificationTime,
