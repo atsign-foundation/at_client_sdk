@@ -81,6 +81,11 @@ Feature: A keychain entry that does not parse says why, and none of its text
     When an app writes @alice's keys again, in 1 segment
     Then the second and third segments are deleted
 
+  Scenario: a rewrite over a legacy header deletes only the segments it names
+    Given a Windows keychain entry holding @alice's keys under a legacy header naming 2 segments, with a third legacy segment stored above them
+    When an app writes @alice's keys again
+    Then the 2 legacy segments it named are deleted and the third is left
+
   Scenario: a write over an oversized legacy header succeeds and looks at no segment past the bound
     Given a Windows store of @alice's passcodes whose header is the legacy count 2561
     When an app saves a passcode for @alice

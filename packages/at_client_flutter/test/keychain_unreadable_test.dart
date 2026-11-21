@@ -621,6 +621,32 @@ void main() {
         );
       });
 
+      test('a rewrite over a legacy header deletes only the segments it '
+          'names', () async {
+        final storage = windowsKeychain();
+        await storage.appendAtKeysToKeychain(keys: keysOf(atSign, 3000));
+        expect(headerCount(), 2, reason: 'the control: two segments');
+        held[current] = '2';
+        for (var i = 0; i < 2; i++) {
+          held['test_data_$i'] = held.remove('${current}_segment_$i')!;
+        }
+        held['test_data_2'] = 'third';
+        expect(
+          '${(await storage.readAtKeysData())!.keys.single.atsign}',
+          atSign,
+          reason: "the control: the 2 legacy segments read as @alice's keys",
+        );
+
+        await storage.updateAtKeysInKeychain(
+          atSign: atSign,
+          keys: keysOf(atSign, 3000),
+        );
+
+        expect(held.keys.where((name) => name.startsWith('test_data_')), [
+          'test_data_2',
+        ]);
+      });
+
       for (final bad in ['2561', '-1', 'abc']) {
         test('a legacy header "$bad" is refused on read', () async {
           held[current] = bad;

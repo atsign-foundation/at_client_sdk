@@ -530,18 +530,19 @@ class KeychainStorage {
     // current prefix start at 0, where the next delete or write finds them.
     final currentPrefix = '${keychainStoreName}_segment';
     var currentCount = 0;
-    ({int count, String prefix})? legacyLayout;
+    String? legacyPrefix;
+    int? legacyCount;
     try {
       final header = await store.read();
       if (header != null && header.isNotEmpty) {
         if (!header.startsWith('{')) {
-          legacyLayout = (count: 0, prefix: await _legacySegmentPrefix());
+          legacyPrefix = await _legacySegmentPrefix();
         }
         final layout = await _segmentLayout(keychainStoreName, header);
-        if (legacyLayout == null) {
+        if (legacyPrefix == null) {
           currentCount = layout.count;
         } else {
-          legacyLayout = layout;
+          legacyCount = layout.count;
         }
       }
     } catch (e, s) {
@@ -554,12 +555,14 @@ class KeychainStorage {
     }
     try {
       await _deleteSegmentsFrom(currentPrefix, 0, atLeast: currentCount);
-      if (legacyLayout != null) {
-        await _deleteSegmentsFrom(
-          legacyLayout.prefix,
-          0,
-          atLeast: legacyLayout.count,
-        );
+      // NOTE: every store's legacy header names the same segments, so one
+      // whose count can be read has only those deleted.
+      if (legacyPrefix != null) {
+        if (legacyCount == null) {
+          await _deleteSegmentsFrom(legacyPrefix, 0);
+        } else {
+          await _deleteSegmentRange(legacyPrefix, 0, legacyCount);
+        }
       }
     } catch (e, s) {
       _logger.severe(
@@ -590,6 +593,13 @@ class KeychainStorage {
         (end < atLeast || await _isStored('${prefix}_$end'))) {
       end++;
     }
+    await _deleteSegmentRange(prefix, first, end);
+  }
+
+  /// Deletes the Windows segments `<prefix>_<first>` to `<prefix>_<end - 1>`,
+  /// stored or not, from the top down, throwing on the first that cannot be
+  /// deleted or stays stored.
+  Future<void> _deleteSegmentRange(String prefix, int first, int end) async {
     for (var i = end - 1; i >= first; i--) {
       await _deleteSegment('${prefix}_$i');
     }
@@ -701,12 +711,10 @@ class KeychainStorage {
       // NOTE: a failure here is logged, not thrown: the new document is
       // already written.
       try {
+        // NOTE: every store's legacy header names the same segments, so only
+        // the old header's own are deleted.
         if (legacyLayout != null) {
-          await _deleteSegmentsFrom(
-            legacyLayout.prefix,
-            0,
-            atLeast: legacyLayout.count,
-          );
+          await _deleteSegmentRange(legacyLayout.prefix, 0, legacyLayout.count);
         }
         await _deleteSegmentsFrom(
           segmentPrefix,
