@@ -636,7 +636,9 @@ mixin Invitations {
     }
   }
 
-  /// Whether this client already holds [key], without asking the atServer.
+  /// Whether this client already holds [key], read where the client's
+  /// preference routes a read: local storage by default, so the atServer is
+  /// not asked.
   Future<bool> _heldLocally(AtKey key) async {
     try {
       return (await atClient.get(key)).value != null;

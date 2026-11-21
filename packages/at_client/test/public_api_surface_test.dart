@@ -93,6 +93,14 @@ void main() {
     });
   });
 
+  group('a refusal and its code are reachable through the barrel', () {
+    test('an app names AtAuthErrorReplyException and reads its code', () {
+      final refusal =
+          AtAuthErrorReplyException('pkam: refused', errorCode: 'AT0027');
+      expect(refusal.errorCode, 'AT0027');
+    });
+  });
+
   // The group above catches a surface REMOVAL; this one catches the opposite,
   // an `src/` file exported by accident. Every change to what a barrel exports
   // is a deliberate diff against a checked-in set — an intended change updates
@@ -209,6 +217,8 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/listener/at_sign_change_listener.dart',
   'package:at_client/src/listener/switch_at_sign_event.dart',
   'package:at_client/src/manager/at_client_manager.dart',
+  // Atsign.authenticatesAs's particulars: the app its from: names.
+  'package:at_client/src/preference/at_client_particulars.dart',
   'package:at_client/src/preference/at_client_preference.dart',
   // AtClientPreference.notificationReplay's type: the policy an app names.
   'package:at_client/src/preference/notification_replay.dart',

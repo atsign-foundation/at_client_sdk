@@ -1,6 +1,7 @@
 import 'dart:math' show Random;
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
@@ -38,6 +39,13 @@ class ServerMutexLease {
   /// Whether the lease has run out, by the time elapsed since it was made, so
   /// a change to the wall clock neither extends nor shortens it.
   bool get isSpent => _held.elapsed >= _length;
+
+  /// How long the lease has left, by the time elapsed since it was made; zero
+  /// once it is spent.
+  Duration get remaining {
+    final left = _length - _held.elapsed;
+    return left > Duration.zero ? left : Duration.zero;
+  }
 }
 
 /// Short-lived locks shared by every client of an atSign, held on its
@@ -79,23 +87,47 @@ extension ServerMutex on AtClient {
   Future<ServerMutexLease?> tryAcquireServerMutex(AtKey key,
       {required Duration ttl}) async {
     checkedServerMutexTtl(ttl, 'ttl');
-    final record = _lockRecord(this, key)
-      ..metadata = (Metadata()
-        ..immutable = true
-        ..ttl = ttl.inMilliseconds);
-    final held = Stopwatch()..start();
-    final leaseFrom = DateTime.now();
-    try {
-      await getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
-        ..atKey = record
-        ..value = _holderOf(this)
-        ..noCommit = true);
-    } on AtException catch (e) {
-      if (_isHeldElsewhere(e)) return null;
-      rethrow;
-    }
-    return ServerMutexLease.timed(record, leaseFrom.add(ttl), held, ttl);
+    final record = _lockRecord(getCurrentAtSign()!.toAtsign(), key);
+    return _take(getRemoteSecondary()!, record, enrollmentId, ttl);
   }
+}
+
+/// Takes the lock [key] names for [ttl] over [remote], an authenticated
+/// connection of [atSign] as a client of [enrollmentId], or returns null when
+/// an immutable record already exists at [key]; what
+/// [ServerMutex.tryAcquireServerMutex] does for a client.
+///
+/// [key] and [ttl] are checked as [ServerMutex.tryAcquireServerMutex] checks
+/// them, before anything is sent, and the record holds the same value. Every
+/// failure other than that record existing is thrown.
+Future<ServerMutexLease?> takeServerMutex(RemoteSecondary remote,
+    {required Atsign atSign,
+    required String? enrollmentId,
+    required AtKey key,
+    required Duration ttl}) async {
+  checkedServerMutexTtl(ttl, 'ttl');
+  return _take(remote, _lockRecord(atSign, key), enrollmentId, ttl);
+}
+
+/// Creates [record] on [remote] as an immutable lock for [ttl], valued for
+/// [enrollmentId]; null when the atServer refuses because it exists.
+Future<ServerMutexLease?> _take(RemoteSecondary remote, AtKey record,
+    String? enrollmentId, Duration ttl) async {
+  record.metadata = Metadata()
+    ..immutable = true
+    ..ttl = ttl.inMilliseconds;
+  final held = Stopwatch()..start();
+  final leaseFrom = DateTime.now();
+  try {
+    await remote.executeVerb(UpdateVerbBuilder()
+      ..atKey = record
+      ..value = _holder(enrollmentId)
+      ..noCommit = true);
+  } on AtException catch (e) {
+    if (_isHeldElsewhere(e)) return null;
+    rethrow;
+  }
+  return ServerMutexLease.timed(record, leaseFrom.add(ttl), held, ttl);
 }
 
 /// [ttl], checked as a server mutex's ttl: at least a millisecond and no
@@ -112,10 +144,10 @@ Duration checkedServerMutexTtl(Duration ttl, String name) {
   return ttl;
 }
 
-/// This client's value in a lock record: its enrollment, or the primary
-/// sentinel for a client with none, then [_isolateNonce].
-String _holderOf(AtClient client) =>
-    '${client.enrollmentId ?? EnrollmentConstants.primaryEnrollmentId}'
+/// A lock record's value for a client of [enrollmentId]: the enrollment, or
+/// the primary sentinel for a client with none, then [_isolateNonce].
+String _holder(String? enrollmentId) =>
+    '${enrollmentId ?? EnrollmentConstants.primaryEnrollmentId}'
     ':$_isolateNonce';
 
 /// Sixteen random bytes as hex, drawn once per isolate.
@@ -127,9 +159,8 @@ final String _isolateNonce = () {
   ].join();
 }();
 
-/// The self record [key] names, owned by [client]'s atSign.
-AtKey _lockRecord(AtClient client, AtKey key) {
-  final atSign = client.getCurrentAtSign()!.toAtsign();
+/// The self record [key] names, owned by [atSign].
+AtKey _lockRecord(Atsign atSign, AtKey key) {
   final Atsign owner;
   try {
     owner = key.sharedBy == null ? atSign : key.sharedBy!.toAtsign();

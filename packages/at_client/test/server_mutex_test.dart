@@ -11,6 +11,8 @@ import 'dart:isolate';
 
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/client/server_mutex.dart' show takeServerMutex;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_commons/at_builders.dart';
@@ -282,8 +284,8 @@ void main() {
       });
       final atClient = await AtClientImpl.create(
           atSign, 'sshnp', AtClientPreference(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:
@@ -305,6 +307,52 @@ void main() {
     });
   });
 
+  group('the take over a connection', () {
+    RemoteSecondary remoteOf(List<String> sent) {
+      final remote = MockRemoteSecondary();
+      when(() => remote.executeVerb(any())).thenAnswer((inv) async {
+        sent.add((inv.positionalArguments[0] as VerbBuilder).buildCommand());
+        return 'data:-1';
+      });
+      return remote;
+    }
+
+    test('sends what the extension sends for the same atSign and enrollment',
+        () async {
+      final viaClient = <String>[];
+      final viaRemote = <String>[];
+      await clientOf(viaClient).tryAcquireServerMutex(lockKey, ttl: ttl);
+      final lease = await takeServerMutex(remoteOf(viaRemote),
+          atSign: '@alice'.toAtsign(),
+          enrollmentId: 'e-1',
+          key: lockKey,
+          ttl: ttl);
+      expect(viaRemote, viaClient);
+      expect(lease!.isSpent, isFalse);
+    });
+
+    test(
+        'refuses a key of another atSign, or a ttl out of bounds, before '
+        'anything is sent', () async {
+      final sent = <String>[];
+      await expectLater(
+          takeServerMutex(remoteOf(sent),
+              atSign: '@alice'.toAtsign(),
+              enrollmentId: 'e-1',
+              key: AtKey.fromString('s1.session_mutexes.sshnp@bob'),
+              ttl: ttl),
+          throwsA(refusedNaming('key')));
+      await expectLater(
+          takeServerMutex(remoteOf(sent),
+              atSign: '@alice'.toAtsign(),
+              enrollmentId: 'e-1',
+              key: lockKey,
+              ttl: Duration.zero),
+          throwsA(refusedNaming('ttl')));
+      expect(sent, isEmpty);
+    });
+  });
+
   group('the lease', () {
     test('runs out on elapsed time, not on the wall clock', () {
       final behind = ServerMutexLease.timed(
@@ -321,6 +369,36 @@ void main() {
           Duration.zero);
       expect(ahead.isSpent, isTrue,
           reason: 'a wall clock short of expiresAt does not extend it');
+    });
+
+    test('has left its length less the time elapsed, and none once spent', () {
+      final running = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().subtract(const Duration(hours: 1)),
+          Stopwatch()..start(),
+          const Duration(minutes: 1));
+      expect(running.remaining, greaterThan(const Duration(seconds: 59)),
+          reason: 'a wall clock moved past expiresAt does not shorten it');
+      expect(running.remaining, lessThanOrEqualTo(const Duration(minutes: 1)));
+      final spent = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().add(const Duration(hours: 1)),
+          Stopwatch(),
+          Duration.zero);
+      expect(spent.remaining, Duration.zero);
+    });
+
+    test('has none left, never less than none, once it has run past its length',
+        () {
+      final overrun = ServerMutexLease.timed(
+          lockKey,
+          DateTime.now().add(const Duration(minutes: 1)),
+          _Clock()..elapsed = const Duration(seconds: 90),
+          const Duration(minutes: 1));
+      expect(overrun.isSpent, isTrue,
+          reason: 'the control: the lease ran 30 seconds past its length');
+      expect(overrun.remaining, Duration.zero,
+          reason: 'what a spent lease has left is zero, never negative');
     });
   });
 }
@@ -347,4 +425,10 @@ Future<String> _lockValueInThisIsolate() async {
       AtKey.fromString('s1.session_mutexes.sshnp@alice'),
       ttl: const Duration(seconds: 30));
   return value!;
+}
+
+/// A stopwatch that reads the elapsed time the test sets.
+class _Clock extends Fake implements Stopwatch {
+  @override
+  Duration elapsed = Duration.zero;
 }

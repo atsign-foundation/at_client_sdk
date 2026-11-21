@@ -391,6 +391,12 @@ and `withTransport` take no `clientConfig:` either.
 `package:at_lookup/at_lookup_io.dart`, and a failed write throws
 `AtIOException` rather than `SocketException`.
 
+From at_lookup 4.1.0, `notificationRefusals` carries an
+`UnAuthenticatedException` for each notification reconnect the atServer
+turns away, answering without letting the client in, while reconnecting goes
+on. `notifications` carries no refusals, as in 4.0. An implementation of
+`AtLookupMuxable` adds the `notificationRefusals` getter.
+
 ### A test double for the atServer
 
 A double that extended `AtLookupSecureSocketFactory`, or wrapped a fake

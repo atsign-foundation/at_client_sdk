@@ -279,7 +279,7 @@ right is a concept the caller no longer has to remember.
 | Notification key format                     | Caller parses `@to:<id>.<subspace>.<ns>@<from>` | Hidden, events arrive as typed `CEvent`s                             |
 | Regex composition for key scans             | Caller writes regexes by hand                   | Hidden, `getItems` / `getItemsAsStream` compose internally           |
 | JSON envelope (type tag, readBy, obj)       | Caller invents it                               | Hidden, `CItem.toJson` / rehydrate machinery                         |
-| 255-char key length + 55-char atSign limit  | Caller may learn it the hard way                | Enforced at `subCollection` construction                              |
+| 248/255-char key length, 56-char Atsign     | Caller may learn it the hard way                | Enforced at `subCollection` construction                              |
 | Read-receipt key pattern (`__rr`)           | Feature unavailable to app authors in practice  | One-line: `item.markReadByMe()` (reader) / `item.readBy` (owner)      |
 | Application namespace composition           | Caller must know it explicitly                  | Still exposed, caller provides fully-qualified namespace (by design) |
 
@@ -538,36 +538,40 @@ call sites, so deferring them is non-breaking.
 
 ## Appendix: key-length budget and tree-depth ceiling
 
-The Atsign Protocol caps any atKey at 255 chars[^limit] and any
-atSign at 55 chars (including the leading `@`). The absolute
-worst-case on-wire shape for an item under a sub-collection is
-the cached-shared-with form:
+An atServer key is at most 248 chars, and the cached copy a
+recipient's atServer keeps at most 255[^limit]. An Atsign is at
+most 56 chars, including the leading `@`. The longest on-wire
+shape for an item under a sub-collection is that cached copy:
 
 ```
 cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>
-   7  +    ≤55       +1+   ≤8 +1+    ?     +    ≤55
+   7  +    ≤56       +1+    8 +1+    ?     +    ≤56
 ```
 
-Wrapper overhead at the worst case (both atSigns at 55 chars):
+Wrapper overhead when both Atsigns are 56 chars:
 
 | Segment      | Chars   | Note                                 |
 |--------------|---------|--------------------------------------|
 | `cached:`    | 7       | literal prefix                       |
-| `<other>`    | 55      | recipient's atSign at protocol max   |
+| `<other>`    | 56      | recipient's Atsign at protocol max   |
 | `:`          | 1       | separator                            |
-| `@<self>`    | 55      | this client's atSign at protocol max |
-| **Subtotal** | **118** |                                      |
+| `@<self>`    | 56      | this client's Atsign at protocol max |
+| **Subtotal** | **120** |                                      |
 
-That leaves **137 chars** for the content portion
-(`<itemId>.<composedNs>`). The SDK auto-generates 8-char item
-ids; reserving those 8 plus 1 char for the separator caps the
-composed namespace at **128 chars**, enforced at `subCollection`
-construction time with a hard `ArgumentError`.
+That leaves **135 chars** for the content portion
+(`<itemId>.<composedNs>`). `subCollection` caps the composed
+namespace at **128 chars**, with a hard `ArgumentError` at
+construction, so the SDK's 8-char generated id and its separator
+fit while each Atsign is at most 55 chars with its `@`; with two
+56-char Atsigns, a 128-char namespace leaves room for a 6-char id.
+An Atsign of emoji takes up to 111 UTF-16 code units, so no fixed
+cap covers every pair; a key that does not fit is refused when it
+is written.
 
 **Tree-depth implications.** A worst-case strategy of
 single-character collection / sub-collection names with an
 application namespace of 15 chars (e.g. `myapp.example`) leaves
-122 chars for the collections section. Each level adds:
+120 chars for the collections section. Each level adds:
 
 | Element                       | Cost                            |
 |-------------------------------|---------------------------------|
@@ -578,20 +582,18 @@ application namespace of 15 chars (e.g. `myapp.example`) leaves
 
 So an item at depth `D` (depth 0 = root collection) costs
 `10 + 11·D` chars beyond the application namespace. Solving
-`10 + 11·D ≤ 122` gives `D ≤ 10.18`, so the **theoretical
+`10 + 11·D ≤ 120` gives `D ≤ 10`, so the **theoretical
 maximum is depth 10, 11 levels including the root**. Realistic
 hierarchical models (blog → comments → replies; kanban board →
 column → card → checklist; issue → comment → reaction) use 2-3
 levels, well inside the budget.
 
-The runtime check at `subCollection` is independent of the
-actual self-atSign length, so the same SDK builds round-trip-safe
-keys regardless of which atSign owns this AtClient. A custom
-item id longer than 8 chars (passed via `create(id: '...')` or
-`draft`) will still encounter a tighter limit at write time when
-atServer rejects the over-long key.
+The runtime check at `subCollection` is independent of the length
+of this client's Atsign. A new item's id, given to `create` or
+`upsert`, may be up to 64 chars; one that leaves the key over its
+limit is refused when the key is written.
 
-[^limit]: The 255-char limit is a legacy consequence of the
+[^limit]: The key-length limits are a legacy consequence of the
 initial choice for underlying persistence, and will likely be
 increased, initially most likely to 1023 chars, once atClients
 and atServers have migrated to newer persistent storage.

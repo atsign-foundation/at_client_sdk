@@ -1,3 +1,4 @@
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -163,6 +164,33 @@ void main() {
     expect(refused.written, ['from:@alice\n'],
         reason: 'nothing is sent on a connection the proxy did not route');
     expect(refused.destroyed, isTrue);
+
+    await lookUp.close();
+  });
+
+  test(
+      "A proxy root's preamble that gets an error: reply fails executeVerb "
+      "with the reply's code", () async {
+    final lookUp = lookUpAt('proxy:proxy.example.com');
+
+    final verb = expectLater(
+        lookUp.executeVerb(LookupVerbBuilder()
+          ..auth = false
+          ..atKey = (AtKey()
+            ..key = 'phone'
+            ..sharedBy = '@bob')),
+        throwsA(isA<AtLookUpException>()
+            .having((e) => e.errorCode, 'errorCode', 'AT0007')
+            .having((e) => e.cause, 'cause',
+                isA<AtLookUpException>().having(
+                    (e) => e.errorCode, 'errorCode', 'AT0007'))));
+    await pumpEventQueue();
+    final refused = transportFactory.created.single;
+    await refused.settle();
+    await refused.serverSends('error:AT0007-no atServer\n@');
+    await verb;
+    expect(refused.written, ['from:@alice\n'],
+        reason: 'the verb is not sent on a connection the proxy refused');
 
     await lookUp.close();
   });

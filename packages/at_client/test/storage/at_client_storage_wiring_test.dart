@@ -17,8 +17,8 @@ void main() {
         atSign: '@storagewire', storagePath: dir.path, closedByClient: true);
     final client = await AtClientImpl.create(
         '@storagewire', 'wavi', AtClientPreference(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@storagewire'),
         storage: given) as AtClientImpl;
 

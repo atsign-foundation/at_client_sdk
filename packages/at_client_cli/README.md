@@ -170,6 +170,9 @@ does, and runs once it is approved. Ctrl-C while it waits keeps the request
 for the next run.
 
 Pass `preference:` an `AtClientPreference` to set anything the flags do not.
+Its `atClientParticulars.appName` and `appVersion` name your program to the
+atServer on every connection that authenticates; a client that names nothing
+is named after its program file, and logs a warning when it starts.
 
 ### The lifecycle verbs, with `CliKeys`
 
@@ -251,6 +254,14 @@ final passcode = await owner.enrollments.otp();
 ```
 
 Worked examples covering each flow are in [`example/bin/`](example/bin).
+
+### Embedding at_activate
+
+A program that ships at_activate's commands under its own name runs
+`AtActivate.main(args, program: 'my_tool', programVersion: '1.2.3')`, so
+every connection its commands authenticate names `my_tool` at `1.2.3`
+rather than at_activate. With no `programVersion`, the version named is
+`unknown`.
 
 ## Moving from at_onboarding_cli and at_cli_commons
 

@@ -77,6 +77,10 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   /// substrate's normal mode — avoids rewriting the store to say nothing.
   /// Throwing from it abandons the write too.
   ///
+  /// An implementation may run [mutate] more than once, each time on a fresh
+  /// read, and writes only what the last run left. So [mutate] decides from
+  /// the [AtKeys] it is given, and resets anything it records outside them.
+  ///
   /// **This never creates.** It is a read-modify-write of material that must
   /// already be there, and [read] throws when it is not — so an implementation
   /// that can observe its backing going away between the read and the write
@@ -97,4 +101,3 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
 abstract class GeneratedAtKeysIo extends AtKeysIo {
   AtKeys generateKeys(String publicKeyId);
 }
-

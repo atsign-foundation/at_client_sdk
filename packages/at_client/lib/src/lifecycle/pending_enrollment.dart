@@ -5,7 +5,9 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
@@ -16,6 +18,12 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
 final Object _clientCallKey = Object();
+
+/// A key source holding [keys] for one handshake, never a keyfile: it serves
+/// a fixed key set to the authenticator and is not a store a client runs on.
+AtKeysIo handshakeKeysIo(String atSign, AtKeys keys) =>
+    // ignore: invalid_use_of_visible_for_testing_member
+    InMemoryAtKeysIo.holding(atSign, keys);
 
 /// An enrollment this device has submitted and the atSign's manager has not
 /// yet decided.
@@ -42,7 +50,7 @@ class PendingEnrollment {
   final AtLookupMuxable? _atLookUp;
   final AtLookUpFactory _lookUps;
   final SecondaryAddressFinder _secondaryAddressFinder;
-  final AtEnrollment _enrollment = AtEnrollment.create();
+  final AtEnrollment _enrollment;
   final AtSignLogger _logger;
 
   /// Completed by [stop] or [cancel], which ends the wait.
@@ -68,7 +76,9 @@ class PendingEnrollment {
   /// ones the client opened on the completed keys uses, each to the atServer
   /// [secondaryAddressFinder] finds; [atLookUp] is a connection for the
   /// handshake instead, for a caller that already holds one, and is left
-  /// open.
+  /// open. The handshake's `from:` names the app [particulars] name, as a
+  /// client's `AtClientPreference.atClientParticulars` do, and at_client as
+  /// the SDK; with no [particulars] the app is named after its program file.
   PendingEnrollment({
     required this.atSign,
     required this.enrollmentId,
@@ -80,11 +90,13 @@ class PendingEnrollment {
     required this.signingAlgo,
     required this.keyExchangeMode,
     AtLookupMuxable? atLookUp,
+    AtClientParticulars? particulars,
     required AtLookUpFactory lookUps,
     required SecondaryAddressFinder secondaryAddressFinder,
   })  : _atLookUp = atLookUp,
         _lookUps = lookUps,
         _secondaryAddressFinder = secondaryAddressFinder,
+        _enrollment = enrollmentFor(particulars),
         _logger = AtSignLogger('PendingEnrollment ($atSign)');
 
   /// Waits for the manager's decision, and on approval completes the keys in
@@ -121,9 +133,7 @@ class PendingEnrollment {
       session: AtAuthSession(
           atSign: atSign,
           rootDomain: rootDomain,
-          // NOTE: a key source for the handshake alone, never a keyfile.
-          // ignore: invalid_use_of_visible_for_testing_member
-          atKeysIo: InMemoryAtKeysIo.holding(atSign, handshakeKeys),
+          atKeysIo: handshakeKeysIo(atSign, handshakeKeys),
           enrollmentId: enrollmentId),
       apkamSymmetricKeyResolver: keyExchangeMode == EnrollmentKeyExchangeMode.pq
           ? enrollmentApkamSymmetricKeyResolver(atSign)
@@ -148,13 +158,11 @@ class PendingEnrollment {
           cancelled: _ended.future);
     } on Exception catch (e) {
       if (_ended.isCompleted) throw await _endedOnceCancelled();
-      final decided = e is! AtEnrollmentException
-          ? null
-          : e.message.contains('denied')
+      final decided = e is AtEnrollmentExpiredException
+          ? 'expired'
+          : e is AtEnrollmentException && e.message.contains('denied')
               ? 'denied'
-              : e.message.contains('error:AT0028')
-                  ? 'expired'
-                  : null;
+              : null;
       if (decided != null) {
         try {
           await _discard(decided);
@@ -174,6 +182,9 @@ class PendingEnrollment {
     // or after it.
     var written = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      written = false;
       if (_ended.isCompleted) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
@@ -419,6 +430,9 @@ class PendingEnrollment {
   Future<void> _discard(String why) async {
     var removed = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      removed = false;
       if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
       stored
         ..discardEnrollment(enrollmentId)

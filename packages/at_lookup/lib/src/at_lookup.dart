@@ -2,8 +2,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/at_connection.dart';
-import 'package:at_lookup/src/util/error_response.dart'
-    show errorResponseException;
 
 /// Performs one authentication on a connection that is already open, using
 /// [executor] to speak to the atServer, and returns whether it succeeded.
@@ -17,6 +15,13 @@ import 'package:at_lookup/src/util/error_response.dart'
 /// so a closure held for an instance's life must decide afresh each time what
 /// credential applies: an instance that CRAM-onboards and then PKAM-
 /// authenticates is one instance and two answers.
+///
+/// Return false, or throw [UnAuthenticatedException], when the atServer
+/// answered without letting the client in, by refusing the credential or
+/// by any other answer: only those count as turned away, which
+/// [AtLookupMuxable.notificationRefusals] reports and a notification reconnect
+/// waits longer after. A reconnect retries any other exception as a failure to
+/// reach the atServer.
 typedef AtAuthenticator = Future<bool> Function(AtCommandExecutor executor);
 
 /// The narrow view of a connection that an [AtAuthenticator] is given: enough
@@ -176,6 +181,8 @@ abstract interface class AtLookUp {
 
   /// Runs [builder]'s command on the atServer, authenticating the connection
   /// first when the verb needs it, and returns the atServer's response.
+  /// An authenticator's failure is thrown as an [AtLookUpException] whose
+  /// [AtLookUpException.cause] is that failure.
   Future<String?> executeVerb(VerbBuilder builder);
 
   /// Sends [command] as written and returns the atServer's response; [auth]
@@ -273,6 +280,9 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   ///
   /// Listen as soon as you read it: until a listener arrives, notifications
   /// are held without bound, and none of that back-pressure applies.
+  ///
+  /// It carries no error events: a reconnect attempt the atServer turns away
+  /// arrives on [notificationRefusals] instead.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.
@@ -290,9 +300,10 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// There is no verb that turns `monitor:` off — the atServer streams until
   /// the connection goes away — so this closes it. [notifications] is closed
   /// too, because a stream that can never produce another event should say so
-  /// rather than hang, and so is [notificationConnectionUp].
+  /// rather than hang, and so are [notificationConnectionUp] and
+  /// [notificationRefusals].
   ///
-  /// Both are replaced on the next [startNotifications], so a caller that
+  /// All three are replaced on the next [startNotifications], so a caller that
   /// restarts must take fresh subscriptions: the ones it held are closed and
   /// will report nothing about the new connection.
   Future<void> stopNotifications();
@@ -345,6 +356,16 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// again after each [startNotifications] rather than once for the life of
   /// the object.
   Stream<bool> get notificationConnectionUp;
+
+  /// Each notification reconnect attempt the atServer turns away, as the
+  /// [UnAuthenticatedException] it failed with; reconnecting carries on,
+  /// waiting longer after each, up to 5 minutes between attempts.
+  ///
+  /// **Broadcast**, like [notificationConnectionUp]: a late subscriber misses
+  /// the refusals that came before it attached. **[stopNotifications] closes
+  /// this stream**, so read this getter again after each [startNotifications]
+  /// rather than once for the life of the object.
+  Stream<UnAuthenticatedException> get notificationRefusals;
 
   /// How often a quiet notification connection is probed, and how long the
   /// probe waits for its answer.

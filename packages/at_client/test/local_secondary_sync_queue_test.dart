@@ -36,8 +36,8 @@ void main() {
       atSign,
       'wavi',
       preference,
-      lookUps: secureSocketLookUps(),
-      secondaryAddressFinder: atDirectoryOf(preference),
+      lookUps: loopbackLookUps(),
+      secondaryAddressFinder: defaultAtDirectory,
       atKeysIo: noKeysFor(atSign),
       storage: hiveStoreFor(atSign, preference),
     );

@@ -34,6 +34,30 @@ class OfflineExchange implements AtCommandExecutor {
   }
 }
 
+/// The [secureSocketLookUps] factory for a unit test: a connection asked for
+/// with no `secondaryAddressFinder` asks the atDirectory its root names, and
+/// throws [StateError], before anything connects, unless that root, after
+/// any `proxy:`, is on the loopback interface.
+AtLookUpFactory loopbackLookUps() => (
+        {required atSign,
+        required rootDomain,
+        required authenticator,
+        secondaryAddressFinder}) {
+      final root = rootDomain.rootDomain;
+      final host = root.startsWith('proxy:') ? root.substring(6) : root;
+      if (secondaryAddressFinder == null &&
+          !{'127.0.0.1', 'localhost', '::1'}.contains(host)) {
+        throw StateError('A unit test asked for the atDirectory at '
+            '$root:${rootDomain.rootPort}; give it one on the loopback '
+            'interface');
+      }
+      return secureSocketLookUps()(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          authenticator: authenticator,
+          secondaryAddressFinder: secondaryAddressFinder);
+    };
+
 /// A port on the loopback interface that nothing listens on, so a connect to
 /// it is refused at once.
 Future<int> refusedPort() async {
@@ -127,9 +151,10 @@ Future<List<String>> fileRequest(
     required String namespace}) async {
   final wrapped = <String>[];
   final undecided = approvingAtServer(
-      decide: (_) async => throw UnAuthenticatedException(
+      decide: (_) async => throw AtAuthErrorReplyException(
           'Failed connecting to $approvingAtSign. '
-          'error:AT0026:Apkam Auth Failed'),
+          'error:AT0026:Apkam Auth Failed',
+          errorCode: 'AT0026'),
       wrapped: wrapped);
   await Atsign(approvingAtSign).enroll(
       otp: 'ABC123',
@@ -142,7 +167,7 @@ Future<List<String>> fileRequest(
         ..rootPort = rootPort
         ..namespace = namespace,
       atLookUp: undecided.lookUp,
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           InternetAddress.loopbackIPv4.address, rootPort));
   return wrapped;

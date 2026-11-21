@@ -1,4 +1,8 @@
 ## 4.1.0-rc.1
+- feat: `errorResponseCode` reads the code an atServer's `error:` reply
+  names, in any form, and `errorResponseException` the exception a lookup
+  throws for that reply.
+- feat: `AtLookUpException.cause` holds the failure `executeVerb` wrapped.
 - feat: a lookup built with a `proxy:<host>` root domain sends
   `from:<atSign>` first on each connection it opens, ahead of any
   `onConnect`, as it already resolves every atSign to the proxy. A caller that
@@ -15,6 +19,16 @@
   `[::1]:8443` gives `[::1]` and `8443`. It used to split on every `:` and
   keep the first two parts, giving `[` and an empty port. `[::1]` with no
   port gives nothing.
+- feat: after the atServer turns a notification reconnect away, answering
+  without letting the client in, reconnecting carries on, waiting longer
+  after each such answer, up to 5 minutes between attempts.
+- feat: `notificationRefusals` carries an `UnAuthenticatedException` for
+  each notification reconnect the atServer turns away; `notifications`
+  carries no refusals, as in 4.0. An implementer of `AtLookupMuxable` adds
+  the `notificationRefusals` getter.
+- fix: an `error:<code>:<text>` reply throws an `AtLookUpException` with
+  that code and text, as the dash and JSON forms do; a reply with no code at
+  its head gives `AT0014`.
 
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
