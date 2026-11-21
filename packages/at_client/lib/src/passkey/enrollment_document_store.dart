@@ -91,10 +91,13 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
       // A missing document is reported as null, not as an error.
       return null;
     }
-    if (response == null || !response.startsWith('data:')) {
+    if (response == null) {
+      throw InvalidResponseException('no llookup response');
+    }
+    if (!response.startsWith('data:')) {
       // NOTE: the reply may be the sealed document, so its text is never shown.
       throw InvalidResponseException('unexpected llookup response of '
-          '${response?.length ?? 0} characters');
+          '${response.length} characters');
     }
     final text = response.substring('data:'.length).trim();
     return text == 'null' ? null : text;

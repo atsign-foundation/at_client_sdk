@@ -83,6 +83,17 @@ void main() {
             'message', 'unexpected llookup response of 18 characters')));
   });
 
+  test('get tells a missing reply apart from an empty one', () async {
+    await expectLater(
+        storeOver(ScriptedAtLookUp((_) async => null)).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>()
+            .having((e) => e.message, 'message', 'no llookup response')));
+    await expectLater(
+        storeOver(ScriptedAtLookUp((_) async => '')).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>().having((e) => e.message,
+            'message', 'unexpected llookup response of 0 characters')));
+  });
+
   test('an unexpected response is not echoed whole into the error', () async {
     final odd = ScriptedAtLookUp((_) async => 'x' * 10000);
     await expectLater(
