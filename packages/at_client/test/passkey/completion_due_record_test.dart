@@ -136,6 +136,19 @@ void main() {
             r'unexpected llookup response: "error:AT0011-a\u000ab\"c"')));
   });
 
+  test('read tells a missing response from a reply of null', () async {
+    final missing = ScriptedAtLookUp((_) async => null);
+    final nullText = ScriptedAtLookUp((_) async => 'null');
+    await expectLater(
+        recordOver(missing).read(),
+        throwsA(isA<InvalidResponseException>()
+            .having((e) => e.message, 'message', 'no llookup response')));
+    await expectLater(
+        recordOver(nullText).read(),
+        throwsA(isA<InvalidResponseException>().having((e) => e.message,
+            'message', 'unexpected llookup response: "null"')));
+  });
+
   test('read throws a typed error on a response without data', () async {
     final odd = ScriptedAtLookUp((_) async => 'error:AT0011-boom');
     await expectLater(

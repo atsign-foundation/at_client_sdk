@@ -79,9 +79,12 @@ class CompletionDueRecord {
     } on KeyNotFoundException {
       return null;
     }
-    if (response == null || !response.startsWith('data:')) {
+    if (response == null) {
+      throw InvalidResponseException('no llookup response');
+    }
+    if (!response.startsWith('data:')) {
       throw InvalidResponseException(
-          'unexpected llookup response: "${clipForMessage('$response', quote: '"')}"');
+          'unexpected llookup response: "${clipForMessage(response, quote: '"')}"');
     }
     return switch (response.substring('data:'.length).trim()) {
       'null' => null,

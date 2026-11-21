@@ -60,19 +60,17 @@ class _Lock implements SetupLock {
   Future<T> run<T>(String name, Future<T> Function() body) => body();
 }
 
+/// Implements [PasskeyHintStore] so a changed export or signature fails to
+/// compile. It holds no hints; the atomic pair write is tested on
+/// `IndexedDbHintStore` in at_client_web.
 class _Hints implements PasskeyHintStore {
-  Uint8List? credential;
-  String? enrollment;
   @override
-  Future<Uint8List?> credentialId(String atSign) async => credential;
+  Future<Uint8List?> credentialId(String atSign) async => null;
   @override
-  Future<String?> enrollmentId(String atSign) async => enrollment;
+  Future<String?> enrollmentId(String atSign) async => null;
   @override
   Future<void> putHint(
-      String atSign, Uint8List credentialId, String enrollmentId) async {
-    credential = credentialId;
-    enrollment = enrollmentId;
-  }
+      String atSign, Uint8List credentialId, String enrollmentId) async {}
 }
 
 void main() {
@@ -97,13 +95,6 @@ void main() {
     expect(PrfUnavailableException('x').message, 'x');
     expect(UnsupportedPasskeyRecordException('x').message, 'x');
     expect(PasskeyRecordAuthenticationException().message, isNotEmpty);
-  });
-
-  test('PasskeyHintStore reads each id and writes the pair together', () async {
-    final PasskeyHintStore store = _Hints();
-    await store.putHint('@a', Uint8List.fromList([1]), 'e1');
-    expect(await store.credentialId('@a'), [1]);
-    expect(await store.enrollmentId('@a'), 'e1');
   });
 
   test('PrfSecret wipes its output', () {
