@@ -75,7 +75,7 @@ void main() {
             AtSelfEnrollmentRequest(
                 session: AtAuthSession(
                     atSign: atSign,
-                    rootDomain: const AtRootDomain('127.0.0.1', 64),
+                    rootDomain: const AtRootDomain('127.0.0.1', 1),
                     atKeysIo: CliKeys.fileFor(atSign, path: path),
                     enrollmentId: 'legacy-1'),
                 appName: 'agent',

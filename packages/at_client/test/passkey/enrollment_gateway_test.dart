@@ -702,7 +702,7 @@ void main() {
     test('a revoke that cannot reach the atServer propagates', () async {
       final session = await activate();
       const failure = 'Exception: $_atSign: unable to connect to atServer on '
-          'atserver.test:1 - SocketException: Connection refused';
+          '127.0.0.1:1 - SocketException: Connection refused';
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
           revoked: (_) => throw AtLookUpException('AT0021', failure));
 
@@ -731,7 +731,7 @@ void main() {
 
     test('a revoke that fails with an I/O error propagates', () async {
       final session = await activate();
-      const failure = 'Exception: connection to atserver.test:1 failed: '
+      const failure = 'Exception: connection to 127.0.0.1:1 failed: '
           'SocketException: Broken pipe';
       serve({_eid: 'approved', 'eid-0': 'approved'}, {_eid: 'approved'},
           revoked: (_) => throw AtLookUpException('AT0004', failure));

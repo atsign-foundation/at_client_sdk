@@ -61,5 +61,17 @@ void main() {
       expect(() => defaultAtDirectory, returnsNormally,
           reason: 'the default atDirectory is built through the refusal');
     });
+
+    test(
+        'when a test asks the default atDirectory for an atServer, then it '
+        'asks port 1 on 127.0.0.1, and is refused', () async {
+      await expectLater(
+          defaultAtDirectory.findSecondary('@alice',
+              timeout: const Duration(seconds: 5)),
+          throwsA(isA<RootServerConnectivityException>().having(
+              (e) => e.message,
+              'message',
+              startsWith('Connecting to 127.0.0.1:1 :'))));
+    });
   });
 }
