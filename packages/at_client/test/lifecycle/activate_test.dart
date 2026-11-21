@@ -572,7 +572,7 @@ void main() {
             cramSecret: cramSecret,
             keys: store,
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: server.lookUp,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
@@ -594,7 +594,7 @@ void main() {
         cramSecret: cramSecret,
         keys: InMemoryAtKeysIo(),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server.lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
