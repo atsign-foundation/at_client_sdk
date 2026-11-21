@@ -1,5 +1,6 @@
 ## 4.1.0-rc.1
 
+- chore: requires at_commons 5.26.0.
 - feat: `AtKeysFormatException.badField` reports a JSON object, or the
   `kind` of data it is given, whose field is missing or not what it must be.
 - feat: a passphrase envelope refused for its passphrase, missing or one
@@ -19,7 +20,7 @@
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and its `seal` and `open` take the record type.
 - feat: `PasskeyVault` holds its Atsign in canonical form, so a record sealed for `@Alice` opens for `@alice`.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
-- feat: passkey error messages show text read from the wire quoted, escaped and clipped, so each stays on one line: the text is in double quotes, each quote, backslash and control, format or line-separator character in it is escaped, and it is cut after 180 characters, escapes included. A sealed record's `iv` or `ct` that is not base64 is named, not shown. `clipForMessage` in `package:at_auth/passkey.dart` does the escaping and clipping, and escapes the quote character it is given.
+- feat: passkey error messages show text read from the wire quoted, escaped and clipped, so each stays on one line: the text is in double quotes, each quote, backslash and control, format or line-separator character in it is escaped, and it is cut after 180 characters, escapes included. A sealed record's `iv` or `ct` that is not base64 is named, not shown. `clipForMessage` in `package:at_commons/at_commons.dart` does the escaping and clipping, and escapes the quote character it is given.
 - feat: `UnknownCredentialSignal` is a capability interface in `package:at_auth/passkey.dart` for a `PasskeyPort` that can tell the platform a passkey no longer belongs to an account. `PasskeyPrf.signalUnknownCredential` calls it when the port implements it, does nothing otherwise, and ignores a failing signal.
 - feat: `package:at_auth/passkey.dart` is a new library for passkey-held keys.
   It runs the passkey PRF ceremonies (register, then unlock) and keeps a

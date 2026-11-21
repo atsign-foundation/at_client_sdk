@@ -177,6 +177,18 @@ void main() {
       'a non-JSON value': (_) => 'not json',
       'the null an expired record reads as': (_) => 'null',
     };
+    test('an unknown v is quoted with its line breaks escaped, on one line',
+        () {
+      expect(
+          PasskeyRecordCodec.open(aliceSealer, '@alice',
+              PasskeyRecordType.atkeys, withField(record, 'v', 'x\ny\u2028"z')),
+          throwsA(isA<UnsupportedPasskeyRecordException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains(r'unknown version "x\u000ay\u2028\"z"'),
+                  isNot(contains('\n')), isNot(contains('\u2028'))))));
+    });
+
     test('a long non-base64 field is not echoed whole into the message', () {
       final bad = withField(record, 'ct', '!' * 10000);
       expect(
