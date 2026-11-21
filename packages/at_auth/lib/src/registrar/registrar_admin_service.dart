@@ -318,11 +318,11 @@ class RegistrarAdminService {
 
   /// Registers [atsign] with the super API key and returns its CRAM key.
   ///
-  /// Not idempotent: a [RegistrarFailure.timeout], [RegistrarFailure.network]
-  /// or [RegistrarFailure.malformedResponse] failure may still have
-  /// committed the registration, leaving [atsign] registered under a CRAM
-  /// secret nobody holds. Reconcile — look it up, or run the delete flow —
-  /// before retrying with the same [atsign].
+  /// Not idempotent: a failure other than [RegistrarFailure.authentication] or
+  /// [RegistrarFailure.registrarError] may still have committed the
+  /// registration, leaving [atsign] registered under a CRAM secret nobody
+  /// holds. Reconcile — look it up, or run the delete flow — before retrying
+  /// with the same [atsign].
   ///
   /// ```dart
   /// final admin = RegistrarAdminService(

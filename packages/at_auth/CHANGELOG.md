@@ -98,10 +98,10 @@
   Returns a `RegisteredAtsign`, whose `registeredAtsign` is the Atsign the
   registrar actually registered (read from its cramkey; a super key may add
   a prefix or postfix to the `requestedAtsign`) and must be the one a caller
-  activates. Not idempotent: a `timeout`, `network` or `malformedResponse`
-  failure may mean the registrar already committed the registration, leaving
-  the Atsign registered under a CRAM secret nobody holds — reconcile (look
-  it up, or run the delete flow) before retrying with the same Atsign.
+  activates. Not idempotent: a failure other than `authentication` or
+  `registrarError` may mean the registrar already committed the registration,
+  leaving the Atsign registered under a CRAM secret nobody holds — reconcile
+  (look it up, or run the delete flow) before retrying with the same Atsign.
 - feat: `RegistrarAdminService` requests the registrar over an abortable,
   non-redirect-following `http` request bounded by a `requestTimeout`
   (default 30s; zero or less is refused with an `ArgumentError`), and caps
