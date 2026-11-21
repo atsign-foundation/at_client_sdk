@@ -540,7 +540,8 @@ the 1-based character where the parser stopped; its `source` is always null.
 A keyfile holding JSON that is not an object throws it too, where it used to
 fail as a `TypeError`, with `isJson` true and a null `position`. So does a
 keychain entry whose header is a JSON object of the wrong shape, such as one
-with no usable segment count; `reason` says what the JSON is. A
+with no usable segment count, or a legacy header whose count is not a whole
+number from 0 to 2560; `reason` says what was found. A
 passphrase-protected
 keyfile whose decrypted content does not parse fails as
 `AtKeysPassphraseException`, an `AtDecryptionException`. An app that built its message from the old
