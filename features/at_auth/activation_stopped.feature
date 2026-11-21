@@ -12,9 +12,9 @@ Feature: An activation whose connection is stopped says it was stopped
   only after it. A stop once the PKAM has succeeded, while the activation
   publishes the encryption public key and deletes the CRAM secret, also
   throws StoppedException, but the keys are already written and the
-  activation is not complete: a second activation is refused as already
-  onboarded, and the caller finishes this one with completeActivationOf
-  over a connection authenticated with the written keys.
+  activation is not complete: the caller finishes it with
+  completeActivationOf over a connection authenticated with the written
+  keys, rather than activating again.
 
   Races: the stop and the atServer's PKAM reply race on one connection;
   at_lookup fails the call in flight once stop() has run, so the activation

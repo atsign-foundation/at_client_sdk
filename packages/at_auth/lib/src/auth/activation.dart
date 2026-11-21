@@ -50,8 +50,8 @@ import 'package:at_utils/at_progress.dart';
 /// during the activation ends it with [StoppedException]; during the
 /// provisioning wait, only once the atDirectory has answered. A stop after
 /// the PKAM has succeeded leaves [keys] written and the activation
-/// incomplete: a second activation is refused, and `completeActivationOf`
-/// over a connection authenticated with those keys finishes it.
+/// incomplete: `completeActivationOf` over a connection authenticated with
+/// those keys finishes it, rather than a second activation.
 ///
 /// Every `from:` the activation sends carries [clientConfig], its four values
 /// as `clientConfigFor` fills and cuts them; empty, it names this program and
