@@ -30,3 +30,8 @@ Feature: at_activate enroll resumes the request its keyfile already holds
       | app  | device |
       | wavi | phone  |
       | buzz | tablet |
+
+  Scenario: enroll resumes this app's request from another device before another app's
+    Given a keyfile holding pending enrollments for @alice filed by app "wavi" on device "old-phone" and by app "buzz" on device "phone"
+    When at_activate enroll runs for @alice with app "wavi" on device "new-phone" on that keyfile
+    Then it sends nothing new, says "Resuming enrollment <id>, filed as wavi on old-phone", and waits on that request

@@ -348,6 +348,61 @@ void main() {
       });
     }
 
+    test(
+        "enroll resumes this app's request from another device before "
+        "another app's", () async {
+      final wrapped = <String>[];
+      final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+      final keyfile = FileAtKeysIo(filePath: (_) => keysPath);
+      final pref = await preference();
+      final filing = atServer(
+          decide: (_) async => throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+              errorCode: 'AT0026'),
+          wrapped: wrapped);
+      await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'wavi',
+          device: 'old-phone',
+          namespaces: {'wavi': 'rw'},
+          keys: keyfile,
+          preference: pref,
+          atLookUp: filing.lookUp,
+          lookUps: settingsFor(pref, keysPath).lookUps,
+          secondaryAddressFinder:
+              settingsFor(pref, keysPath).secondaryAddressFinder);
+      final json = (await keyfile.read(atSign)).toJson();
+      final enrollments = json['enrollments'] as List;
+      enrollments.add(jsonDecode(jsonEncode(enrollments.single))
+        ..['enrollmentId'] = 'e-buzz'
+        ..['appName'] = 'buzz'
+        ..['deviceName'] = 'phone');
+      File(keysPath).deleteSync();
+      await keyfile.write(atSign, AtKeys.fromJson(json));
+      final held = await keyfile.read(atSign);
+      expect(
+          held.pendingEnrollmentIds, unorderedEquals([enrollmentId, 'e-buzz']),
+          reason: 'the control: the keyfile holds both requests');
+      expect(held.enrollmentInfo('e-buzz')?.appName, 'buzz');
+      final second = atServer(decide: (_) async => true, wrapped: wrapped);
+      final err = _Captured();
+
+      final client = await IOOverrides.runZoned(
+          () => enrol(pref, keysPath, second.lookUp,
+              app: 'wavi', device: 'new-phone'),
+          stderr: () => err);
+
+      expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+          reason: 'the wait resumed from the keyfile; no second request');
+      expect(
+          err.text,
+          contains(
+              'Resuming enrollment $enrollmentId, filed as wavi on old-phone'));
+      expect(client.enrollmentId, enrollmentId,
+          reason: 'the approval of the request it waited on opens the client');
+      await client.stop();
+    });
+
     group(
         'Given a keyfile whose pending enrollment records no app and no '
         'device', () {
