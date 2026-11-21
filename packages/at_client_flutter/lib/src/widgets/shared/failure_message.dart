@@ -19,7 +19,8 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 /// For any other failure to reach a server, as the client's connection
 /// classifies one, it is [unreachable], which defaults to saying the atServer
 /// for [atSign] could not be reached. For anything else, it says something
-/// went wrong, with the first line of the error's message.
+/// went wrong, with the first line of the error's message, escaped and
+/// clipped as `clipForMessage` does.
 ///
 /// It holds no stack trace and no exception type.
 String failureMessage(
@@ -93,10 +94,12 @@ bool _isTimeout(Object error) =>
     error is TimeoutException ||
     (error is AtLookUpException && error.errorCode == _timedOutCode);
 
-/// The first line of [error]'s text, without the type it starts with.
+/// The first line of [error]'s text, without the type it starts with,
+/// escaped and clipped.
 ///
 /// A [FormatException]'s source, and any stack trace, start on a later line.
-String _messageOf(Object error) =>
-    _firstLine('$error'.replaceFirst(RegExp(r'^[A-Za-z_]\w*: '), ''));
+String _messageOf(Object error) => clipForMessage(
+  _firstLine('$error'.replaceFirst(RegExp(r'^[A-Za-z_]\w*: '), '')),
+);
 
 String _firstLine(String text) => text.split('\n').first.trim();

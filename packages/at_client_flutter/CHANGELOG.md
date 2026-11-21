@@ -10,6 +10,9 @@
   device names, the card its namespaces, and the key an Anchored verdict
   names, with their control and format characters escaped, each clipped at 180
   characters.
+- fix: the onboarding dialogs show an error's own text, when they have no
+  plainer words for it, with its control characters escaped, clipped at 180
+  characters.
 - feat: `package:at_client_flutter/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - fix: a keychain entry that is not valid JSON is reported as
