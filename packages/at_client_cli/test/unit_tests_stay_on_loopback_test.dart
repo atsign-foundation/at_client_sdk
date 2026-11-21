@@ -123,8 +123,8 @@ bool _atActivateTree(String path) => !path.startsWith('../');
 /// `rootDomain`, or `EnrollerSettings` on an `AtClientPreference` built there
 /// with no root.
 List<String> offTheLoopbackIn(String source, {String path = ''}) => [
-      for (final m in RegExp('\\b($_finders)\\s*\\(\\s*([^,)]+)')
-          .allMatches(source))
+      for (final m
+          in RegExp('\\b($_finders)\\s*\\(\\s*([^,)]+)').allMatches(source))
         if (!_loopbackArguments.contains(m.group(2)!.trim()) &&
             !(path == _atClientTransport &&
                 m.group(2)!.trim() == _atClientTransportHost))
@@ -157,8 +157,8 @@ List<String> offTheLoopbackIn(String source, {String path = ''}) => [
           'the root ${m.group(1)} at offset ${m.start}',
         for (final m in RegExp(r'\[').allMatches(source))
           if (_callEnclosing(source, m.start) != 'expect' &&
-              _commandLineWithoutRoot(topLevel(
-                  bracketedAt(source, m.end, open: '[', close: ']'))))
+              _commandLineWithoutRoot(
+                  topLevel(bracketedAt(source, m.end, open: '[', close: ']'))))
             'a command line with no root at offset ${m.start}',
         for (final m in RegExp(r'\bcreateAtClient\s*\(').allMatches(source))
           if (!RegExp(r'(^|[,\s])rootDomain\s*:\s*(?!null\b)\S')
@@ -425,6 +425,14 @@ void main() {
       ("rootDomain: '[::1]:\$port'", 'a bracketed IPv6 loopback with a port'),
       ('final flows = MockAtsignFlows();', 'a mock of the real verbs'),
       ('flows: const LoopbackFlows(),', 'the verbs that refuse off loopback'),
+      (
+        "CLIBase(atSign: a, atRootDomain: AtRootDomain.parse('127.0.0.1:64'))",
+        'a loopback root named through the root type'
+      ),
+      (
+        'final fixed = AtRootDomain.atsignDomainOverride;',
+        'a name that only begins with the production root is not that root'
+      ),
     ]) {
       expect(offTheLoopbackIn(example), isEmpty, reason: reason);
     }
