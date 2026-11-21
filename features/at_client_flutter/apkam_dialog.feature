@@ -18,7 +18,7 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   Forgery and impersonation: the dialogs resume only what the store they are
   given holds for their atSign, and abandoning needs a confirmed Cancel; the
   dialog adopts only a request in the store it is given, which only programs
-  on this device write; the app name it shows is the one the request was
+  on this device write; the names it shows are the ones the request was
   filed under.
 
   Scenario: Leaving the waiting screen keeps the request
@@ -63,18 +63,17 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     When the approval arrives and the client opens
     Then the confirmation closes, nothing is cancelled, and the dialog returns the client
 
-  Scenario: The enrollment dialog waits on the request its store already holds, under any device name
-    Given a key store holding one pending enrollment for @alice, filed by this app under device name "old-phone"
-    When ApkamActivationDialog opens @alice with device name "phone"
-    Then it shows "Resuming enrollment <id>.." and Cancel, without asking for a passcode
+  Scenario Outline: The enrollment dialog adopts the request its store holds under another app or device name
+    Given a key store holding one pending enrollment <id> for @alice, filed by app "wavi-old" on device "phone"
+    When ApkamActivationDialog opens @alice for app "<app>" on device "<device>"
+    Then it shows "Resuming enrollment <id>, filed as wavi-old on phone.." and Cancel, without asking for a passcode
+    And it logs a warning naming wavi-old and <app>
     And once the request is approved, the dialog returns the client
 
-  Scenario: The enrollment dialog adopts the request its store holds under another app name
-    Given a key store holding one pending enrollment <id> for @alice, filed by app "wavi-old" on device "phone"
-    When ApkamActivationDialog opens @alice for app "wavi"
-    Then it shows "Resuming enrollment <id>, filed as wavi-old.." and Cancel, without asking for a passcode
-    And it logs a warning naming wavi-old and wavi
-    And once the request is approved, the dialog returns the client
+    Examples:
+      | app      | device |
+      | wavi     | phone  |
+      | wavi-old | tablet |
 
   Scenario: The enrollment dialog waits on its own request when its store holds several
     Given a key store holding two pending enrollments for @alice, one filed by this app under device name "phone" and one under "old-phone"

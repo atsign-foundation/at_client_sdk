@@ -40,8 +40,8 @@
   that it cannot wait on, and says why when the device has asked more than
   once.
 - fix: `ApkamActivationDialog` resumes the request its key store already
-  holds, even one filed under another device or app name, naming the old app
-  name when it differs and the request records one.
+  holds, even one filed under another device or app name, naming the app and
+  device the request records when either differs.
 
 ## 2.0.0
 

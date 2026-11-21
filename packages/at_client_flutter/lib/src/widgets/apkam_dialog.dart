@@ -26,7 +26,8 @@ import 'package:flutter/services.dart';
 ///   submitted earlier is waited on again rather than repeated. This app and
 ///   device's own comes first, else this app's under any device name, else
 ///   the store's one request whatever app name it was filed under, which
-///   the dialog adopts, showing that name. The passcode is asked for only
+///   the dialog adopts. One filed under another app or device name is shown
+///   with the names it records. The passcode is asked for only
 ///   when the store holds no request, or several it cannot choose between,
 ///   and Cancel abandons the request the dialog waits on.
 /// - [storage]: the client's local storage; with none, a Hive store under the
@@ -48,7 +49,8 @@ class ApkamActivationDialog extends StatefulWidget {
 
   /// The app name the atSign's manager sees the request under and approves
   /// it as. Keep it constant from one run of the app to the next: a request
-  /// filed under an earlier name is still adopted, and shown with that name.
+  /// filed under an earlier name is still adopted, and shown with the names
+  /// it records.
   final String appName;
   final String deviceName;
   final Map<String, String> namespaces;
@@ -151,7 +153,8 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   /// for a passcode it has already spent: this app and device's own, else
   /// this app's under any device name, else the one request the store holds
   /// under another app name, since `enroll` refuses a store that already
-  /// holds one. Adopting another app name's request is logged as a warning.
+  /// holds one. Adopting one filed under another app or device name is logged
+  /// as a warning.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
@@ -164,7 +167,8 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       return;
     }
     if (pending == null || !mounted) return;
-    final adopted = pending.app != widget.appName;
+    final adopted =
+        pending.app != widget.appName || pending.device != widget.deviceName;
     if (adopted) {
       final filedBy =
           '${pending.app.isEmpty ? '' : ' by app ${pending.app}'}'
@@ -172,12 +176,13 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       _logger.warning(
         'Adopting enrollment ${pending.enrollmentId} of ${widget.atSign}'
         '${filedBy.isEmpty ? '' : ', filed$filedBy,'} for app '
-        '${widget.appName}',
+        '${widget.appName} on device ${widget.deviceName}',
       );
     }
-    final filedAs = adopted && pending.app.isNotEmpty
-        ? ', filed as ${pending.app}'
-        : '';
+    final recorded =
+        '${pending.app.isEmpty ? '' : ' as ${pending.app}'}'
+        '${pending.device.isEmpty ? '' : ' on ${pending.device}'}';
+    final filedAs = adopted && recorded.isNotEmpty ? ', filed$recorded' : '';
     setState(() {
       _isLoading = true;
       _status = 'Resuming enrollment ${pending!.enrollmentId}$filedAs..';

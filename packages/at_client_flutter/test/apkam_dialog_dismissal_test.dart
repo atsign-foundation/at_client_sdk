@@ -496,68 +496,58 @@ void main() {
     ),
   );
 
-  testWidgets('The enrollment dialog waits on the request its store already '
-      'holds, under any device name', (tester) async {
-    final request = filed('enroll-1', app: 'app', device: 'old-phone');
-    holding([request]);
-    final opened = clientAnswers(request);
-    stopEnds(opened, request);
-    final client = MockAtClient();
-    final results = await open(tester, deviceName: 'phone');
+  for (final (app, device) in const [
+    ('wavi', 'phone'),
+    ('wavi-old', 'tablet'),
+  ]) {
+    testWidgets('The enrollment dialog adopts the request its store holds '
+        'under another app or device name', (tester) async {
+      final logs = _RecordedLogs()..installUntilTearDown();
+      final request = filed('enroll-1', app: 'wavi-old', device: 'phone');
+      holding([request]);
+      final opened = clientAnswers(request);
+      stopEnds(opened, request);
+      final client = MockAtClient();
+      final results = await open(tester, appName: app, deviceName: device);
 
-    expect(find.text('Resuming enrollment enroll-1..'), findsOneWidget);
-    expect(find.text('Cancel'), findsOneWidget);
-    neverEnrolls();
+      expect(
+        find.text('Resuming enrollment enroll-1, filed as wavi-old on phone..'),
+        findsOneWidget,
+        reason: 'opened as $app on $device',
+      );
+      expect(find.text('Cancel'), findsOneWidget);
+      neverEnrolls();
+      final warnings = [
+        for (final record in logs.records)
+          if (record.level == 'WARNING') record.message,
+      ];
+      expect(
+        warnings,
+        [
+          allOf(
+            contains('enroll-1'),
+            contains('@alice'),
+            contains('by app wavi-old on device phone'),
+            contains('for app $app on device $device'),
+          ),
+        ],
+        reason:
+            'opened as $app on $device: one warning, naming the request, '
+            'the names it was filed under and the names of this dialog',
+      );
 
-    opened.complete(client);
-    await frames(tester);
+      opened.complete(client);
+      await frames(tester);
 
-    expect(
-      results,
-      [client],
-      reason:
-          'the request filed under another device name is this '
-          "store's, and its approval opens the client here",
-    );
-  });
-
-  testWidgets('The enrollment dialog adopts the request its store holds under '
-      'another app name', (tester) async {
-    final logs = _RecordedLogs()..installUntilTearDown();
-    final request = filed('enroll-1', app: 'wavi-old', device: 'phone');
-    holding([request]);
-    final opened = clientAnswers(request);
-    stopEnds(opened, request);
-    final client = MockAtClient();
-    final results = await open(tester, appName: 'wavi', deviceName: 'phone');
-
-    expect(
-      find.text('Resuming enrollment enroll-1, filed as wavi-old..'),
-      findsOneWidget,
-    );
-    expect(find.text('Cancel'), findsOneWidget);
-    neverEnrolls();
-    final warnings = [
-      for (final record in logs.records)
-        if (record.level == 'WARNING') record.message,
-    ];
-    expect(warnings, [
-      allOf(
-        contains('enroll-1'),
-        contains('@alice'),
-        contains('wavi-old'),
-        contains('phone'),
-        matches(RegExp(r'\bwavi\b(?!-)')),
-      ),
-    ], reason: 'one warning, naming the request and both app names');
-
-    opened.complete(client);
-    await frames(tester);
-
-    expect(results, [
-      client,
-    ], reason: 'the adopted request\'s approval opens the client here');
-  });
+      expect(
+        results,
+        [client],
+        reason:
+            'opened as $app on $device: the adopted request\'s approval '
+            'opens the client here',
+      );
+    });
+  }
 
   group('Given a store whose pending enrollment records no app and no '
       'device', () {
@@ -577,8 +567,8 @@ void main() {
           if (record.level == 'WARNING') record.message,
       ];
       expect(warnings, [
-        'Adopting enrollment enroll-1 of @alice for app wavi',
-      ], reason: 'one warning, naming the request and this app alone');
+        'Adopting enrollment enroll-1 of @alice for app wavi on device phone',
+      ], reason: 'one warning, naming the request and this dialog alone');
     });
   });
 
