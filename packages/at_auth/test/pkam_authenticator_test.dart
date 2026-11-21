@@ -78,4 +78,33 @@ void main() {
       expect(fine.first.stackTrace, isNotNull, reason: 'with its trace');
     });
   });
+
+  group('Given a lookup its owner has stopped', () {
+    test(
+        'when PkamAuthenticator authenticates on it, then the '
+        'StoppedException passes through as thrown', () async {
+      final lookUp = MockAtLookup();
+      final stopped =
+          StoppedException('the lookup for @alice has been stopped');
+      when(() => lookUp.pkamAuthenticate()).thenThrow(stopped);
+
+      await expectLater(PkamAuthenticator().authenticate('@alice', lookUp),
+          throwsA(same(stopped)));
+    });
+  });
+
+  group('Given a lookup whose PKAM times out', () {
+    test(
+        'when PkamAuthenticator authenticates on it, then it throws an '
+        'UnAuthenticatedException naming the atSign', () async {
+      final lookUp = MockAtLookup();
+      when(() => lookUp.pkamAuthenticate())
+          .thenThrow(AtTimeoutException('Waited for 10 millis. No response'));
+
+      await expectLater(
+          PkamAuthenticator().authenticate('@alice', lookUp),
+          throwsA(isA<UnAuthenticatedException>()
+              .having((e) => e.message, 'message', contains('@alice'))));
+    });
+  });
 }

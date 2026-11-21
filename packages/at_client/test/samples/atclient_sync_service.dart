@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 import 'test_util.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/no_keys.dart';
-import '../test_utils/transport.dart';
+import 'sample_transport.dart';
 
 void main() {
   test('sync from remote to local', () async {
@@ -16,7 +16,7 @@ void main() {
           namespace: 'wavi',
           preference: preference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          secondaryAddressFinder: sampleAtDirectoryOf(preference),
           atKeysIo: noKeysFor(atsign),
           storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;
@@ -44,7 +44,7 @@ void main() {
           namespace: 'wavi',
           preference: preference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          secondaryAddressFinder: sampleAtDirectoryOf(preference),
           atKeysIo: noKeysFor(atsign),
           storage: hiveStoreFor(atsign, preference)));
     var atClient = atClientManager.atClient;

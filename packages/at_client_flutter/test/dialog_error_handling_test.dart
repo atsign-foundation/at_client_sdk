@@ -100,6 +100,46 @@ void main() {
       );
     });
 
+    testWidgets('PkamDialog stops the client it opened when the backup then '
+        'fails', (tester) async {
+      final client = MockAtClient();
+      when(() => client.stop()).thenAnswer((_) async {});
+      when(
+        () => flows.open(
+          any(),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).thenAnswer((_) async => client);
+
+      Object? result = 'unset';
+      await pumpOpener(
+        tester,
+        (context) => PkamDialog(
+          atSign: '@alice',
+          // Holds nothing for @alice, so reading the keys to back up fails.
+          keys: InMemoryAtKeysIo(),
+          preference: AtClientPreference(),
+          backupKeys: [InMemoryAtKeysIo()],
+          flows: flows,
+        ),
+        (r) => result = r,
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(result, isNull, reason: 'the dialog popped with no client');
+      expect(
+        find.text(
+          'Something went wrong with @alice: @alice not found in memory',
+        ),
+        findsOneWidget,
+      );
+      verify(() => client.stop()).called(1);
+    });
+
     testWidgets('CramDialog dismisses and shows snackbar on an activation '
         'failure', (tester) async {
       when(

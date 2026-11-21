@@ -1,9 +1,6 @@
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show RetryOptions;
 import 'package:at_client/at_client_io.dart';
-import 'package:at_client/at_client_mixins.dart'
-    show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -37,6 +34,9 @@ class LoopbackFlows extends AtsignFlows {
     return preference;
   }
 
+  /// [app], [device], [provisioningPollInterval] and [connectBudget] are
+  /// passed on only when given, so that one left out takes
+  /// `AtsignFlows.activate`'s own default, not a copy of it.
   @override
   Future<AtClient> activate(
     String atSign, {
@@ -45,32 +45,37 @@ class LoopbackFlows extends AtsignFlows {
     required AtClientPreference preference,
     String? namespace,
     AtClientStorage? storage,
-    String app = firstEnrollmentAppName,
-    String device = firstEnrollmentDeviceName,
+    String? app,
+    String? device,
     bool? mintLegacyMaterial,
     SigningAlgoType? signingAlgo,
     Duration? provisioningBudget,
-    Duration provisioningPollInterval = RetryOptions.defaultRetryDelay,
+    Duration? provisioningPollInterval,
     void Function(ProgressEvent event)? onProgress,
     AtLookUpFactory? lookUps,
-    Duration connectBudget = AtConnection.defaultBudget,
-  }) async => super.activate(
-    atSign,
-    cramSecret: cramSecret,
-    keys: keys,
-    preference: _onLoopback(preference),
-    namespace: namespace,
-    storage: storage,
-    app: app,
-    device: device,
-    mintLegacyMaterial: mintLegacyMaterial,
-    signingAlgo: signingAlgo,
-    provisioningBudget: provisioningBudget,
-    provisioningPollInterval: provisioningPollInterval,
-    onProgress: onProgress,
-    lookUps: lookUps,
-    connectBudget: connectBudget,
-  );
+    Duration? connectBudget,
+  }) async =>
+      await Function.apply(
+            super.activate,
+            [atSign],
+            {
+              #cramSecret: cramSecret,
+              #keys: keys,
+              #preference: _onLoopback(preference),
+              #namespace: namespace,
+              #storage: storage,
+              #app: ?app,
+              #device: ?device,
+              #mintLegacyMaterial: mintLegacyMaterial,
+              #signingAlgo: signingAlgo,
+              #provisioningBudget: provisioningBudget,
+              #provisioningPollInterval: ?provisioningPollInterval,
+              #onProgress: onProgress,
+              #lookUps: lookUps,
+              #connectBudget: ?connectBudget,
+            },
+          )
+          as AtClient;
 
   @override
   Future<AtClient> open(

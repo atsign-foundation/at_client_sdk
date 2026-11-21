@@ -120,8 +120,9 @@ class _PkamDialogState extends State<PkamDialog> {
   }
 
   Future<void> _authenticate() async {
+    AtClient? client;
     try {
-      final client = await _openOrResume();
+      client = await _openOrResume();
       if (client == null) return;
       await _backUp();
       if (widget.onAuthenticationComplete != null) {
@@ -138,6 +139,9 @@ class _PkamDialogState extends State<PkamDialog> {
       // would hang forever and PkamDialog.show() would never complete
       // (issue #1909).
       _logger.severe('Authentication via PKAM failed: $e');
+      // NOTE: a client that opened before the failure reaches nobody, and
+      // while it is live the atSign cannot be opened again.
+      if (client != null) await _stopClient(client);
       if (!mounted) return;
       final message = failureMessage(
         widget.atSign,
@@ -223,6 +227,16 @@ class _PkamDialogState extends State<PkamDialog> {
         'Could not stop the wait for enrollment ${pending.enrollmentId} of '
         '${widget.atSign}: $e',
       );
+    }
+  }
+
+  /// Stops [client], which the dialog will not hand back. A failure is
+  /// logged, since the open has already failed and that is what is shown.
+  Future<void> _stopClient(AtClient client) async {
+    try {
+      await client.stop();
+    } catch (e) {
+      _logger.warning('Could not stop the client of ${widget.atSign}: $e');
     }
   }
 

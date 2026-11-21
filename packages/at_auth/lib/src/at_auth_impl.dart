@@ -401,7 +401,10 @@ class AtAuthImpl implements AtAuth {
   /// atServer answers.
   ///
   /// Retried until the request's overall deadline, then throws an
-  /// [AtTimeoutException] carrying the last failure.
+  /// [AtTimeoutException] carrying the last failure. A [StoppedException]
+  /// from a lookup its owner has stopped is thrown at once; the check meets
+  /// one only once the atDirectory has answered, so a stop while the
+  /// atDirectory fails still waits out the deadline.
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
     // Floor the poll interval so a zero/tiny retryDelay can't hammer the network
@@ -437,6 +440,8 @@ class AtAuthImpl implements AtAuth {
 
         final check = await checkAtSignServer(atLookUp, atRequest.atSign,
             timeout: AtNetworkTimeouts.cap(deadline.difference(DateTime.now())));
+        final cause = check.cause;
+        if (cause is StoppedException) throw cause;
         switch (check.state) {
           case AtSignServerState.notInDirectory:
             throw AtException('atSign: ${atRequest.atSign} is not in the '
@@ -460,6 +465,8 @@ class AtAuthImpl implements AtAuth {
 
         validated = true;
         break; // Exit loop if no exception occurs
+      } on StoppedException {
+        rethrow;
       } catch (e) {
         lastError = e is _AtServerNotAnswering ? e.cause : e;
         if (e is _AtServerNotAnswering) {

@@ -598,13 +598,23 @@ Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
     );
   }
 
-  if (pk == null || !pk.startsWith("data:")) {
+  if (!holdsPublicKey(pk)) {
     return (outcome: _PublicKey.absent, detail: 'response was $pk');
   }
   return (
     outcome: _PublicKey.found,
     detail: 'found public:publickey$atSign OK'
   );
+}
+
+/// Whether [response] to `lookup:publickey@<atsign>` carries a key: a
+/// `data:` reply whose value is neither empty nor `null`, which an atServer
+/// that is provisioned but not activated answers.
+@visibleForTesting
+bool holdsPublicKey(String? response) {
+  if (response == null || !response.startsWith('data:')) return false;
+  final value = response.substring('data:'.length).trim();
+  return value.isNotEmpty && value != 'null';
 }
 
 /// How long at_activate waits for the absent keys' hint lookup before it
@@ -808,10 +818,7 @@ Future<bool> _isActivated(
     try {
       final response = await connection
           .executeCommand('lookup:publickey$atSign\n', auth: false);
-      return response != null &&
-          response.startsWith('data:') &&
-          !response.contains('null') &&
-          response.trim().length > 'data:'.length;
+      return holdsPublicKey(response);
     } catch (e) {
       logger.info('lookup:publickey$atSign failed, so $atSign is taken as '
           'not activated: $e');

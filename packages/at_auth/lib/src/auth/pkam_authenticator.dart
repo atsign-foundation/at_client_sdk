@@ -14,9 +14,13 @@ class PkamAuthenticator {
   /// A failure is thrown as an [UnAuthenticatedException] naming [atSign]
   /// and carrying what failed, an [AtAuthErrorReplyException] with its code
   /// when the atServer's reply ended it; its stack trace is logged at fine.
+  /// A [StoppedException] from a lookup its owner has stopped is rethrown as
+  /// it is.
   Future<bool> authenticate(String atSign, AtLookUp atLookup) async {
     try {
       return await atLookup.pkamAuthenticate();
+    } on StoppedException {
+      rethrow;
     } catch (e, s) {
       _logger.logger.fine('pkam auth failed for $atSign', e, s);
       final message = 'pkam auth failed for $atSign - $e';

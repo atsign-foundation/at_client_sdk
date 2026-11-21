@@ -102,9 +102,9 @@ void main() {
         storage:
             CliKeys.storageFor(atSign, program: namespace, path: storageDir),
         atLookUp: lookUpAnswering(() async => true),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder:
-            CacheableSecondaryAddressFinder(preference.rootDomain, port));
+            CacheableSecondaryAddressFinder('127.0.0.1', port));
     expect(first.connection.current.isOnline, isTrue,
         reason: 'the precondition: this device has held the atSign online');
     await first.stop();

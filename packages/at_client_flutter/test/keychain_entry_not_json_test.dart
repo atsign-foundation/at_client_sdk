@@ -251,6 +251,10 @@ void main() {
       AtClientImpl.atClientInstanceMap.clear();
       dir.deleteSync(recursive: true);
     });
+    final finder = CacheableSecondaryAddressFinder(
+      InternetAddress.loopbackIPv4.address,
+      closedPort,
+    );
     final lookUp = _LookUpRunningItsAuthenticator();
     when(lookUp.close).thenAnswer((_) async {});
     when(lookUp.stop).thenAnswer((_) async {});
@@ -272,11 +276,19 @@ void main() {
           closedByClient: true,
         ),
         atLookUp: lookUp,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: CacheableSecondaryAddressFinder(
-          InternetAddress.loopbackIPv4.address,
-          closedPort,
-        ),
+        lookUps:
+            ({
+              required atSign,
+              required rootDomain,
+              required authenticator,
+              secondaryAddressFinder,
+            }) => secureSocketLookUps()(
+              atSign: atSign,
+              rootDomain: rootDomain,
+              authenticator: authenticator,
+              secondaryAddressFinder: secondaryAddressFinder ?? finder,
+            ),
+        secondaryAddressFinder: finder,
       );
     } catch (e) {
       thrown = e;

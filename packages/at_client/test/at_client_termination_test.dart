@@ -21,7 +21,7 @@ Future<AtClient> _buildAtClient(String atSign) => buildAtClient(
       atSign: atSign,
       namespace: 'test',
       preference: _createPreference(atSign.replaceAll('@', '')),
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: defaultAtDirectory,
       atKeysIo: noKeysFor(atSign),
       storage:
@@ -50,7 +50,7 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_integration'),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor(atSign),
             storage:
@@ -90,7 +90,7 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_errors'),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor(atSign),
             remoteSecondary: mockRemoteSecondary,
@@ -114,7 +114,7 @@ void main() {
         final remoteSecondary = RemoteSecondary(
           '@test',
           AtClientPreference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           atLookUp: mockAtLookup,
         );
 

@@ -284,8 +284,8 @@ void main() {
       });
       final atClient = await AtClientImpl.create(
           atSign, 'sshnp', AtClientPreference(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(AtClientPreference()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
           storage:

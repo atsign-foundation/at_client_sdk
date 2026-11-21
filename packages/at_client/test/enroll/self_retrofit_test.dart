@@ -144,7 +144,7 @@ void main() {
         preference: AtClientPreference()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         appName: 'wavi',
         deviceName: 'laptop',
@@ -187,7 +187,7 @@ void main() {
         preference: AtClientPreference()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         appName: 'wavi',
         deviceName: 'laptop',
@@ -216,7 +216,7 @@ void main() {
         preference: AtClientPreference()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         appName: 'wavi',
         deviceName: 'laptop',

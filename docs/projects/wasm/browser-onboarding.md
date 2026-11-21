@@ -65,7 +65,7 @@ Both converge on the same pointer + document pair — unproven for the portal so
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant B as Browser (at_client_wasm / wasm)
+    participant B as Browser (at_client_web / wasm)
     participant A as Authenticator / password manager
     participant S as atServer
     U->>B: atSign

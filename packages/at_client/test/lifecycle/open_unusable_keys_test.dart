@@ -172,7 +172,7 @@ void main() {
     final first = await Atsign(atSign).open(
         keys: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: lookUpAnswering(() async => true),
         storage: hiveStoreFor(atSign, pref));
@@ -670,7 +670,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: lookUp,
         storage: hiveStoreFor(atSign, pref));
@@ -747,7 +747,7 @@ void main() {
         Atsign(atSign).open(
             keys: InMemoryAtKeysIo.holding(atSign, liveKeys()),
             preference: pref,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(pref),
             atLookUp: revoked,
             storage: hiveStoreFor(atSign, pref)),
@@ -765,7 +765,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: FileAtKeysIo(filePath: (_) => path),
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         storage: hiveStoreFor(atSign, pref));
 

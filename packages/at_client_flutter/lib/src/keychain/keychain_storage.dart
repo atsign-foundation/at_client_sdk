@@ -480,17 +480,9 @@ class KeychainStorage {
           return null;
         }
 
-        final int segmentCount;
-        final String segmentPrefix;
-        if (storedData.startsWith('{')) {
-          segmentCount = _segmentCountIn(storedData);
-          segmentPrefix = '${keychainStoreName}_segment';
-        } else {
-          // legacy
-          segmentCount = _segmentCountIn(storedData);
-          String packageName = await getPackageName();
-          segmentPrefix = '${packageName}_data';
-        }
+        final layout = await _segmentLayout(keychainStoreName, storedData);
+        final segmentCount = layout.count;
+        final segmentPrefix = layout.prefix;
         final results = <String>[];
         for (int i = 0; i < segmentCount; i++) {
           final segmentStore = await _getBiometricStorageFile(
@@ -615,25 +607,13 @@ class KeychainStorage {
     try {
       await _writeText(biometricStoreName: name, data: data);
     } catch (e, s) {
-      if (isWindows) await _undoWrite(name, previous, attempted: data);
+      if (isWindows) await _undoWrite(name, previous);
       Error.throwWithStackTrace(e, s);
-    }
-    if (isWindows) {
-      await _deleteSegments(
-        name,
-        from: _segmentCountOf(data),
-        to: _segmentCountOf(previous),
-      );
     }
   }
 
-  /// Puts the entry named [name] back as [previous] after a failed write of
-  /// [attempted], and deletes the segments [attempted] had past it.
-  Future<void> _undoWrite(
-    String name,
-    String? previous, {
-    required String attempted,
-  }) async {
+  /// Puts the entry named [name] back as [previous] after a failed write.
+  Future<void> _undoWrite(String name, String? previous) async {
     try {
       if (previous == null) {
         await _delete(keychainStoreName: name);
@@ -647,36 +627,6 @@ class KeychainStorage {
         e,
         s,
       );
-    }
-    await _deleteSegments(
-      name,
-      from: _segmentCountOf(previous),
-      to: _segmentCountOf(attempted),
-    );
-  }
-
-  /// How many Windows segments [text] is written in; none for null.
-  int _segmentCountOf(String? text) =>
-      text == null ? 0 : _splitString(text, _kWindowSegmentDataLength).length;
-
-  /// Deletes the Windows segments of the entry named [name] numbered [from]
-  /// up to [to], logging each that cannot be deleted.
-  Future<void> _deleteSegments(
-    String name, {
-    required int from,
-    required int to,
-  }) async {
-    for (var i = from; i < to; i++) {
-      final segmentName = '${name}_segment_$i';
-      try {
-        await (await _getBiometricStorageFile(segmentName)).delete();
-      } catch (e, s) {
-        _logger.warning(
-          'Failed to delete Windows keychain segment "$segmentName"',
-          e,
-          s,
-        );
-      }
     }
   }
 
@@ -701,6 +651,31 @@ class KeychainStorage {
     } else {
       //log('WRITE: _writeDataToStore called', true);
       final dataList = _splitString(data, _kWindowSegmentDataLength);
+      final segmentPrefix = '${biometricStoreName}_segment';
+      // A shorter document leaves the old document's trailing segments
+      // behind; note how many there were so they can be deleted below.
+      int oldSegmentCount = 0;
+      ({int count, String prefix})? legacyLayout;
+      try {
+        final oldHeader = await store.read();
+        if (oldHeader != null && oldHeader.isNotEmpty) {
+          final layout = await _segmentLayout(biometricStoreName, oldHeader);
+          if (layout.prefix == segmentPrefix) {
+            oldSegmentCount = layout.count;
+          } else {
+            legacyLayout = layout;
+          }
+        }
+      } catch (e, s) {
+        // The write itself can still succeed; only the stale segments of an
+        // unreadable header are left in place.
+        _logger.warning(
+          'Failed to read Windows keychain segment metadata before write;'
+          ' stale segments of "$biometricStoreName" may remain',
+          e,
+          s,
+        );
+      }
       String segmentCountInfo = jsonEncode({'segmentCount': dataList.length});
       //log('  => WRITE: Writing $segmentCountInfo to ${store.name}', false);
       await store.write(segmentCountInfo);
@@ -714,8 +689,62 @@ class KeychainStorage {
         // log('  => WRITE: segmentValue was ${dataList[i]}', false);
         await segmentStore.write(dataList[i]);
       }
+
+      // NOTE: stale segments are deleted from the top down, stopping at the
+      // first that stays, so any left over sit directly above the live ones
+      // where the next write looks for them. A failure is logged, not thrown:
+      // the new document is already written.
+      try {
+        if (legacyLayout != null) {
+          for (int i = 0; i < legacyLayout.count; i++) {
+            await _deleteSegment('${legacyLayout.prefix}_$i');
+          }
+        }
+        int end = dataList.length;
+        while (end < oldSegmentCount ||
+            await _isStored('${segmentPrefix}_$end')) {
+          end++;
+        }
+        for (int i = end - 1; i >= dataList.length; i--) {
+          await _deleteSegment('${segmentPrefix}_$i');
+        }
+      } catch (e, s) {
+        _logger.warning(
+          'Failed to delete stale Windows keychain segments of'
+          ' "$biometricStoreName": $e',
+          e,
+          s,
+        );
+      }
     }
   }
+
+  Future<bool> _isStored(String name) async =>
+      await (await _getBiometricStorageFile(name)).read() != null;
+
+  /// Deletes the Windows segment [name], throwing [StateError] if it is still
+  /// stored afterwards.
+  Future<void> _deleteSegment(String name) async {
+    await (await _getBiometricStorageFile(name)).delete();
+    if (await _isStored(name)) {
+      throw StateError('Windows keychain segment "$name" is still stored');
+    }
+  }
+
+  /// Parses the Windows header [storedData] of [keychainStoreName] into the
+  /// number of segments it points at and the name prefix they use.
+  ///
+  /// A header whose count [_segmentCountIn] refuses throws
+  /// [AtKeysFormatException].
+  Future<({int count, String prefix})> _segmentLayout(
+    String keychainStoreName,
+    String storedData,
+  ) async => (
+    count: _segmentCountIn(storedData),
+    prefix: storedData.startsWith('{')
+        ? '${keychainStoreName}_segment'
+        : '${await getPackageName()}_data',
+  );
 
   Future<BiometricStorageFile> _getBiometricStorageFile(
     String storeName,
