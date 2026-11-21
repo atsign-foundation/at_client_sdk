@@ -35,6 +35,7 @@ final class AesGcm256EncryptionAlgo
 
   AesGcm256EncryptionAlgo(this._aesKey);
 
+  /// Returns the ciphertext followed by the tag, built in one buffer.
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
           {InitialisationVector? iv, List<int> aad = const []}) async =>

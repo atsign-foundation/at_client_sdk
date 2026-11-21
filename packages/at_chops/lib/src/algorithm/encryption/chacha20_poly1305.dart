@@ -23,8 +23,8 @@ final class ChaCha20Poly1305Algo {
 
   const ChaCha20Poly1305Algo();
 
-  /// Seals [plaintext] under [key] and [nonce], returning
-  /// `ciphertext || tag`.
+  /// Seals [plaintext] under [key] and [nonce]. Returns the ciphertext
+  /// followed by the tag, built in one buffer.
   Future<Uint8List> encrypt(
     Uint8List plaintext, {
     required Uint8List key,
