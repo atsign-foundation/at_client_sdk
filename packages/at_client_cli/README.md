@@ -161,7 +161,8 @@ online. Otherwise it stops the client and throws:
 
 - `AtCredentialRefusedException` when the atServer refuses the keys, naming
   the cause, and saying when the enrollment awaits approval or was denied;
-- `AtEnrollmentException` when the enrollment request the keyfile holds is
+- `AtEnrollmentDeniedException` or `AtEnrollmentExpiredException`, both
+  `AtEnrollmentException`s, when the enrollment request the keyfile holds is
   denied or expires;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
   atSign;
