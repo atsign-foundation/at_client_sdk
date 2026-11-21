@@ -117,12 +117,14 @@
 - feat: `RegistrarException` carries `endpoint`, `statusCode` and a `reason`
   (`RegistrarFailure`), thrown consistently by every `RegistrarAdminService`
   call — `registerAtsign` and both delete methods — including on a rejected
-  super API key (checked before the response body is read), a connection
-  failure (`RegistrarFailure.network`), any non-200 status including a
-  redirect (`RegistrarFailure.unexpectedStatus`), and a missing or
-  unrecognized `status`, or a `"success"` status whose `data` is null or not
-  a map (`RegistrarFailure.malformedResponse`). Exception text never carries
-  the registrar's `message`, the raw cramkey or the super key.
+  super API key, a connection failure (`RegistrarFailure.network`), any
+  other non-200 status including a redirect
+  (`RegistrarFailure.unexpectedStatus`), and a missing or unrecognized
+  `status`, or a `"success"` status whose `data` is null or not a map
+  (`RegistrarFailure.malformedResponse`). A non-200 status is reported before
+  its body is read, so a large or slow error page is never reported as
+  `responseTooLarge` or `timeout`. Exception text never carries the
+  registrar's `message`, the raw cramkey or the super key.
 - feat: the `RegistrarAdminService` constructor refuses a `registrarUrl`
   with an `ArgumentError` that never echoes the offending value, only when
   `Uri.https` rejects it, it names no host or one of only whitespace and

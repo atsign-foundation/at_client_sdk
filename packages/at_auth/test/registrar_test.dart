@@ -1468,6 +1468,56 @@ void main() {
         );
       });
     }
+
+    for (final status in [302, 503]) {
+      test(
+          'given a $status whose body exceeds the size cap, when '
+          'registerAtsign runs, then it throws unexpectedStatus with the '
+          'status, not responseTooLarge', () async {
+        final oversized = 'x' * (100 * 1024);
+        final client =
+            MockClient((_) async => http.Response(oversized, status));
+        await expectLater(
+          _makeAdminService(client).registerAtsign(atsign: '@alice'.toAtsign()),
+          throwsA(isA<RegistrarException>()
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
+              .having((e) => e.statusCode, 'statusCode', status)),
+        );
+      });
+
+      test(
+          'given a $status whose body never finishes and whose cancel never '
+          'completes, when registerAtsign runs, then it throws '
+          'unexpectedStatus with the status, not timeout, and cancels the '
+          'body', () async {
+        var wasCancelled = false;
+        final client = MockClient.streaming((request, bodyStream) async {
+          final controller = StreamController<List<int>>(
+            onCancel: () {
+              wasCancelled = true;
+              return Completer<void>().future;
+            },
+          );
+          return http.StreamedResponse(controller.stream, status);
+        });
+        final service = RegistrarAdminService(
+          registrarUrl: _registrarUrl,
+          superApiKey: _apiKey,
+          requestTimeout: const Duration(seconds: 1),
+          httpClient: client,
+        );
+        await expectLater(
+          service.registerAtsign(atsign: '@alice'.toAtsign()),
+          throwsA(isA<RegistrarException>()
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.unexpectedStatus)
+              .having((e) => e.statusCode, 'statusCode', status)),
+        );
+        expect(wasCancelled, isTrue,
+            reason: 'a non-200 body must be cancelled, not left open');
+      });
+    }
   });
 
   group('generateAtSignDeleteToken', () {

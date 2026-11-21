@@ -168,7 +168,8 @@ class RegistrarAdminService {
       _adminRequest(RegistrarApiEndpoint.manageAtsigns, data);
 
   /// Sends [data] to [endpoint] and reads its response, bounded together by
-  /// [requestTimeout].
+  /// [requestTimeout]. Returns only a 200 response; any other status throws
+  /// before its body is read.
   Future<http.Response> _adminRequest(
     RegistrarApiEndpoint endpoint,
     Map<String, dynamic> data,
@@ -245,6 +246,17 @@ class RegistrarAdminService {
         endpoint: endpoint.path,
         statusCode: streamed.statusCode,
         reason: RegistrarFailure.authentication,
+      );
+    }
+
+    if (streamed.statusCode != 200) {
+      unawaited(_cancelQuietly(streamed.stream.listen(null)));
+      throw RegistrarException(
+        'Registrar request to ${endpoint.path} returned unexpected status '
+        '${streamed.statusCode}.',
+        endpoint: endpoint.path,
+        statusCode: streamed.statusCode,
+        reason: RegistrarFailure.unexpectedStatus,
       );
     }
 
@@ -355,14 +367,6 @@ class RegistrarAdminService {
         'startatServer': 'true',
       },
     );
-    if (res.statusCode != 200) {
-      throw RegistrarException(
-        'Failed to register an Atsign: unexpected status.',
-        endpoint: endpointPath,
-        statusCode: res.statusCode,
-        reason: RegistrarFailure.unexpectedStatus,
-      );
-    }
     final dynamic decoded;
     try {
       decoded = jsonDecode(res.body);
@@ -427,14 +431,6 @@ class RegistrarAdminService {
     final res = await _manageAtsignsRequest(
       {'atSigns': atSigns, 'operation': 'deletetoken'},
     );
-    if (res.statusCode != 200) {
-      throw RegistrarException(
-        'Failed to generate delete token: unexpected status.',
-        endpoint: endpointPath,
-        statusCode: res.statusCode,
-        reason: RegistrarFailure.unexpectedStatus,
-      );
-    }
     final dynamic payload;
     try {
       payload = jsonDecode(res.body);
@@ -504,14 +500,6 @@ class RegistrarAdminService {
     final res = await _manageAtsignsRequest(
       {'token': token, 'atSigns': atSigns, 'operation': 'delete'},
     );
-    if (res.statusCode != 200) {
-      throw RegistrarException(
-        'Failed to delete atSigns: unexpected status.',
-        endpoint: endpointPath,
-        statusCode: res.statusCode,
-        reason: RegistrarFailure.unexpectedStatus,
-      );
-    }
     final dynamic payload;
     try {
       payload = jsonDecode(res.body);
