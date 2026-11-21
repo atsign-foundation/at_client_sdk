@@ -27,9 +27,12 @@ import 'package:flutter/services.dart';
 ///   device's own comes first, else this app's under any device name, else
 ///   the store's one request whatever app name it was filed under, which
 ///   the dialog adopts. One filed under another app or device name is shown
-///   with the names it records. The passcode is asked for only
-///   when the store holds no request, or several it cannot choose between,
-///   and Cancel abandons the request the dialog waits on.
+///   with the names it records. A request is waited on only when it was
+///   filed for every one of [namespaces] with the access asked for. The
+///   passcode is asked for only when the store holds no request; a store
+///   holding several the dialog cannot choose between, or one filed for
+///   other namespaces, is reported and nothing is waited on or sent. Cancel
+///   abandons the request the dialog waits on.
 /// - [storage]: the client's local storage; with none, a Hive store under the
 ///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how
@@ -49,8 +52,8 @@ class ApkamActivationDialog extends StatefulWidget {
 
   /// The app name the atSign's manager sees the request under and approves
   /// it as. Keep it constant from one run of the app to the next: a request
-  /// filed under an earlier name is still adopted, and shown with the names
-  /// it records.
+  /// filed under an earlier name is still adopted, when it was filed for
+  /// [namespaces], and shown with the names it records.
   final String appName;
   final String deviceName;
   final Map<String, String> namespaces;
@@ -142,6 +145,10 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   /// The Cancel confirmation while it is showing.
   BuildContext? _confirming;
 
+  /// Why the dialog can neither wait on a request in the key store nor send
+  /// one, shown in place of the Activate button; null when it can.
+  String? _blocked;
+
   @override
   void initState() {
     super.initState();
@@ -155,6 +162,10 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   /// under another app name, since `enroll` refuses a store that already
   /// holds one. Adopting one filed under another app or device name is logged
   /// as a warning.
+  ///
+  /// Several requests it cannot choose between, or one filed without every
+  /// namespace this dialog asks for, block the dialog: `enroll` would refuse
+  /// a new request while they are in the store.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
@@ -163,14 +174,41 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
           await _resume(app: widget.appName) ??
           await _resume();
     } catch (e) {
+      if (e is AtEnrollmentPendingException && e.severalMatched) {
+        if (mounted) {
+          setState(
+            () => _blocked =
+                'This device already has several requests to enroll '
+                "${widget.atSign} waiting for approval, and this screen can't "
+                'tell which one to wait for, or send another while they '
+                'wait. Have them approved or denied, then try again.',
+          );
+        }
+        return;
+      }
       // An unreadable store is reported when the request goes out.
       return;
     }
     if (pending == null || !mounted) return;
+    String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
+    if (!_grantsAskedNamespaces(pending)) {
+      _logger.warning(
+        'Not waiting on enrollment ${quoted(pending.enrollmentId)} of '
+        '${widget.atSign}: it was filed for other namespaces than '
+        '${widget.appName} asks for',
+      );
+      setState(
+        () => _blocked =
+            'This device already has a request to enroll ${widget.atSign} '
+            'waiting for approval, filed for other namespaces than this app '
+            "needs, so this screen won't wait for it, and can't send another "
+            'while it waits. Have it approved or denied, then try again.',
+      );
+      return;
+    }
     final adopted =
         pending.app != widget.appName || pending.device != widget.deviceName;
     if (adopted) {
-      String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
       final byApp = pending.app.isEmpty ? '' : ' by app ${quoted(pending.app)}';
       final onDevice = pending.device.isEmpty
           ? ''
@@ -195,6 +233,14 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     });
     await _awaitAndOpen(pending);
   }
+
+  /// Whether [pending] was filed for every namespace this dialog asks for,
+  /// with the access asked for, or read-write where read was asked.
+  bool _grantsAskedNamespaces(PendingEnrollment pending) =>
+      widget.namespaces.entries.every((asked) {
+        final filed = pending.namespaces[asked.key];
+        return filed == asked.value || (asked.value == 'r' && filed == 'rw');
+      });
 
   Future<PendingEnrollment?> _resume({String? app, String? device}) =>
       widget.flows.resumeEnrollment(
@@ -407,7 +453,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
 
   Future<void> _submitOtp() async {
     final otp = _otpController.text;
-    if (otp.length != 6 || _isLoading) return;
+    if (otp.length != 6 || _isLoading || _blocked != null) return;
 
     setState(() {
       _isLoading = true;
@@ -632,6 +678,8 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                     '${_abandoning!.enrollmentId}: its keys are still in the '
                     'key store. Choose Cancel to try again.',
                   )
+                : _blocked != null
+                ? Text(_blocked!)
                 : _isLoading
                 ? Center(
                     child: Column(

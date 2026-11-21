@@ -403,6 +403,65 @@ void main() {
       await client.stop();
     });
 
+    test(
+        'enroll names the app and device of each request a keyfile holds '
+        'when several are pending and none is its own', () async {
+      final wrapped = <String>[];
+      final keysPath = '${dir.path}/${atSign}_buzz_key.atKeys';
+      final keyfile = FileAtKeysIo(filePath: (_) => keysPath);
+      final pref = await preference();
+      final filing = atServer(
+          decide: (_) async => throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+              errorCode: 'AT0026'),
+          wrapped: wrapped);
+      await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'buzz',
+          device: 'iphone',
+          namespaces: {'buzz': 'rw'},
+          keys: keyfile,
+          preference: pref,
+          atLookUp: filing.lookUp,
+          lookUps: settingsFor(pref, keysPath).lookUps,
+          secondaryAddressFinder:
+              settingsFor(pref, keysPath).secondaryAddressFinder);
+      // NOTE: older releases refused only a second request for the same app
+      // and device, so a keyfile could hold both of these.
+      final json = (await keyfile.read(atSign)).toJson();
+      final enrollments = json['enrollments'] as List;
+      enrollments.add(jsonDecode(jsonEncode(enrollments.single))
+        ..['enrollmentId'] = 'e-ipad'
+        ..['appName'] = 'buzz'
+        ..['deviceName'] = 'ipad');
+      File(keysPath).deleteSync();
+      await keyfile.write(atSign, AtKeys.fromJson(json));
+      expect((await keyfile.read(atSign)).pendingEnrollmentIds,
+          unorderedEquals([enrollmentId, 'e-ipad']),
+          reason: 'the control: the keyfile holds both requests');
+      final second = atServer(decide: (_) async => true, wrapped: wrapped);
+
+      await expectLater(
+          enrol(pref, keysPath, second.lookUp, app: 'buzz', device: 'mac'),
+          throwsA(isA<AtKeysUnusableException>()
+              .having((e) => e.cause, 'cause',
+                  AtKeysUnusableCause.pendingEnrollment)
+              .having((e) => e.source, 'source', keysPath)
+              .having(
+                  (e) => e.message,
+                  'message',
+                  allOf(
+                      contains('none filed for app "buzz" on device "mac"'),
+                      contains('"$enrollmentId" (app "buzz" on device '
+                          '"iphone")'),
+                      contains('"e-ipad" (app "buzz" on device "ipad")'),
+                      contains('--app'),
+                      contains('--device'),
+                      isNot(contains('name both the app and the device'))))));
+      expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+          reason: 'no request is sent');
+    });
+
     group(
         'Given a keyfile whose pending enrollment records no app and no '
         'device', () {

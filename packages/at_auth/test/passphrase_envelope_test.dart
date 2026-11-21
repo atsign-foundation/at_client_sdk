@@ -6,6 +6,8 @@ import 'package:at_chops/at_chops.dart' show ArgonHashParams, HashingAlgoType;
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
+typedef _Limits = AtKeysPassphraseEnvelopeCodec;
+
 void main() {
   group('AtKeysPassphraseEnvelopeCodec', () {
     const codec = AtKeysPassphraseEnvelopeCodec();
@@ -115,7 +117,7 @@ void main() {
           (e['kdfParams'] as Map)
             ..['memory'] = 8
             ..['parallelism'] = 2,
-      'a key derivation this device cannot run': (e) =>
+      'a kdfParams memory far above the limit': (e) =>
           (e['kdfParams'] as Map)['memory'] = 4000000000000,
     };
     for (final MapEntry(key: name, value: change) in cases.entries) {
@@ -125,6 +127,72 @@ void main() {
             codec.decode(envelope, passPhrase: 'right'), notThePassphrase);
       });
     }
+
+    group('kdfParams above a limit are refused before any derivation', () {
+      final overLimit = <String, (Map<String, int>, String)>{
+        'memory': (
+          {'memory': _Limits.maxKdfMemory + 1, 'iterations': 1, 'parallelism': 1},
+          'kdfParams.memory of at most ${_Limits.maxKdfMemory}'
+        ),
+        // NOTE: memory is small, so a codec without the limit derives quickly
+        // and opens the envelope.
+        'iterations': (
+          {'memory': 8, 'iterations': _Limits.maxKdfIterations + 1, 'parallelism': 1},
+          'kdfParams.iterations of at most ${_Limits.maxKdfIterations}'
+        ),
+        'parallelism': (
+          {
+            'memory': 8 * (_Limits.maxKdfParallelism + 1),
+            'iterations': 1,
+            'parallelism': _Limits.maxKdfParallelism + 1
+          },
+          'kdfParams.parallelism of at most ${_Limits.maxKdfParallelism}'
+        ),
+        'memory times iterations': (
+          {'memory': _Limits.maxKdfMemory, 'iterations': 3, 'parallelism': 1},
+          'kdfParams.memory times kdfParams.iterations of at most '
+              '${_Limits.maxKdfWork}'
+        ),
+      };
+      for (final MapEntry(key: name, value: (kdfParams, says))
+          in overLimit.entries) {
+        test(name, () async {
+          final envelope =
+              await envelopeWith((e) => e['kdfParams'] = kdfParams);
+          await expectLater(
+              codec.decode(envelope, passPhrase: 'right'),
+              throwsA(allOf(
+                  isA<AtDecryptionException>(),
+                  isNot(isA<AtKeysPassphraseException>()),
+                  predicate<AtDecryptionException>(
+                      (e) => e.message.endsWith('must carry a $says'),
+                      'says the limit'))));
+        });
+      }
+
+      test('the most each limit allows is still opened', () async {
+        final envelope = await envelopeWith((e) => e['kdfParams'] = {
+              'memory': 8 * _Limits.maxKdfParallelism,
+              'iterations': _Limits.maxKdfIterations,
+              'parallelism': _Limits.maxKdfParallelism,
+            });
+        // NOTE: encoded under other costs, so the key differs; what matters
+        // is that the costs are not refused.
+        await expectLater(codec.decode(envelope, passPhrase: 'right'),
+            throwsA(isA<AtKeysPassphraseException>()));
+      });
+
+      test('and encode refuses to write them', () async {
+        await expectLater(
+            codec.encode('{"keys":[]}', 'right',
+                hashParams: ArgonHashParams()
+                  ..memory = 8
+                  ..iterations = _Limits.maxKdfIterations + 1
+                  ..parallelism = 1),
+            throwsA(isA<AtException>().having((e) => e.message, 'message',
+                contains('kdfParams.iterations of at most'))));
+      });
+    });
 
     test(
         'a payload the right passphrase decrypts to something that is not a '

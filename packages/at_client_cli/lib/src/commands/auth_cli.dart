@@ -912,6 +912,11 @@ Future<bool> enroll(ArgResults argResults,
 /// one for [app] on any device, else the keyfile's one request. A request the
 /// manager denies, or that expires, is cleared from the keyfile by the next
 /// run, and a keyfile already holding live keys is refused.
+///
+/// A keyfile holding several requests, none for [app] on [device], which
+/// older releases could file, throws [AtKeysUnusableException] naming the app
+/// and device each was filed under, since one is resumed by passing its names
+/// and a new request needs a keyfile of its own.
 @visibleForTesting
 Future<AtClient> enrolDevice({
   required String atSign,
@@ -939,9 +944,16 @@ Future<AtClient> enrolDevice({
           atLookUp: atLookUp,
           lookUps: settings.lookUps,
           secondaryAddressFinder: settings.secondaryAddressFinder);
-  var pending = await resume(app: app, device: device) ??
-      await resume(app: app) ??
-      await resume();
+  Future<PendingEnrollment?> adopt() async {
+    try {
+      return await resume(app: app) ?? await resume();
+    } on AtEnrollmentPendingException catch (e) {
+      if (!e.severalMatched) rethrow;
+      throw await _severalFiledElsewhere(e, keys, app: app, device: device);
+    }
+  }
+
+  var pending = await resume(app: app, device: device) ?? await adopt();
   if (pending != null) {
     final filedApp = clipForMessage(pending.app);
     final filedDevice = clipForMessage(pending.device);
@@ -983,6 +995,30 @@ Future<AtClient> enrolDevice({
   } finally {
     await narration.cancel();
   }
+}
+
+/// [several], found looking for a request to adopt in [keys] once none was
+/// filed for [app] on [device], told with the app and device each was filed
+/// under and how to go on.
+Future<AtKeysUnusableException> _severalFiledElsewhere(
+    AtEnrollmentPendingException several, AtKeysIo keys,
+    {required String app, required String device}) async {
+  final stored = await keys.read(several.atSign);
+  String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
+  final filed = [
+    for (final id in several.pendingEnrollmentIds)
+      '${quoted(id)} (app '
+          '${quoted(stored.enrollmentInfo(id)?.appName ?? '')} on device '
+          '${quoted(stored.enrollmentInfo(id)?.deviceName ?? '')})',
+  ];
+  return AtKeysUnusableException(
+      '${several.atSign} holds several pending enrollments, none filed for '
+      'app ${quoted(app)} on device ${quoted(device)}: ${filed.join(', ')}. '
+      'To resume one, pass its app with --app and its device with --device; '
+      'to send a new request, give -k a keyfile path of its own',
+      atSign: several.atSign,
+      cause: several.cause,
+      source: several.source);
 }
 
 @visibleForTesting

@@ -91,7 +91,8 @@ class AtAuthImpl implements AtAuth {
   ///
   /// Nothing is sent until the request's `atKeysIo` has been read and checked
   /// with [WrittenAtKeysIo.checkWritable]: a missing or read-only `atKeysIo`
-  /// throws [AtAuthenticationException], keys already there are refused, and
+  /// throws [AtAuthenticationException], keys already there are refused with
+  /// an [AtAuthenticationException] naming the source, and
   /// any read failure other than [AtKeysSourceAbsentException] throws
   /// [AtKeysUnusableException] with cause [AtKeysUnusableCause.unreadable],
   /// naming the source.
@@ -123,8 +124,10 @@ class AtAuthImpl implements AtAuth {
     }
 
     if (existingKeys != null) {
+      final source = keysIo!.describeSource(atOnboardingRequest.atSign);
       throw AtAuthenticationException(
-        'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
+        'atSign: ${atOnboardingRequest.atSign} is already onboarded: its keys '
+        'are ${whereKeysAre(source)}. Cannot perform onboarding again.',
       );
     }
     // Onboarding mints key material and must persist it, so a writable store

@@ -367,6 +367,7 @@ void main() {
       when(() => pending.enrollmentId).thenReturn('enroll-1');
       when(() => pending.app).thenReturn('app');
       when(() => pending.device).thenReturn('device');
+      when(() => pending.namespaces).thenReturn(const {'*': 'rw'});
       when(() => pending.progress).thenAnswer((_) => const Stream.empty());
       when(
         () => pending.client(any(), storage: any(named: 'storage')),
