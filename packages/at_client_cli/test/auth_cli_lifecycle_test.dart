@@ -457,6 +457,67 @@ void main() {
         await client.stop();
       });
     });
+
+    test(
+        'enroll shows a recorded app or device name with its control '
+        'characters escaped', () async {
+      final wrapped = <String>[];
+      final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+      final keyfile = FileAtKeysIo(filePath: (_) => keysPath);
+      final pref = await preference();
+      final filing = atServer(
+          decide: (_) async => throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+              errorCode: 'AT0026'),
+          wrapped: wrapped);
+      await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'wavi',
+          device: 'phone',
+          namespaces: {'wavi': 'rw'},
+          keys: keyfile,
+          preference: pref,
+          atLookUp: filing.lookUp,
+          lookUps: settingsFor(pref, keysPath).lookUps,
+          secondaryAddressFinder:
+              settingsFor(pref, keysPath).secondaryAddressFinder);
+      final json = (await keyfile.read(atSign)).toJson();
+      final entry = (json['enrollments'] as List).single as Map;
+      entry['appName'] = 'wa\u001bvi';
+      entry['deviceName'] = 'pho\rne';
+      File(keysPath).deleteSync();
+      await keyfile.write(atSign, AtKeys.fromJson(json));
+      final info = (await keyfile.read(atSign)).enrollmentInfo(enrollmentId);
+      expect((info?.appName, info?.deviceName), ('wa\u001bvi', 'pho\rne'),
+          reason: 'the control: the keyfile records both names as written');
+      final second = atServer(decide: (_) async => true, wrapped: wrapped);
+      final out = _Captured();
+      final err = _Captured();
+
+      final client = await IOOverrides.runZoned(
+          () => enrol(pref, keysPath, second.lookUp,
+              app: 'buzz', device: 'tablet'),
+          stdout: () => out,
+          stderr: () => err);
+
+      expect(
+          err.text,
+          contains('Resuming enrollment $enrollmentId, filed as wa\\u001bvi '
+              'on pho\\u000dne'));
+      for (final (name, printed) in [
+        ('stdout', out.text),
+        ('stderr', err.text)
+      ]) {
+        expect(
+            printed
+                .replaceAll('\r\u001b[K', '')
+                .replaceAll(RegExp(r'\u001b\[[0-9;]*m'), ''),
+            allOf(isNot(contains('\u001b')), isNot(contains('\r'))),
+            reason: 'on $name, once the colour codes and the line redraw the '
+                'command writes itself are taken out');
+      }
+      await client.stop();
+    });
   });
 }
 
@@ -471,6 +532,9 @@ class _Captured implements Stdout {
 
   @override
   void writeln([Object? object = '']) => written.add('$object\n');
+
+  @override
+  bool get hasTerminal => false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;

@@ -943,15 +943,17 @@ Future<AtClient> enrolDevice({
       await resume(app: app) ??
       await resume();
   if (pending != null) {
-    final recorded = '${pending.app.isEmpty ? '' : ' as ${pending.app}'}'
-        '${pending.device.isEmpty ? '' : ' on ${pending.device}'}';
+    final filedApp = clipForMessage(pending.app);
+    final filedDevice = clipForMessage(pending.device);
+    final recorded = '${filedApp.isEmpty ? '' : ' as $filedApp'}'
+        '${filedDevice.isEmpty ? '' : ' on $filedDevice'}';
     final filed = pending.app == app && pending.device == device
         ? ', submitted earlier from this keyfile'
         : recorded.isEmpty
             ? ''
             : ', filed$recorded';
     stderr.writeln('${chalk.blue('[Information]')} Resuming enrollment '
-        '${pending.enrollmentId}$filed');
+        '${clipForMessage(pending.enrollmentId)}$filed');
   } else {
     pending = await Atsign(atSign).enroll(
         otp: otp,

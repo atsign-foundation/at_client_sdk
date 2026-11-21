@@ -6,6 +6,7 @@ import 'package:at_client/at_client.dart'
         AtKeysPassphraseException,
         AtKeysUnusableCause,
         AtKeysUnusableException;
+import 'package:at_commons/at_commons.dart' show clipForMessage;
 import 'package:chalkdart/chalk.dart';
 
 /// The line a command-line program ends every keys problem with.
@@ -67,9 +68,11 @@ String _waitForApproval(AtEnrollmentPendingException e) {
       e.source == null ? 'This keyfile' : 'The keyfile at ${e.source}';
   return ids.length == 1
       ? '$keyfile holds only a pending enrollment request for '
-          '${e.atSign} (id ${ids.single}). Once it is approved, run the same '
-          'at_activate enroll command again to finish it.'
+          '${e.atSign} (id ${clipForMessage(ids.single)}). Once it is '
+          'approved, run the same at_activate enroll command again to finish '
+          'it.'
       : '$keyfile holds only pending enrollment requests for '
-          '${e.atSign} (ids ${ids.join(', ')}). Once one is approved, run the '
-          'at_activate enroll command that made it again to finish it.';
+          '${e.atSign} (ids ${ids.map(clipForMessage).join(', ')}). Once one '
+          'is approved, run the at_activate enroll command that made it '
+          'again to finish it.';
 }

@@ -1,5 +1,7 @@
 ## 1.1.0
 
+- fix: `at_activate enroll` shows the enrollment ids and names a keyfile
+  records with their control characters escaped.
 - fix: `at_activate enroll` resumes the request its keyfile already holds,
   even one filed under another app or device name, and says which names
   the request records.
@@ -12,7 +14,7 @@
   named is `unknown`.
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
-- chore: requires at_client 4.1.0 and at_auth 4.1.0.
+- chore: requires at_client 4.1.0, at_auth 4.1.0 and at_commons 5.26.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
 - fix: `at_activate status` asks the atDirectory once, prints no posture
   notice, and says a refused atServer connection is unreachable rather than
