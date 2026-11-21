@@ -2,9 +2,11 @@ Feature: AES-256-GCM encryption builds its output in one buffer
 
   AesGcm256FfiAlgo (OpenSSL through FFI) and AesGcm256EncryptionAlgo (pure
   Dart) each return the ciphertext followed by the 16-byte tag from encrypt.
-  Each assembles that result by copying the ciphertext and the tag into one
-  Uint8List of exactly their combined length, so the assembly costs one copy
-  of the ciphertext and builds no concatenated list.
+  The FFI implementation has OpenSSL write the ciphertext and then the tag
+  into one native buffer, and copies that buffer once into the Uint8List it
+  returns. The pure-Dart implementation copies the ciphertext and the tag
+  into one Uint8List of exactly their combined length. Either way the
+  assembly costs one copy of the ciphertext and builds no concatenated list.
   With the same key and nonce and no associated data, the two classes produce
   the same bytes, so each decrypts the other's output. With associated data,
   each returns a published test vector's ciphertext followed by its tag.
