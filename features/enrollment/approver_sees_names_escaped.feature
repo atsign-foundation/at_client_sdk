@@ -10,7 +10,10 @@ Feature: An approver sees the names a request carries with their control charact
   and the key an Anchored verdict names, are escaped and clipped the same
   way, and so are the key of a notification auto ignores or cannot act on
   and the error that stopped it; auto names the sender of a notification
-  from another atSign in double quotes.
+  from another atSign in double quotes. at_client_flutter's enrollment
+  request card, authorisation feedback overlay and approved enrollments
+  list show a request's app and device names, and the key an Anchored
+  verdict names, escaped and clipped the same way, without quotes.
 
   Races and replay: none arises; escaping is a pure function of text already
   read, and nothing new is sent.
@@ -66,3 +69,17 @@ Feature: An approver sees the names a request carries with their control charact
     Given at_activate auto running for @alice
     When a notification from @bob arrives whose key holds an ESC and ends .new.enrollments.__manage
     Then the warning naming the sender and the key shows them on one line, the ESC written as \u001b and the sender in double quotes, and auto does not act on it
+
+  Scenario Outline: The <widget> shows a request's <field> with its control and format characters escaped
+    Given an enrollment request for @alice whose <field> holds a right-to-left override (U+202E)
+    When the <widget> shows that request
+    Then it shows that character written as \u202e
+    Examples:
+      | widget                         | field                  |
+      | enrollment request card        | app name               |
+      | enrollment request card        | device name            |
+      | authorisation feedback overlay | app name               |
+      | authorisation feedback overlay | device name            |
+      | approved enrollments list      | app name               |
+      | approved enrollments list      | device name            |
+      | approved enrollments list      | Anchored verdict's kid |

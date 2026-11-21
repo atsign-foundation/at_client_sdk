@@ -28,6 +28,7 @@ class FakeEnrollmentRequestDecision extends Fake
 
 class FakeListParams extends Fake implements EnrollmentListRequestParam {}
 
+/// Catalogue: features/enrollment/approver_sees_names_escaped.feature
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -909,4 +910,142 @@ void main() {
       );
     },
   );
+
+  /// A request for @alice from [app] on [device], in [status].
+  Enrollment requestFrom(
+    String app,
+    String device, {
+    String status = 'pending',
+  }) => Enrollment()
+    ..enrollmentId = 'e-1'
+    ..appName = app
+    ..deviceName = device
+    ..status = status
+    ..namespace = <String, String>{};
+
+  Future<void> showCard(WidgetTester tester, Enrollment request) =>
+      tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: EnrollmentRequestCard(request: request)),
+        ),
+      );
+
+  Future<void> showOverlay(WidgetTester tester, Enrollment request) =>
+      tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AuthorisationFeedbackOverlay(
+              request: request,
+              newStatus: EnrollmentStatus.approved,
+              onTap: () {},
+            ),
+          ),
+        ),
+      );
+
+  /// Shows [request] among the approved enrollments, its keys failing the
+  /// anchoring check at [kid].
+  Future<void> showApproved(
+    WidgetTester tester,
+    Enrollment request, {
+    String kid = 'deadbeefdeadbeef',
+  }) async {
+    when(
+      () => service.fetchEnrollmentRequests(
+        enrollmentListParams: any(named: 'enrollmentListParams'),
+      ),
+    ).thenAnswer(
+      (inv) async => approvedFilter(inv) ? [request] : [pendingRecord()],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EnrollmentRequestList(
+            atClient: atClient,
+            anchoring: (id) async => ChainResult(
+              ChainVerdict.broken,
+              [id],
+              'a forged link',
+              kid: kid,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+  }
+
+  final escape = '${String.fromCharCode(92)}u202e';
+  for (final (widget, field, shown, show)
+      in <(String, String, String, Future<void> Function(WidgetTester))>[
+        (
+          'enrollment request card',
+          'app name',
+          'wa${escape}vi',
+          (tester) => showCard(tester, requestFrom('wa\u202evi', 'pixel')),
+        ),
+        (
+          'enrollment request card',
+          'device name',
+          'pho${escape}ne',
+          (tester) => showCard(tester, requestFrom('buzz', 'pho\u202ene')),
+        ),
+        (
+          'authorisation feedback overlay',
+          'app name',
+          'wa${escape}vi',
+          (tester) => showOverlay(tester, requestFrom('wa\u202evi', 'pixel')),
+        ),
+        (
+          'authorisation feedback overlay',
+          'device name',
+          'pho${escape}ne',
+          (tester) => showOverlay(tester, requestFrom('buzz', 'pho\u202ene')),
+        ),
+        (
+          'approved enrollments list',
+          'app name',
+          'wa${escape}vi',
+          (tester) => showApproved(
+            tester,
+            requestFrom('wa\u202evi', 'pixel', status: 'approved'),
+          ),
+        ),
+        (
+          'approved enrollments list',
+          'device name',
+          'pho${escape}ne',
+          (tester) => showApproved(
+            tester,
+            requestFrom('buzz', 'pho\u202ene', status: 'approved'),
+          ),
+        ),
+        (
+          'approved enrollments list',
+          "Anchored verdict's kid",
+          'k${escape}1',
+          (tester) => showApproved(
+            tester,
+            requestFrom('buzz', 'pixel', status: 'approved'),
+            kid: 'k\u202e1',
+          ),
+        ),
+      ]) {
+    testWidgets("The $widget shows a request's $field with its control and "
+        'format characters escaped', (tester) async {
+      await show(tester);
+
+      expect(
+        find.textContaining(shown, findRichText: true),
+        findsOneWidget,
+        reason: 'the $field shows its right-to-left override as \\u202e',
+      );
+      expect(
+        find.textContaining('\u202e', findRichText: true),
+        findsNothing,
+        reason: 'no text shown holds the override itself',
+      );
+    });
+  }
 }
