@@ -618,4 +618,27 @@ void main() {
       expect(shown(tester), message);
     });
   });
+
+  testWidgets(
+    "Anything else shows the exception's message escaped and clipped",
+    (tester) async {
+      // NOTE: built from code points, so this source holds no bidi character.
+      final rlo = String.fromCharCode(0x202e);
+      final esc = String.fromCharCode(0x1b);
+      whenOpenFails(Exception('a$esc[2Jb${rlo}c${'x' * 500}'));
+      await pumpOpener(tester, pkamDialog);
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      final message = shown(tester);
+      expect(
+        message,
+        startsWith('Something went wrong with $atSign: a\\u001b[2Jb\\u202ec'),
+      );
+      expect(message, isNot(contains(esc)));
+      expect(message, isNot(contains(rlo)));
+      expect(message, endsWith('...'));
+    },
+  );
 }

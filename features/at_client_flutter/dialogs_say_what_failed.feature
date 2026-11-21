@@ -61,3 +61,8 @@ Feature: The onboarding dialogs say what failed
       | CramDialog          |
       | ApkamDialog         |
       | RegistrarCramDialog |
+
+  Scenario: Anything else shows the exception's message escaped and clipped
+    Given PkamDialog whose operation fails with an exception of no type above, its message an escape character, a right-to-left override and 500 more characters
+    When the dialog runs for @alice
+    Then it shows the message after "Something went wrong with @alice: " with those two characters written as \u001b and \u202e, clipped, and ending "..."
