@@ -768,6 +768,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     controller.add(up);
   }
 
+  StreamController<UnAuthenticatedException>? _refusalController;
+
+  @override
+  Stream<UnAuthenticatedException> get notificationRefusals {
+    if (_stopped) return const Stream.empty();
+    _refusalController ??=
+        StreamController<UnAuthenticatedException>.broadcast();
+    return _refusalController!.stream;
+  }
+
   void _onNotificationConnectionLost() {
     if (!_isNotifying || _reconnecting) return;
     // `warning`: the subscriber cannot see this any other way, and a silent
@@ -835,9 +845,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     }
   }
 
-  /// Adds [refusal] to [notifications] as an error, leaving the stream open.
+  /// Adds [refusal] to [notificationRefusals].
   void _reportRefusal(UnAuthenticatedException refusal) =>
-      _notificationController?.addError(refusal);
+      _refusalController?.add(refusal);
 
   void _startHeartbeat() {
     _stopHeartbeat();
@@ -908,8 +918,6 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   bool get isNotifying => _isNotifying;
 
-  /// See [AtLookupMuxable.notifications]. A reconnect attempt the atServer
-  /// turns away is added to this stream as an error, and the stream stays open.
   @override
   Stream<String> get notifications {
     if (_stopped) return const Stream.empty();
@@ -1135,6 +1143,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     final up = _connectionUpController;
     _connectionUpController = null;
     unawaited(up?.close() ?? Future<void>.value());
+    final refusals = _refusalController;
+    _refusalController = null;
+    unawaited(refusals?.close() ?? Future<void>.value());
   }
 
   Future<void> _sendCommand(String command) async {
