@@ -586,6 +586,25 @@ void main() {
     verifyNever(() => oldPhone.client(any(), storage: any(named: 'storage')));
   });
 
+  testWidgets('The enrollment dialog resumes this app\'s request from another '
+      'device before another app\'s', (tester) async {
+    final wavi = filed('enroll-wavi', app: 'wavi', device: 'old-phone');
+    final buzz = filed('enroll-buzz', app: 'buzz', device: 'phone');
+    holding([wavi, buzz]);
+    stopEnds(clientAnswers(wavi), wavi);
+    await open(tester, appName: 'wavi', deviceName: 'new-phone');
+
+    expect(
+      find.text(
+        'Resuming enrollment enroll-wavi, filed as wavi on old-phone..',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Cancel'), findsOneWidget);
+    neverEnrolls();
+    verifyNever(() => buzz.client(any(), storage: any(named: 'storage')));
+  });
+
   group('Given approval lands just as the dialog is dismissed', () {
     testWidgets('when pending.client() returns after the dismissal, then that '
         'client is stopped, so the next open of the atSign succeeds', (
