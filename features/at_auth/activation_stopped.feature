@@ -8,8 +8,13 @@ Feature: An activation whose connection is stopped says it was stopped
   AtAuthenticationException that reads as a failed login, or an
   AtTimeoutException once the wait runs out. A stop while the atDirectory
   cannot be reached, or does not yet list the Atsign, is seen only at the
-  deadline. No keys are written: they are stored only after the PKAM
-  succeeds.
+  deadline. A stop before the PKAM succeeds writes no keys: they are stored
+  only after it. A stop once the PKAM has succeeded, while the activation
+  publishes the encryption public key and deletes the CRAM secret, also
+  throws StoppedException, but the keys are already written and the
+  activation is not complete: a second activation is refused as already
+  onboarded, and the caller finishes this one with completeActivationOf
+  over a connection authenticated with the written keys.
 
   Races: the stop and the atServer's PKAM reply race on one connection;
   at_lookup fails the call in flight once stop() has run, so the activation
@@ -38,6 +43,15 @@ Feature: An activation whose connection is stopped says it was stopped
     When the atServer refuses its PKAM
     Then the activation throws AtAuthenticationException
     And no keys for @alice are written
+
+  Scenario: An activation whose connection is stopped while it completes throws StoppedException with its keys written
+    # packages/at_auth/test/activation_stopped_test.dart
+    #   test 'An activation whose connection is stopped while it completes throws StoppedException with its keys written'
+    Given an activation of @alice whose PKAM the atServer has accepted
+    When the caller stops the activation's connection while it publishes the encryption public key
+    Then the activation throws StoppedException
+    And the keys for @alice are written
+    And the CRAM secret is not deleted
 
   Scenario: An activation whose connection is stopped while it waits for its atServer throws StoppedException
     # packages/at_auth/test/activation_stopped_test.dart

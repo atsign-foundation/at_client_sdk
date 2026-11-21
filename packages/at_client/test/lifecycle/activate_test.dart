@@ -74,8 +74,10 @@ void main() {
 
   /// An unactivated atServer: it accepts [cramSecret] and nothing else,
   /// approves the first enrollment on that connection, and records every
-  /// command and verb it was sent.
-  ({MockAtLookupImpl lookUp, List<String> sent}) atServer() {
+  /// command and verb it was sent. With [stopAfterCompletion], every PKAM
+  /// after the CRAM secret is deleted throws it, as a stopped connection does.
+  ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
+      {StoppedException? stopAfterCompletion}) {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     final installed = <AtAuthenticator?>[];
@@ -108,10 +110,14 @@ void main() {
     // The first authenticator installed is the CRAM leg's, and it runs
     // against this atServer, which accepts the digest of cramSecret over its
     // challenge and nothing else; the PKAM legs after it are accepted.
-    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async =>
-        installed.length == 1
-            ? installed.single!(_CramAtServer(cramSecret))
-            : true);
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
+      final completed = sent.any((c) =>
+          c.startsWith('delete:') && c.contains(AtConstants.atCramSecret));
+      if (stopAfterCompletion != null && completed) throw stopAfterCompletion;
+      return installed.length == 1
+          ? installed.single!(_CramAtServer(cramSecret))
+          : true;
+    });
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
@@ -533,6 +539,32 @@ void main() {
         reason: 'nothing was minted for a secret the atServer refused');
     expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty);
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
+  });
+
+  test(
+      'Atsign.activate over a supplied connection stopped while its client '
+      'first connects throws StoppedException and leaves no client live',
+      () async {
+    final store = InMemoryAtKeysIo();
+    final stop = StoppedException('the lookup for $atSign has been stopped');
+    // The caller stops the connection once the activation has completed,
+    // so the PKAM of the client's first connect meets the stop.
+    final server = atServer(stopAfterCompletion: stop);
+
+    await expectLater(
+        () async => Atsign(atSign).activate(
+            cramSecret: cramSecret,
+            keys: store,
+            preference: await preference(),
+            lookUps: secureSocketLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: server.lookUp,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
+        throwsA(same(stop)),
+        reason: 'the caller stopped the connection, so the activation says '
+            'so rather than handing back a client over a stopped connection');
+    expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+        reason: 'the client the activation opened is stopped');
   });
 
   test(
