@@ -53,6 +53,12 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
   /// metadata-fragment and the `update:json:...` forms.
   bool noCommit = false;
 
+  /// When true, the metadata-fragment form (not the `update:json:...` form)
+  /// carries no metadata fragment at all, so the command is
+  /// `update:<key> <value>`. Defaults to false, which emits the key's
+  /// metadata (including `:isEncrypted:false`) as before.
+  bool omitMetadata = false;
+
   @override
   String buildCommand() {
     String atKeyName = buildKey();
@@ -68,7 +74,8 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       var command = 'update$noCommitFragment:json:${jsonEncode(json)}\n';
       return command;
     } else {
-      var metadataFragment = atKey.metadata.toAtProtocolFragment();
+      var metadataFragment =
+          omitMetadata ? '' : atKey.metadata.toAtProtocolFragment();
       var command =
           'update$noCommitFragment$metadataFragment:$atKeyName $value\n';
       return command;
@@ -221,6 +228,7 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       other is UpdateVerbBuilder &&
           runtimeType == other.runtimeType &&
           atKey.key == other.atKey.key &&
+          atKey.namespace == other.atKey.namespace &&
           value == other.value &&
           atKey.sharedWith == other.atKey.sharedWith &&
           atKey.sharedBy == other.atKey.sharedBy &&
@@ -239,12 +247,15 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
           atKey.metadata.expiresAt == other.atKey.metadata.expiresAt &&
           atKey.metadata.availableAt == other.atKey.metadata.availableAt &&
           noCommit == other.noCommit &&
+          omitMetadata == other.omitMetadata &&
           atKey.metadata.dataSignature == other.atKey.metadata.dataSignature &&
           atKey.metadata.sharedKeyStatus ==
               other.atKey.metadata.sharedKeyStatus &&
           atKey.metadata.sharedKeyEnc == other.atKey.metadata.sharedKeyEnc &&
           // ignore: deprecated_member_use_from_same_package
           atKey.metadata.pubKeyCS == other.atKey.metadata.pubKeyCS &&
+          atKey.metadata.pubKeyHash == other.atKey.metadata.pubKeyHash &&
+          atKey.metadata.immutable == other.atKey.metadata.immutable &&
           atKey.metadata.encoding == other.atKey.metadata.encoding &&
           atKey.metadata.encKeyName == other.atKey.metadata.encKeyName &&
           atKey.metadata.encAlgo == other.atKey.metadata.encAlgo &&
@@ -256,6 +267,7 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
   @override
   int get hashCode =>
       atKey.key.hashCode ^
+      atKey.namespace.hashCode ^
       value.hashCode ^
       atKey.sharedWith.hashCode ^
       atKey.sharedBy.hashCode ^
@@ -274,11 +286,14 @@ class UpdateVerbBuilder extends AbstractVerbBuilder {
       atKey.metadata.expiresAt.hashCode ^
       atKey.metadata.availableAt.hashCode ^
       noCommit.hashCode ^
+      omitMetadata.hashCode ^
       atKey.metadata.dataSignature.hashCode ^
       atKey.metadata.sharedKeyStatus.hashCode ^
       atKey.metadata.sharedKeyEnc.hashCode ^
       // ignore: deprecated_member_use_from_same_package
       atKey.metadata.pubKeyCS.hashCode ^
+      atKey.metadata.pubKeyHash.hashCode ^
+      atKey.metadata.immutable.hashCode ^
       atKey.metadata.encoding.hashCode ^
       atKey.metadata.encKeyName.hashCode ^
       atKey.metadata.encAlgo.hashCode ^

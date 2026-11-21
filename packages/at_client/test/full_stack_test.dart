@@ -13,6 +13,7 @@ import 'test_utils/no_op_services.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/hive_store.dart';
+import 'test_utils/transport.dart';
 
 bool wrappedDecryptSucceeds(
     {required String cipherText,
@@ -83,7 +84,7 @@ void main() {
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((invocation) async => SecondaryAddress('testing', 12));
       atClient = (await AtClientImpl.create('@alice', 'gary', fullStackPrefs,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: mockSecondaryAddressFinder,
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: await keyfileHolding('@alice',

@@ -9,6 +9,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/transport.dart';
 
 class MockGetRequestTransformer extends Mock implements GetRequestTransformer {}
 
@@ -123,15 +124,15 @@ void main() {
         'Test to verify exception gets stacked in remote secondary executeVerb',
         () async {
       RemoteSecondary remoteSecondary = RemoteSecondary(
-          '@alice', AtClientPreference(),
-          lookUps: secureSocketLookUps());
+          '@alice', loopbackPreference(),
+          lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookup;
-      try {
-        await remoteSecondary.executeVerb(lookupVerbBuilder);
-      } on AtException catch (e) {
-        expect(e.getTraceMessage(),
-            'Failed to fetchData caused by\nConnection timeout');
-      }
+      await expectLater(
+          remoteSecondary.executeVerb(lookupVerbBuilder),
+          throwsA(isA<AtException>().having(
+              (e) => e.getTraceMessage(),
+              'trace message',
+              'Failed to fetchData caused by\nConnection timeout')));
     });
   });
 

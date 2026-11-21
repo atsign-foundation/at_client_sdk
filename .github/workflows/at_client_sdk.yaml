@@ -126,8 +126,8 @@ jobs:
         run: dart test --concurrency=1
 
   # A bare `dart test` runs on the VM, so it skips the @TestOn('browser')
-  # files; at_client_wasm_browser runs the whole suite in Chrome.
-  unit_at_client_wasm:
+  # files; at_client_web_browser runs the whole suite in Chrome.
+  unit_at_client_web:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -135,7 +135,7 @@ jobs:
         dart-channel: [stable, beta]
     defaults:
       run:
-        working-directory: packages/at_client_wasm
+        working-directory: packages/at_client_web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -146,27 +146,27 @@ jobs:
       - name: Check dart-workspace.lock is current and install dependencies
         working-directory: .
         run: |
-          cp packages/at_client_wasm/dart-workspace.lock pubspec.lock
-          cd packages/at_client_wasm
+          cp packages/at_client_web/dart-workspace.lock pubspec.lock
+          cd packages/at_client_web
           dart pub get --no-example --enforce-lockfile
 
-      - name: Analyze project source in at_client_wasm
+      - name: Analyze project source in at_client_web
         run: dart analyze
 
-      - name: Check that at_client_wasm is correctly formatted
+      - name: Check that at_client_web is correctly formatted
         run: dart format . -o none --set-exit-if-changed
 
-      - name: Build at_client_web_entry
-        run: tool/build.sh at_client_web_entry
+      - name: Build at_client_bridge_entry
+        run: tool/build.sh at_client_bridge_entry
 
-      - name: Run at_client_wasm VM tests
+      - name: Run at_client_web VM tests
         run: dart test --concurrency=1
 
       - name: Check that every at_client_web scenario has a proving test
         working-directory: .
         run: features/at_client_web/check_scenarios.sh
 
-  at_client_wasm_browser:
+  at_client_web_browser:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,7 +175,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: atsign-foundation/at_server
-          ref: trunk
+          # Pinned to a commit (trunk on 2026-11-18); bump deliberately.
+          ref: a158b700d4b6aaaeb7e3d8ba56df8948157f0b1d
           path: at_server
           persist-credentials: false
           sparse-checkout: tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
@@ -186,13 +187,19 @@ jobs:
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
-      - name: Run at_client_wasm browser tests in Chrome
-        working-directory: packages/at_client_wasm
+      - name: Run at_client_web browser tests in Chrome (dart2js)
+        working-directory: packages/at_client_web
         env:
           AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
         run: |
           dart pub get
           dart test -p chrome --concurrency=1
+
+      - name: Run at_client_web browser tests in Chrome (dart2wasm)
+        working-directory: packages/at_client_web
+        env:
+          AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
+        run: dart test -p chrome -c dart2wasm --concurrency=1
 
   unit_at_client_flutter:
     runs-on: ubuntu-latest

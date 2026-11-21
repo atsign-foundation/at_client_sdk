@@ -25,7 +25,8 @@ keys, logging). You do not add `at_client` beside it.
 
 `at_client` itself is the platform-neutral **core**: public, but for building
 a platform package, or for a program that passes every dependency explicitly.
-A browser platform package, `at_client_web`, does not exist yet.
+The browser platform package, `at_client_web`, is still being built and is not
+published, so a browser app has no SDK package to depend on yet.
 
 ---
 
@@ -62,6 +63,11 @@ calls those; a Flutter app uses the dialogs, a CLI program `CLIBase`. **Do not
 add `at_auth`**: it is the protocol layer under `at_client`, its 4.0 removed
 the request and response types apps used to hold, and the one type an app may
 want from it, `RegistrarService`, is re-exported by both platform packages.
+`RegistrarAdminService` (also `at_auth`) is the super-API-key registration
+and deletion flow — admin/backend tooling only, never a client app, since the
+super key must never ship in a mobile or web bundle. Its `registerAtsign`
+returns a `RegisteredAtsign`; callers activate as its `registeredAtsign`, not
+the Atsign they requested.
 
 `AtRootDomain` comes from `at_commons`, surfaced via `at_client`.
 

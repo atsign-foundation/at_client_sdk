@@ -77,8 +77,8 @@ void main() {
         open(
             atSign,
             answering(() async =>
-                throw UnAuthenticatedException('Failed connecting to $atSign. '
-                    'error:AT0027:Apkam Access Revoked'))),
+                throw AtAuthErrorReplyException('Failed connecting to $atSign. '
+                    'error:AT0027:Apkam Access Revoked', errorCode: 'AT0027'))),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.atSign, 'atSign', atSign)
             .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)
@@ -102,9 +102,9 @@ void main() {
         storage:
             CliKeys.storageFor(atSign, program: namespace, path: storageDir),
         atLookUp: lookUpAnswering(() async => true),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder:
-            CacheableSecondaryAddressFinder(preference.rootDomain, port));
+            CacheableSecondaryAddressFinder('127.0.0.1', port));
     expect(first.connection.current.isOnline, isTrue,
         reason: 'the precondition: this device has held the atSign online');
     await first.stop();
@@ -113,8 +113,8 @@ void main() {
         open(
             atSign,
             answering(() async =>
-                throw UnAuthenticatedException('Failed connecting to $atSign. '
-                    'error:AT0027:Apkam Access Revoked'))),
+                throw AtAuthErrorReplyException('Failed connecting to $atSign. '
+                    'error:AT0027:Apkam Access Revoked', errorCode: 'AT0027'))),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause', AtConnectionCause.revoked)));
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
@@ -129,8 +129,8 @@ void main() {
         open(
             atSign,
             answering(() async =>
-                throw UnAuthenticatedException('Failed connecting to $atSign. '
-                    'error:AT0026:enrollment_id: e-1 is pending'))),
+                throw AtAuthErrorReplyException('Failed connecting to $atSign. '
+                    'error:AT0026:enrollment_id: e-1 is pending', errorCode: 'AT0026'))),
         throwsA(isA<AtCredentialRefusedException>()
             .having((e) => e.state.cause, 'cause',
                 AtConnectionCause.enrollmentNotApproved)
@@ -293,19 +293,19 @@ void main() {
     test(
         'A denied or expired request ends the program with that reason, and '
         'its keys go', () async {
-      for (final (code, reason) in [
-        ('AT0025', 'Apkam Auth Denied'),
-        ('AT0028', 'enrollment expired'),
-        ('AT0029', 'enrollment expired'),
+      for (final (code, reason, type) in [
+        ('AT0025', 'Apkam Auth Denied', isA<AtEnrollmentDeniedException>()),
+        ('AT0028', 'enrollment expired', isA<AtEnrollmentExpiredException>()),
+        ('AT0029', 'enrollment expired', isA<AtEnrollmentExpiredException>()),
       ]) {
         await submitRequest();
         final server = approvingAtServer(
-            decide: (_) async => throw UnAuthenticatedException(
-                'Failed connecting to $atSign. error:$code:$reason'),
+            decide: (_) async => throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:$code:$reason',
+                errorCode: code),
             wrapped: wrapped);
 
-        await expectLater(openOver(server.lookUp, []),
-            throwsA(isA<AtEnrollmentException>()),
+        await expectLater(openOver(server.lookUp, []), throwsA(type),
             reason: code);
         expect(await pending(), isEmpty, reason: code);
         expect(AtClientImpl.holdsLiveClient(atSign), isFalse, reason: code);

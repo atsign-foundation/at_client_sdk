@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 
 import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
+import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -113,7 +114,7 @@ void main() {
               enrollmentId: legacyId),
           atLookUp: lookUp,
           preference: preference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: MockSecondaryAddressFinder(),
           appName: 'wavi',
           deviceName: 'laptop',

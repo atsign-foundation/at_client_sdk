@@ -157,7 +157,8 @@ online. Otherwise it stops the client and throws:
 
 - `AtCredentialRefusedException` when the atServer refuses the keys, naming
   the cause, and saying when the enrollment awaits approval or was denied;
-- `AtEnrollmentException` when the enrollment request the keyfile holds is
+- `AtEnrollmentDeniedException` or `AtEnrollmentExpiredException`, both
+  `AtEnrollmentException`s, when the enrollment request the keyfile holds is
   denied or expires;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
   atSign;
@@ -260,7 +261,8 @@ Worked examples covering each flow are in [`example/bin/`](example/bin).
 A program that ships at_activate's commands under its own name runs
 `AtActivate.main(args, program: 'my_tool', programVersion: '1.2.3')`, so
 every connection its commands authenticate names `my_tool` at `1.2.3`
-rather than at_activate.
+rather than at_activate. With no `programVersion`, the version named is
+`unknown`.
 
 ## Moving from at_onboarding_cli and at_cli_commons
 

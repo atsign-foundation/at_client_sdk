@@ -12,11 +12,29 @@ import 'package:at_client_cli/src/commands/auth_cli_args.dart';
 import 'package:at_client_cli/src/util/at_file_util.dart';
 import 'package:test/test.dart';
 import 'keyfile_helpers.dart';
+import 'lifecycle_rig.dart' show aliceOnLoopback;
 
 void main() {
   final baseDirPath = 'test/keys';
 
   postureArgumentTests();
+
+  group('holdsPublicKey: what status and activate take as a published key',
+      () {
+    test('a key is held', () {
+      expect(holdsPublicKey('data:MIIBIjANBgkqhkiG9w0BAQEFAAOC'), isTrue);
+    });
+    test('data:null, as a provisioned but unactivated atServer answers, is not',
+        () {
+      expect(holdsPublicKey('data:null'), isFalse);
+      expect(holdsPublicKey('data:null\n'), isFalse);
+    });
+    test('an empty value, a non-data reply or no reply is not', () {
+      expect(holdsPublicKey('data:'), isFalse);
+      expect(holdsPublicKey('error:AT0015-key not found'), isFalse);
+      expect(holdsPublicKey(null), isFalse);
+    });
+  });
 
   group('A group of tests to verify write permission of apkam file path', () {
     final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
@@ -428,9 +446,9 @@ void postureArgumentTests() {
     test('a bare invocation runs onboard, with a warning that hides secrets',
         () {
       final implicit =
-          withImplicitOnboard(['-a', '@alice', '-c', 'cram-s3cret']);
-      expect(
-          implicit.arguments, ['onboard', '-a', '@alice', '-c', 'cram-s3cret'],
+          withImplicitOnboard([...aliceOnLoopback, '-c', 'cram-s3cret']);
+      expect(implicit.arguments,
+          ['onboard', ...aliceOnLoopback, '-c', 'cram-s3cret'],
           reason: 'as 1.x did, so instructions that omit the command still '
               'activate the atSign');
       expect(implicit.warning, contains('Deprecated'));
@@ -439,7 +457,7 @@ void postureArgumentTests() {
               'the CRAM secret');
 
       for (final named in [
-        ['onboard', '-a', '@alice'],
+        ['onboard', '-a', '@alice', '-r', '127.0.0.1:1'],
         ['--version'],
         ['-h'],
         ['--help'],
@@ -454,7 +472,7 @@ void postureArgumentTests() {
     test('wrappedMain inserts onboard before parsing', () async {
       // NOTE: --help stops at onboard's usage, so this needs no atServer.
       expect(
-          await wrappedMain(['-a', '@alice', '--help'],
+          await wrappedMain([...aliceOnLoopback, '--help'],
               program: 'at_activate', programVersion: null),
           0,
           reason: 'with no insertion, a leading -a reaches the top-level '

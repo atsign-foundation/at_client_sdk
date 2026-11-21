@@ -10,12 +10,12 @@ Future<void> main() async {
   );
 
   telemetry.event(
-    'atsign.app.started',
+    'my_app.session.started',
     attributes: const <String, Object?>{
-      'app.debug': false,
-      'app.retries': 2,
-      'app.tags': <Object?>['cli', 'demo'],
-      'app.device': <String, Object?>{'os': 'linux'},
+      'my_app.debug': false,
+      'my_app.retries': 2,
+      'my_app.tags': <Object?>['cli', 'demo'],
+      'my_app.device': <String, Object?>{'os': 'linux'},
     },
   );
   telemetry.log('Reconnecting to the atServer',

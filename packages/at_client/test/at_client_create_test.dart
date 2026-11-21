@@ -73,8 +73,8 @@ void main() {
         atSign: '@factoryheld',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factoryheld'),
         storage: storage);
 
@@ -93,8 +93,8 @@ void main() {
         atSign: '@factoryaddr',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factoryaddr'),
         storage: hiveStoreFor('@factoryaddr', pref()));
 
@@ -126,16 +126,15 @@ void main() {
         atSign: '@factorygiven',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder:
-            FixedSecondaryAddressFinder('given.example', 1234),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: FixedSecondaryAddressFinder('127.0.0.1', 1234),
         atKeysIo: noKeysFor('@factorygiven'),
         storage: hiveStoreFor('@factorygiven', pref()));
 
     final found = await (client as AtClientImpl)
         .secondaryAddressFinder
         .findSecondary('@factorygiven');
-    expect(found.toString(), 'given.example:1234');
+    expect(found.toString(), '127.0.0.1:1234');
 
     await client.stop();
   });
@@ -146,8 +145,8 @@ void main() {
         atSign: '@factorysolo',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factorysolo'),
         storage: hiveStoreFor('@factorysolo', pref()));
 
@@ -170,8 +169,8 @@ void main() {
         atSign: '@factorywired',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factorywired'),
         storage: hiveStoreFor('@factorywired', pref()));
 
@@ -188,8 +187,8 @@ void main() {
         atSign: '@factorybuilder',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factorybuilder'),
         syncServiceBuilder: (_) => noOp,
         storage: hiveStoreFor('@factorybuilder', pref()));
@@ -207,8 +206,8 @@ void main() {
         atSign: '@factorytwice',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factorytwice'),
         storage: hiveStoreFor('@factorytwice', pref()));
 
@@ -217,8 +216,8 @@ void main() {
             atSign: '@factorytwice',
             namespace: 'wavi',
             preference: pref(),
-            lookUps: secureSocketLookUps(),
-            secondaryAddressFinder: atDirectoryOf(pref()),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor('@factorytwice'),
             storage: hiveStoreFor('@factorytwice', pref())),
         throwsA(isA<StateError>()
@@ -231,8 +230,8 @@ void main() {
         atSign: '@factorytwice',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factorytwice'),
         storage: hiveStoreFor('@factorytwice', pref()));
     expect(second, isNot(same(first)),
@@ -259,7 +258,7 @@ void main() {
         atSign: atSign,
         namespace: 'wavi',
         preference: offline(enrollmentId),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(offline(enrollmentId)),
         atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys(enrollmentId)),
         storage: hiveStoreFor(atSign, offline(enrollmentId)));
@@ -282,7 +281,7 @@ void main() {
         atSign: atSign,
         namespace: 'wavi',
         preference: offline('own'),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(offline('own')),
         atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, offline('own')));
@@ -299,7 +298,7 @@ void main() {
             atSign: atSign,
             namespace: 'wavi',
             preference: offline('e1'),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(offline('e1')),
             atKeysIo: InMemoryAtKeysIo.holding(atSign, _demoKeys('e3')),
             storage: hiveStoreFor(atSign, offline('e1'))),
@@ -311,7 +310,7 @@ void main() {
         atSign: '@factoryother',
         namespace: 'wavi',
         preference: offline('e1'),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(offline('e1')),
         atKeysIo: noKeysFor('@factoryother'),
         storage: hiveStoreFor('@factoryother', offline('e1')));
@@ -332,8 +331,8 @@ void main() {
         atSign: '@buildsecondary',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         enrollmentId: enrollmentId,
         atKeysIo: InMemoryAtKeysIo.holding(
             '@buildsecondary', _demoKeys(enrollmentId)),
@@ -371,7 +370,7 @@ void main() {
         atSign: '@factorynolocal',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factorynolocal'),
         storage: storage);
@@ -394,8 +393,8 @@ void main() {
             atSign: '@factoryhalfbuilt',
             namespace: 'wavi',
             preference: pref(),
-            lookUps: secureSocketLookUps(),
-            secondaryAddressFinder: atDirectoryOf(pref()),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor('@factoryhalfbuilt'),
             storage: first,
             syncServiceBuilder: (_) => throw StateError('builder exploded')),
@@ -421,8 +420,8 @@ void main() {
         atSign: '@factoryhalfbuilt',
         namespace: 'wavi',
         preference: pref(),
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(pref()),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor('@factoryhalfbuilt'),
         storage: second);
 

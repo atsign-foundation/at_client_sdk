@@ -90,7 +90,8 @@ Future<int> onboardRegistered(String atSign, String cramKey,
     {Future<int> Function(List<String> arguments, {required String program})?
         onboard}) {
   final run = onboard ?? auth_cli.main;
-  return run(['onboard', '-a', atSign, '-c', cramKey], program: 'at_register');
+  return run(['onboard', '-a', atSign, '-c', cramKey],
+      program: auth_cli.registerProgram);
 }
 
 ///class that handles multiple tasks of type [RegisterApiTask]

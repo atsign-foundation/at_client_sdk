@@ -65,7 +65,7 @@ void main() {
         atSign: '@unattempted',
         namespace: 'lifecycle',
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: await typedKeyfile('@unattempted', enrollmentId: 'primary'),
         storage: hiveStoreFor('@unattempted', await preference()));
@@ -80,7 +80,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         storage: hiveStoreFor(Atsign(atSign), await preference()));
 
@@ -100,7 +100,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUpAnswering(() async => true),
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -115,14 +115,15 @@ void main() {
       'a refusal on a device that has never been online throws, and leaves '
       'nothing behind', () async {
     const atSign = '@refusedfirst';
-    final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
-        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+    final revoked = lookUpAnswering(() async => throw AtAuthErrorReplyException(
+        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked',
+        errorCode: 'AT0027'));
 
     await expectLater(
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: revoked,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
@@ -146,7 +147,7 @@ void main() {
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: missing,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
@@ -164,19 +165,20 @@ void main() {
     final first = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: lookUpAnswering(() async => true),
         storage: hiveStoreFor(Atsign(atSign), pref));
     expect(first.connection.current.isOnline, isTrue);
     await first.stop();
 
-    final revoked = lookUpAnswering(() async => throw UnAuthenticatedException(
-        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+    final revoked = lookUpAnswering(() async => throw AtAuthErrorReplyException(
+        'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked',
+        errorCode: 'AT0027'));
     final second = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: revoked,
         storage: hiveStoreFor(Atsign(atSign), pref));
@@ -199,7 +201,7 @@ void main() {
           atSign: atSign,
           namespace: 'lifecycle',
           preference: pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref),
           atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
           storage: hiveStoreFor(atSign, pref));
@@ -217,8 +219,9 @@ void main() {
     }
 
     MockAtLookupImpl revoked(String atSign) =>
-        lookUpAnswering(() async => throw UnAuthenticatedException(
-            'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked'));
+        lookUpAnswering(() async => throw AtAuthErrorReplyException(
+            'Failed connecting to $atSign. error:AT0027:Apkam Access Revoked',
+            errorCode: 'AT0027'));
 
     test('comes back as a client in the refused state, and is marked',
         () async {
@@ -230,7 +233,7 @@ void main() {
       final client = await Atsign(atSign).open(
           keys: keys,
           preference: pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref),
           atLookUp: revoked(atSign),
           storage: hiveStoreFor(Atsign(atSign), pref));
@@ -255,7 +258,7 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref),
               atLookUp: revoked(atSign),
               storage: hiveStoreFor(Atsign(atSign), pref)),
@@ -276,7 +279,7 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref),
               atLookUp: revoked(atSign),
               storage: hiveStoreFor(Atsign(atSign), pref)),
@@ -296,7 +299,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -325,7 +328,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -351,7 +354,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -380,7 +383,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -403,9 +406,10 @@ void main() {
     var attempts = 0;
     final lookUp = lookUpAnswering(() async {
       attempts++;
-      throw UnAuthenticatedException(
+      throw AtAuthErrorReplyException(
           'Failed connecting to $atSign. error:AT0401:Client authentication '
-          'failed');
+          'failed',
+          errorCode: 'AT0401');
     });
     // Built below open, which would refuse a first open the atServer turns
     // away; the wait is what is under test.
@@ -413,7 +417,7 @@ void main() {
         atSign: atSign,
         namespace: 'lifecycle',
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
         atLookUp: lookUp,
@@ -433,7 +437,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUpAnswering(() async => true),
         serviceFactory: _NoSyncFactory(),

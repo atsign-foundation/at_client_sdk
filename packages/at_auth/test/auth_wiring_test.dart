@@ -60,7 +60,7 @@ class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
   Future<SecondaryAddress> findSecondary(String atSign,
           {Duration? timeout}) async =>
-      SecondaryAddress('abcd', 123);
+      SecondaryAddress('127.0.0.1', 123);
 }
 
 void main() {
@@ -83,14 +83,14 @@ void main() {
   AtAuthImpl rig(AtLookupMuxable lookUp,
       {required String? enrollmentId, required bool activated}) {
     final pkam = MockPkamAuthenticator();
-    when(() => pkam.authenticate(any(), any()))
-        .thenAnswer((_) async => true);
+    when(() => pkam.authenticate(any(), any())).thenAnswer((_) async => true);
     when(() => lookUp.secondaryAddressFinder)
         .thenReturn(FakeSecondaryAddressFinder());
     when(() => lookUp.executeCommand(any(that: startsWith('lookup:publickey')),
-        auth: any(named: 'auth'))).thenAnswer((_) async => activated
-        ? 'data:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA'
-        : throw AtLookUpException('AT0015', 'key not found'));
+            auth: any(named: 'auth')))
+        .thenAnswer((_) async => activated
+            ? 'data:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA'
+            : throw AtLookUpException('AT0015', 'key not found'));
     final enrollment = MockAtEnrollment();
     when(() => enrollment.submit(any(), lookUp)).thenAnswer((_) async =>
         AtEnrollmentResponse(onboardedEnrollmentId, EnrollmentStatus.approved));
@@ -108,8 +108,7 @@ void main() {
         atSign,
         AtKeys()
           ..apkamPublicKey = AtBytes.fromString(demo.pkamPublicKeyMap[owner]!)
-          ..apkamPrivateKey =
-              AtBytes.fromString(demo.pkamPrivateKeyMap[owner]!)
+          ..apkamPrivateKey = AtBytes.fromString(demo.pkamPrivateKeyMap[owner]!)
           ..defaultEncryptionPublicKey =
               AtBytes.fromString(demo.encryptionPublicKeyMap[owner]!)
           ..defaultEncryptionPrivateKey =
@@ -124,8 +123,7 @@ void main() {
   /// enrollment is the keys' own answer, as every caller resolves it.
   Future<String> pkamFrom(AtKeysIo keysIo) async {
     final installed = authenticatorFor(keysIo, atSign,
-        enrollmentId:
-            (await keysIo.read(atSign)).enrollmentToAuthenticateAs());
+        enrollmentId: (await keysIo.read(atSign)).enrollmentToAuthenticateAs());
     final executor =
         _RecordingExecutor(['data:$pkamPinChallenge', 'data:success']);
     expect(await installed(executor), isTrue);
@@ -147,7 +145,6 @@ void main() {
   }
 
   group('a lookup that can take an authenticator', () {
-
     test('onboard installs one three times', () async {
       // The CRAM authenticator for the activation's first login, the
       // keyfile's once its keys exist, and the keyfile's again once the

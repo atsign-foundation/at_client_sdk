@@ -29,8 +29,8 @@ void main() {
 
     atClient = await AtClientImpl.create(
         currentAtSign, namespace, atClientPreference,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(atClientPreference),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await keyfileHolding(currentAtSign,
             encryptionKeyPair: encryptionKeyPair,

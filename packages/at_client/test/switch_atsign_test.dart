@@ -29,8 +29,8 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(alicePreference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(aliceAtSign),
           atLookUp: mockAtLookUp,
           storage: hiveStoreFor(aliceAtSign, alicePreference));
@@ -48,8 +48,8 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(alicePreference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), aliceAtSign);
@@ -59,8 +59,8 @@ void main() {
           atSign: bobAtSign,
           namespace: 'buzz',
           preference: bobPreference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(bobPreference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference)));
       expect(atClientManager.atClient.getCurrentAtSign(), bobAtSign);
@@ -77,8 +77,8 @@ void main() {
           atSign: aliceAtSign,
           namespace: 'wavi',
           preference: alicePreference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(alicePreference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(aliceAtSign),
           storage: hiveStoreFor(aliceAtSign, alicePreference));
       atClientManager.use(alice);
@@ -90,8 +90,8 @@ void main() {
           atSign: bobAtSign,
           namespace: 'buzz',
           preference: bobPreference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(bobPreference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(bobAtSign),
           storage: hiveStoreFor(bobAtSign, bobPreference));
       atClientManager.use(bob);
