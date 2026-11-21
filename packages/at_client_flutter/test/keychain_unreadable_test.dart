@@ -375,6 +375,10 @@ void main() {
     /// The names of stores whose delete returns and leaves them in place.
     late Set<String> undeletableStores;
 
+    /// The names of stores whose read answers null whatever they hold, as
+    /// Windows answers a read that fails.
+    late Set<String> absentStores;
+
     /// Every store name the keychain asked for.
     late List<String> touched;
 
@@ -385,6 +389,7 @@ void main() {
       failNextWriteOf = null;
       unreadableStores = {};
       undeletableStores = {};
+      absentStores = {};
       touched = [];
       logs.records.clear();
     });
@@ -400,6 +405,7 @@ void main() {
         touched.add(name);
         final file = _MockBiometricStorageFile();
         when(file.read).thenAnswer((_) async {
+          if (absentStores.contains(name)) return null;
           if (unreadableStores.contains(name) && held.containsKey(name)) {
             throw PlatformException(code: 'ReadFailed');
           }
@@ -420,18 +426,21 @@ void main() {
       return KeychainStorage(biometricStorage: biometricStorage);
     }
 
-    /// Keys for [atSign] whose entry spans several Windows segments.
-    AtKeys largeKeys(String atSign) => AtKeys()
+    /// Keys for [atSign] holding one key of [bytes] bytes.
+    AtKeys keysOf(String atSign, int bytes) => AtKeys()
       ..atsign = atSign.toAtsign()
       ..addKey(
         CryptographicMaterial(
           keyId: 'enc:rsa2048:1',
           role: CryptographicMaterialRole.of('publicEncryption'),
           algorithm: CryptographicMaterialAlgorithm.of('rsa2048'),
-          bytes: AtBytes.fromString(base64Encode(List.filled(6000, 7))),
+          bytes: AtBytes.fromString(base64Encode(List.filled(bytes, 7))),
           createdAt: DateTime.utc(2026),
         ),
       );
+
+    /// Keys for [atSign] whose entry spans several Windows segments.
+    AtKeys largeKeys(String atSign) => keysOf(atSign, 6000);
 
     /// The segments of the current entry held, by name.
     Iterable<String> segmentsHeld() =>
@@ -576,6 +585,38 @@ void main() {
 
         expect(severeLogs(), isNotEmpty);
         expect(headerCount(), live);
+      });
+
+      test('a rewrite deletes every segment the old header names, one that '
+          'reads as absent included', () async {
+        final storage = windowsKeychain();
+        await storage.appendAtKeysToKeychain(keys: keysOf(atSign, 3000));
+        expect(headerCount(), 2, reason: 'the control: two segments');
+        held['${current}_segment_2'] = held.remove('${current}_segment_1')!;
+        held['${current}_segment_1'] = 'unread';
+        held[current] = '{"segmentCount":3}';
+        absentStores.add('${current}_segment_1');
+        expect(
+          '${(await storage.readAtKeysData())!.keys.single.atsign}',
+          atSign,
+          reason: "the control: the 3 segments read as @alice's keys",
+        );
+
+        await storage.updateAtKeysInKeychain(
+          atSign: atSign,
+          keys: keysOf(atSign, 100),
+        );
+
+        expect(headerCount(), 1, reason: 'the control: one segment written');
+        expect(
+          held.keys,
+          isNot(
+            anyOf(
+              contains('${current}_segment_1'),
+              contains('${current}_segment_2'),
+            ),
+          ),
+        );
       });
 
       for (final bad in ['2561', '-1', 'abc']) {
