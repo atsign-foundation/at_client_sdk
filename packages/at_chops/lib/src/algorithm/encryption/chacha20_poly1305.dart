@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algorithm/encryption/aead_output.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
 
@@ -22,8 +23,8 @@ final class ChaCha20Poly1305Algo {
 
   const ChaCha20Poly1305Algo();
 
-  /// Seals [plaintext] under [key] and [nonce], returning
-  /// `ciphertext || tag`.
+  /// Seals [plaintext] under [key] and [nonce]. Returns the ciphertext
+  /// followed by the tag, built in one buffer.
   Future<Uint8List> encrypt(
     Uint8List plaintext, {
     required Uint8List key,
@@ -31,13 +32,7 @@ final class ChaCha20Poly1305Algo {
     List<int> aad = const [],
   }) async {
     _check(key, nonce);
-    final box = await _algo.encrypt(
-      plaintext,
-      secretKey: crypto.SecretKey(key),
-      nonce: nonce,
-      aad: aad,
-    );
-    return Uint8List.fromList(box.cipherText + box.mac.bytes);
+    return aeadEncrypt(_algo, plaintext, key: key, nonce: nonce, aad: aad);
   }
 
   /// Opens `ciphertext || tag` under [key] and [nonce].
