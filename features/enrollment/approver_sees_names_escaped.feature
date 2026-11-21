@@ -43,10 +43,10 @@ Feature: An approver sees the names a request carries with their control charact
       | at_activate approve |
       | at_activate auto    |
 
-  Scenario Outline: <command> escapes a double quote inside the app name it quotes
-    Given a pending enrollment request for @alice whose app name is wa"vi
+  Scenario Outline: <command> escapes a double quote inside the app and device names it quotes
+    Given a pending enrollment request for @alice whose app name is wa"vi and whose device name is pho"ne
     When <command> handles that request
-    Then what it prints names the app as "wa\"vi"
+    Then what it prints names them as "wa\"vi" and "pho\"ne"
     Examples:
       | command             |
       | at_activate approve |

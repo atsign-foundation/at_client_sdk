@@ -258,12 +258,13 @@ void main() {
   }
 
   for (final (command, run) in handlingB) {
-    test('$command escapes a double quote inside the app name it quotes',
-        () async {
-      expect(await run({'appName': 'wa"vi', 'deviceName': 'phone'}),
-          contains(r'"wa\"vi"'),
-          reason: 'the app name in double quotes, the quote inside it '
-              'escaped');
+    test(
+        '$command escapes a double quote inside the app and device names it '
+        'quotes', () async {
+      expect(await run({'appName': 'wa"vi', 'deviceName': 'pho"ne'}),
+          allOf(contains(r'"wa\"vi"'), contains(r'"pho\"ne"')),
+          reason: 'the app and device names in double quotes, the quote '
+              'inside each escaped');
     }, timeout: const Timeout(Duration(seconds: 5)));
   }
 
