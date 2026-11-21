@@ -184,6 +184,9 @@ abstract class AtEnrollment {
   /// Once [cancelled] completes, with a value or an error, no further poll
   /// starts and the wait throws [StoppedException]; a connection that is
   /// stopped ends it the same way.
+  ///
+  /// Throws [AtEnrollmentDeniedException] when the atServer denies the
+  /// enrollment (AT0025).
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = defaultLogProgress,

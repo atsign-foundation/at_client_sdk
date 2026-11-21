@@ -713,9 +713,9 @@ final AtClient atClient =
   a server error such as AT0011 or no challenge to sign. That is the one
   exception a retry loop around opening should catch. A keyfile holding only
   an enrollment request is resumed: `CLIBase` waits for its approval, as
-  at_activate does, and throws `AtEnrollmentException` when it is denied and
-  `AtEnrollmentExpiredException`, a subtype, when it expires; both remove the
-  request. A wait the atServer keeps answering with anything else, a server
+  at_activate does, and throws `AtEnrollmentDeniedException` when it is denied and
+  `AtEnrollmentExpiredException` when it expires, each an
+  `AtEnrollmentException`; both remove the request. A wait the atServer keeps answering with anything else, a server
   error included, also ends in `AtEnrollmentException` and keeps the
   request, and an atServer not reached ends it with the connection's own
   failure.

@@ -89,16 +89,16 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |
 | `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
 | `AtEnrollmentExpiredException`  | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed | Tell the user; a new `enroll` is a new request              |
-| `AtEnrollmentException`         | `pending.client(...)`: the request was denied; its pending keys are removed                               | Tell the user; a new `enroll` is a new request                |
+| `AtEnrollmentDeniedException`   | `pending.client(...)`: the request was denied; its pending keys are removed                               | Tell the user; a new `enroll` is a new request                |
 | `AtEnrollmentException`         | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included; its pending keys stay | Show the message; a person decides whether to wait again (`resumeEnrollment` returns the request) or `cancel()` |
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
 | `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
 | `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
 
-`AtEnrollmentExpiredException` is also an `AtEnrollmentException`, so its
-`catch` goes first. A denial and an answer that waiting cannot resolve are
-both a plain `AtEnrollmentException`; `resumeEnrollment` returns the request
-after the second and null after a denial.
+`AtEnrollmentExpiredException` and `AtEnrollmentDeniedException` are also
+`AtEnrollmentException`s, so their `catch` goes first. An answer that waiting
+cannot resolve is a plain `AtEnrollmentException`; `resumeEnrollment` returns
+the request after it and null after a denial.
 
 ---
 
