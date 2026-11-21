@@ -218,9 +218,10 @@ Without a severity, the Level column in the Control Center is blank.
   put that endpoint's Atsign in an attribute whose name says its role:
   `acme_gate.command.from`, `coldchain.reading.hub`. Which endpoint talks to
   which is what operators care about most.
-- **Short scalar values:** strings under 64 characters, `int`, `bool`, finite
-  `double`. Put the unit in the name: `_ms`, `_bytes`, `_count`. Lists and
-  maps are allowed but hard to read in the Control Center.
+- **Short scalar values:** strings under 64 characters (except
+  `anomaly.message`), `int`, `bool`, finite `double`. Put the unit in the
+  name: `_ms`, `_bytes`, `_count`. Lists and maps are allowed but hard to read
+  in the Control Center.
 - Any other value type (a `DateTime`, an enum, an `Atsign`, an exception)
   throws `ArgumentError`. Convert it to a `String` first.
 - **Never set these yourself:** anything under `atsign.`, `service.`,
