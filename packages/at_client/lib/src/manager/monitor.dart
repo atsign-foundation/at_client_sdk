@@ -72,6 +72,7 @@ class Monitor {
 
   StreamSubscription<String>? _notificationSubscription;
   StreamSubscription<bool>? _connectionSubscription;
+  StreamSubscription<UnAuthenticatedException>? _refusalSubscription;
 
   /// Rebuilds a connection that answers heartbeats while delivering nothing.
   ///
@@ -117,6 +118,10 @@ class Monitor {
   /// short-circuits on a `targetState` that is already `listening`.
   Timer? _startRetry;
   int _startRetryIx = 0;
+
+  /// Bumped by every [stop], so a start can tell a stop that came after it
+  /// was queued, even when a [start] has since put `targetState` back.
+  int _stops = 0;
 
   /// The same backoff at_lookup uses for a lost connection, so a failed first
   /// connect and a dropped one recover on one schedule rather than two.
@@ -195,19 +200,30 @@ class Monitor {
       return;
     }
     _targetState = NotificationListenerState.listening;
-    _enqueue(_start);
+    final stops = _stops;
+    _enqueue(() => _start(stops));
   }
 
-  Future<void> _start() async {
+  /// Starts notifications, unless a [stop] has come since [stops] was read
+  /// where this start was queued.
+  Future<void> _start(int stops) async {
+    if (stops != _stops) {
+      logger.info('stop() arrived after this start was queued, which ended '
+          'the start');
+      return;
+    }
     // Subscribed before `monitor:` goes out, not after. The notification
     // stream buffers, so nothing is lost either way, but the connection-state
     // stream is broadcast and does not replay - attaching afterwards would
     // miss the very "up" this call is about to cause.
     _connectionSubscription ??=
         lookUp.notificationConnectionUp.listen(_onConnectionState);
+    _refusalSubscription ??= lookUp.notificationRefusals
+        .listen((refusal) => _onRefusal(refusal, stops));
     _notificationSubscription ??= lookUp.notifications.listen(
       _onNotification,
-      onError: _onNotificationStreamError,
+      onError: (Object e) =>
+          logger.warning('Error on the notification stream: $e'),
     );
 
     // Its own guard: reading the watermark is a local keystore operation, not
@@ -260,7 +276,7 @@ class Monitor {
       _armSilenceTimer();
       logger.info('monitor started');
     } catch (e) {
-      if (_targetState != NotificationListenerState.listening) {
+      if (stops != _stops) {
         logger.info('stop() arrived while starting, which ended the start');
         return;
       }
@@ -272,15 +288,13 @@ class Monitor {
     }
   }
 
-  /// Reports a reconnect the atServer refused to [connection]; any other
-  /// error on the notification stream is logged.
-  void _onNotificationStreamError(Object e) {
+  /// Reports a reconnect the atServer refused to [connection], unless a
+  /// [stop] has come since [stops] was read where the start that subscribed
+  /// was queued.
+  void _onRefusal(UnAuthenticatedException e, int stops) {
     final refusal = _failureIn(e).refusal;
-    if (refusal == null) {
-      logger.warning('Error on the notification stream: $e');
-      return;
-    }
-    if (_targetState != NotificationListenerState.listening) {
+    if (refusal == null) return;
+    if (stops != _stops) {
       logger.info('stop() arrived before this refusal, which is not '
           'reported: $e');
       return;
@@ -329,9 +343,10 @@ class Monitor {
     _startRetryIx++;
     onStartRetryDelay?.call(delay);
     logger.info('retrying the notification start in ${delay.inSeconds}s');
+    final stops = _stops;
     _startRetry = Timer(delay, () {
       if (_targetState == NotificationListenerState.listening) {
-        _enqueue(_start);
+        _enqueue(() => _start(stops));
       }
     });
   }
@@ -365,12 +380,13 @@ class Monitor {
     if (last != null && now.difference(last) <= budget) return;
     logger.warning('nothing received for $budget on a connection that is up '
         '- rebuilding it');
-    _enqueue(_rebuild);
+    final stops = _stops;
+    _enqueue(() => _rebuild(stops));
   }
 
-  Future<void> _rebuild() async {
+  Future<void> _rebuild(int stops) async {
     await _teardown();
-    await _start();
+    await _start(stops);
   }
 
   Future<void> _onNotification(String notification) async {
@@ -415,6 +431,7 @@ class Monitor {
   void stop() {
     logger.info('stop() called. Setting targetState to notConnected');
     _targetState = NotificationListenerState.notConnected;
+    _stops++;
     _startRetry?.cancel();
     _startRetry = null;
     _startRetryIx = 0;
@@ -448,6 +465,8 @@ class Monitor {
     _notificationSubscription = null;
     await _connectionSubscription?.cancel();
     _connectionSubscription = null;
+    await _refusalSubscription?.cancel();
+    _refusalSubscription = null;
     _connectedAt = null;
     _setCurrentState(NotificationListenerState.notConnected);
   }
