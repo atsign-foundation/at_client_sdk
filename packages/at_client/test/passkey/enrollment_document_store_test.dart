@@ -75,12 +75,43 @@ void main() {
     });
   }
 
+  test('get names an unexpected response by its length in its error', () async {
+    final odd = ScriptedAtLookUp((_) async => 'error:AT0011-a\nb"c');
+    await expectLater(
+        storeOver(odd).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>().having((e) => e.message,
+            'message', 'unexpected llookup response of 18 characters')));
+  });
+
+  test('get tells a missing reply apart from an empty one', () async {
+    await expectLater(
+        storeOver(ScriptedAtLookUp((_) async => null)).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>()
+            .having((e) => e.message, 'message', 'no llookup response')));
+    await expectLater(
+        storeOver(ScriptedAtLookUp((_) async => '')).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>().having((e) => e.message,
+            'message', 'unexpected llookup response of 0 characters')));
+  });
+
   test('an unexpected response is not echoed whole into the error', () async {
     final odd = ScriptedAtLookUp((_) async => 'x' * 10000);
     await expectLater(
         storeOver(odd).get(_atSign, _eid),
         throwsA(isA<InvalidResponseException>()
             .having((e) => e.message.length, 'message length', lessThan(220))));
+  });
+
+  test('a reply without a data prefix is not quoted, as it may be the document',
+      () async {
+    const sealed = '{"v":2,"iv":"SEALEDIVTEXT","ct":"SEALEDCTTEXT"}';
+    final odd = ScriptedAtLookUp((_) async => sealed);
+    await expectLater(
+        storeOver(odd).get(_atSign, _eid),
+        throwsA(isA<InvalidResponseException>()
+            .having((e) => e.message, 'message',
+                contains('${sealed.length} characters'))
+            .having((e) => e.message, 'message', isNot(contains('SEALED')))));
   });
 
   test('put sends update on the authenticated remote', () async {
@@ -151,8 +182,25 @@ void main() {
         throwsA(isA<AtException>()));
   });
 
-  test('put rejects a document with a newline', () {
-    expect(store.put(_atSign, _eid, '{\n}'), throwsArgumentError);
+  test(
+      'put rejects a document with a newline, naming the field and none of '
+      'its text', () async {
+    await expectLater(
+        store.put(_atSign, _eid, '{"iv":"SEALEDIV",\n"ct":"SEALEDCT"}'),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'document')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => '$e', 'text', isNot(contains('SEALED')))));
+    expect(remoteLookUp.commands, isEmpty);
+  });
+
+  test('put rejects a document with a carriage return', () async {
+    await expectLater(
+        store.put(_atSign, _eid, 'abc\rdef'),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'document')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => '$e', 'text', isNot(contains('abc')))));
     expect(remoteLookUp.commands, isEmpty);
   });
 }

@@ -4,6 +4,7 @@ import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:at_client/src/client/server_mutex.dart';
 import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:at_commons/atsign.dart';
@@ -495,8 +496,10 @@ class AtServerAtKeysIo extends WrittenAtKeysIo {
   /// holds. The store stays usable.
   void _requireStoreAtsign(String atsign) {
     if (atsign.toAtsign() != _atSign) {
-      throw ArgumentError.value(atsign, 'atsign',
-          'this key store holds the document of $_atSign only');
+      throw ArgumentError(
+          'this key store holds the document of $_atSign only, not '
+              '"${clipForMessage(atsign, quote: '"')}"',
+          'atsign');
     }
   }
 

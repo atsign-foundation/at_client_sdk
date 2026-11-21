@@ -25,7 +25,8 @@ keys, logging). You do not add `at_client` beside it.
 
 `at_client` itself is the platform-neutral **core**: public, but for building
 a platform package, or for a program that passes every dependency explicitly.
-A browser platform package, `at_client_web`, does not exist yet.
+The browser platform package, `at_client_web`, is still being built and is not
+published, so a browser app has no SDK package to depend on yet.
 
 ---
 

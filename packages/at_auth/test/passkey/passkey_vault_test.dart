@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
+import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:test/test.dart';
 
 import '../support/bytes_passkey_sealer.dart';
@@ -155,6 +156,50 @@ void main() {
             throwsArgumentError);
       });
     }
+
+    test(
+        'Given a derivation whose auth seed is not 32 bytes, when a vault is '
+        'built from it, then it throws an ArgumentError, zeroes that seed and '
+        'closes the sealer', () {
+      for (final length in [31, 33]) {
+        final seed = Uint8List(length)..fillRange(0, length, 7);
+        final sealer = SpyRecordSealer(bytesSealer);
+        expect(
+            () => PasskeyVault((
+                  lookupHex: 'a' * 64,
+                  ns: 'b' * 64,
+                  authSeed: seed,
+                  sealer: sealer,
+                ), atSign: '@alice'),
+            throwsArgumentError,
+            reason: 'a $length-byte seed');
+        expect(seed, everyElement(0), reason: 'a $length-byte seed is zeroed');
+        expect(sealer.closeCalls, 1,
+            reason: 'the sealer of a $length-byte seed is closed');
+      }
+    });
+
+    test(
+        'a constructor that refuses an atSign still zeroes the seed and '
+        'closes the sealer', () {
+      for (final atSign in ['', '@a b']) {
+        final seed = Uint8List(32)..fillRange(0, 32, 7);
+        final sealer = SpyRecordSealer(bytesSealer);
+        expect(
+            () => PasskeyVault((
+                  lookupHex: 'a' * 64,
+                  ns: 'b' * 64,
+                  authSeed: seed,
+                  sealer: sealer,
+                ), atSign: atSign),
+            throwsA(isA<InvalidAtSignException>()),
+            reason: 'the atSign "$atSign" is refused');
+        expect(seed, everyElement(0),
+            reason: 'the seed is zeroed when "$atSign" is refused');
+        expect(sealer.closeCalls, 1,
+            reason: 'the sealer is closed when "$atSign" is refused');
+      }
+    });
   });
 
   group('close while withAuthSeed is in flight', () {

@@ -28,9 +28,12 @@ Future<String?> publicLookup(
           ..atKey.namespace = namespace
           ..atKey.sharedBy = atSign.toAtsign())
         .buildCommand());
-    if (response == null || !response.startsWith('data:')) {
+    if (response == null) {
+      throw InvalidResponseException('no lookup response');
+    }
+    if (!response.startsWith('data:')) {
       throw InvalidResponseException(
-          'unexpected lookup response: ${clipForMessage('$response')}');
+          'unexpected lookup response: "${clipForMessage(response, quote: '"')}"');
     }
     final text = response.substring('data:'.length).trim();
     return text == 'null' ? null : text;

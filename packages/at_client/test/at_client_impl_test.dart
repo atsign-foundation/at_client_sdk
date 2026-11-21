@@ -62,8 +62,8 @@ void main() {
     test('resolves to the client that superseded it', () async {
       final storage = hiveStoreFor(atSign, pref());
       final settled = await AtClientImpl.create(atSign, 'wavi', pref(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-new',
           storage: storage);
@@ -71,8 +71,8 @@ void main() {
           '$atSign|enroll-new';
 
       final again = await AtClientImpl.create(atSign, 'wavi', pref(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-old',
           storage: storage);
@@ -94,15 +94,15 @@ void main() {
       // NOTE: two clients live at the same moment need separate storage — one
       // location holds one.
       final first = await AtClientImpl.create(atSign, 'wavi', pref(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-new',
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true));
       final other = await AtClientImpl.create(atSign, 'wavi', pref(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-old',
           storage:
@@ -119,8 +119,8 @@ void main() {
           '$atSign|evicted';
 
       final built = await AtClientImpl.create(atSign, 'wavi', pref(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           enrollmentId: 'enroll-old',
           storage: hiveStoreFor(atSign, pref()));
@@ -153,8 +153,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
@@ -164,8 +164,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getCurrentAtSign(), atSign);
@@ -175,8 +175,8 @@ void main() {
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, preference));
       expect(atClient.getPreferences()!.syncRegex, '.wavi');
@@ -207,8 +207,8 @@ void main() {
         atSign: atSign,
         namespace: namespace,
         preference: atClientPreference,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(atClientPreference),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor(atSign),
         storage: hiveStoreFor(atSign, atClientPreference));
 
@@ -283,8 +283,8 @@ void main() {
       client = await buildAtClient(
           atSign: '@sender',
           preference: pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@sender'),
           storage: hiveStoreFor('@sender', pref)) as AtClientImpl;
 
@@ -339,8 +339,8 @@ void main() {
           atSign: '@alice',
           namespace: 'wavi',
           preference: pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           enrollmentId: testEnrollmentId,
           storage: hiveStoreFor('@alice', pref));
@@ -369,8 +369,8 @@ void main() {
           '$enrollValue1,"$enrollKey2":$enrollValue2,"$enrollKey3":$enrollValue3}'));
 
       AtClient? client = await AtClientImpl.create(currentAtsign, 'buzz', pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(currentAtsign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(currentAtsign, pref));
@@ -412,7 +412,7 @@ void main() {
           atSign: atSign,
           namespace: 'wavi',
           preference: AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreAt(atSign, 'test/hive'));
@@ -433,8 +433,8 @@ void main() {
           atSign: atSign,
           namespace: 'wavi',
           preference: pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: hiveStoreFor(atSign, pref));
       expect(
@@ -448,8 +448,8 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor(atSign, pref));
@@ -472,8 +472,8 @@ void main() {
       AtClientPreference pref = AtClientPreference()
         ..hiveStoragePath = 'test/hive';
       AtClient? client = await AtClientImpl.create('@alice', 'buzz', pref,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           remoteSecondary: mockRemoteSecondary,
           storage: hiveStoreFor('@alice', pref));
@@ -507,7 +507,7 @@ void main() {
         '@alice',
         'buzz',
         AtClientPreference()..hiveStoragePath = 'test/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
@@ -542,7 +542,7 @@ void main() {
         '@alice',
         'buzz',
         AtClientPreference()..hiveStoragePath = 'test/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: remote,
         atKeysIo: await typedKeyfile('@alice'),
@@ -598,8 +598,8 @@ void main() {
         '@alice',
         'buzz',
         preferences,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(preferences),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
         storage: hiveStoreFor('@alice', preferences),
@@ -631,8 +631,8 @@ void main() {
         '@alice',
         'buzz',
         preferences,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(preferences),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
         storage: hiveStoreFor('@alice', preferences),
@@ -649,7 +649,7 @@ void main() {
         'buzz',
         AtClientPreference(posture: PqPosture.pqReady)
           ..hiveStoragePath = 'test/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@ready'),
@@ -672,8 +672,8 @@ void main() {
           AtClientPreference(posture: PqPosture.legacy)
             ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@alice', 'buzz', preferences,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preferences),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: await typedKeyfile('@alice'),
           storage: hiveStoreFor('@alice', preferences));
@@ -737,8 +737,8 @@ void main() {
           AtClientPreference(posture: PqPosture.pqReady)
             ..hiveStoragePath = 'test/hive';
       AtClient ac = await AtClientImpl.create('@bob', 'buzz', preferences,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preferences),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: await typedKeyfile('@bob'),
           storage: hiveStoreFor('@bob', preferences));
@@ -771,8 +771,8 @@ void main() {
         '@alice',
         'buzz',
         preferences,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(preferences),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
         storage: hiveStoreFor('@alice', preferences),
@@ -798,8 +798,8 @@ void main() {
         '@alice',
         'buzz',
         preferences,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(preferences),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
         storage: hiveStoreFor('@alice', preferences),
@@ -829,8 +829,8 @@ void main() {
         '@alice',
         'buzz',
         preferences,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: atDirectoryOf(preferences),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
         storage: hiveStoreFor('@alice', preferences),
@@ -854,8 +854,8 @@ void main() {
           '@alice',
           'buzz',
           preferences,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preferences),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           remoteSecondary: mockRemoteSecondary,
           atKeysIo: keysIo,
           storage: hiveStoreFor('@alice', preferences),
@@ -875,7 +875,7 @@ void main() {
         AtClientPreference()
           ..hiveStoragePath = 'test/hive'
           ..crypto = const CryptoConfig(defaultProviderId: 'legacy'),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
@@ -895,7 +895,7 @@ void main() {
             defaultProviderId: 'legacy',
             providers: [provider],
           ),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),
@@ -913,7 +913,7 @@ void main() {
         '@alice',
         'buzz',
         AtClientPreference()..hiveStoragePath = 'test/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: keysIo,
@@ -932,7 +932,7 @@ void main() {
         '@alice',
         'buzz',
         AtClientPreference()..hiveStoragePath = 'test/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: firstKeysIo,
@@ -943,7 +943,7 @@ void main() {
         '@alice',
         'buzz',
         AtClientPreference()..hiveStoragePath = 'test/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: mockRemoteSecondary,
         atKeysIo: await typedKeyfile('@alice'),

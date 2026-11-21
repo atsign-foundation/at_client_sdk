@@ -16,10 +16,8 @@ Feature: The passkey hints are a convenience, so a login and an onboarding go on
 
   Races: tabs of one origin that log in at once each write the hints they
   authenticated with; a pair that no longer opens is retried without
-  hints. When separate stores take the two ids in two writes and only the
-  first lands, the device holds a new credential id beside an old
-  enrollment id; a login with that pair is refused by PKAM and retried
-  without hints, which writes both.
+  hints. The two ids are written in one write, so a login never leaves a
+  new credential id beside an old enrollment id.
   Replay: nothing new is sent or checked.
   Denial of service: a hint store that always fails makes every login a
   login without hints, which prompts for any passkey, reads the pointer and

@@ -146,7 +146,7 @@ void main() {
         _namespace,
         AtClientPreference(posture: PqPosture.legacy)
           ..hiveStoragePath = '${storage.path}/hive',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         atKeysIo: noKeysFor(_owner),
         remoteSecondary: remote,

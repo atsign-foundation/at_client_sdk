@@ -146,7 +146,9 @@ void main() {
   test(
       'at_activate onboard without a CRAM secret and with no registrar API '
       'key sends the built-in key', () async {
-    const args = ['onboard', '-a', '@alice', '-y', '--debug'];
+    const args = [
+      'onboard', '-a', '@alice', '-y', '--debug', '-r', '127.0.0.1:1' //
+    ];
     final run = await runFixture('at_activate_against_loopback.dart', args);
 
     expect(carriesBuiltInKey(run.output), isFalse,
@@ -162,7 +164,9 @@ void main() {
   test(
       'at_activate onboard with a registrar API key set sends that key, not '
       'the built-in one', () async {
-    const args = ['onboard', '-a', '@alice', '-y', '--debug'];
+    const args = [
+      'onboard', '-a', '@alice', '-y', '--debug', '-r', '127.0.0.1:1' //
+    ];
     final run = await runFixture('at_activate_against_loopback.dart', args,
         registrarApiKey: key);
 
@@ -183,7 +187,7 @@ void main() {
       'a header cannot carry refuses before it shows the backup prompt',
       () async {
     const prompt = 'IMPORTANT - READ CAREFULLY';
-    const args = ['onboard', '-a', '@alice'];
+    const args = ['onboard', '-a', '@alice', '-r', '127.0.0.1:1'];
     final control = await runFixture('at_activate_against_loopback.dart', args,
         registrarApiKey: key, input: 'N\n');
     expect(carriesBuiltInKey(control.output), isFalse);

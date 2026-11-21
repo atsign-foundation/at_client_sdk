@@ -4,6 +4,7 @@ import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 
 import '../test_utils/ml_dsa_keyfile.dart';
+import '../test_utils/transport.dart';
 
 /// Opens a client on an atServer that accepts connections and never answers,
 /// starts the work that then waits on it, and returns from `main`.
@@ -23,7 +24,7 @@ Future<void> main(List<String> args) async {
       ..rootDomain = '127.0.0.1'
       ..rootPort = int.parse(port)
       ..namespace = 'exit',
-    lookUps: secureSocketLookUps(),
+    lookUps: loopbackLookUps(),
     secondaryAddressFinder:
         CacheableSecondaryAddressFinder('127.0.0.1', int.parse(port)),
     storage: HiveAtClientStorage(

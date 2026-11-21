@@ -138,7 +138,7 @@ void main() {
         // post-quantum startup at all, and this exercises exactly that startup.
         AtClientPreference(posture: PqPosture.pqReady)
           ..hiveStoragePath = storageDir,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         enrollmentId: 'e-1',
         remoteSecondary: buildRecordingRemote(

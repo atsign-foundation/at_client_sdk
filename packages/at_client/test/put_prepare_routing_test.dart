@@ -84,7 +84,7 @@ void main() {
               ..crypto = CryptoConfig(
                   defaultProviderId: defaultProviderId ?? provider.id,
                   providers: [provider, _Legacy()]),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor('@alice'),
             remoteSecondary: remote,
