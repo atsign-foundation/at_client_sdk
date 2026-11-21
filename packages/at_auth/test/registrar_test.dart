@@ -104,6 +104,27 @@ void main() {
       );
     });
 
+    for (final entry in {
+      'a tab': '\t',
+      'a newline': '\n',
+      'CRLF': '\r\n',
+      'a no-break space': '\u00A0',
+    }.entries) {
+      test(
+          'given a superApiKey of only whitespace holding ${entry.key}, when '
+          'the service is constructed, then it throws AtException, not '
+          'ArgumentError', () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: _registrarUrl,
+            superApiKey: entry.value,
+            httpClient: _mockResponse({}),
+          ),
+          throwsA(isA<AtException>()),
+        );
+      });
+    }
+
     for (final noHost in ['', ':', ':443']) {
       test(
           'given registrarUrl "$noHost", which names no host, when the '
