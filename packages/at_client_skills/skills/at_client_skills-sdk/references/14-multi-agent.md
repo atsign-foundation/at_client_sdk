@@ -41,7 +41,7 @@ accepted or refused the keys in time: an atServer not reached, or one that
 answers with a server error such as AT0011 or no challenge to sign. A retry
 loop around opening catches that last one alone; the others need a person.
 A keyfile holding only an enrollment request is resumed: `CLIBase` waits for
-its approval, as at_activate does, and throws `AtEnrollmentException` when
+its approval, as at_activate does, and throws `AtEnrollmentDeniedException` when
 it is denied and `AtEnrollmentExpiredException`, a subtype, when it expires;
 both remove the request. A wait the atServer keeps answering with anything
 else, a server error included, also ends in `AtEnrollmentException` and

@@ -481,8 +481,8 @@ void main() {
   });
 
   test(
-      'a wait ended by a refusal other than a denial leaves the pending keys, '
-      'even when the refusal says "denied"', () async {
+      'a wait the atServer refuses for another reason keeps the request, even '
+      'when its text says denied', () async {
     final store = InMemoryAtKeysIo();
     final pending = await submit(
         store,
