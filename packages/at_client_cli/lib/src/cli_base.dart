@@ -308,6 +308,8 @@ class CLIBase {
   /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentDeniedException] when the request is denied,
   /// [AtEnrollmentExpiredException] when it expires, both removing its keys,
+  /// a plain [AtEnrollmentException], keeping them, when the atServer keeps
+  /// answering the wait with neither a decision nor "not yet",
   /// [SecondaryNotFoundException] when the atDirectory has no atServer for the
   /// atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or
