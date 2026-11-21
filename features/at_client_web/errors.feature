@@ -9,6 +9,21 @@ Feature: Every failure carries a code the caller branches on
   npm package turns {code, message} into AtError and the callbacks into async
   iterators, and specifies that in at_js.
 
+  # Threats. Each answer names the scenario that holds it.
+  #
+  # Race: error mapping is pure and stateless per thrown object; concurrent
+  #   failures never interfere with one another.
+  # Replay: rejections carry no tokens or credentials, so replaying an error
+  #   message reveals no reusable material.
+  # DoS: error messages omit raw values and truncate untrusted tokens ("an
+  #   unmapped exception rejects internal with a fixed message", "session calls
+  #   name the parameter without its value").
+  # Forgery: rejections are constructed as plain objects carrying only fixed
+  #   codes and parameter-only or sanitized messages ("a rejection is a plain
+  #   object with only code and message").
+  # Impersonation: errors carry no unverified peer-supplied identity claims ("a
+  #   mapped exception keeps its message").
+
   Scenario: an unmapped exception rejects internal with a fixed message
     Given a failure inside the Dart bridge that no code maps
     When create is called

@@ -95,7 +95,7 @@ void main() {
     };
 
     group('otp', () {
-      test('asks for a passcode and returns it', () async {
+      test('otp requests and returns a passcode', () async {
         serve(verbs: (c) => c.startsWith('otp:get') ? 'data:Z9Y8X7' : null);
 
         expect(await session.otp(), 'Z9Y8X7');
@@ -126,7 +126,8 @@ void main() {
     });
 
     group('pendingEnrollments', () {
-      test('lists only the pending requests, as filed', () async {
+      test('pendingEnrollments lists pending requests and empty when none',
+          () async {
         serve(
             pending: '${record('e1', 'pending')},'
                 '${record('e2', 'pending', app: 'chat', device: 'Tab')}');
@@ -148,11 +149,8 @@ void main() {
             {'chat': 'rw'}
           ],
         ]);
-      });
 
-      test('no pending request is an empty list', () async {
         serve();
-
         expect(await session.pendingEnrollments(), isEmpty);
       });
 
@@ -182,7 +180,9 @@ void main() {
     });
 
     group('deny', () {
-      test('denies the pending request', () async {
+      test(
+          'deny denies a pending request and rejects unknown id with enrollment_denied',
+          () async {
         serve(
             pending: record('e1', 'pending'),
             verbs: (c) => c.startsWith('enroll:deny')
@@ -193,11 +193,8 @@ void main() {
 
         expect(wire.commands.where((c) => c.startsWith('enroll:deny')).single,
             contains('e1'));
-      });
 
-      test('deny of an id that is not pending is enrollment_denied', () async {
-        serve(pending: record('e1', 'pending'));
-
+        wire.commands.clear();
         final error = await thrownBy(() => session.deny('gone'));
 
         expect(atErrorCode(error), 'enrollment_denied');
@@ -321,6 +318,71 @@ void main() {
         final error = await thrownBy(() => session.approve('e1'));
 
         expect(atErrorCode(error), 'unsupported');
+      });
+
+      test(
+          'concurrent approve or deny on the same id rejects without sending a second approval',
+          () async {
+        var approved = false;
+        wire.answer = (command) {
+          if (command.startsWith('enroll:list')) {
+            final filtered =
+                command.contains('pending') || command.contains('approved');
+            if (!filtered) return 'data:{${own(managing)}}';
+            return approved
+                ? 'data:{${record('e1', 'approved', wrapped: wrapped)}}'
+                : 'data:{${pendingRecord()}}';
+          }
+          if (command.startsWith('enroll:approve')) {
+            approved = true;
+            return 'data:{"enrollmentId":"e1","status":"approved"}';
+          }
+          throw KeyNotFoundException('absent');
+        };
+
+        final first = session.approve('e1');
+        final secondError = await thrownBy(() => session.deny('e1'));
+        await first;
+
+        expect(atErrorCode(secondError), 'enrollment_denied');
+        expect(wire.commands.where((c) => c.startsWith('enroll:approve')),
+            hasLength(1));
+        expect(
+            wire.commands.where((c) => c.startsWith('enroll:deny')), isEmpty);
+      });
+
+      test('key conveyance failure rejects with enrollment_conveyance_failed',
+          () async {
+        var approved = false;
+        String withBadKeyPackage(String status) =>
+            '"e1.new.enrollments.__manage@alice":${jsonEncode({
+                  'appName': 'tally',
+                  'deviceName': 'Phone',
+                  'namespace': {'tally': 'rw'},
+                  'status': status,
+                  'encryptedAPKAMSymmetricKey': wrapped,
+                  'metadata': {'keyPackage': 'not-a-signed-envelope'},
+                })}';
+        wire.answer = (command) {
+          if (command.startsWith('enroll:list')) {
+            final filtered =
+                command.contains('pending') || command.contains('approved');
+            if (!filtered) return 'data:{${own(managing)}}';
+            return approved
+                ? 'data:{${withBadKeyPackage('approved')}}'
+                : 'data:{${withBadKeyPackage('pending')}}';
+          }
+          if (command.startsWith('enroll:approve')) {
+            approved = true;
+            return 'data:{"enrollmentId":"e1","status":"approved"}';
+          }
+          throw KeyNotFoundException('absent');
+        };
+
+        final error = await thrownBy(() => session.approve('e1'));
+
+        expect(error, isA<EnrollmentConveyanceException>());
+        expect(atErrorCode(error), 'enrollment_conveyance_failed');
       });
     });
   });

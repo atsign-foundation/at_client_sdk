@@ -53,8 +53,17 @@ class _FakeNotifications extends Fake implements NotificationService {
   void startListening() => starts++;
 }
 
+class _FakeCollection<T> extends Fake implements AtCollection<T> {
+  _FakeCollection(this.namespace);
+
+  @override
+  final String namespace;
+}
+
 class _FakeClient extends Fake implements AtClient {
   var stops = 0;
+  Completer<void>? stopHold;
+  final openedCollections = <(String, Duration, EventSource, String?)>[];
 
   @override
   final AtConnection connection = AtConnection(
@@ -67,7 +76,25 @@ class _FakeClient extends Fake implements AtClient {
   String? getCurrentAtSign() => '@alice';
 
   @override
-  Future<void> stop() async => stops++;
+  Future<AtCollection<T>> collection<T>(
+    String namespace,
+    Duration defaultExpiration, {
+    EventSource eventSource = EventSource.both,
+    T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
+    String? writeTypeTag,
+    bool cleanupOrphansOnCreation = false,
+  }) async {
+    openedCollections
+        .add((namespace, defaultExpiration, eventSource, writeTypeTag));
+    return _FakeCollection<T>(namespace);
+  }
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    await stopHold?.future;
+  }
 }
 
 AtNotification _event(String id,
@@ -121,11 +148,11 @@ void main() {
           '@bob:k.other@alice');
     });
 
-    test('an explicit sharedBy is kept', () async {
+    test('a canonical own sharedBy is kept', () async {
       await session.notify(
-          const JsKey('k', sharedWith: '@bob', sharedBy: '@carol'), 'v');
+          const JsKey('k', sharedWith: '@bob', sharedBy: 'A.LICE'), 'v');
 
-      expect(service.params.last.atKey.sharedBy, '@carol');
+      expect(service.params.last.atKey.sharedBy, '@alice');
     });
 
     test('noNamespace leaves the session namespace off', () async {
@@ -179,6 +206,87 @@ void main() {
       await expectLater(
           session.notify(const JsKey('k', sharedWith: '@bob'), 'v'),
           throwsA(same(cause)));
+    });
+
+    test(
+        'notify with mismatched sharedBy rejects with bad_key and sends nothing',
+        () async {
+      await expectLater(
+          session.notify(
+              const JsKey('k', sharedWith: '@bob', sharedBy: '@carol'), 'v'),
+          throwsA(isA<BadKeyException>()));
+      expect(service.params, isEmpty);
+    });
+
+    test(
+        'notify with public or cached flag rejects with bad_key and sends nothing',
+        () async {
+      await expectLater(
+          session.notify(
+              const JsKey('k', sharedWith: '@bob', isPublic: true), 'v'),
+          throwsA(isA<BadKeyException>()));
+      await expectLater(
+          session.notify(
+              const JsKey('k', sharedWith: '@bob', isCached: true), 'v'),
+          throwsA(isA<BadKeyException>()));
+      expect(service.params, isEmpty);
+    });
+
+    test(
+        'notify with empty or invalid key or invalid sharedWith rejects with bad_key and sends nothing',
+        () async {
+      for (final bad in [
+        const JsKey('', sharedWith: '@bob'),
+        const JsKey('a:b', sharedWith: '@bob'),
+        const JsKey('a@b', sharedWith: '@bob'),
+        const JsKey('a b', sharedWith: '@bob'),
+        const JsKey('k', sharedWith: '@bob', namespace: ''),
+        const JsKey('k', sharedWith: '@bob', namespace: 'a b'),
+        const JsKey('k', sharedWith: '@a@b'),
+        const JsKey('k', sharedWith: '@bob '),
+        const JsKey('k', sharedWith: ''),
+      ]) {
+        await expectLater(
+            session.notify(bad, 'v'), throwsA(isA<BadKeyException>()),
+            reason: '${bad.key}/${bad.namespace}/${bad.sharedWith}');
+      }
+      expect(service.params, isEmpty);
+    });
+
+    test('notify interrupted by close rejects with closed', () async {
+      service.status = NotificationStatusEnum.undelivered;
+      service.exception = AtClientException('AT0001', 'stopped');
+      service.hold = Completer<void>();
+
+      final future = session.notify(const JsKey('k', sharedWith: '@bob'), 'v');
+      await pumpEventQueue();
+      await session.close();
+      service.hold!.complete();
+
+      await expectLater(future, throwsA(isA<SessionClosedException>()));
+    });
+
+    test('failed notify does not evict sent echo ids', () async {
+      final received = <JsNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      for (var i = 0; i < 1024; i++) {
+        await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+      }
+      // Failed pre-send calls (not sent to secondary) must not enter _sent.
+      service
+        ..reportsSent = false
+        ..status = NotificationStatusEnum.undelivered
+        ..exception = AtClientException('AT0001', 'failed');
+      for (var i = 0; i < 10; i++) {
+        await expectLater(
+            session.notify(const JsKey('k', sharedWith: '@alice'), 'v'),
+            throwsA(isA<AtClientException>()));
+      }
+
+      service.events.add(_echo('n0'));
+      await pumpEventQueue();
+      expect(received, isEmpty);
     });
   });
 
@@ -314,6 +422,35 @@ void main() {
 
       expect(received.map((n) => n.id), ['n0']);
     });
+
+    test(
+        'subscribe drops notifications with malformed keys or wrong sharedWith',
+        () async {
+      final received = <JsNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      service.events
+        ..add(_event('m1', key: '@alice:k.wavi@bob@eve', from: '@eve'))
+        ..add(_event('m2', key: '@bob.wavi', from: '@bobwavi'))
+        ..add(_event('m3', key: 'cached:cmd.wavi@eve', from: '@eve'))
+        ..add(_event('m4', key: '@victim:cmd.wavi@eve', from: '@eve'))
+        ..add(_event('m5', key: '@alice:@victim:cmd.wavi@eve', from: '@eve'))
+        ..add(_event('m6', key: 'public:@victim:cmd.wavi@eve', from: '@eve'))
+        ..add(_event('m7', key: '@alice:hi@alice', from: '@eve'))
+        ..add(_event('m8', key: '@alice:plain_text_injection', from: '@eve'))
+        ..add(_event('m9', key: 'cached:@victim:k.wavi@eve', from: '@eve'))
+        ..add(_event('m10', key: '@alice:.wavi@bob', from: '@bob'))
+        ..add(_event('ok', key: '@A.lice:k.wavi@b.ob', from: '@bob'));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), ['ok']);
+    });
+
+    test('subscribe with invalid regex rejects naming regex', () {
+      expect(() => session.subscribe('[', (_) {}, onError: (_) {}),
+          throwsA(isA<ArgumentError>()));
+      expect(service.starts, 0);
+    });
   });
 
   group('subscribe errors and drops', () {
@@ -343,6 +480,20 @@ void main() {
       expect(received, isEmpty);
       expect(warnings.single, contains('spoofed'));
       expect(warnings.single, isNot(contains('secret-v')));
+    });
+
+    test('sanitizes control and bidi characters in dropped notification logs',
+        () async {
+      session.subscribe('.*', (_) {}, onError: (_) {});
+
+      service.events.add(_event('bad\nid\u202e\u061c', from: '@carol'));
+      await pumpEventQueue();
+
+      expect(warnings.single, isNot(contains('\n')));
+      expect(warnings.single, isNot(contains('\u202e')));
+      expect(warnings.single, isNot(contains('\u061c')));
+      expect(warnings.single, contains(r'\n'));
+      expect(warnings.single, contains(r'\u202e'));
     });
 
     test('an echo of this session is dropped without a warning', () async {
@@ -441,6 +592,21 @@ void main() {
       expect(() => session.onStatus((_) {}),
           throwsA(isA<SessionClosedException>()));
     });
+
+    test('onStatus listener error does not skip sibling listeners', () async {
+      final seen = <String>[];
+      late void Function() offThird;
+      session.onStatus((_) => throw StateError('boom'));
+      session.onStatus((s) {
+        seen.add('second:$s');
+        offThird();
+      });
+      offThird = session.onStatus((s) => seen.add('third:$s'));
+
+      await report(AtConnectionState.online());
+
+      expect(seen, ['second:connected']);
+    });
   });
 
   group('collection', () {
@@ -462,6 +628,41 @@ void main() {
     test('a name already ending in the namespace is kept', () {
       expect(AtClientJsSession.qualified('todos.wavi', 'wavi'), 'todos.wavi');
       expect(AtClientJsSession.qualified('todos', 'wavi'), 'todos.wavi');
+      expect(
+          AtClientJsSession.qualified('todos.MyApp', 'MyApp'), 'todos.myapp');
+    });
+
+    test(
+        'opening a notification-backed collection starts listening on notificationService',
+        () async {
+      await session.collection('todos', type: 'Todo', eventSource: 'data');
+      expect(service.starts, 0);
+
+      await session.collection('todos', type: 'Todo', eventSource: 'notifs');
+      expect(service.starts, 1);
+
+      await session.collection('notes', type: 'Note');
+      expect(service.starts, 2);
+      expect(client.openedCollections.last.$1, 'notes.wavi');
+    });
+
+    test('rejects invalid collection names and folds mixed-case namespace',
+        () async {
+      final mixed = AtClientJsSession(client, namespace: 'MyApp');
+      await mixed.collection('Todos', type: 'Todo', eventSource: 'data');
+      expect(client.openedCollections.last.$1, 'todos.myapp');
+
+      for (final bad in ['', '.wavi', 'todos.', 'a..b', 'a b', 'a@b', 'a:b']) {
+        await expectLater(
+            mixed.collection(bad, type: 'Todo'),
+            throwsA(isA<JsCollectionsError>().having(
+                (e) => e.code, 'code', CollectionErrorCodes.invalidArgument)),
+            reason: bad);
+      }
+      expect(
+          () => AtClientJsSession(client, namespace: ''), throwsArgumentError);
+      expect(() => AtClientJsSession(client, namespace: 'a.b'),
+          throwsArgumentError);
     });
   });
 
@@ -470,6 +671,26 @@ void main() {
       await session.close();
       await session.close();
 
+      expect(client.stops, 1);
+    });
+
+    test('concurrent close awaits the first stop', () async {
+      final hold = Completer<void>();
+      client.stopHold = hold;
+      var firstDone = false;
+      var secondDone = false;
+
+      final p1 = session.close().then((_) => firstDone = true);
+      final p2 = session.close().then((_) => secondDone = true);
+      await pumpEventQueue();
+      expect(client.stops, 1);
+      expect(firstDone, isFalse);
+      expect(secondDone, isFalse);
+
+      hold.complete();
+      await Future.wait([p1, p2]);
+      expect(firstDone, isTrue);
+      expect(secondDone, isTrue);
       expect(client.stops, 1);
     });
 

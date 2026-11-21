@@ -4,7 +4,17 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
-    show Atsign, AtKeys, AtRootDomain, AtSignLogger;
+    show
+        AtEnrollmentException,
+        AtEnrollmentPendingException,
+        AtKeys,
+        AtNoCredentialException,
+        AtOpenRefusedException,
+        AtRootDomain,
+        AtSignLogger,
+        Atsign,
+        EnrollmentConveyanceException,
+        InvalidAtSignException;
 import 'package:web/web.dart' as web;
 
 import '../collections/js_collections_adapter.dart';
@@ -59,10 +69,50 @@ Future<JsSession> _openSession(BridgeOptions o) async {
 /// never the value.
 AtRootDomain parseRootDomain(String value) {
   try {
-    return AtRootDomain.parse(value);
+    final parsed = AtRootDomain.parse(value);
+    SessionTransportOptions(root: parsed);
+    return parsed;
+  } on ArgumentError {
+    throw _expected('rootDomain', 'host or host:port');
   } on Exception {
     throw _expected('rootDomain', 'host or host:port');
   }
+}
+
+final class _BridgeArgumentError extends ArgumentError {
+  _BridgeArgumentError(super.message);
+}
+
+final _controlChars =
+    RegExp(r'[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
+
+String _safeMessage(String value) => value.replaceAll(_controlChars, ' ');
+
+String _rejectionMessage(Object error, String code) {
+  if (error is _BridgeArgumentError) return error.toString();
+  return switch (error) {
+    AtOpenRefusedException(:final state) =>
+      'the atServer refused the session (${state.cause?.name ?? 'refused'})',
+    PortalSessionOfflineException(:final state) =>
+      'the session could not reach the atServer (${state.cause?.name ?? 'offline'})',
+    AtEnrollmentPendingException() =>
+      'onboarding is incomplete: no usable credential',
+    EnrollmentConveyanceException(:final keyPackageStatus) =>
+      'enrollment approved on server, but key conveyance failed (${keyPackageStatus.name})',
+    AtEnrollmentException() =>
+      'the enrollment request was denied or is not pending',
+    SessionClosedException() => error.toString(),
+    UnsupportedKeyMaterialException() =>
+      'the keys carry unsupported cryptographic material',
+    ManageAccessException() => error.toString(),
+    UnsupportedError(:final message) =>
+      _safeMessage(message ?? 'unsupported operation'),
+    BadKeyException() => error.toString(),
+    AtNoCredentialException() => 'keys hold no usable credential',
+    InvalidAtSignException() => 'atSign is not valid',
+    _ when code == 'closed' => SessionClosedException().toString(),
+    _ => 'internal error',
+  };
 }
 
 /// A rejection reason: a plain object with `code` and `message`, never an
@@ -80,13 +130,7 @@ JSObject _rejection(Object error) {
       reason['failures'] = _jsValue(error.failures);
     }
   } else {
-    // An unmapped error's text may hold anything, so it becomes a fixed
-    // message. An [ArgumentError] keeps its text: the bridge words it to
-    // name the parameter, never the value.
-    reason['message'] = (code == 'internal' && error is! ArgumentError
-            ? 'internal error'
-            : error.toString())
-        .toJS;
+    reason['message'] = _rejectionMessage(error, code).toJS;
   }
   return reason;
 }
@@ -102,8 +146,34 @@ JSPromise<T> _promise<T extends JSAny?>(FutureOr<T> Function() body) =>
 
 /// An argument error that names the parameter and the type it expects, never
 /// the value received.
-ArgumentError _expected(String name, String type) =>
-    ArgumentError('$name must be $type');
+_BridgeArgumentError _expected(String name, String type) =>
+    _BridgeArgumentError('$name must be $type');
+
+_BridgeArgumentError _required(String name) =>
+    _BridgeArgumentError('$name must not be null');
+
+final JSObject _objectClass = globalContext['Object']! as JSObject;
+final JSAny _objectPrototype = _objectClass['prototype']!;
+final JSObject _arrayClass = globalContext['Array']! as JSObject;
+
+bool _hasOwn(JSObject object, String name) =>
+    (_objectClass.callMethod('hasOwn'.toJS, object, name.toJS)! as JSBoolean)
+        .toDart;
+
+JSAny? _own(JSObject object, String name) =>
+    _hasOwn(object, name) ? object[name] : null;
+
+bool _isArray(JSAny value) =>
+    (_arrayClass.callMethod('isArray'.toJS, value)! as JSBoolean).toDart;
+
+bool _isPlainObject(JSObject object) {
+  if (_isArray(object)) return false;
+  final proto = _objectClass.callMethod('getPrototypeOf'.toJS, object);
+  if (proto == null || proto.isUndefinedOrNull) return true;
+  return (_objectClass.callMethod('is'.toJS, proto, _objectPrototype)!
+          as JSBoolean)
+      .toDart;
+}
 
 String? _optionalString(JSAny? value, String name) {
   if (value == null || value.isUndefinedOrNull) return null;
@@ -112,26 +182,30 @@ String? _optionalString(JSAny? value, String name) {
 }
 
 String _string(JSAny? value, String name) =>
-    _optionalString(value, name) ?? (throw ArgumentError.notNull(name));
+    _optionalString(value, name) ?? (throw _required(name));
 
 String? _field(JSObject object, String name) =>
-    _optionalString(object[name], name);
+    _optionalString(_own(object, name), name);
 
 bool _flag(JSObject object, String name) {
-  final value = object[name];
+  final value = _own(object, name);
   if (value == null || value.isUndefinedOrNull) return false;
   if (!value.isA<JSBoolean>()) throw _expected(name, 'a boolean');
   return (value as JSBoolean).toDart;
 }
 
 JSObject _object(JSAny? value, String name) {
-  if (value == null || !value.isA<JSObject>() || value.isA<JSFunction>()) {
+  if (value == null ||
+      value.isUndefinedOrNull ||
+      !value.isA<JSObject>() ||
+      value.isA<JSFunction>() ||
+      !_isPlainObject(value as JSObject)) {
     throw _expected(name, 'an object');
   }
-  return value as JSObject;
+  return value;
 }
 
-/// [value] as an object, or null when it is absent.
+/// [value] as a plain object, or null when it is absent.
 JSObject? _optionalObject(JSAny? value, String name) =>
     value == null || value.isUndefinedOrNull ? null : _object(value, name);
 
@@ -141,6 +215,9 @@ JSFunction? _optionalFunction(JSAny? value, String name) {
   return value as JSFunction;
 }
 
+JSFunction _function(JSAny? value, String name) =>
+    _optionalFunction(value, name) ?? (throw _required(name));
+
 List<String> _strings(JSAny? value, String name) {
   if (value == null || value.isUndefinedOrNull) return const [];
   if (!value.isA<JSArray>()) throw _expected(name, 'an array of strings');
@@ -149,16 +226,14 @@ List<String> _strings(JSAny? value, String name) {
   ];
 }
 
-final JSObject _objectClass = globalContext['Object']! as JSObject;
-final JSObject _arrayClass = globalContext['Array']! as JSObject;
-
 /// The deepest nesting [_fromJs] accepts and [_jsValue] returns. A cyclic
 /// page object reaches it instead of recursing until the stack overflows.
 const _maxJsDepth = maxItemDataDepth;
 
 /// The JS value [value] as plain Dart values: strings, bools, numbers
-/// (integral ones as `int`), lists and string-keyed maps. Anything else, a
-/// function or a bigint say, is refused naming [name].
+/// (integral ones as `int`), lists and string-keyed maps. Anything else —
+/// a function, bigint, Date, Map, Set, RegExp, or typed array — is refused
+/// naming [name].
 Object? _fromJs(JSAny? value, String name, [int depth = 0]) {
   if (value == null || value.isUndefinedOrNull) return null;
   if (value.isA<JSString>()) return (value as JSString).toDart;
@@ -173,25 +248,29 @@ Object? _fromJs(JSAny? value, String name, [int depth = 0]) {
     if (!number.isFinite) throw _expected(name, 'finite numbers only');
     return number;
   }
-  final isContainer = value.isA<JSArray>() ||
-      (value.isA<JSObject>() && !value.isA<JSFunction>());
-  if (isContainer && depth >= _maxJsDepth) {
-    throw _expected(name, 'at most $_maxJsDepth levels deep');
-  }
   if (value.isA<JSArray>()) {
+    if (depth >= _maxJsDepth) {
+      throw _expected(name, 'at most $_maxJsDepth levels deep');
+    }
     return [
       for (final item in (value as JSArray<JSAny?>).toDart)
         _fromJs(item, name, depth + 1)
     ];
   }
-  if (isContainer) {
+  if (value.isA<JSObject>() && !value.isA<JSFunction>()) {
     final object = value as JSObject;
+    if (!_isPlainObject(object)) {
+      throw _expected(name, 'plain JSON values');
+    }
+    if (depth >= _maxJsDepth) {
+      throw _expected(name, 'at most $_maxJsDepth levels deep');
+    }
     final keys =
         (_objectClass.callMethod('keys'.toJS, object)! as JSArray<JSString>)
             .toDart;
     return <String, dynamic>{
       for (final key in keys)
-        key.toDart: _fromJs(object[key.toDart], name, depth + 1)
+        key.toDart: _fromJs(_own(object, key.toDart), name, depth + 1)
     };
   }
   throw _expected(name, 'plain JSON values');
@@ -231,12 +310,22 @@ JSObject _envelope(Map<String, Object?> map) {
   return object;
 }
 
+void _reportStreamError(JSFunction? report, Object error, String source) {
+  if (report != null) {
+    report.callAsFunction(null, _rejection(error));
+  } else {
+    web.console.warn(
+        'at_client_web: a $source error was dropped (${atErrorCode(error)})'
+            .toJS);
+  }
+}
+
 /// The [JsKey] [value] names. A malformed key is a [BadKeyException] naming
 /// the offending field, never the value received.
 JsKey _jsKey(JSAny? value) {
   try {
     final object = _object(value, 'key');
-    return JsKey(_string(object['key'], 'key'),
+    return JsKey(_string(_own(object, 'key'), 'key'),
         namespace: _field(object, 'namespace'),
         sharedWith: _field(object, 'sharedWith'),
         sharedBy: _field(object, 'sharedBy'),
@@ -255,6 +344,7 @@ class BridgeSession {
   BridgeSession(this._session);
 
   final JsSession _session;
+  final _watchCancels = <Future<void> Function()>{};
 
   JSPromise<JSBoolean> notify(JSAny? key, JSAny? value) => _promise(() async =>
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);
@@ -266,30 +356,30 @@ class BridgeSession {
   /// when it cannot subscribe, the `{code, message}` object the promises
   /// reject with. It does not throw: a Dart `throw` reaches JS wrapped, with
   /// no `code` for the caller to read.
-  JSAny subscribe(JSAny? regex, JSFunction callback, [JSAny? onError]) {
+  JSAny subscribe([JSAny? regex, JSAny? callback, JSAny? onError]) {
     try {
+      final pattern = _string(regex, 'regex');
+      try {
+        RegExp(pattern);
+      } on FormatException {
+        throw _expected('regex', 'a valid regular expression');
+      }
+      final deliver = _function(callback, 'callback');
       final report = _optionalFunction(onError, 'onError');
       final unsubscribe = _session.subscribe(
-          _string(regex, 'regex'),
-          (n) => callback.callAsFunction(
-              null,
-              _envelope({
-                'id': n.id,
-                'from': n.from,
-                'key': n.key,
-                'value': n.value,
-                'epochMillis': n.epochMillis,
-                'operation': n.operation,
-              })), onError: (error) {
-        final reason = _rejection(error);
-        if (report != null) {
-          report.callAsFunction(null, reason);
-        } else {
-          web.console.warn(
-              'at_client_web: a subscription error was dropped (${atErrorCode(error)})'
-                  .toJS);
-        }
-      });
+        pattern,
+        (n) => deliver.callAsFunction(
+            null,
+            _envelope({
+              'id': n.id,
+              'from': n.from,
+              'key': n.key,
+              'value': n.value,
+              'epochMillis': n.epochMillis,
+              'operation': n.operation,
+            })),
+        onError: (error) => _reportStreamError(report, error, 'subscription'),
+      );
       return unsubscribe.toJS;
     } on Object catch (error) {
       return _rejection(error);
@@ -302,10 +392,11 @@ class BridgeSession {
 
   /// Calls [callback] with each later change of [status]; returns the
   /// function that stops it, or the `{code, message}` object when it cannot.
-  JSAny onStatus(JSFunction callback) {
+  JSAny onStatus([JSAny? callback]) {
     try {
+      final deliver = _function(callback, 'callback');
       final stop =
-          _session.onStatus((s) => callback.callAsFunction(null, s.toJS));
+          _session.onStatus((s) => deliver.callAsFunction(null, s.toJS));
       return stop.toJS;
     } on Object catch (error) {
       return _rejection(error);
@@ -318,15 +409,20 @@ class BridgeSession {
   JSPromise<JSObject> collection(JSAny? name, JSAny? opts) =>
       _promise(() async {
         final options = _object(opts, 'opts');
-        final expiration = options['expiration'];
+        final expiration = _own(options, 'expiration');
         final adapter = await _session.collection(_string(name, 'name'),
-            type: _string(options['type'], 'type'),
+            type: _string(_own(options, 'type'), 'type'),
             eventSource: _field(options, 'eventSource'),
             expirationMs: expiration == null || expiration.isUndefinedOrNull
                 ? null
                 : _wholeNumber(expiration, 'expiration'));
-        return createJSInteropWrapper(
-            BridgeCollection(adapter, _session.atSign));
+        return createJSInteropWrapper(BridgeCollection(
+          adapter,
+          _session.atSign,
+          isClosed: () => _session.isClosed,
+          onWatch: _watchCancels.add,
+          onWatchCancel: _watchCancels.remove,
+        ));
       });
 
   /// A one-time passcode for a new device to enroll with.
@@ -357,6 +453,14 @@ class BridgeSession {
       });
 
   JSPromise<JSAny?> close() => _promise(() async {
+        for (final cancel in [..._watchCancels]) {
+          try {
+            await cancel();
+          } on Object catch (_) {
+            _logger.warning('Failed to cancel collection watch on close');
+          }
+        }
+        _watchCancels.clear();
         await _session.close();
         return null;
       });
@@ -373,30 +477,62 @@ int _wholeNumber(JSAny? value, String name) {
 /// atSign when left out.
 @JSExport()
 class BridgeCollection {
-  BridgeCollection(this._adapter, this._self);
+  BridgeCollection(
+    this._adapter,
+    this._self, {
+    bool Function()? isClosed,
+    void Function(Future<void> Function() cancel)? onWatch,
+    void Function(Future<void> Function() cancel)? onWatchCancel,
+  })  : _isClosed = isClosed ?? (() => false),
+        _onWatch = onWatch,
+        _onWatchCancel = onWatchCancel;
 
   final JsCollection _adapter;
   final String _self;
+  final bool Function() _isClosed;
+  final void Function(Future<void> Function() cancel)? _onWatch;
+  final void Function(Future<void> Function() cancel)? _onWatchCancel;
+
+  void _open() {
+    if (_isClosed()) throw SessionClosedException();
+  }
 
   JsItemAddress _address(JSAny? value) {
     final object = _object(value, 'address');
-    return (
-      id: _string(object['id'], 'id'),
-      owner: Atsign(_field(object, 'owner') ?? _self),
-    );
+    final id = _string(_own(object, 'id'), 'id');
+    final rawOwner = _field(object, 'owner');
+    try {
+      return (id: id, owner: Atsign(rawOwner ?? _self));
+    } on InvalidAtSignException {
+      throw JsCollectionsError(
+        CollectionErrorCodes.invalidArgument,
+        'owner must be a valid atSign',
+        id: id.toLowerCase(),
+      );
+    }
   }
 
   Map<String, dynamic> _data(JSAny? value) {
-    final object = _object(value, 'data');
-    if ((_arrayClass.callMethod('isArray'.toJS, object)! as JSBoolean).toDart) {
-      throw _expected('data', 'an object');
-    }
+    _object(value, 'data');
     return _fromJs(value, 'data')! as Map<String, dynamic>;
   }
 
   /// The item as an object whose `data` is converted from depth 0, so the
   /// cap counts the data's own levels and not the envelope around it.
-  JSObject _item(JsItem item) => _envelope(item);
+  JSObject _item(JsItem item) {
+    try {
+      return _envelope(item);
+    } on JsCollectionsError catch (e) {
+      if (e.code == CollectionErrorCodes.tooDeep &&
+          (e.id == null || e.owner == null)) {
+        throw itemTooDeep(
+          id: e.id ?? item['id'] as String?,
+          owner: e.owner ?? item['owner']?.toString(),
+        );
+      }
+      rethrow;
+    }
+  }
 
   JSObject _listing(JsListing listing) => JSObject()
     ..['items'] = [for (final item in listing.items) _item(item)].toJS
@@ -408,52 +544,66 @@ class BridgeCollection {
   /// Creates an item from `data`; `opts` may name its `id` and who it is
   /// `sharedWith`.
   JSPromise<JSObject> create(JSAny? data, [JSAny? opts]) => _promise(() async {
+        _open();
         final options = _optionalObject(opts, 'opts');
         return _item(await _adapter.create(_data(data),
             id: options == null ? null : _field(options, 'id'),
             sharedWith: options == null
                 ? const []
-                : _strings(options['sharedWith'], 'sharedWith')));
+                : _strings(_own(options, 'sharedWith'), 'sharedWith')));
       });
 
   /// The item at `address`, or null.
   JSPromise<JSAny?> get(JSAny? address) => _promise(() async {
+        _open();
         final item = await _adapter.get(_address(address));
         return item == null ? null : _item(item);
       });
 
   /// `{items, unreadable}`: every readable item.
-  JSPromise<JSObject> list() =>
-      _promise(() async => _listing(await _adapter.list()));
+  JSPromise<JSObject> list() => _promise(() async {
+        _open();
+        return _listing(await _adapter.list());
+      });
 
   /// `{items, unreadable}`: the items matching every `{path, op, value}` of
   /// `where`.
   JSPromise<JSObject> query(JSAny? where) => _promise(() async {
+        _open();
         if (where == null || !where.isA<JSArray>()) {
           throw _expected('where', 'an array');
         }
         final clauses = [
           for (final raw in (where as JSArray<JSAny?>).toDart)
-            (
-              path: _string(_object(raw, 'where')['path'], 'path'),
-              op: _string((raw! as JSObject)['op'], 'op'),
-              value: _fromJs((raw as JSObject)['value'], 'value'),
-            )
+            () {
+              final clause = _object(raw, 'where');
+              return (
+                path: _string(_own(clause, 'path'), 'path'),
+                op: _string(_own(clause, 'op'), 'op'),
+                value: _fromJs(_own(clause, 'value'), 'value'),
+              );
+            }()
         ];
         return _listing(await _adapter.query(clauses));
       });
 
   /// Replaces the data of the item at `address`.
-  JSPromise<JSObject> update(JSAny? address, JSAny? data) => _promise(
-      () async => _item(await _adapter.update(_address(address), _data(data))));
+  JSPromise<JSObject> update(JSAny? address, JSAny? data) => _promise(() async {
+        _open();
+        return _item(await _adapter.update(_address(address), _data(data)));
+      });
 
   /// Adds the atSigns of `atSigns` to the item's recipients.
   JSPromise<JSObject> share(JSAny? address, JSAny? atSigns) =>
-      _promise(() async => _item(await _adapter.share(
-          _address(address), _strings(atSigns, 'atSigns'))));
+      _promise(() async {
+        _open();
+        return _item(await _adapter.share(
+            _address(address), _strings(atSigns, 'atSigns')));
+      });
 
   /// Deletes the item at `address`; `opts.cascade` removes its sub-items too.
   JSPromise<JSAny?> remove(JSAny? address, [JSAny? opts]) => _promise(() async {
+        _open();
         final options = _optionalObject(opts, 'opts');
         await _adapter.remove(_address(address),
             cascade: options != null && _flag(options, 'cascade'));
@@ -466,21 +616,26 @@ class BridgeCollection {
   /// cannot start.
   JSAny watch(JSAny? onEvent, [JSAny? onError]) {
     try {
-      final deliver = _optionalFunction(onEvent, 'onEvent') ??
-          (throw ArgumentError.notNull('onEvent'));
+      _open();
+      final deliver = _function(onEvent, 'onEvent');
       final report = _optionalFunction(onError, 'onError');
-      final cancel = _adapter
-          .watch((event) => deliver.callAsFunction(null, _envelope(event)),
-              onError: (error) {
-        if (report != null) {
-          report.callAsFunction(null, _rejection(error));
-        } else {
-          web.console.warn(
-              'at_client_web: a watch error was dropped (${error.code})'.toJS);
-        }
-      });
+      late final Future<void> Function() cancel;
+      cancel = _adapter.watch(
+        (event) {
+          if (_isClosed()) return;
+          deliver.callAsFunction(null, _envelope(event));
+        },
+        onError: (error) {
+          if (_isClosed()) return;
+          _reportStreamError(report, error, 'watch');
+        },
+      );
+      _onWatch?.call(cancel);
       return (() {
-        unawaited(cancel());
+        _onWatchCancel?.call(cancel);
+        unawaited(cancel().catchError((Object _) {
+          _logger.warning('Failed to cancel collection watch');
+        }));
       }).toJS;
     } on Object catch (error) {
       return _rejection(error);
@@ -516,11 +671,25 @@ class AtClientWebBridge {
 
   BridgeOptions _options(JSAny? opts) {
     final object = _object(opts, 'opts');
+    final rawAtSign = _string(_own(object, 'atSign'), 'atSign');
+    final Atsign atSign;
+    try {
+      atSign = Atsign(rawAtSign);
+    } on InvalidAtSignException {
+      throw _expected('atSign', 'a valid atSign');
+    }
+    final rawNamespace = _string(_own(object, 'namespace'), 'namespace');
+    final String namespace;
+    try {
+      namespace = normalizeSessionNamespace(rawNamespace);
+    } on ArgumentError {
+      throw _expected('namespace', 'a non-empty namespace segment');
+    }
     final rootDomain = _field(object, 'rootDomain');
     return BridgeOptions(
-        atSign: _string(object['atSign'], 'atSign'),
-        namespace: _string(object['namespace'], 'namespace'),
-        keys: _keys(object['keys']),
+        atSign: atSign,
+        namespace: namespace,
+        keys: _keys(_own(object, 'keys')),
         rootDomain: rootDomain == null ? null : parseRootDomain(rootDomain));
   }
 

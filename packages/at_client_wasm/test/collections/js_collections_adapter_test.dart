@@ -980,6 +980,149 @@ void main() {
       expect(await todos.get(mine('p1')), isNull);
       expect(await notes.getItems(), isEmpty);
     });
+
+    test(
+        'concurrent update, share and remove on one item run sequentially without losing writes',
+        () async {
+      final todos = await open();
+      await todos.create({'title': 'v1'}, id: 'i1');
+
+      final firstPutStarted = Completer<void>();
+      final releaseFirstPut = Completer<void>();
+      var getCount = 0;
+      when(() => alice.mock.get(any())).thenAnswer((inv) {
+        getCount++;
+        final key = inv.positionalArguments[0] as AtKey;
+        return Future.sync(() => server.hasKey(key.toString())
+            ? (AtValue()
+              ..value = server.storedValue(key.toString())!
+              ..metadata = (Metadata()
+                ..createdAt = DateTime.now().toUtc()
+                ..expiresAt = DateTime.now().toUtc().add(testExpiration)))
+            : throw KeyNotFoundException('missing'));
+      });
+      var blockedFirstPut = false;
+      when(() => alice.mock.put(any(), any())).thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        final value = inv.positionalArguments[1] as String;
+        if (!blockedFirstPut && key.toString() == 'i1.$_ns@alice') {
+          blockedFirstPut = true;
+          firstPutStarted.complete();
+          await releaseFirstPut.future;
+        }
+        server.putRaw(key.toString(), value);
+        return true;
+      });
+
+      final updating = todos.update(mine('i1'), {'title': 'v2'});
+      await firstPutStarted.future;
+      final getsBeforeSecond = getCount;
+      final sharing = todos.share(mine('i1'), ['@bob']);
+      await settle();
+
+      // While update holds the per-item lock, share has not started reading.
+      expect(getCount, getsBeforeSecond);
+
+      releaseFirstPut.complete();
+      final results = await Future.wait([updating, sharing]);
+      expect(results[1]['data'], {'title': 'v2'});
+      expect(results[1]['sharedWith'], ['@bob']);
+      expect(jsonDecode(server.storedValue('@bob:i1.$_ns@alice')!)['obj'],
+          {'title': 'v2'});
+
+      // Concurrent update followed by remove leaves the item deleted.
+      await todos.create({'title': 'v1'}, id: 'i2');
+      blockedFirstPut = false;
+      final updateStarted = Completer<void>();
+      final releaseUpdate = Completer<void>();
+      when(() => alice.mock.put(any(), any())).thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        final value = inv.positionalArguments[1] as String;
+        if (!blockedFirstPut && key.toString() == 'i2.$_ns@alice') {
+          blockedFirstPut = true;
+          updateStarted.complete();
+          await releaseUpdate.future;
+        }
+        server.putRaw(key.toString(), value);
+        return true;
+      });
+
+      final u2 = todos.update(mine('i2'), {'title': 'v2'});
+      await updateStarted.future;
+      final r2 = todos.remove(mine('i2'));
+      await settle();
+      expect(server.hasKey('i2.$_ns@alice'), isTrue);
+
+      releaseUpdate.complete();
+      await Future.wait([u2, r2]);
+      expect(server.hasKey('i2.$_ns@alice'), isFalse);
+    });
+
+    test('collection get errors carry id and owner', () async {
+      final todos = await open();
+      await expectLater(
+          todos.get(mine('A:B')),
+          _rejectsWith(CollectionErrorCodes.invalidArgument,
+              id: 'a:b', owner: '@alice'));
+
+      final mockCollection = MockAtCollection();
+      when(() => mockCollection.atSign).thenReturn('@alice'.toAtsign());
+      when(() => mockCollection.getOrNull(any(), any()))
+          .thenThrow(StateError('secret internal details'));
+      final wrapped = JsCollectionsAdapter(mockCollection);
+      await expectLater(
+          wrapped.get(mine('I1')),
+          _rejectsWith(CollectionErrorCodes.failed,
+              id: 'i1', owner: '@alice', kind: 'StateError'));
+
+      when(() => mockCollection.getOrNull(any(), any()))
+          .thenThrow(StoppedException('stopped'));
+      await expectLater(
+          wrapped.get(mine('I1')), throwsA(isA<StoppedException>()));
+    });
+
+    test(
+        'collection list safely skips malformed unreadable keys without throwing in onError',
+        () async {
+      final records = <String>[];
+      final previous = AtSignLogger.defaultLoggingHandler;
+      AtSignLogger.defaultLoggingHandler = _Collect(records);
+      addTearDown(() => AtSignLogger.defaultLoggingHandler = previous);
+
+      final emptyKey = AtKey()
+        ..key = ''
+        ..namespace = 'todos.demo'
+        ..sharedBy = '@';
+      expect(() => emptyKey.toString(), throwsA(isA<InvalidAtKeyException>()));
+
+      final badControlKey = AtKey()
+        ..key = 'k\nline\u202ebidi'
+        ..namespace = 'todos.demo'
+        ..sharedBy = '@';
+
+      final mockCollection = MockAtCollection();
+      when(() => mockCollection.atSign).thenReturn('@alice'.toAtsign());
+      when(() => mockCollection.getItemsAsStream()).thenAnswer((_) {
+        final controller = StreamController<CItem<Map<String, dynamic>>>();
+        scheduleMicrotask(() {
+          controller.addError(
+              CItemReadException(emptyKey, const FormatException('bad')));
+          controller.addError(
+              CItemReadException(badControlKey, const FormatException('bad')));
+          unawaited(controller.close());
+        });
+        return controller.stream;
+      });
+
+      final listing = await JsCollectionsAdapter(mockCollection).list();
+      expect(listing.items, isEmpty);
+      expect(listing.unreadable, isEmpty);
+      expect(records.where((r) => r.startsWith('WARNING|')), hasLength(2));
+      expect(records.last, isNot(contains('\n')));
+      expect(records.last, isNot(contains('\u202e')));
+      expect(records.last, contains(r'\n'));
+      expect(records.last, contains(r'\u202e'));
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -1072,6 +1215,15 @@ void main() {
           naming('<'));
       await expectLater(
           todos.query([(path: 'prio', op: '>=', value: null)]), naming('>='));
+
+      final longToken = 'x' * 200;
+      await expectLater(
+        todos.query([(path: 'x', op: longToken, value: 1)]),
+        throwsA(isA<JsCollectionsError>()
+            .having((e) => e.code, 'code', CollectionErrorCodes.invalidArgument)
+            .having((e) => e.message.length, 'bounded length', lessThan(120))
+            .having((e) => e.message, 'truncated', contains('...'))),
+      );
     });
 
     test('A query returns matching readable items and reports unreadable ones',
