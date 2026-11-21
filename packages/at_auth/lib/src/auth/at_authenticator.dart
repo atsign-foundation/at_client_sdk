@@ -97,17 +97,10 @@ AtAuthenticator authenticatorForPrivateKey(
   final config = withClientConfigDefaults(clientConfig);
   return (executor) async {
     _logger.finer('authenticating $atSign with a bare private key');
-    var fromResponse = await executor.sendSync((FromVerbBuilder()
-          ..atSign = atSign
-          ..clientConfig = Map<String, dynamic>.from(config))
-        .buildCommand());
-    if (fromResponse.isEmpty) {
-      return false;
-    }
-    fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-    fromResponse = validatedFromChallenge(fromResponse, atSign);
+    final challenge = await _pkamChallenge(executor, atSign, config);
+    if (challenge == null) return false;
 
-    final signature = _signRsaPkamChallenge(fromResponse, privateKey);
+    final signature = _signRsaPkamChallenge(challenge, privateKey);
 
     final pkamResponse = await executor.sendSync((PkamVerbBuilder()
           ..signingAlgo = SigningAlgoType.rsa2048.name
@@ -119,9 +112,20 @@ AtAuthenticator authenticatorForPrivateKey(
       _logger.info('pkam auth success for $atSign');
       return true;
     }
-    throw UnAuthenticatedException(
-        'Failed connecting to $atSign. $pkamResponse');
+    throw _failedOn('Failed connecting to $atSign.', pkamResponse);
   };
+}
+
+/// The failure [reply] ends an authentication step with, its message
+/// [failure] then [reply]: an [AtAuthErrorReplyException] carrying the code
+/// an `error:` reply names, or an [UnAuthenticatedException] for any other.
+UnAuthenticatedException _failedOn(String failure, String reply) {
+  final message = '$failure $reply';
+  final answer = reply.trim();
+  return answer.startsWith('error:')
+      ? AtAuthErrorReplyException(message,
+          errorCode: errorResponseCode(answer))
+      : UnAuthenticatedException(message);
 }
 
 /// Answers the atServer's `from:` challenge with a PKAM signature from [keys].
@@ -145,19 +149,12 @@ Future<bool> _pkam(
   final signingAlgo = keyPair.algorithm;
   const hashingAlgo = HashingAlgoType.sha256;
 
-  var fromResponse = await executor.sendSync((FromVerbBuilder()
-        ..atSign = atSign
-        ..clientConfig = Map<String, dynamic>.from(clientConfig))
-      .buildCommand());
-  if (fromResponse.isEmpty) {
-    return false;
-  }
-  fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
-  fromResponse = validatedFromChallenge(fromResponse, atSign);
+  final challenge = await _pkamChallenge(executor, atSign, clientConfig);
+  if (challenge == null) return false;
 
   final signature = keyPair.algorithm == SigningAlgoType.rsa2048
-      ? _signRsaPkamChallenge(fromResponse, keyPair.privateKey)
-      : signPkamChallenge(keyPair, fromResponse);
+      ? _signRsaPkamChallenge(challenge, keyPair.privateKey)
+      : signPkamChallenge(keyPair, challenge);
 
   final pkamResponse = await executor.sendSync((PkamVerbBuilder()
         ..signingAlgo = signingAlgo.name
@@ -169,15 +166,39 @@ Future<bool> _pkam(
     _logger.info('pkam auth success for $atSign');
     return true;
   }
-  throw UnAuthenticatedException('Failed connecting to $atSign. $pkamResponse');
+  throw _failedOn('Failed connecting to $atSign.', pkamResponse);
+}
+
+/// Sends `from:` for [atSign] and returns the challenge the atServer answers
+/// with, or null when it answers nothing.
+///
+/// An `error:` answer is thrown in an [AtAuthErrorReplyException] carrying
+/// the atServer's reply and its code, as a refused `pkam:` is; any other
+/// answer that is not a challenge issued to [atSign] is refused by
+/// [validatedFromChallenge]. Either way nothing is signed.
+Future<String?> _pkamChallenge(AtCommandExecutor executor, String atSign,
+    Map<String, dynamic> clientConfig) async {
+  final fromResponse = await executor.sendSync((FromVerbBuilder()
+        ..atSign = atSign
+        ..clientConfig = Map<String, dynamic>.from(clientConfig))
+      .buildCommand());
+  if (fromResponse.isEmpty) return null;
+  final answer = fromResponse.trim();
+  if (answer.startsWith('error:')) {
+    throw _failedOn('Failed connecting to $atSign.', answer);
+  }
+  return validatedFromChallenge(
+      answer.replaceFirst(RegExp(r'^data:'), ''), atSign);
 }
 
 /// Authenticates [atSign] by answering the atServer's `from:` challenge with
 /// the SHA-512 digest of [cramSecret] and the challenge.
 ///
 /// The challenge is digested as it arrives: unlike PKAM's, it does not pass
-/// through [validatedFromChallenge]. A refusal throws an
-/// [UnAuthenticatedException] naming [atSign] and the atServer's response.
+/// through [validatedFromChallenge]. An `error:` answer to `from:`, or a
+/// refused `cram:`, throws an [UnAuthenticatedException] naming [atSign]
+/// and carrying the atServer's reply, an [AtAuthErrorReplyException] with
+/// its code for an `error:` reply; nothing is digested for the first.
 Future<bool> _cram(
   AtCommandExecutor executor,
   String atSign,
@@ -194,7 +215,11 @@ Future<bool> _cram(
   if (fromResponse.isEmpty) {
     return false;
   }
-  fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
+  fromResponse = fromResponse.trim();
+  if (fromResponse.startsWith('error:')) {
+    throw _failedOn('Cram authentication failed for $atSign:', fromResponse);
+  }
+  fromResponse = fromResponse.replaceFirst(RegExp(r'^data:'), '');
 
   final digest =
       SHA512HashingAlgo().hash(utf8.encode('$cramSecret$fromResponse'));
@@ -205,8 +230,7 @@ Future<bool> _cram(
     _logger.info('cram auth success for $atSign');
     return true;
   }
-  throw UnAuthenticatedException(
-      'Cram authentication failed for $atSign: $cramResponse');
+  throw _failedOn('Cram authentication failed for $atSign:', cramResponse);
 }
 
 /// Signs [challenge] as a PKAM proof with [keyPair], returning the base64 the

@@ -2,8 +2,6 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/at_connection.dart';
-import 'package:at_lookup/src/util/error_response.dart'
-    show errorResponseException;
 
 /// Performs one authentication on a connection that is already open, using
 /// [executor] to speak to the atServer, and returns whether it succeeded.
@@ -17,6 +15,13 @@ import 'package:at_lookup/src/util/error_response.dart'
 /// so a closure held for an instance's life must decide afresh each time what
 /// credential applies: an instance that CRAM-onboards and then PKAM-
 /// authenticates is one instance and two answers.
+///
+/// Return false, or throw [UnAuthenticatedException], when the atServer
+/// answered without letting the client in, by refusing the credential or
+/// by any other answer: only those count as turned away, which
+/// [AtLookupMuxable.notifications] reports and a notification reconnect waits
+/// longer after. A reconnect retries any other exception as a failure to
+/// reach the atServer.
 typedef AtAuthenticator = Future<bool> Function(AtCommandExecutor executor);
 
 /// The narrow view of a connection that an [AtAuthenticator] is given: enough
@@ -176,6 +181,8 @@ abstract interface class AtLookUp {
 
   /// Runs [builder]'s command on the atServer, authenticating the connection
   /// first when the verb needs it, and returns the atServer's response.
+  /// An authenticator's failure is thrown as an [AtLookUpException] whose
+  /// [AtLookUpException.cause] is that failure.
   Future<String?> executeVerb(VerbBuilder builder);
 
   /// Sends [command] as written and returns the atServer's response; [auth]
@@ -273,6 +280,12 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   ///
   /// Listen as soon as you read it: until a listener arrives, notifications
   /// are held without bound, and none of that back-pressure applies.
+  ///
+  /// While notifying, each reconnect attempt the atServer turns away, one
+  /// that fails with an [UnAuthenticatedException], arrives here as that
+  /// exception in an error event, and the stream stays open: reconnecting
+  /// carries on, waiting longer after each, up to 5 minutes between attempts.
+  /// Listen with an `onError`, or each is an unhandled error.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.

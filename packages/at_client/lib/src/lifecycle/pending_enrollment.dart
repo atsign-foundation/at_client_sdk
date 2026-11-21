@@ -11,7 +11,6 @@ import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
-import 'package:at_client/src/util/error_reply.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtLookUpFactory, AtLookupMuxable, SecondaryAddressFinder;
@@ -19,6 +18,12 @@ import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
 final Object _clientCallKey = Object();
+
+/// A key source holding [keys] for one handshake, never a keyfile: it serves
+/// a fixed key set to the authenticator and is not a store a client runs on.
+AtKeysIo handshakeKeysIo(String atSign, AtKeys keys) =>
+    // ignore: invalid_use_of_visible_for_testing_member
+    InMemoryAtKeysIo.holding(atSign, keys);
 
 /// An enrollment this device has submitted and the atSign's manager has not
 /// yet decided.
@@ -128,9 +133,7 @@ class PendingEnrollment {
       session: AtAuthSession(
           atSign: atSign,
           rootDomain: rootDomain,
-          // NOTE: a key source for the handshake alone, never a keyfile.
-          // ignore: invalid_use_of_visible_for_testing_member
-          atKeysIo: InMemoryAtKeysIo.holding(atSign, handshakeKeys),
+          atKeysIo: handshakeKeysIo(atSign, handshakeKeys),
           enrollmentId: enrollmentId),
       apkamSymmetricKeyResolver: keyExchangeMode == EnrollmentKeyExchangeMode.pq
           ? enrollmentApkamSymmetricKeyResolver(atSign)
@@ -155,13 +158,11 @@ class PendingEnrollment {
           cancelled: _ended.future);
     } on Exception catch (e) {
       if (_ended.isCompleted) throw await _endedOnceCancelled();
-      final decided = e is! AtEnrollmentException
-          ? null
-          : e.message.contains('denied')
+      final decided = e is AtEnrollmentExpiredException
+          ? 'expired'
+          : e is AtEnrollmentException && e.message.contains('denied')
               ? 'denied'
-              : atServerErrorCodeIn(e.message) == 'AT0028'
-                  ? 'expired'
-                  : null;
+              : null;
       if (decided != null) {
         try {
           await _discard(decided);
@@ -181,6 +182,9 @@ class PendingEnrollment {
     // or after it.
     var written = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      written = false;
       if (_ended.isCompleted) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
@@ -426,6 +430,9 @@ class PendingEnrollment {
   Future<void> _discard(String why) async {
     var removed = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      removed = false;
       if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
       stored
         ..discardEnrollment(enrollmentId)

@@ -572,6 +572,9 @@ class PqSigningRoot {
       // read-then-flush pairs on one keyfile lose whichever addition flushes
       // first.
       await io.update(atSign.toAtsign(), (keys) {
+        // NOTE: update may run this again on a fresh read; only the last run
+        // counts.
+        superseded.clear();
         final active = _activePrivates(keys).toList();
         if (active.any((m) => _sameBytes(m.bytes.bytes, private))) return false;
 

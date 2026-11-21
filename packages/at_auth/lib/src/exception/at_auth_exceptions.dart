@@ -4,6 +4,25 @@ class AtAuthenticationException extends AtException {
   AtAuthenticationException(super.message);
 }
 
+/// An atServer's `error:` reply to a `from:`, `pkam:` or `cram:`, which
+/// ended the authentication: the message carries the reply.
+class AtAuthErrorReplyException extends UnAuthenticatedException {
+  /// The code the reply names, or null when it names none.
+  final String? errorCode;
+
+  AtAuthErrorReplyException(super.message, {required this.errorCode});
+}
+
+/// The enrollment an enrollment wait was waiting on has expired, or its
+/// atServer no longer holds it, so no approval can follow.
+///
+/// It is also an [AtInvalidEnrollmentException], the type at_commons gives
+/// AT0029, so a catch of either type catches it.
+class AtEnrollmentExpiredException extends AtEnrollmentException
+    implements AtInvalidEnrollmentException {
+  AtEnrollmentExpiredException(super.message);
+}
+
 class AtKeysFileOverwriteException extends AtException {
   AtKeysFileOverwriteException(super.message);
 }

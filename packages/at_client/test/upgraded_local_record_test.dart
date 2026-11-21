@@ -101,7 +101,7 @@ void main() {
         AtClientPreference()
           ..namespace = namespace
           ..hiveStoragePath = dir.path,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: MockRemoteSecondary(),
         atKeysIo:

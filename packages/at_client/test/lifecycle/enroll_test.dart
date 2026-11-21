@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
     show
+        AtAuthErrorReplyException,
         CryptographicMaterial,
         CryptographicMaterialAlgorithm,
         CryptographicMaterialRole,
@@ -21,6 +22,7 @@ import '../test_utils/from_recorder.dart';
 import '../test_utils/mocks.dart';
 import '../test_utils/hive_store.dart';
 import '../test_utils/recorded_logs.dart';
+import '../test_utils/rerunning_at_keys_io.dart';
 import '../test_utils/transport.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
@@ -177,7 +179,7 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: store,
           preference: await preference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
@@ -219,7 +221,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: server);
     expect(File(path).existsSync(), isTrue,
@@ -250,7 +252,7 @@ void main() {
         () async => Atsign(atSign).open(
             keys: store,
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtEnrollmentPendingException>()
@@ -270,7 +272,7 @@ void main() {
             .open(
                 keys: store,
                 preference: await preference(),
-                lookUps: secureSocketLookUps(),
+                lookUps: loopbackLookUps(),
                 secondaryAddressFinder: finder,
                 storage: hiveStoreFor(Atsign(atSign), await preference()))
             .timeout(const Duration(seconds: 2)),
@@ -292,7 +294,7 @@ void main() {
         device: 'phone',
         keys: store,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref));
     expect(resumed?.enrollmentId, enrollmentId);
     expect(resumed?.signingAlgo, SigningAlgoType.rsa2048);
@@ -304,7 +306,7 @@ void main() {
             device: 'tablet',
             keys: store,
             preference: pref,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'another device\'s request is not this one');
@@ -314,7 +316,7 @@ void main() {
             device: 'phone',
             keys: InMemoryAtKeysIo(),
             preference: pref,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
         reason: 'and a store holding nothing resumes nothing');
@@ -341,8 +343,9 @@ void main() {
     // exercised, not skipped.
     final server = atServer(
         decide: (attempt) async => attempt == 1
-            ? throw UnAuthenticatedException(
-                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed')
+            ? throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+                errorCode: 'AT0026')
             : true);
     final pending = await submit(store, server);
 
@@ -383,8 +386,9 @@ void main() {
       'for the next request', () async {
     final store = InMemoryAtKeysIo();
     final denying = atServer(
-        decide: (_) async => throw UnAuthenticatedException(
-            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied'));
+        decide: (_) async => throw AtAuthErrorReplyException(
+            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied',
+            errorCode: 'AT0025'));
     final pending = await submit(store, denying);
 
     await expectLater(
@@ -418,9 +422,10 @@ void main() {
     final pending = await submit(
         store,
         atServer(
-            decide: (_) async => throw UnAuthenticatedException(
+            decide: (_) async => throw AtAuthErrorReplyException(
                 'Failed connecting to $atSign. error:AT0025:Apkam Auth '
-                'Denied')));
+                'Denied',
+                errorCode: 'AT0025')));
     store.failing = true;
 
     await expectLater(
@@ -437,8 +442,9 @@ void main() {
     final path = '${dir.path}/${atSign}_key.atKeys';
     final store = FileAtKeysIo(filePath: (_) => path);
     final denying = atServer(
-        decide: (_) async => throw UnAuthenticatedException(
-            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied'));
+        decide: (_) async => throw AtAuthErrorReplyException(
+            'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied',
+            errorCode: 'AT0025'));
     final pending = await Atsign(atSign).enroll(
         otp: 'ABC123',
         app: 'wavi',
@@ -446,7 +452,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: denying);
 
@@ -467,7 +473,7 @@ void main() {
         namespaces: {'wavi': 'rw'},
         keys: store,
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: atServer(decide: (_) async => true));
     expect(
@@ -537,7 +543,7 @@ void main() {
           ..rootDomain = InternetAddress.loopbackIPv4.address
           ..rootPort = 1
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         keyExchangeMode: keyExchangeMode,
         signingAlgo: signingAlgo,
@@ -628,8 +634,9 @@ void main() {
       }
     }
 
-    Never notYetDecided() => throw UnAuthenticatedException(
-        'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed');
+    Never notYetDecided() => throw AtAuthErrorReplyException(
+        'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+        errorCode: 'AT0026');
 
     const pollEvery = Duration(milliseconds: 10);
 
@@ -803,7 +810,7 @@ void main() {
               keys: store,
               preference: pref,
               atLookUp: server,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref)),
           isNull,
           reason: 'an approval afterwards leaves nothing to resume');
@@ -920,6 +927,32 @@ void main() {
       expect(stored.holdsAuthenticationMaterial, isFalse);
     });
 
+    test(
+        'A cancel that lands while the approval write runs again writes '
+        'nothing', () async {
+      final store = RerunningAtKeysIo();
+      final pending = await submit(store, atServer(decide: (_) async => true));
+      var cancelled = false;
+      store
+        ..rerunning = true
+        ..between = (dropped) async {
+          if (cancelled || dropped.pendingEnrollmentIds.isNotEmpty) return;
+          cancelled = true;
+          unawaited(pending.cancel());
+        };
+
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>()));
+
+      expect(cancelled, isTrue,
+          reason: 'the cancel landed between the runs of the approval write');
+      final stored = await store.read(atSign);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+      expect(stored.enrollmentIds, isEmpty, reason: 'nothing is written');
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+      expect(pending.approved, isFalse);
+    });
+
     /// An atServer that approves at the first PKAM and holds the next, the
     /// opening client's own, completing [opening] and answering with [answer].
     MockAtLookupImpl approvesThenHolds(
@@ -936,7 +969,7 @@ void main() {
         .open(
             keys: store,
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: atServer(decide: (_) async => true),
             storage: hiveStoreFor(Atsign(atSign), await preference()))
@@ -1165,7 +1198,7 @@ void main() {
           keys: store,
           preference: pref,
           atLookUp: server,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref));
     }
 
@@ -1311,20 +1344,23 @@ void main() {
     });
 
     test("An expired request's keys go, as a denial's do", () async {
-      final store = InMemoryAtKeysIo();
-      final pending = await submit(
-          store,
-          atServer(
-              decide: (_) async => throw UnAuthenticatedException(
-                  'Failed connecting to $atSign. error:AT0028:enrollment_id: '
-                  '$enrollmentId is expired or invalid')));
+      for (final code in ['AT0028', 'AT0029']) {
+        final store = InMemoryAtKeysIo();
+        final pending = await submit(
+            store,
+            atServer(
+                decide: (_) async => throw AtAuthErrorReplyException(
+                    'Failed connecting to $atSign. error:$code:enrollment_id: '
+                    '$enrollmentId is expired or invalid',
+                    errorCode: code)));
 
-      await expectLater(
-          pending.awaitApproval(retryInterval: pollEvery),
-          throwsA(isA<AtEnrollmentException>()
-              .having((e) => e.message, 'message', contains('expired'))));
+        await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+            throwsA(isA<AtEnrollmentExpiredException>()),
+            reason: code);
 
-      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+        expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty,
+            reason: code);
+      }
     });
 
     test(
@@ -1338,13 +1374,12 @@ void main() {
       final pending = await submit(
           store,
           atServer(
-              decide: (_) async => throw UnAuthenticatedException(
-                  'Failed connecting to $atSign. error:$reply')));
+              decide: (_) async => throw AtAuthErrorReplyException(
+                  'Failed connecting to $atSign. error:$reply',
+                  errorCode: 'AT0028')));
 
-      await expectLater(
-          pending.awaitApproval(retryInterval: pollEvery),
-          throwsA(isA<AtEnrollmentException>()
-              .having((e) => e.message, 'message', contains('expired'))));
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentExpiredException>()));
 
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
@@ -1387,7 +1422,7 @@ void main() {
       final resumed = await Atsign(atSign).resumeEnrollment(
           keys: store,
           preference: pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref));
 
       expect(resumed?.enrollmentId, enrollmentId);
@@ -1406,7 +1441,7 @@ void main() {
               // ignore: invalid_use_of_visible_for_testing_member
               keys: InMemoryAtKeysIo.holding(atSign, twoPending()),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref));
 
       await expectLater(
@@ -1432,7 +1467,7 @@ void main() {
               // ignore: invalid_use_of_visible_for_testing_member
               keys: InMemoryAtKeysIo.holding(atSign, keys),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref)),
           throwsA(isA<AtEnrollmentPendingException>()
               .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
@@ -1516,8 +1551,9 @@ void main() {
         });
       });
 
-      Never denied() => throw UnAuthenticatedException(
-          'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied');
+      Never denied() => throw AtAuthErrorReplyException(
+          'Failed connecting to $atSign. error:AT0025:Apkam Auth Denied',
+          errorCode: 'AT0025');
 
       Future<void> removedOnce(InMemoryAtKeysIo store) async {
         expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
@@ -1532,6 +1568,42 @@ void main() {
             isEmpty,
             reason: 'and nothing reports that they could not be');
       }
+
+      test(
+          'when another writer removes the pending keys while the removal '
+          'runs again, then the cancel does not report removing them',
+          () async {
+        final store = RerunningAtKeysIo();
+        final pending =
+            await submit(store, atServer(decide: (_) async => true));
+        var otherRemoved = false;
+        store
+          ..rerunning = true
+          ..between = (_) async {
+            if (otherRemoved) return;
+            otherRemoved = true;
+            store.rerunning = false;
+            await store.update(Atsign(atSign), (keys) {
+              keys
+                ..discardEnrollment(enrollmentId)
+                ..unfileLegacyEnrollment(enrollmentId);
+              return true;
+            });
+            store.rerunning = true;
+          };
+
+        await pending.cancel();
+
+        expect(otherRemoved, isTrue,
+            reason: 'the control: the first run found the pending keys');
+        expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+        expect(
+            logs
+                .at('INFO')
+                .where((m) => m.contains('pending keys are removed')),
+            isEmpty,
+            reason: "the cancel's last run found nothing to remove");
+      });
 
       test(
           'when cancel lands as the denial is answered, then the wait throws '
@@ -1619,7 +1691,7 @@ void main() {
           namespaces: {'wavi': 'rw'},
           keys: InMemoryAtKeysIo(),
           preference: await named(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
@@ -1640,7 +1712,7 @@ void main() {
       final resumed = await Atsign(atSign).resumeEnrollment(
           keys: store,
           preference: await named(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory(),
           atLookUp: server);
 
@@ -1671,7 +1743,7 @@ void main() {
           particulars: AtClientParticulars()
             ..appName = 'acme_chat'
             ..appVersion = '2.3.1',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory());
 
       await built.awaitApproval(
@@ -1697,7 +1769,7 @@ void main() {
           signingAlgo: submitted.signingAlgo,
           keyExchangeMode: submitted.keyExchangeMode,
           atLookUp: server,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: await refusingAtDirectory());
 
       await built.awaitApproval(

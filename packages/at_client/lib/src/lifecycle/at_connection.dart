@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'package:at_auth/at_auth.dart' show AtAuthErrorReplyException;
 import 'package:at_client/src/util/close_without_waiting.dart';
-import 'package:at_client/src/util/error_reply.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:at_utils/at_logger.dart';
@@ -11,8 +11,10 @@ enum AtConnectionOutcome {
   /// Connected, and the atServer accepted this client's credentials.
   online,
 
-  /// No atServer was reached: no network, or the atDirectory or atServer is
-  /// unreachable. The client serves what its local storage holds.
+  /// No atServer accepted or refused this client's credentials: no network,
+  /// the atDirectory or atServer is unreachable, or the atServer answered
+  /// the authentication with neither a challenge to sign nor a decision on
+  /// the credentials. The client serves what its local storage holds.
   offline,
 
   /// The atServer was reached and rejected this client's credentials.
@@ -25,7 +27,9 @@ enum AtConnectionCause {
   /// Nothing has tried yet: the client was built and no verb has gone out.
   unattempted,
 
-  /// The atDirectory or the atServer could not be reached.
+  /// The atDirectory or the atServer could not be reached, or the atServer
+  /// answered the authentication with neither a challenge to sign nor a
+  /// decision on the credentials.
   unreachable,
 
   /// The atDirectory was reached and answered that this atSign has no
@@ -38,7 +42,8 @@ enum AtConnectionCause {
   /// The atServer answered `AT0401`: the credentials did not authenticate.
   unauthenticated,
 
-  /// The atServer answered `AT0029`: the enrollment has expired.
+  /// The atServer answered `AT0029`, or `AT0028` to a PKAM: the enrollment
+  /// has expired, or the atServer no longer holds it.
   invalidEnrollment,
 
   /// The atServer answered `AT0026`: the enrollment is not yet approved.
@@ -47,7 +52,8 @@ enum AtConnectionCause {
   /// The atServer answered `AT0025`: the enrollment was denied.
   enrollmentDenied,
 
-  /// A refusal the atServer gave no code this build knows for.
+  /// Reserved: nothing reports it. An answer with a code this build does not
+  /// know is not read as a refusal.
   otherRefusal,
 
   /// The client stopped itself: nothing is connected because nothing is
@@ -237,6 +243,26 @@ const Map<String, AtConnectionCause> _refusalCodes = {
   'AT0026': AtConnectionCause.enrollmentNotApproved,
 };
 
+/// The codes an atServer refuses a `pkam:` or `cram:` with: [_refusalCodes],
+/// and AT0028, which in reply to one names an expired enrollment and in
+/// reply to any other verb a throttle or another enrollment.
+const Map<String, AtConnectionCause> _authenticationRefusalCodes = {
+  ..._refusalCodes,
+  'AT0028': AtConnectionCause.invalidEnrollment,
+};
+
+/// The code at_lookup assigns to an [UnAuthenticatedException] it wraps.
+const String _authenticationFailedCode = 'AT0401';
+
+/// What a failed authentication says when the atServer's `from:` answer
+/// carried no challenge to sign, as the exception's message or as the text
+/// at_lookup wraps it in.
+final List<RegExp> _noChallengeText = [
+  RegExp(r'^(?:Exception: )?Refusing to sign a malformed from: challenge '),
+  RegExp(r'^(?:Exception: )?Failed connecting to \S+\. '
+      r'The authenticator reported failure$'),
+];
+
 /// The codes at_lookup assigns when it wraps a failure to reach the atServer.
 const Set<String> _unreachableCodes = {
   'AT0004', // a socket error, AtIOException among them
@@ -275,20 +301,24 @@ final List<Pattern> _unreachableText = [
 ///
 /// at_lookup's `executeVerb` throws an atServer's `error:` reply to the verb
 /// as an `AtLookUpException` carrying the code the reply names, or `AT0014`
-/// when it names none, and wraps every other failure as one carrying a code
-/// from `error_codes` for the exception's type, or `AT0014` for a type it
-/// has none for, so the refusal codes are read out of the message as well
-/// as the code: an `UnAuthenticatedException` raised by the authenticator is
-/// wrapped as `AT0401` and keeps the atServer's own `error:` reply, in
-/// whichever form the atServer wrote it, in its text.
+/// when it names none, and wraps every other failure as one carrying a code,
+/// with the failure as its cause: an `AtLookUpException`'s own code, such as
+/// a proxy's `error:` reply to its `from:`, or else the code `error_codes`
+/// has for the exception's type, or `AT0014` for a type it has none for. An
+/// `UnAuthenticatedException` raised by the authenticator is wrapped as
+/// `AT0401` and read as its cause, whose
+/// [AtAuthErrorReplyException.errorCode] is the atServer's own code.
+/// No code is read out of a message's text.
 AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtLookUpException) {
+    final cause = error.cause;
+    if (cause is UnAuthenticatedException) {
+      return _classifyAuthentication(cause.message, _replyCode(cause), error);
+    }
     return _classifyCode(error.errorCode, error.errorMessage, error);
   }
   if (error is UnAuthenticatedException) {
-    return AtConnectionState.refused(
-        _refusalCauseIn(error.message) ?? AtConnectionCause.unauthenticated,
-        error: error);
+    return _classifyAuthentication(error.message, _replyCode(error), error);
   }
   if (error is AtInvalidEnrollmentException) {
     return AtConnectionState.refused(AtConnectionCause.invalidEnrollment,
@@ -309,26 +339,20 @@ AtConnectionState? classifyConnectionFailure(Object error) {
     return AtConnectionState.offline(AtConnectionCause.unreachable,
         error: error);
   }
-  if (error is AtException) {
-    final refusal = _refusalCauseIn(error.message);
-    if (refusal != null) {
-      return AtConnectionState.refused(refusal, error: error);
-    }
-    if (_readsUnreachable(error.message)) {
-      return AtConnectionState.offline(AtConnectionCause.unreachable,
-          error: error);
-    }
+  if (error is AtException && _readsUnreachable(error.message)) {
+    return AtConnectionState.offline(AtConnectionCause.unreachable,
+        error: error);
   }
   return null;
 }
 
 AtConnectionState? _classifyCode(String code, String message, Object error) {
+  if (code == _authenticationFailedCode) {
+    return _classifyAuthentication(message, null, error);
+  }
   final refusal = _refusalCodes[code];
   if (refusal != null) {
-    // The wrapped message carries the atServer's own code, which is finer
-    // than the AT0401 the wrapper gave the exception type.
-    return AtConnectionState.refused(_refusalCauseIn(message) ?? refusal,
-        error: error);
+    return AtConnectionState.refused(refusal, error: error);
   }
   if (code == _noAtServerCode) {
     return AtConnectionState.offline(AtConnectionCause.noAtServer,
@@ -339,10 +363,6 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
         error: error);
   }
   if (code == _unknownCode) {
-    final fromMessage = _refusalCauseIn(message);
-    if (fromMessage != null) {
-      return AtConnectionState.refused(fromMessage, error: error);
-    }
     if (_readsUnreachable(message)) {
       return AtConnectionState.offline(AtConnectionCause.unreachable,
           error: error);
@@ -353,8 +373,30 @@ AtConnectionState? _classifyCode(String code, String message, Object error) {
   return AtConnectionState.online();
 }
 
-AtConnectionCause? _refusalCauseIn(String message) =>
-    _refusalCodes[atServerErrorCodeIn(message)];
+/// What a failed authentication says about the connection, from its
+/// [message] and the [replyCode] the atServer's reply to a `pkam:` or
+/// `cram:`, or to the `from:` before one, named: a `from:` answer with no
+/// challenge to sign is unreachable, a refusal code refuses with its cause,
+/// any other code says nothing, and a failure with no code, a verb's own
+/// `AT0401` among them, is refused as unauthenticated.
+AtConnectionState? _classifyAuthentication(
+    String message, String? replyCode, Object error) {
+  if (_noChallengeText.any((text) => text.hasMatch(message))) {
+    return AtConnectionState.offline(AtConnectionCause.unreachable,
+        error: error);
+  }
+  if (replyCode == null) {
+    return AtConnectionState.refused(AtConnectionCause.unauthenticated,
+        error: error);
+  }
+  final refusal = _authenticationRefusalCodes[replyCode];
+  return refusal == null
+      ? null
+      : AtConnectionState.refused(refusal, error: error);
+}
+
+String? _replyCode(UnAuthenticatedException e) =>
+    e is AtAuthErrorReplyException ? e.errorCode : null;
 
 bool _readsUnreachable(String message) =>
     _unreachableText.any((pattern) => message.contains(pattern));

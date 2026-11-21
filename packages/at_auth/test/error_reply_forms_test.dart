@@ -45,6 +45,8 @@ final Map<String, String Function(String code, String description)> forms = {
 };
 
 /// Each reader of an atServer's refusal reads it the same in either form.
+///
+/// Catalogue: features/enrollment/expired_enrollment_codes.feature
 void main() {
   const atSign = pkamPinAtSign;
   const pkamRefused = 'Exception: pkam authentication failed';
@@ -57,8 +59,9 @@ void main() {
     ..apkamSymmetricKey =
         AtBytes.fromString(demo.apkamSymmetricKeyMap[atSign]!);
 
-  TypeMatcher<UnAuthenticatedException> refusalNaming(String code) =>
-      isA<UnAuthenticatedException>()
+  TypeMatcher<AtAuthErrorReplyException> refusalNaming(String code) =>
+      isA<AtAuthErrorReplyException>()
+          .having((e) => e.errorCode, 'errorCode', code)
           .having((e) => e.message, 'message', contains(code));
 
   forms.forEach((form, refusal) {
@@ -79,7 +82,7 @@ void main() {
       pkamAuthenticators.forEach((name, build) {
         test(
             'when $name\'s pkam: is refused, then it throws an '
-            'UnAuthenticatedException naming the code', () async {
+            'AtAuthErrorReplyException naming the code', () async {
           final executor = _ScriptedExecutor(
               ['data:$pkamPinChallenge', refusal('AT0401', pkamRefused)]);
 
@@ -91,12 +94,13 @@ void main() {
 
         test(
             'when $name\'s from: is refused, then it throws an '
-            'UnAuthenticatedException and signs nothing', () async {
+            'AtAuthErrorReplyException carrying the code, and signs nothing',
+            () async {
           final executor = _ScriptedExecutor(
               [refusal('AT0013', 'Exception: Unable to connect')]);
 
           await expectLater(
-              build()(executor), throwsA(isA<UnAuthenticatedException>()));
+              build()(executor), throwsA(refusalNaming('AT0013')));
           expect(executor.sent, hasLength(1));
         });
       });
@@ -104,7 +108,7 @@ void main() {
       cramAuthenticators.forEach((name, build) {
         test(
             'when $name\'s cram: is refused, then it throws an '
-            'UnAuthenticatedException naming the code', () async {
+            'AtAuthErrorReplyException naming the code', () async {
           final executor = _ScriptedExecutor([
             'data:$pkamPinChallenge',
             refusal('AT0401', 'Exception: Authentication Failed')
@@ -118,7 +122,7 @@ void main() {
 
       test(
           'when CramAuthenticator\'s cram: is refused, then it throws an '
-          'UnAuthenticatedException saying CRAM failed and naming the code',
+          'AtAuthErrorReplyException saying CRAM failed and naming the code',
           () async {
         final atServer = FakeCramAtServer(atSign,
             cramReply: refusal('AT0401', 'Exception: Authentication Failed'));
@@ -134,19 +138,21 @@ void main() {
 
       test(
           'when PkamAuthenticator\'s pkam: is refused, then it throws an '
-          'UnAuthenticatedException naming the code', () async {
+          'AtAuthErrorReplyException carrying the code, whose message ends '
+          'with the atServer\'s reply and holds no stack trace', () async {
+        final reply = refusal('AT0401', pkamRefused);
         final atServer = FakeCramAtServer(atSign,
             cramReply: 'data:success',
-            answer: (command) => command.startsWith('pkam:')
-                ? refusal('AT0401', pkamRefused)
-                : null);
+            answer: (command) => command.startsWith('pkam:') ? reply : null);
         final lookUp = atServer.lookUp()
           ..authenticator = authenticatorFor(
               InMemoryAtKeysIo.holding(atSign, pkamKeys()), atSign);
         addTearDown(lookUp.close);
 
-        await expectLater(PkamAuthenticator().authenticate(atSign, lookUp),
-            throwsA(refusalNaming('AT0401')));
+        await expectLater(
+            PkamAuthenticator().authenticate(atSign, lookUp),
+            throwsA(refusalNaming('AT0401').having((e) => e.message,
+                'message', allOf(endsWith(reply), isNot(contains('\n'))))));
       });
 
       group('when an activation is refused at a step', () {
@@ -182,7 +188,7 @@ void main() {
         });
 
         test(
-            'then a refused cram: throws an UnAuthenticatedException naming '
+            'then a refused cram: throws an AtAuthErrorReplyException naming '
             'the code', () async {
           await expectLater(
               activateOver(FakeCramAtServer(atSign,
@@ -202,12 +208,13 @@ void main() {
         });
 
         test(
-            'then a refused pkam: throws an AtAuthenticationException naming '
-            'the code', () async {
+            'then a refused pkam: throws an AtAuthenticationException whose '
+            'message ends with the atServer\'s reply', () async {
+          final reply = refusal('AT0401', pkamRefused);
           await expectLater(
-              activateOver(refusing('pkam:', refusal('AT0401', pkamRefused))),
+              activateOver(refusing('pkam:', reply)),
               throwsA(isA<AtAuthenticationException>()
-                  .having((e) => e.message, 'message', contains('AT0401'))));
+                  .having((e) => e.message, 'message', endsWith(reply))));
         });
 
         for (final verb in ['update:', 'delete:']) {
@@ -222,6 +229,37 @@ void main() {
           });
         }
       });
+    });
+  });
+
+  group('Given an atServer that answers a pkam: with no code', () {
+    AtAuthenticator pkam() =>
+        authenticatorFor(InMemoryAtKeysIo.holding(atSign, pkamKeys()), atSign);
+
+    test(
+        'when the reply is an error: naming none, then it throws an '
+        'AtAuthErrorReplyException carrying no code', () async {
+      final executor = _ScriptedExecutor([
+        'data:$pkamPinChallenge',
+        'error:Exception: pkam authentication failed'
+      ]);
+
+      await expectLater(
+          pkam()(executor),
+          throwsA(isA<AtAuthErrorReplyException>()
+              .having((e) => e.errorCode, 'errorCode', isNull)));
+    });
+
+    test(
+        'when the reply is not an error:, then it throws an '
+        'UnAuthenticatedException that carries no reply code', () async {
+      final executor =
+          _ScriptedExecutor(['data:$pkamPinChallenge', 'data:refused']);
+
+      await expectLater(
+          pkam()(executor),
+          throwsA(isA<UnAuthenticatedException>().having(
+              (e) => e, 'type', isNot(isA<AtAuthErrorReplyException>()))));
     });
   });
 
@@ -312,6 +350,7 @@ void main() {
       'AT0026': 'enrollment_id: $enrollmentId is pending',
       'AT0025': 'enrollment_id: $enrollmentId is denied',
       'AT0028': 'enrollment_id: $enrollmentId is expired or invalid',
+      'AT0029': 'enrollment_id: $enrollmentId is expired or invalid',
     };
     final writtenForms = <String, String Function(String, String)>{
       'colon': (code, text) => 'error:$code:$text',
@@ -340,23 +379,82 @@ void main() {
           expect(polls(server), 1);
         });
 
-        test('AT0028 ends the wait on its first poll, as expired', () async {
-          final server =
-              await atServer([refusal('AT0028', enrollmentStates['AT0028']!)]);
+        for (final code in ['AT0028', 'AT0029']) {
+          test('$code ends the wait on its first poll, as expired',
+              () async {
+            final server =
+                await atServer([refusal(code, enrollmentStates[code]!)]);
 
-          await expectLater(
-              waitOver(server),
-              throwsA(isA<AtEnrollmentException>().having((e) => e.message,
-                  'message', contains('has expired or does not exist'))));
-          expect(polls(server), 1);
+            await expectLater(
+                waitOver(server),
+                throwsA(isA<AtEnrollmentExpiredException>().having(
+                    (e) => e.message,
+                    'message',
+                    contains('has expired or does not exist'))));
+            expect(polls(server), 1);
+          });
+        }
+      });
+    });
+
+    group('The enrollment wait ends as expired on <code>', () {
+      const expired = 'enrollment_id: $enrollmentId is expired or invalid';
+      final rows = {
+        'AT0028, in the colon form': 'error:AT0028:$expired',
+        'AT0029, in the colon form': 'error:AT0029:$expired',
+        'AT0029, in the JSON form': 'error:${jsonEncode({
+              'errorCode': 'AT0029',
+              'errorDescription': expired,
+            })}',
+      };
+      rows.forEach((row, reply) {
+        test(row, () async {
+          final server = await atServer([reply]);
+
+          Object? caught;
+          try {
+            await waitOver(server);
+          } on AtEnrollmentException catch (e) {
+            caught = e;
+          }
+
+          expect(
+              caught,
+              isA<AtEnrollmentExpiredException>()
+                  .having((e) => e.message, 'message', contains(reply)));
+          expect(caught, isA<AtInvalidEnrollmentException>(),
+              reason: 'a catch of either type catches it');
+          expect(polls(server), 1, reason: 'an expiry is not polled again');
         });
+      });
+
+      test(
+          'Given AT0011 on every poll, when it waits, then it ends as a '
+          'refusal it cannot resolve, not as expired', () async {
+        final server = await atServer(List.filled(
+            maxRetries + 2, 'error:AT0011:Internal server exception'));
+
+        Object? caught;
+        try {
+          await waitOver(server);
+        } on AtEnrollmentException catch (e) {
+          caught = e;
+        }
+
+        expect(caught, isNot(isA<AtEnrollmentExpiredException>()));
+        expect(
+            caught,
+            isA<AtEnrollmentException>().having(
+                (e) => e.message, 'message', contains('cannot resolve')));
+        expect(polls(server), maxRetries + 1);
       });
     });
 
     /// Refusals whose code cannot be read where an atServer writes it.
     final unreadable = {
       'a refusal with no error: in it': 'data:refused',
-      'a JSON body that does not parse': 'error:{"errorCode":"AT0401"',
+      'a JSON body that does not parse':
+          'error:{"errorCode":"AT0401","errorDescription":"x"',
       'a JSON body that is not an object': 'error:["AT0401"]',
       'a JSON code that is a number': 'error:{"errorCode":401}',
       'a JSON code that is a list': 'error:{"errorCode":["AT0401"]}',
