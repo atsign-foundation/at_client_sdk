@@ -193,4 +193,14 @@ void main() {
             .having((e) => '$e', 'text', isNot(contains('SEALED')))));
     expect(remoteLookUp.commands, isEmpty);
   });
+
+  test('put rejects a document with a carriage return', () async {
+    await expectLater(
+        store.put(_atSign, _eid, 'abc\rdef'),
+        throwsA(isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'document')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => '$e', 'text', isNot(contains('abc')))));
+    expect(remoteLookUp.commands, isEmpty);
+  });
 }

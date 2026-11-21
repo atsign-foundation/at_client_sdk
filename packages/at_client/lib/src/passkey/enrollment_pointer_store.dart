@@ -94,9 +94,10 @@ class RemoteEnrollmentPointerStore implements EnrollmentPointerStore {
   @override
   Future<void> put(String atSign, String lookupHex, String record,
       {required String ns}) async {
-    if (record.contains('\n')) {
+    if (record.contains('\n') || record.contains('\r')) {
       // NOTE: the record is sealed, so the error never holds it.
-      throw ArgumentError('must not contain newlines', 'record');
+      throw ArgumentError(
+          'must not contain newlines or carriage returns', 'record');
     }
     final command = (UpdateVerbBuilder()
           ..omitMetadata = true

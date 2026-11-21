@@ -117,6 +117,16 @@ void main() {
       expect(remoteLookUp.commands, isEmpty);
     });
 
+    test('put rejects a record with a carriage return', () async {
+      await expectLater(
+          store.put(_atSign, _hex, 'abc\rdef', ns: _ns),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'record')
+              .having((e) => e.invalidValue, 'invalidValue', isNull)
+              .having((e) => '$e', 'text', isNot(contains('abc')))));
+      expect(remoteLookUp.commands, isEmpty);
+    });
+
     test('get reads through the reader', () async {
       expect(await store.get(_atSign, _hex, ns: _ns), _record);
       expect(remoteLookUp.commands, isEmpty);
