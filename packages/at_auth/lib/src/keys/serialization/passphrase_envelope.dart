@@ -53,21 +53,6 @@ class AtKeysPassphraseEnvelopeCodec {
   /// Bytes of random salt in a version 1 envelope.
   static const int saltLength = 16;
 
-  /// The most Argon2id memory, in KiB, a version 1 envelope may ask for:
-  /// 1 GiB, about 54 times what [encode] writes by default.
-  static const int maxKdfMemory = 1 << 20;
-
-  /// The most Argon2id passes a version 1 envelope may ask for.
-  static const int maxKdfIterations = 64;
-
-  /// The most Argon2id lanes a version 1 envelope may ask for.
-  static const int maxKdfParallelism = 64;
-
-  /// The most Argon2id work, `memory` times `iterations`, a version 1
-  /// envelope may ask for: 64 times what [encode] writes by default, so a
-  /// file cannot hold a read for longer than a few dozen default derivations.
-  static const int maxKdfWork = 19456 * 2 * 64;
-
   bool isEnvelope(Map<String, dynamic> json) {
     return json.containsKey('iv');
   }
@@ -109,14 +94,6 @@ class AtKeysPassphraseEnvelopeCodec {
     // A caller-supplied params object still gets this envelope's salt: the two
     // have to agree, and the salt is generated here.
     params.salt = salt;
-    // NOTE: decode refuses costs above these limits, so a file written above
-    // them could never be opened.
-    final overLimit =
-        _costOverLimit(params.memory, params.iterations, params.parallelism);
-    if (overLimit != null) {
-      throw AtException('a version $currentVersion envelope must be written '
-          'with $overLimit, or it could not be read back');
-    }
 
     // The envelope persists the salt and the three costs, and `decode` reads
     // each of them back; `hashLength` is not among them, so decode always
@@ -282,45 +259,15 @@ class AtKeysPassphraseEnvelopeCodec {
             'integer kdfParams.$name');
       }
     }
-    final memory = kdfParams['memory'] as int;
-    final iterations = kdfParams['iterations'] as int;
-    final parallelism = kdfParams['parallelism'] as int;
-    if (memory < 8 * parallelism) {
+    if ((kdfParams['memory'] as int) < 8 * (kdfParams['parallelism'] as int)) {
       throw AtDecryptionException(
           'a version $currentVersion atKeys envelope must carry a '
           'kdfParams.memory of at least 8 times its kdfParams.parallelism');
     }
-    // NOTE: the costs are the file's, so they are bounded before a derivation
-    // that would otherwise hold every read of it for as long as they ask.
-    final overLimit = _costOverLimit(memory, iterations, parallelism);
-    if (overLimit != null) {
-      throw AtDecryptionException('a version $currentVersion atKeys envelope '
-          'must carry $overLimit');
-    }
     return params
-      ..memory = memory
-      ..iterations = iterations
-      ..parallelism = parallelism;
-  }
-
-  /// The first of [memory], [iterations], [parallelism] or the work they make
-  /// together that is above this codec's limits, said as the cost it must not
-  /// exceed; null when none is.
-  static String? _costOverLimit(int memory, int iterations, int parallelism) {
-    if (memory > maxKdfMemory) {
-      return 'a kdfParams.memory of at most $maxKdfMemory';
-    }
-    if (iterations > maxKdfIterations) {
-      return 'a kdfParams.iterations of at most $maxKdfIterations';
-    }
-    if (parallelism > maxKdfParallelism) {
-      return 'a kdfParams.parallelism of at most $maxKdfParallelism';
-    }
-    if (memory * iterations > maxKdfWork) {
-      return 'a kdfParams.memory times kdfParams.iterations of at most '
-          '$maxKdfWork';
-    }
-    return null;
+      ..memory = kdfParams['memory'] as int
+      ..iterations = kdfParams['iterations'] as int
+      ..parallelism = kdfParams['parallelism'] as int;
   }
 
   /// Derives the AES key by hashing [passPhrase] with [hashingAlgoType].

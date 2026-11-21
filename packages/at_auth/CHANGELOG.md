@@ -2,11 +2,6 @@
 
 - fix: activation refusing keys already in the store names the store in its
   `AtAuthenticationException`: the keyfile's path, or the store's name.
-- fix: a passphrase envelope's `kdfParams` are refused, with an
-  `AtDecryptionException` saying which, above `maxKdfMemory` (1 GiB),
-  `maxKdfIterations` (64), `maxKdfParallelism` (64) or a `memory` times
-  `iterations` of `maxKdfWork` (64 times the default), before any key
-  derivation; `encode` refuses to write them.
 - chore: requires at_commons 5.26.0.
 - feat: `AtKeysFormatException.badField` reports a JSON object, or the
   `kind` of data it is given, whose field is missing or not what it must be.
