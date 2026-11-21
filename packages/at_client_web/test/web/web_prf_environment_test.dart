@@ -59,7 +59,7 @@ class _Gateway extends Fake implements EnrollmentGateway {
   String get device => 'Test Device';
 }
 
-class _Hints extends Fake implements CredentialHintStore, EnrollmentIdStore {}
+class _Hints extends Fake implements PasskeyHintStore {}
 
 class _PointerReader extends Fake implements EnrollmentPointerReader {}
 
@@ -190,8 +190,7 @@ void main() {
               prfSupport: PrfSupport(WebPrfEnvironment())),
           pointerReader: _PointerReader(),
           gateway: _Gateway(),
-          credentials: hints,
-          enrollmentIds: hints,
+          hints: hints,
           setupLock: _Lock(),
           setupLockPrefix: 'test:setup',
           deriver: _Deriver());
