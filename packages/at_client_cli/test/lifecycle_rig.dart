@@ -67,6 +67,10 @@ Future<int> refusedPort() async {
   return port;
 }
 
+/// The command-line arguments naming `@alice` and a root on the loopback
+/// interface, to which nothing listens.
+const aliceOnLoopback = ['-a', '@alice', '-r', '127.0.0.1:1'];
+
 /// The atSign [approvingAtServer] speaks for, whose demo keys it holds.
 const approvingAtSign = '@alice🛠';
 
@@ -132,8 +136,7 @@ const approvedEnrollmentId = 'e-1';
     throw StateError('the mocked atServer has no answer for: '
         '${(builder as VerbBuilder).buildCommand()}');
   });
-  when(() => lookUp.pkamAuthenticate())
-      .thenAnswer((_) => decide(++attempts));
+  when(() => lookUp.pkamAuthenticate()).thenAnswer((_) => decide(++attempts));
   when(() => lookUp.close()).thenAnswer((_) async {});
   when(lookUp.stop).thenAnswer((_) async {});
   when(() => lookUp.dropConnection()).thenAnswer((_) async {});
@@ -185,8 +188,7 @@ Future<List<String>> pendingIn(String keysPath, String atSign) async =>
 /// A lookup whose PKAM attempt does what [onPkam] says.
 MockAtLookupImpl lookUpAnswering(Future<bool> Function() onPkam) {
   final lookUp = MockAtLookupImpl();
-  when(() => lookUp.pkamAuthenticate())
-      .thenAnswer((_) => onPkam());
+  when(() => lookUp.pkamAuthenticate()).thenAnswer((_) => onPkam());
   when(() => lookUp.close()).thenAnswer((_) async {});
   when(lookUp.stop).thenAnswer((_) async {});
   when(() => lookUp.dropConnection()).thenAnswer((_) async {});

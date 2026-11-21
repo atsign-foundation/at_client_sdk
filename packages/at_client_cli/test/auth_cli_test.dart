@@ -12,6 +12,7 @@ import 'package:at_client_cli/src/commands/auth_cli_args.dart';
 import 'package:at_client_cli/src/util/at_file_util.dart';
 import 'package:test/test.dart';
 import 'keyfile_helpers.dart';
+import 'lifecycle_rig.dart' show aliceOnLoopback;
 
 void main() {
   final baseDirPath = 'test/keys';
@@ -445,9 +446,9 @@ void postureArgumentTests() {
     test('a bare invocation runs onboard, with a warning that hides secrets',
         () {
       final implicit =
-          withImplicitOnboard(['-a', '@alice', '-c', 'cram-s3cret']);
-      expect(
-          implicit.arguments, ['onboard', '-a', '@alice', '-c', 'cram-s3cret'],
+          withImplicitOnboard([...aliceOnLoopback, '-c', 'cram-s3cret']);
+      expect(implicit.arguments,
+          ['onboard', ...aliceOnLoopback, '-c', 'cram-s3cret'],
           reason: 'as 1.x did, so instructions that omit the command still '
               'activate the atSign');
       expect(implicit.warning, contains('Deprecated'));
@@ -471,7 +472,7 @@ void postureArgumentTests() {
     test('wrappedMain inserts onboard before parsing', () async {
       // NOTE: --help stops at onboard's usage, so this needs no atServer.
       expect(
-          await wrappedMain(['-a', '@alice', '--help'],
+          await wrappedMain([...aliceOnLoopback, '--help'],
               program: 'at_activate', programVersion: null),
           0,
           reason: 'with no insertion, a leading -a reaches the top-level '

@@ -286,16 +286,18 @@ void main() {
 }
 
 /// The arguments at_activate status is given for @alice, with its root at
-/// [rootPort] on the loopback interface.
-List<String> _statusArguments(int rootPort) =>
-    ['-a', '@alice', '-r', '127.0.0.1:$rootPort'];
+/// [rootPort] on the loopback interface, after [command] when it is given.
+List<String> _statusArguments(int rootPort,
+        {List<String> command = const []}) =>
+    [...command, '-a', '@alice', '-r', '127.0.0.1:$rootPort'];
 
 /// at_activate status run for @alice with its root at [rootPort] on the
 /// loopback interface: the code it returns and what it wrote on stderr.
 Future<({int code, String stderr})> _status(int rootPort) async {
   final written = _Written();
   final code = await IOOverrides.runZoned(
-      () => AtActivate.main(['status', ..._statusArguments(rootPort)]),
+      () => AtActivate.main(
+          _statusArguments(rootPort, command: const ['status'])),
       stderr: () => written);
   return (code: code, stderr: written.text);
 }
