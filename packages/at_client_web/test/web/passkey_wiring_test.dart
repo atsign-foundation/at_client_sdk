@@ -1,7 +1,6 @@
 @TestOn('browser')
 library;
 
-import 'package:at_client/at_client.dart';
 import 'package:at_client/passkey.dart';
 import 'package:at_client_web/at_client_web_web.dart';
 import 'package:at_client_web/src/session/passkey_wiring.dart';

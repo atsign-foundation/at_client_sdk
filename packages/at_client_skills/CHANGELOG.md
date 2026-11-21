@@ -5,6 +5,8 @@
 - Keys `open` cannot use throw `AtKeysUnusableException` before it connects,
   `AtNoCredentialException` and `AtEnrollmentPendingException` among them
   (`SKILL.md`; `references/05`, `15`).
+- The package map says the browser platform package, `at_client_web`, is
+  still being built and is not published (`references/06`).
 - An `AtCollection` item id is folded to lower case, and one holding `.`, `:`,
   `@`, whitespace or a control character is refused; a new item's id is 1 to
   64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit;

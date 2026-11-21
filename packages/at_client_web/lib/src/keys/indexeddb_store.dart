@@ -139,16 +139,6 @@ class IndexedDbHintStore implements PasskeyHintStore {
     }
   }
 
-  Future<void> _put(String storeName, String atSign, List<int> bytes) =>
-      _guarded('write', () async {
-        final db = await _connection();
-        final tx = db.transaction(storeName.toJS, 'readwrite');
-        final store = tx.objectStore(storeName);
-        final copy = Uint8List.fromList(bytes);
-        store.put(copy.toJS, atSign.toJS);
-        await _transactionToFuture(tx);
-      });
-
   Future<Uint8List?> _get(String storeName, String atSign) =>
       _guarded('read', () async {
         final db = await _connection();
@@ -160,11 +150,6 @@ class IndexedDbHintStore implements PasskeyHintStore {
         final jsArray = result as JSUint8Array;
         return Uint8List.fromList(jsArray.toDart);
       });
-
-  /// Stores a passkey [id] associated with the [atSign].
-  @override
-  Future<void> putCredentialId(String atSign, Uint8List id) =>
-      _put(_credentialsStore, atSign, id);
 
   /// Stores the passkey [credentialId] and the [enrollmentId] of the [atSign]
   /// in one transaction: either both are stored or, when the transaction
@@ -198,11 +183,6 @@ class IndexedDbHintStore implements PasskeyHintStore {
   @override
   Future<Uint8List?> credentialId(String atSign) =>
       _get(_credentialsStore, atSign);
-
-  /// Stores the enrollment [id] associated with the [atSign].
-  @override
-  Future<void> putEnrollmentId(String atSign, String id) =>
-      _put(_enrollmentsStore, atSign, utf8.encode(id));
 
   /// Retrieves the enrollment id for the [atSign], or null when there is none
   /// or its stored bytes are not UTF-8, which is logged as a warning.
