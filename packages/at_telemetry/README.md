@@ -124,7 +124,7 @@ dart pub add --dev skills
 dart run skills get
 ```
 
-The `skills` tool needs Dart 3.10 or later.
+Installing this skill needs `skills` 1.0.0 or later, so Dart 3.10 or later.
 
 ### Resource attributes
 
