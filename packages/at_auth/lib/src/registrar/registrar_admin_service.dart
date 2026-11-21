@@ -473,7 +473,12 @@ class RegistrarAdminService {
     final token = data['token'];
     final resultAtSigns = data['atSigns'] ?? [];
     final skippedAtSigns = data['skippedatSigns'] ?? [];
-    if (token is! String || resultAtSigns is! List || skippedAtSigns is! List) {
+    if (token is! String ||
+        token.isEmpty ||
+        resultAtSigns is! List ||
+        resultAtSigns.any((a) => a is! String) ||
+        skippedAtSigns is! List ||
+        skippedAtSigns.any((a) => a is! String)) {
       throw RegistrarException(
         'Failed to generate delete token: unexpected response shape.',
         endpoint: endpointPath,

@@ -1653,6 +1653,36 @@ void main() {
       );
     });
 
+    for (final entry in {
+      'an empty token': {
+        'token': '',
+        'atSigns': ['@one'],
+        'skippedatSigns': [],
+      },
+      'an atSigns element that is not a String': {
+        'token': 'the-token',
+        'atSigns': ['@one', 1],
+        'skippedatSigns': [],
+      },
+      'a skippedatSigns element that is not a String': {
+        'token': 'the-token',
+        'atSigns': ['@one'],
+        'skippedatSigns': ['@two', null],
+      },
+    }.entries) {
+      test(
+          'given a success reply holding ${entry.key}, when a delete token is '
+          'requested, then it throws malformedResponse', () async {
+        final service = _makeAdminService(
+            _mockResponse({'status': 'success', 'data': entry.value}));
+        await expectLater(
+          service.generateAtSignDeleteToken(['@one', '@two']),
+          throwsA(isA<RegistrarException>().having(
+              (e) => e.reason, 'reason', RegistrarFailure.malformedResponse)),
+        );
+      });
+    }
+
     test(
         'throws RegistrarException(malformedResponse) when atSigns is not a List',
         () async {
