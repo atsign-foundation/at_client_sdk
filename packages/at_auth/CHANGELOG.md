@@ -1,5 +1,6 @@
 ## 4.1.0-rc.1
 
+- feat: an enrollment's wait for approval that the atServer denies (AT0025) throws `AtEnrollmentDeniedException`, an `AtEnrollmentException`, so a caller can tell a denial from a wait that ended for another reason without reading the message.
 - docs: the passkey HKDF labels (`at_auth/custody/<name>/v1`) and the sealed passkey record layout (`v: 2`) are promised from the first stable release: after it they change only with a compatibility path, since a changed label or layout locks out every Atsign onboarded with a passkey.
 - docs: `WrittenAtKeysIo.update` says an implementation may run its mutate more than once, each time on a fresh read, keeping only the last run's changes.
 - feat: `completeActivationOf` finishes an activation started with `completeActivation: false`, on a connection the caller holds: it publishes the encryption public key it is given, when it is given one, and deletes the CRAM secret. It refuses a key holding a carriage return or a line feed before it sends anything, and counts a CRAM secret the atServer reports as not found as deleted. `AtAuth.completeActivation()` now behaves the same, so it no longer throws when the atServer reports the CRAM secret as not found, and it refuses a multi-line key before it sends anything.

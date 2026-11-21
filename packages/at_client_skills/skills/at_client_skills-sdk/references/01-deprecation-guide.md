@@ -222,7 +222,7 @@ Both packages' code lives in `at_client_cli`. A program depends on
 | `OnboardingUtil`                                                   | `at_activate onboard` fetches a CRAM secret, and `at_register` a free atSign             |
 | `AuthKeyType`                                                      | None: read a keyfile with `CliKeys.fileFor(atSign).read(atSign)`                         |
 | `MySyncProgressListener`                                           | A `SyncProgressListener` of the program's own                                            |
-| `CLIBase` throwing `AtOpenRefusedException`                        | `AtCredentialRefusedException` for every refusal, `SecondaryNotFoundException` for an atSign the atDirectory has no atServer for, `SecondaryServerConnectivityException` only for an outage |
+| `CLIBase` throwing `AtOpenRefusedException`                        | `AtCredentialRefusedException` for every refusal, `SecondaryNotFoundException` for an atSign the atDirectory has no atServer for, `SecondaryServerConnectivityException` only when no atServer accepted or refused the keys (an outage, or a server error such as AT0011) |
 
 ## Deprecated, still present in at_client 4.0
 
