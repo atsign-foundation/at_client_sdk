@@ -554,6 +554,29 @@ void main() {
         expect(severeLogs(), isNotEmpty);
       });
 
+      for (final (form, count) in const [
+        ('legacy', 0),
+        ('legacy', 2560),
+        ('JSON', 0),
+        ('JSON', 2560),
+      ]) {
+        test('a delete-all over a $form header naming $count segments takes '
+            'the count as it is', () async {
+          final legacyForm = form == 'legacy';
+          held[current] = legacyForm ? '$count' : '{"segmentCount":$count}';
+          final prefix = legacyForm ? 'test_data' : '${current}_segment';
+          for (var i = 0; i < count; i++) {
+            held['${prefix}_$i'] = 'part$i';
+          }
+          expect(held, hasLength(count + 1), reason: 'the control');
+
+          await windowsKeychain().deleteAllAtKeysData();
+
+          expect(held, isEmpty, reason: 'the header and its segments go');
+          expect(severeLogs(), isEmpty);
+        });
+      }
+
       test('a rewrite deletes the stale trailing segments, an empty one '
           'among them', () async {
         final storage = windowsKeychain();

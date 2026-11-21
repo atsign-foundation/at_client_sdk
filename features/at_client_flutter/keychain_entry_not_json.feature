@@ -61,6 +61,18 @@ Feature: A keychain entry that does not parse says why, and none of its text
     When an app deletes every atSign's keys
     Then the header is deleted, the second segment is still stored, and the failure is logged at severe
 
+  Scenario Outline: a delete-all over a <form> header naming <count> segments takes the count as it is
+    Given a Windows keychain entry whose <form> header names <count> segments, each stored
+    When an app deletes every atSign's keys
+    Then the header and its segments are deleted, and nothing is logged at severe
+
+    Examples:
+      | form   | count |
+      | legacy | 0     |
+      | legacy | 2560  |
+      | JSON   | 0     |
+      | JSON   | 2560  |
+
   Scenario: a delete over an oversized legacy header clears what is there and looks at no segment past the bound
     Given a Windows keychain entry whose header is the legacy count 2561, over one segment
     When an app deletes every atSign's keys
