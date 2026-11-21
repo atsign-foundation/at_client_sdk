@@ -98,87 +98,91 @@ final class AesGcm256FfiAlgo
 
       // 3. Set key and IV.
       final Pointer<Uint8> keyPtr = calloc<Uint8>(keyBytes.length);
-      final Pointer<Uint8> ivPtr = calloc<Uint8>(nonce.length);
-      keyPtr.asTypedList(keyBytes.length).setAll(0, keyBytes);
-      ivPtr.asTypedList(nonce.length).setAll(0, nonce);
       try {
-        if (_encryptInitEx(ctx, nullptr, nullptr, keyPtr, ivPtr) <= 0) {
-          throw StateError('EVP_EncryptInit_ex (key/IV) failed');
+        final Pointer<Uint8> ivPtr = calloc<Uint8>(nonce.length);
+        try {
+          keyPtr.asTypedList(keyBytes.length).setAll(0, keyBytes);
+          ivPtr.asTypedList(nonce.length).setAll(0, nonce);
+          if (_encryptInitEx(ctx, nullptr, nullptr, keyPtr, ivPtr) <= 0) {
+            throw StateError('EVP_EncryptInit_ex (key/IV) failed');
+          }
+        } finally {
+          calloc.free(ivPtr);
         }
       } finally {
         keyPtr.asTypedList(keyBytes.length).fillRange(0, keyBytes.length, 0);
         calloc.free(keyPtr);
-        calloc.free(ivPtr);
       }
 
       // 4. Feed AAD (if any).
       if (aad.isNotEmpty) {
         final Pointer<Uint8> aadPtr = calloc<Uint8>(aad.length);
-        aadPtr.asTypedList(aad.length).setAll(0, aad);
-        final Pointer<Int32> aadOutLen = calloc<Int32>();
         try {
-          if (_encryptUpdate(ctx, nullptr, aadOutLen, aadPtr, aad.length) <=
-              0) {
-            throw StateError('EVP_EncryptUpdate (AAD) failed');
+          final Pointer<Int32> aadOutLen = calloc<Int32>();
+          try {
+            aadPtr.asTypedList(aad.length).setAll(0, aad);
+            if (_encryptUpdate(ctx, nullptr, aadOutLen, aadPtr, aad.length) <=
+                0) {
+              throw StateError('EVP_EncryptUpdate (AAD) failed');
+            }
+          } finally {
+            calloc.free(aadOutLen);
           }
         } finally {
           calloc.free(aadPtr);
-          calloc.free(aadOutLen);
         }
       }
 
       // 5. Encrypt plaintext.
       final int plainBufLen = plainData.isEmpty ? 1 : plainData.length;
-      final Pointer<Uint8> plainBuf = calloc<Uint8>(plainBufLen);
-      if (plainData.isNotEmpty) {
-        plainBuf.asTypedList(plainData.length).setAll(0, plainData);
-      }
-      final Pointer<Uint8> outBuf = calloc<Uint8>(plainBufLen);
-      final Pointer<Int32> outLen = calloc<Int32>();
+      final Pointer<Uint8> outBuf = malloc<Uint8>(plainBufLen + tagLength);
       try {
         final int encLen;
+        final Pointer<Uint8> plainBuf = malloc<Uint8>(plainBufLen);
         try {
-          if (_encryptUpdate(ctx, outBuf, outLen, plainBuf, plainData.length) <=
-              0) {
-            throw StateError('EVP_EncryptUpdate (plaintext) failed');
+          if (plainData.isNotEmpty) {
+            plainBuf.asTypedList(plainData.length).setAll(0, plainData);
           }
-          encLen = outLen.value;
+          // NOTE: the tag is written at outBuf + encLen, so encLen must equal
+          // the plaintext length.
+          encLen = aesGcmUpdate(
+              (Pointer<Int32> outLen) => _encryptUpdate(
+                  ctx, outBuf, outLen, plainBuf, plainData.length),
+              plainData.length,
+              operation: 'EVP_EncryptUpdate',
+              inputName: 'plaintext',
+              outputName: 'ciphertext');
         } finally {
           // Wipe the plaintext copy from native heap before freeing.
           plainBuf.asTypedList(plainBufLen).fillRange(0, plainBufLen, 0);
-          calloc.free(plainBuf);
+          malloc.free(plainBuf);
         }
 
         // 6. Finalise (GCM produces no extra output here, but required).
         final Pointer<Uint8> finalBuf = calloc<Uint8>(16);
-        final Pointer<Int32> finalLen = calloc<Int32>();
         try {
-          if (_encryptFinalEx(ctx, finalBuf, finalLen) <= 0) {
-            throw StateError('EVP_EncryptFinal_ex failed');
-          }
-
-          // 7. Extract the 16-byte authentication tag.
-          final Pointer<Uint8> tagBuf = calloc<Uint8>(tagLength);
+          final Pointer<Int32> finalLen = calloc<Int32>();
           try {
-            if (_ctxCtrl(ctx, evpCtrlGcmGetTag, tagLength, tagBuf.cast()) <=
+            if (_encryptFinalEx(ctx, finalBuf, finalLen) <= 0) {
+              throw StateError('EVP_EncryptFinal_ex failed');
+            }
+
+            // 7. Extract the 16-byte authentication tag, straight after the
+            // ciphertext.
+            if (_ctxCtrl(ctx, evpCtrlGcmGetTag, tagLength,
+                    (outBuf + encLen).cast()) <=
                 0) {
               throw StateError('EVP_CIPHER_CTX_ctrl (get tag) failed');
             }
-            final Uint8List cipherText =
-                Uint8List.fromList(outBuf.asTypedList(encLen));
-            final Uint8List tag =
-                Uint8List.fromList(tagBuf.asTypedList(tagLength));
-            return Uint8List.fromList(cipherText + tag);
+            return Uint8List.fromList(outBuf.asTypedList(encLen + tagLength));
           } finally {
-            calloc.free(tagBuf);
+            calloc.free(finalLen);
           }
         } finally {
           calloc.free(finalBuf);
-          calloc.free(finalLen);
         }
       } finally {
-        calloc.free(outBuf);
-        calloc.free(outLen);
+        malloc.free(outBuf);
       }
     } finally {
       _ctxFree(ctx);
@@ -222,59 +226,66 @@ final class AesGcm256FfiAlgo
 
       // 3. Set key and IV.
       final Pointer<Uint8> keyPtr = calloc<Uint8>(keyBytes.length);
-      final Pointer<Uint8> ivPtr = calloc<Uint8>(nonce.length);
-      keyPtr.asTypedList(keyBytes.length).setAll(0, keyBytes);
-      ivPtr.asTypedList(nonce.length).setAll(0, nonce);
       try {
-        if (_decryptInitEx(ctx, nullptr, nullptr, keyPtr, ivPtr) <= 0) {
-          throw StateError('EVP_DecryptInit_ex (key/IV) failed');
+        final Pointer<Uint8> ivPtr = calloc<Uint8>(nonce.length);
+        try {
+          keyPtr.asTypedList(keyBytes.length).setAll(0, keyBytes);
+          ivPtr.asTypedList(nonce.length).setAll(0, nonce);
+          if (_decryptInitEx(ctx, nullptr, nullptr, keyPtr, ivPtr) <= 0) {
+            throw StateError('EVP_DecryptInit_ex (key/IV) failed');
+          }
+        } finally {
+          calloc.free(ivPtr);
         }
       } finally {
         keyPtr.asTypedList(keyBytes.length).fillRange(0, keyBytes.length, 0);
         calloc.free(keyPtr);
-        calloc.free(ivPtr);
       }
 
       // 4. Feed AAD (if any).
       if (aad.isNotEmpty) {
         final Pointer<Uint8> aadPtr = calloc<Uint8>(aad.length);
-        aadPtr.asTypedList(aad.length).setAll(0, aad);
-        final Pointer<Int32> aadOutLen = calloc<Int32>();
         try {
-          if (_decryptUpdate(ctx, nullptr, aadOutLen, aadPtr, aad.length) <=
-              0) {
-            throw StateError('EVP_DecryptUpdate (AAD) failed');
+          final Pointer<Int32> aadOutLen = calloc<Int32>();
+          try {
+            aadPtr.asTypedList(aad.length).setAll(0, aad);
+            if (_decryptUpdate(ctx, nullptr, aadOutLen, aadPtr, aad.length) <=
+                0) {
+              throw StateError('EVP_DecryptUpdate (AAD) failed');
+            }
+          } finally {
+            calloc.free(aadOutLen);
           }
         } finally {
           calloc.free(aadPtr);
-          calloc.free(aadOutLen);
         }
       }
 
       // 5. Decrypt ciphertext.
       final int outBufLen = cipherText.isEmpty ? 1 : cipherText.length;
-      final Pointer<Uint8> ctBuf = calloc<Uint8>(outBufLen);
-      if (cipherText.isNotEmpty) {
-        ctBuf.asTypedList(cipherText.length).setAll(0, cipherText);
-      }
       final Pointer<Uint8> outBuf = calloc<Uint8>(outBufLen);
-      final Pointer<Int32> outLen = calloc<Int32>();
       try {
         final int decLen;
+        final Pointer<Uint8> ctBuf = calloc<Uint8>(outBufLen);
         try {
-          if (_decryptUpdate(ctx, outBuf, outLen, ctBuf, cipherText.length) <=
-              0) {
-            throw StateError('EVP_DecryptUpdate (ciphertext) failed');
+          if (cipherText.isNotEmpty) {
+            ctBuf.asTypedList(cipherText.length).setAll(0, cipherText);
           }
-          decLen = outLen.value;
+          decLen = aesGcmUpdate(
+              (Pointer<Int32> outLen) =>
+                  _decryptUpdate(ctx, outBuf, outLen, ctBuf, cipherText.length),
+              cipherText.length,
+              operation: 'EVP_DecryptUpdate',
+              inputName: 'ciphertext',
+              outputName: 'plaintext');
         } finally {
           calloc.free(ctBuf);
         }
 
         // 6. Set expected tag before finalise.
         final Pointer<Uint8> tagBuf = calloc<Uint8>(tagLength);
-        tagBuf.asTypedList(tagLength).setAll(0, tag);
         try {
+          tagBuf.asTypedList(tagLength).setAll(0, tag);
           if (_ctxCtrl(ctx, evpCtrlGcmSetTag, tagLength, tagBuf.cast()) <= 0) {
             throw StateError('EVP_CIPHER_CTX_ctrl (set tag) failed');
           }
@@ -284,24 +295,26 @@ final class AesGcm256FfiAlgo
 
         // 7. Finalise — returns <= 0 on authentication failure.
         final Pointer<Uint8> finalBuf = calloc<Uint8>(16);
-        final Pointer<Int32> finalLen = calloc<Int32>();
         try {
-          final int ret = _decryptFinalEx(ctx, finalBuf, finalLen);
-          if (ret <= 0) {
-            throw AtDecryptionException(
-                'AES-256-GCM (FFI) authentication failed: data was tampered '
-                'with or the wrong key/nonce was used');
+          final Pointer<Int32> finalLen = calloc<Int32>();
+          try {
+            final int ret = _decryptFinalEx(ctx, finalBuf, finalLen);
+            if (ret <= 0) {
+              throw AtDecryptionException(
+                  'AES-256-GCM (FFI) authentication failed: data was tampered '
+                  'with or the wrong key/nonce was used');
+            }
+            return Uint8List.fromList(outBuf.asTypedList(decLen));
+          } finally {
+            calloc.free(finalLen);
           }
-          return Uint8List.fromList(outBuf.asTypedList(decLen));
         } finally {
           calloc.free(finalBuf);
-          calloc.free(finalLen);
         }
       } finally {
         // Wipe the recovered plaintext from native heap before freeing.
         outBuf.asTypedList(outBufLen).fillRange(0, outBufLen, 0);
         calloc.free(outBuf);
-        calloc.free(outLen);
       }
     } finally {
       _ctxFree(ctx);

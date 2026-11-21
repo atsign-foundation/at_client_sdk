@@ -32,31 +32,6 @@ class _Persistence implements StoragePersistence {
 /// Every symbol `package:at_client/passkey.dart` exports, each used through
 /// that library alone, so a symbol dropped from it fails to compile here.
 void main() {
-  group('functions', () {
-    test('enrollmentDocumentKey names the document of an enrollment', () {
-      expect(enrollmentDocumentKey('eid1', 'alice'), 'atkeys.eid1.a.__e@alice');
-      expect(() => enrollmentDocumentKey('', '@alice'), throwsArgumentError);
-    });
-
-    test('enrollmentPointerKey names the pointer of a lookup id', () {
-      final hex = 'a' * 64;
-      expect(enrollmentPointerKey('alice', hex, ns: hex), '_$hex.$hex@alice');
-      expect(() => enrollmentPointerKey('alice', 'x', ns: hex),
-          throwsArgumentError);
-    });
-
-    test('publicLookup takes the connection factory it is given', () {
-      Future<String?> Function(
-          {required AtLookUpFactory lookUps,
-          required AtRootDomain rootDomain,
-          SecondaryAddressFinder? secondaryAddressFinder,
-          required String atSign,
-          required String key,
-          String? namespace}) lookup = publicLookup;
-      expect(lookup, same(publicLookup));
-    });
-  });
-
   group('typedefs', () {
     test('ApkamKeyPair is the record the activator is handed', () async {
       const pair = (publicKey: 'cHVi', privateKey: 'cHJpdg==');
@@ -159,7 +134,7 @@ void main() {
         MissingAtKeysDocumentException('eid1'),
         PublicKeyMismatchException(),
         AtServerAtKeysLockedException('locked'),
-        PasskeyOnboardingIncompleteException(canonicalPasskeyAtSign('@alice'),
+        PasskeyOnboardingIncompleteException('@alice'.toAtsign(),
             cause: AtException('refused')),
       ];
       for (final e in exceptions) {

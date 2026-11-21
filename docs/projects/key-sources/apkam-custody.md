@@ -9,7 +9,9 @@ version 2 envelope that only that hardware can open. The hardware plugs into
 
 ## Status
 
-Draft, 2026-10-01. Nothing here is built. The hardware capabilities in
+Draft, 2026-10-01. Of what this describes, only the browser passkey path is
+built, as [atkeys-derivation.md](../wasm/atkeys-derivation.md) records; the
+rest is not built. The hardware capabilities in
 [section 2](#2-what-the-hardware-offers) are taken from vendor documentation
 and haven't been probed; [section 10](#10-open-questions) lists what would
 settle them. The at_server claims were read from trunk. Updated 2026-11-02 to match
@@ -103,12 +105,9 @@ built:
 
 The salt can't be the enrollment id, because the public keys go into
 `enroll:request` before the id exists. Natively it sits in the same keychain
-item as the hardware key reference. In the browser it is the passkey's
-`userHandle`, which a discoverable `get()` returns; WebAuthn fixes the PRF
-input in the `get()` request and the `userHandle` arrives only in the
-response, so a `userHandle` PRF input would cost a second `get()` and a
-second prompt. The input is a constant and the `userHandle` is the HKDF
-salt, so one ceremony still covers it
+item as the hardware key reference. The browser keeps no salt: the passkey's
+PRF output already differs per passkey, so its derivation takes an empty
+salt and the atSign in the info, and one ceremony covers it
 ([`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)).
 
 Tiers rank differently by role, because the threats differ:
@@ -203,9 +202,13 @@ final class SecurityPlatformKeySource implements AtKeysKeySource {
   public key, which needs no prompt, and unwraps through
   `session.decapsulate`.
 - **PRF-backed sources** (WebAuthn PRF, TPM HMAC, Keystore HMAC, Secure Enclave
-  ECDH) wrap with AES-256-GCM under `HKDF(prf, salt, "atkeys-kek|<atSign>")`,
-  the atSign-bound label [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation)
-  and `design.md` section 8 use. The atSign in the label is what keeps two
+  ECDH) wrap with AES-256-GCM under a key derived with the atSign-bound label
+  `at_auth/custody/kek/v1|<atSign>`, which
+  [`prf-server-keys-blob.md`](prf-server-keys-blob.md#derivation) and `design.md`
+  section 8 use. WebAuthn PRF derives it as the passkey code does,
+  `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")`; a native source takes the
+  random per-enrollment salt that
+  [section 4](#4-custody-tiers-and-the-ranking-rule) keeps in the keychain. The atSign in the label is what keeps two
   atSigns on one device from sharing a recordId or a kek. For the HMAC-based
   PRFs the key is symmetric, so it is already post-quantum. Secure Enclave ECDH
   against a fixed
@@ -334,7 +337,7 @@ browser holds a PKAM key, and offers two: a hidden `public:_` record named from
 the PRF, or an enrollment whose credential is the passkey. There is a third:
 
 > Derive the APKAM key from the passkey. The PRF output, run through
-> `HKDF(prf, salt, "at_auth/custody/auth-seed/v1|<atSign>")` (with `<atSign>`
+> `HKDF(prf, ∅, "at_auth/custody/auth-seed/v1|<atSign>")` (with `<atSign>`
 > in canonical form, as `toAtsign()` returns it, e.g. `@colinconstable`), seeds
 > an ML-DSA-65 key pair, which is enrolled as an ordinary APKAM key. The browser
 > does a normal PKAM, then reads the private `atkeys.<enrollmentId>.a.__e` record.
@@ -368,7 +371,7 @@ the PRF, or an enrollment whose credential is the passkey. There is a third:
 - **The cost:** the PKAM key sits in page memory for the session, the same
   exposure `design.md` section 9 already accepts for the data key.
 
-A separate label, `HKDF(prf, salt, "atkeys-kek|<atSign>")`, derives the key
+A separate label, `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")`, derives the key
 that wraps the document, so the PKAM key and the document key stay
 independent and bound to the atSign. Where PRF is
 unavailable, the fallbacks are largeBlob, then a non-extractable WebCrypto key

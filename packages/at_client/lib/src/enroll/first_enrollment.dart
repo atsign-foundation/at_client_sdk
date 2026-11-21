@@ -11,6 +11,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
+import 'package:at_commons/at_commons.dart' show StoppedException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
 final _logger = AtSignLogger('firstEnrollment');
@@ -90,7 +91,8 @@ Future<PqNativeActivationMaterial> pqNativeActivationMaterial({
 /// Swallows its own failure: the activation has already succeeded by the time
 /// this runs, a root minted later heals nothing worse than a delay, and failing
 /// the caller over it would leave a live atSign reported as unactivated with a
-/// CRAM secret already spent.
+/// CRAM secret already spent. A [StoppedException] is the exception: it is
+/// rethrown, so a caller whose lookup was stopped can end its activation.
 ///
 /// [client] must be authenticated as the atSign's **first** enrollment, which
 /// the atServer grants `__manage` — that is what entitles it to create the root
@@ -102,6 +104,8 @@ Future<void> mintSigningRootAfterActivation(
   try {
     await PqSigningRoot(client, keysIo: atKeysIo)
         .mintIfAbsent(isFullyPrivileged: true);
+  } on StoppedException {
+    rethrow;
   } catch (e) {
     _logger.warning('${client.getCurrentAtSign()} activated but its '
         'signing-root step did not complete; a start-time pull or a later '

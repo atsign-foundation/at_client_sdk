@@ -543,6 +543,21 @@ void main() {
       expect((await io.read(_atSign)).enrollmentToAuthenticateAs(), _eid);
     });
 
+    test('a refused atSign is shown quoted with format characters escaped',
+        () async {
+      await seedRecord(_base());
+      final io = await open();
+      final override = String.fromCharCode(0x202e);
+
+      await expectLater(
+          Future.sync(() => io.read('@bob${override}carol')),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'atsign')
+              .having((e) => '$e', 'text', isNot(contains(override)))
+              .having(
+                  (e) => '$e', 'text', contains('"@bob' r'\' 'u202ecarol"'))));
+    });
+
     test(
         'a write, flush, update or check naming another atSign is refused '
         'before any command', () async {

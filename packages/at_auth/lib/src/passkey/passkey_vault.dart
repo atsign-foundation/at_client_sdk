@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:at_commons/atsign.dart';
 
 import 'passkey_derivation.dart';
@@ -18,20 +19,39 @@ class PasskeyVault {
   /// Takes ownership of [derivation]'s auth seed and sealer, for the [atSign]
   /// it was derived for, which the vault holds in canonical form.
   ///
-  /// Throws [ArgumentError] when the auth seed is not exactly 32 bytes.
+  /// Throws [InvalidAtSignException] when [atSign] is not an atSign, and
+  /// [ArgumentError] when the auth seed is not exactly 32 bytes; either way
+  /// after overwriting the seed with zeroes and closing the sealer.
   PasskeyVault(PasskeyDerivation derivation, {required String atSign})
-      : atSign = atSign.toAtsign(),
+      : atSign = _canonicalAtSign(atSign, derivation),
         lookupHex = derivation.lookupHex,
         ns = derivation.ns,
-        _authSeed = _checkedSeed(derivation.authSeed),
+        _authSeed = _checkedSeed(derivation),
         _sealer = derivation.sealer;
 
-  static Uint8List _checkedSeed(Uint8List seed) {
+  static String _canonicalAtSign(String atSign, PasskeyDerivation derivation) {
+    try {
+      return atSign.toAtsign();
+    } catch (_) {
+      _discard(derivation);
+      rethrow;
+    }
+  }
+
+  static Uint8List _checkedSeed(PasskeyDerivation derivation) {
+    final seed = derivation.authSeed;
     if (seed.length != 32) {
+      _discard(derivation);
       throw ArgumentError.value(
           seed.length, 'authSeed.length', 'auth seed must be 32 bytes');
     }
     return seed;
+  }
+
+  static void _discard(PasskeyDerivation derivation) {
+    final seed = derivation.authSeed;
+    seed.fillRange(0, seed.length, 0);
+    derivation.sealer.close();
   }
 
   /// The canonical atSign this vault belongs to; its records open for this
@@ -59,8 +79,10 @@ class PasskeyVault {
 
   /// The document in [record], opened as type [typ].
   ///
-  /// Throws [UnsupportedPasskeyRecordException] or
-  /// [PasskeyRecordAuthenticationException] as [PasskeyRecordCodec.open] does.
+  /// Throws [UnsupportedPasskeyRecordException] for a malformed or unknown
+  /// record, or one whose type is not [typ];
+  /// [PasskeyRecordAuthenticationException] when it does not open, as when it
+  /// was sealed for another atSign.
   Future<Map<String, dynamic>> open(
           PasskeyRecordType typ, String record) async =>
       PasskeyRecordCodec.open(_open(), atSign, typ, record);

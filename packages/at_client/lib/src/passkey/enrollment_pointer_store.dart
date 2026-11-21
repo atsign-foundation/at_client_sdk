@@ -23,8 +23,8 @@ abstract class EnrollmentPointerStore implements EnrollmentPointerReader {
 
 final _hex64 = RegExp(r'^[0-9a-f]{64}$');
 
-/// The atProtocol key of an enrollment pointer, without the `public:` scope:
-/// `_<lookupHex>.<ns>@<atsign>` with the atSign canonical.
+/// The Atsign Protocol key of an enrollment pointer, without the `public:`
+/// scope: `_<lookupHex>.<ns>@<atsign>` with the atSign canonical.
 ///
 /// Throws [ArgumentError] when [lookupHex] or [ns] is not 64 lowercase hex
 /// characters.
@@ -94,8 +94,10 @@ class RemoteEnrollmentPointerStore implements EnrollmentPointerStore {
   @override
   Future<void> put(String atSign, String lookupHex, String record,
       {required String ns}) async {
-    if (record.contains('\n')) {
-      throw ArgumentError.value(record, 'record', 'must not contain newlines');
+    if (record.contains('\n') || record.contains('\r')) {
+      // NOTE: the record is sealed, so the error never holds it.
+      throw ArgumentError(
+          'must not contain newlines or carriage returns', 'record');
     }
     final command = (UpdateVerbBuilder()
           ..omitMetadata = true
