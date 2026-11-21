@@ -342,6 +342,7 @@ void main() {
     });
 
     for (final entry in {
+      'tab': 'k\tk',
       'newline': 'k\n',
       'crlfHeaderInjection': 'k\r\nX-Injected: 1',
       'controlBelowSpace': 'k\x1F',
