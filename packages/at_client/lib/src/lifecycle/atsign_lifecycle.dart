@@ -349,14 +349,18 @@ extension AtsignLifecycle on Atsign {
         secondaryAddressFinder: secondaryAddressFinder,
         connectBudget: connectBudget);
     // NOTE: open reports a stop during its first connect as an offline
-    // client, but a stop anywhere in the activation ends it as documented.
-    final stopped = client.connection.current.error;
-    if (stopped is StoppedException) {
+    // client, and mintSigningRootAfterActivation rethrows a stop but swallows
+    // every other error; a stop anywhere in the activation ends it as
+    // documented, with the client stopped.
+    try {
+      final stopped = client.connection.current.error;
+      if (stopped is StoppedException) throw stopped;
+      if (pqNative) {
+        await mintSigningRootAfterActivation(client, atKeysIo: keys);
+      }
+    } on StoppedException {
       await client.stop();
-      throw stopped;
-    }
-    if (pqNative) {
-      await mintSigningRootAfterActivation(client, atKeysIo: keys);
+      rethrow;
     }
     return client;
   }

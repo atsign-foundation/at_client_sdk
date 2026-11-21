@@ -75,9 +75,14 @@ void main() {
   /// An unactivated atServer: it accepts [cramSecret] and nothing else,
   /// approves the first enrollment on that connection, and records every
   /// command and verb it was sent. With [stopAfterCompletion], every PKAM
-  /// after the CRAM secret is deleted throws it, as a stopped connection does.
+  /// after the CRAM secret is deleted throws it, as a stopped connection does;
+  /// [failPkamAfterCompletion] does the same with an ordinary error, and
+  /// [stopDuringSigningRootMint] throws on any command that touches the
+  /// signing root, so the PQ activation's mint meets a stop.
   ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
-      {StoppedException? stopAfterCompletion}) {
+      {StoppedException? stopAfterCompletion,
+      StoppedException? stopDuringSigningRootMint,
+      Exception? failPkamAfterCompletion}) {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     final installed = <AtAuthenticator?>[];
@@ -89,6 +94,10 @@ void main() {
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
       sent.add(command);
+      if (stopDuringSigningRootMint != null &&
+          command.contains('pq_signing_root')) {
+        throw stopDuringSigningRootMint;
+      }
       if (command.startsWith('lookup:publickey')) return 'data:null';
       if (command.startsWith('enroll:')) {
         return 'data:${jsonEncode({
@@ -101,6 +110,10 @@ void main() {
     when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async {
       final builder = invocation.positionalArguments.first as VerbBuilder;
       sent.add(builder.buildCommand());
+      if (stopDuringSigningRootMint != null &&
+          builder.buildCommand().contains('pq_signing_root')) {
+        throw stopDuringSigningRootMint;
+      }
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         return 'data:1';
       }
@@ -114,6 +127,9 @@ void main() {
       final completed = sent.any((c) =>
           c.startsWith('delete:') && c.contains(AtConstants.atCramSecret));
       if (stopAfterCompletion != null && completed) throw stopAfterCompletion;
+      if (failPkamAfterCompletion != null && completed) {
+        throw failPkamAfterCompletion;
+      }
       return installed.length == 1
           ? installed.single!(_CramAtServer(cramSecret))
           : true;
@@ -563,6 +579,59 @@ void main() {
         throwsA(same(stop)),
         reason: 'the caller stopped the connection, so the activation says '
             'so rather than handing back a client over a stopped connection');
+    expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+        reason: 'the client the activation opened is stopped');
+  });
+
+  test(
+      'Atsign.activate over a supplied connection whose client first connect '
+      'fails with an ordinary connection error returns the offline client',
+      () async {
+    final server = atServer(
+        failPkamAfterCompletion: const SocketException('connection refused'));
+
+    final client = await Atsign(atSign).activate(
+        cramSecret: cramSecret,
+        keys: InMemoryAtKeysIo(),
+        preference: await preference(),
+        lookUps: secureSocketLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
+    addTearDown(client.stop);
+
+    expect(AtClientImpl.holdsLiveClient(atSign), isTrue,
+        reason: 'an ordinary connection failure is not a stop: the activation '
+            'is complete and the client is live, offline');
+  });
+
+  test(
+      'Atsign.activate over a supplied connection stopped while its '
+      'post-quantum signing root is minted throws StoppedException and leaves '
+      'no client live', () async {
+    final stop = StoppedException('the lookup for $atSign has been stopped');
+    final server = atServer(stopDuringSigningRootMint: stop);
+    final pair = await MlDsa65KeyPair.generate();
+
+    await expectLater(
+        () async => Atsign(atSign).activate(
+            cramSecret: cramSecret,
+            keys: InMemoryAtKeysIo(),
+            signingAlgo: SigningAlgoType.mldsa65,
+            apkamKeyPair: (
+              publicKey: pair.atPublicKey.publicKey,
+              privateKey: pair.atPrivateKey.privateKey,
+            ),
+            preference: await preference(),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: server.lookUp,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
+        throwsA(same(stop)),
+        reason: 'the caller stopped the connection, so the activation says '
+            'so rather than handing back a client over a stopped connection');
+    expect(server.sent.any((c) => c.contains('pq_signing_root')), isTrue,
+        reason: 'the control: the stop met the signing-root step');
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
         reason: 'the client the activation opened is stopped');
   });

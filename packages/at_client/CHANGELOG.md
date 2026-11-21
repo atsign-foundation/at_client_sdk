@@ -56,6 +56,9 @@
   it authenticates by PKAM throws `StoppedException`, not
   `AtAuthenticationException`; stopped while its client first connects, it
   stops that client and throws `StoppedException` rather than returning it.
+  A post-quantum activation stopped while it mints its signing root does the
+  same, and `mintSigningRootAfterActivation` rethrows a `StoppedException`
+  instead of logging it, as it still logs every other error.
 - feat: a PKAM the atServer refuses with AT0028 reports the connection
   refused with cause `invalidEnrollment`, as AT0029 does, and
   `PendingEnrollment` removes an expired request's pending keys on either
