@@ -255,16 +255,15 @@ void main() {
       final decided = expectLater(
           pending.awaitApproval(retryInterval: Duration(seconds: 5)),
           throwsA(predicate((dynamic e) =>
-              e is AtEnrollmentException &&
+              e is AtEnrollmentDeniedException &&
               e.message == 'The enrollment: $enrollmentId is denied')));
       await completer.future;
       await decided;
 
-      // The denial emptied the keyfile: nothing authenticates from it.
-      expect(
-          (await enrollSettings.keysFor(atSign5).read(atSign5))
-              .holdsAuthenticationMaterial,
-          false,
+      final stored = await enrollSettings.keysFor(atSign5).read(atSign5);
+      expect(stored.pendingEnrollmentIds, isEmpty,
+          reason: 'a denial removes the pending keys');
+      expect(stored.holdsAuthenticationMaterial, false,
           reason: 'a denied enrollment leaves no credential behind');
 
       await master.stop();
