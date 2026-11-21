@@ -293,10 +293,10 @@ void main() {
     test(
         'A denied or expired request ends the program with that reason, and '
         'its keys go', () async {
-      for (final (code, reason) in [
-        ('AT0025', 'Apkam Auth Denied'),
-        ('AT0028', 'enrollment expired'),
-        ('AT0029', 'enrollment expired'),
+      for (final (code, reason, type) in [
+        ('AT0025', 'Apkam Auth Denied', isA<AtEnrollmentDeniedException>()),
+        ('AT0028', 'enrollment expired', isA<AtEnrollmentExpiredException>()),
+        ('AT0029', 'enrollment expired', isA<AtEnrollmentExpiredException>()),
       ]) {
         await submitRequest();
         final server = approvingAtServer(
@@ -305,8 +305,7 @@ void main() {
                 errorCode: code),
             wrapped: wrapped);
 
-        await expectLater(openOver(server.lookUp, []),
-            throwsA(isA<AtEnrollmentException>()),
+        await expectLater(openOver(server.lookUp, []), throwsA(type),
             reason: code);
         expect(await pending(), isEmpty, reason: code);
         expect(AtClientImpl.holdsLiveClient(atSign), isFalse, reason: code);

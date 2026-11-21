@@ -167,6 +167,11 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When that call runs
     Then it returns without waiting for client(), which then ends leaving no client live
 
+  Scenario: An AT0025 denial ends the wait with AtEnrollmentDeniedException and removes the pending keys
+    Given a pending enrollment whose request the atServer answers with AT0025
+    When the wait polls
+    Then awaitApproval throws AtEnrollmentDeniedException, and the enrollment's pending keys are gone from the store
+
   Scenario: An expired request's keys go, as a denial's do
     Given a pending enrollment whose request the atServer reports as expired, with AT0028 or AT0029
     When the wait polls

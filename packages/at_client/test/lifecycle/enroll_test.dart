@@ -395,7 +395,7 @@ void main() {
         () async => pending.client(await preference(),
             retryInterval: const Duration(milliseconds: 10),
             storage: hiveStoreFor(pending.atSign, await preference())),
-        throwsA(isA<AtEnrollmentException>()
+        throwsA(isA<AtEnrollmentDeniedException>()
             .having((e) => e.message, 'message', contains('denied'))));
 
     final stored = await store.read(atSign);
@@ -431,7 +431,7 @@ void main() {
     await expectLater(
         () => pending.awaitApproval(
             retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentException>()
+        throwsA(isA<AtEnrollmentDeniedException>()
             .having((e) => e.message, 'message', contains('denied'))));
   });
 
@@ -459,7 +459,7 @@ void main() {
     await expectLater(
         () => pending.awaitApproval(
             retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentException>()));
+        throwsA(isA<AtEnrollmentDeniedException>()));
 
     final stored = await store.read(atSign);
     expect(stored.pendingEnrollmentIds, isEmpty,
@@ -1363,6 +1363,24 @@ void main() {
     test('Stop while client() opens the approved client', () async {
       await endWhileOpening('stop', (pending) => pending.stop(),
           thrown: isA<StoppedException>());
+    });
+
+    test(
+        'An AT0025 denial ends the wait with AtEnrollmentDeniedException and '
+        'removes the pending keys', () async {
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw AtAuthErrorReplyException(
+                  'Failed connecting to $atSign. error:AT0025:Apkam Auth '
+                  'Denied',
+                  errorCode: 'AT0025')));
+
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentDeniedException>()));
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
     test("An expired request's keys go, as a denial's do", () async {

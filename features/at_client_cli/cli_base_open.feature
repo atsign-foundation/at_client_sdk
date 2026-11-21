@@ -63,7 +63,7 @@ Feature: CLIBase says why an atServer refused, apart from an outage
   Scenario: A denied or expired request ends the program with that reason, and its keys go
     Given a program built on CLIBase whose keyfile holds only an enrollment awaiting approval
     When the atServer answers that the request was denied, or has expired
-    Then it ends with AtEnrollmentException, the pending keys are removed, and no client is left open
+    Then it ends with AtEnrollmentDeniedException for a denial and AtEnrollmentExpiredException for an expiry, the pending keys are removed, and no client is left open
 
   Scenario: An atServer not reached for the retry budget ends the program, keeping the request
     Given a program built on CLIBase whose keyfile holds only an enrollment awaiting approval
