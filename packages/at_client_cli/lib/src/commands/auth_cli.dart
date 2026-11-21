@@ -1177,7 +1177,7 @@ Future<void> list(ArgResults ar, AtClient atClient,
         '${clipForMessage(e.deviceName ?? '').padRight(38)}'
         '${_describeKeysExpiry(e.apkamKeysExpiryDuration).padRight(14)}'
         '${(e.expiresAt?.toIso8601String() ?? '-').padRight(26)}'
-        '${(await _describeAnchoring(e, anchoring)).padRight(26)}'
+        '${clipForMessage(await _describeAnchoring(e, anchoring)).padRight(26)}'
         '${_describeNamespaces(e.namespace)}');
   }
 }
