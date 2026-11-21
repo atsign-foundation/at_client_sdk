@@ -221,9 +221,14 @@ void main() {
   /// what it printed.
   Future<String> approvingB(Map<String, String> names) async {
     serveB(request: names);
-    final args = AuthCliArgs()
-        .createApproveCommandParser()
-        .parse(['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', '^wa']);
+    final args = AuthCliArgs().createApproveCommandParser().parse([
+      '-a',
+      '@alice',
+      '-r',
+      '127.0.0.1:1',
+      '--${AuthCliArgs.argNameAppNameRegex}',
+      '^wa'
+    ]);
     final out = _CapturedStdout();
     await IOOverrides.runZoned(() => auth_cli.approve(args, client),
         stdout: () => out);

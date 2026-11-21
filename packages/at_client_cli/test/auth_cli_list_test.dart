@@ -335,8 +335,9 @@ void main() {
               })
                 ..enrollmentId = requestId
             ]);
-    final args =
-        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-r', '127.0.0.1:1']);
     final out = _CapturedStdout();
     await IOOverrides.runZoned(() => auth_cli.list(args, client),
         stdout: () => out);
@@ -457,8 +458,9 @@ void main() {
                 }
               }
             })));
-    final args =
-        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-r', '127.0.0.1:1']);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.list(args, client),
