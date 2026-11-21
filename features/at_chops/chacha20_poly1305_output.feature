@@ -3,9 +3,10 @@ Feature: ChaCha20-Poly1305 encryption builds its output in one buffer
   ChaCha20Poly1305Algo returns the ciphertext followed by the 16-byte tag
   from encrypt. It assembles that result by copying the ciphertext and the
   tag into one Uint8List of exactly their combined length, so the assembly
-  costs one copy of the ciphertext and builds no concatenated list. With
-  associated data, it returns a published test vector's ciphertext followed
-  by its tag.
+  costs one copy of the ciphertext and builds no concatenated list. It shares
+  that join with AesGcm256EncryptionAlgo, so the pure-Dart scenario in
+  aes_gcm_output.feature covers it. With associated data, it returns a
+  published test vector's ciphertext followed by its tag.
 
   Races: none arise; each call allocates its own output and shares it with
   nothing.
@@ -23,10 +24,3 @@ Feature: ChaCha20-Poly1305 encryption builds its output in one buffer
     Given the 256-bit key, 96-bit nonce, plaintext and associated data of a published ChaCha20-Poly1305 test vector
     When at_chops encrypts it with ChaCha20Poly1305Algo
     Then the output is the vector's ciphertext followed by its 16-byte tag
-
-  Scenario: ChaCha20-Poly1305 encryption copies the ciphertext and tag into one buffer of exactly their length
-    Given a 1000-byte plaintext, a key and a nonce
-    And a cipher whose ciphertext and tag fail the test if concatenated or copied into a new list
-    When at_chops encrypts it with ChaCha20Poly1305Algo using that cipher
-    Then the output is the bytes ChaCha20Poly1305Algo returns with its own cipher
-    And the output owns a buffer of exactly the ciphertext and tag length

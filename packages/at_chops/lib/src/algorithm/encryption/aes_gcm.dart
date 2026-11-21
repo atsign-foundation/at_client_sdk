@@ -3,10 +3,10 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/encryption/aead_output.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
-import 'package:meta/meta.dart' show visibleForTesting;
 
 /// AES-256-GCM authenticated encryption (AEAD), backed by pure-Dart
 /// (`package:cryptography`).
@@ -32,30 +32,19 @@ final class AesGcm256EncryptionAlgo
   static final crypto.AesGcm _aesGcm = crypto.AesGcm.with256bits();
 
   final AESKey _aesKey;
-  final crypto.Cipher _cipher;
 
-  AesGcm256EncryptionAlgo(this._aesKey) : _cipher = _aesGcm;
-
-  /// Encrypts and decrypts with [cipher] in place of AES-256-GCM, so a test
-  /// can observe how [encrypt] assembles the ciphertext and tag it returns.
-  @visibleForTesting
-  AesGcm256EncryptionAlgo.withCipher(this._aesKey, crypto.Cipher cipher)
-      : _cipher = cipher;
+  AesGcm256EncryptionAlgo(this._aesKey);
 
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
       {InitialisationVector? iv, List<int> aad = const []}) async {
-    final crypto.SecretBox box = await _cipher.encrypt(
+    final crypto.SecretBox box = await _aesGcm.encrypt(
       plainData,
       secretKey: crypto.SecretKey(_keyBytesForEncrypt()),
       nonce: _nonceBytesForEncrypt(iv),
       aad: aad,
     );
-    final List<int> cipherText = box.cipherText;
-    final List<int> tag = box.mac.bytes;
-    return Uint8List(cipherText.length + tag.length)
-      ..setRange(0, cipherText.length, cipherText)
-      ..setRange(cipherText.length, cipherText.length + tag.length, tag);
+    return cipherTextThenTag(box.cipherText, box.mac.bytes);
   }
 
   @override
@@ -70,7 +59,7 @@ final class AesGcm256EncryptionAlgo
     final Uint8List tag =
         encryptedData.sublist(encryptedData.length - tagLength);
     try {
-      final List<int> plain = await _cipher.decrypt(
+      final List<int> plain = await _aesGcm.decrypt(
         crypto.SecretBox(cipherText,
             nonce: _nonceBytesForDecrypt(iv), mac: crypto.Mac(tag)),
         secretKey: crypto.SecretKey(_keyBytesForDecrypt()),

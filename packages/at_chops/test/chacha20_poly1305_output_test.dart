@@ -1,10 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:cryptography/cryptography.dart' show Chacha20;
 import 'package:test/test.dart';
-
-import 'no_concat_cipher.dart';
 
 /// Catalogue: features/at_chops/chacha20_poly1305_output.feature
 void main() {
@@ -35,25 +32,6 @@ void main() {
 
     expect(out, expected,
         reason: "output is not the vector's ciphertext and tag");
-  });
-
-  test(
-      'ChaCha20-Poly1305 encryption copies the ciphertext and tag into one buffer of exactly their length',
-      () async {
-    final Uint8List key =
-        Uint8List.fromList(List<int>.generate(32, (int i) => i));
-    final Uint8List nonce =
-        Uint8List.fromList(List<int>.generate(12, (int i) => 0xa0 + i));
-    final Uint8List plain =
-        Uint8List.fromList(List<int>.generate(1000, (int i) => i & 0xff));
-
-    final Uint8List expected = await const ChaCha20Poly1305Algo()
-        .encrypt(plain, key: key, nonce: nonce);
-    final Uint8List out = await ChaCha20Poly1305Algo.withCipher(
-            NoConcatCipher(Chacha20.poly1305Aead()))
-        .encrypt(plain, key: key, nonce: nonce);
-
-    expectExactLengthOutput(out, expected);
   });
 }
 

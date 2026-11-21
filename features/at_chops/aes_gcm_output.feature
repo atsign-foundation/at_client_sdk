@@ -33,11 +33,10 @@ Feature: AES-256-GCM encryption builds its output in one buffer
     When at_chops encrypts it with the FFI implementation and with the pure-Dart implementation
     Then each output is the vector's ciphertext followed by its 16-byte tag
 
-  Scenario: AES-256-GCM pure-Dart encryption copies the ciphertext and tag into one buffer of exactly their length
-    Given a 1000-byte plaintext, a key and a nonce
-    And a cipher whose ciphertext and tag fail the test if concatenated or copied into a new list
-    When at_chops encrypts it with the pure-Dart implementation using that cipher
-    Then the output is the bytes the pure-Dart implementation returns with its own cipher
+  Scenario: Pure-Dart encryption joins the ciphertext and tag in one buffer of exactly their length
+    Given a 1000-byte ciphertext and a 16-byte tag that fail the test if concatenated, iterated or copied into a new list
+    When at_chops joins them as AesGcm256EncryptionAlgo and ChaCha20Poly1305Algo do
+    Then the output is the ciphertext followed by the tag
     And the output owns a buffer of exactly the ciphertext and tag length
 
   Scenario Outline: AES-256-GCM FFI encryption refuses a reported ciphertext length that differs from the plaintext length
