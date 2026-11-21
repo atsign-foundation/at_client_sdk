@@ -8,6 +8,9 @@ Feature: AES-256-GCM encryption builds its output in one buffer
   With the same key and nonce and no associated data, the two classes produce
   the same bytes, so each decrypts the other's output. With associated data,
   each returns a published test vector's ciphertext followed by its tag.
+  AesGcm256FfiAlgo decrypts through an update step that refuses a reported
+  plaintext length other than the ciphertext length, so decryption never
+  reads past its plaintext buffer.
 
   Races: none arise; each call allocates its own output and shares it with
   nothing.
@@ -49,3 +52,14 @@ Feature: AES-256-GCM encryption builds its output in one buffer
       | direction | length |
       | less      | 59     |
       | more      | 61     |
+
+  Scenario Outline: The AES-256-GCM FFI update step refuses a reported length that differs from its input length
+    Given a 60-byte <input>
+    And an <operation> call that reports a <length>-byte <output>
+    When at_chops runs that call as the FFI implementation's update step
+    Then the step fails with a StateError naming <operation>, the <length>-byte <output> and the expected 60
+
+    Examples:
+      | operation         | input      | output    | length |
+      | EVP_DecryptUpdate | ciphertext | plaintext | 59     |
+      | EVP_DecryptUpdate | ciphertext | plaintext | 61     |

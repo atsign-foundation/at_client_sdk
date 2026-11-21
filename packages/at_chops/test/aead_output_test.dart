@@ -1,7 +1,10 @@
 import 'dart:collection';
+import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/encryption/aead_output.dart';
+import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart'
+    show aesGcmUpdate;
 import 'package:test/test.dart';
 
 /// Catalogue: features/at_chops/aes_gcm_output.feature
@@ -24,6 +27,28 @@ void main() {
     expect(out.buffer.lengthInBytes, cipherText.length + tag.length,
         reason: 'output buffer is not exactly the ciphertext and tag length');
   });
+
+  for (final (String operation, String input, String output, int reported) in [
+    ('EVP_DecryptUpdate', 'ciphertext', 'plaintext', 59),
+    ('EVP_DecryptUpdate', 'ciphertext', 'plaintext', 61),
+  ]) {
+    test(
+        'The AES-256-GCM FFI update step refuses a reported length that differs from its input length ($operation, $reported)',
+        () {
+      expect(
+          () => aesGcmUpdate((Pointer<Int32> outLen) {
+                outLen.value = reported;
+                return 1;
+              }, 60,
+                  operation: operation, inputName: input, outputName: output),
+          throwsA(isA<StateError>().having(
+              (StateError e) => e.message,
+              'message',
+              '$operation produced a $reported-byte $output, expected 60')),
+          reason: 'the update step accepted a reported $reported-byte $output '
+              'for a 60-byte $input');
+    });
+  }
 }
 
 /// Bytes that fail the test if anything concatenates them (`+`), iterates

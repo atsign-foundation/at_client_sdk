@@ -1,5 +1,6 @@
 import 'dart:ffi';
 
+import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
@@ -250,6 +251,29 @@ void checkInlLength(int length, String name, String fn,
     AtClientException Function(String) thrower) {
   if (length > 0x7fffffff) {
     throw thrower('$name exceeds the int32 limit of $fn');
+  }
+}
+
+/// Runs [update], an AES-GCM `EVP_EncryptUpdate` or `EVP_DecryptUpdate` call
+/// over [inputLength] bytes that writes its output length to the pointer it
+/// is given, and returns that length.
+///
+/// Throws [StateError] if [update] fails, or reports a length other than
+/// [inputLength], which is the only length GCM produces.
+int aesGcmUpdate(int Function(Pointer<Int32> outLen) update, int inputLength,
+    {required String operation,
+    required String inputName,
+    required String outputName}) {
+  final Pointer<Int32> outLen = calloc<Int32>();
+  try {
+    if (update(outLen) <= 0) {
+      throw StateError('$operation ($inputName) failed');
+    }
+    checkOutputLength(outLen.value, inputLength,
+        operation: operation, label: outputName);
+    return outLen.value;
+  } finally {
+    calloc.free(outLen);
   }
 }
 
