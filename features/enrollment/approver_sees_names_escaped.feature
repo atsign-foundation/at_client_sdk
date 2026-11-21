@@ -1,12 +1,16 @@
 Feature: An approver sees the names a request carries with their control characters escaped
 
-  at_activate's list, approve and auto show the app name, device
-  name and namespaces an enrollment request carries, as the atServer serves
-  them or a notification announces them, with each control, format or
+  at_activate's list, approve and auto show the app name, device name and
+  namespaces an enrollment request carries, as the atServer serves them or
+  a notification announces them, with each control, format or
   line-separator character escaped, ESC as \u001b, and each clipped after
   180 characters, followed by "...". A list row stays on one line, its
-  columns padded after escaping. approve and auto name the app and
-  device in double quotes, with a quote inside escaped.
+  columns padded after escaping. approve and auto name the app and device
+  in double quotes, with a quote inside escaped. A request's id and status
+  are escaped and clipped the same way, and so are the key of a
+  notification auto ignores or cannot act on and the error that stopped
+  it; auto names the sender of a notification from another atSign in
+  double quotes.
 
   Races and replay: none arises; escaping is a pure function of text already
   read, and nothing new is sent.
@@ -15,7 +19,9 @@ Feature: An approver sees the names a request carries with their control charact
   to bound.
   Forgery and impersonation: the names are the ones the requesting device
   filed, as the approver's own atServer serves them; shown escaped, a name
-  cannot pass for another line or another row of the output.
+  cannot pass for another line or another row of the output. A notification
+  from another atSign is not acted on, and the warning naming it shows its
+  key and sender escaped.
 
   Scenario Outline: at_activate list shows a request's <field> with its control characters escaped
     Given @alice's atServer holding a pending enrollment request whose <field> holds a <char>
@@ -50,3 +56,8 @@ Feature: An approver sees the names a request carries with their control charact
     Given @alice's atServer holding a pending enrollment request whose device name is 400 characters long
     When at_activate list runs for @alice
     Then that request's row shows the device name's first characters followed by "...", 180 characters before the "..."
+
+  Scenario: at_activate auto escapes the key and sender of a notification from another atSign
+    Given at_activate auto running for @alice
+    When a notification from @bob arrives whose key holds an ESC and ends .new.enrollments.__manage
+    Then the warning naming the sender and the key shows them on one line, the ESC written as \u001b and the sender in double quotes, and auto does not act on it

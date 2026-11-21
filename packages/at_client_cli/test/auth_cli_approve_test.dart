@@ -348,6 +348,29 @@ void main() {
         reason: 'a warning names the sender and the key');
   }, timeout: const Timeout(Duration(seconds: 5)));
 
+  test(
+      'at_activate auto escapes the key and sender of a notification from '
+      'another atSign', () async {
+    serveB();
+
+    final (out, err) = await autoApproveFrom([
+      sentBy('@bob', '@alice:b0b0\u001bb0b0.new.enrollments.__manage@bob'),
+    ], untilDone: false);
+
+    expect(
+        err.text.split('\n'),
+        contains(allOf(
+            contains(r'@alice:b0b0\u001bb0b0.new.enrollments.__manage@bob'),
+            contains('from "@bob"'))),
+        reason: 'one warning line names the key, its ESC written as \\u001b, '
+            'and the sender in double quotes');
+    expect(err.text, isNot(contains('\u001b')),
+        reason: 'nothing on stderr holds an ESC');
+    expect(out.text, isNot(contains('Got enrollment request ID')),
+        reason: 'auto does not act on a notification from another atSign');
+    expect(approvals, isEmpty);
+  }, timeout: const Timeout(Duration(seconds: 5)));
+
   group('Given at_activate auto_approve', () {
     test(
         'when a request arrives from @Alice for a run as @alice, then it is '

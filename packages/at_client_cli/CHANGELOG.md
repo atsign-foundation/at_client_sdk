@@ -1,7 +1,9 @@
 ## 1.1.0
 
-- fix: `at_activate list`, `approve` and `auto` show the names and
-  namespaces a request carries with their control characters escaped.
+- fix: `at_activate list`, `approve` and `auto` show the ids, statuses,
+  names and namespaces a request carries, and the keys and senders `auto`
+  names as it passes a notification over, with their control characters
+  escaped.
 - fix: `at_activate enroll` shows the enrollment ids and names a keyfile
   records with their control characters escaped.
 - fix: `at_activate enroll` resumes the request its keyfile already holds,
