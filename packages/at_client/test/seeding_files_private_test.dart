@@ -95,7 +95,7 @@ void main() {
       ))
         ..hiveStoragePath = storageDir
         ..seedNamespaceKeys = true,
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: defaultAtDirectory,
       remoteSecondary: buildRecordingRemote(
           events: events,

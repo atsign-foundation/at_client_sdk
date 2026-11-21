@@ -37,7 +37,7 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
   // non-nullable function type, and the services read it off the impl.
   @override
-  final AtLookUpFactory lookUps = secureSocketLookUps();
+  final AtLookUpFactory lookUps = loopbackLookUps();
   // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
   // unstubbed mocktail getter answers null, which the runtime refuses for the
   // non-nullable AtConnection; a Monitor built from this mock reads it.
@@ -1054,8 +1054,8 @@ void main() {
                 ..cache(1000, true))
               .build();
       var value = '91807876564';
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
-          lookUps: secureSocketLookUps());
+      var remoteSecondary = RemoteSecondary('@alice', loopbackPreference(),
+          lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
@@ -1385,8 +1385,8 @@ void main() {
               secondaryAddressFinder: defaultAtDirectory)
           as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
-          lookUps: secureSocketLookUps());
+      var remoteSecondary = RemoteSecondary('@alice', loopbackPreference(),
+          lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
@@ -1412,8 +1412,8 @@ void main() {
               secondaryAddressFinder: defaultAtDirectory)
           as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
-          lookUps: secureSocketLookUps());
+      var remoteSecondary = RemoteSecondary('@alice', loopbackPreference(),
+          lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
@@ -1452,8 +1452,8 @@ void main() {
               secondaryAddressFinder: defaultAtDirectory)
           as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
-          lookUps: secureSocketLookUps());
+      var remoteSecondary = RemoteSecondary('@alice', loopbackPreference(),
+          lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));
@@ -1476,8 +1476,8 @@ void main() {
               secondaryAddressFinder: defaultAtDirectory)
           as NotificationServiceImpl;
 
-      var remoteSecondary = RemoteSecondary('@alice', AtClientPreference(),
-          lookUps: secureSocketLookUps());
+      var remoteSecondary = RemoteSecondary('@alice', loopbackPreference(),
+          lookUps: loopbackLookUps());
       remoteSecondary.atLookUp = mockAtLookupImpl;
       when(() => mockSecondaryAddressFinder.findSecondary('@bob'))
           .thenAnswer((_) => Future.value(SecondaryAddress('dummyhost', 9001)));

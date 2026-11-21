@@ -42,7 +42,7 @@ void main() {
         ..rootPort = 1
         ..hiveStoragePath = '${dir.path}/$atSign'
         ..namespace = 'lifecycle',
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: await refusingAtDirectory(),
       atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
       storage: hiveStoreAt(atSign, '${dir.path}/$atSign'));
