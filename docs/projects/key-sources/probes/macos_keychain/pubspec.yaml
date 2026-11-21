@@ -1,0 +1,6 @@
+name: kcprobe
+publish_to: none
+environment:
+  sdk: ^3.6.0
+dependencies:
+  ffi: ^2.1.0

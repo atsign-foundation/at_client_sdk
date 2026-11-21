@@ -77,7 +77,7 @@ One-shot fetch. Reads local store once, applies full spec, returns list.
 
 ### ~~`fetch()`~~ → `get()`
 
-Deprecated alias for `get()`. Migrating: replace `.fetch()` with `.get()`.
+Removed in 4.0; use `get()`.
 
 ### `Stream<List<CItem<T>>> watch()`
 

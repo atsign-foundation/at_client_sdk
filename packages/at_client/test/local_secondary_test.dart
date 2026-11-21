@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
@@ -98,7 +99,7 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
   // non-nullable function type, and the services read it off the impl.
   @override
-  final AtLookUpFactory lookUps = secureSocketLookUps();
+  final AtLookUpFactory lookUps = loopbackLookUps();
   // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
   // unstubbed mocktail getter answers null, which the runtime refuses for the
   // non-nullable AtConnection; a Monitor built from this mock reads it.
@@ -134,15 +135,13 @@ void main() {
     });
 
     test('test get private key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -156,15 +155,13 @@ void main() {
     });
 
     test('test get public key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -178,15 +175,13 @@ void main() {
     });
 
     test('test get encryption private key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -202,15 +197,13 @@ void main() {
     });
 
     test('test get encryption public key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -225,15 +218,13 @@ void main() {
     });
 
     test('test get self encryption key', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -261,15 +252,13 @@ void main() {
     });
 
     test('test update verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -287,15 +276,13 @@ void main() {
     });
 
     test('test update verb builder max key length check', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -318,15 +305,13 @@ void main() {
 
     test('test update verb builder max key length check for cached key',
         () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -350,15 +335,13 @@ void main() {
     });
 
     test('test llookup verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -382,15 +365,13 @@ void main() {
     });
 
     test('test delete verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -419,15 +400,13 @@ void main() {
     });
 
     test('test scan verb builder', () async {
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       AtClient atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       final localSecondary = LocalSecondary(atClient,
@@ -473,15 +452,13 @@ void main() {
     /// cleared in the outer setUp).
     Future<LocalSecondary> buildLocalSecondary() async {
       AtClientImpl.atClientInstanceMap.remove(atSign);
-      final atClientManager = AtClientManager(atSign);
       final preference = AtClientPreference()
         ..syncRegex = '.wavi'
         ..hiveStoragePath = 'test/hive';
       final atClient = await AtClientImpl.create(atSign, 'wavi', preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: atClientManager,
           storage: hiveStoreFor(atSign, preference));
       atClient.syncService = MockSyncService();
       return LocalSecondary(atClient,
@@ -556,10 +533,9 @@ void main() {
 
       mockSecondaryKeyStore = MockSecondaryKeyStore();
       atClient = await AtClientImpl.create(atSign, namespace, preference,
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
-          atClientManager: AtClientManager(atSign),
           storage: _MockKeyStoreStorage(mockSecondaryKeyStore, atSign: atSign));
       localSecondary = LocalSecondary(atClient,
           syncQueue: memorySyncQueue(), keyStore: mockSecondaryKeyStore);
@@ -1036,7 +1012,7 @@ void main() {
       remote = MockRemoteSecondary();
       final c = await AtClientImpl.create(
           atSign, 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           remoteSecondary: remote,
@@ -1089,9 +1065,8 @@ void main() {
   });
 }
 
-// The AtClient owns its commit-log-free persistence bundle (created
-// by `AtClientImpl.create`, since `isLocalStoreRequired` defaults to
-// true). Tests build their own client, so setup only needs to evict
+// The AtClient owns its commit-log-free persistence bundle, created
+// by `AtClientImpl.create`. Tests build their own client, so setup only needs to evict
 // any cached instance so storage is reopened fresh.
 Future<void> setupLocalStorage(String storageDir, String atSign) async {
   AtClientImpl.atClientInstanceMap.remove(atSign);

@@ -23,6 +23,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 import 'test_utils/test_keypairs.dart';
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/unreadable_keys_io.dart';
@@ -549,7 +550,9 @@ void main() {
       // NOTE: the control has to be taken before the move — without it, "no
       // RS256 entry" is satisfied by an envelope carrying no entries at all.
       final atRollout1Envelope = signEnvelope('written at rollout 1',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(
           atRollout1Envelope.signatures.map((s) => s.alg).toList(), ['RS256'],
           reason: 'the control: while rsa2048 is in use, the composed '
@@ -559,7 +562,9 @@ void main() {
       await minter().reconcileSigningKeys();
 
       final afterTheMove = signEnvelope('written after the move',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(afterTheMove.signatures.map((s) => s.alg).toList(), ['ML-DSA-65'],
           reason: 'ONE entry, under the new algorithm: the withdrawn key is '
               'no longer offered for new operations, so nothing signs with '
@@ -600,6 +605,7 @@ void main() {
 
       final rollout1Key = (await keyfile()).signingKeysFor('primary').single;
       final envelope = signEnvelope('what rollout 1 signed',
+          atSign: atSign,
           keys: [
             ApkamSigningKeys(
                 algorithm: rollout1Key.algorithm,
@@ -608,7 +614,9 @@ void main() {
           ],
           type: EnvelopeType.app);
       await verifyEnvelope(envelope,
-          signerPublicKey: published.single, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: published.single,
+          expecting: EnvelopeType.app);
 
       inUse({SigningAlgoType.mldsa65});
       await minter().reconcileSigningKeys();
@@ -618,7 +626,9 @@ void main() {
               'skipped the publish would leave the withdrawn key advertised '
               'as current');
       await verifyEnvelope(envelope,
-          signerPublicKey: published.last, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: published.last,
+          expecting: EnvelopeType.app);
     });
 
     /// UC-G2.9 — the overlap a migration with a verifier gap was thought to
@@ -646,7 +656,9 @@ void main() {
       inUse({SigningAlgoType.rsa2048});
       await minter().reconcileSigningKeys();
       final one = signEnvelope('one member',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(one.signatures.map((s) => s.alg).toList(), ['RS256'],
           reason: 'the control: a single-member set emits exactly one '
               'signature, so the pair below is attributable to the SET rather '
@@ -656,17 +668,168 @@ void main() {
       inUse({SigningAlgoType.rsa2048, SigningAlgoType.mldsa65});
       await minter().reconcileSigningKeys();
       final two = signEnvelope('two members',
-          keys: await minter().signingKeys, type: EnvelopeType.app);
+          atSign: atSign,
+          keys: await minter().signingKeys,
+          type: EnvelopeType.app);
       expect(two.signatures.map((s) => s.alg).toList(), ['ML-DSA-65', 'RS256'],
           reason: 'one signature per active signing key, strongest first — '
               'and reached through the PREFERENCE and the production selector, '
               'not from key material handed to signEnvelope by the test');
 
       await verifyEnvelope(two,
-          signerPublicKey: rsaOnlyApsk, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: rsaOnlyApsk,
+          expecting: EnvelopeType.app);
 
       await verifyEnvelope(two,
-          signerPublicKey: published.last, expecting: EnvelopeType.app);
+          signerAtSign: atSign,
+          signerPublicKey: published.last,
+          expecting: EnvelopeType.app);
+    });
+  });
+
+  group('a posture never downgrades a held key', () {
+    final logs = RecordedLogs();
+    setUpAll(logs.installOn);
+    setUp(logs.records.clear);
+
+    void atPosture(PqPosture posture) => when(() => atClient.getPreferences())
+        .thenReturn(AtClientPreference(posture: posture));
+
+    Future<String> keyfileJson() async =>
+        jsonEncode((await keysIo.read(atSign)).toJson());
+
+    /// An enrollment born at pqActive: it authenticates with ML-DSA-65 and
+    /// holds one client data signing key, an ML-DSA-65 one, and no RSA-2048
+    /// key of either kind.
+    Future<void> bornAtPqActive() async {
+      await asRetrofittedEnrollment();
+      atPosture(PqPosture.pqActive);
+      expect(await mint(), [SigningAlgoType.mldsa65]);
+    }
+
+    test('A weaker posture does not downgrade the client data signing key',
+        () async {
+      await bornAtPqActive();
+      final keyfileBefore = await keyfileJson();
+      final published = updates.length;
+
+      atPosture(PqPosture.pqReady);
+      final reconciled = await minter().reconcileSigningKeys();
+
+      expect(reconciled.minted, isEmpty,
+          reason: 'an RSA-2048 key minted here would be one the enrollment '
+              'never had, advertised for as long as it lives');
+      expect(reconciled.retired, isEmpty);
+      expect(await heldKeyIds(), ['mldsa65'],
+          reason: 'the ML-DSA-65 key stays active');
+      expect(await keyfileJson(), keyfileBefore,
+          reason: 'the keyfile does not change');
+      expect(updates, hasLength(published),
+          reason: 'and nothing is published, so _apsk does not change');
+    });
+
+    test('Alternating postures does not grow the keyfile', () async {
+      await bornAtPqActive();
+      final published = updates.length;
+
+      for (var start = 0; start < 5; start++) {
+        atPosture(PqPosture.pqReady);
+        await minter().reconcileSigningKeys();
+        atPosture(PqPosture.pqActive);
+        await minter().reconcileSigningKeys();
+      }
+
+      expect(await heldKeyIds(), ['mldsa65']);
+      expect((await keysIo.read(atSign)).withdrawnSigningKeysFor(enrollmentId),
+          isEmpty,
+          reason: 'one client data signing key in the keyfile, and none '
+              'retired beside it');
+      expect(updates, hasLength(published),
+          reason: 'no start republished _apsk');
+      expect(updates.last.signingKeys!.map((e) => e.alg).toList(),
+          [SigningAlgoType.mldsa65],
+          reason: 'so _apsk lists the one key it listed after the first start');
+    });
+
+    test('a key that went up the ladder stays active back at pqReady',
+        () async {
+      await asRetrofittedEnrollment();
+      atPosture(PqPosture.pqReady);
+      expect(await mint(), [SigningAlgoType.rsa2048]);
+      atPosture(PqPosture.pqActive);
+      await minter().reconcileSigningKeys();
+      final keyfileBefore = await keyfileJson();
+      final published = updates.length;
+
+      atPosture(PqPosture.pqReady);
+      final reconciled = await minter().reconcileSigningKeys();
+
+      expect(reconciled.minted, isEmpty);
+      expect(reconciled.retired, isEmpty);
+      expect(await heldKeyIds(), ['mldsa65']);
+      expect(await keyfileJson(), keyfileBefore,
+          reason: 'the retired RSA-2048 key stays retired, and no second one '
+              'is minted beside it');
+      expect(updates, hasLength(published));
+    });
+
+    test(
+        'an in-use set naming only weaker algorithms keeps the key and says so',
+        () async {
+      await bornAtPqActive();
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
+          posture: PqPosture.pqActive,
+          dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}));
+
+      final reconciled = await minter().reconcileSigningKeys();
+
+      expect(reconciled.minted, isEmpty);
+      expect(reconciled.retired, isEmpty);
+      expect(await heldKeyIds(), ['mldsa65']);
+      expect(
+          logs.at('INFO'),
+          contains(allOf(contains('mldsa65'), contains(enrollmentId),
+              contains('rsa2048'))),
+          reason: 'a log line names the stronger key kept and the set it '
+              'was kept against');
+    });
+
+    test(
+        'a stronger key held beside the one the set names stays active, and '
+        'says so', () async {
+      await asRetrofittedEnrollment();
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
+          dataSigningKeyAlgorithms: const {
+            SigningAlgoType.mldsa65,
+            SigningAlgoType.rsa2048
+          }));
+      expect(await mint(), [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]);
+      final published = updates.length;
+
+      atPosture(PqPosture.pqReady);
+      final reconciled = await minter().reconcileSigningKeys();
+
+      expect(reconciled.retired, isEmpty,
+          reason: 'the set no longer names ML-DSA-65, but it is stronger than '
+              'everything the set names');
+      expect(await heldKeyIds(), unorderedEquals(['mldsa65', 'rsa2048']));
+      expect(updates, hasLength(published));
+      expect(logs.at('INFO'),
+          contains(allOf(contains('Keeping the mldsa65'), contains('rsa2048'))),
+          reason: 'nothing was minted, so only this line says why ML-DSA-65 '
+              'is still active');
+    });
+
+    test('a key the set names is not reported as kept against it', () async {
+      await bornAtPqActive();
+      logs.records.clear();
+
+      await minter().reconcileSigningKeys();
+
+      expect(logs.at('INFO').where((m) => m.contains('Keeping')), isEmpty,
+          reason: 'the control for the line above: a set naming the held '
+              'key keeps it without saying so');
     });
   });
 

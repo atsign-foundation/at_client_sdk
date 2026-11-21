@@ -1,33 +1,49 @@
+/// The platform-neutral Atsign Protocol client: `AtClient`, its storage,
+/// crypto and services, and the offline envelope verifier.
+///
+/// Apps get this through their platform package's barrel,
+/// `package:at_client_cli/at_client_cli.dart` or
+/// `package:at_client_flutter/at_client_flutter.dart`, rather than importing
+/// it.
+library;
+
 export 'package:at_client/src/client/at_client_factory.dart';
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
 export 'package:at_client/src/client/at_reachability.dart';
 export 'package:at_client/src/client/data_event.dart';
-export 'package:at_client/src/client/local_secondary.dart';
-export 'package:at_client/src/client/remote_secondary.dart';
-export 'package:at_client/src/client/request_options.dart';
+export 'package:at_client/src/client/request_options.dart'
+    hide useRemoteAtServerIfSet;
 export 'package:at_client/src/client/server_mutex.dart'
-    hide checkedServerMutexTtl;
+    hide checkedServerMutexTtl, takeServerMutex;
 export 'package:at_client/src/storage/at_client_storage.dart';
 export 'package:at_client/src/crypto/crypto.dart';
 export 'package:at_client/src/crypto/crypto_runtime.dart';
 export 'package:at_client/src/key_stream/key_stream.dart';
 export 'package:at_client/src/lifecycle/at_connection.dart';
-export 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+export 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
+    hide activateWithoutClient, scratchKeysIo;
 export 'package:at_client/src/lifecycle/enrollments.dart';
-export 'package:at_client/src/lifecycle/pending_enrollment.dart';
+export 'package:at_client/src/lifecycle/pending_enrollment.dart'
+    hide handshakeKeysIo;
 export 'package:at_client/src/listener/at_sign_change_listener.dart';
 export 'package:at_client/src/listener/switch_at_sign_event.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';
+export 'package:at_client/src/preference/at_client_particulars.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
+export 'package:at_client/src/preference/notification_replay.dart';
 export 'package:at_client/src/preference/pq_posture.dart';
 export 'package:at_auth/at_auth.dart'
     show
+        ApskSigningKey,
+        AtAuthErrorReplyException,
+        AtEnrollmentExpiredException,
         AtKeys,
         AtKeysFormatException,
         AtKeysIo,
         EnrollmentKeyExchangeMode,
         InMemoryAtKeysIo,
+        KeyEntryStatus,
         NamespacePermission,
         WrittenAtKeysIo;
 export 'package:at_lookup/at_lookup.dart'
@@ -41,6 +57,9 @@ export 'package:at_lookup/at_lookup.dart'
         SecondaryAddress,
         SecondaryAddressFinder;
 export 'package:at_chops/at_chops.dart' show SigningAlgoType;
+export 'package:at_client/src/signing/envelope_signature.dart'
+    show EnvelopeSignature, SignedEnvelope;
+export 'package:at_client/src/signing/envelope_verification.dart';
 export 'package:at_utils/at_logger.dart' show AtSignLogger;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
@@ -56,4 +75,5 @@ export 'package:at_client/src/util/at_client_util.dart';
 export 'package:at_client/src/util/enroll_list_request_param.dart';
 export 'package:at_commons/at_commons.dart';
 
-export 'package:at_client/src/collections/collections.dart';
+export 'package:at_client/src/collections/collections.dart'
+    hide checkCollectionTagArgs, refuseCollectionTagChange;

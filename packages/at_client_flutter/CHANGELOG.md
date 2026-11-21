@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.1.0
+
+- feat: `package:at_client_flutter/testing.dart` re-exports at_client's
+  experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
+- chore: requires at_client 4.1.0.
+
 ## 2.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
@@ -17,11 +23,16 @@
 - feat: `EnrollmentRequestList` lists the approved enrollments below the
   pending requests, each showing whether its keys are anchored to the atSign's
   signing root.
-- fix: a dialog gives every client a store, so `ApkamActivationDialog` no
-  longer refuses a preference that sets `isLocalStoreRequired` false.
 - feat: `at_client_flutter.dart` re-exports `at_client_io.dart`, so an app
   importing it has `FileAtKeysIo`, `secureSocketLookUps` and
   `CacheableSecondaryAddressFinder`.
+- fix: leaving `ApkamActivationDialog` while it waits for approval keeps the
+  request, which the next show resumes without a passcode, and the atSign can
+  be opened again afterwards. Its Cancel button abandons the request once the
+  user confirms, and names the enrollment to ask the manager to deny.
+- feat: `PkamDialog`, given keys that hold only an enrollment awaiting
+  approval, waits for the approval and returns the client, rather than
+  failing.
 - build: requires `at_client` ^4.0.0.
 - build: requires `at_persistence_secondary_server` ^5.4.0.
 - chore(deps): at_utils ^4.0.0

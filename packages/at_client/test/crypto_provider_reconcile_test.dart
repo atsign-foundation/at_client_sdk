@@ -40,7 +40,7 @@ void main() {
 
       final first = await AtClientImpl.create(
           atSign, 'wavi', prefWith('providerA'),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: storage) as AtClientImpl;
@@ -49,7 +49,7 @@ void main() {
 
       final again = await AtClientImpl.create(
           atSign, 'wavi', prefWith('providerB'),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor(atSign),
           storage: storage);

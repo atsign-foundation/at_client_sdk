@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -20,7 +21,7 @@ Future<AtClient> _buildAtClient(String atSign) => buildAtClient(
       atSign: atSign,
       namespace: 'test',
       preference: _createPreference(atSign.replaceAll('@', '')),
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: defaultAtDirectory,
       atKeysIo: noKeysFor(atSign),
       storage:
@@ -49,7 +50,7 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_integration'),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor(atSign),
             storage:
@@ -89,7 +90,7 @@ void main() {
             atSign,
             'test',
             _createPreference('stop_errors'),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: defaultAtDirectory,
             atKeysIo: noKeysFor(atSign),
             remoteSecondary: mockRemoteSecondary,
@@ -113,7 +114,7 @@ void main() {
         final remoteSecondary = RemoteSecondary(
           '@test',
           AtClientPreference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           atLookUp: mockAtLookup,
         );
 

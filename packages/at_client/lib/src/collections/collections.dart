@@ -13,6 +13,9 @@ import 'dart:typed_data';
 // API) can use `StringBuffer` with its standard Dart semantics.
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/preference/at_client_preference.dart'
+    show RemoteLocalPref;
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_commons/at_commons.dart' hide StringBuffer;
@@ -22,6 +25,7 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart';
 import 'package:mutex/mutex.dart';
+import 'package:at_client/src/util/at_key_grammar.dart' show isAtKeyNamespace;
 import 'package:at_client/src/util/swallowed_error.dart';
 
 part 'collections_test_hooks.dart';
@@ -112,7 +116,8 @@ enum EventSource { data, notifs, both }
 /// either [Query.get] (one-shot `Future<List<CItem<T>>>`) or
 /// [Query.watch] (live reactive `Stream<List<CItem<T>>>`). Queries
 /// are immutable values — build once, pass around, reuse. Execution
-/// is always on-device against the local synced store.
+/// is always on-device, over the records the client reads: its local
+/// synced store by default.
 ///
 /// ```dart
 /// final overdue = todos.query()
@@ -133,22 +138,26 @@ enum EventSource { data, notifs, both }
 ///
 /// A [CItem] can be a parent of its own [AtCollection<U>]; that
 /// sub-collection's items can themselves be parents; and so on.
-/// Nesting is bounded only by the Atsign Protocol's 255-char key
-/// limit. The absolute worst-case wire shape is the cached-copy
-/// form `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`
-/// where each atSign can be up to 55 chars. That fixes the wrapper
-/// overhead at `cached:` (7) + `<other>` (55) + `:` (1) + `@<self>`
-/// (55) = **118 chars**, leaving **137 chars** for everything
-/// inside (item id + every level of composed namespace).
+/// Nesting is bounded only by the Atsign Protocol's key length. An
+/// atServer key is at most 248 chars, and the cached copy a
+/// recipient's atServer keeps at most 255. That cached copy,
+/// `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`, is the
+/// longest shape an item's key takes. An atSign is at most 56 chars
+/// including its `@`, so the wrapper is `cached:` (7) +
+/// `<other>` (56) + `:` (1) + `@<self>` (56) = **120 chars** when both
+/// are that long, leaving **135 chars** for everything inside (the
+/// item id and every level of composed namespace).
 ///
 /// In practice that's plenty. With a 15-char application namespace
 /// and a strategy of single-character collection / sub-collection
 /// names, each tree level costs 11 chars (`.<sub>.<parent.id>`),
 /// so the theoretical depth ceiling is **11 levels (root + 10
 /// nested sub-collections)** — far deeper than any realistic
-/// hierarchical model needs. Each [subCollection] call enforces
-/// the budget and throws [ArgumentError] before any I/O if the
-/// composed namespace would overflow.
+/// hierarchical model needs. Each [subCollection] call caps the
+/// composed namespace at 128 chars and throws [ArgumentError] before
+/// any I/O if it would be longer, so an 8-character generated id fits
+/// while each atSign is at most 55 chars with its `@`. A key that does
+/// not fit is refused when it is written.
 ///
 /// ```dart
 /// // Level 1: comments on a post.
@@ -300,12 +309,13 @@ enum EventSource { data, notifs, both }
 ///
 /// ---
 ///
-/// Per-key decode failures on the read path are yielded into the
-/// stream as errors — not logged and swallowed. Every higher-level
-/// read method is a thin wrapper over [getItemsAsStream], so
-/// `await collection.getItems()` will throw on the first bad key;
+/// A record the read path cannot read, such as one sealed to a key this
+/// device does not hold yet, is yielded into the stream as a
+/// [CItemReadException] error — not logged and swallowed. Every
+/// higher-level read method is a thin wrapper over [getItemsAsStream], so
+/// `await collection.getItems()` will throw on the first such record;
 /// `await for` without an `onError` handler will throw on the first
-/// bad key. Apps that want the old silent-skip posture should chain
+/// such record. Apps that want the old silent-skip posture should chain
 /// `.handleError(...)` before consuming the stream.
 /// Leading anchor shared by every AtKey scan AtCollection emits.
 ///
@@ -315,6 +325,9 @@ enum EventSource { data, notifs, both }
 ///     cursor, etc.) and must never be confused with collection
 ///     items, even when their tail happens to share the namespace
 ///     shape (the underlying defect behind #1942).
+///   - `(?!(?:cached:)?public:)` rejects a public record, this atSign's
+///     own or one its atServer cached from another atSign. A collection
+///     writes no public record, so none is an item.
 ///   - `(?:[^:]*:){0,2}` tolerates up to two leading wrapper
 ///     segments, covering every local shape a collection item can
 ///     take: none for a self-owned key (`<id>.<ns>@self`), one for
@@ -329,7 +342,8 @@ enum EventSource { data, notifs, both }
 ///     could not absorb the second `@self:` segment the way the
 ///     `[^.]+` wildcard on the unfiltered scan does — the defect
 ///     behind #2032.
-const String _atKeyScanPrefix = r'^(?!local:)(?:[^:]*:){0,2}';
+const String _atKeyScanPrefix =
+    r'^(?!local:)(?!(?:cached:)?public:)(?:[^:]*:){0,2}';
 
 interface class AtCollection<T> {
   static const String _rr = '__rr';
@@ -341,6 +355,41 @@ interface class AtCollection<T> {
   // Random-id alphabet and RNG (for auto-generated item ids).
   static const String _idAlphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
   static final Random _rng = Random.secure();
+
+  /// A character an item id or subName must not contain: `.`, `:`, `@`,
+  /// whitespace or a control character.
+  static final RegExp _keyStructure = RegExp(r'[.:@\s\x00-\x1f\x7f-\x9f]');
+
+  static const String _structureRule =
+      'must not be empty or contain ".", ":", "@", whitespace or a control character';
+
+  /// Whether an item id or subName is empty or holds a [_keyStructure]
+  /// character.
+  static bool _refusesStructure(String segment) =>
+      segment.isEmpty || _keyStructure.hasMatch(segment);
+
+  static const String _keyNameRule =
+      "must hold only characters a key's name can hold";
+
+  /// Whether a namespace composed of [subName] and this collection's
+  /// namespace is one an atKey cannot carry.
+  bool _refusesKeyName(String subName) =>
+      !isAtKeyNamespace('$subName.$namespace');
+
+  /// A character JSON leaves unescaped that would break a line or reorder
+  /// it: DEL, a C1 control, a line or paragraph separator, or a
+  /// bidirectional formatting character.
+  static final RegExp _jsonUnescaped =
+      RegExp(r'[\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
+
+  /// [text] quoted and escaped onto one line, for a log message or an
+  /// error's text.
+  static String _forLog(String text) => jsonEncode(text).replaceAllMapped(
+      _jsonUnescaped,
+      (m) => '\\u${m[0]!.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}');
+
+  /// A new item's id, after folding to lower case.
+  static final RegExp _newIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
 
   // Factory registry (process-global, NOT per-collection):
   //   - _factoriesByType: lookup by [Type] when drafting (obfuscation-safe)
@@ -390,10 +439,9 @@ interface class AtCollection<T> {
   // circuit without a round-trip when the caller's about to update
   // an item we just persisted — the common bulk-edit path. Cleared
   // on successful self-delete; left alone on failures so a retry
-  // path still probes. Cross-process visibility: self-keys are
-  // owner-scoped and only this client writes them, so a local
-  // "I just wrote it" entry is authoritative for the
-  // does-it-exist question.
+  // path still probes. An entry can outlive its item, when another
+  // client of this atSign deletes it or it expires, so [upsert] reads
+  // past it to decide the new-item rule.
   final Set<String> _seenSelfIds = <String>{};
 
   // Lazy-init scheduler that fires CItemAvailable into [_events] when
@@ -410,6 +458,11 @@ interface class AtCollection<T> {
   final String namespace;
 
   final Duration defaultExpiration;
+
+  // Type tag stamped on items this collection creates when no factory is
+  // registered for their runtime type. Lets items carry a wire-format tag
+  // without a `fromJson` factory.
+  final String? _writeTypeTag;
 
   late final AtSignLogger _logger;
 
@@ -430,13 +483,8 @@ interface class AtCollection<T> {
   late final RegExp _regexObjAny;
   late final String _regexAllStr;
 
-  /// `namespace` with every literal `.` escaped — produced once at
-  /// construction and reused at every scan site. Namespaces commonly
-  /// contain periods (e.g. `samples.dockerstats.demos`) and an
-  /// unescaped `.` in a regex matches any character, so the
-  /// non-escaped form would wrongly accept keys like
-  /// `lastreceivednotification.<ns>@<atSign>` whose first `.` lines
-  /// up with the namespace's first `.` (see #1942).
+  /// `namespace` escaped for a regex, so it matches only itself — produced
+  /// once at construction and reused at every scan site.
   late final String _escapedNamespace;
 
   /// Which source(s) this collection consumes events from. Set once
@@ -493,6 +541,10 @@ interface class AtCollection<T> {
   /// [fromJson] and [typeTag] travel together: supplying one without the
   /// other throws [ArgumentError]. See [registerFactory] for why
   /// [typeTag] is required.
+  ///
+  /// [writeTypeTag] stamps created items with that tag when no factory is
+  /// registered for their type. It is independent of [fromJson]; when
+  /// [typeTag] is also set, the two must match.
   factory AtCollection(
     AtClient atClient,
     String namespace,
@@ -500,6 +552,7 @@ interface class AtCollection<T> {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -508,6 +561,7 @@ interface class AtCollection<T> {
         eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
 
   /// Test-only factory that bypasses `atClient.notificationService.subscribe`
@@ -521,6 +575,7 @@ interface class AtCollection<T> {
     required Stream<AtNotification> notifications,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -529,6 +584,7 @@ interface class AtCollection<T> {
         eventSource: EventSource.notifs,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
       );
 
@@ -544,6 +600,7 @@ interface class AtCollection<T> {
     required Stream<DataEvent> dataEvents,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -552,6 +609,7 @@ interface class AtCollection<T> {
         eventSource: EventSource.data,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         injectedDataEvents: dataEvents,
       );
 
@@ -568,6 +626,7 @@ interface class AtCollection<T> {
     required Stream<DataEvent> dataEvents,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       AtCollection._(
         atClient,
@@ -576,24 +635,20 @@ interface class AtCollection<T> {
         eventSource: EventSource.both,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
         injectedDataEvents: dataEvents,
       );
 
-  AtCollection._(
-    this.atClient,
-    this.namespace,
-    this.defaultExpiration, {
-    required EventSource eventSource,
-    T Function(Map<String, dynamic>)? fromJson,
-    String? typeTag,
-    Stream<AtNotification>? notifications,
-    Stream<DataEvent>? injectedDataEvents,
-  }) : _eventSource = eventSource {
-    if (!namespace.contains('.')) {
-      throw ArgumentError('namespace must be fully qualified');
-    }
-    if (fromJson != null && typeTag == null) {
+  /// Throws [ArgumentError] when the tag arguments of a collection cannot be
+  /// used together: [typeTag] without a `fromJson` or the reverse, a blank
+  /// [writeTypeTag], or a [writeTypeTag] that differs from [typeTag].
+  static void _checkTagArgs<T>({
+    required bool hasFromJson,
+    required String? typeTag,
+    required String? writeTypeTag,
+  }) {
+    if (hasFromJson && typeTag == null) {
       throw ArgumentError(
         'typeTag is required when fromJson is supplied. '
         "Pass typeTag: '$T' alongside fromJson, or call "
@@ -602,26 +657,57 @@ interface class AtCollection<T> {
         'survives Dart minifier / tree-shaker renames in release builds.',
       );
     }
-    if (fromJson == null && typeTag != null) {
+    if (!hasFromJson && typeTag != null) {
       throw ArgumentError(
         'typeTag was supplied without fromJson. Pass fromJson alongside '
         'it, or omit both and register the factory separately via '
         'AtCollection.registerFactory.',
       );
     }
+    if (writeTypeTag != null && writeTypeTag.trim().isEmpty) {
+      throw ArgumentError('writeTypeTag must be non-blank when supplied.');
+    }
+    if (typeTag != null && writeTypeTag != null && writeTypeTag != typeTag) {
+      throw ArgumentError(
+        'writeTypeTag "$writeTypeTag" conflicts with typeTag "$typeTag". '
+        'Pass the same value or omit writeTypeTag.',
+      );
+    }
+  }
+
+  AtCollection._(
+    this.atClient,
+    this.namespace,
+    this.defaultExpiration, {
+    required EventSource eventSource,
+    T Function(Map<String, dynamic>)? fromJson,
+    String? typeTag,
+    String? writeTypeTag,
+    Stream<AtNotification>? notifications,
+    Stream<DataEvent>? injectedDataEvents,
+  })  : _eventSource = eventSource,
+        _writeTypeTag = writeTypeTag {
+    if (!namespace.contains('.')) {
+      throw ArgumentError('namespace must be fully qualified');
+    }
+    _checkTagArgs<T>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
     if (fromJson != null) {
       registerFactory<T>(fromJson, typeTag: typeTag!);
     }
 
     _logger = AtSignLogger(' AtCollection<$T> $namespace ');
 
-    _escapedNamespace = namespace.replaceAll('.', '\\.');
+    _escapedNamespace = RegExp.escape(namespace);
 
     // Broadest possible match for keys at this namespace — used by
     // the bulk-read path. `.*` permits any leading wire shape
-    // (sharedWith prefix, cached prefix, plain self) so long as it
-    // doesn't begin with `local:`.
-    _regexAllStr = '^(?!local:).*\\.$_escapedNamespace@';
+    // (sharedWith prefix, cached prefix, plain self) that
+    // [_atKeyScanPrefix] admits.
+    _regexAllStr = '$_atKeyScanPrefix.*\\.$_escapedNamespace@';
     // Same logical shape as `_directKeyRegex` but with multi-segment
     // ids — matches direct items `<id>.<ns>@` AND any deeper sub-item
     // `<id>.<subName>.<parentId>.…<ns>@`. Used as a cheap filter to
@@ -819,6 +905,15 @@ interface class AtCollection<T> {
   /// guarantee a collision-free id, use [create] (which retries on
   /// collision) rather than calling [draft] followed by a manual write.
   ///
+  /// A supplied [id] is folded to lower case, and the item holds the folded
+  /// id. Throws [ArgumentError] when [id] is empty, starts with `_`, or
+  /// contains `.`, `:`, `@`, whitespace or a control character. [create]'s
+  /// rule for a new item's id is not applied, so a draft for an item
+  /// already stored under an id outside that rule can be passed to [update].
+  ///
+  /// The item holds its own copy of [sharedWith], so a set the app keeps
+  /// and passes again is never changed by a write of this item.
+  ///
   /// [expiresAt] defaults to `now + defaultExpiration`. Supply an
   /// explicit value to override for this item alone.
   ///
@@ -841,21 +936,13 @@ interface class AtCollection<T> {
     DateTime? availableAt,
   }) {
     final now = DateTime.now().toUtc();
-    id ??= _newItemId();
-    // An id is one dot-separated key segment. A dotted id is written intact
-    // but read back truncated at the first dot (`k.key.split('.').first`),
-    // so it silently corrupts identity and collides with a real item of the
-    // truncated id. Reject it at the single construction point — same guard
-    // subCollection applies to `parent.id`.
-    if (id.contains('.')) {
-      throw ArgumentError('id must not contain dots: "$id"');
-    }
+    id = id == null ? _newItemId() : _foldedId(id, forWrite: true);
     return CItem._(
       owner: atSign,
       id: id,
       type: _resolveType(obj),
       obj: obj,
-      sharedWith: sharedWith ?? {},
+      sharedWith: {...?sharedWith},
       createdAt: now,
       expiresAt: expiresAt ?? now.add(defaultExpiration),
       availableAt: availableAt,
@@ -871,11 +958,17 @@ interface class AtCollection<T> {
   /// check; we retry on collision (odds are astronomically low) and give
   /// up after 10 attempts with a [StateError].
   ///
+  /// A supplied [id] is folded to lower case, and must then be 1 to 64
+  /// characters of a-z, 0-9, `-` and `_`, starting with a letter or digit;
+  /// otherwise [ArgumentError] is thrown before any read or write.
+  ///
   /// [expiresAt] and [availableAt] are forwarded to [draft]. See that
   /// method's doc comment for the defaults and the null semantics.
   ///
   /// Returns the persisted item. Throws [CollectionOpException] on any
-  /// key-level failure.
+  /// key-level failure; when the item's own copy was written and a
+  /// recipient's was not, its [CollectionOpException.item] is the item
+  /// written, to retry the share with [updateSharedWith].
   Future<CItem<T>> create({
     required T obj,
     String? id,
@@ -885,13 +978,14 @@ interface class AtCollection<T> {
   }) async {
     final String useId;
     if (id != null) {
-      if (await _selfKeyExists(id)) {
+      useId = _foldedId(id, forWrite: true);
+      _checkNewId(useId, id);
+      if (await _selfKeyExists(useId)) {
         throw StateError(
-          'Cannot create item with id "$id": already exists in $namespace. '
+          'Cannot create item with id "$useId": already exists in $namespace. '
           'Use update() to modify an existing item.',
         );
       }
-      useId = id;
     } else {
       useId = await _uniqueItemId();
     }
@@ -931,9 +1025,22 @@ interface class AtCollection<T> {
     // round-trip saved is the right trade.
     final results = await _put(item, unshareWithOthers: false);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results, item: _asWritten(item, results));
     }
     await _awaitLocalEmissions();
+    return item;
+  }
+
+  /// [item] naming only the recipients whose copies [results] wrote, or null
+  /// when its own copy was not written.
+  CItem<T>? _asWritten(CItem<T> item, List<OpResult> results) {
+    if (!results.any((r) => r is OpSuccess && r.atKey.sharedWith == null)) {
+      return null;
+    }
+    item.sharedWith.removeAll({
+      for (final r in results.whereType<OpFailure>())
+        if (r.atKey.sharedWith != null) r.atKey.sharedWith!.toAtsign()
+    });
     return item;
   }
 
@@ -975,11 +1082,26 @@ interface class AtCollection<T> {
   /// defaults as [create] / [update]. Returns the persisted item.
   /// Throws [CollectionOpException] on any key-level failure.
   ///
+  /// [id] is folded to lower case. Throws [ArgumentError] before any read
+  /// or write when [id] is empty, starts with `_`, or contains `.`, `:`,
+  /// `@`, whitespace or a control character. When neither local storage
+  /// nor the atServer holds an item with the id, throws [ArgumentError]
+  /// before any write unless it meets [create]'s rule for a new item's id;
+  /// a client whose `remoteLocalPref` is [RemoteLocalPref.remoteOnly] asks
+  /// only the atServer, so an item held in local storage alone does not
+  /// count. Whether an item is held is decided from its metadata, never its
+  /// value, so an item this client cannot decrypt counts as held. A stopped
+  /// client throws [StoppedException] from any lookup rather than counting
+  /// as held; otherwise a local lookup that fails for any reason but the
+  /// item's absence counts as held, and an atServer lookup that fails for
+  /// any reason but the item's absence keeps the refusal, whose message says
+  /// the atServer could not be checked.
+  ///
   /// ```dart
   /// // Periodic stat publisher: re-runs within TTL must be safe.
   /// for (final s in samples) {
   ///   await stats.upsert(
-  ///     id: s.timestamp.toString(),
+  ///     id: '${s.timestamp.millisecondsSinceEpoch}',
   ///     obj: s,
   ///     sharedWith: subscribers,
   ///   );
@@ -999,14 +1121,15 @@ interface class AtCollection<T> {
       expiresAt: expiresAt,
       availableAt: availableAt,
     );
-    final exists = await _selfKeyExists(id);
+    if (!_newIdPattern.hasMatch(draft.id)) {
+      final held = await _selfKeyHeld(draft.id);
+      if (held != _Held.yes) {
+        _checkNewId(draft.id, id, atServerChecked: held == _Held.no);
+      }
+    }
     final results = await _put(draft);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
-    }
-    if (!exists) {
-      // Mirror [create]'s seen-id bookkeeping for the brand-new case.
-      _seenSelfIds.add(id);
+      throw CollectionOpException<T>(results);
     }
     await _awaitLocalEmissions();
     return draft;
@@ -1048,7 +1171,7 @@ interface class AtCollection<T> {
     }
     final results = await _put(item, unshareWithOthers: unshareWithOthers);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     await _awaitLocalEmissions();
   }
@@ -1090,6 +1213,9 @@ interface class AtCollection<T> {
     Set<Atsign> sharedWith, {
     bool unshareWithOthers = true,
   }) async {
+    // NOTE: a copy, because the item's own Set is cleared below and the caller
+    // may have passed that very Set.
+    final wanted = {...sharedWith};
     if (item.owner != atSign) {
       throw ArgumentError('You may not update items owned by other atSigns');
     }
@@ -1100,15 +1226,15 @@ interface class AtCollection<T> {
       );
     }
     final toUnshare = unshareWithOthers
-        ? item.sharedWith.difference(sharedWith)
+        ? item.sharedWith.difference(wanted)
         : const <Atsign>{};
-    final toShare = sharedWith.difference(item.sharedWith);
+    final toShare = wanted.difference(item.sharedWith);
     if (toUnshare.isEmpty && toShare.isEmpty) {
       // No recipient-set delta. Still align the item's own Set with
       // the caller's argument in case they passed a fresh instance.
       item.sharedWith
         ..clear()
-        ..addAll(sharedWith);
+        ..addAll(wanted);
       return;
     }
     final now = DateTime.now();
@@ -1142,11 +1268,11 @@ interface class AtCollection<T> {
       }
     }
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     item.sharedWith
       ..clear()
-      ..addAll(sharedWith);
+      ..addAll(wanted);
     await _awaitLocalEmissions();
   }
 
@@ -1164,7 +1290,7 @@ interface class AtCollection<T> {
   Future<void> delete(CItem<T> item, {bool cascade = false}) async {
     final results = await _delete(item, cascade: cascade);
     if (results.any((r) => r is OpFailure)) {
-      throw CollectionOpException(results);
+      throw CollectionOpException<T>(results);
     }
     await _awaitLocalEmissions();
   }
@@ -1217,8 +1343,8 @@ interface class AtCollection<T> {
   // ───────────────────────────────────────────────────────────────────────
   // Regex builders. Three shapes cover every AtKey scan this class
   // emits; they share the [_atKeyScanPrefix] + [_escapedNamespace]
-  // pieces so the "reject `local:` keys, escape namespace dots"
-  // contract (the fix for #1942) lives in one place.
+  // pieces so the "reject `local:` and public keys, escape the namespace"
+  // contract lives in one place.
 
   /// Regex matching **direct items** at this collection's namespace:
   /// `<prefix><idPattern>.<ns><ownerSuffix>`.
@@ -1263,8 +1389,7 @@ interface class AtCollection<T> {
   /// chain-walker which probes alive-at-mid-namespace levels above
   /// the collection's own namespace.
   String _directKeyRegexForComposed(String composedNs) {
-    final escaped = composedNs.replaceAll('.', '\\.');
-    return '$_atKeyScanPrefix[^.]+\\.$escaped@';
+    return '$_atKeyScanPrefix[^.]+\\.${RegExp.escape(composedNs)}@';
   }
 
   /// True iff an item with the given [id] owned by [owner] exists in
@@ -1272,21 +1397,29 @@ interface class AtCollection<T> {
   /// `getOrNull(id, owner) != null` when you only care whether the
   /// item is there.
   ///
-  /// Both paths issue a single [AtClient.get] probe against the LOCAL
-  /// store. For self-owned items the call short-circuits on the seen-id
-  /// cache populated by every successful read/write in this process and
-  /// only probes on a miss. For items owned by other atSigns it probes the
-  /// received copy `cached:<self>:<id>.<namespace><owner>` — the same
-  /// locally-stored key shape [getOrNull] reads — so `exists` and
-  /// `getOrNull(id, owner) != null` agree, including offline.
+  /// Both paths issue a single [AtClient.get] probe, routed by the client's
+  /// preference: local storage by default, the atServer under
+  /// [RemoteLocalPref.remoteOnly]. For self-owned items the call
+  /// short-circuits on the seen-id cache populated by every successful
+  /// read/write in this process and only probes on a miss. For items owned
+  /// by other atSigns it probes the received copy
+  /// `cached:<self>:<id>.<namespace><owner>` — the same key shape
+  /// [getOrNull] reads — so `exists` and `getOrNull(id, owner) != null`
+  /// agree, offline too on a client that reads local storage.
+  ///
+  /// [id] is folded to lower case. Throws [ArgumentError] before any read
+  /// when [id] is empty or contains `.`, `:`, `@`, whitespace or a control
+  /// character.
   Future<bool> exists(String id, Atsign owner) async {
+    id = _foldedId(id);
     if (owner == atSign) {
       return _selfKeyExists(id);
     }
-    // Build the cached shape (leading `cached:` sets isCached, which routes
-    // the get to the LOCAL secondary). Omitting it yields `@self:id.ns@owner`
-    // with isCached=false — an other-owner key the verb-builder routes to a
-    // REMOTE lookup, which would diverge from getOrNull and fail offline.
+    // Build the cached shape (leading `cached:` sets isCached, so the get is
+    // routed like a read of this atSign's own storage). Omitting it yields
+    // `@self:id.ns@owner` with isCached=false — an other-owner key the
+    // verb-builder routes to a REMOTE lookup, which would diverge from
+    // getOrNull and fail offline.
     try {
       await atClient
           .get(AtKey.fromString('cached:$atSign:$id.$namespace$owner'));
@@ -1305,6 +1438,10 @@ interface class AtCollection<T> {
   /// propagates as that failure (via [getItemsAsStream]'s stream-error
   /// mechanism). Once a matching item is yielded the stream is
   /// cancelled, so later-in-the-scan errors never surface here.
+  ///
+  /// [id] is folded to lower case. Throws [ArgumentError] before any read
+  /// when [id] is empty or contains `.`, `:`, `@`, whitespace or a control
+  /// character. An id starting with `_` is accepted.
   Future<CItem<T>> get(String id, Atsign owner) async {
     final item = await getOrNull(id, owner);
     if (item == null) {
@@ -1318,7 +1455,8 @@ interface class AtCollection<T> {
   /// Same as [get] but returns `null` when no item exists, instead of
   /// throwing [AtKeyNotFoundException]. Same error-propagation
   /// semantics as [get] for per-key decode failures that precede the
-  /// first matching item.
+  /// first matching item, and the same [ArgumentError] for an [id] [get]
+  /// refuses.
   Future<CItem<T>?> getOrNull(String id, Atsign owner) async {
     await for (final item in getItemsAsStream(id: id, owner: owner)) {
       return item; // first match; stream unsubscribed here.
@@ -1344,14 +1482,18 @@ interface class AtCollection<T> {
   /// Fetches every item in the collection as a `List<CItem<T>>`,
   /// optionally filtered by [id] / [owner].
   ///
-  /// **Decode-error policy:** the first per-key decode failure aborts
-  /// the list with that error. If you need to continue past decode
-  /// failures, use [getItemsAsStream] directly and chain
-  /// `.handleError(...)` or collect errors yourself.
+  /// **Decode-error policy:** one record this device cannot read, such as
+  /// one sealed to a key it does not hold yet, fails the list with a
+  /// [CItemReadException] naming it. To list the rest, use
+  /// [getItemsAsStream] with an `onError` handler.
   ///
   /// Items with the same `owner+id` across self and shared copies are
   /// deduplicated and their `sharedWith` sets are unioned.
-  Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) =>
+  ///
+  /// An [id] is checked and folded as [getItemsAsStream] does, and one it
+  /// refuses fails the returned future with [ArgumentError]. The items
+  /// [getItemsAsStream] leaves out are left out here too.
+  Future<List<CItem<T>>> getItems({String? id, Atsign? owner}) async =>
       getItemsAsStream(id: id, owner: owner).toList();
 
   /// Fundamental read path. Yields each item as it is fetched, deduping
@@ -1361,10 +1503,10 @@ interface class AtCollection<T> {
   ///         .where((item) => item.obj.done)
   ///         .toList();
   ///
-  /// Per-key decode failures are yielded into the stream as **errors**
-  /// (via `yield* Stream<CItem<T>>.error(...)`), not swallowed. Good
-  /// data items keep flowing before and after each error. Callers
-  /// choose the policy:
+  /// A record this device cannot read, such as one sealed to a key it does
+  /// not hold yet, is yielded into the stream as a [CItemReadException]
+  /// error naming it and its cause, not swallowed. Good data items keep
+  /// flowing before and after each error. Callers choose the policy:
   ///
   ///   - `.toList()` / `await for` without `onError` → first error
   ///     aborts with the error thrown.
@@ -1375,9 +1517,15 @@ interface class AtCollection<T> {
   ///
   /// All higher-level read methods ([get], [getOrNull], [getItems]) are
   /// thin wrappers over this stream.
+  ///
+  /// An [id] is folded to lower case. This call throws [ArgumentError],
+  /// before a stream is returned or anything is read, when [id] is empty
+  /// or contains `.`, `:`, `@`, whitespace or a control character. An id
+  /// starting with `_` is accepted. An item stored under an id this call
+  /// would refuse is left out, with a warning naming its id and owner.
   Stream<CItem<T>> getItemsAsStream({String? id, Atsign? owner}) =>
       _getItemsAsStreamInternal(
-        id: id,
+        id: id == null ? null : _foldedId(id),
         owner: owner,
         includeNotYetAvailable: false,
       );
@@ -1415,6 +1563,13 @@ interface class AtCollection<T> {
           pendingKey = k.fullKeyAndOwner;
           // NOTE: only when the owner's own copy is gone, which sorts first.
           if (_isOutboundCopy(k)) continue;
+          final itemId = k.key.split('.').first;
+          if (_refusesStructure(itemId)) {
+            _logger.warning('Left out item id ${_forLog(itemId)} owned by '
+                '${_forLog('${k.sharedBy}')} in $namespace: the id '
+                '$_structureRule');
+            continue;
+          }
           final v = await atClient.get(k);
           // An item that is not yet available (`availableAt` in the
           // future) or whose value the keystore won't return for any
@@ -1447,7 +1602,7 @@ interface class AtCollection<T> {
             if (md == null || md.availableAt == null) continue;
             final placeholder = CItem<T>._placeholder(
               owner: k.sharedBy!.toAtsign(),
-              id: k.key.split('.').first,
+              id: itemId,
               sharedWith: {},
               createdAt: md.createdAt ?? DateTime.now().toUtc(),
               expiresAt: md.expiresAt ??
@@ -1487,7 +1642,7 @@ interface class AtCollection<T> {
           }
           pending = CItem._(
             owner: k.sharedBy!.toAtsign(),
-            id: k.key.split('.').first,
+            id: itemId,
             type: decoded['type'] as String,
             obj: _rehydrate<T>(decoded['obj']!, decoded['type'] as String),
             sharedWith: {},
@@ -1542,9 +1697,7 @@ interface class AtCollection<T> {
         //     (see [CItem.readBy] for an example — it does this to
         //     tolerate legacy `__rr` items written in the pre-
         //     refactor wire format).
-        yield* Stream<CItem<T>>.error(
-          'getItemsAsStream decode failure on ${k.key}: $e\n$st',
-        );
+        yield* Stream<CItem<T>>.error(CItemReadException(k, e), st);
       }
     }
     if (pending != null) yield pending;
@@ -1644,28 +1797,33 @@ interface class AtCollection<T> {
   /// );
   /// ```
   ///
-  /// **Nesting depth is bounded by the Atsign Protocol's 255-char
-  /// key limit.** The composed namespace this call produces is
-  /// `<subName>.<parent.id>.<this.namespace>`. The absolute
-  /// worst-case on-wire key for any descendant is the cached-copy
-  /// shape `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`;
-  /// at 55 chars per atSign that's a fixed wrapper overhead of
-  /// 118 chars (`cached:` 7 + `<other>` 55 + `:` 1 + `@<self>` 55),
-  /// leaving 137 chars for `<itemId>.<composedNs>`. Reserving 8
-  /// chars for the SDK's auto-generated item id and 1 for the
-  /// separator, **`composedNs` is capped at 128 chars** — applied
-  /// independently of the actual self-atSign length so the same
-  /// SDK builds round-trip-safe keys regardless of which atSign
-  /// owns this client.
+  /// **Nesting depth is bounded by the Atsign Protocol's key
+  /// length.** The composed namespace this call produces is
+  /// `<subName>.<parent.id>.<this.namespace>`. An atServer key is at
+  /// most 248 chars, and the cached copy a recipient's atServer keeps
+  /// at most 255. That cached copy,
+  /// `cached:<other-atsign>:<itemId>.<composedNs>@<self-atsign>`, is
+  /// the longest shape a descendant's key takes. An atSign is at most
+  /// 56 chars including its `@`, so its wrapper is at most 120 chars
+  /// (`cached:` 7 + `<other>` 56 + `:` 1 + `@<self>` 56), leaving 135
+  /// for `<itemId>.<composedNs>`. **`composedNs` is capped at 128
+  /// chars**, whatever this client's atSign, so an 8-character
+  /// generated id fits while each atSign is at most 55 chars with its
+  /// `@`; a key that does not fit is refused when it is written.
   ///
-  /// Throws [ArgumentError] when:
-  /// - [subName] is empty;
-  /// - [subName] contains a `.`;
+  /// [subName] is folded to lower case, and may start with `_`. Throws
+  /// [ArgumentError] when:
+  /// - [subName] is empty, contains `.`, `:`, `@`, whitespace or a
+  ///   control character, or holds a character a key's name cannot;
   /// - [subName] is `__rr` (reserved for the built-in read-receipt
   ///   sub-collection — use `item.readBy` / `item.markReadByMe` /
   ///   `AtCollection.readReceiptsFor` instead);
-  /// - `parent.id` contains a `.`;
   /// - the composed namespace would exceed 128 chars.
+  ///
+  /// [writeTypeTag] stamps items this sub-collection creates with that tag
+  /// when no factory is registered for their type. It is not inherited from
+  /// the parent collection. Opening the same composed namespace again with
+  /// another tag is not refused: sub-collections are not cached.
   ///
   /// **Parent-delete behaviour.** When [parent] is deleted — locally,
   /// or via a remote-delete notification — the sub-collection
@@ -1677,6 +1835,7 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       _subCollectionInternal<U>(
         parent: parent,
@@ -1684,6 +1843,7 @@ interface class AtCollection<T> {
         defaultExpiration: defaultExpiration,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
 
   /// Walks a descendant chain in one call and returns the typed leaf
@@ -1765,11 +1925,11 @@ interface class AtCollection<T> {
     final prefix = StringBuffer();
     for (var i = 0; i < ancestry.length; i++) {
       final ancestor = ancestry[i];
-      prefix.write(ancestor.id);
+      prefix.write(ancestor.id.toLowerCase());
       prefix.write('@');
       prefix.write(ancestor.owner!);
       prefix.write('/');
-      prefix.write(ancestor.subName);
+      prefix.write(ancestor.subName.toLowerCase());
       prefix.write('|');
       final isLast = (i == ancestry.length - 1);
 
@@ -1845,6 +2005,7 @@ interface class AtCollection<T> {
     required Stream<AtNotification> notifications,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
   }) =>
       _subCollectionInternal<U>(
         parent: parent,
@@ -1852,6 +2013,7 @@ interface class AtCollection<T> {
         defaultExpiration: defaultExpiration,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
         notifications: notifications,
       );
 
@@ -1861,8 +2023,10 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
+    subName = subName.toLowerCase();
     if (subName == _rr) {
       throw ArgumentError(
         'subName "$_rr" is reserved for the built-in read-receipt '
@@ -1877,6 +2041,7 @@ interface class AtCollection<T> {
       defaultExpiration: defaultExpiration,
       fromJson: fromJson,
       typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
       notifications: notifications,
     );
   }
@@ -1889,42 +2054,25 @@ interface class AtCollection<T> {
     required Duration defaultExpiration,
     U Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     Stream<AtNotification>? notifications,
   }) {
-    if (subName.isEmpty || subName.contains('.')) {
-      throw ArgumentError('subName must be non-empty and dot-free: "$subName"');
+    if (_refusesStructure(subName)) {
+      throw _IdArgumentError(subName, 'subName', _structureRule);
     }
-    if (parent.id.contains('.')) {
-      throw ArgumentError('parent.id must not contain dots: "${parent.id}"');
+    if (_refusesKeyName(subName)) {
+      throw _IdArgumentError(subName, 'subName', _keyNameRule);
     }
     final composedNs = '$subName.${parent.id}.$namespace';
-    // Worst-case key shape (cached-shared-with form):
-    //   cached:<other>:<itemId>.<composedNs>@<self>
-    // The Atsign Protocol caps every atSign at 55 chars (including
-    // the leading '@'). At absolute worst case BOTH atSigns are at
-    // that max, fixing the wrapper overhead at:
-    //   cached: (7) + <other> (55) + : (1) + @<self> (55) = 118
-    // which leaves 255 - 118 = 137 chars for <itemId>.<composedNs>.
-    // The SDK's auto-generated item ids are 8 chars; reserving 8 +
-    // 1 for the separator '.' gives a hard cap of 128 chars on
-    // composedNs.
-    //
-    // The bound is INDEPENDENT of the actual self-atSign length —
-    // we want the same SDK to produce round-trip-safe keys
-    // regardless of which atSign owns this client. Custom item ids
-    // longer than 8 chars will still encounter a tighter limit at
-    // write time (atServer rejects keys > 255), but those callers
-    // will know they've stepped outside the SDK's documented
-    // contract.
     const int maxComposedNsLength = 128;
     if (composedNs.length > maxComposedNsLength) {
       throw ArgumentError(
         'Composed sub-collection namespace "$composedNs" is '
-        '${composedNs.length} chars, exceeds the absolute-worst-case '
-        'max of $maxComposedNsLength chars (255-char key limit minus 118 chars '
-        'of wrapper overhead for two 55-char atSigns + cached: prefix, and 9 '
-        'chars reserved for an 8-char item id + separator). Use a shorter '
-        'subName or a shallower nesting depth.',
+        '${composedNs.length} chars, more than the $maxComposedNsLength '
+        'allowed. A cached key is at most 255 chars; "cached:", ":" and two '
+        'atSigns of up to 56 chars each take 120, leaving 135 for the item '
+        'id, a "." and the namespace. Use a shorter subName or a shallower '
+        'nesting depth.',
       );
     }
     // Constructing the sub-collection directly (not via `atClient.collection`)
@@ -1941,6 +2089,7 @@ interface class AtCollection<T> {
         notifications: notifications,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     } else if (_consumesData && _injectedDataEvents != null) {
       sub = AtCollection<U>._withInjectedDataEvents(
@@ -1950,6 +2099,7 @@ interface class AtCollection<T> {
         dataEvents: _injectedDataEvents!,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     } else {
       sub = AtCollection<U>(
@@ -1959,6 +2109,7 @@ interface class AtCollection<T> {
         eventSource: _eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       );
     }
     sub._parentItem = parent;
@@ -2039,10 +2190,14 @@ interface class AtCollection<T> {
   /// after an offline period during which a parent may have been
   /// deleted on another atSign.
   ///
+  /// Every read and delete it makes is routed by the client's preference:
+  /// local storage by default, the atServer under
+  /// [RemoteLocalPref.remoteOnly].
+  ///
   /// Behaviour depends on the collection instance:
   ///
   /// - **Sub-collection** (instance returned by [subCollection]): if
-  ///   its bound parent no longer exists locally, delete every
+  ///   its bound parent no longer exists, delete every
   ///   self-owned item that matches this sub-collection's ancestor-
   ///   owner chain. Cross-owner same-id chains are spared.
   ///
@@ -2050,7 +2205,7 @@ interface class AtCollection<T> {
   ///   descendant (any sub-collection, any depth) under this
   ///   collection's namespace; for each, walk the full ancestor chain
   ///   (ids from the key + owners from the envelope `parents` field)
-  ///   and delete if any level is missing locally. Legacy items with
+  ///   and delete if any level is missing. Legacy items with
   ///   no `parents` envelope fall back to a root-ancestor-only check.
   ///
   /// The cleanest place to invoke this is implicitly via
@@ -2244,7 +2399,8 @@ interface class AtCollection<T> {
   }
 
   /// Returns the set of ids that exist as direct items at the given
-  /// [composedNs] locally, across any owner. Used by the legacy
+  /// [composedNs], where the client's preference routes a scan, across any
+  /// owner. Used by the legacy
   /// (`parents`-less) chain-walker in [_cleanupOrphansFromRoot] to
   /// verify each ancestor level on items that pre-date the
   /// envelope-`parents` convention. Cached in [cache] so repeated
@@ -2294,6 +2450,7 @@ interface class AtCollection<T> {
         return;
       }
       final parts = _getPartsFromNotifKey(n);
+      if (_refusesEvent(parts)) return;
 
       // Until fsync is done, notifications will race ahead of sync events
       // We need to keep the local keystore current
@@ -2319,6 +2476,41 @@ interface class AtCollection<T> {
       }
       _logger.shout('handleNotification: $e\nStackTrace:\n$st');
     }
+  }
+
+  /// Whether an event for [parts] is dropped because its key does not name
+  /// an item, or its item id, an ancestor id or a subName is one the reads
+  /// or [subCollection] refuse; logs it if so.
+  bool _refusesEvent(_CParts parts) {
+    if (parts.name.split('.').length.isEven) {
+      _logger.warning('Dropped an event for ${_forLog(parts.name)} owned by '
+          '${_forLog('${parts.from}')} in $namespace: an item key has an odd '
+          'number of segments before the namespace');
+      return true;
+    }
+    String? refused;
+    if (_refusesStructure(parts.id)) {
+      refused = 'the id $_structureRule';
+    } else {
+      for (final a in parts.ancestry) {
+        if (_refusesStructure(a.id)) {
+          refused = 'its ancestor id ${_forLog(a.id)} $_structureRule';
+          break;
+        }
+        if (_refusesStructure(a.subName)) {
+          refused = 'its subName ${_forLog(a.subName)} $_structureRule';
+          break;
+        }
+        if (_refusesKeyName(a.subName)) {
+          refused = 'its subName ${_forLog(a.subName)} $_keyNameRule';
+          break;
+        }
+      }
+    }
+    if (refused == null) return false;
+    _logger.warning('Dropped an event for item id ${_forLog(parts.id)} owned '
+        'by ${_forLog('${parts.from}')} in $namespace: $refused');
+    return true;
   }
 
   /// Mirror of [_handleNotificationImpl] for the event-driven path.
@@ -2413,6 +2605,7 @@ interface class AtCollection<T> {
         return;
       }
       final parts = _getPartsFromAtKey(event.key);
+      if (_refusesEvent(parts)) return;
       final operation = switch (event) {
         DataUpdated() => 'update',
         DataDeleted() => 'delete',
@@ -2454,8 +2647,7 @@ interface class AtCollection<T> {
     if (keyName.startsWith('public:')) {
       keyName = keyName.substring('public:'.length);
     }
-    if (toStr.isNotEmpty) keyName = keyName.replaceAll('$toStr:', '');
-    if (fromStr.isNotEmpty) keyName = keyName.replaceAll(fromStr, '');
+    keyName = _betweenRecipientAndSender(keyName, toStr, fromStr);
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) keyName = keyName.substring(0, ix);
     final parts = keyName.split('.');
@@ -2465,6 +2657,7 @@ interface class AtCollection<T> {
     }
     return (
       from: fromStr.toAtsign(),
+      name: keyName,
       id: parts.first,
       ancestry: ancestry,
     );
@@ -2785,13 +2978,28 @@ interface class AtCollection<T> {
     }
   }
 
+  /// [key] without a leading `<recipient>:` and a trailing [sender]; an
+  /// empty [recipient] or [sender] strips nothing.
+  static String _betweenRecipientAndSender(
+      String key, String recipient, String sender) {
+    var name = key;
+    if (recipient.isNotEmpty && name.startsWith('$recipient:')) {
+      name = name.substring(recipient.length + 1);
+    }
+    if (sender.isNotEmpty && name.endsWith(sender)) {
+      name = name.substring(0, name.length - sender.length);
+    }
+    return name;
+  }
+
   _CParts _getPartsFromNotifKey(AtNotification n) {
-    String keyName = n.key.replaceAll('${n.to}:', '').replaceAll(n.from, '');
+    String keyName = _betweenRecipientAndSender(n.key, n.to, n.from);
     final ix = keyName.lastIndexOf('.$namespace');
     if (ix >= 0) {
       keyName = keyName.substring(0, ix);
     }
-    final parts = keyName.split('.');
+    final name = keyName.toLowerCase();
+    final parts = name.split('.');
     // parts layout by depth (natural order):
     //   L0 root  : [id]                               (length 1)
     //   L1 sub   : [id, subName, parentId]            (length 3)
@@ -2809,6 +3017,7 @@ interface class AtCollection<T> {
     }
     return (
       from: n.from.toAtsign(),
+      name: name,
       id: parts.first,
       ancestry: ancestry,
     );
@@ -2827,6 +3036,14 @@ interface class AtCollection<T> {
   /// recommended — see [CEvent] doc comment), it should include a
   /// `default: break` branch to stay forward-compatible with future
   /// event types.
+  ///
+  /// No event is emitted for a key whose item id, ancestor id or subName
+  /// is empty or contains `.`, `:`, `@`, whitespace or a control
+  /// character, or whose subName holds a character a key's name cannot, or
+  /// whose key does not have an odd number of segments before the namespace;
+  /// a warning names the id, or those segments, and its owner instead. Every
+  /// other event carries its item id, ancestor ids and subNames folded to
+  /// lower case.
   Stream<CEvent> watch() => _events.stream;
 
   /// Fires when a direct item (at this collection's namespace, depth
@@ -3024,6 +3241,34 @@ interface class AtCollection<T> {
     return ids;
   }
 
+  /// [id] folded to lower case. Throws [ArgumentError] when it is empty or
+  /// contains `.`, `:`, `@`, whitespace or a control character, and, for a
+  /// write ([forWrite]), when it starts with `_`.
+  static String _foldedId(String id, {bool forWrite = false}) {
+    final folded = id.toLowerCase();
+    if (_refusesStructure(folded)) {
+      throw _IdArgumentError(id, 'id', _structureRule);
+    }
+    if (forWrite && folded.startsWith('_')) {
+      throw _IdArgumentError(id, 'id', 'must not start with "_"');
+    }
+    return folded;
+  }
+
+  /// Throws [ArgumentError], naming the [given] id, when [folded] is not a
+  /// valid id for a new item; unless [atServerChecked], the message says the
+  /// atServer could not be checked for an item with the id.
+  static void _checkNewId(String folded, String given,
+      {bool atServerChecked = true}) {
+    if (!_newIdPattern.hasMatch(folded)) {
+      throw _IdArgumentError(
+          given,
+          'id',
+          'a new item id must be 1 to 64 characters of a-z, 0-9, "-" and "_", starting with a letter or digit'
+              '${atServerChecked ? '' : '; the atServer could not be checked for an item with this id'}');
+    }
+  }
+
   String _newItemId() {
     final buf = StringBuffer();
     for (int i = 0; i < 8; i++) {
@@ -3043,6 +3288,38 @@ interface class AtCollection<T> {
     );
   }
 
+  /// Whether this atSign's own item [id], past the seen-id cache, is held,
+  /// judged from its metadata alone: [AtClient.getMeta] never reads a value.
+  ///
+  /// A [StoppedException] from any lookup is rethrown. A client whose
+  /// `remoteLocalPref` is [RemoteLocalPref.remoteOnly] asks the atServer
+  /// alone. Any other client, or one with no preference, asks local storage
+  /// first, where a lookup that fails for any reason but the item's absence
+  /// counts as held; when local storage holds nothing, it asks the atServer
+  /// too, so an item that sync has not yet brought to this device is still
+  /// held. At the atServer only metadata counts: a lookup that fails for any
+  /// reason but the item's absence leaves the item unchecked.
+  Future<_Held> _selfKeyHeld(String id) async {
+    final key = '$id.$namespace$atSign';
+    final atServerOnly = atClient.getPreferences()?.remoteLocalPref ==
+        RemoteLocalPref.remoteOnly;
+    for (final remote in atServerOnly ? [true] : [false, true]) {
+      try {
+        await atClient.getMeta(AtKey.fromString(key),
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);
+        return _Held.yes;
+      } catch (e) {
+        if (e is StoppedException) rethrow;
+        if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
+        if (!remote) return _Held.yes;
+        // NOTE: an atServer lookup that fails for any reason but the item's
+        // absence leaves the item unchecked.
+        return _Held.unchecked;
+      }
+    }
+    return _Held.no;
+  }
+
   Future<bool> _selfKeyExists(String id) async {
     if (_seenSelfIds.contains(id)) return true;
     try {
@@ -3059,10 +3336,13 @@ interface class AtCollection<T> {
 
   String _resolveType(Object? obj) {
     if (obj is Uint8List) return 'binary';
-    final entry = _factoriesByType[obj.runtimeType];
-    if (entry != null) return entry.tag;
-    return 'n/a';
+    return _tagFor(obj.runtimeType, _writeTypeTag);
   }
+
+  /// The tag stamped on a new item of [type], other than a byte array, by a
+  /// collection whose writeTypeTag is [writeTypeTag].
+  static String _tagFor(Type type, String? writeTypeTag) =>
+      _factoriesByType[type]?.tag ?? writeTypeTag ?? 'n/a';
 
   // Drops a past [availableAt] so rehydrated CItems don't carry a stale
   // schedule. The Atsign Protocol metadata wire format is additive — a past
@@ -3173,6 +3453,9 @@ interface class AtCollection<T> {
   /// key-level failure — callers that want throwing semantics (like
   /// [create] and [update]) inspect the returned results and raise
   /// [CollectionOpException].
+  ///
+  /// When the self copy cannot be written, nothing else is: each recipient's
+  /// copy is returned as [OpNotAttempted].
   Future<List<OpResult>> _put(
     CItem<T> item, {
     bool unshareWithOthers = true,
@@ -3187,6 +3470,8 @@ interface class AtCollection<T> {
 
     final results = <OpResult>[];
     final selfKey = AtKey.fromString('${item.id}.$namespace$atSign');
+    AtKey recipientKey(Atsign recipient) =>
+        AtKey.fromString('$recipient:${item.id}.$namespace$atSign');
     final md = _buildMetadata(item, now);
 
     // 1. Self copy.
@@ -3211,7 +3496,12 @@ interface class AtCollection<T> {
       _emitAncestorSubUpdated(item);
     } catch (e) {
       if (e is StoppedException) rethrow;
-      results.add(OpFailure(selfKey, CollectionOp.put, e));
+      // NOTE: a share is written only after the owner's own copy.
+      return [
+        OpFailure(selfKey, CollectionOp.put, e),
+        for (final otherAtSign in item.sharedWith)
+          OpNotAttempted(recipientKey(otherAtSign), CollectionOp.put),
+      ];
     }
 
     // 2. Diff: delete recipient copies whose atSign is no longer in
@@ -3233,9 +3523,7 @@ interface class AtCollection<T> {
 
     // 3. Recipient copies (create or overwrite).
     for (final otherAtSign in item.sharedWith) {
-      final k = AtKey.fromString(
-        '$otherAtSign:${item.id}.$namespace$atSign',
-      );
+      final k = recipientKey(otherAtSign);
       try {
         k.metadata = md;
         await atClient.put(k, jsonEncode(item.toJson()));
@@ -3551,7 +3839,8 @@ final class WithChildren<P, C> {
 /// Queries are **immutable**: each modifier returns a new [Query].
 /// Reuse a built query anywhere; there's no shared mutable state.
 ///
-/// Execution is **on-device**, over the local synced store. Under
+/// Execution is **on-device**, over the records the client reads: its local
+/// synced store by default. Under
 /// end-to-end encryption the atServer cannot decrypt the records it
 /// holds on your behalf, so on-device is the only correct model —
 /// not a performance compromise. See the [AtCollection] class doc for
@@ -3659,7 +3948,7 @@ final class Query<T> {
     return Query<T>._(_collection, _spec._withSkip(n));
   }
 
-  /// One-shot fetch. Reads the local store once, applies the spec,
+  /// One-shot fetch. Reads the collection once, applies the spec,
   /// returns a list. For a live reactive variant, see [watch].
   ///
   /// Propagates any error from the underlying [AtCollection.getItems]
@@ -3669,11 +3958,6 @@ final class Query<T> {
     final all = await _collection.getItems();
     return _spec._apply(all);
   }
-
-  /// Deprecated alias for [get] — keeps existing call-sites compiling
-  /// while they migrate. Will be removed in the next minor release.
-  @Deprecated('use get() instead — fetch() will be removed in the next minor')
-  Future<List<CItem<T>>> fetch() => get();
 
   /// One-shot fetch with duplicates removed by [keyFn]. The first
   /// matching item per key is kept; subsequent items mapping to the
@@ -4832,6 +5116,11 @@ final class CItem<T> {
   /// The unique identifier, prepended to the collection's namespace when
   /// persisted. E.g. if the collection namespace is `todos.my_apps` then
   /// the full persisted key prefix is `<id>.todos.my_apps`.
+  ///
+  /// An id given to [AtCollection.draft], [AtCollection.create] or
+  /// [AtCollection.upsert] is folded to lower case. A new item's id is 1 to
+  /// 64 characters of a-z, 0-9, `-` and `_`, starting with a letter or
+  /// digit; an item already stored keeps the id its key holds.
   final String id;
 
   /// The type-tag that drives rehydration. Set automatically by [draft]
@@ -5093,7 +5382,7 @@ final class CItem<T> {
       );
       final results = await rr._putRecipientsOnly(receipt);
       if (results.any((r) => r is OpFailure)) {
-        throw CollectionOpException(results);
+        throw CollectionOpException<T>(results);
       }
       // Patch the in-process readers cache so a subsequent
       // wasMarkedReadByMe on this CItem instance returns true even
@@ -5146,14 +5435,32 @@ final class OpFailure extends OpResult {
   String toString() => '$atKey:${op.name}:Failure:$reason';
 }
 
+/// A key-level op that was not attempted because the item's own copy could
+/// not be written.
+final class OpNotAttempted extends OpResult {
+  OpNotAttempted(super.atKey, super.op);
+
+  @override
+  String toString() => '$atKey:${op.name}:NotAttempted';
+}
+
 /// Thrown by [AtCollection.create] / [AtCollection.update] /
 /// [AtCollection.delete] when any key-level op failed. Inspect [results]
 /// for the per-key breakdown, or [failures] / [firstFailure] for the
 /// subset that went wrong.
-final class CollectionOpException implements Exception {
+///
+/// [T] is the item type of the collection that threw it, so
+/// `on CollectionOpException<Todo> catch (e)` hands back a typed [item].
+final class CollectionOpException<T> implements Exception {
   final List<OpResult> results;
 
-  CollectionOpException(this.results);
+  /// The item [AtCollection.create] wrote when its own copy landed and a
+  /// recipient's copy did not, naming only the recipients whose copies were
+  /// written: retry the rest with [AtCollection.updateSharedWith], not
+  /// [AtCollection.create], which would write a second item. Null otherwise.
+  final CItem<T>? item;
+
+  CollectionOpException(this.results, {this.item});
 
   List<OpFailure> get failures => results.whereType<OpFailure>().toList();
 
@@ -5163,6 +5470,22 @@ final class CollectionOpException implements Exception {
   String toString() =>
       'CollectionOpException with ${failures.length} failure(s):\n'
       '  ${failures.join('\n  ')}';
+}
+
+/// A record a collection could not read, such as one sealed to a key this
+/// device does not hold yet: yielded as an error by
+/// [AtCollection.getItemsAsStream], with the stack its read failed on.
+final class CItemReadException implements Exception {
+  /// The record that could not be read.
+  final AtKey key;
+
+  /// What reading it failed with.
+  final Object cause;
+
+  CItemReadException(this.key, this.cause);
+
+  @override
+  String toString() => 'CItemReadException: could not read $key: $cause';
 }
 
 /// Multi-line human-readable dump of a [CItem] — useful for
@@ -5399,14 +5722,33 @@ final class CSubItemDeleted extends CEvent {
   String get subName => ancestry.last.subName;
 }
 
+/// What [AtCollection]'s lookups of its own item's metadata found: the item
+/// is held, it is absent, or the atServer lookup failed for any other reason.
+enum _Held { yes, no, unchecked }
+
+/// An [ArgumentError] for an item id or subName whose text shows the value
+/// escaped onto one line, as AtCollection's warnings show it.
+final class _IdArgumentError extends ArgumentError {
+  _IdArgumentError(String super.value, String super.name, super.message)
+      : super.value();
+
+  @override
+  String toString() => 'Invalid argument ($name): $message: '
+      '${AtCollection._forLog(invalidValue as String)}';
+}
+
 /// Parsed components of a notification key. Private to [AtCollection].
 typedef _CParts = ({
   Atsign from,
 
-  /// The item's own id (at any depth).
+  /// The key's segments before the namespace, folded to lower case.
+  String name,
+
+  /// The item's own id (at any depth), folded to lower case.
   String id,
 
-  /// Root-to-direct-parent chain. Empty for a root-level item.
+  /// Root-to-direct-parent chain, folded to lower case. Empty for a
+  /// root-level item.
   List<CAncestor> ancestry,
 });
 
@@ -5417,4 +5759,51 @@ class _FactoryEntry {
   final Function fromJson;
 
   _FactoryEntry(this.tag, this.fromJson);
+}
+
+// -----------------------------------------------------------------------------
+// Reopening a collection with another type tag
+
+/// [AtCollection]'s tag-argument check, for [AtClient.collection], which must
+/// refuse bad arguments even when it hands out a cached collection.
+@internal
+void checkCollectionTagArgs<T>({
+  required bool hasFromJson,
+  required String? typeTag,
+  required String? writeTypeTag,
+}) =>
+    AtCollection._checkTagArgs<T>(
+      hasFromJson: hasFromJson,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+
+/// Throws [ArgumentError] when [open], a collection [AtClient.collection]
+/// already handed out, would stamp a new [T] with another tag than a new
+/// collection opened with [typeTag] and [writeTypeTag] would.
+///
+/// A new collection stamps [typeTag], else the tag of the factory registered
+/// for [T], else [writeTypeTag], else `n/a`; [open] stamps the registered
+/// tag, else its own writeTypeTag, else `n/a`. A [T] of [Uint8List] is always
+/// stamped `binary`, so it never differs. Call [checkCollectionTagArgs]
+/// first.
+@internal
+void refuseCollectionTagChange<T>(
+  AtCollection<dynamic> open, {
+  required String? typeTag,
+  required String? writeTypeTag,
+}) {
+  if (T == Uint8List) return;
+  final held = AtCollection._tagFor(T, open._writeTypeTag);
+  final asked = typeTag ?? AtCollection._tagFor(T, writeTypeTag);
+  if (held == asked) return;
+  throw ArgumentError.value(
+      writeTypeTag ?? typeTag,
+      typeTag != null && writeTypeTag == null ? 'typeTag' : 'writeTypeTag',
+      'the collection ${open.namespace} is already open on this client '
+      'stamping "$held" on a new $T, not "$asked", and a collection\'s '
+      'tag is final at construction — it cannot adopt this one. Open it with '
+      'the tag it was first opened with, or use another namespace. '
+      'Handing it out would leave this caller writing items under a tag '
+      'it did not ask for');
 }

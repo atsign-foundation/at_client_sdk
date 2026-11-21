@@ -5,9 +5,9 @@
 Pod::Spec.new do |s|
   s.name             = 'at_login_flutter'
   s.version          = '0.0.1'
-  s.summary          = 'A flutter library for zero trust logins using the @protocol'
+  s.summary          = 'A flutter library for zero trust logins using the Atsign Protocol'
   s.description      = <<-DESC
-A flutter library for zero trust logins using the @protocol
+A flutter library for zero trust logins using the Atsign Protocol
                        DESC
   s.homepage         = 'http://example.com'
   s.license          = { :file => '../LICENSE' }

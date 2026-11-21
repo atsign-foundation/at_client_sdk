@@ -69,7 +69,7 @@ samples.
 // Send one notification per sample — no identity, no persistence
 await atClient.notificationService.send(
   to: recipientAtsign,
-  namespace: 'sample.nginx.myhost.dockerstats.demos',
+  idAndNamespace: 'sample.nginx.myhost.dockerstats.demos',
   body: jsonEncode(sample.toJson()),
   expiration: const Duration(minutes: 5),  // short TTL — stale samples are useless
 );
@@ -81,8 +81,10 @@ await atClient.notificationService.send(
 // Subscribe to a namespace regex.
 // shouldDecrypt: true is needed because the publisher encrypts by default
 // (shouldEncrypt defaults to true on the send() side).
+// A subscription takes every sender, so keep only the publisher you trust.
 atClient.notificationService
     .subscribe(regex: r'sample\..*\.dockerstats\.demos', shouldDecrypt: true)
+    .where((notification) => notification.from.toAtsign() == publisher)
     .listen((notification) async {
       final sample = StatSample.fromJson(jsonDecode(notification.value));
       await db.insert('samples', sample.toMap());  // append to local SQLite

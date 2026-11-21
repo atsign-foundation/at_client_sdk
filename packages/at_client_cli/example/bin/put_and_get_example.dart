@@ -11,8 +11,7 @@ import 'package:at_client_cli/at_client_cli.dart';
 /// - fetch it back as it is stored
 /// - fetch it back and decrypt it
 Future<void> main(List<String> args) async {
-  final ArgParser parser = CLIBase.createArgsParser(
-      namespace: 'example', addLegacyRootDomainArg: false);
+  final ArgParser parser = CLIBase.createArgsParser(namespace: 'example');
   try {
     AtClient atClient =
         (await CLIBase.fromCommandLineArgs(args, parser: parser)).atClient;
@@ -36,7 +35,7 @@ Future<void> main(List<String> args) async {
 
     print('Fetching $id');
 
-    // Fetch it via atProtocol llookup command
+    // Fetch it via Atsign Protocol llookup command
     var asStored =
         (await atClient.getRemoteSecondary()!.executeCommand('llookup:$id\n'))!
             .replaceFirst(RegExp(r'^data:'), '');

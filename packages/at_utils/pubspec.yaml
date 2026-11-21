@@ -15,7 +15,7 @@ dependencies:
   crypto: ^3.0.5
   at_commons: ^5.21.0
   collection: ^1.16.0
-  chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
+  chalkdart: ">=2.3.0 <4.0.0" # no breaking changes in 3.0.0
 
 dev_dependencies:
   lints: ^6.0.0

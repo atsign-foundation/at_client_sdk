@@ -9,11 +9,50 @@ import 'package:chalkdart/chalk.dart';
 import 'package:http/http.dart';
 import 'package:http/io_client.dart';
 
+/// The environment variable at_register and at_activate take the registrar
+/// API key from, in place of the built-in one.
+const String registrarApiKeyVariable = 'AT_REGISTRAR_API_KEY';
+
+/// What at_register and at_activate say when the registrar API key holds a
+/// character an HTTP header cannot carry.
+const String badRegistrarApiKey =
+    'The registrar API key in $registrarApiKeyVariable holds a character an '
+    'HTTP header cannot carry, such as a line break. Set it to the key exactly '
+    'as the registrar at my.atsign.com issued it.';
+
 ///class containing utilities to perform registration of a free atsign
 class OnboardingUtil {
   static bool allowBadCertificates = false;
   final logger = AtSignLogger(' OnboardingUtil ');
+
+  // NOTE: the registrar API key is never logged, put in a URL or written to
+  // a file.
+  /// The key every request names the app to the registrar with.
+  final String registrarApiKey;
   IOClient? _ioClient;
+
+  /// A registrar client naming the app with [registrarApiKey], or with the
+  /// built-in key when that is absent or blank. Throws
+  /// [at_client.AtClientException], without quoting the key, when it holds a
+  /// character an HTTP header cannot carry.
+  OnboardingUtil(String? registrarApiKey)
+      : registrarApiKey = usableRegistrarApiKey(registrarApiKey);
+
+  /// The registrar API key to send: [registrarApiKey] when it is set and not
+  /// blank, otherwise [RegistrarApiConstants.authorization]. Throws
+  /// [at_client.AtClientException], without quoting it, when a key that is
+  /// set holds a character an HTTP header cannot carry.
+  static String usableRegistrarApiKey(String? registrarApiKey) =>
+      registrarApiKey == null || registrarApiKey.trim().isEmpty
+          ? RegistrarApiConstants.authorization
+          : !_fitsAHeader(registrarApiKey)
+              ? throw at_client.AtClientException.message(badRegistrarApiKey)
+              : registrarApiKey;
+
+  /// Whether [value] holds only what an HTTP header value carries: visible
+  /// ASCII, spaces and tabs.
+  static bool _fitsAHeader(String value) => value.codeUnits
+      .every((unit) => unit == 0x09 || (unit >= 0x20 && unit <= 0x7e));
 
   void _createClient() {
     HttpClient ioc = HttpClient();
@@ -204,7 +243,7 @@ class OnboardingUtil {
     if (_ioClient == null) _createClient();
     Uri uri = Uri.https(authority, path);
     Response response = await _ioClient!.get(uri, headers: <String, String>{
-      'Authorization': RegistrarApiConstants.authorization,
+      'Authorization': registrarApiKey,
       'Content-Type': RegistrarApiConstants.contentType,
     });
     return response;
@@ -225,7 +264,7 @@ class OnboardingUtil {
       uri,
       body: body,
       headers: <String, String>{
-        'Authorization': RegistrarApiConstants.authorization,
+        'Authorization': registrarApiKey,
         'Content-Type': RegistrarApiConstants.contentType,
       },
     );

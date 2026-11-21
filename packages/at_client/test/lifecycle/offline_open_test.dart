@@ -54,7 +54,7 @@ void main() {
         atSign: atSign,
         namespace: 'offline',
         preference: preference,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(preference),
         atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
         storage: hiveStoreFor(atSign, preference));
@@ -105,7 +105,7 @@ void main() {
               ..rootPort = await refusedPort()
               ..hiveStoragePath = dir.path
               ..namespace = 'offline',
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atKeysIo: keys,
             storage: hiveStoreAt(atSign, dir.path));

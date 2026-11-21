@@ -37,7 +37,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -126,7 +126,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -199,7 +199,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -270,7 +270,7 @@ void main() {
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
           '@alice', 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -323,7 +323,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -412,7 +412,7 @@ void main() {
       final privilegedEnrollment = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -480,7 +480,7 @@ void main() {
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
           '@alice', 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -530,7 +530,7 @@ void main() {
       final testEnrollmentId = 'aaa111';
       var atClient = await AtClientImpl.create(
           '@alice', 'all', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -610,7 +610,7 @@ void main() {
       var newEnrollmentId = 'abc123';
       var enrolledAtClient = await AtClientImpl.create(
           '@alice', 'wavi', AtClientPreference()..hiveStoragePath = 'test/hive',
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: defaultAtDirectory,
           atKeysIo: noKeysFor('@alice'),
           storage: hiveStoreAt('@alice', 'test/hive'));
@@ -632,9 +632,8 @@ void main() {
   });
 }
 
-// The AtClient owns its commit-log-free persistence bundle (created
-// by `AtClientImpl.create` since `isLocalStoreRequired` defaults to
-// true). Each test builds its own client, so all setup needs to do is
+// The AtClient owns its commit-log-free persistence bundle, created
+// by `AtClientImpl.create`. Each test builds its own client, so all setup needs to do is
 // evict any cached instance so storage is reopened fresh.
 Future<void> setupLocalStorage(String storageDir, String atSign) async {
   AtClientImpl.atClientInstanceMap.remove(atSign);

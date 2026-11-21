@@ -73,7 +73,10 @@ class AtOnboardingRequest extends AuthRequest {
   /// major, once every first-party downstream writes PQ by default.
   ///
   /// Setting it false makes a legacy peer's send to this atSign unsupported:
-  /// there is no `public:publickey` for them to encrypt to. It also leaves the
+  /// there is no `public:publickey` for them to encrypt to. It leaves
+  /// at_client's `AtClient.put` of a public value throwing
+  /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
+  /// encryption private key. It also leaves the
   /// keyfile with no `selfEncryptionKey`, which is correct — with no legacy
   /// flat fields to protect there is nothing for it to encrypt, and a
   /// passphrase envelope is what protects the typed material at rest.
@@ -86,6 +89,19 @@ class AtOnboardingRequest extends AuthRequest {
   /// again, so onboarding is the only moment a first enrollment can advertise
   /// an encapsulation key at all.
   FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
+
+  /// An APKAM authentication keypair the caller holds already, used for this
+  /// activation's first enrollment in place of a freshly minted one.
+  ///
+  /// It must be a working pair under [signingAlgoType]: the private half signs
+  /// for the public half. A pair that is not is refused with
+  /// [AtSigningException] before anything is enrolled. Null mints one.
+  ///
+  /// If activation fails after the enrollment is accepted (the PKAM login or the
+  /// keyfile write), retrying with the same pair is refused by the atServer while
+  /// that enrollment's record exists: retry with a different pair, or with none so
+  /// one is minted. The CRAM secret stays valid until an activation completes.
+  ({String publicKey, String privateKey})? apkamKeyPair;
 
   /// A signing keypair this atSign's first enrollment owns from birth.
   ///

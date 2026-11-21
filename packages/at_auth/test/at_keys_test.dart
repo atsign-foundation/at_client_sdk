@@ -339,7 +339,7 @@ void main() {
   });
 
   group('AtKeys authenticationKeyPairFor', () {
-    // The fixture's flat fields are this enrollment's own credentials.
+    // The fixture's flat fields hold this enrollment's keys.
     final flatEnrollmentId = encryptedAtKeysMap['enrollmentId'] as String;
     final flatApkamPublicKey =
         encryptedAtKeysMap[auth_constants.apkamPublicKey] as String;
@@ -458,6 +458,114 @@ void main() {
           throwsA(isA<AtKeyNotFoundException>()));
       expect(futureAlgo.authenticationKeyPairFor('never-held-here'), isNotNull,
           reason: 'absent material and unusable material stay different');
+    });
+
+    test(
+        'authenticationKeyPairFor refuses halves that disagree about the algorithm',
+        () {
+      CryptographicMaterial half(String role, String algorithm, String bytes) =>
+          CryptographicMaterial(
+            keyId: 'auth:mldsa65:1',
+            enrollmentId: typedEnrollmentId,
+            role: CryptographicMaterialRole.of(role),
+            algorithm: CryptographicMaterialAlgorithm.of(algorithm),
+            bytes: AtBytes.fromString(bytes),
+            createdAt: DateTime.utc(2026, 1, 1),
+          );
+
+      // `addKey` admits this: the invariant is per (role, algorithm), so a
+      // keyId may hold one half of each without either rule seeing the other.
+      final mixed = AtKeys()
+        ..addKey(half('privateAuthentication', 'mldsa65', 'cHJpdmF0ZQ=='))
+        ..addKey(half('publicAuthentication', 'rsa2048', typedApkamPublicKey));
+
+      expect(
+        mixed.authenticationAlgorithmFor(typedEnrollmentId),
+        SigningAlgoType.mldsa65,
+        reason: 'the control: the algorithm is resolvable, so the refusal '
+            'below is about the pair, not about finding nothing',
+      );
+      expect(
+        () => mixed.authenticationKeyPairFor(typedEnrollmentId),
+        throwsA(isA<AtKeyNotFoundException>()),
+        reason: 'naming ML-DSA while carrying an RSA public key produces a '
+            'pair whose every signature fails verification, with nothing '
+            'naming the keyfile as the cause',
+      );
+    });
+
+    test(
+        'authenticationKeyPairFor refuses a public half under another keyId',
+        () {
+      CryptographicMaterial half(String role, String keyId, String bytes) =>
+          CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: typedEnrollmentId,
+            role: CryptographicMaterialRole.of(role),
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+            bytes: AtBytes.fromString(bytes),
+            createdAt: DateTime.utc(2026, 1, 1),
+          );
+
+      final split = AtKeys()
+        ..addKey(
+          half('privateAuthentication', 'auth:mldsa65:1', 'cHJpdmF0ZQ=='),
+        )
+        ..addKey(
+          half('publicAuthentication', 'auth:mldsa65:2', typedApkamPublicKey),
+        );
+
+      expect(
+        () => split.authenticationKeyPairFor(typedEnrollmentId),
+        throwsA(isA<AtKeyNotFoundException>()),
+        reason:
+            'the two halves are not a keypair: picking them '
+            'independently pairs one generation\'s private key with '
+            'another\'s public one',
+      );
+    });
+
+    test(
+        'authenticationKeyPairFor refuses when the public half is retired',
+        () {
+      CryptographicMaterial half(
+        String role,
+        String keyId,
+        String bytes,
+        CryptographicMaterialStatus status,
+      ) => CryptographicMaterial(
+        keyId: keyId,
+        enrollmentId: typedEnrollmentId,
+        role: CryptographicMaterialRole.of(role),
+        algorithm: CryptographicMaterialAlgorithm.rsa2048,
+        bytes: AtBytes.fromString(bytes),
+        createdAt: DateTime.utc(2026, 1, 1),
+        status: status,
+      );
+
+      final withRetiredPublic = AtKeys()
+        ..addKey(
+          half(
+            'privateAuthentication',
+            'auth:rsa2048:1',
+            'cHJpdmF0ZQ==',
+            CryptographicMaterialStatus.active,
+          ),
+        )
+        ..addKey(
+          half(
+            'publicAuthentication',
+            'auth:rsa2048:1',
+            typedApkamPublicKey,
+            CryptographicMaterialStatus.retired,
+          ),
+        );
+
+      expect(
+        () => withRetiredPublic.authenticationKeyPairFor(typedEnrollmentId),
+        throwsA(isA<AtKeyNotFoundException>()),
+        reason: 'a retired public half is not usable for authentication',
+      );
     });
 
     test('authenticationKeyPairFor answers null for a keyfile holding none',
@@ -840,16 +948,21 @@ void main() {
   group('AtKeys pending enrollment', () {
     /// An enrollment's APKAM keypair as an enrollment files it at submission:
     /// both halves pending under one keyId.
-    List<CryptographicMaterial> pendingApkam(String enrollmentId) => [
+    List<CryptographicMaterial> pendingApkam(
+      String enrollmentId, {
+      String keyId = 'auth:rsa2048:1',
+      CryptographicMaterialAlgorithm algorithm =
+          CryptographicMaterialAlgorithm.rsa2048,
+    }) => [
           for (final role in [
             CryptographicMaterialRole.privateAuthentication,
             CryptographicMaterialRole.publicAuthentication,
           ])
             CryptographicMaterial(
-              keyId: 'auth:rsa2048:1',
+              keyId: keyId,
               enrollmentId: enrollmentId,
               role: role,
-              algorithm: CryptographicMaterialAlgorithm.rsa2048,
+              algorithm: algorithm,
               bytes: AtBytes.fromString('cGVuZGluZw=='),
               createdAt: DateTime.utc(2026, 9, 12),
               status: CryptographicMaterialStatus.pending,
@@ -906,6 +1019,135 @@ void main() {
           throwsA(isA<ArgumentError>()));
     });
 
+    test(
+        'activatePending refuses two pending authentication materials of one algorithm',
+        () {
+      // Both are pending, so addKey accepts them; approving the enrollment
+      // would activate both and leave an AtKeys that every later parse and
+      // flush refuses.
+      CryptographicMaterial pendingAuth(String keyId) => CryptographicMaterial(
+        keyId: keyId,
+        enrollmentId: 'e1',
+        role: CryptographicMaterialRole.privateAuthentication,
+        algorithm: CryptographicMaterialAlgorithm.rsa2048,
+        bytes: AtBytes.fromString('cGVuZGluZw=='),
+        createdAt: DateTime.utc(2026, 9, 12),
+        status: CryptographicMaterialStatus.pending,
+      );
+
+      final atKeys = AtKeys(
+        keysList: [
+          pendingAuth('auth:rsa2048:1'),
+          pendingAuth('auth:rsa2048:2'),
+        ],
+      );
+
+      expect(
+        () => atKeys.activatePending('e1'),
+        throwsA(isA<ArgumentError>()),
+        reason: 'one enrollment may hold only one active authentication '
+            'key material per algorithm',
+      );
+      expect(
+        atKeys.keysForEnrollment('e1').map((m) => m.status),
+        everyElement(CryptographicMaterialStatus.pending),
+        reason: 'a refused approval leaves the enrollment as it was',
+      );
+    });
+
+    test(
+        'activatePending refuses two pending authentication keypairs of one algorithm in one batch',
+        () {
+      // A re-submitted request files a second keypair for the same enrollment.
+      // The two are only ever compared with each other if the batch is
+      // validated against itself.
+      final atKeys = AtKeys(
+        atsign: '@alice'.toAtsign(),
+        keysList: [
+          ...pendingApkam('e1'),
+          ...pendingApkam('e1', keyId: 'auth:rsa2048:2'),
+        ],
+      );
+
+      expect(
+        () => atKeys.activatePending('e1'),
+        throwsA(isA<ArgumentError>()),
+        reason: 'activating both writes a document this build refuses to '
+            'read, so the approval could never be persisted',
+      );
+      expect(
+        atKeys.pendingEnrollmentIds,
+        ['e1'],
+        reason: 'and nothing is activated: the refusal is not a partial write',
+      );
+      expect(
+        () => AtKeys.fromJson(atKeys.toJson()),
+        returnsNormally,
+        reason: 'the keyfile it leaves behind is still a document its own '
+            'reader accepts',
+      );
+    });
+
+    test(
+        'activatePending refuses two pending authentication keypairs of different algorithms in one batch',
+        () {
+      final atKeys = AtKeys(
+        keysList: [
+          ...pendingApkam('e1'),
+          ...pendingApkam('e1',
+              keyId: 'auth:mldsa65:1',
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65),
+        ],
+      );
+
+      expect(
+        () => atKeys.activatePending('e1'),
+        throwsA(isA<ArgumentError>()),
+        reason: 'one live enrollment holds one active authentication pair, '
+            'and the per-(role, algorithm) rule cannot see across two '
+            'algorithms — only the batch comparison can',
+      );
+      expect(
+        atKeys.keysForEnrollment('e1').map((m) => m.status),
+        everyElement(CryptographicMaterialStatus.pending),
+      );
+    });
+
+    test(
+        'activatePending refuses two pending signing materials of one algorithm '
+        'in one batch',
+        () {
+      CryptographicMaterial pendingSigning(String keyId) =>
+          CryptographicMaterial(
+            keyId: keyId,
+            enrollmentId: 'e1',
+            role: CryptographicMaterialRole.privateSigning,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString('cGVuZGluZw=='),
+            createdAt: DateTime.utc(2026, 9, 12),
+            status: CryptographicMaterialStatus.pending,
+          );
+
+      final atKeys = AtKeys(
+        keysList: [
+          pendingSigning('signing:rsa2048:1'),
+          pendingSigning('signing:rsa2048:2'),
+        ],
+      );
+
+      expect(
+        () => atKeys.activatePending('e1'),
+        throwsA(isA<ArgumentError>()),
+        reason:
+            'one enrollment may hold only one active key material per '
+            '(role, algorithm)',
+      );
+      expect(
+        atKeys.keysForEnrollment('e1').map((m) => m.status),
+        everyElement(CryptographicMaterialStatus.pending),
+      );
+    });
+
     test('discardEnrollment removes a pending enrollment and its snapshot', () {
       final atKeys = AtKeys(keysList: pendingApkam('e1'))
         ..recordEnrollmentSnapshot('e1',
@@ -930,6 +1172,47 @@ void main() {
       expect(atKeys.authenticatableEnrollmentIds, ['e1']);
       expect(() => atKeys.discardEnrollment('nope'),
           throwsA(isA<ArgumentError>()));
+    });
+
+    test('discardEnrollment refuses an enrollment holding non-pending material',
+        () {
+      for (final status in [
+        CryptographicMaterialStatus.retired,
+        CryptographicMaterialStatus.dead,
+        CryptographicMaterialStatus.of('revoked'),
+      ]) {
+        final atKeys = AtKeys(
+          keysList: [
+            CryptographicMaterial(
+              keyId: 'auth:rsa2048:1',
+              enrollmentId: 'e1',
+              role: CryptographicMaterialRole.privateAuthentication,
+              algorithm: CryptographicMaterialAlgorithm.rsa2048,
+              bytes: AtBytes.fromString('cGVuZGluZw=='),
+              createdAt: DateTime.utc(2026, 9, 12),
+              status: status,
+            ),
+          ],
+        )..recordEnrollmentSnapshot(
+            'e1',
+            namespaces: {'wavi': 'rw'},
+            appName: 'wavi',
+            deviceName: 'phone',
+          );
+
+        expect(
+          () => atKeys.discardEnrollment('e1'),
+          throwsA(isA<ArgumentError>()),
+          reason: '$status material is not pending, and only pending material '
+              'may be discarded',
+        );
+        expect(
+          atKeys.keysForEnrollment('e1'),
+          isNotEmpty,
+          reason: 'and it is still in the instance, not already lost',
+        );
+        expect(atKeys.enrollmentInfo('e1'), isNotNull);
+      }
     });
 
     test('a pending enrollment round-trips through the document', () {
@@ -1731,6 +2014,70 @@ void main() {
       expect(typed.storedEnrollmentId, isNull);
       expect(typed.enrollmentToAuthenticateAs(), 'E1',
           reason: 'control: the typed enrollment is what authenticates');
+    });
+
+    test(
+        'unfileLegacyEnrollment drops the flat id and symmetric key of the '
+        'enrollment it names, once the document holds nothing else', () {
+      final keys = AtKeys.legacy(
+          apkamSymmetricKey: b64('apkam-symmetric'), enrollmentId: 'E1');
+
+      keys.unfileLegacyEnrollment('E1');
+
+      expect(keys.storedEnrollmentId, isNull);
+      expect(keys.enrollmentSymmetricKey, isNull);
+    });
+
+    test(
+        'unfileLegacyEnrollment leaves the flat id and symmetric key of '
+        'another enrollment', () {
+      final keys = AtKeys.legacy(
+          apkamSymmetricKey: b64('apkam-symmetric'), enrollmentId: 'E1');
+
+      keys.unfileLegacyEnrollment('E2');
+
+      expect(keys.storedEnrollmentId, 'E1',
+          reason: 'only the named enrollment\'s fields are touched');
+      expect(keys.enrollmentSymmetricKey!.key, b64('apkam-symmetric'));
+    });
+
+    test(
+        'unfileLegacyEnrollment keeps the symmetric key while the document '
+        'still holds an enrollment', () {
+      final keys = AtKeys.legacy(
+          apkamSymmetricKey: b64('apkam-symmetric'), enrollmentId: 'E1')
+        ..addKey(CryptographicMaterial(
+            keyId: 'enc:rsa2048:1',
+            enrollmentId: 'E2',
+            role: CryptographicMaterialRole.publicEncryption,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: AtBytes.fromString(b64('enc-public')),
+            createdAt: DateTime.now().toUtc(),
+            status: CryptographicMaterialStatus.pending));
+      expect(keys.holdsAuthenticationMaterial, isFalse,
+          reason: 'the premise: only the enrollment keeps the key');
+
+      keys.unfileLegacyEnrollment('E1');
+
+      expect(keys.storedEnrollmentId, isNull);
+      expect(keys.enrollmentSymmetricKey!.key, b64('apkam-symmetric'));
+    });
+
+    test(
+        'unfileLegacyEnrollment keeps the symmetric key while the document '
+        'holds authentication material', () {
+      final keys = AtKeys.legacy(
+          apkamPublicKey: b64('apkam-public'),
+          apkamPrivateKey: b64('apkam-private'),
+          apkamSymmetricKey: b64('apkam-symmetric'),
+          enrollmentId: 'E1');
+      expect(keys.enrollmentIds, isEmpty,
+          reason: 'the premise: only the authentication material keeps it');
+
+      keys.unfileLegacyEnrollment('E1');
+
+      expect(keys.storedEnrollmentId, isNull);
+      expect(keys.enrollmentSymmetricKey!.key, b64('apkam-symmetric'));
     });
   });
 }

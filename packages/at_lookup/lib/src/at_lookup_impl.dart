@@ -1,7 +1,6 @@
 // ignore_for_file: unused_field, deprecated_member_use_from_same_package
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:at_commons/at_builders.dart';
@@ -14,6 +13,7 @@ import 'package:at_lookup/src/util/abandonment.dart' show Abandonment;
 import 'package:at_lookup/src/util/command_for_log.dart' show commandForLog;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
+import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:mutex/mutex.dart';
 
 /// The `from:` challenge an atServer issues a client, once the `data:` prefix
@@ -109,10 +109,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   late AtLookupOutboundConnectionFactory outboundConnectionFactory;
 
-  /// Prefer [AtLookUp.withTransport] or `AtLookUp.withSecureSocket`, which
+  /// Built by [AtLookUp.withTransport] and `AtLookUp.withSecureSocket`, which
   /// take an [AtRootDomain] and return the [AtLookupMuxable] interface.
-  @Deprecated('Use AtLookUp.withTransport or AtLookUp.withSecureSocket, '
-      'which return an AtLookupMuxable')
+  @internal
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {required this.secondaryAddressFinder,
       required this.transportFactory,
@@ -248,11 +247,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // Already logged by the listener that failed the read; a connection
       // closed underneath a request is not an error in the verb.
       throw AtLookUpException(
-          AtLookUpExceptionUtil.getErrorCode(e), e.toString());
+          AtLookUpExceptionUtil.getErrorCode(e), e.toString(),
+          cause: e);
     } on Exception catch (e) {
       logger.severe('Error in remote verb execution ${e.toString()}');
       var errorCode = AtLookUpExceptionUtil.getErrorCode(e);
-      throw AtLookUpException(errorCode, e.toString());
+      throw AtLookUpException(errorCode, e.toString(), cause: e);
     }
     return _verbResponseHandler(verbResult);
   }
@@ -275,26 +275,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   void _errorResponseHandler(String verbResult) {
-    verbResult = verbResult.replaceFirst(RegExp('^error:'), '');
-    // Setting the errorCode and errorDescription to default values.
-    var errorCode = 'AT0014';
-    var errorDescription = 'Unknown server error';
-    try {
-      var errorMap = jsonDecode(verbResult);
-      errorCode = errorMap['errorCode'];
-      errorDescription = errorMap['errorDescription'];
-    } on FormatException {
-      // Catching the FormatException to preserve backward compatibility - responses without jsonEncoding.
-      // TODO: Can we remove the below catch block in next release once all the servers are migrated to new version.
-      if (verbResult.contains('-')) {
-        errorCode = verbResult.substring(0, verbResult.indexOf('-'));
-        errorDescription = verbResult.substring(verbResult.indexOf('-') + 1);
-      } else {
-        errorDescription += ": $verbResult";
-      }
-    }
-
-    throw AtLookUpException(errorCode, errorDescription);
+    throw errorResponseException(verbResult);
   }
 
   Future<String> _update(UpdateVerbBuilder builder) async {
@@ -704,6 +685,37 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     Duration(seconds: 34),
   ];
 
+  /// Delays between reconnect attempts after the atServer turned the last
+  /// one away, refusing the credential or answering without letting the
+  /// client in. Each such attempt moves one step on, starting from the step the
+  /// [notificationReconnectDelays] had reached, at most its last; the last
+  /// here is repeated indefinitely.
+  static const List<Duration> notificationRefusalReconnectDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+    Duration(seconds: 34),
+    Duration(seconds: 55),
+    Duration(seconds: 89),
+    Duration(seconds: 144),
+    Duration(seconds: 233),
+    Duration(seconds: 300),
+  ];
+
+  /// The [notificationRefusalReconnectDelays] this lookup waits on, settable
+  /// so a test of several attempts turned away does not wait minutes.
+  @visibleForTesting
+  List<Duration> refusalReconnectDelays = notificationRefusalReconnectDelays;
+
+  /// Told the delay chosen before each notification reconnect attempt, so a
+  /// test can see which schedule it came from.
+  @visibleForTesting
+  void Function(Duration delay)? onNotificationReconnectDelay;
+
   /// How often a quiet notification connection is probed, and how long the
   /// probe waits. Settable so a test does not have to wait 30 seconds.
   @override
@@ -776,11 +788,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // that never went down.
     final generation = ++_notifyGeneration;
     _reconnecting = true;
+    var refused = false;
+    var step = 0;
     try {
       while (_isNotifying && generation == _notifyGeneration) {
-        final delay = notificationReconnectDelays[
-            min(_reconnectIx, notificationReconnectDelays.length - 1)];
+        final delays =
+            refused ? refusalReconnectDelays : notificationReconnectDelays;
+        final delay = delays[min(step, delays.length - 1)];
+        step++;
         _reconnectIx++;
+        onNotificationReconnectDelay?.call(delay);
         logger.info('Reconnecting notifications in ${delay.inSeconds}s '
             '(attempt $_reconnectIx)');
         await Future.delayed(delay);
@@ -801,6 +818,14 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         } catch (e) {
           if (generation != _notifyGeneration) return;
           logger.warning('Reconnect attempt $_reconnectIx failed: $e');
+          refused = e is UnAuthenticatedException;
+          if (e is UnAuthenticatedException) {
+            _reportRefusal(e);
+          } else {
+            // NOTE: held at the network schedule's last step, so the waits
+            // after the attempts turned away that follow grow from there.
+            step = min(step, notificationReconnectDelays.length - 1);
+          }
         }
       }
     } finally {
@@ -809,6 +834,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (generation == _notifyGeneration) _reconnecting = false;
     }
   }
+
+  /// Adds [refusal] to [notifications] as an error, leaving the stream open.
+  void _reportRefusal(UnAuthenticatedException refusal) =>
+      _notificationController?.addError(refusal);
 
   void _startHeartbeat() {
     _stopHeartbeat();
@@ -879,6 +908,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   bool get isNotifying => _isNotifying;
 
+  /// See [AtLookupMuxable.notifications]. A reconnect attempt the atServer
+  /// turns away is added to this stream as an error, and the stream stays open.
   @override
   Stream<String> get notifications {
     if (_stopped) return const Stream.empty();

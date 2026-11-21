@@ -85,7 +85,7 @@ void main() {
       namespace,
       AtClientPreference(posture: PqPosture.legacy)
         ..hiveStoragePath = storageDir,
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: defaultAtDirectory,
       remoteSecondary: remoteSecondary,
       atKeysIo: await keyfileHolding(atSign,
@@ -144,7 +144,9 @@ void main() {
         throwsA(isA<CryptoProviderNotRegistered>()
             .having((e) => e.message, 'message', contains(pqProviderId))
             .having((e) => e.message, 'message',
-                contains('Registered providers: $legacyProviderId.'))),
+                contains('Registered providers: $legacyProviderId.'))
+            .having((e) => e.message, 'message',
+                contains('Configure PqPosture.pqReady or above to read it'))),
         reason: 'a client at this stage configures no post-quantum providers, '
             'so a record stamped with one must fail loudly at routing and say '
             'which scheme it is short of — not open, and not fail somewhere '

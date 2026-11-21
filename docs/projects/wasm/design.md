@@ -152,6 +152,8 @@ default.
 
 **The largest item.** Everything that reaches an atServer terminates in one function.
 
+> **Historical (2026-11-05).** This inventory predates at_lookup 4.0.0. On trunk `AtConnection` names no socket — it is transport-based (`write`, `add`, `inbound`) — so the `getSocket()` sites below no longer exist.
+
 | Site                                                                        | What it does                                                                                                                                                                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection built by the default `secureSocketLookUps` factory ends here**; an application-supplied `AtLookUpFactory` ends wherever it chooses. |
@@ -624,7 +626,7 @@ tries to open it. The type system never objects.
 **Design, as landed.** The preference stays what it is — serialisable tuning — and the
 platform capabilities travel beside it as named parameters on every entry point
 (`Atsign.open`, `activate`, `enroll`, `resumeEnrollment`, `authenticatesAs`,
-`buildAtClient`, `AtServiceFactory.atClient`), held on the client and handed to
+`buildAtClient`), held on the client and handed to
 everything under it. Three legs, the **platform bundle**:
 
 | Leg        | Parameter  | Type                          | Ruled                                                                 | The core's one default seam                                                 |
@@ -642,9 +644,9 @@ will move out. And a platform implementer is three objects handed to the doors, 
 fork of at_client: `at_client_web` is a WebSocket `AtLookupMuxable` behind a factory, a
 SQLite-wasm `AtClientStorage` and an IndexedDB `WrittenAtKeysIo`. The two candidates
 this section once weighed — `CryptoConfig` on the preference, and `AtServiceFactory`
-as the DI hook — were not chosen: `AtServiceFactory.atClient` takes the bundle rather
-than owning it, so its one shipping override keeps working, and the preference carries
-no live object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
+as the DI hook — were not chosen: `AtServiceFactory.atClient` took the bundle rather
+than owning it, until at_client 4.0 removed it, and the preference carries no live
+object. [OQ-3](decisions.md#5-open-questions) records the question and D-12 and
 D-15 its answers for the two legs that have shipped.
 
 The filesystem paths in the table above are what the legs replace, each deprecated when
@@ -681,12 +683,13 @@ honours the full spec; every fix benefits native and server too; and one schema 
 browser database is byte-comparable with a desktop one.
 
 The case for IndexedDB is **payload size only** — `sqlite3.wasm` is a ~1 MB+ blob on
-top of the compiled Dart. Hold it in reserve as a payload mitigation. Because the async
-spec surface makes it a straightforward backend implementation rather than a migration,
-that decision can be revisited late, on the measured number from
-[`acceptance.md`](acceptance.md) X2, rather than committed to up front.
+top of the compiled Dart. Hold it in reserve as a payload mitigation. The payload was
+measured and accepted under [D-26](decisions.md) (W4: `sqlite3.wasm` costs +386 KB gz over
+`remote_only`, fixed per app); D4 (raw IndexedDB) is not triggered.
 
-**VFS choice** — `IndexedDbFileSystem` (main thread, loads on open, flushes
-asynchronously; no worker) vs **OPFS** (true synchronous access, requires a dedicated
-web worker). This sets `at_client_web`'s execution model and is deferred to a
-measurement; open question in [`decisions.md`](decisions.md).
+**VFS choice** — `SimpleOpfsFileSystem` in a dedicated web worker, one directory per
+(atSign, enrollmentId) ([D-26](decisions.md)). SQLite runs in the worker; Dart stays on the
+main thread (D-19) and reaches it across the async `AtKeyStore` boundary.
+`IndexedDbFileSystem` is an opt-in fallback only with flush-before-ack and a single-tab guard.
+
+**Key custody is not in this store.** The credential hint stays in plain IndexedDB, outside the storage bundle (K-6 clarification in [`decisions.md`](decisions.md), retained under K-10/K-11): they must open before `enrollmentId` — and so the OPFS directory — is known, in V1 where there is no SQLite, and in a tab the single-writer lock refuses.

@@ -209,7 +209,7 @@ product; the compiler is a packaging decision.*
 ## 4. Where the facade lives
 
 **Inside `at_client_web`.** No new Dart package;
-[`decisions.md`](decisions.md) D-4 stands unamended.
+[`decisions.md`](decisions.md) D-4 stands.
 
 1. **The npm package is not a Dart package.** It is a build artifact — the compiled Dart
    `.js` engine plus a wrapper **authored once in TypeScript**, from which both the
@@ -221,11 +221,17 @@ product; the compiler is a packaging decision.*
 3. **Dart consumers do not pay for it.** The facade is reachable only from that entry
    point's `main()`, so it tree-shakes out of any Dart application that imports
    `at_client_web` as a library.
+4. **JS objects built from item data have a null prototype.** Item `data`, `sharedWith`
+   entries and every other value read from an item reach JavaScript only through the
+   facade's conversion, which creates each object with `Object.create(null)` (or an
+   equivalent). Keys such as `__proto__` or `constructor` are then plain properties.
 
 ```
 packages/at_client_web/
-  lib/at_client_web.dart        # Dart-facing platform impls — unchanged by this doc
+  lib/at_client_web.dart         # Dart-facing platform impls — unchanged by this doc
   lib/src/js/                   # the @JSExport facade, marshalling, error mapping
+  lib/src/collections/          # js_collections_adapter.dart: Dart-side translation onto
+                                #   AtCollection, unexported, VM-tested (§5.5)
   web/at_client_js.dart         # main() that installs the facade  ← dart compile js
   npm/src/                      # index.ts + shim.ts — hand-written TypeScript, the ONLY
                                 #   hand-maintained facade source
@@ -246,8 +252,8 @@ under `lib/src/js/`.
 is **removed**, not deprecated in place. `AtCollection<T>`
 (`packages/at_client/lib/src/collections/collections.dart`, 5,306 lines, exported clean at
 `at_client.dart:28`) is the **sole** JS/TS data plane. The older `at_collection/` tree
-(`AtCollectionModel`, `AtJsonCollectionModel`, factories) is `@Deprecated` at
-`at_client.dart:31-38` in favour of it and is never bound — see [§9](#9-deliberately-excluded).
+(`AtCollectionModel`, `AtJsonCollectionModel`, factories) was removed in at_client 4.0
+in favour of it, and was never bound — see [§9](#9-deliberately-excluded).
 
 ### 5.0 Binding rule: every protocol operation returns a `Promise`
 
@@ -311,6 +317,16 @@ client and a Dart client therefore **cannot share a collection as equals** until
 
 State this asymmetry to every consumer, prominently: **the JS surface is read-compatible
 with typed Dart peers, not yet write-compatible.**
+
+**Status, 2026-11-14.** Route A is implemented upstream in at_client 4.1.0 (unreleased):
+`AtClient.collection` and `AtCollection.subCollection` take an optional
+`writeTypeTag`, and `_resolveType` falls back to it before `n/a` when no factory is
+registered for the item's type. The same change adds a per-client reopen check: a
+namespace reopened on the same client so that a new item would be stamped with another
+tag throws `ArgumentError`. The Dart-side adapter
+(§5.5) passes `type` straight through as `writeTypeTag`, so records it writes carry the
+declared tag (T6.9). JS consumers get this once the `@JSExport` facade exposes the
+adapter; until then the gap above holds for them.
 
 ### 5.3 The surface
 
@@ -405,6 +421,64 @@ paragraph as the code above, not buried in §10:**
 | `subCollection` / `getDescendant` | in scope, same declared-tag mechanism as the root | verify the `fromJson`/`typeTag` XOR check behaves identically to `AtClient.collection`'s (measured only for the root) |
 | `watchWithTree` / `SubSpec` | **excluded** | `SubSpec` has no exported opener (`collections_test_hooks.dart:168`, `@visibleForTesting`, not in the barrel) — blocked on an upstream export, not a design choice |
 
+### 5.5 The Dart-side collections adapter
+
+`packages/at_client_web/lib/src/collections/js_collections_adapter.dart` is the layer the
+`@JSExport` facade calls. No library directly under `lib/` exports it. It is plain Dart with no
+interop imports, so it runs under `dart test` on the VM, and `web/at_client_web_entry.dart`
+reaches every operation so both dart2js and dart2wasm compile it.
+
+It **only translates**: plain values in, `AtCollection` calls, plain values out. It adds no
+behaviour of its own. In particular it does **not** do the facade conveniences in §5.3:
+namespace auto-qualification, defaulting `expiration` or `eventSource`, `orderByPath` and
+`limit`, a type filter, or a `(name, type)` registry. Where §5.3 shows them, that layer
+does not exist yet.
+
+| Operation | `AtCollection` call | Rule |
+| --- | --- | --- |
+| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `expirationMs` must be positive, else `COLLECTION_INVALID_ARGUMENT` |
+| `create(data, {id, sharedWith})` | `create` | a given `id` must match the item-id rule below |
+| `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent; an unreadable item rejects `COLLECTION_ITEM_UNREADABLE` |
+| `list()` | `getItemsAsStream()` with a per-item error handler | resolves `{items, unreadable}` (below); upstream order; never re-sorted |
+| `query([{path, op, value}])` | `getItemsAsStream()` with a per-item error handler, then each clause's `Predicate` applied to the readable items | clauses AND together; resolves `{items, unreadable}`; upstream order |
+| `update({id, owner}, data)` | re-read `get`, then `update(draft, unshareWithOthers: false)` | the draft keeps the re-read `sharedWith`, `expiresAt`, `availableAt` |
+| `share({id, owner}, atSigns)` | re-read `get`, then `updateSharedWith(item, reread ∪ atSigns, unshareWithOthers: false)` | add-only; never `update` with a stale `sharedWith` |
+| `remove({id, owner}, {cascade})` | re-read `get`, then `delete` | |
+| `watch(onEvent, {onError}) → cancel` | `watch().listen` | callbacks (D-9); `cancel()` returns a Future that completes once the subscription is cancelled |
+
+**Item ids.** AtCollection checks every id. It folds the id to lower case, and the call
+rejects with `COLLECTION_INVALID_ARGUMENT` before any write when the id is empty or contains
+`.`, `:`, `@`, whitespace or a control character. `create` and `update` also refuse an id
+starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When
+`create` is given no id, `AtCollection` generates one.
+
+**List and query results.** `list()` and `query()` resolve to
+`{items, unreadable}`. `items` holds every readable item, in upstream order.
+`unreadable` holds one `{id, owner, code}` per record this device cannot read, where `code`
+is `COLLECTION_ITEM_UNREADABLE`; an unreadable record does not fail the call. A record whose key
+names no Atsign is left out of both, and a warning names its key. `get()` of such an item
+still rejects with `COLLECTION_ITEM_UNREADABLE`.
+
+**Known limits.**
+
+- Await each write on an item before starting the next. Two writes to one item that
+  overlap can overwrite each other, as upstream (last writer wins).
+
+A write to an item whose owner is not the client's atSign rejects with `COLLECTION_ITEM_NOT_OWNER` before
+any `AtCollection` call.
+
+A `where` path is dotted (`'meta.prio'`) and reads `['obj', ...segments]`; a missing step
+reads as null. `==`/`!=` map to `eq`/`neq`, `isNull`/`isNotNull` to the nullable field, and
+`<`/`<=`/`>`/`>=` to `isNotNull.and(lt|lte|gt|gte)` with a number or string value. The five
+reserved `PredicateOp`s are not accepted.
+
+Events map to `{type, id, owner, ...}` with `type` one of `updated`, `deleted`
+(`wasExpired`), `available` (`availableAt`), `expiringSoon` (`expiresAt`, `leadTimeMs`),
+`readReceipt` (`from`, `readAt`), `subItemUpdated`/`subItemDeleted` (`ancestry`), and
+`unknown` for a subtype the adapter does not know (T6.8). The adapter reads no item for an
+event, so an unreadable item's event still arrives with its id and owner. Times are
+milliseconds since the epoch.
+
 ---
 
 ## 6. Error mapping
@@ -427,8 +501,8 @@ classes), the facade must catch on the Dart side and rethrow a JS-shaped error:
 
 ```ts
 class AtError extends Error {
-  readonly code: string;      // stable, from AtExceptionCodes
-  readonly kind: string;      // e.g. 'AtKeyException'
+  readonly code: string;      // stable; collection codes are listed in §6.1
+  readonly kind: string;      // e.g. 'AtKeyNotFoundException'
   readonly retriable: boolean;
 }
 ```
@@ -446,6 +520,38 @@ the boundary.** The facade catches `CollectionOpException`, and rethrows a singl
 equivalent structured field) carries the mapped `OpFailure.reason` entries. A JS consumer
 sees one `AtError` shape regardless of whether the underlying failure was a single
 exception or a batch of `OpFailure`s — never a tuple, never a second thrown type.
+
+### 6.1 Collection error codes
+
+Every collections adapter operation (§5.5) returns a Future that rejects with one
+`JsCollectionsError {code, message, id?, owner?, kind?, failures}`, which the facade turns
+into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` names
+the underlying error from a fixed set (`AtKeyNotFoundException`, `InvalidAtSignException`,
+`CItemReadException`, `AtClientException`, `AtException`, `StateError`, `ArgumentError`,
+`TimeoutException`, `FormatException`), or is `Unknown`; it is never read from the runtime
+type, which dart2js minifies. A watch reports stream errors to `onError` in the
+same shape. The codes are a registry of their own, not the at_commons `AT00xx` codes: those
+name the atServer and client failures of key operations, and none of them says "the item is
+owned by another atSign" or "some of the key writes landed". Codes that describe one item are
+`COLLECTION_ITEM_*`; the rest are `COLLECTION_*`. `COLLECTION_NOT_FOUND` would read as a missing
+collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollectionsError` is an `AtException`, so callers that catch
+`AtException` also catch it; the JS shape is unchanged.
+
+| Code | Raised for | Upstream source |
+| --- | --- | --- |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid Atsign, or an item id AtCollection refuses | `ArgumentError`, `InvalidAtSignException`, adapter checks |
+| `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
+| `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
+| `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
+| `COLLECTION_ITEM_HAS_SUB_ITEMS` | remove without cascade of an item with self-owned sub-items | `StateError` from `delete` |
+| `COLLECTION_ITEM_UNREADABLE` | a record this device cannot read: rejects `get` and arrives on the watch stream; `list` and `query` report it as an `unreadable` entry instead of failing, or leave it out with a warning naming its key when the key names no Atsign | `CItemReadException`. The message names the id and, when the key names one, the owner, not the cause |
+| `COLLECTION_ITEM_WRONG_TYPE` | update of an item whose stored type tag is another type's. An untagged (`n/a`) item is adopted. Share and remove work on an item of any type | adapter check on the item as just re-read |
+| `COLLECTION_TYPE_MISMATCH` | an ordering `where` met a value of another type at its path | `TypeError` (VM, dart2wasm) or `ArgumentError` from `compareTo` (dart2js) during the query |
+| `COLLECTION_PARTIAL_FAILURE` | some key-level writes failed; `failures` holds `{op, recipient, kind}` for each | `CollectionOpException` |
+| `COLLECTION_FAILED` | anything else; `kind` names it | |
+
+Schema errors get a `COLLECTION_*` code from §6.1 when the persisted collection record and its schema validation
+land. Until then no adapter operation validates data against a schema.
 
 ---
 
@@ -667,17 +773,17 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
 | Excluded                                                                                               | Why                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **The flat key/value plane** — `put`, `get`, `putBinary`, `getBinary`, `delete`, `exists`, `getKeys`, `getMeta`, `putMeta` | **Removed 2026-08-18 (D-10), not merely unbound.** `AtCollection<T>` is the sole JS data plane; a JS consumer cannot address a raw protocol key. |
-| File transfer — `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`, `stream`, `sendStreamAck` | All take `dart:io File`, all deprecated. Blocked on [`design.md`](design.md) §2.8 regardless.                                                                                    |
-| The 12 `@Deprecated` members of `at_client_spec.dart`                                                  | Including `notify`, `notifyChange`, `notifyAll`, `startMonitor`. `NotificationService` supersedes them.                                                                          |
+| File transfer — `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`, `stream`, `sendStreamAck` | Removed in at_client 4.0; file transfer belongs in the app. Blocked on [`design.md`](design.md) §2.8 regardless.                                                                 |
+| `AtClient.notify`, `notifyChange`, `notifyAll`, `startMonitor`                                         | Removed in at_client 4.0. `NotificationService` replaces them.                                                                                                                    |
 | `AtKey` / `AtValue` as objects                                                                         | No JSON codec; `fromString` is lossy — and moot besides, since no raw key plane is exposed. [§5.1](#51-why-no-raw-key-plane-is-exposed-at-all).                                  |
-| The entire deprecated `at_collection/` tree — `AtCollectionModel`, `AtCollectionModelFactory`, `KeyMaker`, `ObjectLifeCycleOptions`, `AtJsonCollectionModel` | `@Deprecated("Use AtClient.collection for collection-style operations")` at `at_client.dart:31-38`. Its registry keys on a lowercased class-name string (`T.toString().toLowerCase()`) — exactly the minifier-unsafe pattern the current API's mandatory `typeTag` exists to fix. |
+| The legacy `at_collection/` tree — `AtCollectionModel`, `AtCollectionModelFactory`, `KeyMaker`, `ObjectLifeCycleOptions`, `AtJsonCollectionModel` | Removed in at_client 4.0. Its registry keyed on a lowercased class-name string (`T.toString().toLowerCase()`) — exactly the minifier-unsafe pattern the current API's mandatory `typeTag` exists to fix.                                                                          |
 | `watchWithTree` / `SubSpec` | `SubSpec` has no exported opener — its only constructor path, `_openOnForTest`, is `@visibleForTesting` in `collections_test_hooks.dart` and not exported from the barrel. Blocked on an upstream export. |
-| `Query.fetch()` | `@Deprecated('use get() instead')` at `collections.dart:3566`. Bind `get()`. |
+| `Query.fetch()` | Removed in at_client 4.0. Bind `get()`. |
 | `PredicateOp.like` / `.inSet` / `.between` / `.contains` / `.startsWith` | Reserved but unimplemented — `evaluate()` throws `UnimplementedError` (`collections.dart:4305-4307`). Only the 8 working ops (`eq`, `neq`, `lt`, `lte`, `gt`, `gte`, `isNull`, `isNotNull`) appear in the `.where()` type. |
 | `LocalSecondary` / `RemoteSecondary`                                                                   | Raw protocol escape hatches; implementation detail.                                                                                                                              |
 | `CryptoProvider`                                                                                       | Requires implementing a Dart abstract class. A JS-supplied provider is possible in principle ([§1.5](#15-javascript-can-implement-a-dart-interface)) but is not in this surface. |
-| `AtPersistenceBundle`, `AtChops`, `EncryptionService` getters                                          | Dart-only handles with no meaningful JS representation.                                                                                                                          |
-| `ConnectivityListener`                                                                                 | Deprecated, and platform-probing.                                                                                                                                                |
+| The `EncryptionService` getter                                                                         | A Dart-only handle with no meaningful JS representation. The `AtPersistenceBundle` and `AtChops` getters are removed in at_client 4.0.                                           |
+| `ConnectivityListener`                                                                                 | Removed in at_client 4.0, and platform-probing.                                                                                                                                  |
 | `AtKey` leaking via `OpResult.atKey`                                                                    | The one place a raw `AtKey` survives inside upstream's collection result type. Folded away by [§6](#6-error-mapping)'s `AtError` mapping — never surfaced to JS. |
 
 ---
@@ -708,7 +814,7 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   unit tests against `MockAtClient`; nothing in `tests/at_functional_test/` or
   `tests/at_end2end_test/` references it. The API also took a breaking change 2 days
   after introduction (`fb4c96587`, mandatory `typeTag`), reworked `EventSource`
-  semantics since, and ships 7 correctness fixes in the current 3.15.0-rc1. **Ruling: the
+  semantics since, and shipped 7 correctness fixes in 3.15.0-rc1. **Ruling: the
   JS-side collections surface ships marked unstable/0.x in the npm package** until this
   project's own T6/T4 gates exercise it against a live atServer — the marker reflects a
   gap in *our* boundary validation, not upstream's contract.
@@ -728,7 +834,9 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   (upstream `writeTypeTag`) or route B (the carrier-class shim) ships, every record a JS
   binding writes stamps `type: 'n/a'` and cannot be rehydrated as a typed object by a
   Dart peer app. This is a real interop gap for a mixed JS+Dart fleet, not a documentation
-  nicety — see [§11](#11-open-questions) JS-7.
+  nicety — see [§11](#11-open-questions) JS-7. (Route A is implemented upstream in
+  at_client 4.1.0, unreleased, and the §5.5 adapter adopts it; JS consumers get it once
+  the facade exposes the adapter — see the 2026-11-14 status note in §5.2.)
 
 ---
 
@@ -775,10 +883,15 @@ project's preferred outcome; route B is bounded (a fixed ceiling of concurrent t
 achievable unilaterally in the facade. **Resolve on upstream's answer to the additive
 change; document the gap and ship read-compatibility in the meantime.**
 
+*Status, 2026-11-14:* upstream has implemented route A as `writeTypeTag` in at_client
+4.1.0 (unreleased), together with a per-client reopen check in
+`AtClient.collection` that throws `ArgumentError`. The §5.5 adapter adopts it; JS writes still stamp
+`n/a` until the facade exposes the adapter. Route B stays documented as the fallback.
+
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
 `packages/at_client/lib/src/manager/at_client_manager.dart` holds a
 `static final AtClientManager _singleton`, historically driven by `setCurrentAtSign(...)`
-(now deprecated). A caller can build clients that register nowhere — `buildAtClient`
+(removed in at_client 4.0). A caller can build clients that register nowhere — `buildAtClient`
 and `Atsign.open` hand back a client the caller owns — so multi-instance is expressible
 in Dart today; what remains single is the *current* atSign the manager and its
 `AtSignChangeListener`s track. A JS

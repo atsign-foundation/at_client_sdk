@@ -81,7 +81,7 @@ class PutRequestTransformer
 
   String _cryptoProviderIdFor(PutRequestOptions options, AtKey atKey) =>
       CryptoRuntime.providerIdFor(_atClient, options.cryptoProviderId,
-          atKey: atKey);
+          atKey: atKey, sealToNamespace: options.sealToNamespace);
 
   /// Signs a public value with the atSign's encryption private key, which is
   /// what a reader verifies the signature against.

@@ -69,6 +69,17 @@ The two are independent: `useRemoteAtServer` chooses _which secondary_ answers
 for keys that resolve locally; `bypassCache` chooses _whether a remote lookup
 may be served from cache_.
 
+```dart
+// The same options on getMeta: metadata only, nothing decrypted
+final meta = await atClient.getMeta(
+  key,
+  getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+);
+```
+
+`getMeta` takes the same options as `get` and returns null for a record that
+is held but not visible now.
+
 ## `DeleteRequestOptions.useRemoteAtServer`
 
 ```dart
@@ -93,7 +104,8 @@ Check existence against the remote atServer (`true`) or the local keystore
 ## Client-wide: `AtClientPreference.remoteLocalPref`
 
 ```dart
-final prefs = AtClientPreference()
+final prefs = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app'
   ..remoteLocalPref = RemoteLocalPref.remoteOnly  // default: localOnly
   /* ...the rest of your preference setup... */;
 ```
@@ -107,9 +119,10 @@ collection layer. Typical use: a stateless agent instance that pairs
 `remoteOnly` with a no-op sync service
 (see [14-multi-agent.md](14-multi-agent.md)).
 
-One subtlety: passing a request-options object overrides the preference with
-that object's `useRemoteAtServer` value — which defaults to `false`. So on a
-`remoteOnly` client, supply options only when you actually set the flag.
+A request-options object overrides the preference only when it sets
+`useRemoteAtServer`. Left unset, the operation follows `remoteLocalPref`; set
+to `false`, it runs locally even on a `remoteOnly` client. A `local:` key
+never leaves the device, whatever the preference or option says.
 
 ---
 

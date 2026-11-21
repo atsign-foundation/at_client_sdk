@@ -266,6 +266,5 @@ ArgParser _buildParser() {
       abbr: 'P',
       hide: true,
     )
-    ..addOption('legacy-root-domain', hide: true)
     ..addFlag('verbose', abbr: 'v', negatable: false);
 }

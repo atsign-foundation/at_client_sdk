@@ -10,8 +10,10 @@ import 'package:at_utils/at_progress.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
-  factory AtEnrollment.create() {
-    return AtEnrollmentImpl();
+  /// An enrollment whose approval handshake's `from:` carries [clientConfig],
+  /// as `clientConfigFor` fills and cuts it.
+  factory AtEnrollment.create({Map<String, dynamic> clientConfig = const {}}) {
+    return AtEnrollmentImpl(clientConfig: clientConfig);
   }
 
   /// How long [waitForApproval] leaves between polls when a caller states no
@@ -69,7 +71,8 @@ abstract class AtEnrollment {
   ///                     appName: 'wavi',
   ///                     deviceName: 'my-device',
   ///                     namespaces: {'wavi': 'rw'},
-  ///                     otp: '123');
+  ///                     otp: '123',
+  ///                     signingAlgo: SigningAlgoType.mldsa65); // the APKAM keypair's algorithm
   ///
   ///     AtEnrollmentResponse atEnrollmentResponse =
   ///         await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
@@ -177,11 +180,16 @@ abstract class AtEnrollment {
   /// [atLookup] is the connection the approval handshake runs on — the PKAM
   /// retries and the post-approval key fetches — and it is left open for the
   /// caller to close.
+  ///
+  /// Once [cancelled] completes, with a value or an error, no further poll
+  /// starts and the wait throws [StoppedException]; a connection that is
+  /// stopped ends it the same way.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = defaultLogProgress,
     int maxRetries = defaultMaxRetries,
     Duration retryInterval = defaultRetryInterval,
     required AtLookupMuxable atLookup,
+    Future<void>? cancelled,
   });
 }

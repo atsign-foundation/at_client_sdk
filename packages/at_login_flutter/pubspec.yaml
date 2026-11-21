@@ -1,5 +1,5 @@
 name: at_login_flutter
-description: A flutter library for zero trust logins using the atProtocol
+description: A flutter library for zero trust logins using the Atsign Protocol
 version: 0.1.0
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_login_flutter
 homepage: https://atsign.com/

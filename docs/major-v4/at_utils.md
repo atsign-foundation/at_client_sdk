@@ -97,9 +97,9 @@ not just at publish time.
   class holding a concrete `StdErrLoggingHandler()`, not caught by the original
   blast-radius citation. Left in place as it was, it would have kept `dart:io`
   reachable from `at_utils.dart` through `AtSignLogger` itself, silently defeating I2.
-  The field stays, deprecated for removal in 5.0.0, and now holds a handler chosen by a
-  conditional import: `StdErrLoggingHandler` where `dart:io` exists, and
-  `ConsoleLoggingHandler` elsewhere, so `at_utils.dart` reaches no `dart:io`. The three
+  The field held a handler chosen by a conditional import until 4.0.0 removed
+  it: `StdErrLoggingHandler` where `dart:io` exists, and `ConsoleLoggingHandler`
+  elsewhere, so `at_utils.dart` reaches no `dart:io`. The three
   real call sites (`at_cli_commons/cli_base.dart`, `at_onboarding_cli/auth_cli.dart`,
   `tests/at_functional_test`, plus `at_client_flutter`'s dockerstats example — none of
   them the five originally named) construct `StdErrLoggingHandler()` directly against

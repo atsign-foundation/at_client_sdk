@@ -83,9 +83,9 @@ publisher CLI ── notificationService.send ──▶ recipient atServer
 ```
 
 The publisher does **not** use `AtCollection<T>`. It calls
-`atClient.notificationService.send(to, namespace, body, ...)` once
-per sample, with the namespace derived from the container and host
-names so a single subscriber regex catches all of them:
+`atClient.notificationService.send(to: ..., idAndNamespace: ..., body: ...)`
+once per sample, with the namespace derived from the container and
+host names so a single subscriber regex catches all of them:
 
 ```
 notification key = <recipient>:sample.<container>.<host>.dockerstats.demos<publisher>

@@ -1,3 +1,99 @@
+## 4.1.0-rc.1
+
+- docs: the passkey HKDF labels (`at_auth/custody/<name>/v1`) and the sealed passkey record layout (`v: 2`) are promised from the first stable release: after it they change only with a compatibility path, since a changed label or layout locks out every Atsign onboarded with a passkey.
+- docs: `WrittenAtKeysIo.update` says an implementation may run its mutate more than once, each time on a fresh read, keeping only the last run's changes.
+- feat: `completeActivationOf` finishes an activation started with `completeActivation: false`, on a connection the caller holds: it publishes the encryption public key it is given, when it is given one, and deletes the CRAM secret. It refuses a key holding a carriage return or a line feed before it sends anything, and counts a CRAM secret the atServer reports as not found as deleted. `AtAuth.completeActivation()` now behaves the same, so it no longer throws when the atServer reports the CRAM secret as not found, and it refuses a multi-line key before it sends anything.
+- feat: passkey registration and unlock refuse a PRF output that is missing, the wrong length or all zeroes, with `PrfUnavailableException` and the one message "The authenticator did not return a usable PRF result". A passkey that registration created but could not use is reported to the platform as unknown where the port supports it, without delaying the error.
+- feat: `PrfSecret(...)` throws `ArgumentError` for 32 zero bytes, and `PrfSecret.output` throws `StateError` once `wipe()` has run.
+- feat: `prfUnsupportedMessage` reads "This platform or authenticator does not support passkey PRF. Use one that does."
+- feat: `passkeyDisplayName` and `passkeyDisplayNameMaxBytes` in `package:at_auth/passkey.dart` are the display-name rule for a passkey, which the browser's passkey port uses and another platform's port can: the enrollment time in UTC to the minute, then the device name, within 64 UTF-8 bytes.
+- feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and its `seal` and `open` take the record type.
+- feat: `PasskeyVault` holds its Atsign in canonical form, so a record sealed for `@Alice` opens for `@alice`.
+- feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
+- feat: passkey error messages show text read from the wire quoted, escaped and clipped, so each stays on one line: the text is in double quotes, each quote, backslash and control, format or line-separator character in it is escaped, and it is cut after 180 characters, escapes included. A sealed record's `iv` or `ct` that is not base64 is named, not shown. `clipForMessage` in `package:at_auth/passkey.dart` does the escaping and clipping, and escapes the quote character it is given.
+- feat: `UnknownCredentialSignal` is a capability interface in `package:at_auth/passkey.dart` for a `PasskeyPort` that can tell the platform a passkey no longer belongs to an account. `PasskeyPrf.signalUnknownCredential` calls it when the port implements it, does nothing otherwise, and ignores a failing signal.
+- feat: `package:at_auth/passkey.dart` is a new library for passkey-held keys.
+  It runs the passkey PRF ceremonies (register, then unlock) and keeps a
+  PRF-unavailable flag, which is set only when the platform definitely reports
+  no PRF, never on a cancelled or failed ceremony, and can be cleared to try
+  again. Records are sealed and opened through a caller-supplied sealer in a
+  versioned format that names its type. `PasskeyVault` is built from one
+  derivation of a PRF output: it names the record and pointer namespace, seals
+  and opens records, and lends the APKAM auth seed to callers until `close()`,
+  which overwrites the seed with zeroes and closes the sealer; a derivation
+  whose auth seed is not 32 bytes is refused with `ArgumentError`, and an
+  atSign that is not one with `InvalidAtSignException`, either way with the
+  seed zeroed and the sealer closed. The setup lock and `PasskeyHintStore`, which keeps a passkey's credential id and
+  the enrollment id per atSign and writes the two in one `putHint` call, are
+  ports the caller implements. `setupLockName(prefix, atSign)` takes its prefix from the
+  caller, and `recordPrfSalt()` is synchronous. The four HKDF labels (record id,
+  pointer namespace, seal key, auth seed) share the form
+  `at_auth/custody/<name>/v1`.
+- feat: an atServer's `error:` reply to a `from:`, `pkam:` or `cram:` throws
+  `AtAuthErrorReplyException`, an `UnAuthenticatedException` whose
+  `errorCode` is the reply's code. `AtAuth.onboard` still reports a failed
+  PKAM as `AtAuthenticationException`. Requires at_lookup 4.1.0-rc.1.
+- fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation ends
+  it with that exception, and nothing is signed or digested.
+- fix: a failed PKAM during onboarding says what failed, with no stack
+  trace in its message.
+- feat: an enrollment's wait for approval ends at once with
+  `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
+  `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
+  AT0028 or AT0029, in any form.
+- fix: an activation whose connection is stopped while it authenticates by
+  PKAM, or while it waits for its atServer once the atDirectory has
+  answered, throws `StoppedException`, not `AtTimeoutException` or
+  `AtAuthenticationException`.
+- fix: a clientConfig given to an authenticator, `activateAtSign` or
+  `AtEnrollment.create` whose top-level `version` is null, empty or only
+  whitespace sends no `version`, as `clientConfigFor` already did.
+- feat: every `from:` at_auth sends names the program and the SDK in its
+  clientConfig: `appName`, `appVersion`, `sdkName` and `sdkVersion`. A
+  caller's values win; absent or blank ones are the program file's name,
+  `unknown`, `atsign.dart.at_auth` and at_auth's version. Every string value,
+  nested ones included, is sent on one line and cut to 64 UTF-16 code units,
+  and every key is sent on one line.
+- feat: `clientConfigFor` builds that clientConfig, with `version` only when
+  its caller gives one, and `activateAtSign` and `AtEnrollment.create` take a
+  `clientConfig` for their `from:`.
+- fix: an enrollment's wait for approval reads an atServer's refusal the
+  same whether it arrives as plain text or as JSON, so it keeps waiting or
+  ends as the refusal says.
+- feat: `AtEnrollmentRequest` takes an optional `apkamKeyPair`, which the
+  enrollment enrolls in place of a freshly minted APKAM keypair. A pair whose
+  private half does not sign for its public half is refused with
+  `AtSigningException` before `enroll:request` is sent.
+- fix: `KeyEntryStatus.fromWire` takes a `String?`, and `apskSigningKeys`
+  skips an entry whose `status` is present, not null and not a string, as it
+  skips one whose other fields are of the wrong kind.
+- fix: `AtKeys.discardEnrollment` refuses an enrollment holding any material
+  that is not pending (retired, dead, or a status this build doesn't know),
+  not only active material.
+- fix: `AtKeys.activatePending` validates each activated key against the
+  cumulative batch, preventing duplicate pending keys for the same role and
+  algorithm from activating simultaneously.
+- fix: `AtKeys.authenticationKeyPairFor` ensures both halves come from the same
+  keyId and share the same algorithm, and that the public half is active.
+- fix: an enrollment request advertising a signing key whose algorithm the keyfile
+  cannot file is refused before `enroll:request` is sent.
+- fix: `AtKeysAssurance.validateKeyMaterials` indexes active materials by
+  typed `(role, algorithm)` record pair to avoid delimiter collisions.
+- fix: rewriting a typed keyfile compares the stored `atsign` and the new one
+  in canonical form.
+- fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
+  up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
+  activation enrolls in place of a freshly minted APKAM keypair, as
+  `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
+  is not of `signingAlgoType`, is refused with `AtSigningException` before the
+  enrollment is sent. `activateAtSign` and `mintOnboardingKeys` take it too.
+  A supplied pair is checked before the atServer is contacted. If activation
+  fails after the enrollment is accepted (the PKAM login or the keyfile
+  write), retrying with the same pair is refused by the atServer while that
+  enrollment's record exists: retry with a different pair, or with none so one
+  is minted. The CRAM secret stays valid until an activation completes.
+
 ## 4.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
@@ -21,12 +117,22 @@
   `getFreeAtsignByCategory`, `registerPerson` and `validatePerson`, and
   `HttpMethod` loses `get`, with the `RegistrarService` methods that used
   them.
-- BREAKING: `authenticatorForChops` is removed, and `authenticatorFor` no
+- breaking: `authenticatorForChops` is removed, and `authenticatorFor` no
   longer takes `chops` or `signingAlgo`: it signs with the keypair the keys
   hold, under the algorithm they name.
-- BREAKING: `AtKeys.authenticationFor` is removed; use
+- breaking: `AtKeys.authenticationFor` is removed; use
   `authenticationKeyPairFor`.
+- feat: `waitForApproval` takes `cancelled`: once it completes, with a value
+  or an error, no further poll starts and the wait throws `StoppedException`. A stopped connection
+  ends the wait at once, rather than spending the retry budget.
 - build: requires `at_utils` ^4.0.0 and `at_lookup` ^4.0.0.
+- feat: `AtKeys.unfileLegacyEnrollment` drops what `fileLegacyMaterial`
+  filed for an enrollment that is gone, and nothing another enrollment
+  filed.
+- breaking: `AtEnrollmentRequest` and `AtEnrollmentRequest.pq` require a
+  `session`. Their deprecated `atSign`, `rootDomain`, `apkamPublicKey` and
+  `encryptedAPKAMSymmetricKey` parameters are removed, as is the
+  `encryptedAPKAMSymmetricKey` field, which nothing read.
 - breaking: `AtEnrollmentRequest.pq` refuses `rsa2048` with an
   `ArgumentError`, before anything is sent: an enrollment that takes its keys
   post-quantum authenticates with `mldsa65`. An `rsa2048` request uses the
@@ -38,6 +144,8 @@
   `.bak` and `.pre-v1` copies written beside it take the owner and group of
   the keyfile as it was read, and root does not rewrite a keyfile that is a
   symbolic link or anything other than a regular file.
+- fix: a keyfile write that removes a pending enrollment, as a cancelled or
+  denied request's does, keeps no copy of it in `.bak`.
 - fix: a keyfile at_auth 3.3.0 wrote, which carries `version`, its atSign and
   an empty `keys` array, can be updated or flushed without adding typed key
   material; it is rewritten in the flat shape.

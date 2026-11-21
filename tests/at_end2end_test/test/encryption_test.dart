@@ -45,14 +45,12 @@ void main() {
       );
     }
 
-    // The provider is configured via the preference, not registered by this
-    // test: switching to this atSign re-uses the cached AtClient, and
-    // AtClientImpl.create() adopts this preference's crypto config onto it
-    // (CryptoRuntime resolves against the live preference.crypto). This test
-    // depends on that production behaviour.
+    // NOTE: switching to a running atSign keeps its client, and a client the
+    // posture floor raised runs on a copy of its preference, so the crypto
+    // reaches it only through setPreferences.
     final atClientManager = await TestSuiteInitializer.getInstance()
         .switchToAtSign(atSign, namespace, preference: preference);
-    return atClientManager.atClient;
+    return atClientManager.atClient..setPreferences(preference);
   }
 
   // Like getAtClient, but configures an explicit list of providers (for the
@@ -70,7 +68,7 @@ void main() {
       );
     final atClientManager = await TestSuiteInitializer.getInstance()
         .switchToAtSign(atSign, namespace, preference: preference);
-    return atClientManager.atClient;
+    return atClientManager.atClient..setPreferences(preference);
   }
 
   String uniqueKeyName(String prefix) {

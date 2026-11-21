@@ -3,12 +3,14 @@ import 'package:meta/meta.dart' show internal, visibleForTesting;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
+import 'package:at_client/src/preference/posture_floor.dart'
+    show raisedDataSigning, strongerOf;
+import 'package:at_client/src/preference/notification_replay.dart';
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show canSignEnvelopeWith;
 import 'package:at_client/src/service/notification_service.dart';
-import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 
@@ -27,8 +29,10 @@ class AtClientPreference {
   /// axis set as a group, and a floor an explicit axis may raise but not lower.
   ///
   /// ⚠️ An existing enrollment holding an authentication key weaker than this
-  /// asks for is retrofitted at the next start, with no opt-out; an app that
-  /// must not move names [PqPosture.legacy].
+  /// asks for is retrofitted at the next start, with no opt-out. An app that
+  /// wants less names [PqPosture.legacy] rather than weakening an axis of a
+  /// stronger posture, and is still raised to the floor its own key material
+  /// sets.
   final PqPosture posture;
 
   /// Which of the post-quantum startup's steps this client runs, or null to
@@ -123,8 +127,58 @@ class AtClientPreference {
           'authenticationKeyAlgorithm',
           'is weaker than ${posture.authenticationKeyAlgorithm.name}, which '
               'this posture names. A posture is a floor: name a posture that '
-              'wants ${asked.name}, or PqPosture.legacy to stay where you are');
+              'wants ${asked.name}, or PqPosture.legacy, which drives no '
+              'upgrade beyond the floor its keyfile\'s key material sets');
     }
+  }
+
+  /// A copy of this preference raised to [floor]: [posture] as
+  /// [PqPosture.raisedTo] raises it, [authenticationKeyAlgorithm] and
+  /// [dataSigningKeyAlgorithms] the same way, and every other field, the
+  /// never-raised [seedNamespaceKeys] among them, as it is. This preference
+  /// itself when nothing is raised.
+  @internal
+  AtClientPreference raisedTo(PqPosture floor) {
+    final raisedPosture = posture.raisedTo(floor);
+    final authentication = strongerOf(
+        authenticationKeyAlgorithm, floor.authenticationKeyAlgorithm);
+    final dataSigning = raisedDataSigning(
+        dataSigningKeyAlgorithms, floor.dataSigningKeyAlgorithms);
+    if (identical(raisedPosture, posture) &&
+        authentication == authenticationKeyAlgorithm &&
+        identical(dataSigning, dataSigningKeyAlgorithms)) {
+      return this;
+    }
+    return AtClientPreference(
+        posture: raisedPosture,
+        pqStartupGates: pqStartupGates,
+        authenticationKeyAlgorithm: authentication,
+        dataSigningKeyAlgorithms: dataSigning,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms,
+        keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
+      // ignore: deprecated_member_use_from_same_package
+      ..hiveStoragePath = hiveStoragePath
+      ..cramSecret = cramSecret
+      ..namespace = namespace
+      ..rootDomain = rootDomain
+      ..rootPort = rootPort
+      ..networkTimeout = networkTimeout
+      ..maxDataSize = maxDataSize
+      ..syncRegex = syncRegex
+      ..syncBatchSize = syncBatchSize
+      ..syncPageLimit = syncPageLimit
+      ..fileEncryptionChunkSize = fileEncryptionChunkSize
+      ..monitorHeartbeatInterval = monitorHeartbeatInterval
+      ..monitorHeartbeatResponseTimeout = monitorHeartbeatResponseTimeout
+      ..monitorSilenceTimeout = monitorSilenceTimeout
+      ..monitorAutoStart = monitorAutoStart
+      ..expiryCheckTimeInterval = expiryCheckTimeInterval
+      ..notificationReplay = notificationReplay
+      ..atClientParticulars = atClientParticulars
+      ..remoteLocalPref = remoteLocalPref
+      ..crypto = crypto
+      ..allowLegacyCryptoFallback = allowLegacyCryptoFallback
+      ..seedNamespaceKeys = seedNamespaceKeys;
   }
 
   /// Where [other] would change what a **running** client does — one line per
@@ -241,30 +295,9 @@ class AtClientPreference {
       'closedByClient: true) for the same store. Removed in 5.0.0.')
   String? hiveStoragePath;
 
-  /// Syncing strategy of the client [SyncStrategy]
-  /// [Deprecated] Use [SyncService]
-  @Deprecated("Use [SyncService]")
-  SyncStrategy? syncStrategy;
-
-  bool _isLocalStoreRequired = true;
-
-  /// Read by nothing: every client is given its storage.
-  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
-      'Removed in 5.0.0.')
-  bool get isLocalStoreRequired => _isLocalStoreRequired;
-
-  @Deprecated('Read by nothing: every client is given its AtClientStorage. '
-      'Removed in 5.0.0.')
-  set isLocalStoreRequired(bool b) => _isLocalStoreRequired = b;
-
   /// The atSign's CRAM secret, read by a `RemoteSecondary` built without an
   /// `AtKeysIo`; a client authenticates from its `AtKeysIo` and ignores it.
   String? cramSecret;
-
-  /// Private key of the atSign.
-  @Deprecated('A client authenticates from its AtKeysIo; only a '
-      'RemoteSecondary built without one reads this. Removed in 5.0.0.')
-  String? privateKey;
 
   /// Specifies the namespace of an app.
   String? namespace;
@@ -275,15 +308,14 @@ class AtClientPreference {
   /// Port of the root server. Defaults to 64
   int rootPort = 64;
 
-  /// Frequency of sync task to run in minutes. Defaults to 10 minutes.
-  int syncIntervalMins = 10;
-
-  /// The process-wide default network timeout: the maximum wall-clock the SDK
-  /// will spend reaching/using the atServer (connect + retries + waiting for a
-  /// response) before giving up. When set on the `AtClientPreference` used to
-  /// create an `AtClient`, it becomes `AtNetworkTimeouts.defaultTimeout` for the
-  /// whole process (capped at `AtNetworkTimeouts.maxAllowed`, 60s). When null,
-  /// the existing default (30s) applies.
+  /// The process-wide default network timeout: the timeout for each network
+  /// operation the SDK makes, such as a connect, an atDirectory lookup, or the
+  /// wait for a response's next bytes. One SDK call can make several in
+  /// sequence, so its wall-clock can be a multiple of this. When set on the
+  /// `AtClientPreference` used to create an `AtClient`, it becomes
+  /// `AtNetworkTimeouts.defaultTimeout` for the whole process (capped at
+  /// `AtNetworkTimeouts.maxAllowed`, 60s). When null, the existing default
+  /// (30s) applies.
   Duration? networkTimeout;
 
   /// The maximum size of the value that a secondary server can store.
@@ -344,38 +376,47 @@ class AtClientPreference {
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
-  /// Fetch the notifications received while the client was offline, from the
-  /// last one it received. Defaults to true.
+  /// Where the monitor's notification replay starts.
+  /// Defaults to [NotificationReplay.resume]: the last notification the store
+  /// holds, or the service's creation time when it holds none. Notifications
+  /// are not a history: keep history in records.
   ///
-  /// Set to false to ignore those. Notifications received since the client's
-  /// notification service was created are delivered once either way, including
-  /// any that arrived before its monitor connected.
-  bool fetchOfflineNotifications = true;
+  /// Notifications received since the notification service was created are
+  /// delivered once under every policy, including any that arrived before
+  /// the monitor connected.
+  ///
+  /// The service reads this once, when it first resolves its start. Changing
+  /// it afterwards does not affect that service; build a new notification
+  /// service to change policy.
+  NotificationReplay notificationReplay = const NotificationReplay.resume();
 
-  @Deprecated('No longer needed. at_chops will be used by default')
-  bool useAtChops = true;
+  /// Alias of [notificationReplay]. Reads false only for connect. Setting false
+  /// selects connect; setting true selects resume only when the policy is
+  /// connect.
+  @Deprecated('Set notificationReplay instead. '
+      'Use NotificationReplay.connect() for false and resume() for true.')
+  bool get fetchOfflineNotifications =>
+      notificationReplay != const NotificationReplay.connect();
+
+  @Deprecated('Set notificationReplay instead. '
+      'Use NotificationReplay.connect() for false and resume() for true.')
+  set fetchOfflineNotifications(bool value) {
+    if (!value) {
+      notificationReplay = const NotificationReplay.connect();
+    } else if (notificationReplay == const NotificationReplay.connect()) {
+      notificationReplay = const NotificationReplay.resume();
+    }
+  }
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
-  /// Signing algorithm to use for pkam authentication.
+  /// Where a get, getMeta, put, putMeta, delete or key scan goes when the
+  /// call leaves `useRemoteAtServer` unset: local storage, which sync keeps in
+  /// step with the atServer, or the atServer itself.
   ///
-  /// Consulted only for a legacy enrollment whose keyfile carries no typed
-  /// signing material; where typed material exists the client resolves the
-  /// algorithm from the keyfile and this value never overrides it.
-  @Deprecated('The signing algorithm is resolved from the enrollment\'s key '
-      'material; this value is only a fallback for legacy keyfiles with no '
-      'typed signing material')
-  SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
-
-  /// Hashing algorithm once used for pkam authentication.
-  @Deprecated('Has no effect: pkam signs with SHA-256. Removed in 5.0.0.')
-  HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
-
-  /// Set this to [RemoteLocalPref.remoteOnly]
-  /// if you require all data operations (get / put / delete) to be performed
-  /// on the remote atServer rather than on local storage. (When operations are
-  /// performed locally, we depend on sync to get eventual consistency between
-  /// local and remote.
+  /// A `local:` key always stays on the device, an uncached key another
+  /// Atsign owns is always looked up on the atServer, and a notification
+  /// always goes to the atServer, whatever this says.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
 
   /// Configures the crypto providers used for encrypted puts and reads.
@@ -434,30 +475,16 @@ class AtClientPreference {
   final List<String> keyEstablishmentAlgorithms;
 }
 
-/// Default preference on how to handle get, put and delete requests with
-/// regards to use of local storage vs the remote atServer.
+/// Where an operation goes when the call leaves `useRemoteAtServer` unset;
+/// see [AtClientPreference.remoteLocalPref].
 enum RemoteLocalPref {
   /// The default - operate on local storage, and rely on the background
   /// sync processing to push changes to the remote atServer.
   localOnly,
 
-  // /// Operate on remote first. If there is an exception, rethrow it back to
-  // /// application code. If remote operation was successful, then perform the
-  // /// operation on local storage.
-  // remoteFirst,
-  //
-  /// Operate on remote only - i.e. do not interact with local storage at all.
-  /// Note that if the application is syncing, then the change will be pulled
-  /// to local from remote as part of the sync process.
+  /// Send the operation to the atServer, without reading or writing local
+  /// storage for it; sync, when it runs, still pulls the change into local
+  /// storage. A call that sets `useRemoteAtServer` to false still uses local
+  /// storage.
   remoteOnly,
-}
-
-@Deprecated("Use SyncService")
-enum SyncStrategy {
-  /// Sync local keys immediately to secondary server for update and delete commands.
-  immediate,
-  onDemand,
-
-  /// Sync periodically once every time interval specified by [AtClientPreference.syncIntervalMins].
-  scheduled
 }

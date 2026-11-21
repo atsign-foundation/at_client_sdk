@@ -154,6 +154,54 @@ void main() {
           reason: 'the control: once the wait ends, a read miss asks');
     });
 
+    test(
+        "a start's ask is the one a write waits on while its answer is "
+        "awaited, and a read miss's ask is not", () async {
+      final atClient = client();
+      final missAsks = <String>[];
+      final ring = PublishedNskeyKeyRing(atClient,
+          privateFiling: await filing(),
+          fetchConveyance: () async {}, requestConveyance: (ns, name) {
+        missAsks.add(name);
+        return Completer<void>().future;
+      })
+        ..askCooldown = Duration.zero;
+      final kid = nskeyKidOf(pair.publicKeyBytes);
+      ring.rememberOwn(
+          atSign,
+          namespace,
+          NskeyAdvertisement.single(
+              publicKey: pair.publicKeyBytes, alg: SecretSharingAlgos.xWing));
+      final sharing = MockPairwiseSecretSharing();
+      when(() => sharing.requestSecretsFromNamespace(any(),
+          names: any(named: 'names'))).thenAnswer((_) async => 1);
+      final waiting = Completer<Secret>();
+      when(() => sharing.waitForSecret(any(), any(),
+          timeout: any(named: 'timeout'))).thenAnswer((_) => waiting.future);
+
+      await NskeySeeding(
+              atClient: atClient, ring: ring, privateFiling: ring.privateFiling)
+          .requestMissingPrivates(sharing);
+      expect(ring, isA<AwaitsStartUpAsk>(),
+          reason: 'how a write finds the ask to wait for');
+      expect(ring.startUpAskFor(namespace, kid), isNotNull,
+          reason: "start-up asked, and its answer is awaited");
+      expect(ring.startUpAskFor(namespace.toUpperCase(), kid), isNotNull,
+          reason: 'the namespace is compared folded');
+
+      waiting.completeError(TimeoutException('no holder answered'));
+      await pumpEventQueue();
+      expect(ring.startUpAskFor(namespace, kid), isNull,
+          reason: 'its wait has ended');
+
+      expect(await ring.privateHalf(atSign, namespace, kid), isNull);
+      await pumpEventQueue();
+      expect(missAsks, ['${NskeyPrivateFiling.secretNamePrefix}$kid'],
+          reason: 'the control: a read miss asked, and that ask is waiting');
+      expect(ring.startUpAskFor(namespace, kid), isNull,
+          reason: "a read miss's ask does not hold a write up");
+    });
+
     test('does not ask when the private is already held', () async {
       final atClient = client();
       final held = await filing();
@@ -520,6 +568,14 @@ void main() {
           reason: 'a * enrollment may read every namespace, and `*` and '
               '`__manage` name no namespace a key is filed under, so looking '
               'the grant\'s names up conveyed it nothing');
+    });
+
+    test('a grant spelt in capitals is conveyed the namespaces it covers',
+        () async {
+      expect(
+          await conveyedFor(
+              const {'SSHNP': 'r'}, ['sshnp', 'dev1.sshnp', 'notsshnp']),
+          unorderedEquals(['sshnp', 'dev1.sshnp']));
     });
 
     test('a grant is conveyed the namespaces below it, read access included',

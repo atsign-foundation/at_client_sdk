@@ -10,7 +10,9 @@ import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
 
-/// Cold start ends the moment the recipient publishes — UC-B4.1 and UC-B4.4.
+/// Cold start ends once the recipient publishes — UC-B4.1 and UC-B4.4: after
+/// the 30 seconds a share remembers finding nothing, or at once for a program
+/// that asks `canSealTo`, which these tests do.
 ///
 /// `nskey_recipient_not_ready_test.dart` holds the refusal; this holds the
 /// recovery. The refusal itself warms a negative cache — `NskeyResolver`
@@ -57,8 +59,8 @@ void main() {
   });
 
   test(
-      'UC-B4.4: the recipient publishing is the whole trigger, even after a '
-      'refusal has been cached', () async {
+      'UC-B4.4: once the recipient publishes, canSealTo finds the key and '
+      'ends the remembered miss, so the next share is PQ', () async {
     // Run-unique: the recipient must genuinely never have used or authorised
     // this namespace, or the refusal that warms the cache never happens.
     final ns = 'recover${DateTime.now().microsecondsSinceEpoch}';
@@ -114,12 +116,15 @@ void main() {
         reason: 'an app asking "can I reach them yet" is asking about now, so '
             'the readiness query must not answer from a remembered miss');
 
+    expect(await CryptoRuntime(writerClient).canSealTo(recipient, ns), isTrue,
+        reason: 'canSealTo asks the atServer whatever a share found missing, '
+            'and the key it finds ends the miss the refusal left');
+
     expect(await writerClient.put(toRecipient('warm'), 'after they are ready'),
         isTrue,
-        reason: 'the FIRST write after the recipient\'s key appears must go '
-            'out, with no flag to flip and nothing for the sender to do. The '
-            'writer took no action between the refusal and this call except '
-            'to try again, which is what an app does');
+        reason: 'the first share after canSealTo found the recipient\'s key '
+            'goes out at once, with no flag to flip, rather than waiting out '
+            'the 30 seconds the refusal is remembered for');
 
     final written = await writerClient.get(toRecipient('warm'));
     expect(written.metadata?.appMetadata?.providerId,
@@ -169,8 +174,8 @@ void main() {
   }, timeout: Timeout(Duration(minutes: 5)));
 
   test(
-      'UC-B4.1: with the fallback opted in, the cold write goes legacy and the '
-      'first write after the key appears is PQ', () async {
+      'UC-B4.1: with the fallback opted in, the cold write goes legacy, and '
+      'once canSealTo finds the key the next write is PQ', () async {
     // An app that opened the escape hatch never sees a refusal, so nothing
     // tells it the recipient has arrived: the write simply has to start going
     // out PQ.
@@ -230,6 +235,8 @@ void main() {
     await E2ESyncService.getInstance()
         .syncData(recipientClient.syncService, atSign: recipient);
 
+    expect(await CryptoRuntime(writerClient).canSealTo(recipient, ns), isTrue,
+        reason: 'the key it finds ends the miss the cold write left');
     expect(await writerClient.put(toRecipient('warm'), 'after'), isTrue);
     expect(
         (await writerClient.get(toRecipient('warm')))
@@ -237,11 +244,10 @@ void main() {
             ?.appMetadata
             ?.providerId,
         symmetricAesGcmCryptoProviderId,
-        reason: 'the first write after the recipient\'s key appears is PQ '
-            'with no flag to flip. The app never touched '
+        reason: 'the first write after canSealTo found the recipient\'s key '
+            'is PQ with no flag to flip. The app never touched '
             'allowLegacyCryptoFallback again and saw no refusal to react to, '
-            'so if this stayed legacy-encrypted it would stay so forever without '
-            'anything saying so');
+            'so if this stayed legacy-encrypted nothing would say so');
 
     expect(
         (await writerClient.get(toRecipient('cold')))

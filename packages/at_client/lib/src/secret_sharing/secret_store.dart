@@ -201,13 +201,15 @@ class SecretStore {
   ///
   /// Mirrors the atServer's rule: authorized when an approved namespace is
   /// `*`, equals [namespace], or is a dot-suffix of it (an enrollment
-  /// approved for `myapp` may access `data.myapp`).
+  /// approved for `myapp` may access `data.myapp`). Both are compared folded.
   static bool namespaceAuthorizes(
       Map<String, dynamic> approvedNamespaces, String namespace) {
-    for (final approved in approvedNamespaces.keys) {
+    final folded = namespace.toLowerCase();
+    for (final granted in approvedNamespaces.keys) {
+      final approved = granted.toLowerCase();
       if (approved == '*' ||
-          approved == namespace ||
-          namespace.endsWith('.$approved')) {
+          approved == folded ||
+          folded.endsWith('.$approved')) {
         return true;
       }
     }

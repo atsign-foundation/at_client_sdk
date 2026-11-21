@@ -131,22 +131,14 @@ class AtClientValidation {
     await isAtSignExists(
         secondaryAddressFinder, notificationParams.atKey.sharedWith!);
 
-    // For reasons lost in the mists of time, we are overloading use of the 'key' field
-    // in the notification so it actually contains the text of 'text' notifications.
-    // And the text may of course contain spaces.
-    // However, for validation purposes, 'key' should not have spaces.
-    // Hence we only validate the 'key' if notification type is not 'text'.
-    // ignore: deprecated_member_use_from_same_package, deprecated_member_use
-    if (notificationParams.messageType != MessageTypeEnum.text) {
-      AtClientValidation.validateKey(notificationParams.atKey.key);
-      ValidationResult validationResult = AtKeyValidators.get().validate(
-          notificationParams.atKey.toString(),
-          ValidationContext()
-            ..atSign = notificationParams.atKey.sharedBy
-            ..validateOwnership = true);
-      if (!validationResult.isValid) {
-        throw InvalidAtKeyException(validationResult.failureReason);
-      }
+    AtClientValidation.validateKey(notificationParams.atKey.key);
+    ValidationResult validationResult = AtKeyValidators.get().validate(
+        notificationParams.atKey.toString(),
+        ValidationContext()
+          ..atSign = notificationParams.atKey.sharedBy
+          ..validateOwnership = true);
+    if (!validationResult.isValid) {
+      throw InvalidAtKeyException(validationResult.failureReason);
     }
     // Check if the sharedBy atSign is currentAtSign. If yes allow to send notifications
     // else throw UnAuthorizedException

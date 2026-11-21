@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
@@ -99,14 +100,29 @@ class NotificationResponseTransformer
       n.messageType!.toLowerCase().contains('text') &&
       n.isEncrypted == true;
 
-  /// A copy of [n]. Its [AtNotification.metadata] is the same instance.
+  /// A copy of [n] that shares nothing mutable with it: its
+  /// [AtNotification.metadata] is copied too, app metadata and public key
+  /// hash included.
   static AtNotification copyOf(AtNotification n) => AtNotification(
       n.id, n.key, n.from, n.to, n.epochMillis, n.messageType, n.isEncrypted,
       value: n.value,
       operation: n.operation,
       expiresAtInEpochMillis: n.expiresAtInEpochMillis,
-      metadata: n.metadata)
+      metadata: _copyOfMetadata(n.metadata))
     ..status = n.status;
+
+  static Metadata? _copyOfMetadata(Metadata? metadata) {
+    if (metadata == null) return null;
+    final appMetadata = metadata.appMetadata;
+    final pubKeyHash = metadata.pubKeyHash;
+    return metadata.copy()
+      ..pubKeyHash = pubKeyHash == null
+          ? null
+          : PublicKeyHash(pubKeyHash.hash, pubKeyHash.hashingAlgo)
+      ..appMetadata = appMetadata == null
+          ? null
+          : AppMetadata.fromJson(jsonDecode(jsonEncode(appMetadata)));
+  }
 
   Future<String> _getDecryptedValue(AtKey atKey, String? encryptedValue) async {
     final decrypted = await CryptoRuntime(_atClient)

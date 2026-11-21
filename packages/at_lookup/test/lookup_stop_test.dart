@@ -30,6 +30,7 @@ void main() {
 
   setUpAll(() {
     AtSignLogger.defaultLoggingHandler = recorded;
+    AtSignLogger.root_level = 'info';
   });
 
   late FakeAtServerTransportFactory transportFactory;
@@ -82,6 +83,30 @@ void main() {
               'and a caller has to be able to tell that from a network fault');
       expect(recorded.at('SEVERE'), isEmpty,
           reason: 'a stop the owner asked for is not an error');
+    });
+
+    test('fails a pkamAuthenticate in flight with StoppedException', () async {
+      final entered = Completer<void>();
+      final release = Completer<bool>();
+      final atLookup = build()
+        ..authenticator = (_) {
+          entered.complete();
+          return release.future;
+        };
+      final pending = atLookup.pkamAuthenticate();
+      await entered.future.timeout(const Duration(seconds: 2),
+          onTimeout: () => fail('the authenticator was never run'));
+
+      final stopping = atLookup.stop();
+
+      await expectLater(
+          pending.timeout(const Duration(seconds: 2),
+              onTimeout: () => fail('the PKAM in flight was never failed')),
+          throwsA(isA<StoppedException>()),
+          reason: 'the caller stopped the lookup while it authenticated, and '
+              'has to be able to tell that from a refused login');
+      await stopping;
+      release.complete(true);
     });
 
     test('refuses every later call, and opens no connection', () async {

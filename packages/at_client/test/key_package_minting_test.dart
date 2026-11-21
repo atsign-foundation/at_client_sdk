@@ -93,6 +93,7 @@ void main() {
     final envelope = SignedEnvelope.fromJson(
         updates.last.metadata!['keyPackage'] as Map<String, dynamic>);
     await verifyEnvelope(envelope,
+        signerAtSign: atSign,
         signerPublicKey: apkamPair.atPublicKey.publicKey,
         expecting: EnvelopeType.keyPackage);
     return KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId);
@@ -311,6 +312,19 @@ void main() {
       await minter().reconcileKeyPackage();
 
       expect((await advertised()).keys, hasLength(1));
+    });
+
+    test(
+        "Every envelope at_client signs names its signer's Atsign: a key "
+        'package at enroll:update through KeyPackageMinting', () async {
+      configure(const [SecretSharingAlgos.mlKem1024]);
+
+      await minter().reconcileKeyPackage();
+
+      final envelope = SignedEnvelope.fromJson(
+          updates.last.metadata!['keyPackage'] as Map<String, dynamic>);
+      expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign});
+      expect(envelope.signerAtSign, atSign);
     });
 
     test('only metadata is named, so the grant cannot widen', () async {

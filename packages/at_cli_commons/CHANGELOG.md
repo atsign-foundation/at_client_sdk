@@ -5,6 +5,9 @@
   now carries `CLIBase` and the rest of this package. Depend on at_client_cli.
 - breaking: `MySyncProgressListener` is gone, and `CLIBase`'s `preference` is
   an `AtClientPreference`.
+- breaking: `CLIBase.createArgsParser` and `fromCommandLineArgs` take no
+  `addLegacyRootDomainArg`, and the arguments they parse no
+  `-d`/`--legacy-root-domain`; use `-r`/`--root-server`.
 - breaking: `CLIBase` throws `AtCredentialRefusedException` for every
   refusal and `SecondaryNotFoundException` for an atSign the atDirectory does
   not know; `SecondaryServerConnectivityException` now means only an outage.

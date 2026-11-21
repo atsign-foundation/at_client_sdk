@@ -129,6 +129,7 @@ void main() {
             'some JSON came back');
     await verifyEnvelope(envelope,
         signerPublicKey: apsk!.replaceFirst('data:', '').trim(),
+        signerAtSign: atSign,
         expecting: EnvelopeType.keyPackage);
     return KeyPackage.fromPayload(envelope.payload,
         enrollmentId: client.enrollmentId);

@@ -2,6 +2,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/posture_floor.dart' show postureName;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -44,17 +45,21 @@ class CryptoRuntime {
   /// [stampProviderId] is false for a caller that may re-route the write to
   /// legacy after the prepare step, because a key stamped with a provider that
   /// then declined would claim a scheme its value was never sealed under.
+  ///
+  /// [sealToNamespace] is the namespace of the recipient's namespace key a
+  /// share is sealed to; see `PutRequestOptions.sealToNamespace`.
   Future<String> prepareWrite(AtKey atKey,
       {String? requestedProviderId,
+      String? sealToNamespace,
       bool? useRemoteAtServer,
       bool stampProviderId = true}) async {
-    final providerId =
-        providerIdFor(_atClient, requestedProviderId, atKey: atKey);
+    final providerId = providerIdFor(_atClient, requestedProviderId,
+        atKey: atKey, sealToNamespace: sealToNamespace);
     if (stampProviderId) {
       atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
     }
     await prepareForPut(atKey, providerId,
-        useRemoteAtServer: useRemoteAtServer);
+        sealToNamespace: sealToNamespace, useRemoteAtServer: useRemoteAtServer);
     return providerId;
   }
 
@@ -66,13 +71,19 @@ class CryptoRuntime {
   /// key's `appMetadata`, because at this point nothing has stamped it yet.
   /// [useRemoteAtServer] carries how this write is being routed, so a provider
   /// writing a record the write will depend on can route it the same way.
+  /// [sealToNamespace] is refused for a provider that prepares nothing, since
+  /// such a provider seals to no namespace key.
   Future<void> prepareForPut(AtKey atKey, String providerId,
-      {bool? useRemoteAtServer}) async {
+      {String? sealToNamespace, bool? useRemoteAtServer}) async {
     final config = CryptoConfig.forClient(_atClient);
     final provider = config.lookup(providerId);
     if (provider is PreparesWrites) {
       await (provider as PreparesWrites).prepareForWrite(_context(), atKey,
+          sealToNamespace: sealToNamespace,
           useRemoteAtServer: useRemoteAtServer);
+    } else if (sealToNamespace != null) {
+      throw ArgumentError.value(sealToNamespace, 'sealToNamespace',
+          'the $providerId provider seals to no namespace key');
     }
   }
 
@@ -88,6 +99,31 @@ class CryptoRuntime {
   /// advertised key — if what came back cannot be verified as theirs.
   Future<bool> isReadyFor(String atSign, String namespace) => isReadyUnder(
       CryptoConfig.forClient(_atClient).defaultProviderId, atSign, namespace);
+
+  /// Whether [atSign] advertises a namespace key at exactly [namespace] that
+  /// this client can seal to: what a share with that `sealToNamespace` needs.
+  /// A key at a broader namespace does not count.
+  ///
+  /// Asked of the atServer whatever a share found missing, and answered from
+  /// a key found within the key ring's cache. Never throws: false also for a
+  /// client configured with no namespace-key provider, for an advertisement
+  /// that does not verify as [atSign]'s, and when the asking fails, such as
+  /// when [atSign]'s atServer cannot be reached; those last two log a warning
+  /// naming the cause.
+  Future<bool> canSealTo(String atSign, String namespace) async {
+    final ckManager = CryptoConfig.forClient(_atClient).ckManager;
+    if (ckManager == null) return false;
+    try {
+      return await ckManager.resolver.resolveAt(atSign, namespace) != null;
+    } on AtSigningVerificationException catch (e) {
+      _logger.warning('canSealTo answers false for $atSign:$namespace '
+          'because its advertisement there does not verify: $e');
+    } catch (e) {
+      _logger.warning('canSealTo answers false for $atSign:$namespace '
+          'because asking for its key there failed: $e');
+    }
+    return false;
+  }
 
   /// Whether a write to [atSign] in [namespace] can go out under [providerId],
   /// asked as [isReadyFor] asks it of the default scheme. True for a scheme
@@ -107,10 +143,18 @@ class CryptoRuntime {
   /// ([HandlesSelectively]), a *defaulted* id falls back to the legacy provider, while an
   /// *explicitly requested* id throws instead — quietly writing under another
   /// scheme is how an app comes to believe data is post-quantum when it is not.
+  ///
+  /// A write with [sealToNamespace] and no [requested] id uses
+  /// [symmetricAesGcmCryptoProviderId], and is refused with an [ArgumentError]
+  /// naming the posture or the config when the client's config does not
+  /// register it.
   static String providerIdFor(AtClient atClient, String? requested,
-      {AtKey? atKey}) {
+      {AtKey? atKey, String? sealToNamespace}) {
     final config = CryptoConfig.forClient(atClient);
-    final id = requested ?? config.defaultProviderId;
+    final id = requested ??
+        (sealToNamespace == null
+            ? config.defaultProviderId
+            : _sealingProviderId(atClient, config, sealToNamespace));
     if (atKey == null) return id;
     if (id == legacyProviderId) {
       refuseLegacyIfDisallowed(atClient, atKey, id,
@@ -136,6 +180,23 @@ class CryptoRuntime {
       return legacyProviderId;
     }
     return id;
+  }
+
+  static String _sealingProviderId(
+      AtClient atClient, CryptoConfig config, String sealToNamespace) {
+    if (config.lookup(symmetricAesGcmCryptoProviderId) != null) {
+      return symmetricAesGcmCryptoProviderId;
+    }
+    final posture = atClient.getPreferences()?.posture;
+    throw ArgumentError.value(
+        sealToNamespace,
+        'sealToNamespace',
+        CryptoConfig.namedFor(atClient) != null || posture == null
+            ? 'needs the $symmetricAesGcmCryptoProviderId provider, which '
+                "this client's CryptoConfig does not register"
+            : 'needs the $symmetricAesGcmCryptoProviderId provider, which a '
+                'client at ${postureName(posture)} does not configure; '
+                'PqPosture.pqReady and above do');
   }
 
   /// Throw if [providerId] is the legacy provider and [atClient] set
@@ -250,6 +311,19 @@ class CryptoRuntime {
     String lookupReason,
   ) {
     final ids = [legacyProviderId, ...config.providers.map((p) => p.id)];
+    final posture = _atClient.getPreferences()?.posture;
+    if (posture != null &&
+        !posture.configuresPqProviders &&
+        (id == nskeyCryptoProviderId ||
+            id == symmetricAesGcmCryptoProviderId)) {
+      final notification = lookupReason == 'notify';
+      return 'Crypto provider "$id" is not registered: this client runs at '
+          '${postureName(posture)}, which reads no post-quantum data'
+          '${notification ? ', so this notification is lost' : ''}. Configure '
+          'PqPosture.pqReady or above to read '
+          '${notification ? 'later ones' : 'it'}. Lookup reason: '
+          '$lookupReason. Registered providers: ${ids.join(', ')}.';
+    }
     return 'Crypto provider "$id" is not registered. '
         'Lookup reason: $lookupReason. '
         'Registered providers: ${ids.join(', ')}. '

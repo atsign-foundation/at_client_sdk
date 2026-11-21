@@ -1,3 +1,12 @@
+/// Signing, secret sharing, enrollment and invitation mixins over an
+/// `AtClient`.
+///
+/// Apps get this through their platform package's barrel,
+/// `package:at_client_cli/at_client_cli.dart` or
+/// `package:at_client_flutter/at_client_flutter.dart`, rather than importing
+/// it.
+library;
+
 export 'package:at_client/src/mixins/at_client_bindings.dart';
 export 'package:at_client/src/mixins/apkam_signing.dart';
 export 'package:at_client/src/mixins/at_client_envelope_signer.dart';

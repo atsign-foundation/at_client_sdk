@@ -30,8 +30,7 @@
 /// shared constant would move them in lockstep.
 library;
 
-import 'dart:convert' show jsonEncode;
-
+import 'package:at_client/src/signing/envelope_signature.dart' show quotedClaim;
 import 'package:at_client/src/util/at_key_grammar.dart'
     show isAtKeyAtSign, isAtKeyNamespace, isIdShaped;
 import 'package:at_commons/at_commons.dart'
@@ -137,6 +136,24 @@ AtKey currentCkPointerKey(
           '.$ckNs'
       ..namespace = '$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
       ..sharedBy = sharedBy
+      ..metadata = Metadata();
+
+/// The leading segment of a client's record that it verified its own
+/// namespace-key advertisement:
+/// `local:__nskeyverified.<namespace>.<enrollmentId>.a.__e@<atSign>`.
+const String verifiedAdvertisementRecordName = '__nskeyverified';
+
+/// The local at-key holding [enrollmentId]'s record that it verified
+/// [sharedBy]'s advertisement for [namespace]. Local, so it never syncs.
+AtKey verifiedAdvertisementKey(
+        {required String sharedBy,
+        required String enrollmentId,
+        required String namespace}) =>
+    AtKey()
+      ..key = '$verifiedAdvertisementRecordName.$namespace'
+      ..namespace = '$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
+      ..sharedBy = sharedBy
+      ..isLocal = true
       ..metadata = Metadata();
 
 /// The record name of the atSign's signing root:
@@ -308,7 +325,7 @@ String requireRecordAtSign(String value, String field) =>
 String _requireRecordField(
     bool Function(String) shaped, String value, String field, String what) {
   if (shaped(value)) return value;
-  throw AtDecryptionException('a record names ${jsonEncode(value)} as its '
+  throw AtDecryptionException('a record names ${quotedClaim(value)} as its '
       '$field, which is not $what an atKey can carry');
 }
 

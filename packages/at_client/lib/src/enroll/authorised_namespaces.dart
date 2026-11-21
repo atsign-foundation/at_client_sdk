@@ -1,6 +1,6 @@
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
-import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
+import 'package:at_commons/at_commons.dart' show AtKey, EnrollmentConstants;
 
 /// The namespaces [atClient] holds data in, and so holds a key for.
 ///
@@ -17,7 +17,7 @@ Future<Set<String>> authorisedNamespacesOf(AtClient atClient,
         ownNamespace: ownNamespace);
 
 /// The grants [atClient]'s own enrollment record holds, or null for the
-/// atSign's own credential, which no grant limits.
+/// primary enrollment, whose `*:rw` limits nothing.
 ///
 /// Throws when the enrollment record cannot be read.
 Future<Map<String, dynamic>?> ownGrantsOf(AtClient atClient) async {
@@ -29,7 +29,7 @@ Future<Map<String, dynamic>?> ownGrantsOf(AtClient atClient) async {
 }
 
 /// The namespaces [grants] hold data in, as [authorisedNamespacesOf] reads
-/// them: [ownNamespace] alone for null [grants], the atSign's own credential.
+/// them: [ownNamespace] alone for null [grants], the primary enrollment's.
 Set<String> authorisedNamespacesIn(Map<String, dynamic>? grants,
     {required String? ownNamespace}) {
   final own = (ownNamespace == null || ownNamespace.isEmpty)
@@ -72,6 +72,56 @@ String? accessIn(Map<String, dynamic> grants, String namespace) {
   }
   final all = grants[EnrollmentConstants.allNamespaces];
   return all == null ? null : '$all';
+}
+
+/// The grant in [grants] that covers [atKey], the access it gives and the
+/// key's namespace, or null when no grant gives it any.
+///
+/// Decided as the atServer decides it for a key. A grant on the key's
+/// namespace, its last dot segment, wins. Otherwise the first grant the key's
+/// name ends with, after a dot, covers it: `cmp.rotation` covers
+/// `x.cmp.rotation@bob`, but not `cmp.rotation@bob`, whose name is `cmp` in
+/// `rotation`. `*` answers only for a key no grant covers, and alone for a key
+/// that does not parse. Unlike [accessIn], a key's name is not its namespace.
+({String grant, String access, String? namespace})? grantCovering(
+    Map<String, dynamic> grants, String atKey) {
+  String? namespace;
+  var keyWithNamespace = '';
+  try {
+    final parsed = AtKey.fromString(atKey);
+    namespace = parsed.namespace;
+    if (namespace != null && namespace.isNotEmpty) {
+      keyWithNamespace = '${parsed.key}.$namespace';
+    }
+  } catch (_) {
+    // NOTE: AtKey.fromString raises Errors as well as Exceptions.
+    namespace = null;
+  }
+  String? granted;
+  if (namespace != null && namespace.isNotEmpty) {
+    for (final grant in grants.keys) {
+      if ('.$namespace'.endsWith('.$grant')) {
+        granted = grant;
+        break;
+      }
+    }
+  }
+  if (granted == null && keyWithNamespace.isNotEmpty) {
+    for (final grant in grants.keys) {
+      if (keyWithNamespace.endsWith('.$grant')) {
+        granted = grant;
+        break;
+      }
+    }
+  }
+  if (granted == null &&
+      grants.containsKey(EnrollmentConstants.allNamespaces)) {
+    granted = EnrollmentConstants.allNamespaces;
+  }
+  final access = granted == null ? null : grants[granted];
+  return access == null
+      ? null
+      : (grant: granted!, access: '$access', namespace: namespace);
 }
 
 /// Whether a client granted [own] may write to [namespace].

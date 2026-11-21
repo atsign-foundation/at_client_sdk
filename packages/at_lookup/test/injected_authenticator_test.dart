@@ -54,11 +54,15 @@ void main() {
         .thenAnswer((_) => Future.value(replies.removeAt(0)));
   });
 
-  AtLookupImpl build() => AtLookupImpl('@alice', host, 64,
-      secondaryAddressFinder: mockSecondaryAddressFinder,
-      transportFactory: mockTransportFactory,
-      socketListenerFactory: mockSecureSocketListenerFactory,
-      outboundConnectionFactory: mockOutboundConnectionFactory);
+  AtLookupImpl build() => AtLookUp.withTransport(
+      atSign: '@alice',
+      rootDomain: AtRootDomain(host, 64),
+      authenticator: null,
+      transport: AtLookupTransport(
+          transportFactory: mockTransportFactory,
+          listenerFactory: mockSecureSocketListenerFactory,
+          connectionFactory: mockOutboundConnectionFactory),
+      secondaryAddressFinder: mockSecondaryAddressFinder) as AtLookupImpl;
 
   test('an injected authenticator runs and is recorded', () async {
     replies = [fromChallenge, 'data:success', 'data:[]'];

@@ -1,8 +1,6 @@
 // ignore_for_file: non_constant_identifier_names
 
 import 'package:at_utils/src/logging/handlers.dart';
-import 'package:at_utils/src/logging/platform_stderr_handler.dart'
-    if (dart.library.io) 'package:at_utils/src/logging/platform_stderr_handler_io.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:logging/logging.dart' as logging;
 
@@ -10,18 +8,11 @@ import 'package:logging/logging.dart' as logging;
 class AtSignLogger {
   late logging.Logger logger;
   String? _level;
-  static String _root_level = 'info';
+  static String _root_level = 'warning';
   bool _hierarchicalLoggingEnabled = false;
 
   static final ConsoleLoggingHandler consoleLoggingHandler =
       ConsoleLoggingHandler();
-
-  /// Writes log events to stderr where the platform has one, and to the
-  /// console on the web, which has none; the two platforms need different
-  /// handlers, so each gets its own through a conditional import.
-  @Deprecated('Use StdErrLoggingHandler() from '
-      'package:at_utils/at_utils_io.dart; removed in 5.0.0')
-  static final LoggingHandler stdErrLoggingHandler = platformStdErrHandler();
 
   /// The default logging handler to log events.
   ///
@@ -146,6 +137,8 @@ class AtSignLogger {
     _hierarchicalLoggingEnabled = value;
   }
 
+  /// The level each logger constructed after this is set logs at;
+  /// `warning` until a program sets it.
   static set root_level(String rootLevel) {
     _root_level = rootLevel.toLowerCase();
     logging.Logger.root.level = LogLevel.level[_root_level] ??

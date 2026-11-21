@@ -67,6 +67,8 @@ registrar URL. Since the communications leg of the lifecycle work it also
 carries `lookUps`, the `AtLookUpFactory` the commands pass to every verb:
 `proxyLookUps()` when the root domain names a proxy, TLS otherwise.
 
+> Update 2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root; `proxyLookUps()` is deprecated and equals `secureSocketLookUps()`.
+
 ### What at_client_flutter is, for the mirror
 
 | at_client_flutter                                             | The CLI analogue                                                                              |
@@ -112,7 +114,7 @@ final client = await Atsign('@alice').open(
     keys: CliKeys.fileFor('@alice'),          // ~/.atsign/keys/@alice_key.atKeys
     preference: preference,
     storage: CliKeys.storageFor('@alice', program: 'my_app'),   // CLIBase's store
-    lookUps: lookUpsFor(preference.rootDomain),                   // CLIBase's transport
+    lookUps: secureSocketLookUps(),                               // CLIBase's transport
     secondaryAddressFinder: CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort));
 ```
@@ -133,7 +135,7 @@ and friends, `printFullParserUsage`, `MySyncProgressListener` (a
 `AtClientPreference`'s, the keys-and-store conventions above, or `lookUps`,
 which stays a parameter of `CLIBase` and the commands, with
 `lookUpsFor(rootDomain)` choosing between `proxyLookUps()` and
-`secureSocketLookUps()` by the root domain, as `CLIBase` does.
+`secureSocketLookUps()` by the root domain. (2026-11-15: at_lookup 4.1.0 sends `from:<atSign>` itself on every connection for a `proxy:<host>` root, so `CLIBase` uses `secureSocketLookUps()` for every root; `lookUpsFor` and `proxyLookUps()` are deprecated and equal it.)
 
 ## 3. Getting there
 
@@ -208,7 +210,7 @@ final client = await Atsign('@alice').open(                          // after
     keys: CliKeys.fileFor('@alice', passPhrase: pass),
     preference: preference,
     storage: CliKeys.storageFor('@alice', program: 'my_app'),
-    lookUps: lookUpsFor(preference.rootDomain),
+    lookUps: secureSocketLookUps(),
     secondaryAddressFinder: CacheableSecondaryAddressFinder(
         preference.rootDomain, preference.rootPort));
 
@@ -216,7 +218,7 @@ final client = await Atsign('@alice').open(                          // after
 final pref = AtOnboardingPreference()..atKeysFilePath = p..storagePath = s;   // before
 final keys = CliKeys.fileFor('@alice', path: p);                            // after
 final storage = CliKeys.storageFor('@alice', program: 'my_app', path: s);
-// pref.lookUps: pass lookUps: lookUpsFor(rootDomain) (or a factory of your own) to CLIBase or the verb
+// pref.lookUps: pass lookUps: secureSocketLookUps() (or a factory of your own) to CLIBase or the verb
 ```
 
 ## 6. Decisions to make

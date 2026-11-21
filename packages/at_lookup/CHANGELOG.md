@@ -1,5 +1,39 @@
+## 4.1.0-rc.1
+- feat: `errorResponseCode` reads the code an atServer's `error:` reply
+  names, in any form, and `errorResponseException` the exception a lookup
+  throws for that reply.
+- feat: `AtLookUpException.cause` holds the failure `executeVerb` wrapped.
+- feat: a lookup built with a `proxy:<host>` root domain sends
+  `from:<atSign>` first on each connection it opens, ahead of any
+  `onConnect`, as it already resolves every atSign to the proxy. A caller that
+  sent `from:<atSign>` from its own `onConnect` for such a root must stop, or
+  the proxy is sent it twice. An `error:` reply to it, a proxy that cannot
+  route the atSign, closes the connection and fails the command with that
+  error.
+- fix: a `proxy:<host>` root naming a bracketed IPv6 literal, such as
+  `proxy:[::1]`, reaches that address over TLS. It used to fail its lookup
+  with a `FormatException`, and a TLS connect to `[::1]` failed its host
+  lookup. Only brackets round an IPv6 address come off: `[zz]` or
+  `[127.0.0.1]` is looked up as written, and fails.
+- fix: `LookUpUtil.getSecondaryInfo` splits `host:port` on the last `:`, so
+  `[::1]:8443` gives `[::1]` and `8443`. It used to split on every `:` and
+  keep the first two parts, giving `[` and an empty port. `[::1]` with no
+  port gives nothing.
+- feat: after the atServer turns a notification reconnect away, answering
+  without letting the client in, reconnecting carries on, waiting longer
+  after each such answer, up to 5 minutes between attempts.
+- feat: `notifications` now carries an error event, an
+  `UnAuthenticatedException`, for each notification reconnect the atServer
+  turns away, and stays open. A listener with no `onError` gets each as an
+  uncaught error, so give it one.
+- fix: an `error:<code>:<text>` reply throws an `AtLookUpException` with
+  that code and text, as the dash and JSON forms do; a reply with no code at
+  its head gives `AT0014`.
+
 ## 4.0.0
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- breaking: `AtLookupImpl`'s constructor is internal to at_lookup; build a
+  lookup with `AtLookUp.withSecureSocket` or `withTransport`.
 - feat: `package:at_lookup/at_lookup_web.dart` reaches an atServer from a
   browser: `webSocketLookUps()` finds it through the atDirectory over HTTPS
   and connects over `wss://`; `fixedAddressWebSocketLookUps(host:, port:)`

@@ -95,7 +95,8 @@ for attempt in $(seq 1 60); do
   # went away keeps us waiting and then fails loudly rather than reading as
   # "nothing missing".
   if ! missing=$(ve sh -c '
-      for a in "@alice🛠" "@bob🛠" "@sitaram🛠" "@eve🛠" "@denise"; do
+      for a in "@alice🛠" "@bob🛠" "@sitaram🛠" "@eve🛠" "@denise" "@murali🛠" \
+          "@sameeraja🛠"; do
         grep -q "cramAndPkamAuth successful for $a" /apps/logs/pkam.log \
           2>/dev/null || printf "%s " "$a"
       done'); then

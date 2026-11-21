@@ -16,21 +16,16 @@ AtClientPreference vePreference(
       ..namespace = namespace
       ..cramSecret = cramSecret;
 
-/// Activates [atSign] with the CRAM secret on [settings]' preference, writing
-/// its first keys to the keyfile [settings] names, and stops the client the
-/// activation opened once its startup has settled; a test opens its own
-/// afterwards, the way a program does.
+/// Activates [atSign] through at_activate's own activation, with the CRAM
+/// secret on [settings]' preference, writing its first keys to the keyfile
+/// [settings] names; the client the activation opened is stopped once its
+/// startup has settled, and a test opens its own afterwards, the way a
+/// program does.
 Future<void> activateThroughCli(
-    String atSign, auth_cli.EnrollerSettings settings) async {
-  final client = await Atsign(atSign).activate(
-      cramSecret: settings.preference.cramSecret!,
-      keys: settings.keysFor(atSign),
-      preference: settings.preference,
-      storage: settings.storageFor(atSign),
-      lookUps: settings.lookUps,
-      secondaryAddressFinder: settings.secondaryAddressFinder);
-  await auth_cli.awaitStartupTail(client);
-  await client.stop();
+    String atSign, auth_cli.EnrollerSettings settings) {
+  assert(settings.preference.cramSecret != null,
+      'activate would fetch a CRAM secret from the live registrar');
+  return auth_cli.activate(atSign, settings);
 }
 
 /// A client of [atSign] on the keyfile and store [settings] name, through

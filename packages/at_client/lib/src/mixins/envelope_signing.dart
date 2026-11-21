@@ -9,11 +9,15 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show
         apskRecordName,
         apskUri,
+        quotedClaim,
         requireApskEnrollmentId,
+        requireIssuer,
         EnvelopeType,
         SignedEnvelope,
         signEnvelope,
         verifyEnvelope;
+import 'package:at_client/src/signing/envelope_verification.dart'
+    show PublishedApsk;
 import 'package:at_commons/at_commons.dart'
     show
         AtKey,
@@ -24,7 +28,7 @@ import 'package:at_commons/at_commons.dart'
         IllegalStateException,
         KeyNotFoundException;
 import 'package:at_commons/atsign.dart' show AtsignString;
-import 'package:meta/meta.dart' show visibleForTesting;
+import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 /// The `_apsk` values each AtClient's verifiers have fetched, and when each
 /// expires: one cache per client, shared by every signer built on it.
@@ -116,6 +120,7 @@ mixin EnvelopeSigning on ApkamSigning {
         payload,
         keys: keys,
         type: type,
+        atSign: atClient.getCurrentAtSign()!,
         enrollmentId: enrollmentId,
         toEncodable: toEncodable,
       );
@@ -162,12 +167,19 @@ mixin EnvelopeSigning on ApkamSigning {
   /// [expecting] is what the caller is verifying; an envelope signed for
   /// anything else is refused before its signature is checked. It defaults to
   /// [EnvelopeType.app] to pair with [wrapAndSign]'s default.
+  ///
+  /// Refuses an envelope whose `iss` names an Atsign other than
+  /// [signerAtSign], before fetching any `_apsk`. Accepts one that names no
+  /// Atsign, as at_client 4.0.0 signed them, until the release that re-signs
+  /// what an enrollment publishes.
   Future<void> verifyEnvelopeSignature(
     SignedEnvelope envelope, {
     required String signerAtSign,
     String? signerEnrollmentId,
     EnvelopeType expecting = EnvelopeType.app,
   }) async {
+    final atSign = signerAtSign.toAtsign();
+    requireIssuer(envelope, atSign);
     final String? id = signerEnrollmentId ?? envelope.signerEnrollmentId;
     if (id == null) {
       throw AtSigningVerificationException(
@@ -175,12 +187,13 @@ mixin EnvelopeSigning on ApkamSigning {
           'none: there is no _apsk to check the signature against');
     }
 
-    final atSign = signerAtSign.toAtsign();
     final cached = lookupPubKey(atSign, id);
     if (cached != null) {
       try {
         await verifyEnvelope(envelope,
-            signerPublicKey: cached, expecting: expecting);
+            signerPublicKey: cached,
+            signerAtSign: atSign,
+            expecting: expecting);
         return;
       } on AtSigningVerificationException {
         pubKeyCache.remove(_cacheKey(atSign, id));
@@ -189,23 +202,34 @@ mixin EnvelopeSigning on ApkamSigning {
 
     final pk = await getApkamPublicKey(atSign, id);
     try {
-      await verifyEnvelope(envelope, signerPublicKey: pk, expecting: expecting);
+      await verifyEnvelope(envelope,
+          signerPublicKey: pk, signerAtSign: atSign, expecting: expecting);
     } on AtSigningVerificationException catch (e) {
+      // NOTE: pk is whatever the signer published, so it is quoted — escaped
+      // and cut short — as every other claim in a refusal is.
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '
-          '$signerAtSign enrollment $id : $pk — ${e.message}');
+          '$atSign enrollment $id : ${quotedClaim(pk)} —${e.message}');
     }
   }
 
   /// Fetch the APKAM public signing key which [enrollmentId] of [atSign] has
   /// published in its per-enrollment namespace. See
   /// [ApkamSigning.publicSigningKeyUri].
-  Future<String> getApkamPublicKey(String atSign, String enrollmentId) async {
+  Future<String> getApkamPublicKey(String atSign, String enrollmentId) =>
+      _fetchApsk(atSign, enrollmentId, readCache: true);
+
+  /// [getApkamPublicKey], reading the cache only when [readCache] is true; a
+  /// value it fetches is cached either way.
+  Future<String> _fetchApsk(String atSign, String enrollmentId,
+      {required bool readCache}) async {
     atSign = atSign.toAtsign();
     requireApskEnrollmentId(enrollmentId);
 
-    String? cached = lookupPubKey(atSign, enrollmentId);
-    if (cached != null) return cached;
+    if (readCache) {
+      final cached = lookupPubKey(atSign, enrollmentId);
+      if (cached != null) return cached;
+    }
 
     var s = apskUri(atSign, enrollmentId);
     final AtValue av;
@@ -229,6 +253,20 @@ mixin EnvelopeSigning on ApkamSigning {
 
     return av.value;
   }
+
+  /// Fetches the `_apsk` [enrollmentId] of [atSign] published, with whose it
+  /// is; throws [WithdrawnSigningKeyException] when the atServer has moved it.
+  ///
+  /// Asks the atServer every time unless [cached] is true. A cached read
+  /// returns a value fetched within [publicKeyCacheSettings]' `cacheExpiry` as
+  /// it was, so it can miss a key rotated, or an enrollment revoked, since.
+  @experimental
+  Future<PublishedApsk> fetchPublishedApsk(String atSign, String enrollmentId,
+          {bool cached = false}) async =>
+      PublishedApsk(
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          value: await _fetchApsk(atSign, enrollmentId, readCache: cached));
 
   /// Throws [WithdrawnSigningKeyException] when the atServer moved
   /// [enrollmentId]'s `_apsk` out of `.a.__e`, saying why.

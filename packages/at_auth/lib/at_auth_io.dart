@@ -33,6 +33,6 @@
 /// the behaviour it wants.
 library;
 
-export 'src/enroll/file_retrofit_serializer.dart';
+export 'src/enroll/file_retrofit_serializer.dart' show fileRetrofitSerializer;
 export 'src/keys/io/file_io.dart';
 export 'src/registrar/registrar_io_client.dart';

@@ -124,4 +124,45 @@ void main() {
           symmetricAesGcmCryptoProviderId);
     });
   });
+
+  group('Given a notification marked encrypted that carries no value', () {
+    test(
+        'when it is a delete, then it goes through no crypto provider and '
+        'cuts no content key', () async {
+      final c = nskeyClient();
+      // NOTE: notify marks every notification encrypted by default before it
+      // calls transform, a delete included.
+      final params = NotificationParams.forDelete(AtKey()
+        ..key = 'phone'
+        ..namespace = namespace
+        ..sharedWith = '@bob'
+        ..sharedBy = owner
+        ..metadata = (Metadata()..isEncrypted = true));
+
+      final builder =
+          await NotificationRequestTransformer(c.atClient).transform(params);
+
+      expect(builder.value, isNull);
+      expect(params.atKey.metadata.appMetadata, isNull,
+          reason: 'nothing is sealed, so no provider is named');
+      expect(c.written, isEmpty, reason: 'no content key is cut or conveyed');
+    });
+
+    test(
+        'when it is an update with no value, then it goes through no crypto '
+        'provider either', () async {
+      final c = nskeyClient();
+      final params = NotificationParams.forUpdate(AtKey()
+        ..key = 'phone'
+        ..namespace = namespace
+        ..sharedWith = '@bob'
+        ..sharedBy = owner
+        ..metadata = (Metadata()..isEncrypted = true));
+
+      await NotificationRequestTransformer(c.atClient).transform(params);
+
+      expect(params.atKey.metadata.appMetadata, isNull);
+      expect(c.written, isEmpty);
+    });
+  });
 }

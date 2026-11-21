@@ -5,8 +5,12 @@ import 'dart:io';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:test/test.dart';
 
-/// [lookUpsFor] decides what a connection sends first from the root domain
-/// alone, observed at a TLS server on the loopback interface.
+import 'keyfile_helpers.dart';
+
+/// What a connection sends first is decided by at_lookup from the root domain
+/// alone (`proxy:<host>` names the atSign first), whether through the
+/// deprecated [lookUpsFor] or [secureSocketLookUps], observed at a TLS server
+/// on the loopback interface.
 ///
 /// Catalogue: features/at_client_cli/lookups_for.feature
 void main() {
@@ -40,6 +44,8 @@ void main() {
           ..useCertificateChain('${certs.path}/cert.pem')
           ..usePrivateKey('${certs.path}/key.pem'));
     firstLines = StreamController.broadcast();
+    // NOTE: a client that hangs up mid-handshake surfaces here, not on a
+    // socket; it is noise, and unhandled it fails setUpAll after the tests.
     server.listen((socket) {
       var received = '';
       socket.cast<List<int>>().transform(utf8.decoder).listen((text) {
@@ -50,7 +56,7 @@ void main() {
           socket.destroy();
         }
       }, onError: (_) {});
-    });
+    }, onError: (_) {});
   });
 
   tearDownAll(() async {
@@ -58,12 +64,13 @@ void main() {
     certs.deleteSync(recursive: true);
   });
 
-  /// The first line the server receives when a lookup [lookUps] builds for
-  /// `@alice` runs `scan`.
-  Future<String> firstLineFrom(AtLookUpFactory lookUps) async {
-    final lookUp = lookUps(
+  /// The first line the server receives when a lookup that [lookUpsFor]
+  /// [root] builds for `@alice`, on a client whose root is [root], runs
+  /// `scan`.
+  Future<String> firstLineFrom(String root) async {
+    final lookUp = lookUpsFor(root)(
         atSign: '@alice',
-        rootDomain: AtRootDomain.atsignDomain,
+        rootDomain: AtRootDomain(root, 64),
         authenticator: null,
         secondaryAddressFinder:
             FixedSecondaryAddressFinder('127.0.0.1', server.port));
@@ -77,26 +84,45 @@ void main() {
   }
 
   test('Through a proxy, each connection names its atSign first', () async {
-    expect(await firstLineFrom(lookUpsFor('proxy:127.0.0.1')), 'from:@alice',
+    expect(await firstLineFrom('proxy:127.0.0.1'), 'from:@alice',
         reason: 'a proxy routes a connection by the atSign it names first');
   });
 
   test(
       'A CLIBase given no lookUps and a proxy root names its atSign first on '
       'each connection', () async {
+    final home = Directory.systemTemp.createTempSync('lookups_for_cli_');
+    addTearDown(() async {
+      for (final client
+          in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+        await client.stop();
+      }
+      AtClientImpl.atClientInstanceMap.clear();
+      home.deleteSync(recursive: true);
+    });
     final cli = CLIBase(
         atSign: '@alice',
         nameSpace: 'my_app',
         rootDomain: 'proxy:127.0.0.1:${server.port}',
-        homeDir: certs.path);
+        homeDir: home.path,
+        syncDisabled: true,
+        maxConnectAttempts: 1);
     expect(cli.lookUps, isNull, reason: 'the precondition: the default runs');
+    await FileAtKeysIo(filePath: (_) => cli.atKeysFilePathToUse)
+        .write('@alice', randomLegacyKeys());
 
-    expect(await firstLineFrom(cli.lookUpsToUse), 'from:@alice',
-        reason: 'CLIBase.init opens its client with these');
+    final line = firstLines.stream.first;
+    // NOTE: the test server hangs up after the first line, so init fails;
+    // only what it sent first matters here.
+    final opened = cli.init().then((_) {}, onError: (_) {});
+    expect(await line.timeout(const Duration(seconds: 10)), 'from:@alice',
+        reason: 'CLIBase.init opens its client with secureSocketLookUps, and '
+            'at_lookup names the atSign first for a proxy root');
+    await opened;
   });
 
   test('Straight to an atServer, the command goes first', () async {
-    expect(await firstLineFrom(lookUpsFor('root.atsign.org')), 'scan',
+    expect(await firstLineFrom('root.atsign.org'), 'scan',
         reason: 'an atServer reached directly is sent no from: unasked');
   });
 }

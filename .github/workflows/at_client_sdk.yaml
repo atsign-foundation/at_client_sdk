@@ -107,6 +107,89 @@ jobs:
             packages/at_client/citations.jsonl
           if-no-files-found: warn
 
+  # at_client 4.0.0, resolved from pub.dev, verifying the JWS vectors this
+  # tree signs. Its own package, outside the workspace, so it runs the
+  # published verifier rather than this tree's.
+  released_envelope_reader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies
+        working-directory: tests/released_envelope/4.0.0
+        run: dart pub get --enforce-lockfile
+
+      - name: Verify this tree's envelopes with at_client 4.0.0
+        working-directory: tests/released_envelope/4.0.0
+        run: dart test --concurrency=1
+
+  # A bare `dart test` runs on the VM, so it skips the @TestOn('browser')
+  # files; at_client_web_browser runs the whole suite in Chrome.
+  unit_at_client_web:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dart-channel: [stable, beta]
+    defaults:
+      run:
+        working-directory: packages/at_client_web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+        with:
+          dart-channel: ${{ matrix.dart-channel}}
+
+      - name: Install dependencies in at_client_web
+        run: dart pub get
+
+      - name: Analyze project source in at_client_web
+        run: dart analyze
+
+      - name: Check that at_client_web is correctly formatted
+        run: dart format . -o none --set-exit-if-changed
+
+      - name: Run at_client_web VM tests
+        run: dart test --concurrency=1
+
+  at_client_web_browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check out the virtual environment's certificate from at_server
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: atsign-foundation/at_server
+          # Pinned to a commit (trunk on 2026-11-18); bump deliberately.
+          ref: a158b700d4b6aaaeb7e3d8ba56df8948157f0b1d
+          path: at_server
+          persist-credentials: false
+          sparse-checkout: tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
+          sparse-checkout-cone-mode: false
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      - name: Run at_client_web browser tests in Chrome (dart2js)
+        working-directory: packages/at_client_web
+        env:
+          AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
+        run: |
+          dart pub get
+          dart test -p chrome --concurrency=1
+
+      - name: Run at_client_web browser tests in Chrome (dart2wasm)
+        working-directory: packages/at_client_web
+        env:
+          AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
+        run: dart test -p chrome -c dart2wasm --concurrency=1
+
   unit_at_client_flutter:
     runs-on: ubuntu-latest
     strategy:
@@ -138,6 +221,30 @@ jobs:
       # Run unit tests
       - name: Run at_client_flutter unit tests
         working-directory: packages/at_client_flutter
+        run: flutter test --concurrency=1
+
+      - name: Install dependencies of the example
+        working-directory: packages/at_client_flutter/example
+        run: flutter pub get
+
+      - name: flutter analyze the example
+        working-directory: packages/at_client_flutter/example
+        run: flutter analyze --no-fatal-infos lib test
+
+      - name: Run the example's tests
+        working-directory: packages/at_client_flutter/example
+        run: flutter test --concurrency=1
+
+      - name: Install dependencies of the todos example
+        working-directory: packages/at_client_flutter/example/todos
+        run: flutter pub get
+
+      - name: flutter analyze the todos example
+        working-directory: packages/at_client_flutter/example/todos
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run the todos example's tests
+        working-directory: packages/at_client_flutter/example/todos
         run: flutter test --concurrency=1
 
   functional_tests:
@@ -201,6 +308,16 @@ jobs:
       - name: Run functional tests
         working-directory: tests/at_functional_test
         run: dart test --concurrency=1 -x upgrade --file-reporter json:acceptance-report.json
+
+      - name: Install dependencies of the todos example
+        working-directory: packages/at_client_flutter/example/todos
+        run: flutter pub get
+
+      - name: Run the todos examples against the virtual atServer
+        working-directory: packages/at_client_flutter/example/todos
+        env:
+          TODOS_VE_ROOT: vip.ve.atsign.zone:64
+        run: flutter test --concurrency=1 test/todos_examples_pq_test.dart
 
       # The atServer's own log is the only record of why it refused a request,
       # and the container does not outlive the job.
@@ -525,8 +642,9 @@ jobs:
       VIRTUALENV_BASE_PORT: 26000
       VE_TOP_PORT: 26099
       # The TRUNK-TRACKING atServer build. These are the post-quantum e2e
-      # files, so they need server behaviour that is on trunk before it is
-      # released; the published `vip` cannot run them.
+      # files, which need an atServer that verifies ML-DSA PKAM and stores
+      # enrollment metadata: trunk does, and so does every release from
+      # p3.16.5.
       VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

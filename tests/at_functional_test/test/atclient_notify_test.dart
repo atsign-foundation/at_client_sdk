@@ -146,19 +146,6 @@ void main() {
     await received.future;
   });
 
-  test('notify - test deprecated method using notification service', () async {
-    // phone.me@alice🛠
-    var phoneKey = AtKey()
-      ..key = 'phone'
-      ..sharedWith = sharedWithAtSign
-      ..namespace = namespace;
-    var value = '+1 100 200 300';
-    final atClient = atClientManager.atClient;
-    final notifyResult =
-        await atClient.notify(phoneKey, value, OperationEnum.update);
-    expect(notifyResult, true);
-  });
-
   test('notify check value decryption on receiver', () async {
     // First off, let's initialize local storage and lastNotificationTime
     // for the receiving atSign

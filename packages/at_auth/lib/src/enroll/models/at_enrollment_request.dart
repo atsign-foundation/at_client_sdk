@@ -96,16 +96,15 @@ abstract class EnrollmentRequest {
 /// authorization to access the specified namespaces in the request. Conversely, if the request is disapproved, the requesting
 /// app is denied login access.
 class AtEnrollmentRequest extends EnrollmentRequest {
-  /// The authenticated session of the app submitting this enrollment request.
+  /// The session of the app submitting this enrollment request.
   ///
-  /// When supplied, it is the source of the request's [atSign] and [rootDomain],
-  /// and its [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
+  /// It is the source of the request's [atSign] and [rootDomain], and its
+  /// [AtAuthSession.atKeysIo] is where the newly enrolled app's keys are
   /// persisted and handed back on the [AtEnrollmentResponse.session] after
-  /// approval. Prefer this over the deprecated `atSign`/`rootDomain` params.
-  final AtAuthSession? session;
+  /// approval.
+  final AtAuthSession session;
 
   Map<String, String> namespaces;
-  String? encryptedAPKAMSymmetricKey;
   String otp;
   Duration? apkamKeysExpiryDuration;
 
@@ -151,8 +150,9 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   final Stream<String> Function(AtKeys keys, AtLookUp atLookUp)?
       apkamSymmetricKeyResolver;
 
-  /// The algorithm this enrollment's APKAM **authentication** keypair is
-  /// minted under, and the value that rides `EnrollParams.signingAlgo`.
+  /// The algorithm of this enrollment's APKAM **authentication** keypair,
+  /// minted or supplied as [apkamKeyPair], and the value that rides
+  /// `EnrollParams.signingAlgo`.
   ///
   /// **Required, with no default, on purpose:** a default would let a caller
   /// inherit an algorithm it never chose. On an atSign whose deployment
@@ -172,6 +172,26 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// `rsa2048`.
   final SigningAlgoType signingAlgo;
 
+  /// The APKAM authentication keypair this enrollment enrolls, in place of
+  /// one minted at submission.
+  ///
+  /// Both halves are encoded as a mint under [signingAlgo] encodes them: for
+  /// `mldsa65`, base64 of the raw 1952-byte public and 4032-byte secret keys.
+  ///
+  /// Before anything is sent, the private half signs a fixed string through
+  /// the signer a `pkam:` uses and the signature must verify against the
+  /// public half. A pair that is malformed, or whose halves do not belong
+  /// together, is refused with `AtSigningException`; a pair under a
+  /// [signingAlgo] other than `rsa2048` or `mldsa65` with `ArgumentError`.
+  /// Both halves are then re-encoded as standard base64, so a base64url pair
+  /// is sent, published and stored in one spelling.
+  ///
+  /// Whoever supplies the pair decides this enrollment's authentication
+  /// signing key, so it must come from the enrolling device.
+  ///
+  /// Null mints a fresh keypair under [signingAlgo].
+  final ({String publicKey, String privateKey})? apkamKeyPair;
+
   /// How this request conveys the enrollment's symmetric key.
   ///
   /// Not a parameter — the constructor decides it, because the mode and the
@@ -189,30 +209,19 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// is also how an approver seals this atSign's existing secrets to the new
   /// device, which is a separate question from how the symmetric key travels.
   AtEnrollmentRequest({
-    this.session,
-    @Deprecated('Provide `session` instead; its atSign is used.')
-    String? atSign,
-    @Deprecated('Provide `session` instead; its rootDomain is used.')
-    AtRootDomain? rootDomain,
+    required this.session,
     required super.appName,
     required super.deviceName,
-    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
-    super.apkamPublicKey,
     required this.otp,
     required this.namespaces,
-    @Deprecated('Provide `session` instead; it contains a AtKeysIo to use.')
-    this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
     required this.signingAlgo,
+    this.apkamKeyPair,
     super.advertisedSigningKey,
   })  : keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
         apkamSymmetricKeyResolver = null,
-        super(
-          atSign: _atSignOf(session, atSign),
-          rootDomain:
-              session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
-        );
+        super(atSign: session.atSign, rootDomain: session.rootDomain);
 
   /// A pq-mode enrollment request: nothing RSA-wrapped rides it. The approver
   /// mints the symmetric key and encapsulates it to the key package this
@@ -226,20 +235,11 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// requirements instead, so the two ways of getting this wrong stopped being
   /// reachable states.
   ///
-  /// The atSign is sourced exactly as it is for a legacy request: a [session]
-  /// if there is one, else the deprecated loose `atSign`. A request that only
-  /// wants the key exchange — one that inspects what it advertised and never
-  /// waits for approval — has nowhere to persist keys and needs no session.
-  ///
   /// Throws [ArgumentError] for a [signingAlgo] of `rsa2048`, before anything
   /// is sent: an enrollment whose keys travel post-quantum authenticates
   /// post-quantum too.
   AtEnrollmentRequest.pq({
-    this.session,
-    @Deprecated('Provide `session` instead; its atSign is used.')
-    String? atSign,
-    @Deprecated('Provide `session` instead; its rootDomain is used.')
-    AtRootDomain? rootDomain,
+    required this.session,
     required super.appName,
     required super.deviceName,
     required this.otp,
@@ -250,24 +250,11 @@ class AtEnrollmentRequest extends EnrollmentRequest {
         this.apkamSymmetricKeyResolver,
     this.apkamKeysExpiryDuration,
     required SigningAlgoType signingAlgo,
+    this.apkamKeyPair,
     super.advertisedSigningKey,
   })  : signingAlgo = _authenticatingPostQuantum(signingAlgo),
         keyExchangeMode = EnrollmentKeyExchangeMode.pq,
-        encryptedAPKAMSymmetricKey = null,
-        super(
-          atSign: _atSignOf(session, atSign),
-          rootDomain:
-              session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
-        );
-
-  /// The one rule for where a request's atSign comes from, shared by both
-  /// constructors: the session if there is one, else the deprecated parameter,
-  /// else a refusal — a request with no atSign has no atServer to reach.
-  static String _atSignOf(AtAuthSession? session, String? atSign) =>
-      session?.atSign ??
-      atSign ??
-      (throw ArgumentError(
-          'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)'));
+        super(atSign: session.atSign, rootDomain: session.rootDomain);
 
   /// [signingAlgo], unless it is `rsa2048`, which a pq request refuses.
   static SigningAlgoType _authenticatingPostQuantum(

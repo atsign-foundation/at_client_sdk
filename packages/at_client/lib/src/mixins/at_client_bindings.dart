@@ -20,14 +20,21 @@ mixin AtClientBindings {
     int maxTries = 3,
 
     /// The provider to seal [value] under, as `NotificationParams.forUpdate`
-    /// takes it; null for this client's default.
+    /// takes it; null for this client's default, or for the namespace-key
+    /// provider when [sealToNamespace] is set.
     String? cryptoProviderId,
+
+    /// The namespace of the recipient's namespace key [value] is sealed to, as
+    /// `NotificationParams.forUpdate` takes it; null for the most specific one
+    /// the recipient advertises.
+    String? sealToNamespace,
   }) async {
     var params = NotificationParams.forUpdate(
       atKey,
       value: value,
       notificationExpiry: ttln,
       cryptoProviderId: cryptoProviderId,
+      sealToNamespace: sealToNamespace,
     );
 
     NotificationResult result;

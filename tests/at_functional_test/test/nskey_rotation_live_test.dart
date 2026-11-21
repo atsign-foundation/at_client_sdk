@@ -38,11 +38,10 @@ void main() {
   final namespace = 'rotation$runId';
 
   setUpAll(() async {
-    // NOTE: the SECOND atSign, not the first. These tests create enrollments
-    // and REVOKE one, and both are shared state the rest of the suite reads:
-    // every enroll:listns walks the whole roster, and a revoked enrollment's
-    // _apsk is deleted for good.
-    atSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
+    // NOTE: an atSign no other file uses, so the roster each rotation conveys
+    // to, and the mint lock sized to it, hold only this file's enrollments,
+    // and no other file reads the enrollments it revokes.
+    atSign = ConfigUtil.getYaml()['atSign']['rotationAtSign'];
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager = await TestUtils.initAtClient(atSign, namespace,
@@ -94,7 +93,9 @@ void main() {
       sharing: sharing,
       filing: filing,
       ring: PublishedNskeyKeyRing(enrolled.client,
-          privateFiling: filing, lockTtl: liveMintLockTtl, lockBudgetPerMember: Duration.zero),
+          privateFiling: filing,
+          lockTtl: liveMintLockTtl,
+          lockBudgetPerMember: liveMintLockBudgetPerMember),
     );
   }
 
@@ -137,7 +138,7 @@ void main() {
   test(
       'UC-A5.1(b) · a rotation publishes a successor, pushes it to the '
       'survivor, and leaves the excluded enrollment on the old generation',
-      () async {
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     final rotator = await holder('rot-rotator');
     final survivor = await holder('rot-survivor');
     final excluded = await holder('rot-excluded');
@@ -173,7 +174,7 @@ void main() {
       sharing: rotator.sharing,
     );
 
-    await waitOutMintLock();
+    await waitOutMintLock(rotator.enrolled.client, namespace);
 
     final outcome = await rotation.rotateNamespaceKey(namespace,
         excludeEnrollmentIds: {excluded.enrolled.enrollmentId});
@@ -253,7 +254,8 @@ void main() {
             'revocation would have bought nothing');
   });
 
-  test('a rotation inside the mint lock\'s cooldown is refused', () async {
+  test('a rotation inside the mint lock\'s cooldown is refused',
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // NOTE: this cannot be a unit test — the interlock IS the atServer
     // refusing a second create of an immutable record, and a mocked
     // executeVerb accepts the second take happily.
@@ -280,7 +282,7 @@ void main() {
 
     // The control: the same call is accepted once the cooldown has lapsed, so
     // the refusal above is the lock and not an enrollment that cannot rotate.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
     final rotated = (await owner.ring.rotate(ns)).rotated;
     expect(rotated.nskeyKid, isNot(minted.nskeyKid));
   });
@@ -502,7 +504,8 @@ void main() {
 
   test(
       'UC-A5.3 · revokeEnrollmentAndRotate revokes first, then supersedes the '
-      'generation the revoked enrollment held', () async {
+      'generation the revoked enrollment held',
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     // NOTE: its OWN namespace, because this needs a genuine cold start — the
     // owner retains the private for the superseded generation only if it
     // minted it, and on a warm namespace `mintAndPublish` ADOPTS the live
@@ -519,7 +522,7 @@ void main() {
     // NOTE: revokeEnrollmentAndRotate revokes FIRST, so a rotation refused by
     // the cooldown would leave the enrollment cut off but still holding the
     // live generation.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
 
     final outcomes = await NskeyRotation(
       atClient: owner.enrolled.client,
@@ -625,7 +628,7 @@ void main() {
         reason: 'the control: before the rotation the writer\'s key rests on '
             'the generation every enrollment with access holds');
 
-    await waitOutMintLock();
+    await waitOutMintLock(writer.enrolled.client, ns);
     final outcomes = await NskeyRotation(
       atClient: operator.enrolled.client,
       ring: operator.ring,
@@ -671,7 +674,8 @@ void main() {
 
   test(
       'UC-G2.5 · a revocation whose rotation did not happen is rotated at the '
-      'next start', () async {
+      'next start',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
     // The backstop for the composed lever: `revokeEnrollmentAndRotate` revokes
     // and then rotates, and when the second half does not happen nothing else
     // notices — the revoked enrollment is off every roster and still holds the
@@ -683,7 +687,7 @@ void main() {
     final target = await holder('bck-target', namespaces: {ns: 'rw'});
 
     final before = await owner.ring.mintAndPublish(ns);
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
 
     // Revoked and NOT rotated: the half-finished state, produced by driving the
     // revoke alone rather than through the lever that composes the two.
@@ -709,7 +713,7 @@ void main() {
 
     // The control: the rotation took a fresh server stamp, so the same
     // revocation is no longer later than it and the next start rotates nothing.
-    await waitOutMintLock();
+    await waitOutMintLock(owner.enrolled.client, ns);
     expect(await seeding.rotateIfRevoked(atSign, ns), isFalse);
     expect((await owner.ring.publishedAdvertisement(atSign, ns))?.nskeyKid,
         after?.nskeyKid);

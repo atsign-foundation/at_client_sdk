@@ -13,12 +13,14 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_io.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/transport.dart';
 
 /// `AtLookupImpl` implements `AtLookupMuxable`, so this double has the seam.
 class MockMuxableLookUp extends Mock implements AtLookupImpl {}
@@ -94,7 +96,7 @@ void main() {
         () async {
       final lookUp = MockMuxableLookUp();
       RemoteSecondary(atSign, preference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           atLookUp: lookUp,
           privateKey: privateKeyPair.atPrivateKey.privateKey,
           atKeysIo: await keyfile());
@@ -111,7 +113,7 @@ void main() {
     test('the keyfile, for a client holding only a keyfile', () async {
       final lookUp = MockMuxableLookUp();
       RemoteSecondary(atSign, preference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           atLookUp: lookUp,
           atKeysIo: await keyfile());
 
@@ -124,7 +126,7 @@ void main() {
       final empty = InMemoryAtKeysIo();
       await empty.write(atSign, AtKeys());
       RemoteSecondary(atSign, preference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           atLookUp: lookUp,
           privateKey: privateKeyPair.atPrivateKey.privateKey,
           atKeysIo: empty);
@@ -142,7 +144,7 @@ void main() {
     test('the private key, for a client holding no keyfile', () async {
       final lookUp = MockMuxableLookUp();
       RemoteSecondary(atSign, preference,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           atLookUp: lookUp,
           privateKey: privateKeyPair.atPrivateKey.privateKey);
 

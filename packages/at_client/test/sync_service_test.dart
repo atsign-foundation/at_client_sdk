@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
@@ -55,7 +56,6 @@ class SkipDeletesUntilMatcher extends Matcher {
 
 void main() async {
   late AtClient mockAtClient;
-  late AtClientManager mockAtClientManager;
   late NotificationServiceImpl mockNotificationService;
   late RemoteSecondary mockRemoteSecondary;
   late SyncServiceImpl syncServiceImpl;
@@ -64,7 +64,6 @@ void main() async {
 
   setUp(() async {
     mockAtClient = MockAtClient();
-    mockAtClientManager = MockAtClientManager();
     mockNotificationService = MockNotificationServiceImpl();
     mockRemoteSecondary = MockRemoteSecondary();
 
@@ -72,7 +71,6 @@ void main() async {
         .thenReturn(mockNotificationService);
 
     syncServiceImpl = await SyncServiceImpl.create(mockAtClient,
-        atClientManager: mockAtClientManager,
         remoteSecondary: mockRemoteSecondary,
         warmStartSync: false) as SyncServiceImpl;
   });

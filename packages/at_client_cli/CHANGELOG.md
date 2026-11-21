@@ -1,6 +1,53 @@
+## 1.1.0
+
+- feat: `at_activate` and `at_register` name themselves, at at_client_cli's
+  version, on every `from:` their clients send to authenticate, and
+  `createAtClient` takes optional `appName` and `appVersion` to name yours.
+- feat: `AtActivate.main` takes optional `program` and `programVersion`, so a
+  program that runs at_activate names itself and its version on every
+  `from:` in place of at_activate's. With no `programVersion`, the version
+  named is `unknown`.
+- feat: `package:at_client_cli/testing.dart` re-exports at_client's
+  experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
+- chore: requires at_client 4.1.0.
+- fix: `at_activate auto_approve` acts only on requests from its own atSign.
+- fix: `at_activate status` asks the atDirectory once, prints no posture
+  notice, and says a refused atServer connection is unreachable rather than
+  an unexpected failure (it still returns 2).
+- fix: a `CLIBase` program whose atServer answers its PKAM with a server
+  error, such as AT0011, or with no challenge to sign, retries as it does
+  for an atServer not reached, and ends with
+  `SecondaryServerConnectivityException`, not `AtCredentialRefusedException`.
+- fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
+  it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
+  `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that
+  reached a proxy without a `proxy:<host>` root must make it the root.
+  Requires at_lookup 4.1.0.
+
 ## 1.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- feat: `at_activate approve` warns when it approves a request made at the
+  legacy key exchange on an atSign that publishes a namespace key: the
+  approval conveys none of the atSign's namespace keys, and revoking it with
+  the `at_activate revoke` command it prints and requesting again at
+  `--posture pqReady` conveys them.
+- feat: a `CLIBase` program that cannot reach the atServer names the
+  atDirectory address and what failed.
+- feat: a `CLIBase` program whose keyfile holds no credential, as a denial,
+  a cancel or an expiry leaves it, says so on stderr and stops at once.
+- feat: a `CLIBase` program shows the SDK's warnings on stderr by default,
+  such as a notification it could not decrypt; `-v` shows the rest.
+- feat: `at_register`, and `at_activate onboard` without `-c`, ask the
+  registrar with the API key in `AT_REGISTRAR_API_KEY` when it is set, and
+  otherwise with a built-in key, so both work without it. A key that is set
+  but holds a character an HTTP header cannot carry is refused before
+  anything is sent.
+- feat: a program built on `CLIBase` whose keyfile still holds only its
+  enrollment request waits for the approval, as at_activate does, and then
+  runs, rather than throwing.
+- feat: instances of a program that share a keyfile opened through
+  `CliKeys.fileFor`, as `CLIBase` opens it, retrofit it one at a time.
 - feat: at_client_cli is at_onboarding_cli and at_cli_commons in one package:
   `CLIBase`, the at_activate and at_register tools, and the library behind
   them. `AtActivate.main` and `AtRegister.main` run the tools inside another
@@ -26,6 +73,11 @@
   client with `CLIBase` or `Atsign.open`; the README's migration table names
   what replaces each.
 - breaking: `CLIBase`'s `preference` is an `AtClientPreference`.
+- breaking: `CLIBase` takes no `-d`/`--legacy-root-domain`, so use
+  `-r`/`--root-server`, and `CLIBase.createArgsParser` and
+  `fromCommandLineArgs` take no `addLegacyRootDomainArg`. `at_activate`'s
+  `-d` is still the device name. The tools take no `--hashingAlgoType`,
+  which did nothing.
 - breaking: `CLIBase` takes no `downloadDir`, which nothing read.
 - breaking: `CLIBase` throws `AtCredentialRefusedException` for every
   refusal and `SecondaryNotFoundException` for an atSign the atDirectory does
@@ -43,5 +95,10 @@
   three seconds apart; the default of 10 waits about 30 seconds.
 - fix: at_register exits with at_activate's non-zero code, instead of 0,
   when the activation after registration fails.
+- fix: at_register confirms a verification code the registrar accepts with a
+  follow-up at once, so the third code accepted still gets the CRAM key. A
+  registrar that asks again to confirm a confirmed code ends the registration
+  with exit 4.
+- fix: the at_activate Dockerfile builds from the repo root on Dart 3.
 - fix: at_register exits 5, not 4, after three refused verification codes,
   and asks for no fourth code.

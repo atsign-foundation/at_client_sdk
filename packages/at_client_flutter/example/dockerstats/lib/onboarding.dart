@@ -86,7 +86,7 @@ Future<void> logout() async {
 
 AtClientPreference _preference() => AtClientPreference()
   ..namespace = _namespace
-  ..fetchOfflineNotifications = false;
+  ..notificationReplay = const NotificationReplay.connect();
 
 /// Every dialog hands back a client the app owns. This app keeps one current
 /// client in [AtClientManager], since its screens read it from there.

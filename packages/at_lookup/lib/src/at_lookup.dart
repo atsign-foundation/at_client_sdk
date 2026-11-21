@@ -15,6 +15,13 @@ import 'package:at_lookup/src/connection/at_connection.dart';
 /// so a closure held for an instance's life must decide afresh each time what
 /// credential applies: an instance that CRAM-onboards and then PKAM-
 /// authenticates is one instance and two answers.
+///
+/// Return false, or throw [UnAuthenticatedException], when the atServer
+/// answered without letting the client in, by refusing the credential or
+/// by any other answer: only those count as turned away, which
+/// [AtLookupMuxable.notifications] reports and a notification reconnect waits
+/// longer after. A reconnect retries any other exception as a failure to
+/// reach the atServer.
 typedef AtAuthenticator = Future<bool> Function(AtCommandExecutor executor);
 
 /// The narrow view of a connection that an [AtAuthenticator] is given: enough
@@ -68,10 +75,10 @@ typedef AtLookUpFactory = AtLookupMuxable Function({
 abstract interface class AtLookUp {
   /// Build a lookup that talks to an atServer over TLS.
   ///
-  /// This is the entry point. Constructing `AtLookupImpl` directly still
-  /// works and is deprecated: it takes a `String, int` root pair rather than
-  /// an [AtRootDomain], it accepts key material this class no longer needs,
-  /// and it hands back a concrete type where callers only need an interface.
+  /// This is the entry point. `AtLookupImpl`'s own constructor is internal to
+  /// this package: it takes a `String, int` root pair rather than an
+  /// [AtRootDomain], and hands back a concrete type where callers only need an
+  /// interface.
   ///
   /// Static, and that is deliberate — statics are not part of the `implements`
   /// contract, so adding this breaks none of the classes that mock
@@ -105,11 +112,16 @@ abstract interface class AtLookUp {
   /// barrel cannot name a native implementation, so the caller supplies one.
   ///
   /// [onConnect] runs on every connection this lookup opens, once it is up
-  /// and before anything else is sent on it: a proxy that needs `from:` first
-  /// to learn which atServer the connection is for is the case it exists for.
-  /// It talks only through the executor it is handed, since a call back into
+  /// and before anything else is sent on it. A proxy's `from:<atSign>` is not
+  /// for [onConnect]: the lookup sends that itself for a proxy [rootDomain],
+  /// as below, and an [onConnect] that sent it too would send it twice. It
+  /// talks only through the executor it is handed, since a call back into
   /// the lookup waits for it to finish, and a connection whose [onConnect]
   /// fails is closed.
+  ///
+  /// A [rootDomain] of `proxy:<host>` names a proxy fronting many atServers,
+  /// so the lookup sends `from:<atSign>` itself as the first thing on each
+  /// connection, before [onConnect], which a caller need not send for it.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
@@ -128,7 +140,7 @@ abstract interface class AtLookUp {
       );
 
   /// Build a lookup over [transport]; every parameter means what it means on
-  /// [withSecureSocket].
+  /// [withSecureSocket], a proxy [rootDomain] included.
   static AtLookupMuxable withTransport({
     required String atSign,
     required AtRootDomain rootDomain,
@@ -145,12 +157,32 @@ abstract interface class AtLookUp {
       transportFactory: transport.transportFactory,
       socketListenerFactory: transport.listenerFactory,
       outboundConnectionFactory: transport.connectionFactory,
-      onConnect: onConnect,
+      onConnect:
+          rootDomain.isProxyAddress ? _fromThen(atSign, onConnect) : onConnect,
     )..authenticator = authenticator;
   }
 
+  /// A preamble that sends `from:<atSign>`, which tells a proxy which atServer
+  /// the connection is for, and then runs [onConnect], if any.
+  ///
+  /// An `error:` reply, such as a proxy that cannot route [atSign], throws
+  /// the [AtLookUpException] it stands for, so the connection is closed
+  /// rather than kept for commands the proxy will not route.
+  static Future<void> Function(AtCommandExecutor connection) _fromThen(
+    String atSign,
+    Future<void> Function(AtCommandExecutor connection)? onConnect,
+  ) =>
+      (connection) async {
+        final reply = await connection
+            .sendSync((FromVerbBuilder()..atSign = atSign).buildCommand());
+        if (reply.startsWith('error:')) throw errorResponseException(reply);
+        await onConnect?.call(connection);
+      };
+
   /// Runs [builder]'s command on the atServer, authenticating the connection
   /// first when the verb needs it, and returns the atServer's response.
+  /// An authenticator's failure is thrown as an [AtLookUpException] whose
+  /// [AtLookUpException.cause] is that failure.
   Future<String?> executeVerb(VerbBuilder builder);
 
   /// Sends [command] as written and returns the atServer's response; [auth]
@@ -248,6 +280,12 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   ///
   /// Listen as soon as you read it: until a listener arrives, notifications
   /// are held without bound, and none of that back-pressure applies.
+  ///
+  /// While notifying, each reconnect attempt the atServer turns away, one
+  /// that fails with an [UnAuthenticatedException], arrives here as that
+  /// exception in an error event, and the stream stays open: reconnecting
+  /// carries on, waiting longer after each, up to 5 minutes between attempts.
+  /// Listen with an `onError`, or each is an unhandled error.
   Stream<String> get notifications;
 
   /// Ask the atServer to start sending notifications on this connection.

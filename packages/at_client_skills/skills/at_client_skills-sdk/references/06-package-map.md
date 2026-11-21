@@ -25,7 +25,8 @@ keys, logging). You do not add `at_client` beside it.
 
 `at_client` itself is the platform-neutral **core**: public, but for building
 a platform package, or for a program that passes every dependency explicitly.
-A browser platform package, `at_client_web`, does not exist yet.
+The browser platform package, `at_client_web`, is still being built and is not
+published, so a browser app has no SDK package to depend on yet.
 
 ---
 
@@ -99,11 +100,14 @@ it provides:
   namespace), for a program that calls the `Atsign` verbs itself
 - `createAtClient(atSign:, atKeysFilePath:, ...)` — the client at_activate's
   commands open: from the keyfile, syncing nothing, on a store of its own
-- `lookUpsFor(rootDomain)` — the `lookUps:` `CLIBase` uses: `proxyLookUps()`
-  for a root domain of the form `proxy:host:port`, `secureSocketLookUps()`
-  otherwise
+- `lookUpsFor(rootDomain)` — deprecated; returns `secureSocketLookUps()`, the
+  `lookUps:` `CLIBase` uses, for every root (at_lookup 4.1.0 sends
+  `from:<atSign>` itself for a `proxy:host:port` root; `proxyLookUps()` is
+  deprecated and equals it)
 - `ServiceFactoryWithNoOpSyncService` for stateless no-sync instances
-- the `at_activate` and `at_register` executables
+- the `at_activate` and `at_register` executables; `at_register`, and
+  `at_activate onboard` without `-c`, send the registrar API key in
+  `AT_REGISTRAR_API_KEY` when it is set, and otherwise a built-in key
   (`dart pub global activate at_client_cli`)
 
 Not needed in Flutter apps. It replaces `at_cli_commons` and

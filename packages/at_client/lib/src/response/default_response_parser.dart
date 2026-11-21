@@ -1,4 +1,5 @@
 import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart' show errorResponseException;
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/response/response_parser.dart';
 
@@ -30,25 +31,15 @@ class DefaultResponseParser implements ResponseParser {
     response.response = responseString.replaceFirst(RegExp('^data:'), '');
   }
 
-  /// Remove error: in responseString and extract Error code and error response if any
-  /// set isError to true
-  /// set errorCode and errorDescription if any
-  /// @param responseString - response coming from secondary server
-  /// @param response - Response object from parse method
-  /// @returns void
+  /// Throws the exception an atServer's `error:` [responseString] stands
+  /// for, read in any form an atServer writes as a lookup reads it, after
+  /// setting [response]'s error fields from it.
   void parseFailureResponse(String responseString, AtResponse response) {
-    // Remove error: from responseString
-    responseString = responseString.replaceFirst(RegExp('^error:'), '');
-    // Set isError to true
-    response.isError = true;
-    // Find out whether error code exists or not
-    if (responseString.isNotEmpty && responseString.startsWith('AT')) {
-      response.errorCode = (responseString.split('-')[0]);
-      response.errorDescription = responseString.split('-')[1];
-      throw AtClientException(response.errorCode, response.errorDescription);
-    } else {
-      response.errorDescription = responseString;
-      throw AtClientException('AT0014', response.errorDescription);
-    }
+    final error = errorResponseException(responseString);
+    response
+      ..isError = true
+      ..errorCode = error.errorCode
+      ..errorDescription = error.errorMessage;
+    throw AtExceptionUtils.get(error.errorCode, error.errorMessage);
   }
 }

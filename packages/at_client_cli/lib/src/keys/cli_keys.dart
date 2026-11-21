@@ -1,3 +1,5 @@
+import 'package:at_auth/at_auth_io.dart' show fileRetrofitSerializer;
+import 'package:at_auth/at_auth.dart' show retrofitSerializer;
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/hive.dart';
 import 'package:at_client_cli/src/util/utils.dart';
@@ -12,8 +14,13 @@ abstract final class CliKeys {
 
   /// The keyfile store for [atSign] at `~/.atsign/keys/<atSign>_key.atKeys`,
   /// or at [path]; encrypted under [passPhrase] when one is given.
+  ///
+  /// Unless the program has set its own [retrofitSerializer], this sets
+  /// [fileRetrofitSerializer], so instances that share the keyfile retrofit
+  /// it one at a time.
   static FileAtKeysIo fileFor(String atSign,
       {String? path, String? passPhrase}) {
+    retrofitSerializer ??= fileRetrofitSerializer;
     final file = path ??
         getDefaultAtKeysFilePath(
             getHomeDirectory(throwIfNull: true)!, AtUtils.fixAtSign(atSign));
@@ -22,6 +29,10 @@ abstract final class CliKeys {
 
   /// A Hive store for [atSign] at `~/.atsign/storage/<atSign>/<program>/<id>`,
   /// or under [path]; the client closes it when it stops.
+  ///
+  /// The store is the same whichever enrollment of [atSign] opens it, so a
+  /// program that holds more than one enrollment over time gives each its
+  /// own [id].
   static AtClientStorage storageFor(String atSign,
       {required String program, String id = defaultStoreId, String? path}) {
     final fixed = AtUtils.fixAtSign(atSign);

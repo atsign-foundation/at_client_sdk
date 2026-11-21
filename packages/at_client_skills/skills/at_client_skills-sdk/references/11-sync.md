@@ -27,9 +27,9 @@ propagate, and any real-time features appear broken.
 **Fix:** scope sync to your app's namespace.
 
 ```dart
-final acp = AtClientPreference()
-  ..namespace = 'my_namespace'
-  ..syncRegex = 'my_namespace';   // scope sync to THIS app's keys
+final acp = AtClientPreference(posture: PqPosture.pqActive)
+  ..namespace = 'my_app'
+  ..syncRegex = 'my_app';   // scope sync to THIS app's keys
 ```
 
 (Where the store lives is the `storage:` the client is opened on — see
@@ -51,18 +51,19 @@ or decryption — it only excludes other apps' unrelated keys.
 - **Writes apply locally immediately, then sync in the background.** The write
   returns as soon as it's in the local store and queued for sync;
   `SyncService` pushes it to the atServer afterward.
-- **Fallback cadence: `AtClientPreference.syncIntervalMins` (default 10).** This
-  periodic full-sync reconciles a *missed* live notification (the app was
-  backgrounded, the monitor was reconnecting, or the recipient was offline when
-  the change was made). Lower it (e.g. `1`) so a change made on another device
-  or atsign still surfaces within a minute even when the live push didn't land.
+- **Fallback cadence: a 30-second timer.** This periodic sync reconciles a
+  *missed* live notification (the app was backgrounded, the monitor was
+  reconnecting, or the recipient was offline when the change was made), so a
+  change made on another device or atsign surfaces within about 30 seconds
+  even when the live push didn't land. It is not configurable; at_client 4.0
+  removed `AtClientPreference.syncIntervalMins`, which set nothing.
 
 ---
 
 ## 3. Observe completion with `SyncProgressListener`
 
 Tests and headless drivers must wait until synced before asserting. Use
-`SyncProgressListener` — **not** the deprecated `sync(onDone:)`:
+`SyncProgressListener`; 4.0 removed `sync(onDone:)` and `sync(onError:)`:
 
 ```dart
 class _SyncedListener implements SyncProgressListener {
@@ -74,7 +75,7 @@ class _SyncedListener implements SyncProgressListener {
   }
 }
 
-final sync = client.syncService;   // the client's own; the manager's getter is deprecated
+final sync = client.syncService;   // the client's own; 4.0 removed the manager's getter
 final listener = _SyncedListener(() => print('synced'));
 sync.addProgressListener(listener);
 // ... later:

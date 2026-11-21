@@ -11,9 +11,9 @@ import '../exception/at_exceptions.dart';
 import 'key_type.dart';
 
 class AtKey {
-  /// The 'identifier' part of an atProtocol key name. For example if the key is
-  /// `@bob:city.address.my_app@alice` then the [key] would be `city.address` and
-  /// the [namespace] would be `my_app`
+  /// The 'identifier' part of an Atsign Protocol key name. For example if the
+  /// key is `@bob:city.address.my_app@alice` then the [key] would be
+  /// `city.address` and the [namespace] would be `my_app`
   late String key;
   String? _sharedWith;
   String? _sharedBy;
@@ -68,11 +68,11 @@ class AtKey {
     }
   }
 
-  /// The 'owner' part of an atProtocol key name. For example if the key is
+  /// The 'owner' part of an Atsign Protocol key name. For example if the key is
   /// `@bob:city.address.my_app@alice` then [sharedBy] is `@alice`
   String? get sharedBy => _sharedBy;
 
-  /// The 'owner' part of an atProtocol key name. For example if the key is
+  /// The 'owner' part of an Atsign Protocol key name. For example if the key is
   /// `@bob:city.address.my_app@alice` then [sharedBy] is `@alice`
   set sharedBy(String? sharedByAtSign) {
     if (sharedByAtSign != null &&
@@ -83,12 +83,12 @@ class AtKey {
     _sharedBy = sharedByAtSign?.toLowerCase();
   }
 
-  /// The 'recipient' part of an atProtocol key name. For example if the key is
-  /// `@bob:city.address.my_app@alice` then [sharedWith] is `@bob`
+  /// The 'recipient' part of an Atsign Protocol key name. For example if the
+  /// key is `@bob:city.address.my_app@alice` then [sharedWith] is `@bob`
   String? get sharedWith => _sharedWith;
 
-  /// The 'recipient' part of an atProtocol key name. For example if the key is
-  /// `@bob:city.address.my_app@alice` then [sharedWith] is `@bob`
+  /// The 'recipient' part of an Atsign Protocol key name. For example if the
+  /// key is `@bob:city.address.my_app@alice` then [sharedWith] is `@bob`
   set sharedWith(String? sharedWithAtSign) {
     if (sharedWithAtSign != null &&
         sharedWithAtSign.isNotEmpty &&
@@ -540,7 +540,7 @@ class Metadata {
     return 'Metadata{${jsonEncode(toJson())}}';
   }
 
-  /// Creates a fragment which can be included in any atProtocol commands which use
+  /// Creates a fragment which can be included in any Atsign Protocol commands which use
   /// Metadata - e.g. `update`, `update:meta` and `notify`
   String toAtProtocolFragment() {
     StringBuffer sb = StringBuffer();

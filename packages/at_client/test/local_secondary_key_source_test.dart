@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
+import 'package:at_client/src/client/local_secondary.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -29,8 +30,8 @@ void main() {
 
   Future<AtClient> clientWith({required InMemoryAtKeysIo keySource}) async =>
       AtClientImpl.create(atSign, 'unit', prefs(),
-          lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(prefs()),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: defaultAtDirectory,
           remoteSecondary: MockRemoteSecondary(),
           storage:
               InMemoryAtClientStorage(atSign: atSign, closedByClient: true),

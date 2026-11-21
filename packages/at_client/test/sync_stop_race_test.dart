@@ -21,6 +21,14 @@ class MockAtClient extends Mock implements AtClient {
 
 /// A NotificationServiceImpl double whose `subscribe` is a concrete override
 /// returning a stream that never emits, so no test can stub it into emitting.
+class _Progress implements SyncProgressListener {
+  final List<SyncProgress> events = [];
+
+  @override
+  void onSyncProgressEvent(SyncProgress syncProgress) =>
+      events.add(syncProgress);
+}
+
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {
   @override
@@ -32,8 +40,8 @@ class MockNotificationServiceImpl extends Mock
 
 /// Pins that `stop()` actually stops: a sync run parked on its opening network
 /// read (the stats fetch inside `_isInSync`) when `stop()` is called does no
-/// further sync work when it resumes, and its request is answered as stopped
-/// rather than left dangling.
+/// further sync work when it resumes, and a progress listener hears that the
+/// service stopped rather than being left waiting.
 void main() {
   late MockAtClient atClient;
   late MockRemoteSecondary remote;
@@ -61,9 +69,7 @@ void main() {
         .thenAnswer((_) async => <String>[]);
 
     service = await SyncServiceImpl.create(atClient,
-        atClientManager: MockAtClientManager(),
-        remoteSecondary: remote,
-        warmStartSync: false) as SyncServiceImpl;
+        remoteSecondary: remote, warmStartSync: false) as SyncServiceImpl;
   });
 
   tearDown(() async {
@@ -77,8 +83,9 @@ void main() {
     final park = Completer<String>();
     when(() => remote.executeVerb(any())).thenAnswer((_) => park.future);
 
-    SyncResult? errorResult;
-    service.sync(onError: (result) => errorResult = result as SyncResult?);
+    final progress = _Progress();
+    service.addProgressListener(progress);
+    service.sync();
     await Future.delayed(Duration.zero);
     verify(() => remote.executeVerb(any())).called(1);
 
@@ -88,11 +95,12 @@ void main() {
     await Future.delayed(Duration(milliseconds: 20));
     verifyNever(() => local.peekSyncQueue(limit: any(named: 'limit')));
     verifyNever(() => atClient.get(any()));
-    expect(errorResult, isNotNull,
-        reason: 'the stranded request must be answered, not left dangling');
-    expect(
-        errorResult!.atClientException?.message, contains('has been stopped'),
-        reason: 'the request is answered as stopped, not as any other error');
+    expect(progress.events, isNotEmpty,
+        reason: 'the stranded run\'s listener is told, not left waiting');
+    expect(progress.events.last.stopped, isTrue);
+    expect(progress.events.last.atClientException?.message,
+        contains('has been stopped'),
+        reason: 'the run is reported as stopped, not as any other error');
   });
 
   test(
@@ -106,8 +114,9 @@ void main() {
       return park.future;
     });
 
-    SyncResult? errorResult;
-    service.sync(onError: (result) => errorResult = result as SyncResult?);
+    final progress = _Progress();
+    service.addProgressListener(progress);
+    service.sync();
     await Future.delayed(Duration(milliseconds: 20));
     verify(() => remote.executeVerb(any())).called(2);
 
@@ -117,9 +126,37 @@ void main() {
     await Future.delayed(Duration(milliseconds: 20));
     verifyNever(() => atClient.put(any(), any(),
         putRequestOptions: any(named: 'putRequestOptions')));
-    expect(
-        errorResult?.atClientException?.message, contains('has been stopped'),
-        reason: 'the stranded request is answered as stopped');
+    expect(progress.events.last.atClientException?.message,
+        contains('has been stopped'),
+        reason: 'the stranded run is reported as stopped');
+  });
+
+  test(
+      'a run reading local storage for its in-sync check when stop() lands '
+      'does no work on resume', () async {
+    when(() => remote.executeVerb(any()))
+        .thenAnswer((_) async => 'data:[{"value":"9"}]');
+    final park = Completer<int>();
+    var parked = false;
+    when(() => local.syncQueueSize).thenAnswer((_) {
+      parked = true;
+      return park.future;
+    });
+
+    service.sync();
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!parked && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(milliseconds: 1));
+    }
+    expect(parked, isTrue, reason: 'the premise: the run is reading it');
+    final stopping = service.stop();
+    clearInteractions(atClient);
+    park.complete(5);
+    await stopping;
+    await Future.delayed(const Duration(milliseconds: 20));
+
+    verifyNever(() => atClient.get(any()));
+    verifyNever(() => local.peekSyncQueue(limit: any(named: 'limit')));
   });
 
   test('control: without stop(), the same parked run resumes and does work',

@@ -10,7 +10,9 @@ for atKeys, and Flutter-specific extensions — so a new Flutter app can
 go from "user has an atSign" to "`AtClient` in hand" with a few widget
 calls. One import covers an app:
 `package:at_client_flutter/at_client_flutter.dart` re-exports
-`at_client`, and nothing here asks an app to import `at_auth`.
+`at_client`, and nothing here asks an app to import `at_auth`. Import only
+that barrel, and do not add at_client to the app's pubspec. A test may also
+import `package:at_client_flutter/testing.dart`, for `TestEnvelopeSigner`.
 
 Supports mobile, desktop, and IoT targets via Flutter. **Flutter
 web is not supported** — atSign onboarding and key handling rely
@@ -29,6 +31,7 @@ implementations today.
 | Manage enrollments               | `client.enrollments` — list, approve, deny, revoke, passcodes (from `at_client`)                       |
 | Keychain read / write / delete   | `KeychainStorage` ([`lib/src/keychain/keychain_storage.dart`](lib/src/keychain/keychain_storage.dart)) |
 | Flutter helpers on core types    | `import 'package:at_client_flutter/extensions.dart';`                                                  |
+| Verify a signed envelope offline | `verifySignedEnvelope(envelope, signer: publishedApsk)` → `EnvelopeVerified` or `EnvelopeRefused` (experimental) |
 
 ## Examples
 
@@ -107,6 +110,14 @@ workflow for cross-window chart development are in
 
 ## Onboarding, provisioning & timeouts
 
+**The registrar API key.** `RegistrarCramDialog` takes a `RegistrarService`
+built with a registrar URL and an `apiKey`. The service sends the key to the
+registrar (`my.atsign.com`) on the calls that find a free atSign and
+exchange the code emailed to the user for that atSign's CRAM secret. It
+names the app to the registrar and acts for no atSign: the CRAM secret still
+needs the code from the user's email. An app developer can create an API key
+via the registrar at [my.atsign.com](https://my.atsign.com).
+
 Registering a brand-new atSign and having its atServer **provisioned** are two
 separate steps — provisioning can lag registration by anything from seconds to a
 few minutes. `CramDialog` (at_client's `Atsign.activate` underneath) handles
@@ -159,7 +170,7 @@ The dialogs take the `AtClientPreference` and, optionally, the `AtClientStorage`
 the client opens on. With none, they open a Hive store in the app's support
 directory (`getApplicationSupportDirectory()`), or under
 `preference.hiveStoragePath` while the app still sets it. An app that kept its
-store anywhere else passes it as `storage:` before at_client 4.0 removes
+store anywhere else passes it as `storage:` before at_client 5.0 removes
 `hiveStoragePath`. They also take `lookUps:`, at_client's
 `AtLookUpFactory`, for an app that chooses its transport or reaches its
 atServers through a proxy: every connection the client they hand back opens
@@ -228,8 +239,11 @@ if (atKeys == null) throw Exception('No keys found for $atSign');
 final atKeysIo = FileAtKeysIo(
   filePath: (_) => '/path/to/${atSign}_key.atKeys',
 );
-atKeysIo.write(atSign, atKeys);
+await atKeysIo.write(atSign, atKeys);
 ```
+
+`write` creates the file: it throws `AtKeysFileOverwriteException` when the
+file already exists, so await it and export to a path that is free.
 
 ## Migrating from 1.x
 
@@ -274,7 +288,9 @@ app's support directory, where a 1.x app that set `hiveStoragePath` to it kept
 its store.
 
 ```dart
-final preference = AtClientPreference()..namespace = 'my_app';
+// Step one for an app built on 1.x: pqReady, then pqActive once
+// every client runs pqReady (the at_client README's rollout ladder).
+final preference = AtClientPreference(posture: PqPosture.pqReady)..namespace = 'my_app';
 ```
 
 **Log in from the keychain, then set up the client**

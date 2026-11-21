@@ -11,6 +11,9 @@ import 'package:at_client/src/crypto/nskey/nskey_rotation.dart'
     show NskeyRotation;
 import 'package:at_client/src/crypto/nskey/rotation_policy.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
+import 'package:at_client/src/crypto/nskey/start_up_seeding.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show classifyConnectionFailure;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -78,6 +81,10 @@ class NskeySeeding {
     this.rotationPolicy = rotateNskeyAfterOneYear,
   }) : _ownNamespace = atClient.getPreferences()?.namespace;
 
+  /// The namespace a client on the primary enrollment (`*:rw`) seeds: the
+  /// client's preference namespace when this was built.
+  String? get ownNamespace => _ownNamespace;
+
   /// The namespaces this client should hold a key for; see
   /// [authorisedNamespacesOf]. Empty when the enrollment record cannot be read.
   Future<Set<String>> authorisedNamespaces() async {
@@ -96,6 +103,14 @@ class NskeySeeding {
   /// [isSeedableNamespace].
   static bool isSeedable(String namespace) => isSeedableNamespace(namespace);
 
+  /// The namespaces [seed] seeds under [grants]: those authorised that this
+  /// enrollment may write in.
+  Set<String> seededUnder(Map<String, dynamic>? grants) => {
+        for (final ns
+            in authorisedNamespacesIn(grants, ownNamespace: _ownNamespace))
+          if (mayWriteIn(grants, ns)) ns
+      };
+
   /// Mints for every authorised namespace that has no key yet, conveying each
   /// new private before publishing it. Returns the namespaces this start
   /// published fresh material for — a cold-start mint, or a rotation a
@@ -105,7 +120,10 @@ class NskeySeeding {
   /// here writes to it. One its grants let it write without naming it, such as
   /// `chat.app` under a grant on `app`, is rotated where this client holds its
   /// key and a revocation is owed there, and is otherwise left alone.
-  Future<Set<String>> seed() async {
+  ///
+  /// [progress] is told which namespaces this start seeds as soon as they are
+  /// known, and why any of them could not be seeded.
+  Future<Set<String>> seed({StartUpSeeding? progress}) async {
     final owner = atClient.getCurrentAtSign();
     if (owner == null) return const {};
 
@@ -114,12 +132,14 @@ class NskeySeeding {
       grants = await ownGrantsOf(atClient);
     } catch (e) {
       if (e is StoppedException) rethrow;
+      progress?.failedAll(e);
       _logger.info('Could not read this enrollment to find its namespaces, so '
           'nothing is seeded this start: $e');
       return const {};
     }
     final namespaces =
         authorisedNamespacesIn(grants, ownNamespace: _ownNamespace);
+    progress?.seeding(seededUnder(grants));
 
     final minted = <String>{};
     final readOnly = <String>{};
@@ -136,11 +156,13 @@ class NskeySeeding {
           minted.add(namespace);
           continue;
         }
-        if (await seedNamespace(owner, namespace) == NskeySeedOutcome.minted) {
-          minted.add(namespace);
-        }
+        final outcome = await seedNamespace(owner, namespace);
+        if (outcome == NskeySeedOutcome.minted) minted.add(namespace);
+        final why = _whyNotSeeded(outcome);
+        if (why != null) progress?.failed(namespace, why);
       } catch (e) {
         if (e is StoppedException) rethrow;
+        progress?.failed(namespace, e);
         _logger.warning('Could not seed $owner:$namespace this start: $e');
       }
     }
@@ -161,10 +183,20 @@ class NskeySeeding {
     return minted;
   }
 
+  /// Why [outcome] left a namespace with no key this client may seal to, or
+  /// null when it has one.
+  static String? _whyNotSeeded(NskeySeedOutcome outcome) => switch (outcome) {
+        NskeySeedOutcome.minted || NskeySeedOutcome.alreadyPublished => null,
+        NskeySeedOutcome.noKeyPackage =>
+          'this enrollment carries no key package, so it mints none',
+        NskeySeedOutcome.cannotConvey => 'this client has no secret-sharing '
+            'substrate or no key source to file a namespace key in',
+      };
+
   /// The namespaces this client holds a key for and [grants] let it write,
   /// other than those in [named]: `chat.app` under a grant on `app`.
   ///
-  /// Empty for the atSign's own credential, whose start asks about no
+  /// Empty for the primary enrollment, whose start asks about no
   /// revocation, and, logged, when the keyfile cannot be read.
   Future<Set<String>> _writableHeld(Map<String, dynamic>? grants,
       {required Set<String> named}) async {
@@ -292,13 +324,23 @@ class NskeySeeding {
   /// Puts [rotationPolicy] the question for a namespace that already has a
   /// generation, replaces it if the answer is yes, and returns whether it did.
   ///
-  /// [published] is the generation already read where the caller has it, and any
-  /// failure returns false rather than throwing — the published generation stays
-  /// published, and the question is put again at the next start.
+  /// [published] is the generation already read where the caller has it. Not
+  /// reaching the atServer returns false rather than throwing — the published
+  /// generation stays published, and the question is put again at the next
+  /// start — and any other failure to read it is thrown.
   Future<bool> rotateIfPolicyAsks(String owner, String namespace,
       {NskeyAdvertisement? published}) async {
-    final generation =
-        published ?? await ring.publishedAdvertisement(owner, namespace);
+    final NskeyAdvertisement? generation;
+    try {
+      generation =
+          published ?? await ring.publishedAdvertisement(owner, namespace);
+    } catch (e) {
+      if (classifyConnectionFailure(e)?.isOffline != true) rethrow;
+      _logger.warning('Could not read the published nskey for '
+          '$owner:$namespace, so the rotation policy was not asked; it is '
+          'asked at the next start that reaches the atServer: $e');
+      return false;
+    }
     if (generation == null) return false;
 
     final bool replace;
@@ -366,8 +408,8 @@ class NskeySeeding {
     final filing = privateFiling;
     if (substrate == null || filing == null) return false;
 
-    // NOTE: the atSign's own credential is not an enrollment the atServer will
-    // answer about, and the verb behind the lookup is APKAM-gated.
+    // NOTE: the primary enrollment is not one the atServer will answer about,
+    // and the verb behind the lookup is APKAM-gated.
     if (isAtSignCredential(atClient.enrollmentId)) {
       return false;
     }
@@ -556,7 +598,8 @@ class NskeySeeding {
                 _logger.info('No holder answered for $name in '
                     '$owner:$namespace within the wait; a later answer is '
                     'filed as it arrives ($e)');
-              }));
+              }),
+              atStartUp: true);
         }
       } catch (e) {
         if (e is StoppedException) rethrow;

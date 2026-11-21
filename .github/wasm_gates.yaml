@@ -61,9 +61,7 @@ at_utils:
   # run: AtSignLogger, AtUtils, atmetadata and the progress events. The file,
   # stderr and CLI logging handlers, the progress colours, PseudoServerSocket
   # and ApplicationConfiguration need dart:io, or chalkdart, which pulls it in,
-  # so they are in at_utils_io.dart. AtSignLogger.stdErrLoggingHandler comes
-  # through a conditional import: the console handler on the web, the stderr
-  # handler natively. The second control walks that native branch.
+  # so they are in at_utils_io.dart.
   ratchets:
     - barrel: package:at_utils/at_utils.dart
       allowed_offenders: []
@@ -85,10 +83,6 @@ at_utils:
       reaches_file: lib/src/networking/pseudo_server_socket.dart
       reaches_library: dart:io
       because: the native code it exists to quarantine
-    - barrel: package:at_utils/at_utils.dart
-      reaches_file: lib/src/logging/io_handlers.dart
-      reaches_library: dart:io
-      because: the stderr handler AtSignLogger holds on the native branch
 
 at_lookup:
   # Gated by the 4.0.0 transport split. at_lookup.dart holds AtLookUp, the
@@ -199,7 +193,7 @@ at_policy:
 
 at_telemetry:
   # Depends on at_utils' logger and two crypto packages, not on at_client; its
-  # control looks through at_utils at the stderr handler on the native branch.
+  # control looks through cryptography at its native Argon2.
   ratchets:
     - barrel: package:at_telemetry/at_telemetry.dart
       allowed_offenders: []
@@ -210,7 +204,7 @@ at_telemetry:
     - package:at_telemetry/at_telemetry.dart
   controls:
     - barrel: package:at_telemetry/at_telemetry.dart
-      through_package: at_utils
-      reaches_file: lib/src/logging/io_handlers.dart
-      reaches_library: dart:io
-      because: the stderr handler AtSignLogger holds on the native branch
+      through_package: cryptography
+      reaches_file: lib/src/dart/argon2_impl_default.dart
+      reaches_library: dart:ffi
+      because: the native Argon2 cryptography takes on the VM

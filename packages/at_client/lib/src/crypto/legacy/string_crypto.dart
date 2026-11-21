@@ -8,9 +8,10 @@ import 'package:at_commons/at_commons.dart';
 /// Encrypts [value] with [algorithm] and returns the ciphertext in base64.
 ///
 /// A symmetric [algorithm] requires [iv]. A failure inside the algorithm is
-/// reported as [AtEncryptionException] carrying the algorithm's own message,
-/// which is the type the legacy encryption paths handle; a malformed [value]
-/// surfaces as whatever the conversion throws, outside that mapping.
+/// reported as [AtEncryptionException], which is the type the legacy
+/// encryption paths handle, with the cause described by [_describeCause]; a
+/// malformed [value] surfaces as whatever the conversion throws, outside that
+/// mapping.
 Future<String> encryptStringToBase64(
     String value, AtEncryptionAlgorithm<Uint8List, Uint8List> algorithm,
     {InitialisationVector? iv}) async {
@@ -21,10 +22,12 @@ Future<String> encryptStringToBase64(
         algorithm is SymmetricEncryptionAlgorithm<Uint8List, Uint8List>
             ? await algorithm.encrypt(plainBytes, iv: iv!)
             : await algorithm.encrypt(plainBytes);
-  } on Exception catch (e) {
-    throw AtEncryptionException(e.toString())
+  } catch (e) {
+    if (e is! Exception && e is! Error) rethrow;
+    final String cause = _describeCause(e);
+    throw AtEncryptionException(cause)
       ..stack(AtChainedException(Intent.shareData,
-          ExceptionScenario.encryptionFailed, 'Failed to encrypt $e'));
+          ExceptionScenario.encryptionFailed, 'Failed to encrypt $cause'));
   }
   return base64.encode(cipherBytes);
 }
@@ -33,9 +36,9 @@ Future<String> encryptStringToBase64(
 ///
 /// A symmetric [algorithm] is refused without an [iv] rather than failing
 /// inside the cipher. A failure inside the algorithm is reported as
-/// [AtDecryptionException] carrying the algorithm's own message; a [value]
-/// that is not base64, or plaintext that is not UTF-8, surfaces as whatever
-/// the conversion throws, outside that mapping.
+/// [AtDecryptionException], with the cause described by [_describeCause]; a
+/// [value] that is not base64, or plaintext that is not UTF-8, surfaces as
+/// whatever the conversion throws, outside that mapping.
 Future<String> decryptStringFromBase64(
     String value, AtEncryptionAlgorithm<Uint8List, Uint8List> algorithm,
     {InitialisationVector? iv}) async {
@@ -52,13 +55,21 @@ Future<String> decryptStringFromBase64(
   } catch (e) {
     // NOTE: the cipher reports input it cannot use, such as a block sealed to
     // another RSA key, as an ArgumentError.
-    if (e is! Exception && e is! ArgumentError) rethrow;
-    throw AtDecryptionException(e.toString())
+    if (e is! Exception && e is! Error) rethrow;
+    final String cause = _describeCause(e);
+    throw AtDecryptionException(cause)
       ..stack(AtChainedException(Intent.decryptData,
-          ExceptionScenario.decryptionFailed, 'Failed to decrypt $e'));
+          ExceptionScenario.decryptionFailed, 'Failed to decrypt $cause'));
   }
   return utf8.decode(plainBytes);
 }
+
+/// The cause to report for [e] in an encryption or decryption exception.
+///
+/// An [AtException]'s message is kept. Anything else is named by its type
+/// only, because its text can quote its input, and that input can be a key.
+String _describeCause(Object e) =>
+    e is AtException ? e.message : e.runtimeType.toString();
 
 /// Unwraps with the atSign's own RSA private key, which is the only half RSA
 /// decryption reads.

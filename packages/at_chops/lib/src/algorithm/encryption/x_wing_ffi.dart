@@ -34,6 +34,7 @@ final class XWingFfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   final MlKem768FfiAlgo _mlKem;
   final X25519FfiAlgo _x25519;
 
+  /// Throws [UnsupportedError] if [lib] is older than OpenSSL 3.5.1.
   XWingFfiAlgo.fromLib(DynamicLibrary lib)
       : _mlKem = MlKem768FfiAlgo.fromLib(lib),
         _x25519 = X25519FfiAlgo.fromLib(lib);

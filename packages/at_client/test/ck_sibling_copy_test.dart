@@ -293,42 +293,35 @@ void main() {
     });
 
     test(
-        'a sender holding no key covering the namespace mints one where the '
-        'recipient\'s was found', () async {
-      final s = sender(
-          aliceHoldsKey: false,
-          reach: (ns, ring) async {
-            ring.seedKeypair(alice, ns,
-                publicKey: aliceNskey.publicKeyBytes,
-                privateKey: aliceNskey.privateKeyBytes);
-            return const AtReachabilityResult(AtReachability.published);
-          });
+        'a sender holding no key at her own level sends the share without a '
+        'copy, and mints nothing', () async {
+      final s = sender(aliceHoldsKey: false);
 
       // An AtCollection sub-collection's namespace carries an item id.
       await s.manager.ensureCurrent(s.context, value(ns: 'item-7.$namespace'));
 
-      expect(s.reachedFor, [namespace],
-          reason: 'at the level bob\'s key was found, never the value\'s own, '
-              'or every item would get a key of its own');
-      final ckKid = s.cache.current(bob, namespace)!.ckKid;
-      expect(s.puts.map((p) => p.key.toString()), [
-        '@bob:$ckKid.__ck.app_1.my_apps@alice',
-        '$ckKid.__ck.app_1.my_apps@alice',
-      ]);
-    });
-
-    test('with seedNamespaceKeys off a share goes without one, and says why',
-        () async {
-      final s = sender(aliceHoldsKey: false);
-
-      await s.manager.ensureCurrent(s.context, value());
-
+      expect(s.reachedFor, isEmpty, reason: 'no key is minted for a copy');
       expect(s.puts.single.key.sharedWith, bob);
       expect(s.cache.current(bob, namespace), isNotNull,
           reason: 'the share itself goes ahead');
       final ckKid = s.cache.current(bob, namespace)!.ckKid;
       expect(logs.at('WARNING').where((m) => m.contains(ckKid)),
-          [contains('seedNamespaceKeys is off')]);
+          [contains('No namespace key $alice holds covers')]);
+    });
+
+    test('the copy of a share in an item namespace is sealed at her own level',
+        () async {
+      final s = sender();
+
+      await s.manager.ensureCurrent(s.context, value(ns: 'item-7.$namespace'));
+
+      final ckKid = s.cache.current(bob, namespace)!.ckKid;
+      expect(s.puts.map((p) => p.key.toString()), [
+        '@bob:$ckKid.__ck.app_1.my_apps@alice',
+        '$ckKid.__ck.app_1.my_apps@alice',
+      ]);
+      expect(
+          s.puts.last.key.metadata.appMetadata!.additional!['ns'], namespace);
     });
 
     test('a sender that holds a key asks for none — the control', () async {

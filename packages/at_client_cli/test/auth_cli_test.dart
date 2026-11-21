@@ -18,6 +18,23 @@ void main() {
 
   postureArgumentTests();
 
+  group('holdsPublicKey: what status and activate take as a published key',
+      () {
+    test('a key is held', () {
+      expect(holdsPublicKey('data:MIIBIjANBgkqhkiG9w0BAQEFAAOC'), isTrue);
+    });
+    test('data:null, as a provisioned but unactivated atServer answers, is not',
+        () {
+      expect(holdsPublicKey('data:null'), isFalse);
+      expect(holdsPublicKey('data:null\n'), isFalse);
+    });
+    test('an empty value, a non-data reply or no reply is not', () {
+      expect(holdsPublicKey('data:'), isFalse);
+      expect(holdsPublicKey('error:AT0015-key not found'), isFalse);
+      expect(holdsPublicKey(null), isFalse);
+    });
+  });
+
   group('A group of tests to verify write permission of apkam file path', () {
     final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
 
@@ -226,27 +243,6 @@ void main() {
 void postureArgumentTests() {
   final args = AuthCliArgs();
 
-  group('the hashingAlgoType argument', () {
-    test('is accepted and hidden, and never reaches the PKAM hash', () {
-      final parser = args.createOnboardCommandParser();
-      expect(parser.options[AuthCliArgs.argNameHashingAlgoType]!.hide, isTrue);
-
-      final preference = enrollerSettingsFrom(parser.parse([
-        '-a',
-        '@alice',
-        '--${AuthCliArgs.argNameHashingAlgoType}',
-        'argon2id',
-      ])).preference;
-      expect(
-          // ignore: deprecated_member_use
-          preference.hashingAlgoType,
-          // ignore: deprecated_member_use
-          AtClientPreference().hashingAlgoType,
-          reason: 'the argument is accepted for compatibility and reaches no '
-              'preference');
-    });
-  });
-
   group('the posture argument', () {
     test('every command parser accepts it, not activation alone', () {
       final parsers = {
@@ -310,7 +306,8 @@ void postureArgumentTests() {
                 'handed; naming one here restates a default where nothing '
                 'reviews it:\n${(byFile[path] ?? const []).join('\n')}');
       }
-      final args = byFile['lib/src/commands/auth_cli_args.dart'] ?? const <String>[];
+      final args =
+          byFile['lib/src/commands/auth_cli_args.dart'] ?? const <String>[];
       expect(args, hasLength(3),
           reason: 'expected the three postureNames entries and nothing else: '
               'an unnamed posture is at_client\'s default, inherited through '
@@ -318,26 +315,40 @@ void postureArgumentTests() {
               'Anything else is a default in disguise:\n${args.join('\n')}');
     });
 
-    test('every command that builds a client passes the posture to it', () {
+    /// The auth_cli.dart lines whose `await _commandClient(` call passes no
+    /// [argument].
+    List<int> commandClientCallsWithout(String argument) {
       // NOTE: read from source because driving each command needs an atServer
       // per row.
       final source = File('lib/src/commands/auth_cli.dart').readAsStringSync();
       final calls =
-          RegExp(r'await createAtClient\(').allMatches(source).toList();
+          RegExp(r'await _commandClient\(').allMatches(source).toList();
       expect(calls, isNotEmpty,
           reason: 'if this finds nothing the rest of the row proves nothing');
 
       final without = <int>[];
       for (final call in calls) {
         final end = source.indexOf(');', call.start);
-        if (!source.substring(call.start, end).contains('posture:')) {
+        if (!source.substring(call.start, end).contains('$argument:')) {
           without
               .add('\n'.allMatches(source.substring(0, call.start)).length + 1);
         }
       }
+      return without;
+    }
+
+    test('every command that builds a client passes the posture to it', () {
+      final without = commandClientCallsWithout('posture');
       expect(without, isEmpty,
-          reason: 'auth_cli.dart lines $without call createAtClient without a '
+          reason: 'auth_cli.dart lines $without call _commandClient without a '
               'posture, so those commands ignore --posture');
+    });
+
+    test('every command that builds a client passes --mca to it', () {
+      final without = commandClientCallsWithout('maxConnectAttempts');
+      expect(without, isEmpty,
+          reason: 'auth_cli.dart lines $without call _commandClient without '
+              'maxConnectAttempts, so those commands ignore --mca');
     });
 
     test('the retired argument is gone from every one of them', () {
@@ -445,7 +456,7 @@ void postureArgumentTests() {
               'the CRAM secret');
 
       for (final named in [
-        ['onboard', '-a', '@alice'],
+        ['onboard', '-a', '@alice', '-r', '127.0.0.1:1'],
         ['--version'],
         ['-h'],
         ['--help'],
@@ -459,10 +470,16 @@ void postureArgumentTests() {
 
     test('wrappedMain inserts onboard before parsing', () async {
       // NOTE: --help stops at onboard's usage, so this needs no atServer.
-      expect(await wrappedMain(['-a', '@alice', '--help']), 0,
+      expect(
+          await wrappedMain(['-a', '@alice', '--help'],
+              program: 'at_activate', programVersion: null),
+          0,
           reason: 'with no insertion, a leading -a reaches the top-level '
               'parser, which has no such option');
-      expect(await wrappedMain(['--version']), 0,
+      expect(
+          await wrappedMain(['--version'],
+              program: 'at_activate', programVersion: null),
+          0,
           reason: 'a leading option that is not a command must still be '
               'served');
     });

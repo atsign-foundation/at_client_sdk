@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:at_utils/src/logging/platform_stderr_handler_io.dart' as native;
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils_io.dart';
 import 'package:logging/logging.dart';
@@ -14,16 +13,13 @@ void main() {
       'at_logger.dart',
       'at_progress.dart'
     ]) {
-      final reached = _reach('lib/$barrel', io: false);
+      final reached = _reach('lib/$barrel');
       expect(reached.where(_isPlatformOnly), isEmpty,
           reason: '$barrel reaches no dart:io, directly or through chalkdart');
     }
-    // NOTE: the controls walk the same graph with the native branch of each
-    // conditional import taken, so a walker that never resolved the
-    // conditional cannot pass the assertions above.
-    expect(_reach('lib/at_utils.dart', io: true), contains('dart:io'),
-        reason: 'the native branch of AtSignLogger reaches the stderr handler');
-    expect(_reach('lib/at_utils_io.dart', io: false), contains('dart:io'),
+    // NOTE: the control walks the io barrel the same way, so a walker that
+    // reached nothing cannot pass the assertions above.
+    expect(_reach('lib/at_utils_io.dart'), contains('dart:io'),
         reason: 'the io barrel holds what the default barrels leave out');
   });
 
@@ -39,10 +35,6 @@ void main() {
         File(file).readAsStringSync(), 'INFO|${record.time}|MyApp|started\n');
     expect(StdErrLoggingHandler(), isA<LoggingHandler>());
     expect(CLILoggingHandler(), isA<LoggingHandler>());
-    // ignore: deprecated_member_use_from_same_package
-    expect(AtSignLogger.stdErrLoggingHandler, isA<StdErrLoggingHandler>(),
-        reason: 'a native program still logs to stderr through it');
-    expect(native.platformStdErrHandler(), isA<StdErrLoggingHandler>());
   });
 
   test('A progress event prints without terminal colour codes', () {
@@ -59,9 +51,8 @@ void main() {
 
 /// Every library [entry] reaches through `import` and `export`, its own files
 /// followed and other packages recorded but not entered, taking each
-/// conditional import's `dart.library.io` branch when [io] is true and its
-/// default otherwise.
-Set<String> _reach(String entry, {required bool io}) {
+/// conditional import's default branch, which is the web's.
+Set<String> _reach(String entry) {
   final reached = <String>{};
   final pending = [entry];
   final seen = <String>{};
@@ -72,9 +63,7 @@ Set<String> _reach(String entry, {required bool io}) {
     if (!seen.add(path)) continue;
     final source = File(path).readAsStringSync();
     for (final m in directive.allMatches(source)) {
-      var uri = m.group(1)!;
-      final branch = RegExp(r"'([^']+)'").firstMatch(m.group(2) ?? '');
-      if (io && branch != null) uri = branch.group(1)!;
+      final uri = m.group(1)!;
       if (uri.startsWith('package:at_utils/')) {
         pending.add('lib/${uri.substring('package:at_utils/'.length)}');
       } else if (!uri.contains(':')) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
@@ -8,6 +9,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
@@ -18,19 +20,8 @@ void main() {
   String atsign = '@alice🛠';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
   String writeFilePath = 'test/data/@bober_key.atKeys';
-  late String homeDirKeys;
 
   group('FileAtKeysIo tests', () {
-    setUp(() {
-      var homeDir = getHomeDirectory();
-      homeDirKeys = '$homeDir/.atsign/keys/@alice🛠_key.atKeys';
-      Directory keysDir = Directory(homeDirKeys).parent;
-      if (!keysDir.existsSync()) {
-        keysDir.createSync(recursive: true);
-      }
-      File(keyFilePath).copySync(homeDirKeys);
-    });
-
     test('Test read() with valid atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       final atKeys = await fileAtKeysIo.read(atsign);
@@ -52,15 +43,31 @@ void main() {
     });
 
     test('Test read() without atKeys file path', () async {
-      final fileAtKeysIo = FileAtKeysIo();
+      final tempHome =
+          Directory.systemTemp.createTempSync('at_keys_io_test_home');
+      try {
+        final keysDir = Directory('${tempHome.path}/.atsign/keys')
+          ..createSync(recursive: true);
+        File(keyFilePath).copySync('${keysDir.path}/${atsign}_key.atKeys');
 
-      final atKeys = await fileAtKeysIo.read(atsign);
-      expect(atKeys.apkamPrivateKey, isNotNull);
-      expect(atKeys.apkamPublicKey, isNotNull);
-      expect(atKeys.apkamSymmetricKey, isNotNull);
-      expect(atKeys.defaultEncryptionPrivateKey, isNotNull);
-      expect(atKeys.defaultEncryptionPublicKey, isNotNull);
-      expect(atKeys.defaultSelfEncryptionKey, isNotNull);
+        final packageConfig = await Isolate.packageConfig;
+        final result = await Process.run(
+          Platform.resolvedExecutable,
+          [
+            if (packageConfig != null)
+              '--packages=${packageConfig.toFilePath()}',
+            File('test/support/read_keyfile_at_default_path.dart')
+                .absolute
+                .path,
+            atsign,
+          ],
+          environment: {'HOME': tempHome.path},
+        );
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      } finally {
+        tempHome.deleteSync(recursive: true);
+      }
     });
 
     test('Test write()', () async {
@@ -281,6 +288,149 @@ void main() {
         }
       });
     });
+
+    for (final passPhrase in [null, 'qwerty']) {
+      group(
+          'the .bak beside a keyfile whose pending enrollment is settled'
+          '${passPhrase == null ? '' : ', with a passphrase'}', () {
+        const symmetric = 'c3ltbWV0cmlj';
+        String privateOf(String id) => base64Encode(utf8.encode('private-$id'));
+
+        /// A keyfile as a submission files it: each of [ids] holding its
+        /// APKAM keypair pending, and the first one's flat enrollment id and
+        /// APKAM symmetric key.
+        Future<({String path, String text, FileAtKeysIo io})> pendingKeyfile(
+            Directory dir,
+            {List<String> ids = const ['e1']}) async {
+          final path = '${dir.path}/@alice_key.atKeys';
+          final io =
+              FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase);
+          final keys = AtKeys(atsign: atsign.toAtsign(), keysList: [
+            for (final id in ids)
+              for (final (role, value) in [
+                (
+                  CryptographicMaterialRole.privateAuthentication,
+                  privateOf(id)
+                ),
+                (CryptographicMaterialRole.publicAuthentication, 'cHVibGlj'),
+              ])
+                CryptographicMaterial(
+                  keyId: 'auth:rsa2048:1',
+                  enrollmentId: id,
+                  role: role,
+                  algorithm: CryptographicMaterialAlgorithm.rsa2048,
+                  bytes: AtBytes.fromString(value),
+                  createdAt: DateTime.utc(2026, 9, 12),
+                  status: CryptographicMaterialStatus.pending,
+                ),
+          ])
+            ..fileLegacyMaterial(
+                enrollmentId: ids.first, apkamSymmetricKey: symmetric);
+          for (final id in ids) {
+            keys.recordEnrollmentSnapshot(id,
+                namespaces: {'wavi': 'rw'}, appName: 'wavi', deviceName: id);
+          }
+          await io.write(atsign, keys);
+          expect((await io.read(atsign)).pendingEnrollmentIds, ids,
+              reason: 'the precondition: each of them is pending on disk');
+          return (path: path, text: await File(path).readAsString(), io: io);
+        }
+
+        Future<AtKeys> backupOf(String path) =>
+            FileAtKeysIo(filePath: (_) => '$path.bak', passPhrase: passPhrase)
+                .read(atsign);
+
+        test(
+            'An update that removes a pending enrollment keeps no copy of it '
+            'in the .bak', () async {
+          final dir = await Directory.systemTemp.createTemp('bak_pending_test');
+          try {
+            final keyfile = await pendingKeyfile(dir);
+
+            await keyfile.io.update(atsign.toAtsign(), (keys) {
+              keys
+                ..discardEnrollment('e1')
+                ..unfileLegacyEnrollment('e1')
+                ..addKey(symmetricKey('added', value: 'YWRkZWQ='));
+              return true;
+            });
+
+            expect(File('${keyfile.path}.bak').existsSync(), isTrue,
+                reason: 'the write still keeps a recovery copy');
+            final kept = await backupOf(keyfile.path);
+            expect(kept.pendingEnrollmentIds, isEmpty);
+            expect(kept.enrollmentIds, isEmpty);
+            expect(kept.keysForEnrollment('e1'), isEmpty);
+            expect(kept.toJson()['enrollmentId'], isNull);
+            expect(kept.toJson()['apkamSymmetricKey'], isNull);
+            expect(kept.atSignKeysForKeyId('added'), isEmpty,
+                reason: 'the copy is the previous document, not the new one');
+            final text = await File('${keyfile.path}.bak').readAsString();
+            expect(text, isNot(contains(privateOf('e1'))));
+            expect(text, isNot(contains(symmetric)));
+            if (passPhrase != null) {
+              expect(
+                  const AtKeysPassphraseEnvelopeCodec()
+                      .isEnvelope(jsonDecode(text) as Map<String, dynamic>),
+                  isTrue,
+                  reason: 'the copy stays under the passphrase');
+            }
+          } finally {
+            await dir.delete(recursive: true);
+          }
+        });
+
+        test(
+            'An update that removes one pending enrollment keeps the others '
+            'in the .bak', () async {
+          final dir = await Directory.systemTemp.createTemp('bak_pending_test');
+          try {
+            final keyfile = await pendingKeyfile(dir, ids: ['e1', 'e2']);
+
+            await keyfile.io.update(atsign.toAtsign(), (keys) {
+              keys
+                ..discardEnrollment('e1')
+                ..unfileLegacyEnrollment('e1');
+              return true;
+            });
+
+            final kept = await backupOf(keyfile.path);
+            expect(kept.pendingEnrollmentIds, ['e2']);
+            expect(
+                kept
+                    .keysForEnrollment('e2')
+                    .where((m) =>
+                        m.role ==
+                        CryptographicMaterialRole.privateAuthentication)
+                    .map((m) => m.bytes.toString()),
+                [privateOf('e2')]);
+            expect(kept.enrollmentInfo('e2')?.deviceName, 'e2');
+            expect(kept.keysForEnrollment('e1'), isEmpty);
+          } finally {
+            await dir.delete(recursive: true);
+          }
+        });
+
+        test(
+            'An update that approves a pending enrollment keeps the previous '
+            'document in the .bak as it was', () async {
+          final dir = await Directory.systemTemp.createTemp('bak_pending_test');
+          try {
+            final keyfile = await pendingKeyfile(dir);
+
+            await keyfile.io.update(atsign.toAtsign(), (keys) {
+              keys.activatePending('e1');
+              return true;
+            });
+
+            expect(
+                await File('${keyfile.path}.bak').readAsString(), keyfile.text);
+          } finally {
+            await dir.delete(recursive: true);
+          }
+        });
+      });
+    }
 
     test('Test flush() creates the file (and parent dirs) when absent',
         () async {
@@ -667,7 +817,6 @@ void main() {
       if (keyFile.existsSync()) {
         keyFile.deleteSync();
       }
-      File(homeDirKeys).deleteSync();
     });
   });
 

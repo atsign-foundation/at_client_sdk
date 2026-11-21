@@ -16,6 +16,7 @@ void main() {
   late AtSignLogger logger;
 
   setUp(() {
+    AtSignLogger.root_level = 'info';
     handler = _KeepingHandler();
     logger = AtSignLogger('records', loggingHandler: handler);
   });

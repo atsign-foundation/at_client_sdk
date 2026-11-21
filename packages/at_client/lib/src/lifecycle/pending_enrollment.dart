@@ -5,7 +5,9 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/lifecycle/at_connection.dart';
 import 'package:at_client/src/lifecycle/atsign_lifecycle.dart';
+import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
     show enrollmentApkamSymmetricKeyResolver;
 import 'package:at_client/src/storage/at_client_storage.dart';
@@ -15,6 +17,14 @@ import 'package:at_lookup/at_lookup.dart'
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
+final Object _clientCallKey = Object();
+
+/// A key source holding [keys] for one handshake, never a keyfile: it serves
+/// a fixed key set to the authenticator and is not a store a client runs on.
+AtKeysIo handshakeKeysIo(String atSign, AtKeys keys) =>
+    // ignore: invalid_use_of_visible_for_testing_member
+    InMemoryAtKeysIo.holding(atSign, keys);
+
 /// An enrollment this device has submitted and the atSign's manager has not
 /// yet decided.
 ///
@@ -23,8 +33,8 @@ import 'package:at_utils/at_progress.dart';
 /// namespaces asked for, so a restart finds them with
 /// `Atsign.resumeEnrollment` and picks up here. [client] waits for the
 /// decision: approval completes the keys in the store, moves them to
-/// active, and opens a client the caller owns; denial removes them and
-/// throws.
+/// active, and opens a client the caller owns; denial, or the request's
+/// expiry, removes them and throws.
 class PendingEnrollment {
   final Atsign atSign;
   final String enrollmentId;
@@ -40,8 +50,24 @@ class PendingEnrollment {
   final AtLookupMuxable? _atLookUp;
   final AtLookUpFactory _lookUps;
   final SecondaryAddressFinder _secondaryAddressFinder;
-  final AtEnrollment _enrollment = AtEnrollment.create();
+  final AtEnrollment _enrollment;
   final AtSignLogger _logger;
+
+  /// Completed by [stop] or [cancel], which ends the wait.
+  final Completer<void> _ended = Completer<void>();
+  bool _abandoned = false;
+
+  /// Whether the approval has been written to [keys], completing them.
+  bool get approved => _approved;
+  bool _approved = false;
+  Future<void>? _cancelling;
+
+  /// The [client] calls in flight, each completing once its call has ended.
+  final Set<Future<void>> _clientCalls = {};
+
+  /// The handshake connection [awaitApproval] built, while it waits; null for
+  /// one the caller supplied.
+  AtLookupMuxable? _ownHandshake;
 
   /// What the wait is doing, as it does it.
   Stream<ProgressEvent> get progress => _enrollment.progressStream;
@@ -50,7 +76,9 @@ class PendingEnrollment {
   /// ones the client opened on the completed keys uses, each to the atServer
   /// [secondaryAddressFinder] finds; [atLookUp] is a connection for the
   /// handshake instead, for a caller that already holds one, and is left
-  /// open.
+  /// open. The handshake's `from:` names the app [particulars] name, as a
+  /// client's `AtClientPreference.atClientParticulars` do, and at_client as
+  /// the SDK; with no [particulars] the app is named after its program file.
   PendingEnrollment({
     required this.atSign,
     required this.enrollmentId,
@@ -62,11 +90,13 @@ class PendingEnrollment {
     required this.signingAlgo,
     required this.keyExchangeMode,
     AtLookupMuxable? atLookUp,
+    AtClientParticulars? particulars,
     required AtLookUpFactory lookUps,
     required SecondaryAddressFinder secondaryAddressFinder,
   })  : _atLookUp = atLookUp,
         _lookUps = lookUps,
         _secondaryAddressFinder = secondaryAddressFinder,
+        _enrollment = enrollmentFor(particulars),
         _logger = AtSignLogger('PendingEnrollment ($atSign)');
 
   /// Waits for the manager's decision, and on approval completes the keys in
@@ -74,12 +104,14 @@ class PendingEnrollment {
   ///
   /// The wait for a decision has no bound: somebody decides on their own
   /// schedule. [maxRetries] budgets consecutive failures to reach the
-  /// atServer, and [retryInterval] is the pause between polls. A denial
-  /// removes this enrollment from [keys] and throws [AtEnrollmentException].
+  /// atServer, and [retryInterval] is the pause between polls. A denial, or
+  /// the request's expiry, removes this enrollment from [keys] and throws
+  /// [AtEnrollmentException].
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
   }) async {
+    await _refuseIfEnded();
     final stored = await keys.read(atSign);
     if (!stored.pendingEnrollmentIds.contains(enrollmentId)) {
       throw AtEnrollmentException(
@@ -101,9 +133,7 @@ class PendingEnrollment {
       session: AtAuthSession(
           atSign: atSign,
           rootDomain: rootDomain,
-          // NOTE: a key source for the handshake alone, never a keyfile.
-          // ignore: invalid_use_of_visible_for_testing_member
-          atKeysIo: InMemoryAtKeysIo.holding(atSign, handshakeKeys),
+          atKeysIo: handshakeKeysIo(atSign, handshakeKeys),
           enrollmentId: enrollmentId),
       apkamSymmetricKeyResolver: keyExchangeMode == EnrollmentKeyExchangeMode.pq
           ? enrollmentApkamSymmetricKeyResolver(atSign)
@@ -118,27 +148,55 @@ class PendingEnrollment {
             rootDomain: rootDomain,
             authenticator: null,
             secondaryAddressFinder: _secondaryAddressFinder);
+    if (_atLookUp == null) _ownHandshake = handshake;
     try {
+      await _refuseIfEnded();
       await _enrollment.waitForApproval(response,
           retryInterval: retryInterval,
           maxRetries: maxRetries,
-          atLookup: handshake);
-    } on AtEnrollmentException catch (e) {
-      if (e.message.contains('denied')) await _discard();
+          atLookup: handshake,
+          cancelled: _ended.future);
+    } on Exception catch (e) {
+      if (_ended.isCompleted) throw await _endedOnceCancelled();
+      final decided = e is AtEnrollmentExpiredException
+          ? 'expired'
+          : e is AtEnrollmentException && e.message.contains('denied')
+              ? 'denied'
+              : null;
+      if (decided != null) {
+        try {
+          await _discard(decided);
+        } catch (failure) {
+          _logger.warning('enrollment $enrollmentId of $atSign was $decided, '
+              'and its pending keys could not be removed: $failure');
+        }
+      }
       rethrow;
     } finally {
+      _ownHandshake = null;
       if (_atLookUp == null) await handshake.close();
     }
 
+    // NOTE: the check that the wait has not ended and the write are one
+    // update, so a stop or cancel lands either before the approval is written
+    // or after it.
+    var written = false;
     await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      written = false;
+      if (_ended.isCompleted) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
         _fileFlat(stored);
       } else {
         stored.activatePending(enrollmentId);
       }
+      written = true;
       return true;
     });
+    if (!written) throw await _endedOnceCancelled();
+    _approved = true;
     _logger.info('enrollment $enrollmentId of $atSign is approved and its '
         'keys are complete');
   }
@@ -155,17 +213,140 @@ class PendingEnrollment {
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
     Duration connectBudget = AtConnection.defaultBudget,
-  }) async {
-    await awaitApproval(retryInterval: retryInterval, maxRetries: maxRetries);
-    return atSign.open(
-        keys: keys,
-        preference: preference,
-        namespace: namespace,
-        storage: storage,
-        atLookUp: _atLookUp,
-        lookUps: _lookUps,
-        secondaryAddressFinder: _secondaryAddressFinder,
-        connectBudget: connectBudget);
+  }) {
+    final ended = Completer<void>();
+    _clientCalls.add(ended.future);
+    return runZoned(() async {
+      await awaitApproval(retryInterval: retryInterval, maxRetries: maxRetries);
+      final client = await atSign.open(
+          keys: keys,
+          preference: preference,
+          namespace: namespace,
+          storage: storage,
+          atLookUp: _atLookUp,
+          lookUps: _lookUps,
+          secondaryAddressFinder: _secondaryAddressFinder,
+          connectBudget: connectBudget);
+      if (_ended.isCompleted) {
+        await client.stop();
+        throw _endedException();
+      }
+      return client;
+    }, zoneValues: {_clientCallKey: ended.future}).whenComplete(() {
+      _clientCalls.remove(ended.future);
+      ended.complete();
+    });
+  }
+
+  /// Ends the wait [client] or [awaitApproval] is in, which then throws
+  /// [AtEnrollmentCancelledException] once this enrollment's pending keys
+  /// have left [keys], as a denial's do. When [keys] cannot remove them, this
+  /// throws what it threw, and a later call tries again.
+  ///
+  /// An approval already written to [keys] stays there. A [client] call in
+  /// flight has ended before this returns, having stopped any client it
+  /// opened, so the atSign can be opened again at once; a call made inside
+  /// the work that [client] awaits, such as a key store or connection it was
+  /// given, does not wait for it. A connection the caller supplied is left
+  /// open while the wait runs; once [client] has opened a client on it, that
+  /// client owns it, as `Atsign.open` does, so stopping the client stops the
+  /// connection too. Nothing withdraws the request on the atServer. Tell the
+  /// atSign's manager to deny it: an approval after cancel creates an
+  /// enrollment nobody can use, which the manager would then revoke. A second
+  /// call after one that succeeded does nothing more, waiting as the first
+  /// did.
+  Future<void> cancel() async {
+    try {
+      await (_cancelling ??= _cancelOnce());
+    } finally {
+      await _clientCallsEnded();
+    }
+  }
+
+  /// Ends the wait [client] or [awaitApproval] is in, which then throws
+  /// [StoppedException], and keeps this enrollment's pending keys in [keys], so
+  /// `Atsign.resumeEnrollment` picks the request up again. Sends nothing.
+  ///
+  /// The handshake connection [awaitApproval] built is closed, and one the
+  /// caller supplied is left open. An approval not yet written to [keys] is not
+  /// written, and the next resume finds the request approved. A [client] call
+  /// in flight has ended before this returns, having stopped any client it
+  /// opened on an approval already written, except for a call made inside
+  /// the work that [client] awaits, as with [cancel]. A later [cancel] still
+  /// abandons the request. Once the wait has ended, by this or by [cancel],
+  /// this does nothing more, waiting as the first did.
+  Future<void> stop() async {
+    if (!_ended.isCompleted) {
+      _ended.complete();
+      try {
+        await _ownHandshake?.stop();
+      } on Exception catch (e) {
+        _logger.warning('Could not close the handshake connection of '
+            'enrollment $enrollmentId of $atSign while stopping its wait: $e');
+      }
+    }
+    await _clientCallsEnded();
+  }
+
+  /// Waits for every [client] call in flight to end, except one this runs
+  /// inside, whose end waits on this.
+  Future<void> _clientCallsEnded() {
+    final inside = Zone.current[_clientCallKey];
+    return Future.wait([
+      for (final call in _clientCalls)
+        if (!identical(call, inside)) call
+    ]);
+  }
+
+  Future<void> _cancelOnce() async {
+    _abandoned = true;
+    if (!_ended.isCompleted) _ended.complete();
+    try {
+      await _ownHandshake?.stop();
+    } on Exception catch (e) {
+      _logger.warning('Could not close the handshake connection of '
+          'enrollment $enrollmentId of $atSign while cancelling its wait; its '
+          'pending keys are removed all the same: $e');
+    } finally {
+      try {
+        await _discard('cancelled');
+      } catch (_) {
+        _cancelling = null;
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> _refuseIfEnded() async {
+    if (_ended.isCompleted) throw await _endedOnceCancelled();
+  }
+
+  /// [_endedException], once the cancel that ended the wait, if one did, has
+  /// removed the pending keys, so a caller that exits on it leaves none
+  /// behind. The cancel's own failure is reported by [cancel].
+  Future<Exception> _endedOnceCancelled() async {
+    final cancelling = _cancelling;
+    if (_abandoned && cancelling != null) {
+      await cancelling.then((_) {}, onError: (Object _) {});
+    }
+    return _endedException();
+  }
+
+  /// What a wait that [cancel] or [stop] ended throws.
+  Exception _endedException() {
+    final wait = 'the wait for enrollment $enrollmentId of $atSign';
+    if (_approved) {
+      final after = 'after its approval was written; the approved keys stay '
+          'in its key store';
+      return _abandoned
+          ? AtEnrollmentCancelledException('$wait was cancelled $after')
+          : StoppedException('$wait was stopped $after, to open the atSign '
+              'with');
+    }
+    return _abandoned
+        ? AtEnrollmentCancelledException('$wait was cancelled')
+        : StoppedException('$wait was stopped; the request stays in its key '
+            'store, for resumeEnrollment');
   }
 
   /// Copies onto [stored] what the approval released into [completed]: the
@@ -175,26 +356,36 @@ class PendingEnrollment {
   ///
   /// NOTE: this and [_fileFlat] write the legacy document shape on the
   /// approval's behalf, filling only what the store does not hold yet, so
-  /// the flat fields are named directly here.
+  /// the flat fields are read directly here.
   void _completeFrom(AtKeys stored, AtKeys completed) {
-    // ignore: deprecated_member_use
-    stored.enrollmentId = enrollmentId;
-    // ignore: deprecated_member_use
-    stored.defaultEncryptionPublicKey ??= stored
-        .keysForEnrollment(enrollmentId)
-        .where((m) =>
-            m.role == CryptographicMaterialRole.publicEncryption &&
-            m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
-        .firstOrNull
-        ?.bytes;
-    // ignore: deprecated_member_use
-    final encryptionPrivateKey = completed.defaultEncryptionPrivateKey;
-    // ignore: deprecated_member_use
-    stored.defaultEncryptionPrivateKey ??= encryptionPrivateKey;
-    // ignore: deprecated_member_use
-    stored.defaultSelfEncryptionKey ??= completed.defaultSelfEncryptionKey;
-    // ignore: deprecated_member_use
-    stored.apkamSymmetricKey ??= completed.apkamSymmetricKey;
+    stored.fileLegacyMaterial(
+      enrollmentId: enrollmentId,
+      encryptionPublicKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.defaultEncryptionPublicKey,
+          stored
+              .keysForEnrollment(enrollmentId)
+              .where((m) =>
+                  m.role == CryptographicMaterialRole.publicEncryption &&
+                  m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
+              .firstOrNull
+              ?.bytes),
+      encryptionPrivateKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.defaultEncryptionPrivateKey,
+          // ignore: deprecated_member_use
+          completed.defaultEncryptionPrivateKey),
+      selfEncryptionKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.defaultSelfEncryptionKey,
+          // ignore: deprecated_member_use
+          completed.defaultSelfEncryptionKey),
+      apkamSymmetricKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.apkamSymmetricKey,
+          // ignore: deprecated_member_use
+          completed.apkamSymmetricKey),
+    );
   }
 
   /// Moves an rsa2048 keypair from the typed pending material into the flat
@@ -211,12 +402,16 @@ class PendingEnrollment {
             m.algorithm == CryptographicMaterialAlgorithm.rsa2048)
         .firstOrNull
         ?.bytes;
-    // ignore: deprecated_member_use
-    stored.apkamPublicKey ??=
-        bytesOf(CryptographicMaterialRole.publicAuthentication);
-    // ignore: deprecated_member_use
-    stored.apkamPrivateKey ??=
-        bytesOf(CryptographicMaterialRole.privateAuthentication);
+    stored.fileLegacyMaterial(
+      apkamPublicKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.apkamPublicKey,
+          bytesOf(CryptographicMaterialRole.publicAuthentication)),
+      apkamPrivateKey: _unlessFiled(
+          // ignore: deprecated_member_use
+          stored.apkamPrivateKey,
+          bytesOf(CryptographicMaterialRole.privateAuthentication)),
+    );
     final info = stored.enrollmentInfo(enrollmentId);
     stored.discardEnrollment(enrollmentId);
     stored.recordEnrollmentSnapshot(enrollmentId,
@@ -225,34 +420,56 @@ class PendingEnrollment {
         deviceName: info?.deviceName);
   }
 
-  Future<void> _discard() async {
-    try {
-      await keys.update(atSign, (stored) {
-        if (!stored.enrollmentIds.contains(enrollmentId)) return false;
-        stored.discardEnrollment(enrollmentId);
-        // The flat fields the submission carried for this request go with
-        // it, so the store reads as holding nothing for the atSign.
-        // ignore: deprecated_member_use
-        if (stored.enrollmentId == enrollmentId) stored.enrollmentId = null;
-        if (stored.enrollmentIds.isEmpty &&
-            !stored.holdsAuthenticationMaterial) {
-          // ignore: deprecated_member_use
-          stored.apkamSymmetricKey = null;
-        }
-        return true;
-      });
-      _logger.info('enrollment $enrollmentId of $atSign was denied; its '
+  /// [value] as [AtKeys.fileLegacyMaterial] takes it, or null to leave the
+  /// field as it is when the store already holds [filed].
+  static String? _unlessFiled(AtBytes? filed, AtBytes? value) =>
+      filed == null ? value?.toString() : null;
+
+  /// Removes this enrollment's pending keys from [keys], after the request
+  /// was [why]: denied or cancelled. Throws what [keys] throws.
+  Future<void> _discard(String why) async {
+    var removed = false;
+    await keys.update(atSign, (stored) {
+      // NOTE: update may run this again on a fresh read; only the last run
+      // counts.
+      removed = false;
+      if (!stored.pendingEnrollmentIds.contains(enrollmentId)) return false;
+      stored
+        ..discardEnrollment(enrollmentId)
+        ..unfileLegacyEnrollment(enrollmentId);
+      removed = true;
+      return true;
+    });
+    if (removed) {
+      _logger.info('enrollment $enrollmentId of $atSign was $why; its '
           'pending keys are removed');
-    } catch (e) {
-      _logger.warning('enrollment $enrollmentId of $atSign was denied, and '
-          'its pending keys could not be removed: $e');
     }
   }
 }
 
+/// The wait [PendingEnrollment.awaitApproval] or [PendingEnrollment.client]
+/// was in was ended by [PendingEnrollment.cancel].
+class AtEnrollmentCancelledException extends AtEnrollmentException {
+  AtEnrollmentCancelledException(super.message);
+}
+
+/// `open` was asked to open a keyfile that holds no credential and no
+/// pending enrollment, as a denial, a cancel or an expiry leaves it, so there
+/// is nothing to authenticate with: the device has to enroll again.
+class AtNoCredentialException extends AtException {
+  final String atSign;
+
+  AtNoCredentialException(this.atSign)
+      : super('$atSign holds no credential in this keyfile: its enrollment '
+            'was denied, cancelled or expired, or never completed, so there '
+            'is nothing to authenticate with; enroll again');
+}
+
 /// `open` was asked to open a keyfile that holds nothing but an enrollment
 /// awaiting approval, so there is no credential to authenticate with yet.
-/// `Atsign.resumeEnrollment` is the way to pick it up.
+/// `Atsign.resumeEnrollment` is the way to pick it up, and throws this too,
+/// from [AtEnrollmentPendingException.several], when more than one pending
+/// enrollment matches what it was given.
 class AtEnrollmentPendingException extends AtException {
   final String atSign;
   final List<String> pendingEnrollmentIds;
@@ -262,4 +479,11 @@ class AtEnrollmentPendingException extends AtException {
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
             '${pendingEnrollmentIds.join(', ')}: resume it with '
             'resumeEnrollment rather than opening it');
+
+  /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
+  /// enrollments of [atSign] matching what it was given.
+  AtEnrollmentPendingException.several(this.atSign, this.pendingEnrollmentIds)
+      : super('$atSign holds several pending enrollments that match: '
+            '${pendingEnrollmentIds.join(', ')}. To resume one, name both the '
+            'app and the device');
 }

@@ -13,17 +13,6 @@ import 'at_lookup_test_utils.dart';
 
 /// Catalogue, in part: features/at_lookup/atdirectory_answer.feature
 void main() async {
-  group('this should be moved to functional tests', () {
-    test('look up @cicd1 from root.atsign.wtf:64', () async {
-      var secondaryAddress =
-          await CacheableSecondaryAddressFinder('root.atsign.wtf', 64)
-              .findSecondary('@cicd1');
-      expect(secondaryAddress.port, isNotNull);
-      expect(secondaryAddress.host, isNotNull);
-      print(secondaryAddress.toString());
-    });
-  });
-
   group('some cache tests with a MockSecondaryFinder', () {
     String rootDomain = 'root.atsign.unit.tests';
     int rootPort = 64;
@@ -253,6 +242,28 @@ void main() async {
               timeout: const Duration(seconds: 5)),
           throwsA(isA<AtException>()),
           reason: 'a host name holding a space is not host:port');
+      expect(cachingAtServerFinder.cacheContains(atSign), isFalse);
+    });
+
+    test('DoS: the answer is bounded in size', () async {
+      requiredFailures = 0;
+      // The atDirectory prompts, then streams bytes with no line feed.
+      when(() => mockSocket.write('$noAtAtSign\n')).thenAnswer((_) async {
+        for (var i = 0; i < 100; i++) {
+          socketOnDataFn(('a' * 100).codeUnits);
+        }
+      });
+
+      final sw = Stopwatch()..start();
+      await expectLater(
+          cachingAtServerFinder.findSecondary(atSign,
+              timeout: const Duration(seconds: 5)),
+          throwsA(isA<AtException>().having(
+              (e) => e.message, 'message', contains('longer than 512 bytes'))),
+          reason: 'an answer past the bound is refused, not read until the '
+              'deadline');
+      expect(sw.elapsed, lessThan(const Duration(seconds: 3)),
+          reason: 'refused at the bound, not at the deadline');
       expect(cachingAtServerFinder.cacheContains(atSign), isFalse);
     });
 

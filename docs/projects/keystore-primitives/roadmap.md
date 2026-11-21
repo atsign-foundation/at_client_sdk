@@ -21,7 +21,7 @@ the missing primitive. The pairs are listed impact first.
 | 11–12 | `transaction(body)`                           | writes that touch several records as separate awaits, the cascade among them                                                                                   |
 | 13–14 | `scanKeys` with `orderBy`, `limit` and `skip` | `Query.watch()`, which applies each event as a one-item delta only when the query has no `limit` or `skip`, and otherwise runs the whole query again per event |
 | 15–16 | `queryByPath`, gated by `supportsPathQueries` | `Query.wherePath()`, whose predicates carry a field path so that a store can index them, and are evaluated in memory                                           |
-| 17–18 | `snapshot()`, gated by `supportsSnapshots`    | a consistent read for `Query.fetch()`                                                                                                                          |
+| 17–18 | `snapshot()`, gated by `supportsSnapshots`    | a consistent read for `Query.get()`                                                                                                                            |
 | 19–20 | `stats()`                                     | diagnostics                                                                                                                                                    |
 
 ## Why

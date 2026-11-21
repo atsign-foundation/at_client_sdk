@@ -107,8 +107,10 @@ class AtKeysFileLock {
         // create opened, never by reopening the lock's path. A token that
         // does not land takes the lock back down and propagates, for the
         // reason given below.
-        if (createNewWith(lockPath, utf8.encode(token))) return token;
-        lastFailure = FileSystemException('Cannot create the lock', lockPath);
+        final refused = createNewWith(lockPath, utf8.encode(token));
+        if (refused == null) return token;
+        lastFailure =
+            FileSystemException('Cannot create the lock', lockPath, refused);
       } else {
         File? created;
         try {

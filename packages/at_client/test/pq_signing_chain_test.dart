@@ -24,6 +24,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/enroll_link_fake.dart';
+import 'test_utils/envelope_signers.dart' show claimless;
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/link_fixtures.dart';
 import 'test_utils/mocks.dart';
@@ -181,6 +182,7 @@ void main() {
           'b-1',
           key,
           PqSigningChain.signChainLink(PqSigningChain.linkPayload('b-1', key),
+              signerAtSign: atSign,
               key: ApkamSigningKeys(
                   algorithm: SigningAlgoType.mldsa65,
                   publicKey: rootPair.pub,
@@ -395,10 +397,71 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: aKey,
               signerEnrollmentId: 'a-1'));
       return (a: a, b: b, aKey: aKey);
     }
+
+    /// [signerAtSign]'s enrollments a-1, anchored by a root link, and b-1,
+    /// whose only key a-1's key chain-links as [linkAtSign]'s, or with no
+    /// Atsign when [linkAtSign] is null; then the walk from b-1.
+    Future<ChainResult> chainedAs(String signerAtSign, String? linkAtSign,
+        {String? checkedAs}) async {
+      MockAtClient of(String id) => buildRemoteBackedMockClient(
+          atSign: signerAtSign,
+          enrollmentId: id,
+          remoteData: remoteData,
+          remoteMetadata: remoteMetadata,
+          enrollLinkLog: linkCalls);
+      final root = (await publishRoot(remoteData, signerAtSign)).voucher;
+      final a = of('a-1');
+      final aKey = await withSigningKey(a);
+      final aEntry = (await record(a, 'a-1')).keys.single;
+      await store(a, 'a-1', aEntry,
+          await root.sign(PqSigningChain.linkPayload('a-1', aEntry)));
+      final b = of('b-1');
+      await withSigningKey(b);
+      final bEntry = (await record(b, 'b-1')).keys.single;
+      final link = PqSigningChain.signChainLink(
+          PqSigningChain.linkPayload('b-1', bEntry),
+          key: aKey,
+          signerAtSign: linkAtSign ?? signerAtSign,
+          signerEnrollmentId: 'a-1');
+      await store(
+          b,
+          'b-1',
+          bEntry,
+          linkAtSign == null
+              ? claimless(SignedEnvelope.fromJson(link), [aKey]).toJson()
+              : link);
+      return PqSigningChain(b).verifyChain(signerOf(b), 'b-1');
+    }
+
+    test(
+        "at_client's own verifiers refuse a document naming another Atsign: "
+        'a chain link on a key through PqSigningChain.verifyChain', () async {
+      final result = await chainedAs('@bob', '@alice');
+
+      expect(result.verdict, ChainVerdict.broken);
+      expect(result.reason, contains('"@alice"'));
+    });
+
+    test(
+        "the control for the row above: the same chain, its link naming the "
+        'Atsign it is checked for, reads anchored', () async {
+      final result = await chainedAs('@bob', '@bob');
+
+      expect(result.verdict, ChainVerdict.anchored, reason: result.reason);
+    });
+
+    test(
+        "at_client's own verifiers accept a document that names no Atsign: "
+        'a chain link on a key through PqSigningChain.verifyChain', () async {
+      final result = await chainedAs(atSign, null);
+
+      expect(result.verdict, ChainVerdict.anchored, reason: result.reason);
+    });
 
     test(
         'when the walk runs, then it continues from that key and reads '
@@ -448,7 +511,10 @@ void main() {
           'b-1',
           bEntry,
           signEnvelope(PqSigningChain.linkPayload('b-1', bEntry),
-                  keys: [f.aKey], type: EnvelopeType.app, enrollmentId: 'a-1')
+                  atSign: atSign,
+                  keys: [f.aKey],
+                  type: EnvelopeType.app,
+                  enrollmentId: 'a-1')
               .toJson());
 
       expect((await walk(f.b, 'b-1')).verdict, ChainVerdict.broken,
@@ -465,6 +531,7 @@ void main() {
           'b-1',
           bEntry,
           signEnvelope(PqSigningChain.linkPayload('b-1', bEntry),
+                  atSign: atSign,
                   keys: [mlKey, f.aKey],
                   type: EnvelopeType.chainLink,
                   enrollmentId: 'a-1')
@@ -485,7 +552,7 @@ void main() {
           PqSigningChain.signChainLink({
             ...PqSigningChain.linkPayload('b-1', bEntry),
             'enrollmentId': 'c-1'
-          }, key: f.aKey, signerEnrollmentId: 'a-1'));
+          }, signerAtSign: atSign, key: f.aKey, signerEnrollmentId: 'a-1'));
 
       final result = await walk(f.b, 'b-1');
 
@@ -518,6 +585,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: ApkamSigningKeys(
                   algorithm: SigningAlgoType.rsa2048,
                   publicKey: second.atPublicKey.publicKey,
@@ -600,6 +668,7 @@ void main() {
             keys[i],
             PqSigningChain.signChainLink(
                 PqSigningChain.linkPayload('b-1', keys[i]),
+                signerAtSign: atSign,
                 key: ApkamSigningKeys(
                     algorithm: SigningAlgoType.rsa2048,
                     publicKey: pairs[i - 1].atPublicKey.publicKey,
@@ -632,6 +701,7 @@ void main() {
           aEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('a-1', aEntry),
+              signerAtSign: atSign,
               key: bKey,
               signerEnrollmentId: 'b-1'));
       await store(
@@ -640,6 +710,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: aKey,
               signerEnrollmentId: 'a-1'));
 
@@ -668,6 +739,7 @@ void main() {
           aEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('a-1', aEntry),
+              signerAtSign: atSign,
               key: bKey,
               signerEnrollmentId: 'b-1'));
       final aVoucher = (await PqSigningChain(a)
@@ -683,6 +755,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: bKey,
               signerEnrollmentId: 'gone-1'));
       final linked = await PqSigningChain(a).linkKeysOf(
@@ -950,6 +1023,7 @@ void main() {
       final bEntry = stale.keys.single;
       final chainLink = PqSigningChain.signChainLink(
           PqSigningChain.linkPayload('b-1', bEntry),
+          signerAtSign: atSign,
           key: aKey,
           signerEnrollmentId: 'a-1');
       await store(b, 'b-1', bEntry, chainLink);
@@ -1233,6 +1307,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: cKey,
               signerEnrollmentId: 'c-1'));
       linkCalls.clear();
@@ -1309,6 +1384,71 @@ void main() {
       final fromC = await walk(c, 'c-1');
       expect(fromC.verdict, ChainVerdict.anchored, reason: fromC.reason);
       expect(fromC.path, ['c-1', 'b-1']);
+    });
+  });
+
+  group(
+      'Given an _apsk or signing root listing an entry whose status nests '
+      '250,000 arrays beside a usable key', () {
+    String withDeepStatus(String advertisement) {
+      final usable = (jsonDecode(advertisement) as Map)['keys'] as List;
+      return '{"v":1,"keys":[${jsonEncode(usable.single)},{"kid":"k2",'
+          '"use":"sign","alg":"mldsa65","pub":"AAAA","status":'
+          '${'[' * 250000}${']' * 250000}}]}';
+    }
+
+    test(
+        'when the chain walk reads the _apsk, then it reads the usable key '
+        'alone', () async {
+      final pub = base64Encode(
+          (await MlDsa65PureDartAlgo().generateKeyPair()).publicKey);
+      final value = withDeepStatus(jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: pub)
+      ])));
+
+      expect(
+          ApskRecord.parse('b-1', value, null).keys.map((k) => k.pub), [pub]);
+    });
+
+    test('when the signing root is read, then it reads the usable root alone',
+        () async {
+      await newRoot();
+      final key = 'public:${PqSigningRoot.recordName}$atSign';
+      remoteData[key] = withDeepStatus(remoteData[key]!);
+
+      expect(
+          (await PqSigningRoot.publishedRoots(client('a-1'), atSign))
+              .map((k) => k.pub),
+          [rootPair.pub]);
+    });
+  });
+
+  group('Given a chain voucher from PqSigningChain.voucher', () {
+    test(
+        'when it links another enrollment\'s key, then the link names this '
+        'client\'s Atsign', () async {
+      final root = await newRoot();
+      final b = client('b-1');
+      await withSigningKey(b);
+      await PqSigningChain(b).linkKeysOf(await record(b, 'b-1'), root,
+          authenticationKey:
+              pkamKeyPairFor(atSign, 'b-1').atPublicKey.publicKey,
+          verifier: signerOf(b));
+      final c = client('c-1');
+      final cKey = await withSigningKey(c);
+      final bVoucher = (await PqSigningChain(b)
+          .voucher(signerOf(b), isFullyPrivileged: () async => false))!;
+      expect(bVoucher.isRoot, isFalse, reason: 'the premise: a chain voucher');
+
+      await PqSigningChain(b).linkKeysOf(await record(b, 'c-1'), bVoucher,
+          authenticationKey:
+              pkamKeyPairFor(atSign, 'c-1').atPublicKey.publicKey,
+          verifier: signerOf(b));
+
+      final link =
+          (await record(c, 'c-1')).links[publicKeyKidOfBase64(cKey.publicKey)];
+      expect(link, isNotNull, reason: 'the premise: the voucher linked it');
+      expect(SignedEnvelope.fromJson(link!).signerAtSign, atSign);
     });
   });
 
@@ -1819,6 +1959,7 @@ void main() {
           bEntry,
           PqSigningChain.signChainLink(
               PqSigningChain.linkPayload('b-1', bEntry),
+              signerAtSign: atSign,
               key: aKey,
               signerEnrollmentId: 'a-1'));
 

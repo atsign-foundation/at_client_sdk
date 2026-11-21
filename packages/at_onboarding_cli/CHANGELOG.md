@@ -1,10 +1,16 @@
 ## 2.0.0
 
 - docs: [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app from at_client 3 to 4.
+- feat: `at_register`, and `at_activate onboard` without `-c`, ask the
+  registrar with the API key in `AT_REGISTRAR_API_KEY` when it is set, and
+  otherwise with the built-in key, as before.
 - breaking: at_onboarding_cli is a deprecated re-export of at_client_cli,
   which now carries its code and its at_activate and at_register tools.
   Depend on at_client_cli; `dart pub global activate at_client_cli` installs
   the tools, and activating this package still does.
+- breaking: `CLIBase` takes no `-d`/`--legacy-root-domain`, so use
+  `-r`/`--root-server`; `at_activate`'s `-d` is still the device name. The
+  tools take no `--hashingAlgoType`, which did nothing.
 - breaking: `AtOnboardingService`, `AtOnboardingPreference`,
   `OnboardingUtil`, `AuthKeyType`, `EnrollmentDetails` and
   `PrintAllArgParserUsage` are gone; at_client_cli's README names what

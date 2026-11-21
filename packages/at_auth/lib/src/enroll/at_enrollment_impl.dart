@@ -26,13 +26,17 @@ import 'package:at_utils/at_progress.dart';
 /// passcode expiry is decided whichever of the two types it holds. The
 /// collaborators then take those values explicitly.
 class AtEnrollmentImpl implements AtEnrollment {
-  AtEnrollmentImpl();
+  AtEnrollmentImpl({Map<String, dynamic> clientConfig = const {}})
+      : _clientConfig = clientConfig;
+
+  final Map<String, dynamic> _clientConfig;
 
   final EnrollmentProgress _progress = EnrollmentProgress();
   late final EnrollmentApprover _approver = EnrollmentApprover();
   late final EnrollmentSubmitter _submitter =
       EnrollmentSubmitter(_progress, _approver);
-  late final EnrollmentHandshake _handshake = EnrollmentHandshake(_progress);
+  late final EnrollmentHandshake _handshake =
+      EnrollmentHandshake(_progress, clientConfig: _clientConfig);
 
   @override
   Stream<ProgressEvent> get progressStream => _progress.stream;
@@ -57,6 +61,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     bool logProgress = AtEnrollment.defaultLogProgress,
     int maxRetries = AtEnrollment.defaultMaxRetries,
     required AtLookupMuxable atLookup,
+    Future<void>? cancelled,
   }) =>
       _handshake.waitForApproval(
         enrollmentResponse,
@@ -64,5 +69,6 @@ class AtEnrollmentImpl implements AtEnrollment {
         logProgress: logProgress,
         maxRetries: maxRetries,
         atLookup: atLookup,
+        cancelled: cancelled,
       );
 }

@@ -23,8 +23,8 @@ class EnrollmentConstants {
   static const String regexForSEK =
       '.*\\.${AtConstants.defaultSelfEncryptionKey}\\.${EnrollmentConstants.enrollManageNamespace}@';
 
-  /// The enrollment an atSign's own credential authenticates as: the flat
-  /// keyfile material with no enrollment record of its own.
+  /// The primary enrollment (`*:rw`), which the root PKAM keys authenticate
+  /// as: the flat keyfile material with no enrollment record of its own.
   ///
   /// It never reaches the wire: an atServer knows this credential only by the
   /// absence of an id, so [PkamVerbBuilder] omits it.

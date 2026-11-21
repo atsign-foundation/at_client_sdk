@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeys, AtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysIo;
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -32,10 +33,10 @@ import 'package:at_lookup/at_lookup.dart';
 /// logged at shout level and ignored.
 ///
 /// Throws a [StateError] when a client for [atSign] as the same principal
-/// (the enrollment the keys name, or the atSign's own credential) is already
+/// (the enrollment the keys name, or the primary enrollment) is already
 /// live, rather than handing back one this caller does not own; [stop]
 /// releases it. Another enrollment of the atSign is another principal and
-/// builds beside it, on a store of its own. A failure while building leaves
+/// builds beside it, given a store of its own. A failure while building leaves
 /// nothing behind — the part-built client is stopped, which unfiles it and
 /// releases its claim on [storage].
 Future<AtClient> buildAtClient({
@@ -55,7 +56,7 @@ Future<AtClient> buildAtClient({
   final principal = await _principalOf(atSign, atKeysIo, enrollmentId);
   if (AtClientImpl.holdsLiveClientAs(atSign, principal)) {
     throw StateError(
-        'A client for $atSign as ${principal == null ? "its own credential" : "enrollment $principal"} '
+        'A client for $atSign as ${principal == null ? "the primary enrollment" : "enrollment $principal"} '
         'is already live. buildAtClient builds a client the caller owns, so '
         'it will not hand back one owned elsewhere; stop() the existing '
         'client first.');
@@ -65,7 +66,7 @@ Future<AtClient> buildAtClient({
   if (holder != null) {
     throw StateError('The storage at $location is held by the live client for '
         '${holder.getCurrentAtSign()} as '
-        '${holder.enrollmentId == null ? "its own credential" : "enrollment ${holder.enrollmentId}"}. '
+        '${holder.enrollmentId == null ? "the primary enrollment" : "enrollment ${holder.enrollmentId}"}. '
         'Two clients cannot share one store; stop() that client first, or '
         'open this one on a store of its own.');
   }
@@ -92,7 +93,8 @@ Future<AtClient> buildAtClient({
         ? await SyncServiceImpl.create(client)
         : await syncServiceBuilder(client);
     client.enrollmentService = enrollmentServiceBuilder == null
-        ? EnrollmentServiceImpl(client, AtEnrollment.create())
+        ? EnrollmentServiceImpl(
+            client, enrollmentFor(preference.atClientParticulars))
         : await enrollmentServiceBuilder(client);
   } catch (_) {
     await client.stop();

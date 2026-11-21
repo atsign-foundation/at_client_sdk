@@ -20,3 +20,12 @@ consider whether `packages/at_client_skills/` needs a follow-up release.
 
 - [ ] No public API change — skill unaffected
 - [ ] Public API changed — I have opened or will open an `at_client_skills` PR to reflect this
+
+## Architecture
+
+The rules are in `docs/architecture/invariants.md`. A pin move goes in a PR of
+its own, ahead of the change that needs it, and needs a code owner's review.
+Tick exactly one.
+
+- [ ] `tools/check_architecture.sh` passes, and this PR moves no pin
+- [ ] This PR is a pin move. Invariant: … Existing mechanism I could not use, and why: … Row in `docs/architecture/decisions.md`: …

@@ -32,7 +32,11 @@ import 'package:flutter/services.dart';
 ///
 /// Returns:
 /// - The `AtClient` opened on the approved keys, or null if the process fails
-///   or is cancelled.
+///   or is cancelled. Leaving the dialog before then stops the enrollment's
+///   wait (`PendingEnrollment.stop`) and keeps the request, which the next
+///   show resumes, and stops a client the approval opens after leaving. Only
+///   its Cancel button, once the user confirms, abandons the request
+///   (`PendingEnrollment.cancel`).
 class ApkamActivationDialog extends StatefulWidget {
   final String atSign;
   final AtRootDomain rootDomain;
@@ -110,6 +114,7 @@ class ApkamActivationDialog extends StatefulWidget {
 }
 
 class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
+  final AtSignLogger _logger = AtSignLogger('ApkamActivationDialog');
   final TextEditingController _otpController = TextEditingController();
   final FocusNode _otpFocusNode = FocusNode();
   final ScrollController _pinScrollController = ScrollController();
@@ -117,6 +122,14 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   String _status = 'Waiting for approval..';
   late final WrittenAtKeysIo _keys;
   StreamSubscription<dynamic>? _progress;
+  PendingEnrollment? _waitingOn;
+
+  /// The enrollment a confirmed Cancel could not abandon, which Cancel
+  /// tries again.
+  PendingEnrollment? _abandoning;
+
+  /// The Cancel confirmation while it is showing.
+  BuildContext? _confirming;
 
   @override
   void initState() {
@@ -164,6 +177,11 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   );
 
   Future<void> _awaitAndOpen(PendingEnrollment pending) async {
+    if (!mounted) {
+      await _stop(pending);
+      return;
+    }
+    setState(() => _waitingOn = pending);
     _progress = pending.progress.listen((event) {
       if (mounted) setState(() => _status = event.msg);
     });
@@ -177,13 +195,22 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
           widget.storage,
         ),
       );
-      if (!mounted) return;
+      if (!mounted) {
+        // NOTE: nothing receives a client opened after the dismissal, and
+        // while it is live the atSign cannot be opened again.
+        await client.stop();
+        return;
+      }
+      final confirming = _confirming;
+      if (confirming != null && confirming.mounted) {
+        Navigator.of(confirming).pop(false);
+      }
       Navigator.of(context).pop(client);
     } catch (e) {
       // The approval was refused, the atServer went away, or the request was
       // wrong. Surface it instead of leaking an unhandled exception, and keep
       // the dialog open so the user can retry (issue #1909).
-      if (!mounted) return;
+      if (!mounted || e is AtEnrollmentCancelledException) return;
       final message = e is AtTimeoutException
           ? 'Activation timed out — the atServer could not be reached. '
                 'Please check your connection and try again.'
@@ -193,6 +220,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
+      _waitingOn = null;
       await _progress?.cancel();
       _progress = null;
       // Guard against setState after the dialog was dismissed mid-await; a bare
@@ -205,8 +233,123 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     }
   }
 
+  /// Stops [pending]'s wait and keeps the request. A failure is logged,
+  /// since the dialog is gone and there is nobody to tell.
+  Future<void> _stop(PendingEnrollment pending) async {
+    try {
+      await pending.stop();
+    } catch (e) {
+      _logger.warning(
+        'Could not stop the wait for enrollment ${pending.enrollmentId} of '
+        '${widget.atSign}: $e',
+      );
+    }
+  }
+
+  /// Asks the user to confirm abandoning the request, then cancels it.
+  Future<void> _onCancel() async {
+    final retrying = _abandoning;
+    final pending = retrying ?? _waitingOn;
+    if (pending == null) return;
+    if (retrying == null && !await _confirmAbandon(pending.enrollmentId)) {
+      return;
+    }
+    try {
+      await pending.cancel();
+    } catch (e) {
+      _logger.warning(
+        'Could not remove the pending keys of enrollment '
+        '${pending.enrollmentId} of ${widget.atSign}: $e',
+      );
+      if (!mounted) return;
+      setState(() => _abandoning = pending);
+      return;
+    }
+    if (!mounted) return;
+    if (pending.approved) {
+      await _openApproved(pending);
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Enrollment ${pending.enrollmentId} abandoned. Ask the manager of '
+          '${widget.atSign} to deny it.',
+        ),
+      ),
+    );
+    Navigator.of(context).pop();
+  }
+
+  /// Hands back a client on the keys whose approval was written before the
+  /// Cancel took effect, which lets the approval stand.
+  Future<void> _openApproved(PendingEnrollment pending) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'The approval of enrollment ${pending.enrollmentId} landed before '
+          'the Cancel took effect, so it stands.',
+        ),
+      ),
+    );
+    final AtClient client;
+    try {
+      client = await widget.flows.open(
+        widget.atSign,
+        keys: _keys,
+        preference: under(widget.preference, widget.rootDomain),
+        storage: widget.storage,
+        lookUps: widget.lookUps,
+      );
+    } catch (e) {
+      _logger.warning(
+        'Could not open ${widget.atSign} on the approved keys of enrollment '
+        '${pending.enrollmentId}: $e',
+      );
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    if (!mounted) {
+      // NOTE: nothing receives a client opened after the dismissal, and
+      // while it is live the atSign cannot be opened again.
+      await client.stop();
+      return;
+    }
+    Navigator.of(context).pop(client);
+  }
+
+  /// Whether the user confirms abandoning enrollment [enrollmentId].
+  Future<bool> _confirmAbandon(String enrollmentId) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          _confirming = context;
+          return AlertDialog(
+            title: const Text('Abandon this request?'),
+            content: Text(
+              'This abandons enrollment $enrollmentId of ${widget.atSign}. '
+              'Trying again needs a new OTP from another enrollment of '
+              '${widget.atSign}.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Keep waiting'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Abandon'),
+              ),
+            ],
+          );
+        },
+      ).whenComplete(() => _confirming = null) ??
+      false;
+
   @override
   void dispose() {
+    final waitingOn = _waitingOn;
+    if (waitingOn != null) unawaited(_stop(waitingOn));
     _progress?.cancel();
     _otpController.dispose();
     _otpFocusNode.dispose();
@@ -265,7 +408,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Back button
             Row(
               children: [
                 InkWell(
@@ -274,6 +416,9 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                   },
                   child: const Icon(Icons.arrow_back, size: 20),
                 ),
+                const Spacer(),
+                if (_waitingOn != null || _abandoning != null)
+                  TextButton(onPressed: _onCancel, child: const Text('Cancel')),
               ],
             ),
             const SizedBox(height: 24),
@@ -437,8 +582,13 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
             ),
             const SizedBox(height: 32),
 
-            // Submit button
-            _isLoading
+            _abandoning != null
+                ? Text(
+                    'Could not abandon enrollment '
+                    '${_abandoning!.enrollmentId}: its keys are still in the '
+                    'key store. Choose Cancel to try again.',
+                  )
+                : _isLoading
                 ? Center(
                     child: Column(
                       children: [

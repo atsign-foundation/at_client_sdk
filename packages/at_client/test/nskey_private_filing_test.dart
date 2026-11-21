@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/at_commons.dart' show AtBytes, StoppedException;
-import 'package:at_commons/atsign.dart' show Atsign;
+import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
@@ -13,6 +13,7 @@ import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/nskey_generation.dart';
+import 'test_utils/rerunning_at_keys_io.dart';
 
 /// Moving an arriving nskey private out of the transit buffer and into AtKeys.
 void main() {
@@ -52,6 +53,108 @@ void main() {
             'store is in-memory by design');
     expect(material!.bytes.bytes, generation.seed);
     expect(material.algorithm, CryptographicMaterialAlgorithm.xWing);
+  });
+
+  test('a private for a namespace spelt in capitals is filed under it folded',
+      () async {
+    final (io, filer) = await filing();
+    final generation = await nskeyGeneration();
+
+    expect(
+        await filer.file(nskeySecret(generation, ns: 'App_1.My_Apps')), isTrue);
+
+    final keys = await io.read(atSign);
+    expect(keys.atSignKeys.map((m) => m.keyId),
+        contains('nskey.app_1.my_apps.${generation.kid}'));
+  });
+
+  test(
+      'a private an earlier release filed under its namespace in capitals is '
+      'read under the namespace folded', () async {
+    final io = InMemoryAtKeysIo();
+    final generation = await nskeyGeneration();
+    await io.write(
+        atSign,
+        AtKeys()
+          ..addKey(CryptographicMaterial(
+            keyId: 'nskey.App_1.My_Apps.${generation.kid}',
+            role: CryptographicMaterialRole.privateDecapsulation,
+            algorithm: CryptographicMaterialAlgorithm.xWing,
+            bytes: AtBytes(generation.seed),
+            createdAt: DateTime.now().toUtc(),
+          )));
+    final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+
+    expect(await filer.read(namespace, generation.kid), isNotNull);
+    expect(await filer.readSeed(namespace, generation.kid), isNotNull);
+    expect((await filer.filedFor(namespace)).map((f) => f.nskeyKid),
+        [generation.kid]);
+  });
+
+  test(
+      'a seed another writer files while the update runs again is reported '
+      'as already filed', () async {
+    final io = RerunningAtKeysIo();
+    await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+    final announced = <Object>[];
+    filer.privatesFiled.listen(announced.add);
+    final generation = await nskeyGeneration();
+    var otherWrote = false;
+    io
+      ..rerunning = true
+      ..between = (_) async {
+        if (otherWrote) return;
+        otherWrote = true;
+        await NskeyPrivateFiling(keysIo: io, atSign: atSign).store(
+            namespace: namespace,
+            nskeyKid: generation.kid,
+            seed: NskeySeed(generation.seed));
+      };
+
+    final filed = await filer.store(
+        namespace: namespace,
+        nskeyKid: generation.kid,
+        seed: NskeySeed(generation.seed));
+    await pumpEventQueue();
+
+    expect(otherWrote, isTrue);
+    expect(await filer.readSeed(namespace, generation.kid), isNotNull,
+        reason: 'the other writer filed it');
+    expect(filed, isFalse, reason: 'this filing wrote nothing');
+    expect(announced, isEmpty);
+  });
+
+  test(
+      'a rotation owed is reported only when the last run of the update holds '
+      'the private', () async {
+    final io = RerunningAtKeysIo();
+    await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+    final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+    final generation = await nskeyGeneration();
+    await filer.store(
+        namespace: namespace,
+        nskeyKid: generation.kid,
+        seed: NskeySeed(generation.seed));
+    var otherWrote = false;
+    io
+      ..rerunning = true
+      ..between = (_) async {
+        if (otherWrote) return;
+        otherWrote = true;
+        await io.flush(atSign.toAtsign(), AtKeys(atsign: atSign.toAtsign()));
+      };
+
+    final owed = await filer.markRotationOwed(
+        namespace, [generation.kid], DateTime.utc(2026, 11, 18));
+
+    expect(otherWrote, isTrue,
+        reason: 'the control: the first run held the private and marked it');
+    expect(await filer.readSeed(namespace, generation.kid), isNull,
+        reason: 'the other writer left a keyfile without the private');
+    expect(owed, isFalse,
+        reason: 'the last run held no private to owe a rotation for');
+    expect(await filer.rotationOwed(namespace, [generation.kid]), isFalse);
   });
 
   test('the same kid in two namespaces files as two keys', () async {
@@ -370,6 +473,127 @@ void main() {
     expect(await filer.filedFor(namespace), isEmpty);
   });
 
+  group('Given the namespaces a filing lists as held', () {
+    test(
+        'when the keyfile cannot be read, then each call in the next 10 '
+        'seconds throws the read\'s error, from that one read', () async {
+      final io = _CountingUnreadableKeysIo();
+      final filer = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+
+      expect(io.reads, 1);
+    });
+
+    test('a read is kept for a minute, and a failed one for 10 seconds', () {
+      final filer =
+          NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+
+      expect(filer.namespacesReadEvery, const Duration(minutes: 1));
+      expect(filer.namespacesRetryEvery, const Duration(seconds: 10));
+    });
+
+    test(
+        'when a failed read\'s window has passed, then the next call reads the '
+        'keyfile again', () async {
+      final io = _CountingUnreadableKeysIo();
+      final filer = NskeyPrivateFiling(
+          keysIo: io, atSign: atSign, namespacesRetryEvery: Duration.zero);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<AtKeysParseException>()));
+
+      expect(io.reads, 2);
+    });
+
+    test('when there is no keyfile, then it lists nothing', () async {
+      final filer =
+          NskeyPrivateFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+
+      expect(await filer.filedNamespaces(), isEmpty);
+    });
+
+    test(
+        'when another process files a private on the same keyfile, then it is '
+        'listed once the window has passed', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      final here = NskeyPrivateFiling(
+          keysIo: io, atSign: atSign, namespacesReadEvery: Duration.zero);
+      final there = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      expect(await here.filedNamespaces(), isEmpty);
+
+      expect(
+          await there.store(
+              namespace: 'todos.demos',
+              nskeyKid: 'kid1',
+              seed: NskeySeed(privateBytes)),
+          isTrue);
+
+      expect(await here.filedNamespaces(), contains('todos.demos'));
+    });
+
+    test(
+        'when this filing finds a private already filed, then it is listed at '
+        'once', () async {
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      final here = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      final there = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      expect(await here.filedNamespaces(), isEmpty);
+      await there.store(
+          namespace: 'todos.demos',
+          nskeyKid: 'kid1',
+          seed: NskeySeed(privateBytes));
+
+      expect(
+          await here.store(
+              namespace: 'todos.demos',
+              nskeyKid: 'kid1',
+              seed: NskeySeed(privateBytes)),
+          isFalse);
+
+      expect(await here.filedNamespaces(), contains('todos.demos'));
+    });
+
+    test(
+        'when a second call arrives while the first read of the keyfile is in '
+        'flight, then both list what it holds, from that one read', () async {
+      final io = _HeldKeysIo();
+      await io.write(atSign, AtKeys());
+      await NskeyPrivateFiling(keysIo: io, atSign: atSign).store(
+          namespace: 'todos.demos',
+          nskeyKid: 'kid1',
+          seed: NskeySeed(privateBytes));
+      final here = NskeyPrivateFiling(keysIo: io, atSign: atSign);
+      io
+        ..held = Completer<void>()
+        ..reads = 0;
+
+      final first = here.filedNamespaces();
+      final second = here.filedNamespaces();
+      io.held!.complete();
+
+      expect(await second, contains('todos.demos'));
+      expect(await first, contains('todos.demos'));
+      expect(io.reads, 1);
+    });
+
+    test('when the client stops as the keyfile is read, then it says so',
+        () async {
+      final filer =
+          NskeyPrivateFiling(keysIo: _StoppedKeysIo(), atSign: atSign);
+
+      await expectLater(
+          filer.filedNamespaces(), throwsA(isA<StoppedException>()));
+    });
+  });
+
   group('a key source that cannot be read is not an empty one', () {
     test('a source holding nothing yet reads as a genuine absence', () async {
       final filing =
@@ -416,6 +640,37 @@ void main() {
       expect(await filing.readAll(), isEmpty);
     });
   });
+}
+
+/// A keyfile that cannot be read, counting how often a read is tried.
+/// A key source whose reads wait for [held] to complete, counting them.
+class _HeldKeysIo extends InMemoryAtKeysIo {
+  Completer<void>? held;
+  int reads = 0;
+
+  @override
+  Future<AtKeys> read(String atsign) async {
+    reads++;
+    await held?.future;
+    return super.read(atsign);
+  }
+}
+
+/// A key source whose client has stopped.
+class _StoppedKeysIo extends _UnreadableKeysIo {
+  @override
+  Future<AtKeys> read(String atsign) async =>
+      throw StoppedException('the client for $atsign has stopped');
+}
+
+class _CountingUnreadableKeysIo extends _UnreadableKeysIo {
+  int reads = 0;
+
+  @override
+  Future<AtKeys> read(String atsign) {
+    reads++;
+    return super.read(atsign);
+  }
 }
 
 /// A key source that exists and cannot be parsed.

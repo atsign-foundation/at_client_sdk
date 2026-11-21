@@ -338,7 +338,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   /// The namespaces this client's own enrollment was granted, or null when it
   /// may write anywhere or its record cannot be found.
   ///
-  /// The atSign's own credential is treated as the atSign itself, with no
+  /// The primary enrollment (`*:rw`) is treated as the atSign itself, with no
   /// limit; for a record the list does not carry, the atServer's refusal of
   /// the write is what reports a namespace this client may not write.
   Future<Map<String, dynamic>?> _ownGrants() async {

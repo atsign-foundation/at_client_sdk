@@ -110,9 +110,11 @@ CryptographicMaterial? keyPackageMaterial(AtKeys keys,
 /// key is not something to advertise to peers or to keep answering on.
 ///
 /// [enrollmentId] scopes the selection, and the tagged and untagged sets do not
-/// mix: a retrofitted keyfile carries an untagged package alongside a tagged
-/// one. A client takes its own tagged packages if it has any, falls back to the
-/// untagged ones, and NEVER takes one tagged for a different enrollment.
+/// mix. An untagged package sits beside tagged ones in a keyfile where a new
+/// device's enrollment filed its first package untagged, as development builds
+/// did before that path tagged it, and a tagged key was filed later. A client
+/// takes its own tagged packages if it has any, falls back to the untagged
+/// ones, and NEVER takes one tagged for a different enrollment.
 /// Merging the two sets, or newest-wins across the whole file, would hand a
 /// client restarting on a shared keyfile an address its own enrollment record
 /// never advertised.

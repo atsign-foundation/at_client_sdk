@@ -301,7 +301,6 @@ ArgParser _buildParser() {
         ..addFlag('never-sync', negatable: false, hide: true)
         ..addOption('max-connect-attempts', defaultsTo: '20', hide: true)
         ..addOption('pass-phrase', aliases: const ['passPhrase'], hide: true)
-        ..addOption('legacy-root-domain', hide: true)
         ..addFlag('verbose', abbr: 'v', negatable: false);
   return p;
 }

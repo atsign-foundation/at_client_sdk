@@ -1,4 +1,4 @@
-# The @Protocol root server configuration
+# The Atsign Protocol root server configuration
 root_server:
   # The url to connect to root server
   url: 'root.atsign.wtf'

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/storage/hive/hive_box_sync_queue_store.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
@@ -262,9 +264,9 @@ void main() {
               'UpdateVerbBuilder, so a refused DELETE surfaced as a '
               'TypeError from inside the catch');
       expect(
-          recorded.at('FINER'),
-          contains(
-              contains('Failed to sync k1.__ssenv.wavi@abandon caused by')),
+          recorded.at('WARNING'),
+          contains(contains('Not applying the atServer\'s change to '
+              'k1.__ssenv.wavi@abandon')),
           reason: 'the refusal is logged with the key it was about');
     });
 
