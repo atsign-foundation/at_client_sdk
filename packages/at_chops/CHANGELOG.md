@@ -27,6 +27,8 @@
 - perf: `ChaCha20Poly1305Algo.encrypt` builds the ciphertext and tag in one
   buffer, which is faster for plaintexts from 32 bytes to 1.1 MB. The output
   is unchanged.
+- fix: `AesGcm256FfiAlgo.decrypt` throws a `StateError` when OpenSSL reports
+  a plaintext length that differs from the ciphertext length.
 
 ## 3.7.1
 
