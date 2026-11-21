@@ -23,7 +23,9 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
 
   AtEnrollmentPendingException's message names each pending enrollment id the
   keyfile records in double quotes, its control characters escaped and each
-  clipped at 180 characters, so the message stays on one line.
+  clipped at 180 characters, so the message stays on one line. The
+  AtEnrollmentException enroll throws for a store already waiting names the
+  id, app and device it holds the same way.
 
   Races: a stop or a cancel and an approval resolve at the write to the
   store. One that lands first leaves nothing written. stop then cancel
@@ -192,6 +194,11 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
       | wavi | phone  |
       | wavi | laptop |
       | buzz | phone  |
+
+  Scenario: A refusal to enroll into a waiting store names what it holds quoted and escaped
+    Given a store holding a pending enrollment for @alice whose id holds a line feed, filed by app "wa<ESC>vi" on device "phone"
+    When app buzz on device tablet asks to enroll @alice into that store
+    Then enroll throws AtEnrollmentException naming the id, the app and the device in double quotes on one line, the line feed shown as \u000a and the ESC as \u001b, and nothing is sent to the atServer
 
   Scenario: A keyfile left empty by a denial or a cancel is refused at once
     Given a keyfile whose enrollment request was denied, or cancelled, and so holds no credential

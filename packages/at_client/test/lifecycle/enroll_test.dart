@@ -341,8 +341,8 @@ void main() {
               (e) => e.message,
               'message',
               allOf(
-                  contains('pending enrollment $enrollmentId for wavi on '
-                      'phone'),
+                  contains('pending enrollment "$enrollmentId" for "wavi" on '
+                      '"phone"'),
                   contains('resumeEnrollment')))));
       verifyZeroInteractions(untouched);
       expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
@@ -375,8 +375,8 @@ void main() {
               (e) => e.message,
               'message',
               allOf(
-                  contains('pending enrollment $enrollmentId: resume it with '
-                      'resumeEnrollment'),
+                  contains('pending enrollment "$enrollmentId": resume it '
+                      'with resumeEnrollment'),
                   isNot(contains('null'))))));
       verifyZeroInteractions(untouched);
       expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
@@ -1432,9 +1432,10 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
-    /// A store holding a pending request for app `wavi` under each of [ids],
-    /// from a device named after its enrollment id.
-    AtKeys pendingWith(List<String> ids) {
+    /// A store holding a pending request for [app] under each of [ids], from
+    /// [device], else from a device named after its enrollment id.
+    AtKeys pendingWith(List<String> ids,
+        {String app = 'wavi', String? device}) {
       final keys = AtKeys(atsign: Atsign(atSign));
       final keyPair = RsaKeyPair.generate();
       for (final id in ids) {
@@ -1457,7 +1458,8 @@ void main() {
               createdAt: DateTime.now().toUtc(),
               status: CryptographicMaterialStatus.pending));
         }
-        keys.recordEnrollmentSnapshot(id, appName: 'wavi', deviceName: id);
+        keys.recordEnrollmentSnapshot(id,
+            appName: app, deviceName: device ?? id);
       }
       return keys;
     }
@@ -1574,6 +1576,27 @@ void main() {
                 ]))));
       });
     }
+
+    test(
+        'A refusal to enroll into a waiting store names what it holds quoted '
+        'and escaped', () async {
+      final store = InMemoryAtKeysIo();
+      await store.write(
+          atSign, pendingWith(['e\n"one'], app: 'wa\u001bvi', device: 'phone'));
+      final untouched = atServer(decide: (_) async => true);
+
+      await expectLater(
+          () => submit(store, untouched, app: 'buzz', device: 'tablet'),
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains(r'pending enrollment "e\u000a\"one" for '
+                      r'"wa\u001bvi" on "phone"'),
+                  isNot(contains('\n')),
+                  isNot(contains('\u001b'))))));
+      verifyZeroInteractions(untouched);
+    });
 
     test('A connection the app supplied is left open', () async {
       var polls = 0;

@@ -2,6 +2,9 @@
 
 - fix: `AtEnrollmentPendingException` names each pending enrollment id in
   double quotes, with its control characters escaped.
+- fix: `Atsign.enroll`'s refusal of a keys store already waiting on an
+  enrollment names its id, app and device in double quotes, with their
+  control characters escaped.
 - fix: `Atsign.enroll` refuses a keys store already waiting on an
   enrollment for the Atsign, whatever that enrollment's app and device,
   before anything is sent, and names it: resume it with `resumeEnrollment`.

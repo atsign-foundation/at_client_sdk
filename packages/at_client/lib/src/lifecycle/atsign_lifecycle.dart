@@ -623,9 +623,11 @@ extension AtsignLifecycle on Atsign {
       final info = existing.enrollmentInfo(pendingId);
       final app = info?.appName;
       final device = info?.deviceName;
+      String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
       throw AtEnrollmentException('$this already holds the pending '
-          'enrollment $pendingId${app == null ? '' : ' for $app'}'
-          '${device == null ? '' : ' on $device'}: resume it with '
+          'enrollment ${quoted(pendingId)}'
+          '${app == null ? '' : ' for ${quoted(app)}'}'
+          '${device == null ? '' : ' on ${quoted(device)}'}: resume it with '
           'resumeEnrollment rather than submitting another');
     }
   }
