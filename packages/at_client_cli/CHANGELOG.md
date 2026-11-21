@@ -1,9 +1,5 @@
 ## 1.1.0
 
-- fix: `at_activate enroll` with a keyfile holding several pending requests,
-  none for its `--app` on its `--device`, names the app and device each was
-  filed under, and says to pass one's names to resume it or give `-k` a
-  keyfile of its own to send a new request.
 - fix: `at_activate list`, `approve` and `auto` show the ids, statuses,
   names and namespaces a request carries, and the keys and senders `auto`
   names as it passes a notification over, with their control characters

@@ -86,12 +86,6 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     When ApkamActivationDialog opens @alice for app "wavi" on device "new-phone"
     Then it shows "Resuming enrollment <id>, filed as wavi on old-phone.." and Cancel, without asking for a passcode
 
-  Scenario: The enrollment dialog says it cannot go on when its store holds several requests, none its own
-    Given a key store holding pending enrollments for @alice filed by app "wavi" on device "phone" and by app "wavi" on device "tablet"
-    When ApkamActivationDialog opens @alice for app "wavi" on device "laptop"
-    Then it says this device already has several requests waiting for approval, in place of the Activate button
-    And a passcode entered is never sent, and no request is waited on
-
   Scenario: The enrollment dialog waits on a request filed for other namespaces
     Given a key store holding one pending enrollment <id> for @alice, filed by app "todos" on device "phone" for namespaces {todos: rw}
     When ApkamActivationDialog opens @alice for app "todos2" on device "phone" with namespaces {todos2: rw}

@@ -10,8 +10,9 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 /// or never completed, and to enroll the device again. For an
 /// [AtEnrollmentPendingException], it says the enrollment is still waiting
 /// for approval, and to enroll again from this app, unless several pending
-/// enrollments matched, when it says this device asked more than once and
-/// to enroll from this app, which waits for this app's own request. For any
+/// enrollments matched, when it says this device asked more than once, and
+/// that enrolling from this app picks up this app's own request if it sent
+/// only one. For any
 /// other [AtKeysUnusableException], it is the first line of that exception's
 /// message. For an atServer's refusal, wrapped or as thrown and classified by
 /// the client's connection, or an atSign not in the atDirectory, it is the
@@ -37,8 +38,8 @@ String failureMessage(
   if (error is AtEnrollmentPendingException && error.severalMatched) {
     return 'This device has asked to enroll $atSign more than once, and none '
         "of those requests has been approved yet, so this screen can't tell "
-        'which one to wait for. Enroll this device from this app: it picks '
-        "up this app's own request and waits for that one.";
+        'which one to wait for. Enrolling this device from this app picks up '
+        "this app's own request, if it sent only one.";
   }
   if (error is AtEnrollmentPendingException) {
     return "This device's enrollment for $atSign is still waiting for "

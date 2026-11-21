@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:args/args.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 
@@ -10,9 +8,7 @@ import '../util/custom_arg_parser.dart';
 ///
 /// The keyfile named is the resume record: run again, the wait picks up the
 /// request it holds rather than asking again, this app and device's own
-/// first, else this app's on any device, else the keyfile's one request. A
-/// keyfile holding several, none this app and device's own, is reported and
-/// nothing is sent.
+/// first, else this app's on any device, else the keyfile's one request.
 Future<void> main(List<String> args) async {
   AtSignLogger.root_level = 'finer';
   final argResults = CustomArgParser(getArgParser()).parse(args);
@@ -35,24 +31,10 @@ Future<void> main(List<String> args) async {
           lookUps: lookUps,
           secondaryAddressFinder: secondaryAddressFinder);
 
-  // A keyfile an older release wrote can hold several requests, none for
-  // buzz on iphone, which this example cannot choose between; enroll would
-  // refuse to file another beside them.
-  Future<PendingEnrollment?> adopt() async {
-    try {
-      return await resume(app: 'buzz') ?? await resume();
-    } on AtEnrollmentPendingException catch (e) {
-      if (!e.severalMatched) rethrow;
-      stderr.writeln('${e.message}. This example enrols as buzz on iphone: '
-          'point --atKeysPath at a keyfile of its own to send a new request.');
-      // NOTE: nothing is open yet, so there is nothing to close first.
-      exit(1);
-    }
-  }
-
   // run otp:get from an enrolled client and pass the passcode
   final pending = await resume(app: 'buzz', device: 'iphone') ??
-      await adopt() ??
+      await resume(app: 'buzz') ??
+      await resume() ??
       await Atsign(atSign).enroll(
           otp: argResults['otp'],
           app: 'buzz',

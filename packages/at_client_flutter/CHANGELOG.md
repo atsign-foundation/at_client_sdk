@@ -2,9 +2,6 @@
 
 ## 2.1.0
 
-- fix: `ApkamActivationDialog` asks for no passcode while its key store holds
-  several requests it cannot choose between, and says so in place of the
-  Activate button.
 - fix: `ApkamActivationDialog`'s resume status and adoption warning show the
   enrollment id and the names its key store records with their control
   characters escaped.

@@ -609,35 +609,6 @@ void main() {
     verifyNever(() => buzz.client(any(), storage: any(named: 'storage')));
   });
 
-  /// The dialog's Activate button.
-  Finder activateButton() => find.descendant(
-    of: find.byType(ApkamActivationDialog),
-    matching: find.byType(ElevatedButton),
-  );
-
-  testWidgets('The enrollment dialog says it cannot go on when its store '
-      'holds several requests, none its own', (tester) async {
-    final phone = filed('enroll-phone', app: 'wavi', device: 'phone');
-    final tablet = filed('enroll-tablet', app: 'wavi', device: 'tablet');
-    holding([phone, tablet]);
-    await open(tester, appName: 'wavi', deviceName: 'laptop');
-
-    expect(
-      find.textContaining(
-        'This device already has several requests to enroll @alice waiting '
-        'for approval',
-      ),
-      findsOneWidget,
-    );
-    expect(activateButton(), findsNothing);
-    await tester.enterText(find.byType(EditableText), '123456');
-    await frames(tester);
-    neverEnrolls();
-    for (final request in [phone, tablet]) {
-      verifyNever(() => request.client(any(), storage: any(named: 'storage')));
-    }
-  });
-
   testWidgets('The enrollment dialog waits on a request filed for other '
       'namespaces', (tester) async {
     final request = filed(
@@ -667,11 +638,9 @@ void main() {
     opened.complete(client);
     await frames(tester);
 
-    expect(
-      results,
-      [client],
-      reason: "the request's approval opens the client here",
-    );
+    expect(results, [
+      client,
+    ], reason: "the request's approval opens the client here");
   });
 
   testWidgets('The enrollment dialog shows a recorded app name with its '

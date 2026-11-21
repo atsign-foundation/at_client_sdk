@@ -216,8 +216,8 @@ void main() {
           shown(tester),
           'This device has asked to enroll $atSign more than once, and none of '
           "those requests has been approved yet, so this screen can't tell "
-          'which one to wait for. Enroll this device from this app: it picks '
-          "up this app's own request and waits for that one.",
+          'which one to wait for. Enrolling this device from this app picks up '
+          "this app's own request, if it sent only one.",
         );
         expect(result(), isNull, reason: 'the dialog returns no client');
       });

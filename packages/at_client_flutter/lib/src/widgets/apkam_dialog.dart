@@ -27,11 +27,9 @@ import 'package:flutter/services.dart';
 ///   device's own comes first, else this app's under any device name, else
 ///   the store's one request whatever app name it was filed under, which
 ///   the dialog adopts. One filed under another app or device name is shown
-///   with the names it records, whatever namespaces it was filed for. The
-///   passcode is asked for only when the store holds no request; a store
-///   holding several the dialog cannot choose between is reported and
-///   nothing is waited on or sent. Cancel abandons the request the dialog
-///   waits on.
+///   with the names it records. The passcode is asked for only
+///   when the store holds no request, or several it cannot choose between,
+///   and Cancel abandons the request the dialog waits on.
 /// - [storage]: the client's local storage; with none, a Hive store under the
 ///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how
@@ -144,10 +142,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   /// The Cancel confirmation while it is showing.
   BuildContext? _confirming;
 
-  /// Why the dialog can neither wait on a request in the key store nor send
-  /// one, shown in place of the Activate button; null when it can.
-  String? _blocked;
-
   @override
   void initState() {
     super.initState();
@@ -161,9 +155,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   /// under another app name, since `enroll` refuses a store that already
   /// holds one. Adopting one filed under another app or device name is logged
   /// as a warning.
-  ///
-  /// Several requests it cannot choose between block the dialog: `enroll`
-  /// would refuse a new request while they are in the store.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
@@ -172,18 +163,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
           await _resume(app: widget.appName) ??
           await _resume();
     } catch (e) {
-      if (e is AtEnrollmentPendingException && e.severalMatched) {
-        if (mounted) {
-          setState(
-            () => _blocked =
-                'This device already has several requests to enroll '
-                "${widget.atSign} waiting for approval, and this screen can't "
-                'tell which one to wait for, or send another while they '
-                'wait. Have them approved or denied, then try again.',
-          );
-        }
-        return;
-      }
       // An unreadable store is reported when the request goes out.
       return;
     }
@@ -428,7 +407,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
 
   Future<void> _submitOtp() async {
     final otp = _otpController.text;
-    if (otp.length != 6 || _isLoading || _blocked != null) return;
+    if (otp.length != 6 || _isLoading) return;
 
     setState(() {
       _isLoading = true;
@@ -653,8 +632,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
                     '${_abandoning!.enrollmentId}: its keys are still in the '
                     'key store. Choose Cancel to try again.',
                   )
-                : _blocked != null
-                ? Text(_blocked!)
                 : _isLoading
                 ? Center(
                     child: Column(
