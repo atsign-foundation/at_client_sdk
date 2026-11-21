@@ -20,6 +20,11 @@ Feature: A keychain entry that does not parse says why, and none of its text
     When an app calls Atsign.open with KeychainAtKeysIo
     Then it throws AtKeysUnusableException, and no log record and no field of the exception holds any of the entry's text
 
+  Scenario: On Windows, opening with that entry held in segments logs and keeps none of its text
+    Given a Windows keychain header that parses, naming 2 segments that hold the same entry between them
+    When an app calls Atsign.open with KeychainAtKeysIo
+    Then it throws AtKeysUnusableException, each segment read is logged, and no log record and no field of the exception holds any of the entry's text
+
   Scenario: Adding keys to a keychain whose entry does not parse says why, and none of its text
     Given a keychain atKeys entry whose text is not JSON
     When an app adds keys for another atSign to the keychain

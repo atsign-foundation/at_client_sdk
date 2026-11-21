@@ -20,6 +20,11 @@ Feature: Activation refuses a keyfile it cannot read or write before it uses the
     When onboard is called with the CRAM secret
     Then it throws AtAuthenticationException saying where the keys must go, and sends nothing to the atServer
 
+  Scenario: Keys already in the store are refused, naming the store, before anything is sent
+    Given a keys store for @alice that already holds keys, a keyfile or a store whose writability check checks nothing
+    When the app activates @alice with its CRAM secret
+    Then it throws AtAuthenticationException saying @alice is already onboarded and naming the store, and sends nothing to the atServer
+
   Scenario: An absent keyfile still activates
     Given no atKeys file at the activation's path
     When the app activates the atSign with its CRAM secret

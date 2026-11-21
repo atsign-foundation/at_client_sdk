@@ -55,7 +55,7 @@ class AtKeysUnusableException extends AtException {
       {required String this.source, Object? error})
       : cause = AtKeysUnusableCause.absent,
         error = _withoutSource(error),
-        super('No keys for $atSign ${_where(source)}, so this device cannot '
+        super('No keys for $atSign ${whereKeysAre(source)}, so this device cannot '
             'authenticate as $atSign. Activate $atSign, enroll this device, '
             'or use the keyfile it already has.');
 
@@ -65,7 +65,7 @@ class AtKeysUnusableException extends AtException {
       {required String this.source, required Object error})
       : cause = AtKeysUnusableCause.unreadable,
         error = _withoutSource(error),
-        super('The keys for $atSign ${_where(source)} could not be read: '
+        super('The keys for $atSign ${whereKeysAre(source)} could not be read: '
             '${_reasonFor(error)}.');
 
   /// The keys in [source] for [atSign] were read, and resolving the keypair
@@ -74,7 +74,7 @@ class AtKeysUnusableException extends AtException {
       {required String this.source, required Object error})
       : cause = AtKeysUnusableCause.noAuthenticationKeypair,
         error = _withoutSource(error),
-        super('The keys for $atSign ${_where(source)} cannot be used to '
+        super('The keys for $atSign ${whereKeysAre(source)} cannot be used to '
             'authenticate: ${_reasonFor(error)}.');
 
   /// The keys in [source] record [recorded], an atSign other than [atSign].
@@ -82,7 +82,7 @@ class AtKeysUnusableException extends AtException {
       {required String this.source})
       : cause = AtKeysUnusableCause.anotherAtsign,
         error = null,
-        super('The keys ${_where(source)} are for '
+        super('The keys ${whereKeysAre(source)} are for '
             '${clipForMessage(recorded)}, not $atSign.');
 }
 
@@ -95,7 +95,9 @@ Object? _withoutSource(Object? error) =>
 
 /// [source] with the preposition a message puts before it: `in` before a
 /// name, which begins "the" or "this", and `at` before a path.
-String _where(String source) =>
+///
+/// Internal to at_auth: `package:at_auth/at_auth.dart` hides it.
+String whereKeysAre(String source) =>
     source.startsWith('the ') || source.startsWith('this ')
         ? 'in $source'
         : 'at $source';

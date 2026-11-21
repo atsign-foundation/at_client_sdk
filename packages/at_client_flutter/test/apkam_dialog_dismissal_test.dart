@@ -44,16 +44,19 @@ class _RecordedLogs implements LoggingHandler {
 }
 
 /// A request filed in a key store under [enrollmentId] by [app] on [device],
-/// which has not been decided.
+/// which has not been decided, for [namespaces], what the dialog asks for by
+/// default.
 MockPendingEnrollment filed(
   String enrollmentId, {
   required String app,
   required String device,
+  Map<String, String> namespaces = const {'*': 'rw'},
 }) {
   final request = MockPendingEnrollment();
   when(() => request.enrollmentId).thenReturn(enrollmentId);
   when(() => request.app).thenReturn(app);
   when(() => request.device).thenReturn(device);
+  when(() => request.namespaces).thenReturn(namespaces);
   when(() => request.progress).thenAnswer((_) => const Stream.empty());
   when(() => request.approved).thenReturn(false);
   return request;
@@ -603,6 +606,66 @@ void main() {
     expect(find.text('Cancel'), findsOneWidget);
     neverEnrolls();
     verifyNever(() => buzz.client(any(), storage: any(named: 'storage')));
+  });
+
+  /// The dialog's Activate button.
+  Finder activateButton() => find.descendant(
+    of: find.byType(ApkamActivationDialog),
+    matching: find.byType(ElevatedButton),
+  );
+
+  testWidgets('The enrollment dialog says it cannot go on when its store '
+      'holds several requests, none its own', (tester) async {
+    final phone = filed('enroll-phone', app: 'wavi', device: 'phone');
+    final tablet = filed('enroll-tablet', app: 'wavi', device: 'tablet');
+    holding([phone, tablet]);
+    await open(tester, appName: 'wavi', deviceName: 'laptop');
+
+    expect(
+      find.textContaining(
+        'This device already has several requests to enroll @alice waiting '
+        'for approval',
+      ),
+      findsOneWidget,
+    );
+    expect(activateButton(), findsNothing);
+    await tester.enterText(find.byType(EditableText), '123456');
+    await frames(tester);
+    neverEnrolls();
+    for (final request in [phone, tablet]) {
+      verifyNever(() => request.client(any(), storage: any(named: 'storage')));
+    }
+  });
+
+  testWidgets('The enrollment dialog does not wait on a request filed for '
+      'other namespaces', (tester) async {
+    final logs = _RecordedLogs()..installUntilTearDown();
+    final request = filed(
+      'enroll-1',
+      app: 'todos',
+      device: 'device',
+      namespaces: const {'todos': 'rw'},
+    );
+    holding([request]);
+    await open(tester, appName: 'todos2');
+
+    expect(
+      find.textContaining('filed for other namespaces than this app needs'),
+      findsOneWidget,
+    );
+    expect(find.text('Cancel'), findsNothing);
+    expect(activateButton(), findsNothing);
+    final warnings = [
+      for (final record in logs.records)
+        if (record.level == 'WARNING') record.message,
+    ];
+    expect(warnings, [
+      allOf(contains('"enroll-1"'), contains('other namespaces')),
+    ]);
+    await tester.enterText(find.byType(EditableText), '123456');
+    await frames(tester);
+    neverEnrolls();
+    verifyNever(() => request.client(any(), storage: any(named: 'storage')));
   });
 
   testWidgets('The enrollment dialog shows a recorded app name with its '

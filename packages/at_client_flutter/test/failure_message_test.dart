@@ -164,4 +164,23 @@ void main() {
       'Something went wrong with @alice: Unexpected end of input',
     );
   });
+
+  test("anything else shows its message's control and bidi characters "
+      'escaped, clipped to the message length', () {
+    // NOTE: built from code points, so this source holds no bidi character.
+    final rlo = String.fromCharCode(0x202e);
+    final esc = String.fromCharCode(0x1b);
+    final message = shown(Exception('a$esc[2Jb${rlo}c${'x' * 500}'));
+    const prefix = 'Something went wrong with @alice: ';
+
+    expect(message, startsWith('${prefix}a\\u001b[2Jb\\u202ec'));
+    expect(message, isNot(contains(esc)));
+    expect(message, isNot(contains(rlo)));
+    expect(message, endsWith('...'));
+    expect(
+      message.length,
+      lessThanOrEqualTo(prefix.length + maxMessageTextLength + '...'.length),
+      reason: 'the error text is clipped, not shown in full',
+    );
+  });
 }

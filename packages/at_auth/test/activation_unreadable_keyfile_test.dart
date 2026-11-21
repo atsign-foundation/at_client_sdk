@@ -549,6 +549,48 @@ void main() {
     });
   });
 
+  group(
+      'Keys already in the store are refused, naming the store, before '
+      'anything is sent', () {
+    AtKeys held() => AtKeys.legacy(
+          apkamPublicKey: randomBase64(64),
+          apkamPrivateKey: randomBase64(64),
+          apkamSymmetricKey: randomBase64(32),
+          encryptionPublicKey: randomBase64(64),
+          encryptionPrivateKey: randomBase64(64),
+          selfEncryptionKey: randomBase64(32),
+        );
+
+    test('a store whose writability check checks nothing', () async {
+      // NOTE: InMemoryAtKeysIo's checkWritable is the default no-op, so only
+      // the read refuses these keys.
+      final keys = InMemoryAtKeysIo.holding(atSign, held());
+
+      await expectLater(
+          activate(keys),
+          throwsA(isA<AtAuthenticationException>().having(
+              (e) => e.message,
+              'message',
+              'atSign: $atSign is already onboarded: its keys are in the '
+                  'keys store. Cannot perform onboarding again.')));
+      expectNothingSent();
+    });
+
+    test('a keyfile', () async {
+      final path = '${dir.path}/${atSign}_key.atKeys';
+      await writeKeyfile(path);
+
+      await expectLater(
+          activate(FileAtKeysIo(filePath: (_) => path)),
+          throwsA(isA<AtAuthenticationException>().having(
+              (e) => e.message,
+              'message',
+              'atSign: $atSign is already onboarded: its keys are at $path. '
+                  'Cannot perform onboarding again.')));
+      expectNothingSent();
+    });
+  });
+
   group('Activation refuses unusable keys with AtKeysUnusableException', () {
     const source = 'the test keys store';
 

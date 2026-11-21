@@ -100,14 +100,27 @@ void main() {
   /// A keychain whose store [holding] serves [entry], whose every other store
   /// is empty, and which records each store written to or deleted in
   /// [changed].
-  KeychainStorage keychainWith({required String holding}) {
+  ///
+  /// When [segmented], [holding] serves a Windows header over two segments
+  /// that hold [entry] between them, as a Windows keychain stores it.
+  KeychainStorage keychainWith({
+    required String holding,
+    bool segmented = false,
+  }) {
+    final held = segmented
+        ? {
+            holding: '{"segmentCount":2}',
+            '${holding}_segment_0': entry.substring(0, 20),
+            '${holding}_segment_1': entry.substring(20),
+          }
+        : {holding: entry};
     final biometricStorage = _MockBiometricStorage();
     when(
       () => biometricStorage.getStorage(any(), options: any(named: 'options')),
     ).thenAnswer((invocation) async {
       final file = _MockBiometricStorageFile();
       final name = invocation.positionalArguments.first as String;
-      when(file.read).thenAnswer((_) async => name == holding ? entry : null);
+      when(file.read).thenAnswer((_) async => held[name]);
       when(() => file.write(any())).thenAnswer((_) async => changed.add(name));
       when(file.delete).thenAnswer((_) async => changed.add(name));
       return file;
@@ -233,10 +246,10 @@ void main() {
     },
   );
 
-  /// Opens `@alice` with a keychain whose current store serves [entry], and
-  /// expects [AtKeysUnusableException], with no log record and no field of the
-  /// exception holding the entry's text.
-  Future<void> expectOpeningLogsAndKeepsNone() async {
+  /// Opens `@alice` with a keychain whose current store serves [entry], over
+  /// segments when [segmented], and expects [AtKeysUnusableException], with no
+  /// log record and no field of the exception holding the entry's text.
+  Future<void> expectOpeningLogsAndKeepsNone({bool segmented = false}) async {
     const atSign = '@alice';
     final dir = Directory.systemTemp.createTempSync('keychain_not_json_');
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -264,7 +277,10 @@ void main() {
     try {
       await Atsign(atSign).open(
         keys: KeychainAtKeysIo(
-          keychainStorage: keychainWith(holding: '@atsigns:test'),
+          keychainStorage: keychainWith(
+            holding: '@atsigns:test',
+            segmented: segmented,
+          ),
         ),
         preference: AtClientPreference()
           ..rootDomain = InternetAddress.loopbackIPv4.address
@@ -327,17 +343,19 @@ void main() {
       KeychainStorage.isWindows = true;
       addTearDown(() => KeychainStorage.isWindows = false);
 
-      await expectOpeningLogsAndKeepsNone();
+      // NOTE: a Windows keychain holds the entry in segments under a header
+      // that parses, so the segment reads and their logging run.
+      await expectOpeningLogsAndKeepsNone(segmented: true);
 
       expect(
         logs.records.where(
           (r) =>
               r.logger == 'KeychainStorage' &&
-              r.message.contains('READ: Fetched') &&
-              r.message.contains('from @atsigns:test'),
+              r.message.contains('READ: Fetched segment') &&
+              r.message.contains('from @atsigns:test_segment'),
         ),
-        isNotEmpty,
-        reason: 'the recorder hears the Windows read of the current store',
+        hasLength(2),
+        reason: 'the recorder hears each Windows segment read',
       );
     });
 

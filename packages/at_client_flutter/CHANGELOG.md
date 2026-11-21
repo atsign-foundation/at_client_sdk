@@ -2,6 +2,10 @@
 
 ## 2.1.0
 
+- fix: `ApkamActivationDialog` waits only on a request in its key store
+  filed for every namespace it asks for. A request filed for other
+  namespaces, or several it cannot choose between, is reported in place of
+  the Activate button, and no passcode is sent.
 - fix: `ApkamActivationDialog`'s resume status and adoption warning show the
   enrollment id and the names its key store records with their control
   characters escaped.
