@@ -1,7 +1,7 @@
 # atKeys on the atServer: a PRF-named blob
 
 * **Status:** Draft
-* **Last Updated:** 2026-11-04
+* **Last Updated:** 2026-11-20
 
 A short profile of [`design.md` section 8](design.md#8-the-browser), gate (a):
 the browser bootstraps from an atServer record named by the PRF, pointing to its
@@ -15,7 +15,9 @@ side and gate (c).
   the private record `atkeys.<enrollmentId>.a.__e`.
 * A device secret (passkey, Secure Enclave, TPM) feeds **one PRF call**. Two
   labelled HKDF outputs come from it: the bootstrap record's **recordId** and
-  the **kek** that wraps the envelope's data key.
+  the **kek** that wraps the envelope's data key. A passkey's derivation takes
+  an empty salt; a native source (Secure Enclave, TPM) takes the stored salt of
+  [`apkam-custody.md` section 4](apkam-custody.md#4-custody-tiers-and-the-ranking-rule).
 * Nothing the atServer returns is fed back into the PRF.
 
 ## Before → after
@@ -28,10 +30,18 @@ side and gate (c).
 ## Derivation
 
 ```text
-ikm      = PRF(device secret, "atkeys-prf-v1")     // one call, one prompt
-recordId = HKDF(ikm, salt = userHandle, info = "atkeys-record-id|<atSign>")
-kek      = HKDF(ikm, salt = userHandle, info = "atkeys-kek|<atSign>")
+ikm      = PRF(device secret, SHA-256("atsign:keys:lookup:v1"))  // one call, one prompt
+recordId = HKDF(ikm, salt = ∅, info = "at_auth/custody/record-id/v1|<atSign>")
+kek      = HKDF(ikm, salt = ∅, info = "at_auth/custody/kek/v1|<atSign>")
 ```
+
+This is the derivation the passkey code implements; its record, with the
+pointer namespace, the auth seed and test vectors, is
+[`atkeys-derivation.md`](../wasm/atkeys-derivation.md#derivation-and-record).
+A native hardware source derives with the same labels, but in place of `∅`
+takes the random 32-byte salt per enrollment that
+[`apkam-custody.md` section 4](apkam-custody.md#4-custody-tiers-and-the-ranking-rule)
+keeps in the device's keychain.
 
 * **Domain separation.** The two outputs differ only by label, so neither can
   be made equal to the other. The raw `ikm` never leaves the device.
@@ -39,10 +49,11 @@ kek      = HKDF(ikm, salt = userHandle, info = "atkeys-kek|<atSign>")
   request, and the `userHandle` arrives only in the response, so a
   `userHandle` input would need a second `get()` — and a second prompt —
   before anything could be derived. The input is a fixed constant instead,
-  and the `userHandle` returned by the same `get()` is the HKDF salt.
-* **No server-chosen input.** The HKDF salt is the passkey's `userHandle`
-  ([`apkam-custody.md` section 4](apkam-custody.md#4-custody-tiers-and-the-ranking-rule)),
-  held by the authenticator, not stored beside the blob.
+  and the `userHandle` takes no part in the derivation.
+* **No server-chosen input.** The passkey's HKDF takes an empty salt, so
+  nothing stored beside the blob or chosen by the atServer enters its
+  derivation. The PRF output already differs per passkey, so a salt would add
+  nothing. A native source's salt stays in the device's keychain.
 * **atSign-bound.** One device with two atSigns gets two unrelated recordIds.
   The `<atSign>` in each label is in canonical form, as `toAtsign()` returns it
   (lower-case, leading `@`, dots removed, e.g. `@colinconstable`).
@@ -88,7 +99,6 @@ cannot drift between two records:
 | Item | Created | Kept where |
 | --- | --- | --- |
 | **Device secret** | Once per device, at first setup | Authenticator / enclave / TPM; survives app-storage wipes |
-| **userHandle (HKDF salt)** | With the device secret | In the passkey (returned by a discoverable `get()`) or the keychain item |
 | **Data key + IV** | Every write | Data key wrapped by `kek` in the envelope; IV in clear |
 | **recordId**, **kek** | Re-derived at setup and restore | Memory only |
 
@@ -102,20 +112,20 @@ sequenceDiagram
     participant AS as atServer
 
     Note over S,AS: Setup: device has its atKeys and is authenticated
-    A->>S: create device secret + userHandle (first setup only)
+    A->>S: create device secret (first setup only)
     Note over S: secret never leaves
-    A->>S: PRF("atkeys-prf-v1")
-    S-->>A: ikm, userHandle (same get() returns both)
-    A->>A: recordId, kek = HKDF(ikm, salt = userHandle, two labels, atSign)
+    A->>S: PRF(SHA-256("atsign:keys:lookup:v1"))
+    S-->>A: ikm
+    A->>A: recordId, kek = HKDF(ikm, empty salt, two labels, atSign)
     A->>A: fresh data key, envelope v2 (AES-GCM, AAD = atSign, enrollmentId, v)
     A->>A: wrap data key with kek
     A->>AS: update public:_<recordId> = {"enrollmentId": "<id>"}
     A->>AS: update atkeys.<enrollmentId>.a.__e = envelope
 
     Note over S,AS: Restore: app restarts with nothing stored locally
-    A->>S: PRF("atkeys-prf-v1")
-    S-->>A: ikm, userHandle (same as setup)
-    A->>A: recordId, kek = HKDF(ikm, salt = userHandle, two labels, atSign)
+    A->>S: PRF(SHA-256("atsign:keys:lookup:v1"))
+    S-->>A: ikm (same as setup)
+    A->>A: recordId, kek = HKDF(ikm, empty salt, two labels, atSign)
     A->>AS: lookup public:_<recordId>
     AS-->>A: {"enrollmentId": "<id>"}
     Note over A: browser: APKAM key re-derived from the passkey (gate c)
@@ -195,9 +205,9 @@ only guard is that a put needs at least half the lock's ttl left on its lease.
 ## Decisions
 
 1. Replace local `.atKeys` files with an envelope v2 on the atServer.
-2. One PRF call, with a constant input (the `userHandle` arrives only in the
-   response, so it is the HKDF salt); recordId and kek are domain-separated
-   HKDF outputs bound to the atSign.
+2. One PRF call, with a constant input; recordId and kek are domain-separated
+   HKDF outputs, bound to the atSign by their info, with an empty salt for a
+   passkey and the stored per-enrollment salt for a native source.
 3. A fresh data key per write in the envelope; no server-stored PRF salt.
 4. The recordId hides the bootstrap record; confidentiality of the document
    in `atkeys.<enrollmentId>.a.__e` rests on PKAM authentication and the kek.
@@ -222,7 +232,7 @@ From an adversarial review of the first draft of this doc (33 findings).
 | recordId links atSigns; nothing binds the atSign | atSign in both labels and the AAD |
 | recordId reaches other apps through sync | `public:_` has no commit-log row |
 | recordId exposed on the wire | TLS, moving to PQ-TLS (the atServer and its logs still see it; see Open) |
-| Two prompts per cold start | One PRF call, with a constant input: the userHandle arrives only in the `get()` response, so using it as the PRF input would need a second `get()`; it is the HKDF salt instead |
+| Two prompts per cold start | One PRF call, with a constant input: the userHandle arrives only in the `get()` response, so using it as the PRF input would need a second `get()`; it takes no part in the derivation |
 | Key substitution on restore goes unnoticed | Check against published public keys after decrypting |
 | Whole keyfile, including APKAM keys, on the server | APKAM keys excluded |
 

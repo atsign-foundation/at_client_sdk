@@ -10,15 +10,14 @@ export 'src/passkey/at_server_at_keys_io.dart'
         AtServerAtKeysWriteException;
 export 'src/passkey/completion_due_record.dart' show CompletionDue;
 export 'src/passkey/enrollment_document_store.dart'
-    show EnrollmentDocumentStore, enrollmentDocumentKey;
+    show EnrollmentDocumentStore;
 export 'src/passkey/enrollment_gateway.dart'
     show Activator, ApkamKeyPair, AtAuthEnrollmentGateway, ClientOpener;
 export 'src/passkey/enrollment_pointer_store.dart'
     show
         EnrollmentPointerReader,
         EnrollmentPointerStore,
-        LookupEnrollmentPointerReader,
-        enrollmentPointerKey;
+        LookupEnrollmentPointerReader;
 export 'src/passkey/passkey_custody.dart'
     show
         EnrollmentGateway,
@@ -30,7 +29,5 @@ export 'src/passkey/passkey_custody.dart'
         PkamRefusedException,
         PublicKeyMismatchException,
         PublishedEncryptionKey,
-        StoragePersistence,
-        canonicalPasskeyAtSign;
+        StoragePersistence;
 export 'src/passkey/passkey_session.dart' show PasskeySession;
-export 'src/passkey/public_lookup.dart' show publicLookup;

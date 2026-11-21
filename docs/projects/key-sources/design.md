@@ -7,7 +7,9 @@ TPM, a systemd credential, a cloud KMS, the OS keychain, DPAPI, or a passkey.
 
 ## Status
 
-Draft, 2026-09-29. Nothing here is built, and none of it is ruled. The
+Draft, 2026-09-29. Of what this describes, only the browser passkey path is
+built, as [atkeys-derivation.md](../wasm/atkeys-derivation.md) records; the
+rest is neither built nor ruled. The
 measurements in [section 3](#3-measurements) were taken on 2026-09-28 and
 2026-09-29 with the probes in [`probes/`](probes/), and each one names the
 probe that reproduces it. Claims not yet measured are marked as such, and
@@ -380,8 +382,9 @@ The browser has to bootstrap before it holds a PKAM key, so the bootstrap
 needs a gate of its own. There are two, and they can be combined.
 
 The first is a record whose name is derived from the passkey, for example
-`public:_<HKDF(prf, salt, "atkeys-record-id|<atSign>")>`, domain-separated from
-the `HKDF(prf, salt, "atkeys-kek|<atSign>")` that wraps the document's data key.
+`public:_<HKDF(prf, ∅, "at_auth/custody/record-id/v1|<atSign>")>`, domain-separated from
+the `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")` that wraps the document's data key,
+each with an empty salt.
 The atSign in both labels keeps two atSigns on one device from sharing a record
 name or a kek; the `<atSign>` in each label is in canonical form, as `toAtsign()` returns it
 (lower-case, leading `@`, dots removed, e.g. `@colinconstable`).

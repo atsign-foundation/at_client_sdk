@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart';
+import 'package:at_auth/src/passkey/passkey_record.dart'
+    show PasskeyRecordCodec;
 import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:test/test.dart';
 

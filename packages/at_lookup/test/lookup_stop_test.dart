@@ -85,6 +85,30 @@ void main() {
           reason: 'a stop the owner asked for is not an error');
     });
 
+    test('fails a pkamAuthenticate in flight with StoppedException', () async {
+      final entered = Completer<void>();
+      final release = Completer<bool>();
+      final atLookup = build()
+        ..authenticator = (_) {
+          entered.complete();
+          return release.future;
+        };
+      final pending = atLookup.pkamAuthenticate();
+      await entered.future.timeout(const Duration(seconds: 2),
+          onTimeout: () => fail('the authenticator was never run'));
+
+      final stopping = atLookup.stop();
+
+      await expectLater(
+          pending.timeout(const Duration(seconds: 2),
+              onTimeout: () => fail('the PKAM in flight was never failed')),
+          throwsA(isA<StoppedException>()),
+          reason: 'the caller stopped the lookup while it authenticated, and '
+              'has to be able to tell that from a refused login');
+      await stopping;
+      release.complete(true);
+    });
+
     test('refuses every later call, and opens no connection', () async {
       final atLookup = build();
       await answered(atLookup, 'noop:0\n');
@@ -204,6 +228,14 @@ void main() {
       await expectLater(atLookup.notifications, emitsDone,
           reason: 'a stream read after stop() can never produce anything');
       await expectLater(atLookup.notificationConnectionUp, emitsDone);
+      expect(
+          await atLookup.notificationRefusals.toList().timeout(
+              const Duration(seconds: 5),
+              onTimeout: () =>
+                  fail('notificationRefusals read after stop() never ends')),
+          isEmpty,
+          reason: 'a refusals stream read after stop() can never produce '
+              'anything');
     });
   });
 

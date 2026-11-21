@@ -1,4 +1,3 @@
-import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:at_commons/at_builders.dart'
     show LLookupVerbBuilder, UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart'
@@ -34,7 +33,7 @@ void checkEnrollmentId(String enrollmentId) {
   }
 }
 
-/// The atProtocol key of an enrollment's document,
+/// The Atsign Protocol key of an enrollment's document,
 /// `atkeys.<enrollmentId>.a.__e@<atsign>` with the atSign canonical.
 ///
 /// Throws [ArgumentError] when [enrollmentId] is empty or holds a character
@@ -92,9 +91,13 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
       // A missing document is reported as null, not as an error.
       return null;
     }
-    if (response == null || !response.startsWith('data:')) {
-      throw InvalidResponseException(
-          'unexpected llookup response: ${clipForMessage('$response')}');
+    if (response == null) {
+      throw InvalidResponseException('no llookup response');
+    }
+    if (!response.startsWith('data:')) {
+      // NOTE: the reply may be the sealed document, so its text is never shown.
+      throw InvalidResponseException('unexpected llookup response of '
+          '${response.length} characters');
     }
     final text = response.substring('data:'.length).trim();
     return text == 'null' ? null : text;
@@ -102,9 +105,10 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
 
   @override
   Future<void> put(String atSign, String enrollmentId, String document) async {
-    if (document.contains('\n')) {
-      throw ArgumentError.value(
-          document, 'document', 'must not contain newlines');
+    if (document.contains('\n') || document.contains('\r')) {
+      // NOTE: the document is sealed key material, so the error never holds it.
+      throw ArgumentError(
+          'must not contain newlines or carriage returns', 'document');
     }
     final command = (UpdateVerbBuilder()
           ..omitMetadata = true

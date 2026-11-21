@@ -149,8 +149,7 @@ void main() {
           deriver: const BytesPasskeyKeyDeriver(),
           pointerReader: pointers,
           gateway: gateway(lookUps, root: root),
-          credentials: hints,
-          enrollmentIds: hints,
+          hints: hints,
           setupLock: FakeSetupLock(),
           setupLockPrefix: 'test:setup',
           retryDelay: Duration.zero);
