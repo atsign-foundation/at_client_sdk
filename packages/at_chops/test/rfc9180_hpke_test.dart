@@ -104,6 +104,7 @@ void main() {
       });
     }
 
+    /// Catalogue: features/at_chops/chacha20_poly1305_output.feature
     test('and re-encrypting reproduces the published ciphertext', () async {
       final e = encryptions.first;
       final ct = await const ChaCha20Poly1305Algo().encrypt(
