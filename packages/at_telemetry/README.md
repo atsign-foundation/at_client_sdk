@@ -124,6 +124,8 @@ dart pub add --dev skills
 dart run skills get
 ```
 
+The `skills` tool needs Dart 3.10 or later.
+
 ### Resource attributes
 
 The resource describes who sent the telemetry, and is the same for every
