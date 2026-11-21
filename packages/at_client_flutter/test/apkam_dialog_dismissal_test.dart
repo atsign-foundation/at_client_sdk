@@ -636,6 +636,23 @@ void main() {
     expect(warnings, [contains(r'by app "wa\u001bvi"')]);
   });
 
+  testWidgets("The enrollment dialog's adoption warning escapes a double "
+      'quote inside the recorded app name', (tester) async {
+    final logs = _RecordedLogs()..installUntilTearDown();
+    final request = filed('enroll-1', app: 'wa"vi', device: 'phone');
+    holding([request]);
+    stopEnds(clientAnswers(request), request);
+    await open(tester, appName: 'wavi', deviceName: 'phone');
+
+    final warnings = [
+      for (final record in logs.records)
+        if (record.level == 'WARNING') record.message,
+    ];
+    expect(warnings, [
+      contains(r'by app "wa\"vi"'),
+    ], reason: 'the filed app in double quotes, the quote inside it escaped');
+  });
+
   group('Given approval lands just as the dialog is dismissed', () {
     testWidgets('when pending.client() returns after the dismissal, then that '
         'client is stopped, so the next open of the atSign succeeds', (

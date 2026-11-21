@@ -36,6 +36,15 @@ Feature: An approver sees the names a request carries with their control charact
       | at_activate approve     |
       | at_activate auto-approve |
 
+  Scenario Outline: <command> escapes a double quote inside the app name it quotes
+    Given a pending enrollment request for @alice whose app name is wa"vi
+    When <command> handles that request
+    Then what it prints names the app as "wa\"vi"
+    Examples:
+      | command             |
+      | at_activate approve |
+      | at_activate auto    |
+
   Scenario: at_activate list clips a name longer than 180 characters
     Given @alice's atServer holding a pending enrollment request whose device name is 400 characters long
     When at_activate list runs for @alice

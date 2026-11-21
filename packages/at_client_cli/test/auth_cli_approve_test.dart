@@ -217,39 +217,55 @@ void main() {
     expect(out.text, isNot(contains('expires')));
   });
 
+  /// Runs `at_activate approve` over B, filed under [names], and hands back
+  /// what it printed.
+  Future<String> approvingB(Map<String, String> names) async {
+    serveB(request: names);
+    final args = AuthCliArgs()
+        .createApproveCommandParser()
+        .parse(['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', '^wa']);
+    final out = _CapturedStdout();
+    await IOOverrides.runZoned(() => auth_cli.approve(args, client),
+        stdout: () => out);
+    return out.text;
+  }
+
+  /// Runs `at_activate auto` as B, filed under [names], is announced, and
+  /// hands back what it printed.
+  Future<String> autoApprovingB(Map<String, String> names) async {
+    serveB();
+    final (out, _) = await autoApproveFrom([
+      AtNotification('n-1', '$b.new.enrollments.__manage@alice', '@alice',
+          '@alice', DateTime.now().millisecondsSinceEpoch, 'key', false)
+        ..value = jsonEncode(names)
+    ], untilDone: false);
+    return out.text;
+  }
+
   const filedNames = {'appName': 'wa\u001bvi', 'deviceName': 'pho\rne'};
 
-  for (final (command, run) in <(String, Future<String> Function())>[
-    (
-      'at_activate approve',
-      () async {
-        serveB(request: filedNames);
-        final args = AuthCliArgs().createApproveCommandParser().parse(
-            ['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', '^wa']);
-        final out = _CapturedStdout();
-        await IOOverrides.runZoned(() => auth_cli.approve(args, client),
-            stdout: () => out);
-        return out.text;
-      }
-    ),
-    (
-      'at_activate auto-approve',
-      () async {
-        serveB();
-        final (out, _) = await autoApproveFrom([
-          AtNotification('n-1', '$b.new.enrollments.__manage@alice', '@alice',
-              '@alice', DateTime.now().millisecondsSinceEpoch, 'key', false)
-            ..value = jsonEncode(filedNames)
-        ], untilDone: false);
-        return out.text;
-      }
-    ),
+  for (final (command, run) in [
+    ('at_activate approve', approvingB),
+    ('at_activate auto-approve', autoApprovingB),
   ]) {
     test(
         "$command names the request's app and device in double quotes, "
         'escaped', () async {
-      expect(await run(),
+      expect(await run(filedNames),
           allOf(contains(r'"wa\u001bvi"'), contains(r'"pho\u000dne"')));
+    }, timeout: const Timeout(Duration(seconds: 5)));
+  }
+
+  for (final (command, run) in [
+    ('at_activate approve', approvingB),
+    ('at_activate auto', autoApprovingB),
+  ]) {
+    test('$command escapes a double quote inside the app name it quotes',
+        () async {
+      expect(await run({'appName': 'wa"vi', 'deviceName': 'phone'}),
+          contains(r'"wa\"vi"'),
+          reason: 'the app name in double quotes, the quote inside it '
+              'escaped');
     }, timeout: const Timeout(Duration(seconds: 5)));
   }
 

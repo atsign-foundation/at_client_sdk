@@ -96,6 +96,11 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
     Then the warning it logs names the filed app as "wa\u001bvi", in double quotes
 
+  Scenario: The enrollment dialog's adoption warning escapes a double quote inside the recorded app name
+    Given a key store holding one pending enrollment <id> for @alice, filed by app wa"vi on device "phone"
+    When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
+    Then the warning it logs names the filed app as "wa\"vi"
+
   Scenario: PkamDialog resumes a pending keychain entry
     Given a keychain entry for an atSign holding only an enrollment awaiting approval
     When the user logs in with it through PkamDialog
