@@ -176,8 +176,8 @@ List<String> offTheLoopbackIn(String source, {String path = ''}) => [
                   _commandLineWithoutRoot(source,
                       bracketedAt(source, m.start + 1, open: '[', close: ']')))
             'at_activate ${m.group(1)} with no root at offset ${m.start}',
-        for (final m in RegExp(r'\bfromCommandLineArgs\s*\(\s*\[')
-            .allMatches(source))
+        for (final m
+            in RegExp(r'\bfromCommandLineArgs\s*\(\s*\[').allMatches(source))
           if (_commandLineWithoutRoot(
               source, bracketedAt(source, m.end, open: '[', close: ']')))
             'CLIBase.fromCommandLineArgs with no root at offset ${m.start}',
@@ -389,6 +389,17 @@ void main() {
         hasLength(37));
     expect(offTheLoopbackIn("for (final c in ['otp', 'list']) {}"), isEmpty,
         reason: 'a list of command names is no command line');
+    // auth_cli.dart wrappedMain returns at its `wasParsed(argNameHelp)` check,
+    // and onboard() at its `argNameVersion` check, before anything connects;
+    // a command whose parser has no --version fails to parse and returns 1.
+    for (final carved in [
+      "AtActivate.main(['onboard', '-a', '@alice', '--help'])",
+      "AtActivate.main(['otp', '-a', '@alice', '-h'])",
+      "AtActivate.main(['onboard', '-a', '@alice', '--version'])",
+    ]) {
+      expect(offTheLoopbackIn(carved), isEmpty,
+          reason: '$carved asks for help or the version, then stops');
+    }
     expect(
         offTheLoopbackIn(
             "expect(run.arguments, ['onboard', '-a', '@alice'], reason: r)"),
@@ -499,8 +510,7 @@ void main() {
     const forwarded = 'secureSocketLookUps()(atSign: a, rootDomain: r, '
         'authenticator: null, secondaryAddressFinder: secondaryAddressFinder)';
     expect(offTheLoopbackIn(forwarded, path: _rig), isEmpty);
-    expect(
-        offTheLoopbackIn(forwarded, path: 'test/a_test.dart'), hasLength(1));
+    expect(offTheLoopbackIn(forwarded, path: 'test/a_test.dart'), hasLength(1));
 
     const subclass = 'class _Real extends AtsignFlows { const _Real(); }';
     expect(offTheLoopbackIn(subclass, path: _loopbackFlows), isEmpty);
@@ -531,6 +541,7 @@ void main() {
     for (final reference in [
       "import 'samples/test_util.dart';",
       "export '../samples/remote_lookup.dart';",
+      "part 'samples/remote_lookup.dart';",
     ]) {
       expect(samplesOffencesIn('../at_client/test/a/a_test.dart', reference),
           hasLength(1),
@@ -565,6 +576,16 @@ void main() {
               authenticator: null),
           throwsA(isA<StateError>().having((e) => e.message, 'message',
               contains('proxy:root.atsign.org:64'))));
+    });
+
+    test(
+        'when the root is a proxy on the loopback interface, then it builds '
+        'one', () async {
+      final lookUp = loopbackLookUps()(
+          atSign: '@alice',
+          rootDomain: AtRootDomain('proxy:127.0.0.1', 1),
+          authenticator: null);
+      await lookUp.close();
     });
 
     test('when the root is on the loopback interface, then it builds one',
