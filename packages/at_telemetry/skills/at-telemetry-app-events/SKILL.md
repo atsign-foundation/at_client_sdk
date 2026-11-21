@@ -19,12 +19,12 @@ metadata:
 # App telemetry for the Atsign Control Center
 
 > **Audience:** an AI coding agent adding `at_telemetry` to an app whose
-> endpoints (one atSign each) are managed from the Atsign Control Center.
+> endpoints (one Atsign each) are managed from the Atsign Control Center.
 
 ## 1. Who reads this telemetry
 
 The **Control Center operator**. They run a fleet of endpoints: devices,
-services and user apps, one atSign each. They want to know two things:
+services and user apps, one Atsign each. They want to know two things:
 
 - what each endpoint is doing, in the app's own words: "lobby door unlocked
   for @front_desk"
@@ -82,12 +82,12 @@ Call `await telemetry.shutdown();` before the process exits, or the events
 still waiting in the current batch are lost.
 
 - `serviceName` is the app's stable name in snake_case, the same on every
-  endpoint that runs the app. It is **not** the atSign: the collector records
-  which atSign sent each batch by itself.
+  endpoint that runs the app. It is **not** the Atsign: the collector records
+  which Atsign sent each batch by itself.
 - `serviceVersion` is the app's version. The Control Center shows it next to
   the service name.
-- The collector atSign is chosen by the operator. Read it from configuration.
-- The endpoint's atSign must be registered with the operator's collector, or
+- The collector Atsign is chosen by the operator. Read it from configuration.
+- The endpoint's Atsign must be registered with the operator's collector, or
   its telemetry is dropped. That is set up on the Control Center side, not in
   the app.
 - `event` returns at once and never throws for a delivery problem. It **does**
@@ -191,7 +191,7 @@ Good: `acme_gate.door.unlocked`, `coldchain.sensor.calibrated`,
   with `atsign.`: that namespace belongs to Atsign, and the atServer's own
   events are `atsign.atserver.*`.
 - Lowercase, dot separated, snake_case inside a segment.
-- **Fixed strings only.** Never put an atSign, id, count or free text in a
+- **Fixed strings only.** Never put an Atsign, id, count or free text in a
   name. The Activity page lists events by name, and a name with a variable in
   it becomes thousands of one-off names. Variables go in attributes.
 - **Use `event`, never `log`.** A plain log has no name, so the Control Center
@@ -215,7 +215,7 @@ Without a severity, the Level column in the Control Center is blank.
   `acme_gate.door.id` as "Acme gate door ID", so names should still read well
   that way.
 - **Name the other endpoint.** Whenever an event involves another endpoint,
-  put that endpoint's atSign in an attribute whose name says its role:
+  put that endpoint's Atsign in an attribute whose name says its role:
   `acme_gate.command.from`, `coldchain.reading.hub`. Which endpoint talks to
   which is what operators care about most.
 - **Short scalar values:** strings under 64 characters, `int`, `bool`, finite
@@ -259,7 +259,7 @@ Rules:
 2. **Good kinds:** `device_fault`, `peer_unresponsive`, `command_rejected`,
    `config_invalid`, `storage_full`, `backlog_growing`, `overdue`.
    **Bad kinds:** `error`, `SocketException`, `AtTimeoutException`, anything
-   with an id or atSign in it.
+   with an id or Atsign in it.
 3. **Good message:** "@front_desk has not answered the last 3 door status
    updates. Check that the front desk app is running."
    **Bad message:** exception text, a stack trace, key names, or protocol
@@ -280,7 +280,7 @@ Rules:
    that stopped reading is the anomaly.
 8. **When an endpoint goes silent, its peer reports it.** A stopped app sends
    nothing, so the endpoint that expected to hear from it raises
-   `peer_unresponsive` or `overdue`, naming the silent endpoint's atSign.
+   `peer_unresponsive` or `overdue`, naming the silent endpoint's Atsign.
 
 ## 10. Never send
 
@@ -308,7 +308,7 @@ Not for the operator:
 - [ ] Every event name is a fixed `<app>.<thing>.<outcome>` string, not
       starting with `atsign.`
 - [ ] Every event sets a severity
-- [ ] Every event that involves another endpoint names its atSign
+- [ ] Every event that involves another endpoint names its Atsign
 - [ ] Events tied to a notification pass `notificationIds`
 - [ ] No event only restates that a message was sent, received or delivered
 - [ ] Every `error` and `fatal` event has `anomaly.kind` and

@@ -1,7 +1,7 @@
 # Worked example: acme_gate
 
 `acme_gate` runs on door controllers. Each controller is an endpoint with its
-own atSign. A front desk app (`@front_desk`) sends it unlock commands as
+own Atsign. A front desk app (`@front_desk`) sends it unlock commands as
 notifications, and the controller sends door status updates back, which the
 front desk answers.
 

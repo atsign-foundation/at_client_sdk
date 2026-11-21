@@ -3,7 +3,7 @@
 Telemetry for apps and atServers built on the Atsign Protocol. It holds the
 record model, the OTLP/JSON logs encoding, the request signature atServers use
 when they send telemetry over HTTPS, and a client that lets an app send its
-own telemetry to a collector atSign by notification.
+own telemetry to a collector Atsign by notification.
 
 This package is experimental. It stays below 1.0 while the contracts it
 defines are still settling, so expect breaking changes between minor
@@ -18,7 +18,7 @@ versions.
   model: an optional event name, a body, severity 1 to 24, timestamps,
   attributes, and a resource describing the sender.
 - `AtTelemetryNotificationExporter`, which batches records and sends each
-  batch as one notification to a collector atSign.
+  batch as one notification to a collector Atsign.
 - `AtTelemetryLogsCodec`, which encodes and decodes OTLP/JSON
   `ExportLogsServiceRequest` payloads. It is built directly from maps, with no
   protobuf dependency.
@@ -108,7 +108,7 @@ between endpoints, connections, authentication, enrollments and notification
 delivery, so an app sends only two kinds of record:
 
 - an `info` event when it finishes something a person or device asked for,
-  such as `acme_gate.door.unlocked`, naming the other endpoint's atSign and
+  such as `acme_gate.door.unlocked`, naming the other endpoint's Atsign and
   linking the notification it acted on
 - an `error` event with `anomaly.kind` and `anomaly.message` attributes when
   it cannot do its job and a person needs to act, sent once when the problem
@@ -162,7 +162,7 @@ If the app's atServer does not take a notification, or `notify` takes longer
 than 30 seconds, the batch stays in memory and goes again with the next
 flush. Past 100 waiting batches, the oldest is dropped with a warning. Once
 the app's atServer accepts a notification, that atServer retries delivery to
-the collector atSign itself.
+the collector Atsign itself.
 
 Every limit is a constructor parameter on the exporter.
 
@@ -232,7 +232,7 @@ logs request.
 
 An atServer signs each HTTPS request with an Ed25519 key that only it holds.
 The signature covers the method, path, content type, body digest, the
-collector it is meant for (the audience), the producer atSign, and a sequence
+collector it is meant for (the audience), the producer Atsign, and a sequence
 number.
 
 ```dart
