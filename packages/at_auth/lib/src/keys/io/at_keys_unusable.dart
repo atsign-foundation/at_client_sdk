@@ -55,7 +55,8 @@ class AtKeysUnusableException extends AtException {
       {required String this.source, Object? error})
       : cause = AtKeysUnusableCause.absent,
         error = _withoutSource(error),
-        super('No keys for $atSign ${whereKeysAre(source)}, so this device cannot '
+        super(
+            'No keys for $atSign ${whereKeysAre(source)}, so this device cannot '
             'authenticate as $atSign. Activate $atSign, enroll this device, '
             'or use the keyfile it already has.');
 

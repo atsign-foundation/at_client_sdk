@@ -98,8 +98,7 @@ class _ProbeFile implements File {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// A platform's refusal to read its keychain, as a plugin reports one.

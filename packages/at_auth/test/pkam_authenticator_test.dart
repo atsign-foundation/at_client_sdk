@@ -67,8 +67,10 @@ void main() {
           throwsA(isA<UnAuthenticatedException>().having(
               (e) => e.message,
               'message',
-              allOf(contains('pkam auth failed for $atSign'),
-                  contains('the atServer said no'), isNot(contains('\n')),
+              allOf(
+                  contains('pkam auth failed for $atSign'),
+                  contains('the atServer said no'),
+                  isNot(contains('\n')),
                   isNot(contains('#0'))))));
       final fine = logs.records.where((r) =>
           '${r.level.name}' == 'FINE' &&
