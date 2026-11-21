@@ -9,23 +9,25 @@
   none of the entry's text.
 - fix: on Windows, a keychain read logs the store name and the length of
   what it read, never the text.
-- fix: on Windows, a keychain entry whose header's segment count is missing,
-  not a whole number or out of range, legacy headers included, is refused as
+- fix: on Windows, reading a keychain entry whose header's segment count is
+  missing, not a whole number or out of range, legacy headers included, throws
   `AtKeysFormatException`.
 - fix: `KeychainStorage.removeAtsignFromKeychain` and
-  `appendAtKeysToKeychain` throw, writing nothing, when the keychain or its
-  legacy-named store cannot be read or written, or its entry is not a JSON
-  object; `deleteAllAtKeysData` clears a keychain whose entry does not parse.
+  `appendAtKeysToKeychain` throw, changing nothing, when they cannot read the
+  keychain (or its legacy-named store, when the keychain holds nothing under
+  its current name) or its entry is not a JSON object, and throw a write that
+  fails; `deleteAllAtKeysData` clears a keychain whose entry does not parse.
 - fix: on Windows, a keychain write of keys that fails partway is undone
   before it is thrown, so the keychain reads back as it did, unless undoing
-  it fails too, which is logged. Removing an Atsign leaves none of its keys
-  behind in the keychain.
+  it fails too, which is logged.
 - fix: on Windows, deleting the keychain deletes its entry's segments even
   when its header does not parse or a segment it names cannot be read, and
   rewriting it deletes the old header's segments that the new entry does not
-  reuse; each logs at severe any segment it cannot delete.
-- fix: reading the keychain throws when its legacy-named store cannot be
-  read, rather than reading as a keychain that holds no keys.
+  reuse; each stops at the first segment it cannot delete and logs that at
+  severe.
+- fix: reading the keychain throws when it holds nothing under its current
+  name and its legacy-named store cannot be read, rather than reading as a
+  keychain that holds no keys.
 - fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry is not
   JSON or not a JSON object, saying every Atsign stored there is affected.
 - chore: requires at_client 4.1.0 and at_auth 4.1.0.
@@ -38,8 +40,8 @@
   wrong with <atSign>: <message>", never a stack trace.
 - fix: `PkamDialog` tells the user in plain words to enroll the device again
   when its keys hold no credential, or only enrollments awaiting approval
-  that it cannot wait on, and says why when the device has asked more than
-  once.
+  that it cannot wait on, and, for a key store it can write, says why when
+  the device has asked more than once.
 - fix: `ApkamActivationDialog` resumes the request its key store already
   holds, even one filed under another device or app name, naming the app and
   device the request records when either differs.
