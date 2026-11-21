@@ -40,4 +40,4 @@ Feature: at_activate enroll resumes the request its keyfile already holds
   Scenario: enroll shows a recorded app or device name with its control characters escaped
     Given a keyfile holding a pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "pho<CR>ne"
     When at_activate enroll runs for @alice with app "buzz" on device "tablet" on that keyfile
-    Then it says "Resuming enrollment <id>, filed as wa\u001bvi on pho\u000dne", and nothing it prints holds an ESC or a carriage return
+    Then it says "Resuming enrollment <id>, filed as wa\u001bvi on pho\u000dne", and nothing it prints, apart from its own colour and line-redraw codes, holds an ESC or a carriage return
