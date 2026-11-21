@@ -286,7 +286,7 @@ void main() {
               atSign: atSign,
               rootDomain: rootDomain,
               authenticator: authenticator,
-              secondaryAddressFinder: secondaryAddressFinder ?? finder,
+              secondaryAddressFinder: finder,
             ),
         secondaryAddressFinder: finder,
       );

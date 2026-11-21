@@ -36,7 +36,7 @@ class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
   Future<SecondaryAddress> findSecondary(String atSign,
       {Duration? timeout}) async {
-    return SecondaryAddress('abcd', 123);
+    return SecondaryAddress('127.0.0.1', 123);
   }
 }
 
