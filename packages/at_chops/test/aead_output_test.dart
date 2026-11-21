@@ -28,7 +28,11 @@ void main() {
         reason: 'output buffer is not exactly the ciphertext and tag length');
   });
 
+  // Both directions: a shorter length misplaces the tag, and a longer one
+  // writes or reads past the end of a native buffer.
   for (final (String operation, String input, String output, int reported) in [
+    ('EVP_EncryptUpdate', 'plaintext', 'ciphertext', 59),
+    ('EVP_EncryptUpdate', 'plaintext', 'ciphertext', 61),
     ('EVP_DecryptUpdate', 'ciphertext', 'plaintext', 59),
     ('EVP_DecryptUpdate', 'ciphertext', 'plaintext', 61),
   ]) {

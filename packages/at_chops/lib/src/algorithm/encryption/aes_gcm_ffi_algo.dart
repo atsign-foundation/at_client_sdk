@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
-import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
@@ -139,31 +138,25 @@ final class AesGcm256FfiAlgo
       final Pointer<Uint8> outBuf = malloc<Uint8>(plainBufLen + tagLength);
       try {
         final int encLen;
-        final Pointer<Int32> outLen = calloc<Int32>();
+        final Pointer<Uint8> plainBuf = malloc<Uint8>(plainBufLen);
         try {
-          final Pointer<Uint8> plainBuf = malloc<Uint8>(plainBufLen);
-          try {
-            if (plainData.isNotEmpty) {
-              plainBuf.asTypedList(plainData.length).setAll(0, plainData);
-            }
-            if (_encryptUpdate(
-                    ctx, outBuf, outLen, plainBuf, plainData.length) <=
-                0) {
-              throw StateError('EVP_EncryptUpdate (plaintext) failed');
-            }
-            encLen = aesGcmCiphertextLength(outLen.value);
-          } finally {
-            // Wipe the plaintext copy from native heap before freeing.
-            plainBuf.asTypedList(plainBufLen).fillRange(0, plainBufLen, 0);
-            malloc.free(plainBuf);
+          if (plainData.isNotEmpty) {
+            plainBuf.asTypedList(plainData.length).setAll(0, plainData);
           }
+          // NOTE: the tag is written at outBuf + encLen, so encLen must equal
+          // the plaintext length.
+          encLen = aesGcmUpdate(
+              (Pointer<Int32> outLen) => _encryptUpdate(
+                  ctx, outBuf, outLen, plainBuf, plainData.length),
+              plainData.length,
+              operation: 'EVP_EncryptUpdate',
+              inputName: 'plaintext',
+              outputName: 'ciphertext');
         } finally {
-          calloc.free(outLen);
+          // Wipe the plaintext copy from native heap before freeing.
+          plainBuf.asTypedList(plainBufLen).fillRange(0, plainBufLen, 0);
+          malloc.free(plainBuf);
         }
-        // NOTE: the tag is written at outBuf + encLen, so encLen must equal the
-        // plaintext length.
-        checkOutputLength(encLen, plainData.length,
-            operation: 'EVP_EncryptUpdate', label: 'ciphertext');
 
         // 6. Finalise (GCM produces no extra output here, but required).
         final Pointer<Uint8> finalBuf = calloc<Uint8>(16);

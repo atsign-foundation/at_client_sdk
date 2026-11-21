@@ -3,7 +3,6 @@ import 'dart:ffi';
 import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
-import 'package:meta/meta.dart' show visibleForTesting;
 
 // ── OpenSSL EVP opaque types ─────────────────────────────────────────────────
 
@@ -276,18 +275,6 @@ int aesGcmUpdate(int Function(Pointer<Int32> outLen) update, int inputLength,
     calloc.free(outLen);
   }
 }
-
-/// The function behind [aesGcmCiphertextLength]; the identity by default.
-///
-/// Tests replace it to make the length `AesGcm256FfiAlgo.encrypt` works with
-/// differ from the plaintext length.
-@visibleForTesting
-int Function(int reported) aesGcmEncryptUpdateLength =
-    (int reported) => reported;
-
-/// The AES-256-GCM ciphertext length for the output length
-/// `EVP_EncryptUpdate` [reported].
-int aesGcmCiphertextLength(int reported) => aesGcmEncryptUpdateLength(reported);
 
 typedef EvpEncryptFinalExNative = Int32 Function(
     Pointer<EVP_CIPHER_CTX>, Pointer<Uint8>, Pointer<Int32>);

@@ -6,8 +6,6 @@ import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
-import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart'
-    show aesGcmEncryptUpdateLength;
 import 'package:cryptography/cryptography.dart';
 import 'package:cryptography/dart.dart';
 import 'package:test/test.dart';
@@ -77,38 +75,6 @@ void main() {
     expect(pureOut, expected,
         reason: "pure-Dart output is not the vector's ciphertext and tag");
   });
-
-  // A shorter length leaves the tag inside the output buffer; a longer one
-  // would write the tag past its end, so both directions must be refused.
-  for (final (String direction, int delta) in [('less', -1), ('more', 1)]) {
-    test(
-        'AES-256-GCM FFI encryption refuses a reported ciphertext length that differs from the plaintext length ($direction)',
-        () async {
-      final DynamicLibrary? lib = tryLoadLibCrypto();
-      if (lib == null) fail('libcrypto not available on this host');
-
-      final int Function(int) original = aesGcmEncryptUpdateLength;
-      addTearDown(() => aesGcmEncryptUpdateLength = original);
-      aesGcmEncryptUpdateLength = (int reported) => reported + delta;
-
-      final AESKey key =
-          AESKey(base64Encode(List<int>.generate(32, (int i) => i)));
-      final InitialisationVector iv = InitialisationVector(
-          Uint8List.fromList(List<int>.generate(12, (int i) => 0xa0 + i)));
-      final Uint8List plain =
-          Uint8List.fromList(List<int>.generate(60, (int i) => i));
-
-      await expectLater(
-          AesGcm256FfiAlgo.fromLib(lib, key).encrypt(plain, iv: iv),
-          throwsA(isA<StateError>().having(
-              (StateError e) => e.message,
-              'message',
-              'EVP_EncryptUpdate produced a ${60 + delta}-byte ciphertext, '
-                  'expected 60')),
-          reason: 'FFI encryption accepted a reported ciphertext length one '
-              'byte $direction than the plaintext length');
-    });
-  }
 }
 
 Uint8List _hex(String s) => Uint8List.fromList(List<int>.generate(s.length ~/ 2,
