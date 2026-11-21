@@ -65,7 +65,7 @@ void main() {
         atSign: '@unattempted',
         namespace: 'lifecycle',
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: await typedKeyfile('@unattempted', enrollmentId: 'primary'),
         storage: hiveStoreFor('@unattempted', await preference()));
@@ -80,7 +80,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         storage: hiveStoreFor(Atsign(atSign), await preference()));
 
@@ -100,7 +100,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUpAnswering(() async => true),
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -123,7 +123,7 @@ void main() {
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: revoked,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
@@ -147,7 +147,7 @@ void main() {
         () async => Atsign(atSign).open(
             keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
             preference: await preference(),
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: missing,
             storage: hiveStoreFor(Atsign(atSign), await preference())),
@@ -165,7 +165,7 @@ void main() {
     final first = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: lookUpAnswering(() async => true),
         storage: hiveStoreFor(Atsign(atSign), pref));
@@ -178,7 +178,7 @@ void main() {
     final second = await Atsign(atSign).open(
         keys: keys,
         preference: pref,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref),
         atLookUp: revoked,
         storage: hiveStoreFor(Atsign(atSign), pref));
@@ -201,7 +201,7 @@ void main() {
           atSign: atSign,
           namespace: 'lifecycle',
           preference: pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref),
           atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
           storage: hiveStoreFor(atSign, pref));
@@ -233,7 +233,7 @@ void main() {
       final client = await Atsign(atSign).open(
           keys: keys,
           preference: pref,
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref),
           atLookUp: revoked(atSign),
           storage: hiveStoreFor(Atsign(atSign), pref));
@@ -258,7 +258,7 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref),
               atLookUp: revoked(atSign),
               storage: hiveStoreFor(Atsign(atSign), pref)),
@@ -279,7 +279,7 @@ void main() {
           () async => Atsign(atSign).open(
               keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
               preference: pref,
-              lookUps: secureSocketLookUps(),
+              lookUps: loopbackLookUps(),
               secondaryAddressFinder: atDirectoryOf(pref),
               atLookUp: revoked(atSign),
               storage: hiveStoreFor(Atsign(atSign), pref)),
@@ -299,7 +299,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -328,7 +328,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -354,7 +354,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -383,7 +383,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp,
         storage: hiveStoreFor(Atsign(atSign), await preference()));
@@ -417,7 +417,7 @@ void main() {
         atSign: atSign,
         namespace: 'lifecycle',
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atKeysIo: await typedKeyfile(atSign, enrollmentId: 'primary'),
         atLookUp: lookUp,
@@ -437,7 +437,7 @@ void main() {
     final client = await Atsign(atSign).open(
         keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
         preference: await preference(),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUpAnswering(() async => true),
         serviceFactory: _NoSyncFactory(),

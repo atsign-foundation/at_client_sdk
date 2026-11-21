@@ -196,16 +196,12 @@ Feature: Onboarding writes the @keys before it deletes the CRAM secret
     When the app logs in to @alice🛠 with that passkey
     Then it gets a passkey session whose client is online as the onboarding's enrollment
 
-  Scenario: A login after an onboarding that stopped before deleting the CRAM secret deletes it
-    Given an Atsign whose passkey onboarding wrote its @keys document and pointer, but did not delete the CRAM secret
-    When the app logs in with that passkey
-    Then the login deletes the CRAM secret
-
-  Scenario: A login after an onboarding that stopped before publishing its encryption public key publishes it and deletes the CRAM secret
+  Scenario: A login after an onboarding that stopped before deleting the CRAM secret deletes it before it opens the client, and publishes the document's encryption public key
     Given an Atsign whose passkey onboarding wrote its @keys document and pointer, but published no encryption public key and did not delete the CRAM secret
     When the app logs in with that passkey
-    Then the login publishes the document's encryption public key
-    And it deletes the CRAM secret
+    Then the login deletes the CRAM secret before it opens the client
+    And it publishes the document's encryption public key
+    And it opens the onboarding's enrollment
 
   Scenario: A login that finds the completion due deletes the CRAM secret, then revokes the other enrollments, then publishes the key
     Given an onboarding of @alice🛠 was interrupted after its enrollment was approved

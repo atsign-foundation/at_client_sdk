@@ -1,5 +1,7 @@
 ## 4.1.0-rc.1
 
+- docs: the names of the passkey records on the atServer (the `atkeys.<enrollmentId>.a.__e` document, the `_<lookupHex>.<ns>` pointer, the `atkeys-lock.<enrollmentId>.a.__e` lock and the `completion-due.<enrollmentId>.a.__e` record) are promised from the first stable release, as at_auth's passkey HKDF labels and record layout are: after it they change only with a compatibility path.
+- fix: passkey errors show an unexpected atServer reply or a refused Atsign in quotes, with its control and format characters escaped, so each stays on one line. An unexpected reply to a read of the sealed `@keys` document is named by its length, not shown. A sealed record or document that holds a newline or a carriage return is refused without showing it.
 - fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (after the first, from the document it last read, with no atServer round trip), and never stores the private half in the `@keys` document, nor the public half as typed authentication material. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `close()` zeroes the private key and a read after it throws. A write still running at `close()` finishes whole; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its Atsign and type, and accepts only an Atsign with one leading `@` (`alice` and `left@right` are refused as invalid).
 - fix: the passkey vault's auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and stopping the passkey session zeroes what it can. The APKAM private key (an immutable `String` in the authenticator) and the `@keys` private keys stay in memory for the session and cannot be wiped in Dart.
 - fix: `AtServerAtKeysIo.update` builds on a fresh read of the stored document, not the copy read at login, so a second tab's update after another tab's write lands.
@@ -16,7 +18,7 @@
 - feat: `AtServerAtKeysIo.keepsAllOf` reports whether the stored document already holds everything the given keys hold.
 - fix: `AtServerAtKeysIo` throws `ArgumentError` when built with a `lockTtl` under a millisecond or over 15 minutes, or a `lockWait` that is not positive, instead of failing at its first write.
 - feat: an onboarding deletes the CRAM secret, then revokes every other approved enrollment of the Atsign, then publishes its encryption public key, so no enrollment approved before the CRAM secret was deleted survives, and a passkey from an interrupted attempt is refused as lost. A revoke that fails fails the onboarding without reporting the new passkey to the platform, and `open` then finishes it unless its enrollment has been revoked since. A revoke the atServer refuses (`AT0028`, `AT0029`, `AT0031` or `AT0032`, as for an enrollment that has expired, no longer exists, is no longer approved or is one it will not revoke) fails the onboarding only when another approved enrollment is still listed afterwards; any other failed revoke, such as a lost connection, a timeout or a paused or busy atServer, fails it at once.
-- fix: `PasskeyCustody.open` takes the saved hints only when it has both ids; one alone is treated as none. When the narrowed ceremony fails or the atServer refuses PKAM for the saved enrollment, it retries once as a device with no hints, under the setup lock, and a success replaces the saved ids. A cancelled ceremony cannot be told from a deleted passkey and is retried too. A store that is a `PasskeyHintStore` receives both ids in one write.
+- fix: `PasskeyCustody.open` takes the saved hints only when it has both ids; one alone is treated as none. When the narrowed ceremony fails or the atServer refuses PKAM for the saved enrollment, it retries once as a device with no hints, under the setup lock, and a success replaces the saved ids. A cancelled ceremony cannot be told from a deleted passkey and is retried too. Both ids are saved in one write.
 - fix: a passkey login reads the atServer's refusal of its PKAM in any form the atServer writes it, so AT0025, AT0027 and AT0028 whether or not the reply names the enrollment, AT0029, and a reply with no code report a lost passkey, at once on a device with no saved hints, and on a device with hints when a retry without them is refused too. Neither a failure before the `pkam:` is sent, such as an error answer to its `from:`, nor a proxy's error answer to the `from:` of a reconnect after the `pkam:` is a lost passkey, and each keeps the device's saved hints.
 - fix: the `from:` of a passkey login's PKAM, and of the PKAM that follows an onboarding's activation, names at_client as the SDK, with its version.
 - fix: a write of the passkey hints that fails with an `Exception` does not fail `PasskeyCustody.onboard` or `open`: it is logged as a warning naming the Atsign, and the next login saves the hints. A remembered credential id or enrollment id whose read fails with an `Exception`, or an enrollment id outside the enrollment id alphabet, counts as no hints and is never sent; an `Error` from either read still fails `open`.
@@ -31,8 +33,8 @@
   running, so one write waiting out another writer's lock still lands, though a
   write queued behind it may be refused;
   `AtClient.stop()` closes no key
-  store. `PasskeyCustody` takes a
-  `setupLockPrefix` for its per-atSign setup lock, and `PkamRefusedException`
+  store. `PasskeyCustody` takes one `PasskeyHintStore` for the device's saved
+  hints and a `setupLockPrefix` for its per-atSign setup lock, and `PkamRefusedException`
   says an approver can `enroll:unrevoke` a revoked enrollment.
   `AtServerAtKeysIo` keeps the sealed
   @keys document on the atServer: it creates the document, reads each write
@@ -50,6 +52,9 @@
   longer reads as a refusal: connecting reports offline carrying the error,
   a verb that meets it leaves the connection state as it was, a first open
   hands back its client, and `Atsign.authenticatesAs` throws the error.
+- fix: `Atsign.activate` over an `atLookUp` of your own that you stop while
+  it authenticates by PKAM throws `StoppedException`, not
+  `AtAuthenticationException`.
 - feat: a PKAM the atServer refuses with AT0028 reports the connection
   refused with cause `invalidEnrollment`, as AT0029 does, and
   `PendingEnrollment` removes an expired request's pending keys on either

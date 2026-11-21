@@ -126,8 +126,8 @@ jobs:
         run: dart test --concurrency=1
 
   # A bare `dart test` runs on the VM, so it skips the @TestOn('browser')
-  # files; at_client_wasm_browser runs the whole suite in Chrome.
-  unit_at_client_wasm:
+  # files; at_client_web_browser runs the whole suite in Chrome.
+  unit_at_client_web:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -135,7 +135,7 @@ jobs:
         dart-channel: [stable, beta]
     defaults:
       run:
-        working-directory: packages/at_client_wasm
+        working-directory: packages/at_client_web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -143,19 +143,19 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      - name: Install dependencies in at_client_wasm
+      - name: Install dependencies in at_client_web
         run: dart pub get
 
-      - name: Analyze project source in at_client_wasm
+      - name: Analyze project source in at_client_web
         run: dart analyze
 
-      - name: Check that at_client_wasm is correctly formatted
+      - name: Check that at_client_web is correctly formatted
         run: dart format . -o none --set-exit-if-changed
 
-      - name: Run at_client_wasm VM tests
+      - name: Run at_client_web VM tests
         run: dart test --concurrency=1
 
-  at_client_wasm_browser:
+  at_client_web_browser:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -176,16 +176,16 @@ jobs:
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
-      - name: Run at_client_wasm browser tests in Chrome (dart2js)
-        working-directory: packages/at_client_wasm
+      - name: Run at_client_web browser tests in Chrome (dart2js)
+        working-directory: packages/at_client_web
         env:
           AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
         run: |
           dart pub get
           dart test -p chrome --concurrency=1
 
-      - name: Run at_client_wasm browser tests in Chrome (dart2wasm)
-        working-directory: packages/at_client_wasm
+      - name: Run at_client_web browser tests in Chrome (dart2wasm)
+        working-directory: packages/at_client_web
         env:
           AT_VE_CERTS_DIR: ${{ github.workspace }}/at_server/tools/build_virtual_environment/ve_base/contents/atsign/secondary/base/certs
         run: dart test -p chrome -c dart2wasm --concurrency=1
