@@ -99,8 +99,8 @@ Decision (human):
 - `registrarUrl` is accepted when `Uri.https(registrarUrl, path)` accepts it,
   as 4.0.0 did, so hosts with `_`, IPv6 literals and IDN hosts keep working.
   It is refused with `ArgumentError` named `registrarUrl`, without echoing the
-  value, when `Uri.https` rejects it, when it carries user info, or when its
-  port is outside 1 to 65535.
+  value, when `Uri.https` rejects it, when it names no host, when it carries
+  user info, or when its port is outside 1 to 65535.
 - The super API key may contain 0x20 to 0x7E, the characters dart:io accepts
   in a header value. Anything else is refused with `ArgumentError` named
   `superApiKey`, without echoing the key. This replaces the control-character

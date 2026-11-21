@@ -122,9 +122,9 @@
   the registrar's `message`, the raw cramkey or the super key.
 - feat: the `RegistrarAdminService` constructor refuses a `registrarUrl`
   with an `ArgumentError` that never echoes the offending value, only when
-  `Uri.https` rejects it, it carries user info (a change from 4.0.0, which
-  sent a request to whichever host `Uri.https` picked out of it), or its
-  port is outside 1-65535. A `superApiKey` must be `0x20`-`0x7E`; any other
+  `Uri.https` rejects it, it names no host, it carries user info (a change
+  from 4.0.0, which sent a request to whichever host `Uri.https` picked out
+  of it), or its port is outside 1-65535. A `superApiKey` must be `0x20`-`0x7E`; any other
   byte, including a non-ASCII character, is refused with an `ArgumentError`
   naming `superApiKey`, which never echoes the key.
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth

@@ -104,16 +104,23 @@ void main() {
       );
     });
 
-    test('accepts an empty registrarUrl, as Uri.https does', () {
-      expect(
-        () => RegistrarAdminService(
-          registrarUrl: '',
-          superApiKey: _apiKey,
-          httpClient: _mockResponse({}),
-        ),
-        returnsNormally,
-      );
-    });
+    for (final noHost in ['', ':', ':443']) {
+      test(
+          'given registrarUrl "$noHost", which names no host, when the '
+          'service is constructed, then it throws ArgumentError naming '
+          'registrarUrl', () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: noHost,
+            superApiKey: _apiKey,
+            httpClient: _mockResponse({}),
+          ),
+          throwsA(
+            isA<ArgumentError>().having((e) => e.name, 'name', 'registrarUrl'),
+          ),
+        );
+      });
+    }
 
     test('throws ArgumentError naming registrarUrl when it carries a scheme',
         () {

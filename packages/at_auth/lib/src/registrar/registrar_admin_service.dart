@@ -99,7 +99,8 @@ class RegistrarAdminService {
   ///
   /// Throws [ArgumentError] if [superApiKey] contains a code unit outside
   /// `0x20`-`0x7E`, or if [registrarUrl] is not an authority [Uri.https]
-  /// accepts, carries user info, or has a port outside 1-65535.
+  /// accepts, names no host, carries user info, or has a port outside
+  /// 1-65535.
   RegistrarAdminService({
     required this.registrarUrl,
     required String superApiKey,
@@ -122,15 +123,18 @@ class RegistrarAdminService {
 
   static void _validateRegistrarUrl(String registrarUrl) {
     const invalidMessage =
-        'registrarUrl must be an authority Uri.https accepts, with no user '
-        'info and a port between 1 and 65535';
+        'registrarUrl must be an authority Uri.https accepts, with a host, no '
+        'user info and a port between 1 and 65535';
     final Uri uri;
     try {
       uri = Uri.https(registrarUrl, '/');
     } on FormatException {
       throw ArgumentError(invalidMessage, 'registrarUrl');
     }
-    if (uri.userInfo.isNotEmpty || uri.port < 1 || uri.port > 65535) {
+    if (uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.port < 1 ||
+        uri.port > 65535) {
       throw ArgumentError(invalidMessage, 'registrarUrl');
     }
   }
