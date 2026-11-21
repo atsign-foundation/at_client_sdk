@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:typed_data';
 
 import 'package:at_client_web/src/keys/indexeddb_store.dart';
 import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
@@ -37,7 +38,7 @@ void main() {
       late IndexedDbHintStore used;
       final result = await runClosingStore(open, (store) async {
         used = store;
-        await store.putEnrollmentId('@alice', 'e1');
+        await store.putHint('@alice', Uint8List.fromList([1]), 'e1');
         return 'done';
       });
 

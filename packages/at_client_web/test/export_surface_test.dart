@@ -56,39 +56,48 @@ void main() {
             multiLine: true)));
   });
 
-  test(
-      'exports the session the passkey entry points return and the lock '
-      'refusal they throw', () {
-    final barrel = File('lib/at_client_web_web.dart').readAsStringSync();
-    expect(
-        barrel,
-        matches(RegExp(
-            r"^export 'package:at_client/passkey\.dart'\s+show[^;]*"
-            r'\bAtServerAtKeysLockedException\b[^;]*\bPasskeySession\b',
-            multiLine: true)));
-  });
-
   test('no exported file carries a test seam', () {
     for (final MapEntry(:key, :value) in sources.entries) {
       expect(value, isNot(contains('visibleForTesting')), reason: key);
     }
   });
 
+  test('re-exports the core API and in-memory storage completely', () {
+    final barrel = File('lib/at_client_web_web.dart').readAsStringSync();
+    for (final library in ['at_client.dart', 'memory.dart']) {
+      expect(barrel, contains("export 'package:at_client/$library';\n"),
+          reason: 'package:at_client/$library is re-exported with no show '
+              'or hide');
+    }
+  });
+
   test(
-      'exports nothing the core libraries already export beyond the types '
-      'the passkey entry points name', () {
-    final reExport =
-        RegExp(r"^export 'package:at_(auth|client)/[^;]*;", multiLine: true);
+      'the barrel re-exports exactly the core API, in-memory storage, and the '
+      'session and exceptions of the passkey entry points, and no other '
+      'exported file re-exports a package', () {
+    final reExport = RegExp(r"^export 'package:[^;]*;", multiLine: true);
     final space = RegExp(r'\s+');
     for (final MapEntry(:key, :value) in sources.entries) {
-      final found =
-          reExport.allMatches(value).map((m) => m[0]!.replaceAll(space, ' '));
       expect(
-          found,
+          reExport.allMatches(value).map((m) => m[0]!.replaceAll(space, ' ')),
           key == 'at_client_web_web.dart'
               ? [
-                  "export 'package:at_client/passkey.dart' "
-                      'show AtServerAtKeysLockedException, PasskeySession;'
+                  "export 'package:at_auth/passkey.dart' show "
+                      'PasskeyCeremonyException, '
+                      'PasskeyRecordAuthenticationException, '
+                      'PrfUnavailableException, '
+                      'UnsupportedPasskeyRecordException;',
+                  "export 'package:at_client/at_client.dart';",
+                  "export 'package:at_client/memory.dart';",
+                  "export 'package:at_client/passkey.dart' show "
+                      'AtServerAtKeysLockedException, '
+                      'AtServerAtKeysWriteException, '
+                      'MissingAtKeysDocumentException, '
+                      'PasskeyLostException, '
+                      'PasskeyOnboardingIncompleteException, '
+                      'PasskeySession, '
+                      'PkamRefusedException, '
+                      'PublicKeyMismatchException;',
                 ]
               : isEmpty,
           reason: key);

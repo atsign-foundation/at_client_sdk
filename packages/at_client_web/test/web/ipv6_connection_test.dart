@@ -3,7 +3,6 @@ library;
 
 import 'dart:async';
 
-import 'package:at_client/at_client.dart';
 import 'package:at_client_web/at_client_web_web.dart';
 import 'package:at_lookup/at_lookup_web.dart';
 import 'package:test/test.dart';

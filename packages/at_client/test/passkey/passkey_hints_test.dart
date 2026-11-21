@@ -7,6 +7,8 @@ import 'package:at_chops/at_chops.dart' show AESKey;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart' show InMemoryAtClientStorage;
 import 'package:at_client/passkey.dart';
+import 'package:at_client/src/passkey/enrollment_pointer_store.dart'
+    show enrollmentPointerKey;
 import 'package:at_client/src/passkey/enrollment_gateway.dart'
     show withApkamKey;
 import 'package:at_lookup/at_lookup.dart';
@@ -73,7 +75,7 @@ void main() {
           lookUps: server.lookUps,
           secondaryAddressFinder: server.finder);
 
-  PasskeyCustody custody(LegacyHints hints) => PasskeyCustody(
+  PasskeyCustody custody(FakeHints hints) => PasskeyCustody(
       prf: PasskeyPrf(authenticator),
       deriver: const BytesPasskeyKeyDeriver(),
       pointerReader: LookupEnrollmentPointerReader(
@@ -88,15 +90,14 @@ void main() {
           device: 'browser',
           clientOpener: openClient,
           activator: activate),
-      credentials: hints,
-      enrollmentIds: hints,
+      hints: hints,
       retryDelay: Duration.zero,
       setupLock: FakeSetupLock(),
       setupLockPrefix: 'test:setup');
 
   /// Onboards [_atSign] with a new passkey, remembering it in [hints], and
   /// stops the session; returns the new enrollment's id.
-  Future<String> onboarded(LegacyHints hints) async {
+  Future<String> onboarded(FakeHints hints) async {
     final session = await custody(hints).onboard(atSign: _atSign, cram: _cram);
     final enrollmentId = session.client.enrollmentId!;
     await session.stop();
@@ -196,7 +197,7 @@ void main() {
       'An onboarding whose passkey hints cannot be written returns its session',
       () async {
     final device = FakeHints()
-      ..failPairWrites = true
+      ..failWrites = true
       ..writeFailure = HintStoreException('quota exceeded writing $_eid');
 
     final session =

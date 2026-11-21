@@ -121,9 +121,9 @@ List<int> _aad(String atSign, String typ, Uint8List iv) =>
               } &&
               Map(length: 6)
           when PasskeyRecordType.values.any((t) => t.name == typ) =>
-        (typ: typ, iv: _b64(iv), ct: _b64(ct)),
+        (typ: typ, iv: _b64('iv', iv), ct: _b64('ct', ct)),
       {'v': final v} when v != _v => throw UnsupportedPasskeyRecordException(
-          'unknown version ${clipForMessage('$v')}'),
+          'unknown version "${clipForMessage('$v', quote: '"')}"'),
       _ => throw UnsupportedPasskeyRecordException(
           'unknown alg/kdf or malformed record'),
     };
@@ -136,11 +136,12 @@ Object? _json(String text) {
   }
 }
 
-Uint8List _b64(String value) {
+/// [value], the record's [field], decoded. The refusal names the field and
+/// never quotes the value: `iv` and `ct` are the sealed key document.
+Uint8List _b64(String field, String value) {
   try {
     return base64Decode(value);
   } on FormatException {
-    throw UnsupportedPasskeyRecordException(
-        'not base64: ${clipForMessage(value)}');
+    throw UnsupportedPasskeyRecordException('$field is not base64');
   }
 }
