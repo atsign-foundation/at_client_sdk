@@ -84,7 +84,7 @@ Consequences:
 
 Context: each review round on #2469 found another guard that no test pinned,
 because each fix-up covered only the findings listed. Open at the time: a super
-API key with DEL or a non-ASCII character still fails late and is reported as
+API key with a non-ASCII character still fails late and is reported as
 `RegistrarFailure.network`; two port guards each mask the other; the `?? []`
 defaults for missing delete-flow lists are untested; a cancellation that never
 completes holds up the timeout and size-cap failures; `registrarUrl` refuses

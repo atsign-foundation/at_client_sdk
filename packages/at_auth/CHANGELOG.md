@@ -105,13 +105,12 @@
 - feat: `RegistrarAdminService` requests the registrar over an abortable,
   non-redirect-following `http` request bounded by a `requestTimeout`
   (default 30s; zero or less is refused with an `ArgumentError`), and caps
-  its response body at 64 KiB, enforced before a
-  chunk is buffered rather than after. Both apply to `registerAtsign` and
-  the `/manage-atsigns/` delete methods alike; a timed-out or over-cap
-  request's body stream and underlying connection are torn down rather than
-  drained, including when the stream itself errors, a late response arrives
-  after the timeout already fired, or a `.cancel()`'s `onCancel` throws
-  (requires `http: ^1.5.0`).
+  its response body at 64 KiB, enforced before a chunk is buffered rather
+  than after. Both apply to `registerAtsign` and the `/manage-atsigns/`
+  delete methods alike; a timed-out or over-cap request's body stream and
+  underlying connection are torn down rather than drained, including when the
+  stream itself errors, a late response arrives after the timeout already
+  fired, or a `.cancel()`'s `onCancel` throws (requires `http: ^1.5.0`).
 - feat: `RegistrarException` carries `endpoint`, `statusCode` and a `reason`
   (`RegistrarFailure`), thrown consistently by every `RegistrarAdminService`
   call — `registerAtsign` and both delete methods — including on a rejected
@@ -126,11 +125,10 @@
   `Uri.https` rejects it, it names no host or one of only whitespace and
   dots, it carries user info (a change from 4.0.0, which sent a request to
   whichever host `Uri.https` picked out of it), or its port is outside
-  1-65535. A `superApiKey` must be
-  `0x20`-`0x7E`; any other byte, including a tab, DEL or a non-ASCII
-  character, is refused with an `ArgumentError` naming `superApiKey`, which
-  never echoes the key (a key holding a tab or DEL is a change from 4.0.0,
-  which sent it).
+  1-65535. A `superApiKey` must be `0x20`-`0x7E`; any other byte, including
+  a tab, DEL or a non-ASCII character, is refused with an `ArgumentError`
+  naming `superApiKey`, which never echoes the key (a key holding a tab or
+  DEL is a change from 4.0.0, which sent it).
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
   5.0.0.
 - feat: `package:at_auth/at_registrar.dart`, a library exporting
