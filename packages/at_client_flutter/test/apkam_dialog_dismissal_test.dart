@@ -559,6 +559,29 @@ void main() {
     ], reason: 'the adopted request\'s approval opens the client here');
   });
 
+  group('Given a store whose pending enrollment records no app and no '
+      'device', () {
+    testWidgets('when the enrollment dialog opens @alice for app wavi, then '
+        'it resumes that enrollment saying nothing of names', (tester) async {
+      final logs = _RecordedLogs()..installUntilTearDown();
+      final request = filed('enroll-1', app: '', device: '');
+      holding([request]);
+      stopEnds(clientAnswers(request), request);
+      await open(tester, appName: 'wavi', deviceName: 'phone');
+
+      expect(find.text('Resuming enrollment enroll-1..'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      neverEnrolls();
+      final warnings = [
+        for (final record in logs.records)
+          if (record.level == 'WARNING') record.message,
+      ];
+      expect(warnings, [
+        'Adopting enrollment enroll-1 of @alice for app wavi',
+      ], reason: 'one warning, naming the request and this app alone');
+    });
+  });
+
   testWidgets('The enrollment dialog waits on its own request when its store '
       'holds several', (tester) async {
     final phone = filed('enroll-phone', app: 'app', device: 'phone');

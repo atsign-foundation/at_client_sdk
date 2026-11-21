@@ -166,17 +166,21 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     if (pending == null || !mounted) return;
     final adopted = pending.app != widget.appName;
     if (adopted) {
+      final filedBy =
+          '${pending.app.isEmpty ? '' : ' by app ${pending.app}'}'
+          '${pending.device.isEmpty ? '' : ' on device ${pending.device}'}';
       _logger.warning(
-        'Adopting enrollment ${pending.enrollmentId} of ${widget.atSign}, '
-        'filed by app ${pending.app} on device ${pending.device}, for app '
+        'Adopting enrollment ${pending.enrollmentId} of ${widget.atSign}'
+        '${filedBy.isEmpty ? '' : ', filed$filedBy,'} for app '
         '${widget.appName}',
       );
     }
+    final filedAs = adopted && pending.app.isNotEmpty
+        ? ', filed as ${pending.app}'
+        : '';
     setState(() {
       _isLoading = true;
-      _status =
-          'Resuming enrollment ${pending!.enrollmentId}'
-          '${adopted ? ', filed as ${pending.app}' : ''}..';
+      _status = 'Resuming enrollment ${pending!.enrollmentId}$filedAs..';
     });
     await _awaitAndOpen(pending);
   }

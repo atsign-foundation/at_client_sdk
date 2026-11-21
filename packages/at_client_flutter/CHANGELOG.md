@@ -41,7 +41,7 @@
   once.
 - fix: `ApkamActivationDialog` resumes the request its key store already
   holds, even one filed under another device or app name, naming the old app
-  name when it differs.
+  name when it differs and the request records one.
 
 ## 2.0.0
 

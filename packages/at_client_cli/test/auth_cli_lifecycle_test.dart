@@ -340,6 +340,61 @@ void main() {
           reason: 'the approval of the request it waited on opens the client');
       await client.stop();
     });
+
+    group(
+        'Given a keyfile whose pending enrollment records no app and no '
+        'device', () {
+      test(
+          'when at_activate enroll runs, then it resumes that enrollment '
+          'saying nothing of names', () async {
+        final wrapped = <String>[];
+        final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+        final keyfile = FileAtKeysIo(filePath: (_) => keysPath);
+        final pref = await preference();
+        final filing = atServer(
+            decide: (_) async => throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+                errorCode: 'AT0026'),
+            wrapped: wrapped);
+        await Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'buzz',
+            device: 'phone',
+            namespaces: {'buzz': 'rw'},
+            keys: keyfile,
+            preference: pref,
+            atLookUp: filing.lookUp,
+            lookUps: settingsFor(pref, keysPath).lookUps,
+            secondaryAddressFinder:
+                settingsFor(pref, keysPath).secondaryAddressFinder);
+        final json = (await keyfile.read(atSign)).toJson();
+        for (final entry in json['enrollments'] as List) {
+          (entry as Map)
+            ..remove('appName')
+            ..remove('deviceName');
+        }
+        File(keysPath).deleteSync();
+        await keyfile.write(atSign, AtKeys.fromJson(json));
+        final info = (await keyfile.read(atSign)).enrollmentInfo(enrollmentId);
+        expect((info?.appName, info?.deviceName), (null, null),
+            reason: 'the control: the keyfile records neither name');
+        final second = atServer(decide: (_) async => true, wrapped: wrapped);
+        final err = _Captured();
+
+        final client = await IOOverrides.runZoned(
+            () => enrol(pref, keysPath, second.lookUp),
+            stderr: () => err);
+
+        expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+            reason: 'the wait resumed from the keyfile; no second request');
+        expect(
+            err.text,
+            allOf(contains('Resuming enrollment $enrollmentId\n'),
+                isNot(contains('filed')), isNot(contains('submitted'))));
+        expect(client.enrollmentId, enrollmentId);
+        await client.stop();
+      });
+    });
   });
 }
 
