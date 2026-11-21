@@ -711,17 +711,18 @@ final AtClient atClient =
 - **`CLIBase` tells a refusal from an outage.** Opening the client, it
   throws `AtCredentialRefusedException` when the atServer refuses the keys,
   `SecondaryNotFoundException` when the atDirectory has no atServer for the
-  atSign, and `SecondaryServerConnectivityException` only when no atServer
+  Atsign, and `SecondaryServerConnectivityException` only when no atServer
   accepted or refused the keys: an outage, or an atServer that answers with
   a server error such as AT0011 or no challenge to sign. That is the one
   exception a retry loop around opening should catch. A keyfile holding only
   an enrollment request is resumed: `CLIBase` waits for its approval, as
-  at_activate does, and throws `AtEnrollmentDeniedException` when it is denied and
-  `AtEnrollmentExpiredException` when it expires, each an
-  `AtEnrollmentException`; both remove the request. A wait the atServer keeps answering with anything else, a server
-  error included, also ends in `AtEnrollmentException` and keeps the
-  request, and an atServer not reached ends it with the connection's own
-  failure.
+  at_activate does, and throws `AtEnrollmentDeniedException` when it is
+  denied and `AtEnrollmentExpiredException` when it expires (both at_client
+  4.1.0; 4.0 throws a plain `AtEnrollmentException` for each), each an
+  `AtEnrollmentException`; both remove the request. A wait the atServer
+  keeps answering with anything else, a server error included, also ends in
+  `AtEnrollmentException` and keeps the request, and an atServer not
+  reached ends it with the connection's own failure.
 - **Every process needs its own storage** (`CliKeys.storageFor(atSign,
   program:, path:)`, a `HiveAtClientStorage(atSign:, storagePath:)`, or
   `CLIBase`'s `-s` flag) — one store is held by one live client and a second
