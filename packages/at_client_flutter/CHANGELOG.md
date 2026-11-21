@@ -7,8 +7,9 @@
   characters escaped.
 - fix: `EnrollmentRequestCard`, `AuthorisationFeedbackOverlay` and the
   approved enrollments in `EnrollmentRequestList` show a request's app and
-  device names, and the key an Anchored verdict names, with their control
-  and format characters escaped, each clipped at 180 characters.
+  device names, the card its namespaces, and the key an Anchored verdict
+  names, with their control and format characters escaped, each clipped at 180
+  characters.
 - feat: `package:at_client_flutter/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - fix: a keychain entry that is not valid JSON is reported as

@@ -78,6 +78,7 @@ Feature: An approver sees the names a request carries with their control charact
       | widget                         | field                  |
       | enrollment request card        | app name               |
       | enrollment request card        | device name            |
+      | enrollment request card        | namespace              |
       | authorisation feedback overlay | app name               |
       | authorisation feedback overlay | device name            |
       | approved enrollments list      | app name               |

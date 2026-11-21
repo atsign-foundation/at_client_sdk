@@ -992,6 +992,19 @@ void main() {
           (tester) => showCard(tester, requestFrom('buzz', 'pho\u202ene')),
         ),
         (
+          'enrollment request card',
+          'namespace',
+          'wa${escape}vi',
+          (tester) async {
+            await showCard(
+              tester,
+              requestFrom('buzz', 'pixel')..namespace = {'wa\u202evi': 'rw'},
+            );
+            await tester.tap(find.text('More details'));
+            await tester.pump();
+          },
+        ),
+        (
           'authorisation feedback overlay',
           'app name',
           'wa${escape}vi',
