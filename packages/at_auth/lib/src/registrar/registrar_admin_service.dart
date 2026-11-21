@@ -93,8 +93,16 @@ class RegistrarAdminService {
   /// [RegistrarFailure.timeout].
   final Duration requestTimeout;
 
-  late final http.Client _http;
+  final http.Client? _httpClient;
 
+  /// Creates the client for one request when none was given, in the zone the
+  /// service was built in.
+  final http.Client Function() _newHttpClient =
+      Zone.current.bindCallback(http.Client.new);
+
+  /// A request without an [httpClient] uses a client of its own, closed when
+  /// the request ends; an [httpClient] that is given is never closed.
+  ///
   /// Throws [AtException] if [superApiKey] is empty or all whitespace.
   ///
   /// Throws [ArgumentError] if [superApiKey] contains a code unit outside
@@ -107,7 +115,8 @@ class RegistrarAdminService {
     required String superApiKey,
     this.requestTimeout = const Duration(seconds: 30),
     http.Client? httpClient,
-  }) : _superApiKey = superApiKey {
+  })  : _superApiKey = superApiKey,
+        _httpClient = httpClient {
     if (_superApiKey.trim().isEmpty) {
       throw AtException(
           'Registrar super API key is required and cannot be empty.');
@@ -123,7 +132,6 @@ class RegistrarAdminService {
       throw ArgumentError.value(
           requestTimeout, 'requestTimeout', 'must be positive');
     }
-    _http = httpClient ?? http.Client();
   }
 
   static void _validateRegistrarUrl(String registrarUrl) {
@@ -179,9 +187,10 @@ class RegistrarAdminService {
       ..sink.add(requestBody);
     unawaited(request.sink.close());
 
+    final client = _httpClient ?? _newHttpClient();
     try {
       return await _sendAndReadResponse(
-              endpoint, request, cancelToken, abortTrigger)
+              client, endpoint, request, cancelToken, abortTrigger)
           .timeout(requestTimeout);
     } on TimeoutException {
       if (!abortTrigger.isCompleted) abortTrigger.complete();
@@ -200,16 +209,19 @@ class RegistrarAdminService {
         endpoint: endpoint.path,
         reason: RegistrarFailure.network,
       );
+    } finally {
+      if (_httpClient == null) client.close();
     }
   }
 
   Future<http.Response> _sendAndReadResponse(
+    http.Client client,
     RegistrarApiEndpoint endpoint,
     http.AbortableStreamedRequest request,
     _ReadCancelToken cancelToken,
     Completer<void> abortTrigger,
   ) async {
-    final streamed = await _http.send(request);
+    final streamed = await client.send(request);
 
     final requestAlreadyTimedOut = abortTrigger.isCompleted;
     if (requestAlreadyTimedOut) {

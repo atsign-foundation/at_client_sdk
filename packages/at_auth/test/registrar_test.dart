@@ -56,6 +56,24 @@ RegistrarAdminService _makeAdminService(MockClient client) =>
 MockClient _mockResponse(Object body, {int status = 200}) =>
     MockClient((_) async => http.Response(jsonEncode(body), status));
 
+/// An [http.Client] that forwards to [_inner], counts its [close] calls and,
+/// like a real client, refuses to send once closed.
+class _CloseCountingClient extends http.BaseClient {
+  final http.Client _inner;
+  int closeCount = 0;
+
+  _CloseCountingClient(this._inner);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    if (closeCount > 0) throw http.ClientException('closed', request.url);
+    return _inner.send(request);
+  }
+
+  @override
+  void close() => closeCount++;
+}
+
 void main() {
   group('constructor validation', () {
     test('throws when apiKey is empty', () {
@@ -1054,6 +1072,74 @@ void main() {
       final service = _makeAdminService(_mockResponse({}));
       // ignore: deprecated_member_use_from_same_package
       expect(service.superApiKey, equals(_apiKey));
+    });
+
+    for (final status in [200, 401]) {
+      test(
+          'given no httpClient, when two calls end with status $status, then '
+          'each closes the client it was given', () async {
+        final created = <_CloseCountingClient>[];
+        await http.runWithClient(() async {
+          final service = RegistrarAdminService(
+              registrarUrl: _registrarUrl, superApiKey: _apiKey);
+          for (var call = 0; call < 2; call++) {
+            await service
+                .registerAtsign(atsign: '@alice'.toAtsign())
+                .then((_) {}, onError: (Object _) {});
+          }
+        }, () {
+          final client = _CloseCountingClient(_mockResponse(
+              {'status': 'success', 'cramkey': '@alice:K'},
+              status: status));
+          created.add(client);
+          return client;
+        });
+        expect(created.map((c) => c.closeCount), equals([1, 1]),
+            reason: 'each call must close the client it used, once');
+      });
+    }
+
+    test('given an httpClient, when two calls end, then it is never closed',
+        () async {
+      final client = _CloseCountingClient(
+          _mockResponse({'status': 'success', 'cramkey': '@alice:K'}));
+      final service = RegistrarAdminService(
+          registrarUrl: _registrarUrl,
+          superApiKey: _apiKey,
+          httpClient: client);
+      for (var call = 0; call < 2; call++) {
+        await service.registerAtsign(atsign: '@alice'.toAtsign());
+        expect(client.closeCount, equals(0),
+            reason: 'a client the caller passed in is the caller\'s to close');
+      }
+    });
+
+    test(
+        'given no httpClient and a service built inside runWithClient, when '
+        'it is called inside another, then it uses the client of the zone it '
+        'was built in', () async {
+      var buildZoneSends = 0;
+      var callZoneSends = 0;
+      final service = http.runWithClient(
+        () => RegistrarAdminService(
+            registrarUrl: _registrarUrl, superApiKey: _apiKey),
+        () => MockClient((_) async {
+          buildZoneSends++;
+          return http.Response(
+              jsonEncode({'status': 'success', 'cramkey': '@alice:K'}), 200);
+        }),
+      );
+      await http.runWithClient(
+        () => service
+            .registerAtsign(atsign: '@alice'.toAtsign())
+            .then((_) {}, onError: (Object _) {}),
+        () => MockClient((_) async {
+          callZoneSends++;
+          return http.Response('', 500);
+        }),
+      );
+      expect((buildZoneSends, callZoneSends), equals((1, 0)),
+          reason: 'the client comes from the zone the service was built in');
     });
 
     test(

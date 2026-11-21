@@ -111,6 +111,9 @@
   underlying connection are torn down rather than drained, including when the
   stream itself errors, a late response arrives after the timeout already
   fired, or a `.cancel()`'s `onCancel` throws (requires `http: ^1.5.0`).
+- fix: a `RegistrarAdminService` built without an `httpClient` closes the
+  client it opens for each call once the call ends, so no idle registrar
+  connection outlives it; a client passed as `httpClient` is never closed.
 - feat: `RegistrarException` carries `endpoint`, `statusCode` and a `reason`
   (`RegistrarFailure`), thrown consistently by every `RegistrarAdminService`
   call — `registerAtsign` and both delete methods — including on a rejected
