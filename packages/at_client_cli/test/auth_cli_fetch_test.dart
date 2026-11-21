@@ -9,6 +9,8 @@ import 'package:at_client_cli/src/commands/auth_cli_args.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'lifecycle_rig.dart' show aliceOnLoopback;
+
 class _MockAtClient extends Mock implements AtClient {}
 
 class _MockRemoteSecondary extends Mock implements RemoteSecondary {}
@@ -58,7 +60,7 @@ void main() {
     });
     final args = AuthCliArgs()
         .createFetchCommandParser()
-        .parse(['-a', '@alice', '-i', b]);
+        .parse([...aliceOnLoopback, '-i', b]);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.fetch(args, client),

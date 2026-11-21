@@ -127,15 +127,14 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: loopbackLookUps(),
-        secondaryAddressFinder:
-            FixedSecondaryAddressFinder('given.example', 1234),
+        secondaryAddressFinder: FixedSecondaryAddressFinder('127.0.0.1', 1234),
         atKeysIo: noKeysFor('@factorygiven'),
         storage: hiveStoreFor('@factorygiven', pref()));
 
     final found = await (client as AtClientImpl)
         .secondaryAddressFinder
         .findSecondary('@factorygiven');
-    expect(found.toString(), 'given.example:1234');
+    expect(found.toString(), '127.0.0.1:1234');
 
     await client.stop();
   });
