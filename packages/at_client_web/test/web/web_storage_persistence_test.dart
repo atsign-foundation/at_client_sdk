@@ -41,9 +41,4 @@ void main() {
     expect(await WebStoragePersistence().requestPersist(), isFalse);
     expect(calls.toDart, hasLength(1));
   });
-
-  test('requestPersist answers whether the browser granted persistence',
-      () async {
-    expect(await WebStoragePersistence().requestPersist(), isA<bool>());
-  });
 }

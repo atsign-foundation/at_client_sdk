@@ -51,9 +51,10 @@ void main() {
 
   setUp(() => keys = InMemoryAtKeysIo());
 
-  Future<void> activate(Never Function() pkam,
+  Future<void> activate(bool Function() pkam,
       {Future<String?> Function() publicKeyCheck = _notActivated,
-      RetryOptions retryOptions = RetryOptions.defaultRetryOptions}) {
+      RetryOptions retryOptions = RetryOptions.defaultRetryOptions,
+      Future<String> Function(VerbBuilder verb)? verb}) {
     final lookUp = _MockAtLookUp();
     final enrollment = _MockAtEnrollment();
     when(() => lookUp.secondaryAddressFinder).thenReturn(_FakeFinder());
@@ -62,9 +63,12 @@ void main() {
     var cramAccepted = false;
     when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
       if (!cramAccepted) return cramAccepted = true;
-      pkam();
+      return pkam();
     });
-    when(() => lookUp.executeVerb(any())).thenAnswer((_) async => 'data:2');
+    when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async =>
+        verb == null
+            ? 'data:2'
+            : verb(invocation.positionalArguments.first as VerbBuilder));
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => enrollment.submit(any(), lookUp)).thenAnswer(
         (_) async => AtEnrollmentResponse('abc123', EnrollmentStatus.approved));
@@ -106,6 +110,31 @@ void main() {
         throwsA(isA<AtAuthenticationException>()),
         reason: 'a refusal is still a failed login');
     expectNoKeysWritten();
+  });
+
+  test(
+      'An activation whose connection is stopped while it completes throws '
+      'StoppedException with its keys written', () async {
+    final stopped = StoppedException('the lookup for @alice has been stopped');
+    final sent = <String>[];
+    Future<String> stoppedAtPublish(VerbBuilder verb) async {
+      sent.add(verb.buildCommand());
+      if (verb is UpdateVerbBuilder) throw stopped;
+      return 'data:1';
+    }
+
+    await expectLater(activate(() => true, verb: stoppedAtPublish),
+        throwsA(same(stopped)),
+        reason: 'the caller stopped the connection, so the activation says so');
+    final written = await keys.read('@alice');
+    expect(written.enrollmentId, 'abc123',
+        reason: 'the PKAM had succeeded, so the keys were already written');
+    expect(sent, hasLength(1),
+        reason: 'the stop met the publish of the encryption public key');
+    expect(sent.single,
+        allOf(startsWith('update:'), contains('public:publickey@alice')));
+    expect(sent.where((c) => c.startsWith('delete:')), isEmpty,
+        reason: 'the CRAM secret is left for completeActivationOf to delete');
   });
 
   test(

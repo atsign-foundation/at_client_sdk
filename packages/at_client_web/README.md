@@ -12,7 +12,7 @@ This is a pre-release and unpublished package intended for WebAssembly/browser t
 
 ## Browser entry points
 
-`package:at_client_web/at_client_web_web.dart` exports everything in `at_client_web.dart` plus the browser transports:
+`package:at_client_web/at_client_web_web.dart` is the one import a browser app needs. It exports everything in `at_client_web.dart`; at_client's core API and in-memory storage; `onboardNewAtSign`, `passkeyLogin`, `prfSupported` and `clearPrfMiss` with the `PasskeySession` they return and the exceptions they throw or carry as a cause; and the browser transports:
 
 - `sessionTransport(SessionTransportOptions)` returns the `SessionTransport` (`lookUps`, `finder` and `root`) that `portalSession` takes: direct, or the dev proxy when `proxyHost` and `proxyPort` are set or the root is `proxy:<host>`. A host, the proxy's or the root's, is a bare host of ASCII letters, digits, `.`, `-` and `_` only, or a bracketed IPv6 literal such as `[::1]`; `SessionTransportOptions` throws an `ArgumentError` naming the field for an empty host, one holding any other character outside such a literal, a port outside 1-65535, a `proxyHost` or `proxyPort` without the other, and a `root` given with a proxy. `portalSession` builds its preference on the transport's `root`, and refuses a `prefs` that names another root.
 - Through the dev proxy, each connection goes to `wss://host:port/ws`, and at_lookup sends `from:<atSign>` first on it because the session's root is `proxy:<host>`. A proxy that fronts many atServers reads it to learn which atServer the connection is for.

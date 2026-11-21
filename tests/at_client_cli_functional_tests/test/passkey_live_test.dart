@@ -643,10 +643,13 @@ void main() {
 
   test(
       'A login after an onboarding that stopped before deleting the CRAM '
-      'secret deletes it', () async {
+      'secret deletes it before it opens the client, and publishes the '
+      "document's encryption public key", () async {
     const atSign = '@sachin';
     final rig = PasskeyRig(salt: 55);
     await _interrupted(rig, atSign, _isCramDelete, _incomplete);
+    expect(await publicLookupReply(atSign, 'publickey'), contains('AT0015'),
+        reason: 'the onboarding published no encryption public key');
     expect(await _cramLogin(atSign), 'accepted',
         reason: 'the onboarding left the CRAM secret');
     final mark = rig.tap.lines.length;
@@ -662,30 +665,10 @@ void main() {
     expect(_accepted(rig.tap, rig.tap.indexOfSent(_isCramDelete, from: mark)),
         isTrue,
         reason: 'the login sent the delete');
-  }, timeout: _timeout);
-
-  test(
-      'A login after an onboarding that stopped before publishing its '
-      'encryption public key publishes it and deletes the CRAM secret',
-      () async {
-    const atSign = '@device2';
-    final rig = PasskeyRig(salt: 56);
-    await _interrupted(rig, atSign, _isCramDelete, _incomplete);
-    expect(await publicLookupReply(atSign, 'publickey'), contains('AT0015'),
-        reason: 'the onboarding published no encryption public key');
-    expect(await _cramLogin(atSign), 'accepted',
-        reason: 'the onboarding left the CRAM secret');
-
-    final session =
-        await rig.custody(hints: MemoryHints()).open(atSign: atSign);
-    addTearDown(session.stop);
-
     final own = (await rig.storedDocument(atSign, session.client.enrollmentId!,
         rig.currentPrf))['aesEncryptPublicKey'];
-    expect(await publicLookupReply(atSign, 'publickey'), 'data:$own');
-    final cram = await _cramLogin(atSign);
-    print('LIVE cram: after the login: $cram');
-    expect(cram, startsWith('refused'));
+    expect(await publicLookupReply(atSign, 'publickey'), 'data:$own',
+        reason: "the login published the document's encryption public key");
   }, timeout: _timeout);
 
   test('A login with saved hints sends no activation completion', () async {

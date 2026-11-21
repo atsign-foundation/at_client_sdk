@@ -219,15 +219,7 @@ class MemoryHints implements PasskeyHintStore {
   Future<Uint8List?> credentialId(String atSign) async => credentials[atSign];
 
   @override
-  Future<void> putCredentialId(String atSign, Uint8List id) async =>
-      credentials[atSign] = id;
-
-  @override
   Future<String?> enrollmentId(String atSign) async => ids[atSign];
-
-  @override
-  Future<void> putEnrollmentId(String atSign, String id) async =>
-      ids[atSign] = id;
 
   @override
   Future<void> putHint(
@@ -409,8 +401,7 @@ class PasskeyRig {
             rootDomain: veRoot,
             secondaryAddressFinder: finder),
         gateway: gateway ?? this.gateway(),
-        credentials: store,
-        enrollmentIds: store,
+        hints: store,
         setupLock: setupLock,
         setupLockPrefix: 'vetest:setup');
   }
