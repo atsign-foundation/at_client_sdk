@@ -92,11 +92,11 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Then it says this device already has several requests waiting for approval, in place of the Activate button
     And a passcode entered is never sent, and no request is waited on
 
-  Scenario: The enrollment dialog does not wait on a request filed for other namespaces
-    Given a key store holding one pending enrollment <id> for @alice, filed by app "todos" for namespaces {todos: rw}
-    When ApkamActivationDialog opens @alice for app "todos2" with namespaces {todos2: rw}
-    Then it says the request waiting for approval was filed for other namespaces, in place of the Activate button, and logs a warning naming <id>
-    And it never waits on that request, and a passcode entered is never sent
+  Scenario: The enrollment dialog waits on a request filed for other namespaces
+    Given a key store holding one pending enrollment <id> for @alice, filed by app "todos" on device "phone" for namespaces {todos: rw}
+    When ApkamActivationDialog opens @alice for app "todos2" on device "phone" with namespaces {todos2: rw}
+    Then it shows "Resuming enrollment <id>, filed as todos on phone.." and Cancel, without asking for a passcode
+    And once the request is approved, the dialog returns the client
 
   Scenario: The enrollment dialog shows a recorded app name with its control characters escaped
     Given a key store holding one pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "phone"

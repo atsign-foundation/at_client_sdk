@@ -146,12 +146,13 @@ void main() {
     ),
   ).thenAnswer((_) async => request);
 
-  /// Opens the dialog for [appName] on [deviceName] from a button and records
-  /// what `showDialog` returns.
+  /// Opens the dialog for [appName] on [deviceName], asking for [namespaces],
+  /// from a button and records what `showDialog` returns.
   Future<List<Object?>> open(
     WidgetTester tester, {
     String appName = 'app',
     String deviceName = 'device',
+    Map<String, String> namespaces = const {'*': 'rw'},
   }) async {
     final results = <Object?>[];
     await tester.pumpWidget(
@@ -168,7 +169,7 @@ void main() {
                       rootDomain: AtRootDomain.atsignDomain,
                       appName: appName,
                       deviceName: deviceName,
-                      namespaces: const {'*': 'rw'},
+                      namespaces: namespaces,
                       preference: AtClientPreference(),
                       keys: InMemoryAtKeysIo(),
                       storage: FakeAtClientStorage(),
@@ -637,35 +638,40 @@ void main() {
     }
   });
 
-  testWidgets('The enrollment dialog does not wait on a request filed for '
-      'other namespaces', (tester) async {
-    final logs = _RecordedLogs()..installUntilTearDown();
+  testWidgets('The enrollment dialog waits on a request filed for other '
+      'namespaces', (tester) async {
     final request = filed(
       'enroll-1',
       app: 'todos',
-      device: 'device',
+      device: 'phone',
       namespaces: const {'todos': 'rw'},
     );
     holding([request]);
-    await open(tester, appName: 'todos2');
+    final opened = clientAnswers(request);
+    stopEnds(opened, request);
+    final client = MockAtClient();
+    final results = await open(
+      tester,
+      appName: 'todos2',
+      deviceName: 'phone',
+      namespaces: const {'todos2': 'rw'},
+    );
 
     expect(
-      find.textContaining('filed for other namespaces than this app needs'),
+      find.text('Resuming enrollment enroll-1, filed as todos on phone..'),
       findsOneWidget,
     );
-    expect(find.text('Cancel'), findsNothing);
-    expect(activateButton(), findsNothing);
-    final warnings = [
-      for (final record in logs.records)
-        if (record.level == 'WARNING') record.message,
-    ];
-    expect(warnings, [
-      allOf(contains('"enroll-1"'), contains('other namespaces')),
-    ]);
-    await tester.enterText(find.byType(EditableText), '123456');
-    await frames(tester);
+    expect(find.text('Cancel'), findsOneWidget);
     neverEnrolls();
-    verifyNever(() => request.client(any(), storage: any(named: 'storage')));
+
+    opened.complete(client);
+    await frames(tester);
+
+    expect(
+      results,
+      [client],
+      reason: "the request's approval opens the client here",
+    );
   });
 
   testWidgets('The enrollment dialog shows a recorded app name with its '
