@@ -16,7 +16,7 @@ dependencies:
   crypton: ^2.2.1
   ffi: ^2.1.0
   at_utils: ^4.0.0
-  http: ^1.2.1
+  http: ^1.5.0
   meta: ^1.16.0
 
 dev_dependencies:
