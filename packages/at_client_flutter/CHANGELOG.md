@@ -20,9 +20,10 @@
   before it is thrown, so the keychain reads back as it did, unless undoing
   it fails too, which is logged. Removing an Atsign leaves none of its keys
   behind in the keychain.
-- fix: on Windows, deleting or rewriting the keychain deletes the old
-  entry's segments, even when its header does not parse or a segment it
-  names cannot be read, and logs at severe any segment it cannot delete.
+- fix: on Windows, deleting the keychain deletes its entry's segments even
+  when its header does not parse or a segment it names cannot be read, and
+  rewriting it deletes the old header's segments that the new entry does not
+  reuse; each logs at severe any segment it cannot delete.
 - fix: reading the keychain throws when its legacy-named store cannot be
   read, rather than reading as a keychain that holds no keys.
 - fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry is not
