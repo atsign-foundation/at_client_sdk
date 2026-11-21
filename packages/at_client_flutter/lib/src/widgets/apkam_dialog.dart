@@ -170,22 +170,28 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     final adopted =
         pending.app != widget.appName || pending.device != widget.deviceName;
     if (adopted) {
-      final filedBy =
-          '${pending.app.isEmpty ? '' : ' by app ${pending.app}'}'
-          '${pending.device.isEmpty ? '' : ' on device ${pending.device}'}';
+      String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
+      final byApp = pending.app.isEmpty ? '' : ' by app ${quoted(pending.app)}';
+      final onDevice = pending.device.isEmpty
+          ? ''
+          : ' on device ${quoted(pending.device)}';
+      final filedBy = '$byApp$onDevice';
       _logger.warning(
-        'Adopting enrollment ${pending.enrollmentId} of ${widget.atSign}'
-        '${filedBy.isEmpty ? '' : ', filed$filedBy,'} for app '
+        'Adopting enrollment ${quoted(pending.enrollmentId)} of '
+        '${widget.atSign}${filedBy.isEmpty ? '' : ', filed$filedBy,'} for app '
         '${widget.appName} on device ${widget.deviceName}',
       );
     }
+    final filedApp = clipForMessage(pending.app);
+    final filedDevice = clipForMessage(pending.device);
     final recorded =
-        '${pending.app.isEmpty ? '' : ' as ${pending.app}'}'
-        '${pending.device.isEmpty ? '' : ' on ${pending.device}'}';
+        '${filedApp.isEmpty ? '' : ' as $filedApp'}'
+        '${filedDevice.isEmpty ? '' : ' on $filedDevice'}';
     final filedAs = adopted && recorded.isNotEmpty ? ', filed$recorded' : '';
+    final id = clipForMessage(pending.enrollmentId);
     setState(() {
       _isLoading = true;
-      _status = 'Resuming enrollment ${pending!.enrollmentId}$filedAs..';
+      _status = 'Resuming enrollment $id$filedAs..';
     });
     await _awaitAndOpen(pending);
   }

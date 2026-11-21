@@ -19,7 +19,8 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   given holds for their atSign, and abandoning needs a confirmed Cancel; the
   dialog adopts only a request in the store it is given, which only programs
   on this device write; the names it shows are the ones the request was
-  filed under.
+  filed under, with their control characters escaped and each clipped at
+  180 characters, and its warning quotes them.
 
   Scenario: Leaving the waiting screen keeps the request
     Given the dialog waiting for approval
@@ -84,6 +85,16 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given a key store holding pending enrollments for @alice filed by app "wavi" on device "old-phone" and by app "buzz" on device "phone"
     When ApkamActivationDialog opens @alice for app "wavi" on device "new-phone"
     Then it shows "Resuming enrollment <id>, filed as wavi on old-phone.." and Cancel, without asking for a passcode
+
+  Scenario: The enrollment dialog shows a recorded app name with its control characters escaped
+    Given a key store holding one pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "phone"
+    When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
+    Then it shows "Resuming enrollment <id>, filed as wa\u001bvi on phone.." and Cancel
+
+  Scenario: The enrollment dialog's adoption warning names the recorded app quoted and escaped
+    Given a key store holding one pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "phone"
+    When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
+    Then the warning it logs names the filed app as "wa\u001bvi", in double quotes
 
   Scenario: PkamDialog resumes a pending keychain entry
     Given a keychain entry for an atSign holding only an enrollment awaiting approval

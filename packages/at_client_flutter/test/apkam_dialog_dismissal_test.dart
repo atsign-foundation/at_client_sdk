@@ -527,7 +527,7 @@ void main() {
           allOf(
             contains('enroll-1'),
             contains('@alice'),
-            contains('by app wavi-old on device phone'),
+            contains('by app "wavi-old" on device "phone"'),
             contains('for app $app on device $device'),
           ),
         ],
@@ -567,7 +567,7 @@ void main() {
           if (record.level == 'WARNING') record.message,
       ];
       expect(warnings, [
-        'Adopting enrollment enroll-1 of @alice for app wavi on device phone',
+        'Adopting enrollment "enroll-1" of @alice for app wavi on device phone',
       ], reason: 'one warning, naming the request and this dialog alone');
     });
   });
@@ -603,6 +603,37 @@ void main() {
     expect(find.text('Cancel'), findsOneWidget);
     neverEnrolls();
     verifyNever(() => buzz.client(any(), storage: any(named: 'storage')));
+  });
+
+  testWidgets('The enrollment dialog shows a recorded app name with its '
+      'control characters escaped', (tester) async {
+    final request = filed('enroll-1', app: 'wa\u001bvi', device: 'phone');
+    holding([request]);
+    stopEnds(clientAnswers(request), request);
+    await open(tester, appName: 'wavi', deviceName: 'phone');
+
+    expect(
+      find.text(
+        r'Resuming enrollment enroll-1, filed as wa\u001bvi on phone..',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Cancel'), findsOneWidget);
+  });
+
+  testWidgets("The enrollment dialog's adoption warning names the recorded "
+      'app quoted and escaped', (tester) async {
+    final logs = _RecordedLogs()..installUntilTearDown();
+    final request = filed('enroll-1', app: 'wa\u001bvi', device: 'phone');
+    holding([request]);
+    stopEnds(clientAnswers(request), request);
+    await open(tester, appName: 'wavi', deviceName: 'phone');
+
+    final warnings = [
+      for (final record in logs.records)
+        if (record.level == 'WARNING') record.message,
+    ];
+    expect(warnings, [contains(r'by app "wa\u001bvi"')]);
   });
 
   group('Given approval lands just as the dialog is dismissed', () {
