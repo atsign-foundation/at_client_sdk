@@ -37,15 +37,11 @@ final class AesGcm256EncryptionAlgo
 
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
-      {InitialisationVector? iv, List<int> aad = const []}) async {
-    final crypto.SecretBox box = await _aesGcm.encrypt(
-      plainData,
-      secretKey: crypto.SecretKey(_keyBytesForEncrypt()),
-      nonce: _nonceBytesForEncrypt(iv),
-      aad: aad,
-    );
-    return cipherTextThenTag(box.cipherText, box.mac.bytes);
-  }
+          {InitialisationVector? iv, List<int> aad = const []}) async =>
+      aeadEncrypt(_aesGcm, plainData,
+          key: _keyBytesForEncrypt(),
+          nonce: _nonceBytesForEncrypt(iv),
+          aad: aad);
 
   @override
   Future<Uint8List> decrypt(Uint8List encryptedData,

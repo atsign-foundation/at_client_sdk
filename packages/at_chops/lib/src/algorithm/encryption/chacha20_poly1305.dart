@@ -32,13 +32,7 @@ final class ChaCha20Poly1305Algo {
     List<int> aad = const [],
   }) async {
     _check(key, nonce);
-    final box = await _algo.encrypt(
-      plaintext,
-      secretKey: crypto.SecretKey(key),
-      nonce: nonce,
-      aad: aad,
-    );
-    return cipherTextThenTag(box.cipherText, box.mac.bytes);
+    return aeadEncrypt(_algo, plaintext, key: key, nonce: nonce, aad: aad);
   }
 
   /// Opens `ciphertext || tag` under [key] and [nonce].
