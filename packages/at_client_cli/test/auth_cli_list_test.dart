@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
@@ -412,5 +413,71 @@ void main() {
     final row = printed.split('\n').singleWhere((l) => l.startsWith(requestId));
     expect(row, contains('${'d' * 180}...'));
     expect(row, isNot(contains('d' * 181)));
+  });
+
+  test(
+      'at_activate list shows the key an Anchored verdict names with its '
+      'control characters escaped', () async {
+    const approvedId = 'a2a2a2a2-1a2e-43e4-93bd-378f1d366ea7';
+    const kid = 'k\n1';
+    const key = {'kid': kid, 'use': 'sign', 'alg': 'mldsa65', 'pub': 'cHVi'};
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              Enrollment.fromJSON({
+                'appName': 'wavi',
+                'deviceName': 'phone',
+                'namespace': {'wavi': 'rw'},
+                'status': 'approved',
+              })
+                ..enrollmentId = approvedId
+            ]);
+    when(() => client.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenThrow(AtKeyNotFoundException('no such record'));
+    when(() => client.get(
+            any(
+                that: predicate<AtKey>(
+                    (k) => '$k'.contains('_apsk.$approvedId.a.__e'))),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((_) async => AtValue()
+          ..value = jsonEncode({
+            'v': 1,
+            'keys': [key]
+          })
+          ..metadata = (Metadata()
+            ..appMetadata = AppMetadata(providerId: 'legacy', additional: {
+              PqSigningChain.linksField: {
+                kid: {
+                  'payload': {...key, 'v': 2, 'enrollmentId': 'another'}
+                }
+              }
+            })));
+    final args =
+        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final out = _CapturedStdout();
+
+    await IOOverrides.runZoned(() => auth_cli.list(args, client),
+        stdout: () => out);
+
+    final lines = out.text.split('\n');
+    expect(lines.removeLast(), '', reason: 'the list ends with a newline');
+    expect(lines, [
+      startsWith('Found 1 matching enrollment records'),
+      startsWith('Enrollment ID'),
+      startsWith(approvedId),
+    ]);
+    final (header, row) = (lines[1], lines.last);
+    final (anchored, namespaces) =
+        (header.indexOf('Anchored'), header.indexOf('Namespaces'));
+    final escapedKid = 'k${String.fromCharCode(92)}u000a1';
+    final column = 'broken $escapedKid'.padRight(namespaces - anchored);
+    expect(row.substring(anchored), '$column{wavi: rw}',
+        reason: "the enrollment's Anchored column, from its header to the "
+            "next, names the failing key with its line feed escaped");
   });
 }

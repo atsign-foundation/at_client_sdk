@@ -6,11 +6,11 @@ Feature: An approver sees the names a request carries with their control charact
   line-separator character escaped, ESC as \u001b, and each clipped after
   180 characters, followed by "...". A list row stays on one line, its
   columns padded after escaping. approve and auto name the app and device
-  in double quotes, with a quote inside escaped. A request's id and status
-  are escaped and clipped the same way, and so are the key of a
-  notification auto ignores or cannot act on and the error that stopped
-  it; auto names the sender of a notification from another atSign in
-  double quotes.
+  in double quotes, with a quote inside escaped. A request's id and status,
+  and the key an Anchored verdict names, are escaped and clipped the same
+  way, and so are the key of a notification auto ignores or cannot act on
+  and the error that stopped it; auto names the sender of a notification
+  from another atSign in double quotes.
 
   Races and replay: none arises; escaping is a pure function of text already
   read, and nothing new is sent.
@@ -56,6 +56,11 @@ Feature: An approver sees the names a request carries with their control charact
     Given @alice's atServer holding a pending enrollment request whose device name is 400 characters long
     When at_activate list runs for @alice
     Then that request's row shows the device name's first characters followed by "...", 180 characters before the "..."
+
+  Scenario: at_activate list shows the key an Anchored verdict names with its control characters escaped
+    Given @alice's atServer holding an approved enrollment whose _apsk record lists its client data signing key under a kid holding a line feed, and the key fails the anchoring check
+    When at_activate list runs for @alice
+    Then that enrollment's Anchored column shows the line feed written as \u000a, and every line the list prints ends where a row ends
 
   Scenario: at_activate auto escapes the key and sender of a notification from another atSign
     Given at_activate auto running for @alice
