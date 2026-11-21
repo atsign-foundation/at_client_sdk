@@ -30,7 +30,9 @@ enum AtKeysUnusableCause {
 /// and [source] where they were looked for.
 ///
 /// Its message holds no stack trace and quotes no value read from the keys
-/// but the atSign they record, an enrollment id or an algorithm name.
+/// but the atSign they record, an enrollment id or an algorithm name, each
+/// with its control and format characters escaped and clipped, as
+/// `clipForMessage` does.
 class AtKeysUnusableException extends AtException {
   final String atSign;
   final AtKeysUnusableCause cause;
@@ -80,7 +82,8 @@ class AtKeysUnusableException extends AtException {
       {required String this.source})
       : cause = AtKeysUnusableCause.anotherAtsign,
         error = null,
-        super('The keys ${_where(source)} are for $recorded, not $atSign.');
+        super('The keys ${_where(source)} are for '
+            '${clipForMessage(recorded)}, not $atSign.');
 }
 
 /// [error], or for a [FormatException] carrying the text it failed on, the
@@ -97,9 +100,9 @@ String _where(String source) =>
         ? 'in $source'
         : 'at $source';
 
-/// Why [error] leaves the keys unusable, in one line: what the error says,
-/// which names where the keys failed and quotes no value from them
-/// but an enrollment id or an algorithm name.
+/// Why [error] leaves the keys unusable, in one line, escaped and clipped:
+/// what the error says, which names where the keys failed and quotes no
+/// value from them but an enrollment id or an algorithm name.
 String _reasonFor(Object error) {
   final text = switch (error) {
     AtKeysFormatException(:final isJson, :final reason, :final position) =>
@@ -114,5 +117,6 @@ String _reasonFor(Object error) {
     _ => '$error',
   };
   final line = text.split('\n').first.trim();
-  return line.endsWith('.') ? line.substring(0, line.length - 1) : line;
+  return clipForMessage(
+      line.endsWith('.') ? line.substring(0, line.length - 1) : line);
 }

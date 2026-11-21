@@ -102,6 +102,9 @@
   rather than extending it must add both.
 - feat: `AtKeysUnusableException` says why an atSign's keys cannot be used
   (`cause`) and where they were looked for (`source`).
+- fix: `AtKeysUnusableException` shows the Atsign a keyfile records, and why
+  reading the keys or finding their keypair failed, with their control
+  characters escaped, clipped at 180 characters.
 - feat: `AtKeysFormatException.isJson` says whether the document parsed, as
   JSON that is not an object or not one of the shape it must have, or as the
   `kind` of data `badField` was given.
