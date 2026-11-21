@@ -125,9 +125,11 @@
   with an `ArgumentError` that never echoes the offending value, only when
   `Uri.https` rejects it, it names no host, it carries user info (a change
   from 4.0.0, which sent a request to whichever host `Uri.https` picked out
-  of it), or its port is outside 1-65535. A `superApiKey` must be `0x20`-`0x7E`; any other
-  byte, including a non-ASCII character, is refused with an `ArgumentError`
-  naming `superApiKey`, which never echoes the key.
+  of it), or its port is outside 1-65535. A `superApiKey` must be
+  `0x20`-`0x7E`; any other byte, including a tab, DEL or a non-ASCII
+  character, is refused with an `ArgumentError` naming `superApiKey`, which
+  never echoes the key (a key holding a tab or DEL is a change from 4.0.0,
+  which sent it).
 - deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
   5.0.0.
 - feat: `package:at_auth/at_registrar.dart`, a library exporting

@@ -94,16 +94,17 @@ rule refuses keys with spaces that 4.0.0 sent.
 Decision (human):
 - Everything that worked in at_auth 4.0.0 keeps working. The constructor
   refuses only input that 4.0.0 could never have used, which 4.0.0 reported
-  late or as the wrong error. The one deliberate exception is user info in
-  `registrarUrl`.
+  late or as the wrong error. The deliberate exceptions are user info in
+  `registrarUrl` and a tab or DEL in the super API key.
 - `registrarUrl` is accepted when `Uri.https(registrarUrl, path)` accepts it,
   as 4.0.0 did, so hosts with `_`, IPv6 literals and IDN hosts keep working.
   It is refused with `ArgumentError` named `registrarUrl`, without echoing the
   value, when `Uri.https` rejects it, when it names no host, when it carries
   user info, or when its port is outside 1 to 65535.
-- The super API key may contain 0x20 to 0x7E, the characters dart:io accepts
-  in a header value. Anything else is refused with `ArgumentError` named
-  `superApiKey`, without echoing the key. This replaces the control-character
+- The super API key may contain 0x20 to 0x7E, visible ASCII and the space.
+  Anything else is refused with `ArgumentError` named `superApiKey`, without
+  echoing the key, including a tab or DEL, which dart:io sends in a header
+  value and so 4.0.0 sent. This replaces the control-character
   rule above. An empty or whitespace-only key still throws `AtException`, as
   in 4.0.0.
 - A delete-flow response that omits `atSigns`, `skippedatSigns`, `deleted` or
@@ -117,5 +118,6 @@ Decision (human):
 Consequences:
 - A misconfigured key or URL fails at construction, never as `network`.
 - A hung `onCancel` cannot hang a registrar call.
-- The only 4.0.0 input refused that could have worked is a `registrarUrl`
-  with user info; the CHANGELOG records it.
+- The 4.0.0 inputs refused that could have worked are a `registrarUrl` with
+  user info and a super API key holding a tab or DEL; the CHANGELOG records
+  both.
