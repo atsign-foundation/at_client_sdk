@@ -107,7 +107,10 @@ class PendingEnrollment {
   /// atServer, and [retryInterval] is the pause between polls. A denial, or
   /// the request's expiry, removes this enrollment from [keys] and throws
   /// [AtEnrollmentDeniedException] or [AtEnrollmentExpiredException], both
-  /// [AtEnrollmentException]s. Any other end of the wait keeps the request.
+  /// [AtEnrollmentException]s. When [keys] cannot remove it, the same type is
+  /// thrown, its message saying the pending keys stay and why, and the next
+  /// resume finds the request again. Any other end of the wait keeps the
+  /// request.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
@@ -157,7 +160,7 @@ class PendingEnrollment {
           maxRetries: maxRetries,
           atLookup: handshake,
           cancelled: _ended.future);
-    } on Exception catch (e) {
+    } on Exception catch (e, stackTrace) {
       if (_ended.isCompleted) throw await _endedOnceCancelled();
       final decided = e is AtEnrollmentExpiredException
           ? 'expired'
@@ -170,6 +173,16 @@ class PendingEnrollment {
         } catch (failure) {
           _logger.warning('enrollment $enrollmentId of $atSign was $decided, '
               'and its pending keys could not be removed: $failure');
+          // The decision is still what the caller is told, in a message that
+          // says the keys stayed, so nobody takes them for gone.
+          final kept = '${(e as AtException).message}; its pending keys could '
+              'not be removed and stay in the key store, where the next resume '
+              'finds the request again: $failure';
+          Error.throwWithStackTrace(
+              e is AtEnrollmentExpiredException
+                  ? AtEnrollmentExpiredException(kept)
+                  : AtEnrollmentDeniedException(kept),
+              stackTrace);
         }
       }
       rethrow;

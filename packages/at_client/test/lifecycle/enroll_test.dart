@@ -416,23 +416,37 @@ void main() {
   });
 
   test(
-      'a denial whose pending keys the store cannot remove still throws the '
-      'denial', () async {
-    final store = _UpdateFailingStore();
-    final pending = await submit(
-        store,
-        atServer(
-            decide: (_) async => throw AtAuthErrorReplyException(
-                'Failed connecting to $atSign. error:AT0025:Apkam Auth '
-                'Denied',
-                errorCode: 'AT0025')));
-    store.failing = true;
+      'a denial or expiry whose pending keys the store cannot remove still '
+      'throws the decision, saying the keys stay', () async {
+    for (final (code, text, decision) in [
+      ('AT0025', 'Apkam Auth Denied', isA<AtEnrollmentDeniedException>()),
+      (
+        'AT0028',
+        'enrollment_id: $enrollmentId is expired or invalid',
+        isA<AtEnrollmentExpiredException>()
+      ),
+    ]) {
+      final store = _UpdateFailingStore();
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw AtAuthErrorReplyException(
+                  'Failed connecting to $atSign. error:$code:$text',
+                  errorCode: code)));
+      store.failing = true;
 
-    await expectLater(
-        () => pending.awaitApproval(
-            retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentDeniedException>()
-            .having((e) => e.message, 'message', contains('denied'))));
+      await expectLater(
+          () => pending.awaitApproval(
+              retryInterval: const Duration(milliseconds: 10)),
+          throwsA(decision.having(
+              (e) => (e as AtException).message,
+              'message',
+              allOf(contains('could not be removed and stay in the key store'),
+                  contains('Could not acquire the keyfile lock')))),
+          reason: code);
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+          reason: '$code: the keys the store could not remove are still there');
+    }
   });
 
   test('a denial empties a file store too, which then takes the next request',
