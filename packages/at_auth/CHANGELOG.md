@@ -104,7 +104,8 @@
   it up, or run the delete flow) before retrying with the same Atsign.
 - feat: `RegistrarAdminService` requests the registrar over an abortable,
   non-redirect-following `http` request bounded by a `requestTimeout`
-  (default 30s), and caps its response body at 64 KiB, enforced before a
+  (default 30s; zero or less is refused with an `ArgumentError`), and caps
+  its response body at 64 KiB, enforced before a
   chunk is buffered rather than after. Both apply to `registerAtsign` and
   the `/manage-atsigns/` delete methods alike; a timed-out or over-cap
   request's body stream and underlying connection are torn down rather than

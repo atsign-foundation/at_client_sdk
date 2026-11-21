@@ -100,7 +100,7 @@ class RegistrarAdminService {
   /// Throws [ArgumentError] if [superApiKey] contains a code unit outside
   /// `0x20`-`0x7E`, or if [registrarUrl] is not an authority [Uri.https]
   /// accepts, names no host, carries user info, or has a port outside
-  /// 1-65535.
+  /// 1-65535, or if [requestTimeout] is not positive.
   RegistrarAdminService({
     required this.registrarUrl,
     required String superApiKey,
@@ -118,6 +118,10 @@ class RegistrarAdminService {
           'superApiKey');
     }
     _validateRegistrarUrl(registrarUrl);
+    if (requestTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+          requestTimeout, 'requestTimeout', 'must be positive');
+    }
     _http = httpClient ?? http.Client();
   }
 

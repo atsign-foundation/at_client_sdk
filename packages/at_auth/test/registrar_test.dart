@@ -342,6 +342,30 @@ void main() {
       });
     }
 
+    for (final timeout in [
+      Duration.zero,
+      const Duration(microseconds: -1),
+      const Duration(seconds: -30),
+    ]) {
+      test(
+          'given a requestTimeout of $timeout, when the service is '
+          'constructed, then it throws ArgumentError naming requestTimeout',
+          () {
+        expect(
+          () => RegistrarAdminService(
+            registrarUrl: _registrarUrl,
+            superApiKey: _apiKey,
+            requestTimeout: timeout,
+            httpClient: _mockResponse({}),
+          ),
+          throwsA(
+            isA<ArgumentError>()
+                .having((e) => e.name, 'name', 'requestTimeout'),
+          ),
+        );
+      });
+    }
+
     final acceptedRegistrarUrls = <String, ({String host, int port})>{
       'registrar_api:8443': (host: 'registrar_api', port: 8443),
       '[::1]:8443': (host: '::1', port: 8443),
