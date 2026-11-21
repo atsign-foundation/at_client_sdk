@@ -100,8 +100,10 @@ class RegistrarAdminService {
   final http.Client Function() _newHttpClient =
       Zone.current.bindCallback(http.Client.new);
 
-  /// A request without an [httpClient] uses a client of its own, closed when
-  /// the request ends; an [httpClient] that is given is never closed.
+  /// With no [httpClient], each request takes a new client from
+  /// `http.Client()` and closes it when the request ends, so a
+  /// `runWithClient` factory must return a new client for each call. An
+  /// [httpClient] that is given is never closed.
   ///
   /// Throws [AtException] if [superApiKey] is empty or all whitespace.
   ///
