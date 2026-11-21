@@ -27,6 +27,7 @@ class _CapturedStdout extends Fake implements Stdout {
 
 /// Catalogue: features/enrollment/approver_sees_expiry.feature and
 /// docs/projects/pq/acceptance.md UC-G3.25.
+/// Catalogue: features/enrollment/approver_sees_names_escaped.feature
 void main() {
   setUpAll(() {
     registerFallbackValue(_FakeListParams());
@@ -310,5 +311,74 @@ void main() {
         allOf(contains(' revoked '), isNot(contains('revoked ?'))),
         reason: 'an enrollment whose _apsk was moved to .r.__e reads revoked '
             'through client.enrollments.anchoring');
+  });
+
+  const requestId = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
+
+  /// What `at_activate list` prints for @alice when its atServer holds one
+  /// pending request, B, whose record carries [fields].
+  Future<String> listing(Map<String, dynamic> fields) async {
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              Enrollment.fromJSON({
+                'appName': 'wavi',
+                'deviceName': 'phone',
+                'namespace': {'wavi': 'rw'},
+                'status': 'pending',
+                ...fields,
+              })
+                ..enrollmentId = requestId
+            ]);
+    final args =
+        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final out = _CapturedStdout();
+    await IOOverrides.runZoned(() => auth_cli.list(args, client),
+        stdout: () => out);
+    return out.text;
+  }
+
+  for (final (field, char, raw, escape, fields) in [
+    ('app name', 'carriage return', '\r', r'\u000d', {'appName': 'wa\rvi'}),
+    ('device name', 'ESC', '\u001b', r'\u001b', {'deviceName': 'pho\u001bne'}),
+    (
+      'namespace',
+      'line feed',
+      '\n',
+      r'\u000a',
+      {
+        'namespace': {'wa\nvi': 'rw'}
+      }
+    ),
+  ]) {
+    test(
+        "at_activate list shows a request's $field with its control "
+        'characters escaped', () async {
+      final printed = await listing(fields);
+
+      final lines = printed.split('\n');
+      expect(lines.removeLast(), '', reason: 'the list ends with a newline');
+      expect(lines, [
+        startsWith('Found 1 matching enrollment records'),
+        startsWith('Enrollment ID'),
+        startsWith(requestId),
+      ]);
+      expect(lines.last, contains(escape),
+          reason: "B's row shows the $char written as $escape");
+      expect(lines, everyElement(isNot(anyOf(contains('\r'), contains(raw)))),
+          reason: 'no line holds the $char or a carriage return');
+    });
+  }
+
+  test('at_activate list clips a name longer than 180 characters', () async {
+    final printed = await listing({'deviceName': 'd' * 400});
+
+    final row = printed.split('\n').singleWhere((l) => l.startsWith(requestId));
+    expect(row, contains('${'d' * 180}...'));
+    expect(row, isNot(contains('d' * 181)));
   });
 }

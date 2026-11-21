@@ -1173,13 +1173,22 @@ Future<void> list(ArgResults ar, AtClient atClient,
   for (final e in records) {
     stdout.writeln('${(e.enrollmentId ?? '').padRight(38)}'
         '${(e.status ?? '').padRight(10)}'
-        '${(e.appName ?? '').padRight(20)}'
-        '${(e.deviceName ?? '').padRight(38)}'
+        '${clipForMessage(e.appName ?? '').padRight(20)}'
+        '${clipForMessage(e.deviceName ?? '').padRight(38)}'
         '${_describeKeysExpiry(e.apkamKeysExpiryDuration).padRight(14)}'
         '${(e.expiresAt?.toIso8601String() ?? '-').padRight(26)}'
         '${(await _describeAnchoring(e, anchoring)).padRight(26)}'
-        '${e.namespace}');
+        '${_describeNamespaces(e.namespace)}');
   }
+}
+
+/// [namespaces] as a row shows them, `{namespace: access, ...}`, each
+/// namespace and access escaped and clipped by [clipForMessage].
+String _describeNamespaces(Map<String, dynamic>? namespaces) {
+  if (namespaces == null) return 'null';
+  final shown = namespaces.entries
+      .map((n) => '${clipForMessage(n.key)}: ${clipForMessage('${n.value}')}');
+  return '{${shown.join(', ')}}';
 }
 
 /// Whether [e]'s keys are anchored, as a row shows it: `anchored`,
@@ -1278,9 +1287,9 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
   // Iterate through the requests, approve each one
   for (final er in toApprove) {
     final eId = er.enrollmentId!;
-    stdout.writeln('Approving enrollmentId $eId'
-        ' with appName "${er.appName}"'
-        ' and deviceName "${er.deviceName}"');
+    stdout.writeln('Approving enrollmentId ${clipForMessage(eId)}'
+        ' with appName "${clipForMessage('${er.appName}', quote: '"')}"'
+        ' and deviceName "${clipForMessage('${er.deviceName}', quote: '"')}"');
     if (warnsOfLegacyExchange && _atLegacyKeyExchange(er)) {
       stderr.writeln('Warning: $eId asks at the legacy key exchange, so '
           'approving it conveys none of ${atClient.getCurrentAtSign()}\'s '
@@ -1382,9 +1391,9 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
           'enrollment request naming an appName and a deviceName');
       return;
     }
-    stdout.writeln('Got enrollment request ID $eId'
-        ' with appName "${er['appName']}"'
-        ' and deviceName "${er['deviceName']}"');
+    stdout.writeln('Got enrollment request ID ${clipForMessage(eId)}'
+        ' with appName "${clipForMessage(er['appName'], quote: '"')}"'
+        ' and deviceName "${clipForMessage(er['deviceName'], quote: '"')}"');
 
     // check the request matches our params
     String appName = er['appName'];

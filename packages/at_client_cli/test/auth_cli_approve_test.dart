@@ -35,6 +35,7 @@ class _CapturedStdout extends Fake implements Stdout {
 /// Catalogue: features/enrollment/approver_sees_expiry.feature
 /// Catalogue: features/at_client_cli/auto_approve_keeps_listening.feature
 /// Catalogue: features/enrollment/auto_approve_from_own_atsign.feature
+/// Catalogue: features/enrollment/approver_sees_names_escaped.feature
 void main() {
   const b = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
   late _MockAtClient client;
@@ -215,6 +216,42 @@ void main() {
         contains('Approval successful, but $b has since been revoked\n'));
     expect(out.text, isNot(contains('expires')));
   });
+
+  const filedNames = {'appName': 'wa\u001bvi', 'deviceName': 'pho\rne'};
+
+  for (final (command, run) in <(String, Future<String> Function())>[
+    (
+      'at_activate approve',
+      () async {
+        serveB(request: filedNames);
+        final args = AuthCliArgs().createApproveCommandParser().parse(
+            ['-a', '@alice', '--${AuthCliArgs.argNameAppNameRegex}', '^wa']);
+        final out = _CapturedStdout();
+        await IOOverrides.runZoned(() => auth_cli.approve(args, client),
+            stdout: () => out);
+        return out.text;
+      }
+    ),
+    (
+      'at_activate auto-approve',
+      () async {
+        serveB();
+        final (out, _) = await autoApproveFrom([
+          AtNotification('n-1', '$b.new.enrollments.__manage@alice', '@alice',
+              '@alice', DateTime.now().millisecondsSinceEpoch, 'key', false)
+            ..value = jsonEncode(filedNames)
+        ], untilDone: false);
+        return out.text;
+      }
+    ),
+  ]) {
+    test(
+        "$command names the request's app and device in double quotes, "
+        'escaped', () async {
+      expect(await run(),
+          allOf(contains(r'"wa\u001bvi"'), contains(r'"pho\u000dne"')));
+    }, timeout: const Timeout(Duration(seconds: 5)));
+  }
 
   test('auto_approve matches --arx and --drx case-insensitively', () async {
     serveB();
