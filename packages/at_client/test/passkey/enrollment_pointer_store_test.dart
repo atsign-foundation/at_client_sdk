@@ -109,6 +109,12 @@ void main() {
       expect(remoteLookUp.commands, isEmpty);
     });
 
+    test('put rejects a record with a carriage return', () {
+      expect(
+          store.put(_atSign, _hex, 'abc\rdef', ns: _ns), throwsArgumentError);
+      expect(remoteLookUp.commands, isEmpty);
+    });
+
     test('get reads through the reader', () async {
       expect(await store.get(_atSign, _hex, ns: _ns), _record);
       expect(remoteLookUp.commands, isEmpty);

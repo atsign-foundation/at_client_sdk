@@ -155,4 +155,9 @@ void main() {
     expect(store.put(_atSign, _eid, '{\n}'), throwsArgumentError);
     expect(remoteLookUp.commands, isEmpty);
   });
+
+  test('put rejects a document with a carriage return', () {
+    expect(store.put(_atSign, _eid, 'abc\rdef'), throwsArgumentError);
+    expect(remoteLookUp.commands, isEmpty);
+  });
 }

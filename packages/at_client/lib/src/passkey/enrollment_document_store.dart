@@ -102,9 +102,9 @@ class RemoteEnrollmentDocumentStore implements EnrollmentDocumentStore {
 
   @override
   Future<void> put(String atSign, String enrollmentId, String document) async {
-    if (document.contains('\n')) {
-      throw ArgumentError.value(
-          document, 'document', 'must not contain newlines');
+    if (document.contains('\n') || document.contains('\r')) {
+      throw ArgumentError.value(document, 'document',
+          'must not contain newlines or carriage returns');
     }
     final command = (UpdateVerbBuilder()
           ..omitMetadata = true
