@@ -1446,10 +1446,14 @@ void main() {
       test(
           'given a $status whose body cancel never completes, when '
           'registerAtsign runs, then it throws authentication with the '
-          'status, not timeout', () async {
+          'status, not timeout, and cancels the body', () async {
+        var wasCancelled = false;
         final client = MockClient.streaming((request, bodyStream) async {
           final controller = StreamController<List<int>>(
-            onCancel: () => Completer<void>().future,
+            onCancel: () {
+              wasCancelled = true;
+              return Completer<void>().future;
+            },
           );
           return http.StreamedResponse(controller.stream, status);
         });
@@ -1466,6 +1470,8 @@ void main() {
                   (e) => e.reason, 'reason', RegistrarFailure.authentication)
               .having((e) => e.statusCode, 'statusCode', status)),
         );
+        expect(wasCancelled, isTrue,
+            reason: 'a $status body must be cancelled, not left open');
       });
     }
 
