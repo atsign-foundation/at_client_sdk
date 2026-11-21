@@ -13,7 +13,7 @@ description: >
 license: BSD-3-Clause
 compatibility: Claude Code and any agentskills.io-compatible agent.
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
 ---
 
 # App telemetry for the Atsign Control Center
