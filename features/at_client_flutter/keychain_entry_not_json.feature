@@ -107,3 +107,8 @@ Feature: A keychain entry that does not parse says why, and none of its text
     Given a Windows keychain with no header, whose every segment reads as stored
     When an app adds keys for @alice
     Then the write ends, and no segment numbered 2560 or more is deleted
+
+  Scenario: a Windows keychain whose segments always read as stored does not make a delete-all search without end
+    Given a Windows keychain with a header that does not parse, whose every segment reads as stored
+    When an app deletes every atSign's keys
+    Then the delete ends, and no segment numbered 2560 or more is looked at

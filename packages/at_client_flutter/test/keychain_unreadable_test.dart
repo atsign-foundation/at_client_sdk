@@ -381,6 +381,9 @@ void main() {
     /// Windows answers a read that fails.
     late Set<String> absentStores;
 
+    /// Whether the store named reads as stored whatever is held.
+    late bool Function(String name) readsAsStored;
+
     /// Every store name the keychain asked for.
     late List<String> touched;
 
@@ -392,6 +395,7 @@ void main() {
       unreadableStores = {};
       undeletableStores = {};
       absentStores = {};
+      readsAsStored = (_) => false;
       touched = [];
       logs.records.clear();
     });
@@ -411,6 +415,7 @@ void main() {
           if (unreadableStores.contains(name) && held.containsKey(name)) {
             throw PlatformException(code: 'ReadFailed');
           }
+          if (readsAsStored(name)) return held[name] ?? 'stored';
           return held[name];
         });
         when(() => file.write(any())).thenAnswer((invocation) async {
@@ -494,12 +499,22 @@ void main() {
     });
 
     group('segments are found and deleted the same way', () {
-      /// The highest segment index any store asked for named.
-      int highestIndexTouched() => touched
+      /// The segment index of each store asked for that names one.
+      Iterable<int> indexesTouched() => touched
           .map((name) => RegExp(r'_(\d+)$').firstMatch(name))
           .whereType<RegExpMatch>()
-          .map((m) => int.parse(m[1]!))
-          .fold(-1, (a, b) => a > b ? a : b);
+          .map((m) => int.parse(m[1]!));
+
+      /// The highest segment index any store asked for named, failing the
+      /// test when none named one.
+      int highestIndexTouched() {
+        expect(
+          indexesTouched(),
+          isNotEmpty,
+          reason: 'the control: a segment was looked at',
+        );
+        return indexesTouched().reduce((a, b) => a > b ? a : b);
+      }
 
       Iterable<String> severeLogs() =>
           logs.records.where((r) => r.level == 'SEVERE').map((r) => r.message);
@@ -685,7 +700,11 @@ void main() {
               ),
             ),
           );
-          expect(highestIndexTouched(), lessThan(2560));
+          expect(
+            indexesTouched(),
+            isEmpty,
+            reason: 'the header is refused before any segment is looked at',
+          );
         });
       }
 
@@ -709,6 +728,30 @@ void main() {
         await windowsKeychain().saveSpp(atSign, Passcode('code', null));
 
         expect(jsonDecode(held[spp]!)['segmentCount'], 1);
+        expect(highestIndexTouched(), lessThan(2560));
+      });
+
+      test('a Windows keychain whose segments always read as stored does not '
+          'make a delete-all search without end', () async {
+        const segment = '${current}_segment_';
+        held[current] = '{bad';
+        readsAsStored = (name) {
+          if (!name.startsWith(segment)) return false;
+          // NOTE: a search past the bound is stopped here, so it fails
+          // rather than hangs.
+          if (int.parse(name.substring(segment.length)) >= 2600) {
+            throw StateError('the search reached segment 2600');
+          }
+          return true;
+        };
+
+        await windowsKeychain().deleteAllAtKeysData();
+
+        expect(
+          indexesTouched(),
+          contains(2559),
+          reason: 'the control: the search ran up to the bound',
+        );
         expect(highestIndexTouched(), lessThan(2560));
       });
     });
