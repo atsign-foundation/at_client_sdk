@@ -15,6 +15,7 @@ class MockBiometricStorage extends Mock implements BiometricStorage {}
 
 class MockBiometricStorageFile extends Mock implements BiometricStorageFile {}
 
+/// Catalogue: features/at_client_flutter/keychain_entry_not_json.feature
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

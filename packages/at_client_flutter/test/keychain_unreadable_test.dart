@@ -37,6 +37,8 @@ class _RecordedLogs implements LoggingHandler {
 
 /// A keychain the platform refuses to read, or whose one document does not
 /// parse, is refused as unreadable, and nothing is written or sent.
+///
+/// Catalogue: features/at_client_flutter/keychain_entry_not_json.feature
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const atSign = '@alice';
