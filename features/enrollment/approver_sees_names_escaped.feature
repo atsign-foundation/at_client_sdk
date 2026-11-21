@@ -21,6 +21,7 @@ Feature: An approver sees the names a request carries with their control charact
     Given @alice's atServer holding a pending enrollment request whose <field> holds a <char>
     When at_activate list runs for @alice
     Then that request's row shows the <char> written as <escape>, and every line the list prints ends where a row ends
+    And each column after it starts where the header's does
     Examples:
       | field       | char            | escape |
       | app name    | carriage return | \u000d |

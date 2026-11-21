@@ -342,11 +342,37 @@ void main() {
     return out.text;
   }
 
-  for (final (field, char, raw, escape, fields) in [
-    ('app name', 'carriage return', '\r', r'\u000d', {'appName': 'wa\rvi'}),
-    ('device name', 'ESC', '\u001b', r'\u001b', {'deviceName': 'pho\u001bne'}),
+  const columns = [
+    'Enrollment ID',
+    'Status',
+    'AppName',
+    'DeviceName',
+    'KeysExpiry',
+    'ExpiresAt',
+    'Anchored',
+    'Namespaces',
+  ];
+
+  for (final (field, column, char, raw, escape, fields) in [
+    (
+      'app name',
+      'AppName',
+      'carriage return',
+      '\r',
+      r'\u000d',
+      {'appName': 'wa\rvi'}
+    ),
+    (
+      'device name',
+      'DeviceName',
+      'ESC',
+      '\u001b',
+      r'\u001b',
+      {'deviceName': 'pho\u001bne'}
+    ),
     (
       'namespace',
+      'Namespaces',
       'line feed',
       '\n',
       r'\u000a',
@@ -371,6 +397,12 @@ void main() {
           reason: "B's row shows the $char written as $escape");
       expect(lines, everyElement(isNot(anyOf(contains('\r'), contains(raw)))),
           reason: 'no line holds the $char or a carriage return');
+      final (header, row) = (lines[1], lines.last);
+      for (final later in columns.skip(columns.indexOf(column) + 1)) {
+        final start = header.indexOf(later);
+        expect(row.substring(start - 1, start + 1), matches(RegExp(r'^ \S$')),
+            reason: "B's $later column starts where the header's does");
+      }
     });
   }
 
