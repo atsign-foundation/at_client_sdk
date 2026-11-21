@@ -243,11 +243,12 @@ void main() {
   }
 
   const filedNames = {'appName': 'wa\u001bvi', 'deviceName': 'pho\rne'};
-
-  for (final (command, run) in [
+  final handlingB = [
     ('at_activate approve', approvingB),
-    ('at_activate auto-approve', autoApprovingB),
-  ]) {
+    ('at_activate auto', autoApprovingB),
+  ];
+
+  for (final (command, run) in handlingB) {
     test(
         "$command names the request's app and device in double quotes, "
         'escaped', () async {
@@ -256,10 +257,7 @@ void main() {
     }, timeout: const Timeout(Duration(seconds: 5)));
   }
 
-  for (final (command, run) in [
-    ('at_activate approve', approvingB),
-    ('at_activate auto', autoApprovingB),
-  ]) {
+  for (final (command, run) in handlingB) {
     test('$command escapes a double quote inside the app name it quotes',
         () async {
       expect(await run({'appName': 'wa"vi', 'deviceName': 'phone'}),

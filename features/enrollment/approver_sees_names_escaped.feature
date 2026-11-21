@@ -1,11 +1,11 @@
 Feature: An approver sees the names a request carries with their control characters escaped
 
-  at_activate's list, approve and auto_approve show the app name, device
+  at_activate's list, approve and auto show the app name, device
   name and namespaces an enrollment request carries, as the atServer serves
   them or a notification announces them, with each control, format or
   line-separator character escaped, ESC as \u001b, and each clipped after
   180 characters, followed by "...". A list row stays on one line, its
-  columns padded after escaping. approve and auto_approve name the app and
+  columns padded after escaping. approve and auto name the app and
   device in double quotes, with a quote inside escaped.
 
   Races and replay: none arises; escaping is a pure function of text already
@@ -33,9 +33,9 @@ Feature: An approver sees the names a request carries with their control charact
     When <command> handles that request
     Then what it prints names them as "wa\u001bvi" and "pho\u000dne"
     Examples:
-      | command                 |
-      | at_activate approve     |
-      | at_activate auto-approve |
+      | command             |
+      | at_activate approve |
+      | at_activate auto    |
 
   Scenario Outline: <command> escapes a double quote inside the app name it quotes
     Given a pending enrollment request for @alice whose app name is wa"vi
