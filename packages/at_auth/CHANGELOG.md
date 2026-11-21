@@ -54,7 +54,9 @@
 - fix: an activation whose connection is stopped while it authenticates by
   PKAM, or while it waits for its atServer once the atDirectory has
   answered, throws `StoppedException`, not `AtTimeoutException` or
-  `AtAuthenticationException`.
+  `AtAuthenticationException`. Stopped after the PKAM has succeeded, it
+  throws `StoppedException` with its keys already written and the
+  activation incomplete; `completeActivationOf` finishes it.
 - fix: a clientConfig given to an authenticator, `activateAtSign` or
   `AtEnrollment.create` whose top-level `version` is null, empty or only
   whitespace sends no `version`, as `clientConfigFor` already did.

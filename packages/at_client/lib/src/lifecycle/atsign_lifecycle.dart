@@ -301,7 +301,10 @@ extension AtsignLifecycle on Atsign {
   /// or on a supplied [atLookUp], which is taken as having already reached
   /// the atServer, so the provisioning wait is skipped. A supplied [atLookUp]
   /// that its caller stops during the activation ends it with
-  /// [StoppedException].
+  /// [StoppedException], and no client is left running. A stop after the
+  /// PKAM has succeeded leaves [keys] written and, if it lands before the
+  /// encryption public key is published and the CRAM secret deleted, the
+  /// activation incomplete; `completeActivationOf` finishes it.
   Future<AtClient> activate({
     required String cramSecret,
     required WrittenAtKeysIo keys,
@@ -350,8 +353,19 @@ extension AtsignLifecycle on Atsign {
         lookUps: lookUps,
         secondaryAddressFinder: secondaryAddressFinder,
         connectBudget: connectBudget);
-    if (pqNative) {
-      await mintSigningRootAfterActivation(client, atKeysIo: keys);
+    // NOTE: open reports a stop during its first connect as an offline
+    // client, and mintSigningRootAfterActivation rethrows a stop but swallows
+    // every other error; a stop anywhere in the activation ends it as
+    // documented, with the client stopped.
+    try {
+      final stopped = client.connection.current.error;
+      if (stopped is StoppedException) throw stopped;
+      if (pqNative) {
+        await mintSigningRootAfterActivation(client, atKeysIo: keys);
+      }
+    } on StoppedException {
+      await client.stop();
+      rethrow;
     }
     return client;
   }
