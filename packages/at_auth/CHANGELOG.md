@@ -93,6 +93,46 @@
   write), retrying with the same pair is refused by the atServer while that
   enrollment's record exists: retry with a different pair, or with none so one
   is minted. The CRAM secret stays valid until an activation completes.
+- feat: `RegistrarAdminService.registerAtsign`, registering an Atsign under
+  the super API key alongside the existing `/manage-atsigns/` delete flow.
+  Returns a `RegisteredAtsign`, whose `registeredAtsign` is the Atsign the
+  registrar actually registered (read from its cramkey; a super key may add
+  a prefix or postfix to the `requestedAtsign`) and must be the one a caller
+  activates. Not idempotent: a `timeout`, `network` or `malformedResponse`
+  failure may mean the registrar already committed the registration, leaving
+  the Atsign registered under a CRAM secret nobody holds — reconcile (look
+  it up, or run the delete flow) before retrying with the same Atsign.
+- feat: `RegistrarAdminService` requests the registrar over an abortable,
+  non-redirect-following `http` request bounded by a `requestTimeout`
+  (default 30s), and caps its response body at 64 KiB, enforced before a
+  chunk is buffered rather than after. Both apply to `registerAtsign` and
+  the `/manage-atsigns/` delete methods alike; a timed-out or over-cap
+  request's body stream and underlying connection are torn down rather than
+  drained, including when the stream itself errors, a late response arrives
+  after the timeout already fired, or a `.cancel()`'s `onCancel` throws
+  (requires `http: ^1.5.0`).
+- feat: `RegistrarException` carries `endpoint`, `statusCode` and a `reason`
+  (`RegistrarFailure`), thrown consistently by every `RegistrarAdminService`
+  call — `registerAtsign` and both delete methods — including on a rejected
+  super API key (checked before the response body is read), a connection
+  failure (`RegistrarFailure.network`), any non-200 status including a
+  redirect (`RegistrarFailure.unexpectedStatus`), and a missing or
+  unrecognized `status`, or a `"success"` status whose `data` is null or not
+  a map (`RegistrarFailure.malformedResponse`). Exception text never carries
+  the registrar's `message`, the raw cramkey or the super key.
+- feat: the `RegistrarAdminService` constructor refuses a `registrarUrl`
+  with an `ArgumentError` that never echoes the offending value, only when
+  `Uri.https` rejects it, it carries user info (a change from 4.0.0, which
+  sent a request to whichever host `Uri.https` picked out of it), or its
+  port is outside 1-65535. A `superApiKey` must be `0x20`-`0x7E`; any other
+  byte, including a non-ASCII character, is refused with an `ArgumentError`
+  naming `superApiKey`, which never echoes the key.
+- deprecated: `RegistrarAdminService.superApiKey` will be removed in at_auth
+  5.0.0.
+- feat: `package:at_auth/at_registrar.dart`, a library exporting
+  `RegistrarAdminService`, `RegistrarException` and `RegistrarFailure`.
+  `RegistrarException` is still catchable as `AtException` through
+  `at_auth.dart` alone; catching it by type needs `at_registrar.dart`.
 
 ## 4.0.0
 
