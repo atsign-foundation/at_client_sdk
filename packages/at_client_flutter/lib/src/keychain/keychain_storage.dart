@@ -612,11 +612,16 @@ class KeychainStorage {
         prefix: '${keychainStoreName}_segment',
       );
     }
-    // legacy
-    return (
-      count: int.tryParse(storedData) ?? 0,
-      prefix: '${await getPackageName()}_data',
-    );
+    // legacy: the header is a bare positive segment count. Anything else is
+    // a corrupt entry, not an empty one, so refuse it rather than read it as
+    // absent and let a write replace it.
+    final legacyCount = int.tryParse(storedData);
+    if (legacyCount == null || legacyCount < 1) {
+      throw FormatException(
+        'Keychain entry header is neither JSON nor a segment count',
+      );
+    }
+    return (count: legacyCount, prefix: '${await getPackageName()}_data');
   }
 
   Future<BiometricStorageFile> _getBiometricStorageFile(
