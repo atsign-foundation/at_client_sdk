@@ -41,12 +41,12 @@ Feature: A keychain entry that does not parse says why, and none of its text
       | -1   |
       | abc  |
 
-  Scenario: a remove whose read of one segment throws still deletes every segment the header names
+  Scenario: a delete-all whose read of one segment throws still deletes every segment the header names
     Given a Windows keychain entry whose header names 3 segments, the second of which throws when read
     When an app deletes every atSign's keys
     Then the header and all 3 segments are deleted
 
-  Scenario: a remove whose header cannot be read still deletes the segments present
+  Scenario: a delete-all whose header cannot be read still deletes the segments present
     Given a Windows keychain entry of 2 segments whose header throws when read
     When an app deletes every atSign's keys
     Then the header and both segments are deleted, and the failed read is logged at severe
@@ -56,7 +56,7 @@ Feature: A keychain entry that does not parse says why, and none of its text
     When an app deletes every atSign's keys
     Then the header and both segments are deleted
 
-  Scenario: a remove whose segment stays stored logs it at severe and still deletes the header
+  Scenario: a delete-all whose segment stays stored logs it at severe and still deletes the header
     Given a Windows keychain entry whose header names 2 segments, the second of which stays stored when deleted
     When an app deletes every atSign's keys
     Then the header is deleted, the second segment is still stored, and the failure is logged at severe

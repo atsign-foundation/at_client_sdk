@@ -493,7 +493,7 @@ void main() {
       Iterable<String> severeLogs() =>
           logs.records.where((r) => r.level == 'SEVERE').map((r) => r.message);
 
-      test('a remove whose read of one segment throws still deletes every '
+      test('a delete-all whose read of one segment throws still deletes every '
           'segment the header names', () async {
         held[current] = '{"segmentCount":3}';
         for (var i = 0; i < 3; i++) {
@@ -506,8 +506,8 @@ void main() {
         expect(held, isEmpty, reason: 'the header and all 3 segments go');
       });
 
-      test('a remove whose header cannot be read still deletes the segments '
-          'present', () async {
+      test('a delete-all whose header cannot be read still deletes the '
+          'segments present', () async {
         held[current] = '{"segmentCount":2}';
         held['${current}_segment_0'] = 'a';
         held['${current}_segment_1'] = 'b';
@@ -529,8 +529,8 @@ void main() {
         expect(held, isEmpty);
       });
 
-      test('a remove whose segment stays stored logs it at severe and still '
-          'deletes the header', () async {
+      test('a delete-all whose segment stays stored logs it at severe and '
+          'still deletes the header', () async {
         held[current] = '{"segmentCount":2}';
         held['${current}_segment_0'] = 'a';
         held['${current}_segment_1'] = 'b';
