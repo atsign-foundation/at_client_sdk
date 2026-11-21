@@ -1,7 +1,7 @@
 ## 4.1.0-rc.1
 
-- feat: `AtKeysFormatException.badField` reports a JSON object whose field
-  is missing or of the wrong kind.
+- feat: `AtKeysFormatException.badField` reports a JSON object, or the
+  `kind` of data it is given, whose field is missing or not what it must be.
 - feat: a passphrase envelope refused for its passphrase, missing or one
   that does not open it, throws `AtKeysPassphraseException`, an
   `AtDecryptionException`; every other refusal of an envelope is still a
@@ -97,7 +97,8 @@
 - feat: `AtKeysUnusableException` says why an atSign's keys cannot be used
   (`cause`) and where they were looked for (`source`).
 - feat: `AtKeysFormatException.isJson` says whether the document parsed, as
-  JSON that is not an object or not one of the shape it must have.
+  JSON that is not an object or not one of the shape it must have, or as the
+  `kind` of data `badField` was given.
 - fix: `activateAtSign` throws before sending anything when `keys` holds keys
   it cannot read (`AtKeysUnusableException`, naming the store and why) or
   when a `FileAtKeysIo` keyfile cannot be written there

@@ -46,7 +46,8 @@ class AtKeysFormatException extends FormatException {
   final int? position;
 
   /// Whether the document parsed, as JSON that is not an object or not one
-  /// of the shape it must have.
+  /// of the shape it must have, or as the other kind of data
+  /// [AtKeysFormatException.badField] was given, such as a legacy header.
   final bool isJson;
 
   // NOTE: source stays null; the parser's source is the document's text.
@@ -72,11 +73,14 @@ class AtKeysFormatException extends FormatException {
       AtKeysFormatException._(
           '$what is not a JSON object', 'not a JSON object', null, true);
 
-  /// [what] parsed, as a JSON object whose [field] is missing or not
-  /// [requirement].
+  /// [what] parsed, as [kind] whose [field] is missing or not [requirement].
+  ///
+  /// [kind] says what the data is, and is 'a JSON object' unless the data is
+  /// something else, such as a legacy header that is not JSON.
   factory AtKeysFormatException.badField(
-      String what, String field, String requirement) {
-    final reason = 'a JSON object whose $field is not $requirement';
+      String what, String field, String requirement,
+      {String kind = 'a JSON object'}) {
+    final reason = '$kind whose $field is not $requirement';
     return AtKeysFormatException._('$what is $reason', reason, null, true);
   }
 
