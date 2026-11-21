@@ -592,6 +592,21 @@ void main() {
         });
       }
 
+      test('a delete-all over a legacy header deletes only the segments it '
+          'names', () async {
+        held[current] = '2';
+        held['test_data_0'] = 'part0';
+        held['test_data_1'] = 'part1';
+        held['test_data_2'] = 'third';
+
+        await windowsKeychain().deleteAllAtKeysData();
+
+        expect(held, isNot(contains(current)), reason: 'the header is gone');
+        expect(held.keys.where((name) => name.startsWith('test_data_')), [
+          'test_data_2',
+        ]);
+      });
+
       test('a rewrite deletes the stale trailing segments, an empty one '
           'among them', () async {
         final storage = windowsKeychain();

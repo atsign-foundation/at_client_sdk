@@ -73,6 +73,11 @@ Feature: A keychain entry that does not parse says why, and none of its text
       | JSON   | 0     |
       | JSON   | 2560  |
 
+  Scenario: a delete-all over a legacy header deletes only the segments it names
+    Given a Windows keychain entry whose legacy header names 2 segments, with a third legacy segment stored above them
+    When an app deletes every atSign's keys
+    Then the header and the 2 segments it named are deleted and the third is left
+
   Scenario: a delete over an oversized legacy header clears what is there and looks at no segment past the bound
     Given a Windows keychain entry whose header is the legacy count 2561, over one segment
     When an app deletes every atSign's keys
