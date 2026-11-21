@@ -1304,6 +1304,33 @@ void main() {
             (e) => e.reason, 'reason', RegistrarFailure.responseTooLarge)),
       ).timeout(const Duration(milliseconds: 500));
     });
+
+    for (final status in [401, 403]) {
+      test(
+          'given a $status whose body cancel never completes, when '
+          'registerAtsign runs, then it throws authentication with the '
+          'status, not timeout', () async {
+        final client = MockClient.streaming((request, bodyStream) async {
+          final controller = StreamController<List<int>>(
+            onCancel: () => Completer<void>().future,
+          );
+          return http.StreamedResponse(controller.stream, status);
+        });
+        final service = RegistrarAdminService(
+          registrarUrl: _registrarUrl,
+          superApiKey: _apiKey,
+          requestTimeout: const Duration(seconds: 1),
+          httpClient: client,
+        );
+        await expectLater(
+          service.registerAtsign(atsign: '@alice'.toAtsign()),
+          throwsA(isA<RegistrarException>()
+              .having(
+                  (e) => e.reason, 'reason', RegistrarFailure.authentication)
+              .having((e) => e.statusCode, 'statusCode', status)),
+        );
+      });
+    }
   });
 
   group('generateAtSignDeleteToken', () {

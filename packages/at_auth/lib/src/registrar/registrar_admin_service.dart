@@ -212,7 +212,7 @@ class RegistrarAdminService {
     }
 
     if (streamed.statusCode == 401 || streamed.statusCode == 403) {
-      await _cancelQuietly(streamed.stream.listen(null));
+      unawaited(_cancelQuietly(streamed.stream.listen(null)));
       throw RegistrarException(
         'Registrar super-API-key authentication failed on ${endpoint.path}: '
         'the key is either invalid, missing, or lacks the privilege the '
