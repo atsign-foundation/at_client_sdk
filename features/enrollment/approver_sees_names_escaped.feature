@@ -12,8 +12,9 @@ Feature: An approver sees the names a request carries with their control charact
   and the error that stopped it; auto names the sender of a notification
   from another atSign in double quotes. at_client_flutter's enrollment
   request card, authorisation feedback overlay and approved enrollments
-  list show a request's app and device names, and the key an Anchored
-  verdict names, escaped and clipped the same way, without quotes.
+  list show a request's app and device names, the card its namespaces,
+  and the key an Anchored verdict names, escaped and clipped the same
+  way, without quotes.
 
   Races and replay: none arises; escaping is a pure function of text already
   read, and nothing new is sent.
