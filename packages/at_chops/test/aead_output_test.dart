@@ -1,4 +1,6 @@
 import 'dart:ffi';
+import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/encryption/aead_output.dart';
@@ -61,4 +63,127 @@ void main() {
               'for a 60-byte $input');
     });
   }
+
+  for (final (String method, String update) in [
+    ('encrypt', '_encryptUpdate'),
+    ('decrypt', '_decryptUpdate'),
+  ]) {
+    test(
+        "The source of AesGcm256FfiAlgo's encrypt and decrypt calls the AES-256-GCM FFI update step ($method)",
+        () async {
+      final Uri? library = await Isolate.resolvePackageUri(Uri.parse(
+          'package:at_chops/src/algorithm/encryption/aes_gcm_ffi_algo.dart'));
+      final String body = _methodBody(File.fromUri(library!).readAsStringSync(),
+          'Future<Uint8List>', method);
+
+      expect(body, contains('$update('),
+          reason: 'the body read is not the one that runs $update');
+      expect(RegExp(r'\baesGcmUpdate\s*\(').hasMatch(body), isTrue,
+          reason: 'AesGcm256FfiAlgo.$method does not call aesGcmUpdate '
+              '(a source check: it pins the call, not its arguments)');
+    });
+  }
+}
+
+/// The block body of the one method in [source] declared as
+/// `[returnType] [name](`, with its comments and string literals blanked.
+String _methodBody(String source, String returnType, String name) {
+  final String code = _codeOnly(source);
+  final List<RegExpMatch> headers =
+      RegExp('${RegExp.escape(returnType)}\\s+${RegExp.escape(name)}\\s*\\(')
+          .allMatches(code)
+          .toList();
+  expect(headers, hasLength(1),
+      reason: 'expected one declaration of $returnType $name(');
+  final int paramsEnd = _closing(code, headers.single.end - 1, '(', ')');
+  final Match? open =
+      RegExp(r'\s*(async\s*)?\{').matchAsPrefix(code, paramsEnd + 1);
+  expect(open, isNotNull, reason: '$name has no block body');
+  final int bodyStart = open!.end - 1;
+  return code.substring(bodyStart, _closing(code, bodyStart, '{', '}') + 1);
+}
+
+/// The index of the [close] that matches the [open] at [start] in [code].
+int _closing(String code, int start, String open, String close) {
+  int depth = 0;
+  for (int i = start; i < code.length; i++) {
+    if (code[i] == open) depth++;
+    if (code[i] == close && --depth == 0) return i;
+  }
+  fail('no $close matches the $open at offset $start');
+}
+
+/// [source] with every comment and string literal replaced by spaces, so
+/// offsets still line up and only code is left to match.
+String _codeOnly(String source) {
+  final List<String> out = source.split('');
+  void blank(int from, int to) {
+    for (int k = from; k < to; k++) {
+      if (out[k] != '\n') out[k] = ' ';
+    }
+  }
+
+  late int Function(int, bool) code;
+
+  int string(int i) {
+    final bool raw = i > 0 && source[i - 1] == 'r';
+    final String quote =
+        source.startsWith("'''", i) || source.startsWith('"""', i)
+            ? source.substring(i, i + 3)
+            : source[i];
+    i += quote.length;
+    while (i < source.length) {
+      if (source.startsWith(quote, i)) return i + quote.length;
+      if (!raw && source[i] == r'\') {
+        i += 2;
+      } else if (!raw && source.startsWith(r'${', i)) {
+        i = code(i + 2, true);
+      } else {
+        i++;
+      }
+    }
+    return i;
+  }
+
+  int blockComment(int i) {
+    int depth = 0;
+    while (i < source.length) {
+      if (source.startsWith('/*', i)) {
+        depth++;
+        i += 2;
+      } else if (source.startsWith('*/', i)) {
+        i += 2;
+        if (--depth == 0) return i;
+      } else {
+        i++;
+      }
+    }
+    return i;
+  }
+
+  code = (int i, bool interpolation) {
+    int depth = 0;
+    while (i < source.length) {
+      final int from = i;
+      if (source.startsWith('//', i)) {
+        final int newline = source.indexOf('\n', i);
+        i = newline < 0 ? source.length : newline;
+        blank(from, i);
+      } else if (source.startsWith('/*', i)) {
+        i = blockComment(i);
+        blank(from, i);
+      } else if (source[i] == "'" || source[i] == '"') {
+        i = string(i);
+        blank(from, i);
+      } else {
+        if (source[i] == '{') depth++;
+        if (source[i] == '}' && interpolation && depth-- == 0) return i + 1;
+        i++;
+      }
+    }
+    return i;
+  };
+
+  code(0, false);
+  return out.join();
 }

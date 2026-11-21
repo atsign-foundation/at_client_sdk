@@ -64,3 +64,14 @@ Feature: AES-256-GCM encryption builds its output in one buffer
       | EVP_EncryptUpdate | plaintext  | ciphertext | 61     |
       | EVP_DecryptUpdate | ciphertext | plaintext  | 59     |
       | EVP_DecryptUpdate | ciphertext | plaintext  | 61     |
+
+  Scenario Outline: The source of AesGcm256FfiAlgo's encrypt and decrypt calls the AES-256-GCM FFI update step
+    Given the source of AesGcm256FfiAlgo, with its comments and string literals left out
+    When at_chops reads the body of its <method> method
+    Then that body calls <update>, so it is the body that runs the update
+    And that body calls the update step
+
+    Examples:
+      | method  | update         |
+      | encrypt | _encryptUpdate |
+      | decrypt | _decryptUpdate |
