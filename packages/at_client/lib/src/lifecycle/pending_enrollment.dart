@@ -160,7 +160,7 @@ class PendingEnrollment {
       if (_ended.isCompleted) throw await _endedOnceCancelled();
       final decided = e is AtEnrollmentExpiredException
           ? 'expired'
-          : e is AtEnrollmentException && e.message.contains('denied')
+          : e is AtEnrollmentDeniedException
               ? 'denied'
               : null;
       if (decided != null) {
