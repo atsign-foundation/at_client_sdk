@@ -21,6 +21,10 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   by Atsign.open at once with AtNoCredentialException, which says to enroll
   again, before it writes anything or opens a connection.
 
+  AtEnrollmentPendingException's message names each pending enrollment id the
+  keyfile records in double quotes, its control characters escaped and each
+  clipped at 180 characters, so the message stays on one line.
+
   Races: a stop or a cancel and an approval resolve at the write to the
   store. One that lands first leaves nothing written. stop then cancel
   removes the keys; cancel then stop changes nothing. An approval written first
@@ -193,3 +197,12 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a keyfile whose enrollment request was denied, or cancelled, and so holds no credential
     When a program opens it
     Then the open throws at once a refusal saying the keyfile holds no credential and to enroll again, nothing is written to the keyfile, and no connection is attempted
+
+  Scenario Outline: <call> names the pending enrollment ids a keyfile records quoted and escaped
+    Given a keyfile holding <held> for @alice, one whose id holds a line feed
+    When <call> runs for @alice
+    Then the AtEnrollmentPendingException's message names each id in double quotes on one line, the line feed shown as \u000a
+    Examples:
+      | call                                                  | held                     |
+      | Atsign.open                                           | one pending enrollment   |
+      | Atsign.resumeEnrollment, naming neither app nor device | two pending enrollments |

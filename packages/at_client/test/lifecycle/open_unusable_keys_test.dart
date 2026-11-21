@@ -731,7 +731,7 @@ void main() {
                 (e) => e.message,
                 'message',
                 '$atSign holds no live credential, only the pending '
-                    'enrollment e-1: resume it with resumeEnrollment rather '
+                    'enrollment "e-1": resume it with resumeEnrollment rather '
                     'than opening it')
             .having((e) => e.pendingEnrollmentIds, 'pending', ['e-1']));
     expectNoConnection();

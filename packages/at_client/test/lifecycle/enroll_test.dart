@@ -1432,12 +1432,12 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
-    /// A store holding two pending requests for app `wavi`, from devices named
-    /// after their enrollment ids, `e-one` and `e-two`.
-    AtKeys twoPending() {
+    /// A store holding a pending request for app `wavi` under each of [ids],
+    /// from a device named after its enrollment id.
+    AtKeys pendingWith(List<String> ids) {
       final keys = AtKeys(atsign: Atsign(atSign));
       final keyPair = RsaKeyPair.generate();
-      for (final id in ['e-one', 'e-two']) {
+      for (final id in ids) {
         for (final (role, key) in [
           (
             CryptographicMaterialRole.privateAuthentication,
@@ -1461,6 +1461,10 @@ void main() {
       }
       return keys;
     }
+
+    /// A store holding two pending requests for app `wavi`, from devices named
+    /// after their enrollment ids, `e-one` and `e-two`.
+    AtKeys twoPending() => pendingWith(['e-one', 'e-two']);
 
     test('The one pending enrollment resumes with no names', () async {
       final store = InMemoryAtKeysIo();
@@ -1527,6 +1531,49 @@ void main() {
               .having((e) => e.severalMatched, 'severalMatched', isTrue)
               .having((e) => e.message, 'message', namesBothAndAsksForNames)));
     });
+
+    for (final (call, ids, run) in <(
+      String,
+      List<String>,
+      Future<Object?> Function(WrittenAtKeysIo, AtClientPreference)
+    )>[
+      (
+        'Atsign.open',
+        ['e\n"one'],
+        (keys, pref) async => Atsign(atSign).open(
+            keys: keys,
+            preference: pref,
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            storage: hiveStoreFor(Atsign(atSign), pref)),
+      ),
+      (
+        'Atsign.resumeEnrollment, naming neither app nor device',
+        ['e\n"one', 'e-two'],
+        (keys, pref) => Atsign(atSign).resumeEnrollment(
+            keys: keys,
+            preference: pref,
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref)),
+      ),
+    ]) {
+      test(
+          '$call names the pending enrollment ids a keyfile records quoted '
+          'and escaped', () async {
+        await expectLater(
+            // ignore: invalid_use_of_visible_for_testing_member
+            run(InMemoryAtKeysIo.holding(atSign, pendingWith(ids)),
+                await preference()),
+            throwsA(isA<AtEnrollmentPendingException>().having(
+                (e) => e.message,
+                'message',
+                allOf([
+                  contains(r'"e\u000a\"one"'),
+                  if (ids.length > 1) contains('"e-two"'),
+                  isNot(contains('\n')),
+                ]))));
+      });
+    }
 
     test('A connection the app supplied is left open', () async {
       var polls = 0;

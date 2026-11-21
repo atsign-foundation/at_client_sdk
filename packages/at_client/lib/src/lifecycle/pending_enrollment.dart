@@ -488,7 +488,7 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
         super(
             '$atSign holds no live credential, only the pending enrollment'
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
-            '${pendingEnrollmentIds.join(', ')}: resume it with '
+            '${_quoted(pendingEnrollmentIds)}: resume it with '
             'resumeEnrollment rather than opening it',
             atSign: atSign,
             cause: AtKeysUnusableCause.pendingEnrollment);
@@ -500,8 +500,11 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
       : severalMatched = true,
         super(
             '$atSign holds several pending enrollments that match: '
-            '${pendingEnrollmentIds.join(', ')}. To resume one, name both the '
+            '${_quoted(pendingEnrollmentIds)}. To resume one, name both the '
             'app and the device',
             atSign: atSign,
             cause: AtKeysUnusableCause.pendingEnrollment);
+
+  static String _quoted(List<String> ids) =>
+      ids.map((id) => '"${clipForMessage(id, quote: '"')}"').join(', ');
 }
