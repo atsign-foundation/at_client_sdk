@@ -58,12 +58,29 @@ class _FakeCollection<T> extends Fake implements AtCollection<T> {
 
   @override
   final String namespace;
+
+  var cancels = 0;
+
+  /// When set, cancelling a watch throws it.
+  Object? cancelFailure;
+
+  @override
+  Stream<CEvent> watch() => (StreamController<CEvent>()
+        ..onCancel = () {
+          cancels++;
+          if (cancelFailure case final failure?) {
+            return Future<void>.error(failure);
+          }
+          return null;
+        })
+      .stream;
 }
 
 class _FakeClient extends Fake implements AtClient {
   var stops = 0;
   Completer<void>? stopHold;
   final openedCollections = <(String, Duration, EventSource, String?)>[];
+  final collections = <_FakeCollection<Object?>>[];
 
   @override
   final AtConnection connection = AtConnection(
@@ -87,7 +104,9 @@ class _FakeClient extends Fake implements AtClient {
   }) async {
     openedCollections
         .add((namespace, defaultExpiration, eventSource, writeTypeTag));
-    return _FakeCollection<T>(namespace);
+    final collection = _FakeCollection<T>(namespace);
+    collections.add(collection as _FakeCollection<Object?>);
+    return collection;
   }
 
   @override
@@ -703,6 +722,35 @@ void main() {
       ]) {
         await expectLater(call(), throwsA(isA<SessionClosedException>()));
       }
+    });
+
+    test('cancels every active watch, none twice once cancelled', () async {
+      final adapter = await session.collection('todos', type: 'Todo');
+      final cancelled = adapter.watch((_) {}, onError: (_) {});
+      adapter.watch((_) {}, onError: (_) {});
+      adapter.watch((_) {}, onError: (_) {});
+      await cancelled();
+
+      await session.close();
+
+      expect(client.collections.single.cancels, 3);
+    });
+
+    test('warns, never swallows silently, when a watch fails to cancel',
+        () async {
+      final adapter = await session.collection('todos', type: 'Todo');
+      client.collections.single.cancelFailure = StateError('boom');
+      adapter.watch((_) {}, onError: (_) {});
+      adapter.watch((_) {}, onError: (_) {});
+
+      await session.close();
+
+      expect(client.collections.single.cancels, 2);
+      expect(warnings, [
+        'Failed to cancel collection watch on close',
+        'Failed to cancel collection watch on close',
+      ]);
+      expect(client.stops, 1);
     });
 
     test('stops delivering to subscribers', () async {

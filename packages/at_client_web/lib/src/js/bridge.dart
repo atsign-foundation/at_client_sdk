@@ -344,7 +344,6 @@ class BridgeSession {
   BridgeSession(this._session);
 
   final JsSession _session;
-  final _watchCancels = <Future<void> Function()>{};
 
   JSPromise<JSBoolean> notify(JSAny? key, JSAny? value) => _promise(() async =>
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);
@@ -420,8 +419,6 @@ class BridgeSession {
           adapter,
           _session.atSign,
           isClosed: () => _session.isClosed,
-          onWatch: _watchCancels.add,
-          onWatchCancel: _watchCancels.remove,
         ));
       });
 
@@ -453,14 +450,6 @@ class BridgeSession {
       });
 
   JSPromise<JSAny?> close() => _promise(() async {
-        for (final cancel in [..._watchCancels]) {
-          try {
-            await cancel();
-          } on Object catch (_) {
-            _logger.warning('Failed to cancel collection watch on close');
-          }
-        }
-        _watchCancels.clear();
         await _session.close();
         return null;
       });
@@ -481,17 +470,11 @@ class BridgeCollection {
     this._adapter,
     this._self, {
     bool Function()? isClosed,
-    void Function(Future<void> Function() cancel)? onWatch,
-    void Function(Future<void> Function() cancel)? onWatchCancel,
-  })  : _isClosed = isClosed ?? (() => false),
-        _onWatch = onWatch,
-        _onWatchCancel = onWatchCancel;
+  }) : _isClosed = isClosed ?? (() => false);
 
   final JsCollection _adapter;
   final String _self;
   final bool Function() _isClosed;
-  final void Function(Future<void> Function() cancel)? _onWatch;
-  final void Function(Future<void> Function() cancel)? _onWatchCancel;
 
   void _open() {
     if (_isClosed()) throw SessionClosedException();
@@ -619,8 +602,7 @@ class BridgeCollection {
       _open();
       final deliver = _function(onEvent, 'onEvent');
       final report = _optionalFunction(onError, 'onError');
-      late final Future<void> Function() cancel;
-      cancel = _adapter.watch(
+      final cancel = _adapter.watch(
         (event) {
           if (_isClosed()) return;
           deliver.callAsFunction(null, _envelope(event));
@@ -630,9 +612,7 @@ class BridgeCollection {
           _reportStreamError(report, error, 'watch');
         },
       );
-      _onWatch?.call(cancel);
       return (() {
-        _onWatchCancel?.call(cancel);
         unawaited(cancel().catchError((Object _) {
           _logger.warning('Failed to cancel collection watch');
         }));

@@ -1202,10 +1202,8 @@ void main() {
       test(
           'collection operations and watch reject with closed after session close',
           () async {
-        _call(c, 'watch', [((JSAny? _) {}).toJS]);
         await _resolved(_call(s, 'close'));
 
-        expect(adapter.cancelled, 1);
         for (final (method, args) in [
           (
             'create',
