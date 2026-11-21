@@ -1,6 +1,6 @@
 # at-keys derivation — decisions
 
-**Status:** decided · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-13 (fallbacks) ruled 2026-10-28
+**Status:** ruled, and built (see "What is built" below) · 2026-10-15 · record layout re-ruled 2026-10-27 (K-10 pointer, K-11 document; K-6/K-8 superseded) · C4 (K-5) re-ruled and D (K-12, auth seed) ruled 2026-10-27; K-13 (fallbacks) ruled 2026-10-28
 **Applied to:** [`browser-onboarding.md`](browser-onboarding.md) §2, BO-1, BO-2, BO-9 · circulate to Gary, Xavier and Jeremy S.
 **Reconciles with:** `docs/projects/key-sources/prf-server-keys-blob.md` (PR #2427, merged to gkc's branch `gkc-published-vip-verifies-mldsa`, not on trunk)
 
@@ -12,7 +12,7 @@
 | B | **One PRF call, then HKDF; no stored salt** | Gary's model (second PRF call with a random salt stored in the blob); browser-onboarding's `R` |
 | C1 | **atSign in both HKDF labels** | — |
 | C2 | **AES-256-GCM, AAD = the record's clear header** | #2295 (AAD = atSign, enrollmentId, version) |
-| C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27) | — |
+| C4 | **Restored public keys must match the published ones before the restored keys are used**: after PKAM, before any encrypt or decrypt; a mismatch is a hard fail (K-5, re-ruled 2026-10-27; amended 2026-11-19: a login without saved hints whose onboarding's own delete of the CRAM secret answered and whose completion is still due publishes the document's key over the other) | — |
 | D | **Third derivation, the auth seed**, seeds the enrollment's ML-DSA-65 APKAM key, never stored — the primary PKAM-key path (K-12). Fallbacks ruled by K-13 | #2295 (H-6 seed label) adopted; K-8's APKAM key generated and stored in the blob |
 | — | Rejected: a per-write data key (C3) | #2295 |
 
@@ -21,10 +21,10 @@
 ```
 salt  = SHA-256("atsign:keys:lookup:v1")
 P     = WebAuthn get(prf.eval.first = salt)                 // one prompt
-lookup = HKDF-SHA256(P, salt = ∅, info = "atkeys-record-id|<atSign>")   → 64 lowercase hex
-kek    = HKDF-SHA256(P, salt = ∅, info = "atkeys-kek|<atSign>")
+lookup = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/record-id/v1|<atSign>")   → 64 lowercase hex
+kek    = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/kek/v1|<atSign>")
 authSeed = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/auth-seed/v1|<atSign>")   → 32 bytes
-ns     = HKDF-SHA256(P, salt = ∅, info = "atkeys-ns|<atSign>")         → 64 lowercase hex (K-17)
+ns     = HKDF-SHA256(P, salt = ∅, info = "at_auth/custody/ns/v1|<atSign>")         → 64 lowercase hex (K-17)
 apkamKey = ML-DSA-65 keygen(seed = authSeed)                    // never stored (K-12)
 
 record = { v: 2, typ, alg: "A256GCM", kdf: "HKDF-SHA256", iv: <96-bit random, per write>, ct }
@@ -43,10 +43,12 @@ document = atkeys.<enrollmentId>.a.__e@<atSign>  typ "atkeys"  plaintext = @keys
 - `<atSign>` in the labels is canonical, as at_commons `toAtsign()` produces it: lowercase, leading `@`, dots removed. `@Alice`, `alice` and `@ali.ce` all derive the same keys.
 - Test vector (`P` = bytes `00..1f`, atSign `@alice`):
   - salt `e5830b409db0e503af40c254598c41bf4e6ad6627ff185d311a9f446383ea620`
-  - lookup `7086a5038ed92fcd20309c479df67581a64cf9f8caf802ef81e7ecec8e4272fe`
-  - kek `338114674b5a98898fe30e20b4e29e96907ac6ec58b615bc0a298e759cd520b0`
+  - lookup `562dd8ceae1d04851c10847fea609250dc0c74d92af520a4ab96565bfea6c4b6`
+  - ns `10781e72da94f814194f90c4c40d75d7b0b029d06253d40a610b0ad977b2d620`
+  - kek `926e411c042496d783b7c01687562cc76b11cfe6fd683ddeeb285b7adfab83ce`
   - authSeed `b0e85850ef5407a914408bc6ccdc6a32baeb6446127275414199179a2cf79fc6`
-- These label strings are canonical. They replace `atkeys/lookup` and `atkeys/blob`.
+  - Pinned by `packages/at_auth/test/passkey/passkey_key_deriver_test.dart` (`lookupHex and ns match the golden vectors for @alice and @bob`) and, in the browser under dart2js and dart2wasm, by `packages/at_client_web/test/web/web_crypto_passkey_test.dart` (`The browser's derivation matches the vectors`).
+- All four labels have the form `at_auth/custody/<name>/v1` (`record-id`, `kek`, `auth-seed`, `ns`). The browser's deriver (`at_client_web`) and `at_auth`'s test deriver both take them from the `at_auth` constants and compute every output with at_chops' `HkdfSha256`, so they cannot drift. The browser imports the kek as a non-extractable WebCrypto AES-GCM key, then the buffers the deriver holds and the one it imports through are overwritten with zeroes; copies made inside `HkdfSha256` are left to the garbage collector. These label strings are canonical. They replace the unversioned `atkeys-record-id`, `atkeys-kek` and `atkeys-ns` and, before them, `atkeys/lookup` and `atkeys/blob`; only the auth-seed label is unchanged, so its vector is too. A record sealed or pointer written under an unversioned label does not open under these.
 
 ## Why
 
@@ -84,3 +86,18 @@ A separate label keeps the APKAM key independent of the lookup key (which the se
 | D — auth-seed label | High. A new label derives a different APKAM key, so every enrollment must be redone. |
 | B, C1 — labels | Low. `P` comes back on every open: derive under the old labels, decrypt, rewrite, delete the old record. |
 | C2 — record format | Low. `v` migrates on the next open. |
+
+## What is built
+
+| Item | Behaviour |
+|---|---|
+| API | `onboardNewAtSign`, `passkeyLogin` (`atSign` required), `prfSupported`, `clearPrfMiss`, each in `at_client_web_web.dart`; `onboardNewAtSign` and `passkeyLogin` take an optional `SessionTransportOptions` |
+| Derivation | `PasskeyPrf` runs the one PRF call; `PasskeyVault` holds the derived record key, pointer lookup, pointer namespace and auth seed, and seals and opens records |
+| Exceptions | `PrfUnavailableException`, `PasskeyLostException`, `PublicKeyMismatchException`, `MissingAtKeysDocumentException`, `SetupLockTimeoutException`, `IndexedDbException`, `PasskeyOnboardingIncompleteException`, `AtServerAtKeysLockedException`; a refused PKAM is always `PasskeyLostException` with `PkamRefusedException` as its cause, and an `Exception` that stops `onboardNewAtSign` once the pointer is written is always the cause of a `PasskeyOnboardingIncompleteException` |
+| Setup lock | Per canonical atSign, held across onboarding; login takes it only with no saved hints, or for the stale-hints retry |
+| Write order | Document first, then the pointer |
+| APKAM key | `authSeed` seeds it on every open; never stored |
+| Key store | `AtServerAtKeysIo` reads and writes the sealed document through the enrollment's own connection |
+| `user.id` | Random; the atSign is never in it (K-18) |
+
+v1 limits are listed in [`browser-onboarding.md`](browser-onboarding.md) §7.

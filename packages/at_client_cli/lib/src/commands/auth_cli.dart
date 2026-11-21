@@ -247,8 +247,7 @@ Future<int> wrappedMain(List<String> arguments,
         break;
 
       case AuthCliCommand.status:
-        return await status(commandArgResults,
-            program: program, programVersion: programVersion);
+        return await status(commandArgResults);
 
       case AuthCliCommand.onboard:
         // First time an app is connecting to an atServer.
@@ -481,8 +480,10 @@ Future<int> wrappedMain(List<String> arguments,
 ///  - 2 if the atSign exists but the atServer cannot be reached
 ///  - 1 if the atServer is reachable but there is no `public:publickey@<atsign>`
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
-Future<int> status(ArgResults ar,
-    {required String program, required String? programVersion}) async {
+///
+/// [atLookUp] is a connection to look the public key up over, for a test; a
+/// run connects to the atServer the atDirectory names.
+Future<int> status(ArgResults ar, {AtLookUp? atLookUp}) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -497,54 +498,113 @@ Future<int> status(ArgResults ar,
     exit(1);
   }
 
-  SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
-      rootDomain.rootDomain, rootDomain.rootPort);
+  final found = await _lookUpPublicKey(
+      atSign,
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort),
+      (atDirectory) =>
+          atLookUp ??
+          secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: atDirectory,
+          ));
+  stderr.writeln('returning ${found.outcome.exitCode}: ${found.detail}');
+  return found.outcome.exitCode;
+}
+
+/// What looking up an atSign's public key found, with the exit code
+/// [status] returns for it.
+enum _PublicKey {
+  found(0),
+  absent(1),
+  atServerUnreachable(2),
+  notInAtDirectory(3),
+  atDirectoryUnreachable(4);
+
+  const _PublicKey(this.exitCode);
+
+  final int exitCode;
+}
+
+/// Asks [atDirectory] for [atSign]'s atServer and that atServer, over the
+/// connection [connect] builds on the same [atDirectory], for its public key,
+/// unauthenticated; [detail] says what was found.
+Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(
+    String atSign,
+    SecondaryAddressFinder atDirectory,
+    AtLookUp Function(SecondaryAddressFinder atDirectory) connect) async {
   try {
-    await saf.findSecondary(atSign);
+    await atDirectory.findSecondary(atSign);
   } on SecondaryNotFoundException {
-    stderr.writeln('returning 3: atDirectory has no record for $atSign');
-    return 3;
+    return (
+      outcome: _PublicKey.notInAtDirectory,
+      detail: 'atDirectory has no record for $atSign'
+    );
   } catch (e) {
-    stderr.writeln('returning 4: Caught ${e.runtimeType} : $e');
-    return 4;
+    return (
+      outcome: _PublicKey.atDirectoryUnreachable,
+      detail: 'Caught ${e.runtimeType} : $e'
+    );
   }
 
-  String? pk;
+  // NOTE: a public key lookup needs no authentication, and no credential is
+  // held here.
+  final al = connect(atDirectory);
+  final found = await _publicKeyFrom(al, atSign);
   try {
-    // NOTE: a public key lookup needs no authentication, and no credential is
-    // held here.
-    final settings = enrollerSettingsFrom(ar,
-        program: program, programVersion: programVersion);
-    final AtLookUp al = settings.lookUps(
-      atSign: atSign,
-      rootDomain: rootDomain,
-      authenticator: null,
-      secondaryAddressFinder: settings.secondaryAddressFinder,
-    );
+    await al.close();
+  } catch (e) {
+    logger.finer('closing the public key lookup for $atSign failed: $e');
+  }
+  return found;
+}
+
+/// What [al] answers for [atSign]'s public key.
+Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
+    AtLookUp al, String atSign) async {
+  ({_PublicKey outcome, String detail}) unreachable(AtException e) => (
+        outcome: _PublicKey.atServerUnreachable,
+        detail: 'atServer cannot be reached $atSign ($e)'
+      );
+  final String? pk;
+  try {
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
     } on AtLookUpException catch (e) {
-      final e1 = AtExceptionUtils.get(e.errorCode, e.errorMessage);
-      throw e1;
+      throw AtExceptionUtils.get(e.errorCode, e.errorMessage);
     }
   } on SecondaryServerConnectivityException catch (e) {
-    stderr.writeln('returning 2: atServer cannot be reached $atSign ($e)');
-    return 2;
+    return unreachable(e);
+  } on SecondaryConnectException catch (e) {
+    return unreachable(e);
   } on KeyNotFoundException catch (e) {
-    stderr.writeln('returning 1: $e');
-    return 1;
+    return (outcome: _PublicKey.absent, detail: '$e');
   } catch (e) {
-    stderr.writeln('returning 2: Caught unexpected ${e.runtimeType} : $e');
-    return 2;
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'Caught unexpected ${e.runtimeType} : $e'
+    );
   }
 
-  if (pk == null || !pk.startsWith("data:")) {
-    stderr.writeln('returning 1: response was $pk');
-    return 1;
+  if (!holdsPublicKey(pk)) {
+    return (outcome: _PublicKey.absent, detail: 'response was $pk');
   }
+  return (
+    outcome: _PublicKey.found,
+    detail: 'found public:publickey$atSign OK'
+  );
+}
 
-  stderr.writeln('returning 0: found public:publickey$atSign OK');
-  return 0;
+/// Whether [response] to `lookup:publickey@<atsign>` carries a key: a
+/// `data:` reply whose value is neither empty nor `null`, which an atServer
+/// that is provisioned but not activated answers.
+@visibleForTesting
+bool holdsPublicKey(String? response) {
+  if (response == null || !response.startsWith('data:')) return false;
+  final value = response.substring('data:'.length).trim();
+  return value.isNotEmpty && value != 'null';
 }
 
 /// How often a client waiting for its enrollment to be approved asks again,
@@ -687,10 +747,7 @@ Future<bool> _isActivated(
     try {
       final response = await connection
           .executeCommand('lookup:publickey$atSign\n', auth: false);
-      return response != null &&
-          response.startsWith('data:') &&
-          !response.contains('null') &&
-          response.trim().length > 'data:'.length;
+      return holdsPublicKey(response);
     } catch (e) {
       logger.info('lookup:publickey$atSign failed, so $atSign is taken as '
           'not activated: $e');

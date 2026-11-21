@@ -7,7 +7,9 @@ TPM, a systemd credential, a cloud KMS, the OS keychain, DPAPI, or a passkey.
 
 ## Status
 
-Draft, 2026-09-29. Nothing here is built, and none of it is ruled. The
+Draft, 2026-09-29. Of what this describes, only the browser passkey path is
+built, as [atkeys-derivation.md](../wasm/atkeys-derivation.md) records; the
+rest is neither built nor ruled. The
 measurements in [section 3](#3-measurements) were taken on 2026-09-28 and
 2026-09-29 with the probes in [`probes/`](probes/), and each one names the
 probe that reproduces it. Claims not yet measured are marked as such, and
@@ -380,8 +382,9 @@ The browser has to bootstrap before it holds a PKAM key, so the bootstrap
 needs a gate of its own. There are two, and they can be combined.
 
 The first is a record whose name is derived from the passkey, for example
-`public:_<HKDF(prf, salt, "atkeys-record-id|<atSign>")>`, domain-separated from
-the `HKDF(prf, salt, "atkeys-kek|<atSign>")` that wraps the document's data key.
+`public:_<HKDF(prf, ∅, "at_auth/custody/record-id/v1|<atSign>")>`, domain-separated from
+the `HKDF(prf, ∅, "at_auth/custody/kek/v1|<atSign>")` that wraps the document's data key,
+each with an empty salt.
 The atSign in both labels keeps two atSigns on one device from sharing a record
 name or a kek; the `<atSign>` in each label is in canonical form, as `toAtsign()` returns it
 (lower-case, leading `@`, dots removed, e.g. `@colinconstable`).
@@ -433,8 +436,13 @@ Updating the document needs the same atomicity `update` has for a file, and
 devices sharing a synced passkey share one document. at_server trunk has no
 conditional update (nothing like a compare-and-swap in its verb handlers),
 and without one two devices updating at once lose a write; a lost
-signing root or nskey private can't be replaced. A conditional update on the
-atServer is a prerequisite for the server-backed store, not an open question.
+signing root or nskey private can't be replaced. So every write of the
+document holds the enrollment's lock, a server mutex with a short ttl, from
+before it reads the document until it puts. The lock is not a fence: a put
+sent while the lock is held can land after it expires, once another writer has
+taken the lock and put, and then drops that writer's material while both
+writers' read-backs match. The only guard is that a put needs at least half
+the lock's ttl left on its lease.
 
 This fits the WASM plan's key-material gates X-K1 to X-K4 in
 [`../wasm/acceptance.md`](../wasm/acceptance.md#9a1-confidentiality--key-material-new-the-existing-key-gates-measure-only-time),
@@ -467,4 +475,4 @@ atSign-wide encryption keys.
 | Does Chrome support the PRF extension with Google Password Manager passkeys, and give the same output across sessions? | A localhost page in Chrome that creates a passkey with PRF and derives twice              |
 | Does a non-extractable WebCrypto key survive reload, restart and storage pressure in Chrome and Safari?                | The WASM plan's X-K2 to X-K4                                                              |
 | Does a `public:_` record's name reach the owner's other clients through sync, or the commit log?                       | Answered: no. `public:_` gets no commit-log row; `public:__` does, and syncs               |
-| Can the atServer update a record conditionally?                                                                        | Not today; a prerequisite for the server-backed store ([section 8](#8-the-browser))        |
+| Can the atServer update a record conditionally?                                                                        | Not today; the server-backed store holds the enrollment's lock instead, which is not a fence ([section 8](#8-the-browser)) |

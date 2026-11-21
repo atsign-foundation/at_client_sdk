@@ -89,7 +89,7 @@ void main() {
         storage: CliKeys.storageFor(atSign,
             program: 'unit_test', path: storage.path),
         atLookUp: own,
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: FixedSecondaryAddressFinder(
             InternetAddress.loopbackIPv4.address, preference.rootPort));
 

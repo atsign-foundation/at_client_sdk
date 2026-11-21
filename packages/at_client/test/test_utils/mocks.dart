@@ -28,6 +28,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'test_keypairs.dart';
+import 'transport.dart';
 
 /// A lookup that answers every command with null until a test says otherwise.
 ///
@@ -203,7 +204,7 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
   // NOTE: the same erasure: an unstubbed `lookUps` answers null into a
   // non-nullable function type, and the services read it off the impl.
   @override
-  final AtLookUpFactory lookUps = secureSocketLookUps();
+  final AtLookUpFactory lookUps = loopbackLookUps();
   // NOTE: `implements` erases the concrete getter AtClientImpl carries, and an
   // unstubbed mocktail getter answers null, which the runtime refuses for the
   // non-nullable AtConnection; a Monitor built from this mock reads it.

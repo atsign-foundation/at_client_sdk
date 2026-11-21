@@ -1040,6 +1040,12 @@ void main() {
       });
     });
 
+    group('Given a claim holding a double quote', () {
+      test('when it is quoted, then the quote in it is escaped', () {
+        expect(quotedClaim('a"b'), r'"a\"b"');
+      });
+    });
+
     group('Given a typ, enid or kid carrying a newline or a control character',
         () {
       SignedEnvelope unsigned(Map<String, Object?> header) =>

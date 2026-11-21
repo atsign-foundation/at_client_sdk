@@ -85,7 +85,7 @@ void main() {
       namespace,
       AtClientPreference(posture: PqPosture.legacy)
         ..hiveStoragePath = storageDir,
-      lookUps: secureSocketLookUps(),
+      lookUps: loopbackLookUps(),
       secondaryAddressFinder: defaultAtDirectory,
       remoteSecondary: remoteSecondary,
       atKeysIo: await keyfileHolding(atSign,
