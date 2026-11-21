@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/encryption/aead_output.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
@@ -34,17 +35,14 @@ final class AesGcm256EncryptionAlgo
 
   AesGcm256EncryptionAlgo(this._aesKey);
 
+  /// Returns the ciphertext followed by the tag, built in one buffer.
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
-      {InitialisationVector? iv, List<int> aad = const []}) async {
-    final crypto.SecretBox box = await _aesGcm.encrypt(
-      plainData,
-      secretKey: crypto.SecretKey(_keyBytesForEncrypt()),
-      nonce: _nonceBytesForEncrypt(iv),
-      aad: aad,
-    );
-    return Uint8List.fromList(box.cipherText + box.mac.bytes);
-  }
+          {InitialisationVector? iv, List<int> aad = const []}) async =>
+      aeadEncrypt(_aesGcm, plainData,
+          key: _keyBytesForEncrypt(),
+          nonce: _nonceBytesForEncrypt(iv),
+          aad: aad);
 
   @override
   Future<Uint8List> decrypt(Uint8List encryptedData,
