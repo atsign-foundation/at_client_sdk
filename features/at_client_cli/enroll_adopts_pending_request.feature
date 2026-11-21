@@ -21,7 +21,12 @@ Feature: at_activate enroll resumes the request its keyfile already holds
   device names the request was filed under, which are the names the manager
   approves.
 
-  Scenario: enroll adopts the request its keyfile holds under another app or device name
+  Scenario Outline: enroll adopts the request its keyfile holds under another app or device name
     Given a keyfile holding a pending enrollment <id> for @alice, filed by app "buzz" on device "phone"
-    When at_activate enroll runs for @alice with app "wavi" on that keyfile
+    When at_activate enroll runs for @alice with app "<app>" on device "<device>" on that keyfile
     Then it sends nothing new, says "Resuming enrollment <id>, filed as buzz on phone", and waits on that request
+
+    Examples:
+      | app  | device |
+      | wavi | phone  |
+      | buzz | tablet |

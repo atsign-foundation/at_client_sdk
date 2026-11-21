@@ -223,13 +223,14 @@ void main() {
             required List<String> wrapped}) =>
         approvingAtServer(decide: decide, wrapped: wrapped);
 
-    Future<AtClient> enrol(AtClientPreference pref, String keysPath,
-            MockAtLookupImpl lookUp) =>
+    Future<AtClient> enrol(
+            AtClientPreference pref, String keysPath, MockAtLookupImpl lookUp,
+            {String app = 'wavi', String device = 'phone'}) =>
         enrolDevice(
             atSign: atSign,
             settings: settingsFor(pref, keysPath),
-            app: 'wavi',
-            device: 'phone',
+            app: app,
+            device: device,
             otp: 'ABC123',
             namespaces: {'wavi': 'rw'},
             signingAlgo: SigningAlgoType.rsa2048,
@@ -301,45 +302,51 @@ void main() {
       await client.stop();
     });
 
-    test(
-        'enroll adopts the request its keyfile holds under another app or '
-        'device name', () async {
-      final wrapped = <String>[];
-      final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
-      final pref = await preference();
-      final filing = atServer(
-          decide: (_) async => throw AtAuthErrorReplyException(
-              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
-              errorCode: 'AT0026'),
-          wrapped: wrapped);
-      await Atsign(atSign).enroll(
-          otp: 'ABC123',
-          app: 'buzz',
-          device: 'phone',
-          namespaces: {'buzz': 'rw'},
-          keys: FileAtKeysIo(filePath: (_) => keysPath),
-          preference: pref,
-          atLookUp: filing.lookUp,
-          lookUps: settingsFor(pref, keysPath).lookUps,
-          secondaryAddressFinder:
-              settingsFor(pref, keysPath).secondaryAddressFinder);
-      final second = atServer(decide: (_) async => true, wrapped: wrapped);
-      final err = _Captured();
+    for (final (app, device) in const [('wavi', 'phone'), ('buzz', 'tablet')]) {
+      test(
+          'enroll adopts the request its keyfile holds under another app or '
+          'device name', () async {
+        final wrapped = <String>[];
+        final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+        final pref = await preference();
+        final filing = atServer(
+            decide: (_) async => throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+                errorCode: 'AT0026'),
+            wrapped: wrapped);
+        await Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'buzz',
+            device: 'phone',
+            namespaces: {'buzz': 'rw'},
+            keys: FileAtKeysIo(filePath: (_) => keysPath),
+            preference: pref,
+            atLookUp: filing.lookUp,
+            lookUps: settingsFor(pref, keysPath).lookUps,
+            secondaryAddressFinder:
+                settingsFor(pref, keysPath).secondaryAddressFinder);
+        final second = atServer(decide: (_) async => true, wrapped: wrapped);
+        final err = _Captured();
 
-      final client = await IOOverrides.runZoned(
-          () => enrol(pref, keysPath, second.lookUp),
-          stderr: () => err);
+        final client = await IOOverrides.runZoned(
+            () =>
+                enrol(pref, keysPath, second.lookUp, app: app, device: device),
+            stderr: () => err);
 
-      expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
-          reason: 'the wait resumed from the keyfile; no second request');
-      expect(
-          err.text,
-          contains(
-              'Resuming enrollment $enrollmentId, filed as buzz on phone'));
-      expect(client.enrollmentId, enrollmentId,
-          reason: 'the approval of the request it waited on opens the client');
-      await client.stop();
-    });
+        expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+            reason: 'run as $app on $device: the wait resumed from the '
+                'keyfile; no second request');
+        expect(
+            err.text,
+            contains(
+                'Resuming enrollment $enrollmentId, filed as buzz on phone'),
+            reason: 'run as $app on $device');
+        expect(client.enrollmentId, enrollmentId,
+            reason: 'run as $app on $device: the approval of the request it '
+                'waited on opens the client');
+        await client.stop();
+      });
+    }
 
     group(
         'Given a keyfile whose pending enrollment records no app and no '
