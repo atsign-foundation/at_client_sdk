@@ -127,8 +127,7 @@ void main() {
         namespace: 'wavi',
         preference: pref(),
         lookUps: loopbackLookUps(),
-        secondaryAddressFinder:
-            FixedSecondaryAddressFinder('127.0.0.1', 1234),
+        secondaryAddressFinder: FixedSecondaryAddressFinder('127.0.0.1', 1234),
         atKeysIo: noKeysFor('@factorygiven'),
         storage: hiveStoreFor('@factorygiven', pref()));
 
