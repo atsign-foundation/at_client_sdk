@@ -4,8 +4,8 @@
   names and namespaces a request carries, and the keys and senders `auto`
   names as it passes a notification over, with their control characters
   escaped.
-- fix: `at_activate enroll` shows the enrollment ids and names a keyfile
-  records with their control characters escaped.
+- fix: `at_activate enroll`'s resume message shows the enrollment id and the
+  names a keyfile records with their control characters escaped.
 - fix: `at_activate enroll` resumes the request its keyfile already holds,
   even one filed under another app or device name, and says which names
   the request records.

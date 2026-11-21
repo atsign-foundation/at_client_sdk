@@ -2,8 +2,9 @@
 
 ## 2.1.0
 
-- fix: `ApkamActivationDialog` shows the enrollment id and names its key
-  store records with their control characters escaped.
+- fix: `ApkamActivationDialog`'s resume status and adoption warning show the
+  enrollment id and the names its key store records with their control
+  characters escaped.
 - feat: `package:at_client_flutter/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
 - fix: a keychain entry that is not valid JSON is reported as
