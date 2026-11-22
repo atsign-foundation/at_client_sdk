@@ -428,6 +428,30 @@ void main() {
     });
   });
 
+  testWidgets('The enrollment dialog says so when another wait has cancelled '
+      'the request it waits on', (tester) async {
+    resumes(pending);
+    final opened = clientAnswers();
+    stopEnds(opened);
+    final results = await open(tester);
+    expect(find.text('Cancel'), findsOneWidget, reason: 'it is waiting');
+
+    opened.completeError(AtEnrollmentCancelledException(cancelledElsewhere));
+    await frames(tester);
+
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.textContaining("the atSign's manager can revoke it"),
+      ),
+      findsOneWidget,
+      reason: 'the failure is shown',
+    );
+    expect(find.byType(ApkamActivationDialog), findsOneWidget);
+    expect(results, isEmpty, reason: 'the dialog stays open');
+    verifyNever(() => pending.cancel());
+  });
+
   void neverEnrolls() => verifyNever(
     () => flows.enroll(
       any(),
@@ -542,6 +566,26 @@ void main() {
     expect(find.text('Cancel'), findsOneWidget);
   });
 
+  testWidgets('The Cancel confirmation shows the enrollment id with its '
+      'control characters escaped', (tester) async {
+    final request = filed('enr\u001boll-1', app: 'app', device: 'device');
+    resumes(request);
+    stopEnds(clientAnswers(request), request);
+    await open(tester);
+
+    await tapText(tester, 'Cancel');
+
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.textContaining(
+          r'This abandons enrollment enr\u001boll-1 of @alice.',
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
   group('Given approval lands just as the dialog is dismissed', () {
     testWidgets('when pending.client() returns after the dismissal, then that '
         'client is stopped, so the next open of the atSign succeeds', (
@@ -572,6 +616,13 @@ void main() {
     });
   });
 }
+
+/// What `PendingEnrollment` throws when another wait for the same request
+/// cancelled it before the approval was filed.
+const cancelledElsewhere =
+    'enrollment "enroll-1" of @alice was approved after its pending keys '
+    "left its key store, so nothing is filed: the atSign's manager can "
+    'revoke it';
 
 /// A frame, then 400ms of them, since nothing here settles.
 Future<void> frames(WidgetTester tester) async {

@@ -2,8 +2,16 @@
 
 ## 2.1.0
 
+- feat: `PkamDialog` offers Cancel while it waits on a pending enrollment, as
+  `ApkamActivationDialog` does: after the user confirms, it removes the
+  request's pending keys from the key store.
+- fix: `ApkamActivationDialog` and `PkamDialog` show a failure when another
+  wait has cancelled the request they wait on, saying the Atsign's manager
+  can revoke its approval.
 - fix: `ApkamActivationDialog`'s resume status shows the enrollment id and
-  the names its key store records with their control characters escaped.
+  the names its key store records with their control characters escaped, and
+  both dialogs' Cancel texts and `PkamDialog`'s waiting status show the
+  enrollment id the same way.
 - fix: `EnrollmentRequestCard`, `AuthorisationFeedbackOverlay` and the
   approved enrollments in `EnrollmentRequestList` show a request's app and
   device names, the card its namespaces, and the key an Anchored verdict
