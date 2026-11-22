@@ -2,14 +2,19 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 
 /// {@template apkam_example_page}
-/// An example page demonstrating the APKAM enrollment flow.
+/// An example page for the approving side of the APKAM enrollment flow.
 ///
 /// This page has two parts:
 /// 1. **Manager View**: Uses [EnrollmentRequestList] to see and manage incoming requests.
-/// 2. **Requester Simulator**: A button that simulates a "New Device" requesting access.
+/// 2. **Passcode for Another Device**: A button that gets a one-time passcode
+///    another device quotes to request enrollment, and says where to use it.
 /// {@endtemplate}
 class ApkamExamplePage extends StatefulWidget {
-  const ApkamExamplePage({super.key});
+  const ApkamExamplePage({super.key, this.getPasscode});
+
+  /// Gets the passcode the page shows; with none, the current client's
+  /// `enrollments.otp()` does.
+  final Future<Passcode> Function()? getPasscode;
 
   @override
   State<ApkamExamplePage> createState() => _ApkamExamplePageState();
@@ -17,12 +22,13 @@ class ApkamExamplePage extends StatefulWidget {
 
 class _ApkamExamplePageState extends State<ApkamExamplePage> {
   final AtSignLogger _logger = AtSignLogger('ApkamExample');
-  final List<RequesterStatus> _simulatedRequests = [];
+  Passcode? _passcode;
 
   @override
   Widget build(BuildContext context) {
     final currentAtSign = AtClientManager.getInstance().atClient
         .getCurrentAtSign();
+    final passcode = _passcode;
 
     return Scaffold(
       appBar: AppBar(title: Text('APKAM Demo ($currentAtSign)')),
@@ -49,44 +55,45 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
                     const Divider(height: 48),
 
                     const AuthorisationSectionHeader(
-                      title: 'Requester Simulator',
+                      title: 'Passcode for Another Device',
                       icon: Icons.phonelink_setup_outlined,
                     ),
                     const Text(
-                      'Click below to simulate a new device requesting enrollment.',
+                      'Get a one-time passcode that another device quotes to '
+                      'request enrollment. Its request then appears in the '
+                      'manager view above.',
                       style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
-                      onPressed: _simulateNewRequest,
-                      icon: const Icon(Icons.add_to_home_screen),
-                      label: const Text('Simulate Request'),
+                      onPressed: _getPasscode,
+                      icon: const Icon(Icons.password),
+                      label: const Text('Get Passcode'),
                     ),
 
-                    if (_simulatedRequests.isNotEmpty) ...[
+                    if (passcode != null) ...[
                       const SizedBox(height: 24),
-                      const Text(
-                        'Active Requests (Simulated)',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      SelectableText(
+                        'Passcode: ${passcode.value}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-                      for (final req in _simulatedRequests)
-                        Card(
-                          child: ListTile(
-                            leading: _getStatusIcon(req.status),
-                            title: Text('${req.appName} | ${req.deviceName}'),
-                            subtitle: Text('Status: ${req.status.name}'),
-                            trailing: req.status == EnrollmentStatus.pending
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ),
+                      const Text(
+                        'On another device, enter it in this example\'s '
+                        '"Register an atSign with APKAM", or run:',
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        'at_activate enroll -a $currentAtSign --app <app> '
+                        '--device <device> --namespaces <ns:rw> '
+                        '--passcode ${passcode.value} -k <keyfile>',
+                        style: const TextStyle(fontFamily: 'monospace'),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'While it waits, at_activate cancel -a $currentAtSign '
+                        '-k <keyfile> gives that request up.',
+                      ),
                     ],
                   ],
                 ),
@@ -98,107 +105,22 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
     );
   }
 
-  /// Simulates the "Requester" side of the APKAM flow.
-  ///
-  /// This method:
-  /// 1. Has the manager's client issue a passcode.
-  /// 2. Submits a request with it, as a new device would.
-  /// 3. Waits for the manager view above to decide.
-  Future<void> _simulateNewRequest() async {
-    final atClient = AtClientManager.getInstance().atClient;
-    final currentAtSign = atClient.getCurrentAtSign()!;
-
-    // Create unique app/device names for simulation
-    final timestamp = DateTime.now().millisecondsSinceEpoch % 1000;
-    final appName = 'SimulatedApp_$timestamp';
-    final deviceName = 'Device_$timestamp';
-
-    final requesterStatus = RequesterStatus(
-      appName: appName,
-      deviceName: deviceName,
-      status: EnrollmentStatus.pending,
-    );
-
-    setState(() {
-      _simulatedRequests.insert(0, requesterStatus);
-    });
-
+  /// Gets a one-time passcode from the manager's client, which is enrolled
+  /// and may issue one, and shows it.
+  Future<void> _getPasscode() async {
+    final getPasscode =
+        widget.getPasscode ??
+        () => AtClientManager.getInstance().atClient.enrollments.otp();
     try {
-      _logger.info('Initiating simulated request for $appName');
-
-      // STEP 1: a passcode from the manager's client, which is enrolled and
-      // may issue one.
-      final passcode = await atClient.enrollments.otp();
-
-      // STEP 2: the request, as a new device would submit it. The simulated
-      // device's keys live in memory: nothing opens a client on them.
-      final preferences = atClient.getPreferences()!;
-      final pending = await Atsign(currentAtSign).enroll(
-        otp: passcode.value,
-        app: appName,
-        device: deviceName,
-        namespaces: {'public': 'rw'},
-        // NOTE: a demo device's keys, which no client is opened on.
-        // ignore: invalid_use_of_visible_for_testing_member
-        keys: InMemoryAtKeysIo(),
-        preference: AtClientPreference()
-          ..rootDomain = preferences.rootDomain
-          ..rootPort = preferences.rootPort,
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder: CacheableSecondaryAddressFinder(
-          preferences.rootDomain,
-          preferences.rootPort,
-        ),
-      );
-      _logger.info('Submitted request ID: ${pending.enrollmentId}');
-
-      // STEP 3: wait for the manager view above to decide.
-      await pending.awaitApproval(
-        retryInterval: const Duration(seconds: 5),
-        maxRetries: 12,
-      );
-
-      _logger.info('Simulated request approved.');
-      if (mounted) {
-        setState(() {
-          requesterStatus.status = EnrollmentStatus.approved;
-        });
-      }
+      final passcode = await getPasscode();
+      if (mounted) setState(() => _passcode = passcode);
     } catch (e) {
-      _logger.severe('Simulation failed: $e');
+      _logger.severe('Could not get a passcode: $e');
       if (mounted) {
-        setState(() {
-          requesterStatus.status = EnrollmentStatus.denied;
-        });
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Simulation error: $e')));
+        ).showSnackBar(SnackBar(content: Text('Could not get a passcode: $e')));
       }
     }
   }
-
-  Widget _getStatusIcon(EnrollmentStatus status) {
-    switch (status) {
-      case EnrollmentStatus.approved:
-        return const Icon(Icons.check_circle, color: Colors.green);
-      case EnrollmentStatus.denied:
-      case EnrollmentStatus.revoked:
-      case EnrollmentStatus.expired:
-        return const Icon(Icons.error, color: Colors.red);
-      default:
-        return const Icon(Icons.hourglass_empty, color: Colors.orange);
-    }
-  }
-}
-
-class RequesterStatus {
-  final String appName;
-  final String deviceName;
-  EnrollmentStatus status;
-
-  RequesterStatus({
-    required this.appName,
-    required this.deviceName,
-    required this.status,
-  });
 }

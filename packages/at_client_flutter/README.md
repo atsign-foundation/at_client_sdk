@@ -44,8 +44,9 @@ example app. Read these rather than copying snippets from here:
   `AtClient` in hand. If you only read one file, read this one.
 - [`example/lib/apkam_example.dart`](example/lib/apkam_example.dart) —
   the approve/deny side of APKAM (e.g. a "manager" device approving a
-  new phone's enrollment request), with a simulated requester built on
-  `client.enrollments.otp()` and `Atsign.enroll`.
+  new phone's enrollment request), with a passcode from
+  `client.enrollments.otp()` that the new device quotes to request
+  enrollment.
 - [`example/lib/main.dart`](example/lib/main.dart) — minimal host app
   wiring the two flows above into navigation.
 

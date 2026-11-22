@@ -25,6 +25,9 @@
 - fix: `ApkamActivationDialog` and `PkamDialog` show a failure when the
   request they wait on is approved after another wait has cancelled it,
   saying the Atsign's manager can revoke the approval.
+- docs: the example's APKAM page shows a passcode another device quotes to
+  request enrollment, and where to use it, and no longer files a request of
+  its own.
 - fix: `ApkamActivationDialog`'s resume status shows the enrollment id and
   the names its AtKeys store records with their control characters escaped,
   and both dialogs' Cancel texts and `PkamDialog`'s waiting status show the
