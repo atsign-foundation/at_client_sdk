@@ -1773,6 +1773,54 @@ void main() {
       expect((await keys.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
+    /// What resumeEnrollment resumes from [keys]: its enrollment id, or null.
+    Future<String?> resumedFrom(AtKeys keys) async {
+      final pref = await preference();
+      return (await Atsign(atSign).resumeEnrollment(
+              // ignore: invalid_use_of_visible_for_testing_member
+              keys: InMemoryAtKeysIo.holding(atSign, keys),
+              preference: pref,
+              lookUps: loopbackLookUps(),
+              secondaryAddressFinder: atDirectoryOf(pref)))
+          ?.enrollmentId;
+    }
+
+    test(
+        'Given live keys under an enrollmentId field and nothing pending, '
+        'when resumeEnrollment is called, then it returns null', () async {
+      final live = AtKeys.legacy(
+          apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
+          apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!,
+          enrollmentId: 'e-live');
+
+      expect(await resumedFrom(live), isNull);
+    });
+
+    test(
+        'Given one pending request beside an enrollmentId field naming '
+        'another, when resumeEnrollment is called, then it resumes the '
+        'pending one', () async {
+      expect(
+          await resumedFrom(pendingWith(['e-one'])
+            ..fileLegacyMaterial(enrollmentId: 'e-old')),
+          'e-one');
+    });
+
+    test(
+        'Given a store holding two pending requests, when enroll is called, '
+        'then its refusal names the one resumeEnrollment resumes', () async {
+      Future<void> refusedNaming(AtKeys keys, String id) => expectLater(
+          // ignore: invalid_use_of_visible_for_testing_member
+          submit(InMemoryAtKeysIo.holding(atSign, keys),
+              atServer(decide: (_) async => true)),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', contains('the pending enrollment "$id"'))));
+
+      await refusedNaming(twoPending(), 'e-one');
+      await refusedNaming(
+          twoPending()..fileLegacyMaterial(enrollmentId: 'e-two'), 'e-two');
+    });
+
     test(
         'Atsign.open names the pending enrollment ids a keyfile records quoted '
         'and escaped', () async {
