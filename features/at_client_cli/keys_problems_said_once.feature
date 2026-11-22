@@ -61,7 +61,7 @@ Feature: A CLI program says what is wrong with the keys once, and what to do nex
   Scenario: A keyfile for another atSign
     Given a keyfile at <path> whose atsign is @bob
     When the user runs "at_activate otp -a @alice -k <path>"
-    Then stderr holds, once, "The keys at <path> are for @bob, not @alice. Check -a and -k." then the footer, and it exits 1
+    Then stderr holds, once, "The keys in the AtKeys store (<path>) are for @bob, not @alice. Check -a and -k." then the footer, and it exits 1
 
   Scenario: Keys with no authentication keypair this machine can use
     Given a keyfile for @alice at <path> that holds no authentication keypair for the enrollment it authenticates as

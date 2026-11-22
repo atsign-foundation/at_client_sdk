@@ -1,5 +1,7 @@
 ## 1.1.0
 
+- fix: keys that cannot be read, cannot authenticate or are for another
+  atSign are reported naming the keyfile as "the AtKeys store (<path>)".
 - fix: `at_activate list`, `approve` and `auto` show the ids, statuses,
   names and namespaces a request carries, and the keys and senders `auto`
   names as it passes a notification over, with their control characters

@@ -161,9 +161,9 @@ void main() {
 
     expect(
       shown(tester),
-      'No keys for $atSign in $keychain, so this device cannot authenticate '
-      'as $atSign. Activate $atSign, enroll this device, or use the keyfile it '
-      'already has.',
+      'No keys for $atSign in the AtKeys store ($keychain), so this device '
+      'cannot authenticate as $atSign. Activate $atSign, enroll this device, '
+      'or use the keyfile it already has.',
     );
     expect(result(), isNull, reason: 'the dialog returns no client');
   });
@@ -333,7 +333,10 @@ void main() {
     expect(
       shown(tester),
       allOf(
-        startsWith('The keys for $atSign in $keychain could not be read: '),
+        startsWith(
+          'The keys for $atSign in the AtKeys store ($keychain) could not '
+          'be read: ',
+        ),
         contains('User canceled the operation.'),
         isNot(contains('Please check your connection')),
       ),

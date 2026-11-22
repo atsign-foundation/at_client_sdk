@@ -13,13 +13,13 @@ sealed class AtKeysIo {
   final assurance = const AtKeysAssurance();
   FutureOr<AtKeys> read(String atsign);
 
-  /// Where [atsign]'s keys are kept, in words a message can show: a keyfile's
-  /// path, or a name for a store that has none.
+  /// Where [atsign]'s keys are kept, in words a message shows in brackets
+  /// after "the AtKeys store", such as a keyfile's path or "this device's
+  /// keychain", or empty when the store has nothing more specific to say.
   ///
   /// It never throws, since a caller names the source while reporting another
-  /// failure, and names no key material. A name begins "the" or "this", as
-  /// messages put "in" before a name and "at" before a path.
-  String describeSource(String atsign) => 'the keys store';
+  /// failure, and names no key material.
+  String describeSource(String atsign) => '';
 }
 
 /// An interface that defines methods for AtKeys that can be written.

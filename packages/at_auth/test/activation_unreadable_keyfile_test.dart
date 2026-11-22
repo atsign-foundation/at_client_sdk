@@ -43,7 +43,7 @@ class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
 /// A keys store with no path, named [source], whose read fails with
 /// [error].
 class _UnreadableStore extends WrittenAtKeysIo {
-  _UnreadableStore(this.error, {this.source = 'the test keys store'});
+  _UnreadableStore(this.error, {this.source = 'a test location'});
 
   final Object error;
   final String source;
@@ -231,8 +231,8 @@ void main() {
               unreadable(
                   path,
                   allOf(
-                      startsWith('The keys for $atSign at $path could not be '
-                          'read: '),
+                      startsWith('The keys for $atSign in the AtKeys store '
+                          '($path) could not be read: '),
                       contains('Permission denied')),
                   isA<FileSystemException>()
                       .having((e) => e.path, 'path', path)
@@ -251,8 +251,9 @@ void main() {
           throwsA(allOf(
               unreadable(
                   path,
-                  'The keys for $atSign at $path could not be read: it is not '
-                  'valid JSON: Unexpected character (at character 1).',
+                  'The keys for $atSign in the AtKeys store ($path) could not '
+                  'be read: it is not valid JSON: Unexpected character (at '
+                  'character 1).',
                   isA<AtKeysFormatException>()),
               holdsNoneOf(text))));
       expectNothingSent();
@@ -270,8 +271,8 @@ void main() {
               unreadable(
                   path,
                   allOf(
-                      startsWith('The keys for $atSign at $path could not be '
-                          'read: '),
+                      startsWith('The keys for $atSign in the AtKeys store '
+                          '($path) could not be read: '),
                       contains('passphrase may be incorrect'),
                       isNot(contains(passPhrase)),
                       isNot(contains(otherPassPhrase)),
@@ -290,8 +291,9 @@ void main() {
           throwsA(allOf(
               unreadable(
                   path,
-                  'The keys for $atSign at $path could not be read: Pass '
-                  'Phrase is required for password protected atKeys file.',
+                  'The keys for $atSign in the AtKeys store ($path) could not '
+                  'be read: Pass Phrase is required for password protected '
+                  'atKeys file.',
                   isA<AtDecryptionException>()),
               holdsNoneOf(text, window: 16))));
       expectNothingSent();
@@ -304,9 +306,10 @@ void main() {
             FileAtKeysIo(filePath: (a) => defaultAtKeysFilePathUnder(null, a))),
         throwsA(unreadable(
             'the atKeys file at an unresolved path',
-            'The keys for $atSign in the atKeys file at an unresolved path '
-                'could not be read: there is no home directory to find the '
-                "keyfile in; give FileAtKeysIo the keyfile's path as filePath.",
+            'The keys for $atSign in the AtKeys store (the atKeys file at an '
+                'unresolved path) could not be read: there is no home '
+                'directory to find the keyfile in; give FileAtKeysIo the '
+                "keyfile's path as filePath.",
             isA<AtException>())));
     expectNothingSent();
   });
@@ -571,7 +574,7 @@ void main() {
               (e) => e.message,
               'message',
               'atSign: $atSign is already onboarded: its keys are in the '
-                  'keys store. Cannot perform onboarding again.')));
+                  'AtKeys store. Cannot perform onboarding again.')));
       expectNothingSent();
     });
 
@@ -584,14 +587,14 @@ void main() {
           throwsA(isA<AtAuthenticationException>().having(
               (e) => e.message,
               'message',
-              'atSign: $atSign is already onboarded: its keys are at $path. '
-                  'Cannot perform onboarding again.')));
+              'atSign: $atSign is already onboarded: its keys are in the '
+                  'AtKeys store ($path). Cannot perform onboarding again.')));
       expectNothingSent();
     });
   });
 
   group('Activation refuses unusable keys with AtKeysUnusableException', () {
-    const source = 'the test keys store';
+    const source = 'a test location';
 
     test('a keyfile with a field of the wrong type', () async {
       final path = '${dir.path}/${atSign}_key.atKeys';
@@ -604,8 +607,9 @@ void main() {
           throwsA(allOf(
               unreadable(
                   path,
-                  "The keys for $atSign at $path could not be read: type 'int' "
-                  "is not a subtype of type 'String' in type cast.",
+                  'The keys for $atSign in the AtKeys store ($path) could not '
+                  "be read: type 'int' is not a subtype of type 'String' in "
+                  'type cast.',
                   isA<TypeError>()),
               holdsNoneOf(selfEncryptionKey))));
       expectNothingSent();
@@ -617,9 +621,10 @@ void main() {
               source: "this device's keychain")),
           throwsA(unreadable(
               "this device's keychain",
-              "The keys for $atSign in this device's keychain could not be "
-                  'read: PlatformException(AuthError:UserCanceled, User '
-                  'canceled the operation., null, null).',
+              "The keys for $atSign in the AtKeys store (this device's "
+                  'keychain) could not be read: '
+                  'PlatformException(AuthError:UserCanceled, User canceled '
+                  'the operation., null, null).',
               isA<_PlatformRefusal>())));
       expectNothingSent();
     });
@@ -630,8 +635,9 @@ void main() {
               const FormatException('Unexpected character', null, 0)))),
           throwsA(unreadable(
               source,
-              'The keys for $atSign in $source could not be read: it is not '
-              'valid JSON: Unexpected character (at character 1).',
+              'The keys for $atSign in the AtKeys store ($source) could not '
+              'be read: it is not valid JSON: Unexpected character (at '
+              'character 1).',
               isA<AtKeysFormatException>())));
       expectNothingSent();
     });
@@ -642,8 +648,8 @@ void main() {
               _UnreadableStore(AtKeysFormatException.notAnObject('the entry'))),
           throwsA(unreadable(
               source,
-              'The keys for $atSign in $source could not be read: it is not a '
-              'JSON object.',
+              'The keys for $atSign in the AtKeys store ($source) could not '
+              'be read: it is not a JSON object.',
               isA<AtKeysFormatException>())));
       expectNothingSent();
     });
@@ -658,8 +664,8 @@ void main() {
           throwsA(allOf(
               unreadable(
                   source,
-                  'The keys for $atSign in $source could not be read: '
-                  'Unexpected end of input.',
+                  'The keys for $atSign in the AtKeys store ($source) could '
+                  'not be read: Unexpected end of input.',
                   isA<FormatException>()
                       .having((e) => e.message, 'message',
                           'Unexpected end of input')
@@ -678,8 +684,8 @@ void main() {
           activate(_UnreadableStore(error)),
           throwsA(unreadable(
               source,
-              'The keys for $atSign in $source could not be read: Unsupported '
-              'atKeys version: 2.',
+              'The keys for $atSign in the AtKeys store ($source) could not '
+              'be read: Unsupported atKeys version: 2.',
               same(error))));
       expectNothingSent();
     });
@@ -691,8 +697,8 @@ void main() {
           activate(_UnreadableStore(error)),
           throwsA(unreadable(
               source,
-              'The keys for $atSign in $source could not be read: The store is '
-              'closed.',
+              'The keys for $atSign in the AtKeys store ($source) could not '
+              'be read: The store is closed.',
               same(error))));
       expectNothingSent();
     });
@@ -704,8 +710,9 @@ void main() {
               const FormatException('not a JSON object', null, 3)))),
           throwsA(unreadable(
               source,
-              'The keys for $atSign in $source could not be read: it is not '
-              'valid JSON: not a JSON object (at character 4).',
+              'The keys for $atSign in the AtKeys store ($source) could not '
+              'be read: it is not valid JSON: not a JSON object (at '
+              'character 4).',
               isA<AtKeysFormatException>())));
       expectNothingSent();
     });
@@ -717,8 +724,8 @@ void main() {
           activate(_UnreadableStore(error)),
           throwsA(unreadable(
               source,
-              'The keys for $atSign in $source could not be read: Bad state: '
-              'the store is closed.',
+              'The keys for $atSign in the AtKeys store ($source) could not '
+              'be read: Bad state: the store is closed.',
               same(error))));
       expectNothingSent();
     });
@@ -732,8 +739,33 @@ void main() {
           '/keys/${atSign}_key.atKeys');
     });
 
-    test('of a store that does not say is the keys store', () {
-      expect(InMemoryAtKeysIo().describeSource(atSign), 'the keys store');
+    test('of a store that says nothing more is empty', () {
+      expect(InMemoryAtKeysIo().describeSource(atSign), isEmpty);
+    });
+  });
+
+  group('Given keys absent from an AtKeys store', () {
+    test(
+        'when the store says nothing more, then the message says plain "the '
+        'AtKeys store"', () {
+      expect(
+          AtKeysUnusableException.absent(atSign, source: '').message,
+          'No keys for $atSign in the AtKeys store, so this device cannot '
+          'authenticate as $atSign. Activate $atSign, enroll this device, or '
+          'use the keyfile it already has.');
+    });
+
+    test(
+        'when the store names where its keys are kept, then the message puts '
+        'that in brackets after "the AtKeys store"', () {
+      expect(
+          AtKeysUnusableException.absent(atSign,
+                  source: '/keys/${atSign}_key.atKeys')
+              .message,
+          'No keys for $atSign in the AtKeys store '
+          '(/keys/${atSign}_key.atKeys), so this device cannot authenticate '
+          'as $atSign. Activate $atSign, enroll this device, or use the '
+          'keyfile it already has.');
     });
   });
 }

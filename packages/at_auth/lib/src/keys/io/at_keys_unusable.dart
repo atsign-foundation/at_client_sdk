@@ -37,8 +37,10 @@ class AtKeysUnusableException extends AtException {
   final String atSign;
   final AtKeysUnusableCause cause;
 
-  /// Where the keys were looked for, as `AtKeysIo.describeSource` names it;
-  /// null when whoever threw this named none.
+  /// Where the keys were looked for, as `AtKeysIo.describeSource` gives it:
+  /// what the message shows in brackets after "the AtKeys store", empty when
+  /// the store had nothing more to say, and null when whoever threw this
+  /// named none.
   final String? source;
 
   /// What reading the keys threw, when something did; a [FormatException]
@@ -94,12 +96,10 @@ Object? _withoutSource(Object? error) =>
         ? FormatException(error.message, null, error.offset)
         : error;
 
-/// [source] with the preposition a message puts before it: `in` before a
-/// name, which begins "the" or "this", and `at` before a path.
+/// Where a message says the keys are: in the AtKeys store, with [source] in
+/// brackets after it unless [source] is empty.
 String whereKeysAre(String source) =>
-    source.startsWith('the ') || source.startsWith('this ')
-        ? 'in $source'
-        : 'at $source';
+    source.isEmpty ? 'in the AtKeys store' : 'in the AtKeys store ($source)';
 
 /// Why [error] leaves the keys unusable, in one line, escaped and clipped:
 /// what the error says, which names where the keys failed and quotes no

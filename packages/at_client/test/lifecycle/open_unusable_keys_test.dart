@@ -181,7 +181,7 @@ void main() {
     await first.stop();
 
     final secret = await unreadable();
-    final prefix = 'The keys for $atSign at $path $says: ';
+    final prefix = 'The keys for $atSign in the AtKeys store ($path) $says: ';
     await expectLater(
         Atsign(atSign).open(
             keys: reader,
@@ -219,9 +219,10 @@ void main() {
             .having(
                 (e) => e.message,
                 'message',
-                'No keys for $atSign at $path, so this device cannot '
-                    'authenticate as $atSign. Activate $atSign, enroll this '
-                    'device, or use the keyfile it already has.')));
+                'No keys for $atSign in the AtKeys store ($path), so this '
+                    'device cannot authenticate as $atSign. Activate '
+                    '$atSign, enroll this device, or use the keyfile it '
+                    'already has.')));
     expectNoConnection();
   });
 
@@ -655,8 +656,11 @@ void main() {
         throwsA(isA<AtKeysUnusableException>()
             .having((e) => e.cause, 'cause', AtKeysUnusableCause.anotherAtsign)
             .having((e) => e.source, 'source', path)
-            .having((e) => e.message, 'message',
-                'The keys at $path are for @bob, not $atSign.')));
+            .having(
+                (e) => e.message,
+                'message',
+                'The keys in the AtKeys store ($path) are for @bob, not '
+                    '$atSign.')));
     expectNoConnection();
   });
 

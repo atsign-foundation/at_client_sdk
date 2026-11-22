@@ -19,7 +19,7 @@ Feature: The onboarding dialogs say what failed
   Scenario: A dialog with no keys shows the keys message
     Given no keys for @alice in this device's keychain
     When PkamDialog opens @alice
-    Then it shows "No keys for @alice in this device's keychain, so this device cannot authenticate as @alice. Activate @alice, enroll this device, or use the keyfile it already has." and returns no client
+    Then it shows "No keys for @alice in the AtKeys store (this device's keychain), so this device cannot authenticate as @alice. Activate @alice, enroll this device, or use the keyfile it already has." and returns no client
 
   Scenario Outline: Keys with no credential, or an enrollment PkamDialog cannot wait on, say what to do in plain words
     Given keys for @alice that <hold>

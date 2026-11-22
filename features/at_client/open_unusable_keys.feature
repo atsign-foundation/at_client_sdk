@@ -20,7 +20,7 @@ Feature: Atsign.open refuses keys it cannot use before connecting, and says why
   Scenario: An absent keyfile is refused before connecting
     Given no atKeys at the keys source for @alice
     When an app calls Atsign.open for @alice
-    Then it throws AtKeysUnusableException with cause absent, source <path> and the message "No keys for @alice at <path>, so this device cannot authenticate as @alice. Activate @alice, enroll this device, or use the keyfile it already has.", and opens no connection
+    Then it throws AtKeysUnusableException with cause absent, source <path> and the message "No keys for @alice in the AtKeys store (<path>), so this device cannot authenticate as @alice. Activate @alice, enroll this device, or use the keyfile it already has.", and opens no connection
 
   Scenario: A keyfile path that cannot be resolved is refused before connecting
     Given an app whose keyfile path cannot be resolved, as the default path on a platform with no home directory
@@ -30,19 +30,19 @@ Feature: Atsign.open refuses keys it cannot use before connecting, and says why
   Scenario: An unreadable keyfile is refused before connecting, even on a device that has held the atSign online
     Given a device that has held @alice online, and an atKeys file for @alice that cannot be read
     When an app calls Atsign.open for @alice
-    Then it throws AtKeysUnusableException with cause unreadable and the message "The keys for @alice at <path> could not be read: <reason>.", holding none of the file's contents, and opens no connection
+    Then it throws AtKeysUnusableException with cause unreadable and the message "The keys for @alice in the AtKeys store (<path>) could not be read: <reason>.", holding none of the file's contents, and opens no connection
     # cases: permission denied; not a JSON object; wrong passphrase; no passphrase; a field of the wrong type; a keyId that appears twice; an envelope version this build has no code for; an envelope that carries no salt; an envelope that carries no key derivation parameters; a role that appears twice for one keyId; an enrollment holding two active keys of one role and algorithm; an atKeys version this build has no code for; a namespace that names no string; a key derivation memory below one; a key derivation iterations below one; a key derivation parallelism below one; a key derivation memory and parallelism of zero; a key derivation memory below eight times its parallelism; a key derivation this device cannot run; a hashing algorithm this build has no code for
 
   Scenario: Keys that hold no authentication keypair this device can use are refused before connecting, even on a device that has held the atSign online
     Given a device that has held @alice online, and an atKeys file for @alice that can be read but holds no authentication keypair this device can use
     When an app calls Atsign.open for @alice
-    Then it throws AtKeysUnusableException with cause noAuthenticationKeypair and the message "The keys for @alice at <path> cannot be used to authenticate: <reason>.", holding no key material, and opens no connection
+    Then it throws AtKeysUnusableException with cause noAuthenticationKeypair and the message "The keys for @alice in the AtKeys store (<path>) cannot be used to authenticate: <reason>.", holding no key material, and opens no connection
     # cases: no authentication keypair; an algorithm this build cannot sign with; several enrollments qualifying
 
   Scenario: A keyfile naming another atSign is refused before connecting
     Given an atKeys file whose atsign is @bob
     When an app calls Atsign.open for @alice
-    Then it throws AtKeysUnusableException with cause anotherAtsign and the message "The keys at <path> are for @bob, not @alice.", and opens no connection
+    Then it throws AtKeysUnusableException with cause anotherAtsign and the message "The keys in the AtKeys store (<path>) are for @bob, not @alice.", and opens no connection
 
   Scenario: A keyfile that names no atSign is used as before
     Given an atKeys file for @alice that records no atsign

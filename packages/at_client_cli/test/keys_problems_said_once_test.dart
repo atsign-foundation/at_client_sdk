@@ -324,8 +324,9 @@ void main() {
     expect(
         run.stderr,
         holdsOnceInOrder([
-          'The keys for $atSign at ${defaultKeyfile()} could not be read: '
-              'this atKeys file declares an envelope version this build has '
+          'The keys for $atSign in the AtKeys store (${defaultKeyfile()}) '
+              'could not be read: this atKeys file declares an envelope '
+              'version this build has '
               'no code for \u2014 refusing rather than guessing at how its key '
               'was derived.',
           footer,
@@ -356,7 +357,8 @@ void main() {
     expect(
         run.stderr,
         holdsOnceInOrder([
-          'The keys at $path are for @bob, not $atSign. Check -a and -k.',
+          'The keys in the AtKeys store ($path) are for @bob, not $atSign. '
+              'Check -a and -k.',
           footer,
         ]));
     expect(run.exitCode, 1);
@@ -379,10 +381,10 @@ void main() {
     expect(
         run.stderr,
         holdsOnceInOrder([
-          'The keys for $atSign at ${defaultKeyfile()} cannot be used to '
-              'authenticate: AtKeys holds no authentication keypair for the '
-              'enrollment it authenticates as, so there is nothing to sign '
-              'with.',
+          'The keys for $atSign in the AtKeys store (${defaultKeyfile()}) '
+              'cannot be used to authenticate: AtKeys holds no '
+              'authentication keypair for the enrollment it authenticates '
+              'as, so there is nothing to sign with.',
           footer,
         ]));
     expect(run.exitCode, 1);
@@ -429,8 +431,8 @@ void main() {
 
       final run =
           await atActivate(['otp', '-a', atSign, '-r', atDirectoryRoot()]);
-      final first = 'The keys for $atSign at ${defaultKeyfile()} could not be '
-          'read: ';
+      final first = 'The keys for $atSign in the AtKeys store '
+          '(${defaultKeyfile()}) could not be read: ';
 
       expect(run.stderr.where((l) => l.startsWith(first)), hasLength(1),
           reason: 'the library message: ${run.stderr}');
@@ -457,8 +459,9 @@ void main() {
       expect(
           run.stderr,
           holdsOnceInOrder([
-            "The keys for $atSign at ${defaultKeyfile()} could not be read: "
-                "type 'int' is not a subtype of type 'String' in type cast.",
+            'The keys for $atSign in the AtKeys store (${defaultKeyfile()}) '
+                "could not be read: type 'int' is not a subtype of type "
+                "'String' in type cast.",
             footer,
           ]));
       expect(run.stderr.join('\n'), isNot(contains('pass it with -P')));
