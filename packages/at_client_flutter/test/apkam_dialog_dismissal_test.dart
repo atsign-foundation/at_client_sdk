@@ -18,6 +18,15 @@ class FakeAtClientPreference extends Fake implements AtClientPreference {}
 
 class FakeAtClientStorage extends Fake implements AtClientStorage {}
 
+/// Records each route the navigator pops.
+class _PopRecorder extends NavigatorObserver {
+  final popped = <Route<dynamic>>[];
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      popped.add(route);
+}
+
 /// A request filed in a key store under [enrollmentId] by [app] on [device],
 /// which has not been decided, for [namespaces], what the dialog asks for by
 /// default.
@@ -52,7 +61,9 @@ void main() {
 
   late MockAtsignFlows flows;
   late MockPendingEnrollment pending;
+  late _PopRecorder pops;
   setUp(() {
+    pops = _PopRecorder();
     flows = MockAtsignFlows();
     pending = filed('enroll-1', app: 'app', device: 'device');
   });
@@ -100,6 +111,7 @@ void main() {
     final results = <Object?>[];
     await tester.pumpWidget(
       MaterialApp(
+        navigatorObservers: [pops],
         home: Scaffold(
           body: Builder(
             builder: (context) => ElevatedButton(
@@ -426,6 +438,105 @@ void main() {
       expect(results, [client]);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('A failure while Cancel is being confirmed closes the '
+        'confirmation and shows the failure', (tester) async {
+      resumes(pending);
+      final opened = clientAnswers();
+      stopEnds(opened);
+      final results = await open(tester);
+      await tapText(tester, 'Cancel');
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      opened.completeError(
+        AtEnrollmentDeniedException('enrollment enroll-1 of @alice was denied'),
+      );
+      await frames(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.textContaining('enroll-1 of @alice was denied'),
+        ),
+        findsOneWidget,
+        reason: 'the failure is shown',
+      );
+      expect(find.byType(ApkamActivationDialog), findsOneWidget);
+      expect(results, isEmpty, reason: 'the dialog stays open');
+      verifyNever(() => pending.cancel());
+    });
+
+    testWidgets('Leaving the enrollment dialog while its confirmed Cancel runs '
+        'closes it once', (tester) async {
+      resumes(pending);
+      final opened = clientAnswers();
+      stopEnds(opened);
+      final removing = Completer<void>();
+      when(() => pending.cancel()).thenAnswer((_) async {
+        await removing.future;
+        if (!opened.isCompleted) {
+          opened.completeError(AtEnrollmentCancelledException('cancelled'));
+        }
+      });
+      final results = await open(tester);
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Abandon');
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump();
+      removing.complete();
+      await frames(tester);
+
+      expect(find.byType(ApkamActivationDialog), findsNothing);
+      expect(
+        pops.popped.whereType<PageRoute<dynamic>>(),
+        isEmpty,
+        reason: 'only the dialog closes, not the screen beneath it',
+      );
+      expect(results, [null]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Given a confirmed Cancel after the approval was written, '
+        'when the user leaves before the approved keys open, then that '
+        'client is stopped and nothing beneath the dialog is popped', (
+      tester,
+    ) async {
+      resumes(pending);
+      when(() => pending.approved).thenReturn(true);
+      when(() => pending.stop()).thenAnswer((_) async {});
+      final opened = clientAnswers();
+      when(() => pending.cancel()).thenAnswer((_) async {
+        opened.completeError(
+          AtEnrollmentCancelledException('cancelled after the approval'),
+        );
+      });
+      final opening = Completer<AtClient>();
+      when(
+        () => flows.open(
+          any(),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).thenAnswer((_) => opening.future);
+      final approvedClient = MockAtClient();
+      when(() => approvedClient.stop()).thenAnswer((_) async {});
+      final results = await open(tester);
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Abandon');
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump();
+      opening.complete(approvedClient);
+      await frames(tester);
+
+      verify(() => approvedClient.stop()).called(1);
+      expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+      expect(results, [null]);
+    });
   });
 
   testWidgets('The enrollment dialog says so when another wait has cancelled '
@@ -586,7 +697,54 @@ void main() {
     );
   });
 
+  testWidgets('The abandoned message shows the enrollment id with its '
+      'control characters escaped', (tester) async {
+    final request = filed('enr\u001boll-1', app: 'app', device: 'device');
+    resumes(request);
+    final opened = clientAnswers(request);
+    stopEnds(opened, request);
+    when(() => request.cancel()).thenAnswer((_) async {
+      opened.completeError(AtEnrollmentCancelledException('cancelled'));
+    });
+    await open(tester);
+
+    await tapText(tester, 'Cancel');
+    await tapText(tester, 'Abandon');
+
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text(
+          r'Enrollment enr\u001boll-1 abandoned. Ask the manager of @alice '
+          'to deny it.',
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
   group('Given approval lands just as the dialog is dismissed', () {
+    testWidgets('when pending.client() returns as the dialog closes, then '
+        'that client is stopped and nothing beneath the dialog is popped', (
+      tester,
+    ) async {
+      resumes(pending);
+      final opened = clientAnswers();
+      when(() => pending.stop()).thenAnswer((_) async {});
+      final client = MockAtClient();
+      when(() => client.stop()).thenAnswer((_) async {});
+      final results = await open(tester);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump();
+      opened.complete(client);
+      await frames(tester);
+
+      verify(() => client.stop()).called(1);
+      expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+      expect(results, [null]);
+    });
+
     testWidgets('when pending.client() returns after the dismissal, then that '
         'client is stopped, so the next open of the atSign succeeds', (
       tester,

@@ -18,6 +18,15 @@ class FakeAtClientPreference extends Fake implements AtClientPreference {}
 
 class FakeAtClientStorage extends Fake implements AtClientStorage {}
 
+/// Records each route the navigator pops.
+class _PopRecorder extends NavigatorObserver {
+  final popped = <Route<dynamic>>[];
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      popped.add(route);
+}
+
 /// PkamDialog, waiting on the enrollment it resumed from a keychain entry,
 /// offers ApkamActivationDialog's Cancel: only a confirmed Cancel abandons
 /// the request.
@@ -33,11 +42,13 @@ void main() {
 
   late MockAtsignFlows flows;
   late MockPendingEnrollment pending;
+  late _PopRecorder pops;
 
   /// What each `flows.open` after the first, which finds only the pending
   /// enrollment, answers with.
   late Future<AtClient> Function() reopens;
   setUp(() {
+    pops = _PopRecorder();
     flows = MockAtsignFlows();
     pending = MockPendingEnrollment();
     when(() => pending.enrollmentId).thenReturn('enroll-1');
@@ -98,6 +109,7 @@ void main() {
     final completed = <AtClient>[];
     await tester.pumpWidget(
       MaterialApp(
+        navigatorObservers: [pops],
         home: Scaffold(
           body: Builder(
             builder: (context) => ElevatedButton(
@@ -413,6 +425,56 @@ void main() {
     expect(results, [null], reason: 'the dialog closes with no client');
     expect(completed, isEmpty);
     verifyNever(() => pending.cancel());
+  });
+
+  testWidgets('A failure ending PkamDialog\'s wait as its confirmed Cancel '
+      'runs closes the dialog once', (tester) async {
+    final opened = clientAnswers();
+    stopEnds(opened);
+    // The Cancel's ending runs first and the denial's after it.
+    when(() => pending.cancel()).thenAnswer((_) async {
+      Timer(const Duration(milliseconds: 1), () {
+        opened.completeError(
+          AtEnrollmentDeniedException(
+            'enrollment enroll-1 of @alice was denied',
+          ),
+        );
+      });
+    });
+    final (results, completed) = await open(tester);
+
+    await tapText(tester, 'Cancel');
+    await tapText(tester, 'Abandon');
+
+    expect(find.byType(PkamDialog), findsNothing);
+    expect(
+      pops.popped.whereType<PageRoute<dynamic>>(),
+      isEmpty,
+      reason: 'only the dialog closes, not the screen beneath it',
+    );
+    expect(results, [null], reason: 'the dialog closes with no client');
+    expect(completed, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Given PkamDialog waiting, when the approval lands as the '
+      'dialog closes, then its client is stopped and nothing beneath the '
+      'dialog is popped', (tester) async {
+    final opened = clientAnswers();
+    when(() => pending.stop()).thenAnswer((_) async {});
+    final client = MockAtClient();
+    when(() => client.stop()).thenAnswer((_) async {});
+    final (results, completed) = await open(tester);
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    opened.complete(client);
+    await frames(tester);
+
+    verify(() => client.stop()).called(1);
+    expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+    expect(results, [null]);
+    expect(completed, isEmpty);
   });
 }
 

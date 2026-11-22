@@ -21,6 +21,15 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
   Future<void> handBack(AtClient client) async =>
       Navigator.of(context).pop(client);
 
+  /// Whether the dialog is there to report to and to close: mounted, with its
+  /// route not yet popped, by the dialog or by the user.
+  bool get showing => mounted && (ModalRoute.of(context)?.isActive ?? true);
+
+  /// Closes the dialog, unless it has closed already.
+  void closeDialog() {
+    if (showing) Navigator.of(context).pop();
+  }
+
   /// The enrollment whose Cancel the user confirmed.
   PendingEnrollment? _cancelled;
 
@@ -93,7 +102,7 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
         ),
       ),
     );
-    Navigator.of(context).pop();
+    closeDialog();
   }
 
   /// Hands back a client on the keys whose approval was written before the
@@ -118,7 +127,7 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
       if (mounted) Navigator.of(context).pop();
       return;
     }
-    if (!mounted) {
+    if (!showing) {
       // NOTE: nothing receives a client opened after the dismissal, and
       // while it is live the atSign cannot be opened again.
       await client.stop();

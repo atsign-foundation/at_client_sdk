@@ -15,7 +15,9 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   approval already written is stopped; a request another process on this
   device completes or abandons first is found as it then is; a wait whose
   request another wait cancels ends with its failure shown, since only the
-  user's own confirmed Cancel ends a wait silently.
+  user's own confirmed Cancel ends a wait silently; and a dialog closes
+  once, whichever of its wait's failure, a confirmed Cancel and the user's
+  leaving comes first.
   Replay: none arises; leaving and Cancel send nothing.
   DoS: no poll runs once the user has left.
   Forgery and impersonation: the dialogs resume only what the store they are
@@ -68,6 +70,18 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Then the confirmation closes, nothing is cancelled, and the dialog returns the client
 
   @race
+  Scenario: A failure while Cancel is being confirmed closes the confirmation and shows the failure
+    Given the Cancel confirmation showing
+    When the wait fails
+    Then the confirmation closes, the failure is shown and the dialog stays open
+
+  @race
+  Scenario: Leaving the enrollment dialog while its confirmed Cancel runs closes it once
+    Given the dialog waiting for approval
+    When the user confirms Cancel and leaves with the back arrow before the pending keys are removed
+    Then the dialog closes with no client, and the screen it was opened from stays
+
+  @race
   Scenario: The enrollment dialog says so when another wait has cancelled the request it waits on
     Given the enrollment dialog waiting on a request, and Cancel not chosen
     When its wait ends because another wait cancelled the request
@@ -99,6 +113,11 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given a dialog waiting on an enrollment whose id holds an ESC character
     When the user chooses Cancel
     Then the confirmation shows the id with the ESC escaped as \u001b
+
+  Scenario: The abandoned message shows the enrollment id with its control characters escaped
+    Given a dialog waiting on an enrollment whose id holds an ESC character
+    When the user confirms Cancel and the pending keys are removed
+    Then the message saying the request was abandoned shows the ESC escaped as \u001b
 
   Scenario: PkamDialog resumes a pending keychain entry
     Given a keychain entry for an atSign holding only an enrollment awaiting approval
@@ -148,3 +167,9 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given PkamDialog's Cancel confirmation showing
     When the wait fails
     Then the confirmation closes, the failure is shown and the dialog closes with no client
+
+  @race
+  Scenario: A failure ending PkamDialog's wait as its confirmed Cancel runs closes the dialog once
+    Given PkamDialog waiting on a resumed enrollment
+    When the user confirms Cancel, and the wait then fails with a denial as the dialog closes
+    Then the dialog closes with no client, and the screen it was opened from stays

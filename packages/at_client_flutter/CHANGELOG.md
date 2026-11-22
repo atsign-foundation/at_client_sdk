@@ -5,6 +5,11 @@
 - feat: `PkamDialog` offers Cancel while it waits on a pending enrollment, as
   `ApkamActivationDialog` does: after the user confirms, it removes the
   request's pending keys from the key store.
+- fix: `ApkamActivationDialog` and `PkamDialog` no longer close the screen
+  beneath them, or leave a client running that the app never receives, when
+  a failure, a confirmed Cancel or the user leaving lands as they close.
+  `ApkamActivationDialog` also closes its Cancel confirmation when the wait
+  fails.
 - fix: `ApkamActivationDialog` and `PkamDialog` show a failure when another
   wait has cancelled the request they wait on, saying the Atsign's manager
   can revoke its approval.

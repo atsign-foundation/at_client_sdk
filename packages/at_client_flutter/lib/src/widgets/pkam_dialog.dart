@@ -189,7 +189,7 @@ class _PkamDialogState extends State<PkamDialog>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
-    Navigator.of(context).pop(null);
+    closeDialog();
   }
 
   /// The client opened on the keys, or, when they hold only an enrollment
@@ -237,7 +237,7 @@ class _PkamDialogState extends State<PkamDialog>
           widget.storage,
         ),
       );
-      if (!mounted) {
+      if (!showing) {
         // NOTE: nothing receives a client opened after the user left, and
         // while it is live the atSign cannot be opened again.
         await client.stop();

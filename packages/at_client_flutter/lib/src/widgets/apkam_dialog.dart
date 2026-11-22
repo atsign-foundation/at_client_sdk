@@ -226,7 +226,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
           widget.storage,
         ),
       );
-      if (!mounted) {
+      if (!showing) {
         // NOTE: nothing receives a client opened after the dismissal, and
         // while it is live the atSign cannot be opened again.
         await client.stop();
@@ -245,6 +245,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
       ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       _waitingOn = null;
+      closeConfirmation();
       await _progress?.cancel();
       _progress = null;
       // Guard against setState after the dialog was dismissed mid-await; a bare
