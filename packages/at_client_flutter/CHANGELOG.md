@@ -75,7 +75,7 @@
 - fix: `PkamDialog`, `CramDialog`, `ApkamActivationDialog` and
   `RegistrarCramDialog` say what failed: a keys problem, an atServer refusal
   in plain words, a server that could not be reached, or "Something went
-  wrong with <atSign>: <message>", never a stack trace.
+  wrong with <Atsign>: <message>", never a stack trace.
 - fix: `PkamDialog` tells the user in plain words to enroll the device again
   when its keys hold no credential, or only enrollments awaiting approval
   that it cannot wait on.

@@ -103,12 +103,12 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
-- feat: `AtKeysIo.describeSource` says where an atSign's keys are kept (for
+- feat: `AtKeysIo.describeSource` says where an Atsign's keys are kept (for
   `FileAtKeysIo`, the keyfile path), and `WrittenAtKeysIo.checkWritable`
   throws when the store could not take new keys now (`FileAtKeysIo` checks;
   by default it checks nothing). A class that implements `WrittenAtKeysIo`
   rather than extending it must add both.
-- feat: `AtKeysUnusableException` says why an atSign's keys cannot be used
+- feat: `AtKeysUnusableException` says why an Atsign's keys cannot be used
   (`cause`) and where they were looked for (`source`).
 - fix: `AtKeysUnusableException` shows the Atsign a keyfile records, and why
   reading the keys or finding their keypair failed, with their control

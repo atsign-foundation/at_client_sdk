@@ -12,8 +12,10 @@
 - fix: `at_activate cancel` and `enroll` say what is wrong with a keyfile
   they cannot read, or one recorded for another Atsign, and `enroll` no
   longer waits on that other Atsign's request.
-- fix: keys that cannot be read, cannot authenticate or are for another
-  atSign are reported naming the keyfile as "the AtKeys store (<path>)".
+- fix: at_activate and programs built on `CLIBase` name the keyfile as "the
+  AtKeys store (<path>)" when its keys cannot be read for a reason other
+  than a wrong or missing passphrase, hold no keypair to authenticate with,
+  or are recorded for another Atsign.
 - fix: `at_activate list`, `approve` and `auto` show the ids, statuses,
   names and namespaces a request carries, and the keys and senders `auto`
   names as it passes a notification over, with their control characters
@@ -48,7 +50,7 @@
   Requires at_lookup 4.1.0.
 - fix: at_activate and programs built on `CLIBase` report a keys problem
   once, naming the keyfile and the next step to take where there is one.
-- feat: when an atSign's keys are absent, at_activate looks up its public
+- feat: when an Atsign's keys are absent, at_activate looks up its public
   key, for up to 5 seconds, to say whether to activate it or enroll this
   machine. The activate command it gives, and the one programs built on
   `CLIBase` give, names the root they were given with `-r`, and a lookup
