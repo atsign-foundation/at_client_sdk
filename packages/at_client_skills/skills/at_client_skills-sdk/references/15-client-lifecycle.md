@@ -97,7 +97,7 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtEnrollmentExpiredException` (at_client 4.1.0) | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
 | `AtEnrollmentDeniedException` (at_client 4.1.0) | `pending.client(...)`: the request was denied; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
 | `AtEnrollmentException`          | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included; its pending keys stay            | Show the message; a person decides whether to wait again (`resumeEnrollment` returns the request) or `cancel()` |
-| Any other error, `AtEnrollmentException` included | `pending.client(...)`: the request was approved but its keys could not be fetched or decrypted: an `AtException` such as `AtLookUpException` for an error reply or none, a `FormatException` or `ArgumentError` for a reply that does not parse or decrypt, and a plain `AtEnrollmentException` only when no conveyed key decrypts them; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
+| Any other error, `AtEnrollmentException` included | `pending.client(...)`: the request was approved but its keys could not be fetched or decrypted: an `AtException` such as `AtLookUpException` for an error reply or none, errors such as `FormatException` or `ArgumentError` for a reply that does not parse or decrypt, and a plain `AtEnrollmentException` only when no conveyed key decrypts them; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`, or another wait for the same request cancelled it before its approval was filed | Nothing after a cancel of its own; otherwise show the message, since an approval may have landed                |
 | `StoppedException`               | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                                                                    | `resumeEnrollment` later; the request is kept                                                                   |
 | `AtCredentialRefusedException`   | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal                                                                 | Show the cause                                                                                                  |
@@ -108,9 +108,10 @@ connect attempt waits before the client comes back offline, 5 s by default).
 `AtEnrollmentException`. An approval whose keys cannot be collected throws
 whatever collecting them threw, mostly not an `AtEnrollmentException`, so a
 final `catch` of any other error goes after these and waits again rather than
-cancelling. `resumeEnrollment` returns the request after either, and null
-after a denial or expiry whose pending keys were removed. at_client 4.0
-throws a plain `AtEnrollmentException` for a denial and an expiry too.
+cancelling. `resumeEnrollment` returns the request after either of these,
+and null after a denial or expiry whose pending keys were removed.
+at_client 4.0 throws a plain `AtEnrollmentException` for a denial and an
+expiry too.
 
 `resumeEnrollment` reads the keys as `open` does: keys it cannot read, or that
 record another Atsign, throw `AtKeysUnusableException` before it connects, and

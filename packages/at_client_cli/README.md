@@ -171,11 +171,11 @@ online. Otherwise it stops the client and throws:
   the next run;
 - whatever fetching or decrypting the keys threw when the request was
   approved but its keys could not be collected, keeping the request: an
-  `AtException` such as `AtLookUpException` for an error reply or none, a
-  `FormatException` or `ArgumentError` for a reply that does not parse or
-  decrypt, and a plain `AtEnrollmentException` only when no conveyed key
-  decrypts them. The request may already be approved, so run again rather
-  than cancel it;
+  `AtException` such as `AtLookUpException` for an error reply or none,
+  errors such as `FormatException` or `ArgumentError` for a reply that does
+  not parse or decrypt, and a plain `AtEnrollmentException` only when no
+  conveyed key decrypts them. The request may already be approved, so run
+  again rather than cancel it;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
   Atsign;
 - `SecondaryServerConnectivityException` when no atServer accepted or refused

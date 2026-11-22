@@ -318,10 +318,11 @@ class CLIBase {
   /// answering the wait with neither a decision nor "not yet", whatever
   /// fetching or decrypting the keys threw when the request was approved but
   /// they could not be collected, keeping them: an [AtException] such as
-  /// `AtLookUpException` for an error reply or none, [FormatException] or
-  /// [ArgumentError] for a reply that does not parse or decrypt, and a plain
-  /// [AtEnrollmentException] only when no conveyed key decrypts them (the
-  /// request may already be approved; run again rather than cancel it),
+  /// `AtLookUpException` for an error reply or none, errors such as
+  /// [FormatException] or [ArgumentError] for a reply that does not parse or
+  /// decrypt, and a plain [AtEnrollmentException] only when no conveyed key
+  /// decrypts them (the request may already be approved; run again rather
+  /// than cancel it),
   /// [SecondaryNotFoundException] when the atDirectory has no atServer for the
   /// atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or
