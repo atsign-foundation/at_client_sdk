@@ -18,6 +18,12 @@
   error, such as AT0011, or with no challenge to sign, retries as it does
   for an atServer not reached, and ends with
   `SecondaryServerConnectivityException`, not `AtCredentialRefusedException`.
+- fix: a `CLIBase` program whose enrollment request is denied ends with
+  `AtEnrollmentDeniedException`, and one whose request has expired with
+  `AtEnrollmentExpiredException`, both `AtEnrollmentException`s, and either
+  removes the request's keys. A wait for approval that ends on any other
+  refusal keeps the request for the next run, even when the atServer's text
+  says "denied".
 - fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
   it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
   `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that

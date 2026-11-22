@@ -405,7 +405,7 @@ final pending = await Atsign(atSign).enroll(
     namespaces: {'my_app': 'rw'}, keys: keys, preference: preference,
     lookUps: lookUps, secondaryAddressFinder: atDirectory);
 final client = await pending.client(preference,
-    storage: storage);                             // throws AtEnrollmentException on a denial
+    storage: storage);                             // throws AtEnrollmentDeniedException on a denial (4.1.0)
 ```
 
 **Approve, deny, revoke; passcodes**

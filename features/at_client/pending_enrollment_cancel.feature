@@ -15,7 +15,8 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   still approve it, and that approval names keys nobody holds.
 
   An expired request, which the atServer answers with AT0028 or AT0029, has
-  its pending keys removed as a denial does.
+  its pending keys removed as a denial does. A denial is the atServer's
+  AT0025 alone: a refusal whose text says "denied" keeps the request.
 
   A store a cancel, a denial or an expiry left with no credential is refused
   by Atsign.open at once with AtNoCredentialException, which says to enroll
@@ -30,12 +31,15 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   Replay: none arises; stop and cancel send nothing, and a resume polls the
   same enrollment as before.
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
-  wait that every restart would otherwise resume into the same answer.
-  Forgery and impersonation: cancel and expiry remove only this enrollment's
-  pending keys, found by atSign and enrollment id. A resume with no names
-  trusts the store it is given, as open does: a pending entry planted there
-  still needs the manager's approval, and a passcode from an enrolled app to
-  have been submitted at all.
+  wait that every restart would otherwise resume into the same answer. Of
+  the atServer's answers, only AT0025, AT0028 and AT0029 remove a request's
+  keys, so no other answer, whatever its text, discards a request.
+  Forgery and impersonation: cancel, a denial and expiry remove only this
+  enrollment's pending keys, found by atSign and enrollment id. Only the
+  atServer the wait polls answers AT0025, and it already decides the
+  request. A resume with no names trusts the store it is given, as open
+  does: a pending entry planted there still needs the manager's approval,
+  and a passcode from an enrolled app to have been submitted at all.
 
   Scenario: Cancel ends a wait for approval
     Given a pending enrollment waiting in awaitApproval

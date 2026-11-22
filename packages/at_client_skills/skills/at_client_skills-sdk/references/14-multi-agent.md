@@ -36,17 +36,18 @@ verbose, etc.). This is the same pattern the canonical TUI example uses
 `CLIBase` waits for the client to come online, and otherwise stops it and
 throws: `AtCredentialRefusedException` when the atServer refuses the keys,
 `SecondaryNotFoundException` when the atDirectory has no atServer for the
-atSign, and `SecondaryServerConnectivityException` only when no atServer
+Atsign, and `SecondaryServerConnectivityException` only when no atServer
 accepted or refused the keys in time: an atServer not reached, or one that
 answers with a server error such as AT0011 or no challenge to sign. A retry
 loop around opening catches that last one alone; the others need a person.
 A keyfile holding only an enrollment request is resumed: `CLIBase` waits for
-its approval, as at_activate does, and throws `AtEnrollmentDeniedException` when
-it is denied and `AtEnrollmentExpiredException` when it expires, each an
-`AtEnrollmentException`; both remove the request. A wait the atServer keeps answering with anything
-else, a server error included, also ends in `AtEnrollmentException` and
-keeps the request, and an atServer not reached ends it with the
-connection's own failure.
+its approval, as at_activate does, and throws `AtEnrollmentDeniedException`
+when it is denied and `AtEnrollmentExpiredException` when it expires (both
+at_client 4.1.0; 4.0 throws a plain `AtEnrollmentException` for each), each
+an `AtEnrollmentException`; both remove the request. A wait the atServer
+keeps answering with anything else, a server error included, also ends in
+`AtEnrollmentException` and keeps the request, and an atServer not reached
+ends it with the connection's own failure.
 
 ## One process, one storage path
 
