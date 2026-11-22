@@ -113,8 +113,8 @@ class PendingEnrollment {
   /// or process has filed it, this wait ends approved as well; when another has
   /// removed the pending keys instead, the approval files nothing and this
   /// throws [AtEnrollmentCancelledException]. A wait begun once the request is
-  /// no longer pending throws [AtEnrollmentException] at once. Any other end of
-  /// the wait keeps the request.
+  /// no longer pending throws [AtEnrollmentException] at once. Any other
+  /// refusal or failure keeps the request, and [cancel] removes it.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,

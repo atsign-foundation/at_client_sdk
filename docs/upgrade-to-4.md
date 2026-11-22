@@ -694,11 +694,13 @@ release candidate also meets three changes section 2 covers by error:
 `AtCredentialRefusedException` when the atServer refuses the keys, saying when
 an enrollment awaits approval or was denied; `SecondaryNotFoundException` when
 the atDirectory has no atServer for the atSign; and
-`SecondaryServerConnectivityException` only when the atServer is not reached
-in time. A retry loop catches the last alone. A keyfile still holding only its
-enrollment request is resumed: the program says it is waiting for that
-enrollment, waits for its approval as at_activate does, then runs, and a
-denial or expiry ends it with `AtEnrollmentException`.
+`SecondaryServerConnectivityException` only when no atServer accepted or
+refused the keys in time: an outage, or, with at_client 4.1.0, a server error
+such as AT0011. A retry loop catches the last alone. A keyfile still holding
+only its enrollment request is resumed: the program says it is waiting for
+that enrollment, waits for its approval as at_activate does, then runs, and a
+denial or expiry ends it with `AtEnrollmentException`; with at_client 4.1.0
+that is `AtEnrollmentDeniedException` or `AtEnrollmentExpiredException`.
 
 ```dart after-cli
 Future<AtClient> openWhenReachable(List<String> args) async {

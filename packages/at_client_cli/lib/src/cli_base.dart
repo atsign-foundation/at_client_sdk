@@ -314,6 +314,10 @@ class CLIBase {
   /// [AtEnrollmentExpiredException] when it expires, both removing its keys
   /// or, when the keyfile cannot be written, saying in their message that the
   /// keys stay, so the next [init] resumes the request again,
+  /// a plain [AtEnrollmentException], keeping them, when the atServer keeps
+  /// answering the wait with neither a decision nor "not yet", or when the
+  /// request was approved but its keys could not be fetched or decrypted (so
+  /// it may already be approved; run again rather than cancel it),
   /// [SecondaryNotFoundException] when the atDirectory has no atServer for the
   /// atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or

@@ -450,6 +450,28 @@ void main() {
       });
     });
 
+    test(
+        'Given AT0011 saying "permission denied" on every poll, when it '
+        'waits, then it ends as a refusal it cannot resolve, not as denied',
+        () async {
+      final server = await atServer(List.filled(maxRetries + 2,
+          'error:AT0011:Internal server exception: permission denied'));
+
+      Object? caught;
+      try {
+        await waitOver(server);
+      } on AtEnrollmentException catch (e) {
+        caught = e;
+      }
+
+      expect(caught, isNot(isA<AtEnrollmentDeniedException>()));
+      expect(
+          caught,
+          isA<AtEnrollmentException>()
+              .having((e) => e.message, 'message', contains('cannot resolve')));
+      expect(polls(server), maxRetries + 1);
+    });
+
     /// Refusals whose code cannot be read where an atServer writes it.
     final unreadable = {
       'a refusal with no error: in it': 'data:refused',

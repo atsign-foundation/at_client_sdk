@@ -94,18 +94,20 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtNoCredentialException`        | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                                                                     | Enroll again                                                                                                    |
 | `AtStorageInUseException`        | Another process holds the Hive store at this location open                                                                                                   | Give each process a location of its own                                                                         |
 | `StateError` "already live"      | A client for this atSign as the same enrollment, or on the same storage, is live in this process                                                             | `stop()` it first; another enrollment opens beside it                                                           |
-| `AtEnrollmentExpiredException`   | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
-| `AtEnrollmentDeniedException`    | `pending.client(...)`: the request was denied; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
-| `AtEnrollmentException`          | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included; its pending keys stay            | Show the message; a person decides whether to wait again (`resumeEnrollment` returns the request) or `cancel()` |
+| `AtEnrollmentExpiredException` (at_client 4.1.0) | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
+| `AtEnrollmentDeniedException` (at_client 4.1.0) | `pending.client(...)`: the request was denied; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
+| `AtEnrollmentException`          | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included, or the request was approved but its keys could not be fetched or decrypted; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`, or another wait for the same request cancelled it before its approval was filed | Nothing after a cancel of its own; otherwise show the message, since an approval may have landed                |
 | `StoppedException`               | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                                                                    | `resumeEnrollment` later; the request is kept                                                                   |
 | `AtCredentialRefusedException`   | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal                                                                 | Show the cause                                                                                                  |
 
-`AtEnrollmentExpiredException` and `AtEnrollmentDeniedException` are also
-`AtEnrollmentException`s, so their `catch` goes first. An answer that waiting
-cannot resolve is a plain `AtEnrollmentException`; `resumeEnrollment` returns
-the request after it, and null after a denial or expiry whose pending keys
-were removed.
+`AtEnrollmentExpiredException`, `AtEnrollmentDeniedException` and
+`AtEnrollmentCancelledException` are also `AtEnrollmentException`s, so their
+`catch` goes first. An answer that waiting cannot resolve, and an approval
+whose keys cannot be collected, are plain `AtEnrollmentException`s;
+`resumeEnrollment` returns the request after either, and null after a denial
+or expiry whose pending keys were removed. at_client 4.0 throws a plain
+`AtEnrollmentException` for a denial and an expiry too.
 
 `resumeEnrollment` reads the keys as `open` does: keys it cannot read, or that
 record another Atsign, throw `AtKeysUnusableException` before it connects, and
