@@ -604,7 +604,7 @@ void main() {
   });
 
   test(
-      'a wait the atServer refuses for another reason keeps the request, even '
+      'A wait the atServer refuses for another reason keeps the request, even '
       'when its text says denied', () async {
     final store = InMemoryAtKeysIo();
     final pending = await submit(
@@ -1687,39 +1687,25 @@ void main() {
       expect((await keys.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
-    for (final (call, ids, run) in <(
-      String,
-      List<String>,
-      Future<Object?> Function(WrittenAtKeysIo, AtClientPreference)
-    )>[
-      (
-        'Atsign.open',
-        ['e\n"one', 'e-two'],
-        (keys, pref) async => Atsign(atSign).open(
-            keys: keys,
-            preference: pref,
-            lookUps: loopbackLookUps(),
-            secondaryAddressFinder: await refusingAtDirectory(),
-            storage: hiveStoreFor(Atsign(atSign), pref)),
-      ),
-    ]) {
-      test(
-          '$call names the pending enrollment ids a keyfile records quoted '
-          'and escaped', () async {
-        await expectLater(
-            // ignore: invalid_use_of_visible_for_testing_member
-            run(InMemoryAtKeysIo.holding(atSign, pendingWith(ids)),
-                await preference()),
-            throwsA(isA<AtEnrollmentPendingException>().having(
-                (e) => e.message,
-                'message',
-                allOf([
-                  contains(r'"e\u000a\"one"'),
-                  if (ids.length > 1) contains('"e-two"'),
-                  isNot(contains('\n')),
-                ]))));
-      });
-    }
+    test(
+        'Atsign.open names the pending enrollment ids a keyfile records quoted '
+        'and escaped', () async {
+      final pref = await preference();
+      await expectLater(
+          Atsign(atSign).open(
+              // ignore: invalid_use_of_visible_for_testing_member
+              keys: InMemoryAtKeysIo.holding(
+                  atSign, pendingWith(['e\n"one', 'e-two'])),
+              preference: pref,
+              lookUps: loopbackLookUps(),
+              secondaryAddressFinder: await refusingAtDirectory(),
+              storage: hiveStoreFor(Atsign(atSign), pref)),
+          throwsA(isA<AtEnrollmentPendingException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains(r'"e\u000a\"one"'), contains('"e-two"'),
+                  isNot(contains('\n'))))));
+    });
 
     test(
         'A refusal to enroll into a waiting store names what it holds quoted '
