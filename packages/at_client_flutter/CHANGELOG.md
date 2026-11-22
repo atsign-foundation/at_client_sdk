@@ -22,6 +22,9 @@
   dialog's callback (`onAuthenticationComplete`, `onOnboardingComplete`) when
   one is given, and is stopped when none is, so the Atsign can be opened
   again.
+- fix: `CramDialog` stops the client it opened when `onOnboardingComplete`
+  throws, and no longer throws when the activation reports progress after
+  the user has left.
 - fix: `ApkamActivationDialog` and `PkamDialog` show a failure when the
   request they wait on is approved after another wait has cancelled it,
   saying the Atsign's manager can revoke the approval.

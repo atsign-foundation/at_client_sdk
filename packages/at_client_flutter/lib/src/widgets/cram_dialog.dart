@@ -126,15 +126,18 @@ class _CramDialogState extends State<CramDialog> {
 
   Future<void> _onboard() async {
     final secret = _parseCramKey(widget.cramKey);
+    AtClient? opened;
     try {
-      final client = await widget.flows.activate(
+      final client = opened = await widget.flows.activate(
         widget.atSign,
         cramSecret: secret,
         keys: widget.keys ?? KeychainAtKeysIo(),
         preference: under(widget.preference, widget.rootDomain),
         storage: widget.storage,
         lookUps: widget.lookUps,
-        onProgress: _progress.add,
+        onProgress: (event) {
+          if (!_progress.isClosed) _progress.add(event);
+        },
       );
       final onboarded = widget.onOnboardingComplete;
       if (onboarded != null) {
@@ -150,6 +153,9 @@ class _CramDialogState extends State<CramDialog> {
         await _stopClient(client);
       }
     } catch (e) {
+      // NOTE: a client that opened before the failure reaches nobody, and
+      // while it is live the atSign cannot be opened again.
+      if (opened != null) await _stopClient(opened);
       // Activation failed or timed out. Without an error path the dialog would
       // stay on screen forever and CramDialog.show() would never complete
       // (issue #1905 / #1909).

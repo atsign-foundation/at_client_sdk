@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_utils/at_progress.dart';
 import 'package:biometric_storage/biometric_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -783,6 +784,146 @@ void main() {
         reason: 'nothing beneath the dialog is popped',
       );
       expect(results, [null]);
+    },
+  );
+
+  testWidgets('Given CramDialog onboarding @alice, when its activation reports '
+      'progress after the user has left, then the dialog takes it without '
+      'throwing', (tester) async {
+    final activated = Completer<AtClient>();
+    void Function(ProgressEvent event)? onProgress;
+    when(
+      () => flows.activate(
+        any(),
+        cramSecret: any(named: 'cramSecret'),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        storage: any(named: 'storage'),
+        lookUps: any(named: 'lookUps'),
+        onProgress: any(named: 'onProgress'),
+      ),
+    ).thenAnswer((invocation) {
+      onProgress =
+          invocation.namedArguments[#onProgress]
+              as void Function(ProgressEvent event)?;
+      return activated.future;
+    });
+    final client = _MockAtClient();
+    when(() => client.stop()).thenAnswer((_) async {});
+    when(() => client.enrollmentId).thenReturn('first-1');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDialog<Object?>(
+                context: context,
+                builder: (context) => CramDialog(
+                  atSign: atSign,
+                  cramKey: 'cram-secret-6d1f0b',
+                  preference: loopback(),
+                  keys: InMemoryAtKeysIo(),
+                  flows: flows,
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    ProgressEvent event(String msg) =>
+        ProgressEvent(group: 'CRAM', msg: msg, type: ProgressEventType.info);
+    expect(
+      () => onProgress!(event('while showing')),
+      returnsNormally,
+      reason: 'the control: the dialog hears progress while it is showing',
+    );
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(CramDialog),
+      findsNothing,
+      reason: 'the control: the user has left the dialog',
+    );
+
+    expect(
+      () => onProgress!(event('after the user left')),
+      returnsNormally,
+      reason: 'progress after the user left is taken without throwing',
+    );
+    activated.complete(client);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Given CramDialog onboarding @alice with an onOnboardingComplete that '
+    'throws, when the activation completes, then the dialog stops the client '
+    'and closes with none',
+    (tester) async {
+      final client = _MockAtClient();
+      when(
+        () => flows.activate(
+          any(),
+          cramSecret: any(named: 'cramSecret'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) async => client);
+      var stops = 0;
+      when(() => client.stop()).thenAnswer((_) async => stops++);
+      when(() => client.enrollmentId).thenReturn('first-1');
+      final received = <AtClient>[];
+      final results = <Object?>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  results.add(
+                    await showDialog<Object?>(
+                      context: context,
+                      builder: (context) => CramDialog(
+                        atSign: atSign,
+                        cramKey: 'cram-secret-6d1f0b',
+                        preference: loopback(),
+                        keys: InMemoryAtKeysIo(),
+                        onOnboardingComplete: (given) {
+                          received.add(given);
+                          throw Exception('the app could not take it');
+                        },
+                        flows: flows,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(received, [
+        client,
+      ], reason: 'the control: onOnboardingComplete was given the client');
+      expect(stops, 1, reason: 'the dialog stops the client');
+      expect(results, [null], reason: 'the dialog closes with no client');
+      expect(
+        shown(tester),
+        'Something went wrong with $atSign: the app could not take it',
+      );
     },
   );
 }
