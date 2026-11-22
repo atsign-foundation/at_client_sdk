@@ -20,24 +20,6 @@ void main() {
         .toList();
   }
 
-  group(
-      'Given AtEnrollmentPendingException.several for two pending enrollment '
-      'requests that match', () {
-    test(
-        'when it is reported, then the report gives that case\'s own '
-        'instruction and no wait', () {
-      final several =
-          AtEnrollmentPendingException.several(atSign, ['e-1', 'e-2']);
-
-      final lines =
-          stderrOf(() => reportKeysProblem(several, absentHint: const []));
-
-      expect(lines, [several.message, keysProblemFooter]);
-      expect(lines.first, contains('name both the app and the device'));
-      expect(lines.join('\n'), isNot(contains('is approved')));
-    });
-  });
-
   group('Given keys holding only pending enrollment requests', () {
     test(
         'when one is reported, then the report names its id in the singular '

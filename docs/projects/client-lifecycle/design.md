@@ -216,8 +216,10 @@ reported as the atServer being unreachable.
 **Ruling 5, the key destination is the resume store.** `enroll(keys:)` files
 the minted keypair under the new enrollment id as `pending` typed material,
 with app, device and namespaces on the slot (the submitter already stamps
-those, `enrollment_submitter.dart:90` and `:329`). Resume finds the pending
-slot for (app, device) in the same store; approval flushes the completed keys
+those, `enrollment_submitter.dart:90` and `:329`). Resume finds the store's
+one pending slot, whatever its app and device (amended 2026-11-22 by Gary's
+ruling that a key store holds at most one pending enrollment; it said "the
+pending slot for (app, device)"); approval flushes the completed keys
 and moves it to `active`; denial or expiry removes it. The CLI's
 `EnrollmentCheckpoint` file and the keychain's `EnrollmentData` go. This adds
 one token to `CryptographicMaterialStatus`, an at_auth-owned at-rest
@@ -343,7 +345,7 @@ final pending = await Atsign('@alice').enroll(otp: otp, app: 'noports',
 pending.progress.listen(...);              // pending, approved, denied
 final client = await pending.client(preference);
 // after a restart:
-final pending = await Atsign('@alice').resumeEnrollment(app: 'noports', device: d, keys: keysIo);
+final pending = await Atsign('@alice').resumeEnrollment(keys: keysIo);
 
 // the manager holds the current client; nothing else builds one
 AtClientManager.getInstance().use(client);

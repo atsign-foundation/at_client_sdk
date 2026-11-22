@@ -26,9 +26,8 @@ Feature: The onboarding dialogs say what failed
     When PkamDialog opens @alice
     Then it shows "<message>" and returns no client
     Examples:
-      | hold                                            | message                                                                                                                                                                                                                                             |
-      | hold no credential                              | This device's enrollment for @alice was denied, cancelled or expired, or never completed. Enroll this device again to use @alice here.                                                                                                              |
-      | hold only several enrollments awaiting approval | This device has asked to enroll @alice more than once, and none of those requests has been approved yet, so this screen can't tell which one to wait for. Enrolling this device from this app picks up this app's own request, if it sent only one. |
+      | hold               | message                                                                                                                                |
+      | hold no credential | This device's enrollment for @alice was denied, cancelled or expired, or never completed. Enroll this device again to use @alice here. |
 
   Scenario Outline: An atServer refusal shows its cause in plain words
     Given keys for @alice the atServer refuses with cause <cause>, on a device that has never held @alice online

@@ -4,7 +4,6 @@ import 'dart:io' show FileSystemException;
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/apkam_dialog.dart';
-import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -18,30 +17,6 @@ class MockPendingEnrollment extends Mock implements PendingEnrollment {}
 class FakeAtClientPreference extends Fake implements AtClientPreference {}
 
 class FakeAtClientStorage extends Fake implements AtClientStorage {}
-
-/// Every record logged, as its level's name and its message.
-class _RecordedLogs implements LoggingHandler {
-  final List<({String level, String message})> records = [];
-
-  @override
-  void call(dynamic record) => records.add((
-    level: '${record.level.name}',
-    message: '${record.message}',
-  ));
-
-  /// Makes this the handler every logger built from now on binds, until the
-  /// test ends.
-  void installUntilTearDown() {
-    final handler = AtSignLogger.defaultLoggingHandler;
-    final level = AtSignLogger.root_level;
-    AtSignLogger.defaultLoggingHandler = this;
-    AtSignLogger.root_level = 'info';
-    addTearDown(() {
-      AtSignLogger.defaultLoggingHandler = handler;
-      AtSignLogger.root_level = level;
-    });
-  }
-}
 
 /// A request filed in a key store under [enrollmentId] by [app] on [device],
 /// which has not been decided, for [namespaces], what the dialog asks for by
@@ -105,41 +80,9 @@ void main() {
     });
   }
 
-  /// `flows.resumeEnrollment` answers as `Atsign.resumeEnrollment` does over
-  /// a key store holding [requests]: each name given narrows the search, and
-  /// more than one request left throws.
-  void holding(List<PendingEnrollment> requests) =>
-      when(
-        () => flows.resumeEnrollment(
-          any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
-          keys: any(named: 'keys'),
-          preference: any(named: 'preference'),
-          lookUps: any(named: 'lookUps'),
-        ),
-      ).thenAnswer((invocation) async {
-        final app = invocation.namedArguments[#app] as String?;
-        final device = invocation.namedArguments[#device] as String?;
-        final matching = [
-          for (final request in requests)
-            if ((app == null || request.app == app) &&
-                (device == null || request.device == device))
-              request,
-        ];
-        if (matching.length > 1) {
-          throw AtEnrollmentPendingException.several('@alice', [
-            for (final request in matching) request.enrollmentId,
-          ]);
-        }
-        return matching.isEmpty ? null : matching.single;
-      });
-
   void resumes(PendingEnrollment? request) => when(
     () => flows.resumeEnrollment(
       any(),
-      app: any(named: 'app'),
-      device: any(named: 'device'),
       keys: any(named: 'keys'),
       preference: any(named: 'preference'),
       lookUps: any(named: 'lookUps'),
@@ -506,9 +449,8 @@ void main() {
   ]) {
     testWidgets('The enrollment dialog adopts the request its store holds '
         'under another app or device name', (tester) async {
-      final logs = _RecordedLogs()..installUntilTearDown();
       final request = filed('enroll-1', app: 'wavi-old', device: 'phone');
-      holding([request]);
+      resumes(request);
       final opened = clientAnswers(request);
       stopEnds(opened, request);
       final client = MockAtClient();
@@ -521,24 +463,6 @@ void main() {
       );
       expect(find.text('Cancel'), findsOneWidget);
       neverEnrolls();
-      final warnings = [
-        for (final record in logs.records)
-          if (record.level == 'WARNING') record.message,
-      ];
-      expect(
-        warnings,
-        [
-          allOf(
-            contains('enroll-1'),
-            contains('@alice'),
-            contains('by app "wavi-old" on device "phone"'),
-            contains('for app $app on device $device'),
-          ),
-        ],
-        reason:
-            'opened as $app on $device: one warning, naming the request, '
-            'the names it was filed under and the names of this dialog',
-      );
 
       opened.complete(client);
       await frames(tester);
@@ -557,56 +481,15 @@ void main() {
       'device', () {
     testWidgets('when the enrollment dialog opens @alice for app wavi, then '
         'it resumes that enrollment saying nothing of names', (tester) async {
-      final logs = _RecordedLogs()..installUntilTearDown();
       final request = filed('enroll-1', app: '', device: '');
-      holding([request]);
+      resumes(request);
       stopEnds(clientAnswers(request), request);
       await open(tester, appName: 'wavi', deviceName: 'phone');
 
       expect(find.text('Resuming enrollment enroll-1..'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);
       neverEnrolls();
-      final warnings = [
-        for (final record in logs.records)
-          if (record.level == 'WARNING') record.message,
-      ];
-      expect(warnings, [
-        'Adopting enrollment "enroll-1" of @alice for app wavi on device phone',
-      ], reason: 'one warning, naming the request and this dialog alone');
     });
-  });
-
-  testWidgets('The enrollment dialog waits on its own request when its store '
-      'holds several', (tester) async {
-    final phone = filed('enroll-phone', app: 'app', device: 'phone');
-    final oldPhone = filed('enroll-old-phone', app: 'app', device: 'old-phone');
-    holding([phone, oldPhone]);
-    stopEnds(clientAnswers(phone), phone);
-    await open(tester, deviceName: 'phone');
-
-    expect(find.text('Resuming enrollment enroll-phone..'), findsOneWidget);
-    expect(find.text('Cancel'), findsOneWidget);
-    neverEnrolls();
-    verifyNever(() => oldPhone.client(any(), storage: any(named: 'storage')));
-  });
-
-  testWidgets('The enrollment dialog resumes this app\'s request from another '
-      'device before another app\'s', (tester) async {
-    final wavi = filed('enroll-wavi', app: 'wavi', device: 'old-phone');
-    final buzz = filed('enroll-buzz', app: 'buzz', device: 'phone');
-    holding([wavi, buzz]);
-    stopEnds(clientAnswers(wavi), wavi);
-    await open(tester, appName: 'wavi', deviceName: 'new-phone');
-
-    expect(
-      find.text(
-        'Resuming enrollment enroll-wavi, filed as wavi on old-phone..',
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('Cancel'), findsOneWidget);
-    neverEnrolls();
-    verifyNever(() => buzz.client(any(), storage: any(named: 'storage')));
   });
 
   testWidgets('The enrollment dialog waits on a request filed for other '
@@ -617,7 +500,7 @@ void main() {
       device: 'phone',
       namespaces: const {'todos': 'rw'},
     );
-    holding([request]);
+    resumes(request);
     final opened = clientAnswers(request);
     stopEnds(opened, request);
     final client = MockAtClient();
@@ -646,7 +529,7 @@ void main() {
   testWidgets('The enrollment dialog shows a recorded app name with its '
       'control characters escaped', (tester) async {
     final request = filed('enroll-1', app: 'wa\u001bvi', device: 'phone');
-    holding([request]);
+    resumes(request);
     stopEnds(clientAnswers(request), request);
     await open(tester, appName: 'wavi', deviceName: 'phone');
 
@@ -657,38 +540,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Cancel'), findsOneWidget);
-  });
-
-  testWidgets("The enrollment dialog's adoption warning names the recorded "
-      'app quoted and escaped', (tester) async {
-    final logs = _RecordedLogs()..installUntilTearDown();
-    final request = filed('enroll-1', app: 'wa\u001bvi', device: 'phone');
-    holding([request]);
-    stopEnds(clientAnswers(request), request);
-    await open(tester, appName: 'wavi', deviceName: 'phone');
-
-    final warnings = [
-      for (final record in logs.records)
-        if (record.level == 'WARNING') record.message,
-    ];
-    expect(warnings, [contains(r'by app "wa\u001bvi"')]);
-  });
-
-  testWidgets("The enrollment dialog's adoption warning escapes a double "
-      'quote inside the recorded app name', (tester) async {
-    final logs = _RecordedLogs()..installUntilTearDown();
-    final request = filed('enroll-1', app: 'wa"vi', device: 'phone');
-    holding([request]);
-    stopEnds(clientAnswers(request), request);
-    await open(tester, appName: 'wavi', deviceName: 'phone');
-
-    final warnings = [
-      for (final record in logs.records)
-        if (record.level == 'WARNING') record.message,
-    ];
-    expect(warnings, [
-      contains(r'by app "wa\"vi"'),
-    ], reason: 'the filed app in double quotes, the quote inside it escaped');
   });
 
   group('Given approval lands just as the dialog is dismissed', () {

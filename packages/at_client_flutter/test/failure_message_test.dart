@@ -142,18 +142,6 @@ void main() {
         contains('Enroll this device again from this app'),
       );
     });
-
-    test('that matched several pending ones says this device asked more than '
-        'once, not to enroll again', () {
-      final shownForSeveral = shown(
-        AtEnrollmentPendingException.several(atSign, ['e1', 'e2']),
-      );
-      expect(
-        shownForSeveral,
-        startsWith('This device has asked to enroll @alice more than once'),
-      );
-      expect(shownForSeveral, isNot(contains('Enroll this device again')));
-    });
   });
 
   test("anything else shows its message's first line, and no FormatException "

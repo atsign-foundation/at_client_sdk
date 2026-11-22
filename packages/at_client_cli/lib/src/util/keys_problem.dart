@@ -43,7 +43,7 @@ void reportKeysProblem(AtKeysUnusableException e,
       ],
     AtKeysUnusableCause.anotherAtsign => ['${e.message} Check -a and -k.'],
     AtKeysUnusableCause.pendingEnrollment
-        when e is AtEnrollmentPendingException && !e.severalMatched =>
+        when e is AtEnrollmentPendingException =>
       [_waitForApproval(e)],
     AtKeysUnusableCause.noCredential when e.source != null => [
         'The keyfile at ${e.source} holds no credential for ${e.atSign}: its '

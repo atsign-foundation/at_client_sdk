@@ -419,7 +419,7 @@ final client = await Atsign('@alice').open(
 //         — onboard a new atSign
 //       Atsign(a).enroll(otp:, app:, device:, namespaces:, keys:, preference:, lookUps:,
 //         secondaryAddressFinder:) → PendingEnrollment; pending.client(preference, storage:)
-//       Atsign(a).resumeEnrollment(app:, device:, keys:, preference:, lookUps:,
+//       Atsign(a).resumeEnrollment(keys:, preference:, lookUps:,
 //         secondaryAddressFinder:) — after a restart
 ```
 

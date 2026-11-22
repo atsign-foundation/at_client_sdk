@@ -12,6 +12,11 @@
 - fix: of two `Atsign.enroll` calls into one keys store at once, only one
   files its request. The other throws `AtEnrollmentException` naming the
   enrollment it sent, which the Atsign's manager can deny.
+- fix: `Atsign.resumeEnrollment` returns the keys store's one pending
+  enrollment whatever app and device it was filed under, so its `app` and
+  `device` parameters are deprecated and ignored.
+  `AtEnrollmentPendingException.several` is deprecated, since nothing throws
+  it.
 - feat: `AtKeysPassphraseException` is exported: it is an unreadable
   keyfile's `error` when its passphrase is missing or does not open it.
 - fix: a pending enrollment's keys are removed when the atServer denies it (`AtEnrollmentDeniedException`, now exported), it has expired or the app calls `cancel()`; a wait that ends on another refusal keeps the request for `resumeEnrollment`, even when the atServer's error text contains "denied".
@@ -213,11 +218,9 @@
   every device, for keys it cannot use: absent, unreadable, holding no
   keypair it can sign with, or for another atSign. `AtNoCredentialException`
   and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
-- feat: `AtEnrollmentPendingException.severalMatched` says whether
-  `resumeEnrollment` threw it for several matching pending enrollments.
 - feat: `AtNoCredentialException` and `AtEnrollmentPendingException` say
-  which keys store they came from in `source` when `Atsign.open` or
-  `resumeEnrollment` throws them.
+  which keys store they came from in `source` when `Atsign.open` throws
+  them.
 - fix: `Atsign.enroll` refusing a keys store that holds live keys says to give
   the new enrollment a keys store of its own.
 - feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the

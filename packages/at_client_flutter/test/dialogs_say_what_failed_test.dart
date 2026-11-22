@@ -187,40 +187,6 @@ void main() {
         );
         expect(result(), isNull, reason: 'the dialog returns no client');
       });
-
-      testWidgets('hold only several enrollments awaiting approval', (
-        tester,
-      ) async {
-        const pending = ['e-1', 'e-2'];
-        whenOpenFails(AtEnrollmentPendingException(atSign, pending));
-        when(
-          () => flows.resumeEnrollment(
-            any(),
-            app: any(named: 'app'),
-            device: any(named: 'device'),
-            keys: any(named: 'keys'),
-            preference: any(named: 'preference'),
-            lookUps: any(named: 'lookUps'),
-          ),
-        ).thenAnswer(
-          (_) => Future.error(
-            AtEnrollmentPendingException.several(atSign, pending),
-          ),
-        );
-        final result = await pumpOpener(tester, pkamDialog);
-
-        await tester.tap(find.text('open'));
-        await tester.pumpAndSettle();
-
-        expect(
-          shown(tester),
-          'This device has asked to enroll $atSign more than once, and none of '
-          "those requests has been approved yet, so this screen can't tell "
-          'which one to wait for. Enrolling this device from this app picks up '
-          "this app's own request, if it sent only one.",
-        );
-        expect(result(), isNull, reason: 'the dialog returns no client');
-      });
     },
   );
 
@@ -379,8 +345,6 @@ void main() {
     when(
       () => flows.resumeEnrollment(
         any(),
-        app: any(named: 'app'),
-        device: any(named: 'device'),
         keys: any(named: 'keys'),
         preference: any(named: 'preference'),
         lookUps: any(named: 'lookUps'),
@@ -524,8 +488,6 @@ void main() {
       when(
         () => flows.resumeEnrollment(
           any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           lookUps: any(named: 'lookUps'),

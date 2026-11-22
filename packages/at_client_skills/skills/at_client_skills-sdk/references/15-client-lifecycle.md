@@ -56,10 +56,11 @@ final enrolled = await pending.client(preference,
 // would then revoke. Both return once any client the wait opened has
 // stopped: when pending.approved says the approval landed first, open the
 // atSign on `keys` at once.
-final resumed = await Atsign('@alice').resumeEnrollment(
-    app: 'my_app', device: 'phone', keys: keys, preference: preference,
-    lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending
-// With no app or device, it resumes the one pending enrollment `keys` holds.
+final resumed = await Atsign('@alice').resumeEnrollment(keys: keys,
+    preference: preference, lookUps: lookUps,
+    secondaryAddressFinder: finder);                  // null: none pending
+// It resumes the one pending enrollment `keys` holds, whatever app and
+// device it was filed under.
 
 // Which enrollment a keys store authenticates as, without building a client.
 final principal = await Atsign('@alice').authenticatesAs(keys: keys,
@@ -85,7 +86,6 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtKeysUnusableException`        | The keys are absent, cannot be read, hold no keypair it can use, or record another atSign; thrown before connecting, on any device                | Show its message; `cause` says which                                                                            |
 | `AtOpenRefusedException`         | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none)                                          | Show the cause; nothing local to serve                                                                          |
 | `AtEnrollmentPendingException`   | The keys hold only an enrollment awaiting approval (an `AtKeysUnusableException`)                                                                 | `resumeEnrollment`                                                                                              |
-| `AtEnrollmentPendingException`   | `resumeEnrollment` found several pending enrollments matching what it was given                                                                   | Name both `app` and `device`                                                                                    |
 | `AtNoCredentialException`        | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                                                          | Enroll again                                                                                                    |
 | `AtStorageInUseException`        | Another process holds the Hive store at this location open                                                                                        | Give each process a location of its own                                                                         |
 | `StateError` "already live"      | A client for this atSign as the same enrollment, or on the same storage, is live in this process                                                  | `stop()` it first; another enrollment opens beside it                                                           |

@@ -1,10 +1,9 @@
 Feature: at_activate enroll resumes the request its keyfile already holds
 
   at_activate enroll run on a keyfile already waiting on an enrollment
-  request resumes that request rather than submitting another, whatever app
-  or device name it was filed under: the request for the app and device it
-  is given first, else that app's on any device, else the keyfile's one
-  request. When the request it resumes was filed under another app or device
+  request resumes that request rather than submitting another: the
+  keyfile's one pending request, whatever app or device name it was filed
+  under. When the request it resumes was filed under another app or device
   name, it says the names the keyfile records for it. It shows the id and
   each name with its control characters escaped, clipped at 180 characters.
   A request the manager denies, or that expires, is cleared from the keyfile
@@ -31,11 +30,6 @@ Feature: at_activate enroll resumes the request its keyfile already holds
       | app  | device |
       | wavi | phone  |
       | buzz | tablet |
-
-  Scenario: enroll resumes this app's request from another device before another app's
-    Given a keyfile holding pending enrollments for @alice filed by app "wavi" on device "old-phone" and by app "buzz" on device "phone"
-    When at_activate enroll runs for @alice with app "wavi" on device "new-phone" on that keyfile
-    Then it sends nothing new, says "Resuming enrollment <id>, filed as wavi on old-phone", and waits on that request
 
   Scenario: enroll shows a recorded app or device name with its control characters escaped
     Given a keyfile holding a pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "pho<CR>ne"

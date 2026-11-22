@@ -136,18 +136,24 @@ class AtsignFlows {
   );
 
   /// `Atsign.resumeEnrollment`: the request already filed in [keys] and
-  /// awaiting approval, or null when there is none. Each of [app] and
-  /// [device] given narrows the search; with neither, [keys] must hold one.
+  /// awaiting approval, or null when there is none. [keys] hold at most one
+  /// pending request, returned whatever app and device it was filed under.
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
+    @Deprecated(
+      'Ignored: a key store holds at most one pending enrollment, '
+      'which is returned whatever app it was filed under',
+    )
     String? app,
+    @Deprecated(
+      'Ignored: a key store holds at most one pending enrollment, '
+      'which is returned whatever device it was filed under',
+    )
     String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookUpFactory? lookUps,
   }) => Atsign(atSign).resumeEnrollment(
-    app: app,
-    device: device,
     keys: keys,
     preference: preference,
     lookUps: lookUps ?? secureSocketLookUps(),

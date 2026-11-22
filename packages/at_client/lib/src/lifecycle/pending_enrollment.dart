@@ -471,22 +471,15 @@ class AtNoCredentialException extends AtKeysUnusableException {
 
 /// `open` was asked to open a keyfile that holds nothing but an enrollment
 /// awaiting approval, so there is no credential to authenticate with yet.
-/// `Atsign.resumeEnrollment` is the way to pick it up, and throws this too,
-/// from [AtEnrollmentPendingException.several], when more than one pending
-/// enrollment matches what it was given.
+/// `Atsign.resumeEnrollment` is the way to pick it up.
 ///
 /// Its cause is [AtKeysUnusableCause.pendingEnrollment].
 class AtEnrollmentPendingException extends AtKeysUnusableException {
   final List<String> pendingEnrollmentIds;
 
-  /// Whether `Atsign.resumeEnrollment` threw this, finding several pending
-  /// enrollments that match what it was given, which waiting cannot resolve.
-  final bool severalMatched;
-
   AtEnrollmentPendingException(String atSign, this.pendingEnrollmentIds,
       {super.source})
-      : severalMatched = false,
-        super(
+      : super(
             '$atSign holds no live credential, only the pending enrollment'
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
             '${_quoted(pendingEnrollmentIds)}: resume it with '
@@ -494,15 +487,14 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
             atSign: atSign,
             cause: AtKeysUnusableCause.pendingEnrollment);
 
-  /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
-  /// enrollments of [atSign] matching what it was given.
+  /// [atSign] holds the several pending enrollments [pendingEnrollmentIds].
+  @Deprecated('Nothing throws this: a key store holds at most one pending '
+      'enrollment, and Atsign.resumeEnrollment returns it')
   AtEnrollmentPendingException.several(String atSign, this.pendingEnrollmentIds,
       {super.source})
-      : severalMatched = true,
-        super(
-            '$atSign holds several pending enrollments that match: '
-            '${_quoted(pendingEnrollmentIds)}. To resume one, name both the '
-            'app and the device',
+      : super(
+            '$atSign holds several pending enrollments: '
+            '${_quoted(pendingEnrollmentIds)}',
             atSign: atSign,
             cause: AtKeysUnusableCause.pendingEnrollment);
 

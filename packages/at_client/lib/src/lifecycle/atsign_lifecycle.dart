@@ -22,6 +22,7 @@ import 'package:at_client/src/secret_sharing/enrollment_symmetric_key.dart'
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
 /// An empty in-memory key store for a step that files keys the caller then
@@ -133,9 +134,9 @@ Future<String> activateWithoutClient(
 ///     secondaryAddressFinder: finder);
 /// final client = await pending.client(preference, storage: storage);
 /// // after a restart:
-/// final resumed = await Atsign('@alice').resumeEnrollment(app: 'wavi',
-///     device: 'phone', keys: FileAtKeysIo(), preference: preference,
-///     lookUps: lookUps, secondaryAddressFinder: finder);
+/// final resumed = await Atsign('@alice').resumeEnrollment(
+///     keys: FileAtKeysIo(), preference: preference, lookUps: lookUps,
+///     secondaryAddressFinder: finder);
 /// ```
 ///
 /// `FileAtKeysIo`, `secureSocketLookUps` and `CacheableSecondaryAddressFinder`
@@ -493,14 +494,15 @@ extension AtsignLifecycle on Atsign {
         secondaryAddressFinder: secondaryAddressFinder);
   }
 
-  /// The enrollment [enroll] filed in [keys] for [app] on [device] and has not
-  /// yet completed, or null when there is none: the way an application picks
-  /// up an enrollment it submitted before a restart.
+  /// The enrollment [enroll] filed in [keys] and has not yet completed, or
+  /// null when there is none: the way an application picks up an enrollment
+  /// it submitted before a restart, to wait for its approval or cancel it.
   ///
-  /// Each of [app] and [device] that is given narrows the search, and more
-  /// than one pending enrollment left after it throws
-  /// [AtEnrollmentPendingException.several], naming them and asking for both
-  /// names; with neither, [keys] must hold one.
+  /// A key store holds at most one pending enrollment, and this returns it
+  /// whatever app and device it was filed under. A store holding more, which
+  /// only a merge, a restore or a hand edit makes, gives the one its
+  /// `enrollmentId` field names, else the first, and logs a warning;
+  /// cancelling each in turn clears the rest.
   ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
   /// the enrollment opens, to the atServer [secondaryAddressFinder] finds,
@@ -508,7 +510,11 @@ extension AtsignLifecycle on Atsign {
   /// for a caller that already holds one, which the client the enrollment
   /// opens takes over as [open] does.
   Future<PendingEnrollment?> resumeEnrollment({
+    @Deprecated('Ignored: a key store holds at most one pending enrollment, '
+        'which is returned whatever app it was filed under')
     String? app,
+    @Deprecated('Ignored: a key store holds at most one pending enrollment, '
+        'which is returned whatever device it was filed under')
     String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
@@ -522,48 +528,42 @@ extension AtsignLifecycle on Atsign {
     } on AtKeysSourceAbsentException {
       return null;
     }
-    final matching = [
-      for (final enrollmentId in stored.pendingEnrollmentIds)
-        if ((app == null ||
-                stored.enrollmentInfo(enrollmentId)?.appName == app) &&
-            (device == null ||
-                stored.enrollmentInfo(enrollmentId)?.deviceName == device))
-          enrollmentId
-    ];
-    if (matching.length > 1) {
-      throw AtEnrollmentPendingException.several(this, matching,
-          source: keys.describeSource(this));
+    final enrollmentId = _pendingToResume(stored);
+    if (enrollmentId == null) return null;
+    final count = stored.pendingEnrollmentIds.length;
+    if (count > 1) {
+      AtSignLogger('AtsignLifecycle ($this)').warning(
+          '${keys.describeSource(this)} holds $count pending enrollments of '
+          '$this, where a key store holds at most one: resuming '
+          '"${clipForMessage(enrollmentId, quote: '"')}"');
     }
-    for (final enrollmentId in matching) {
-      final info = stored.enrollmentInfo(enrollmentId);
-      final apkam = stored
-          .keysForEnrollment(enrollmentId)
-          .where((m) =>
-              m.role == CryptographicMaterialRole.privateAuthentication &&
-              m.status == CryptographicMaterialStatus.pending)
-          .first;
-      return PendingEnrollment(
-          atSign: this,
-          enrollmentId: enrollmentId,
-          app: app ?? info?.appName ?? '',
-          device: device ?? info?.deviceName ?? '',
-          namespaces: info?.namespaces ?? const {},
-          keys: keys,
-          rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-          signingAlgo: SigningAlgoType.values
-              .firstWhere((a) => a.name == apkam.algorithm.toString()),
-          // A legacy request carries its own symmetric key in; a pq request
-          // has none until the approver encapsulates one to its key package.
-          // ignore: deprecated_member_use
-          keyExchangeMode: stored.apkamSymmetricKey == null
-              ? EnrollmentKeyExchangeMode.pq
-              : EnrollmentKeyExchangeMode.legacy,
-          atLookUp: atLookUp,
-          particulars: preference.atClientParticulars,
-          lookUps: lookUps,
-          secondaryAddressFinder: secondaryAddressFinder);
-    }
-    return null;
+    final info = stored.enrollmentInfo(enrollmentId);
+    final apkam = stored
+        .keysForEnrollment(enrollmentId)
+        .where((m) =>
+            m.role == CryptographicMaterialRole.privateAuthentication &&
+            m.status == CryptographicMaterialStatus.pending)
+        .first;
+    return PendingEnrollment(
+        atSign: this,
+        enrollmentId: enrollmentId,
+        app: info?.appName ?? '',
+        device: info?.deviceName ?? '',
+        namespaces: info?.namespaces ?? const {},
+        keys: keys,
+        rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
+        signingAlgo: SigningAlgoType.values
+            .firstWhere((a) => a.name == apkam.algorithm.toString()),
+        // A legacy request carries its own symmetric key in; a pq request
+        // has none until the approver encapsulates one to its key package.
+        // ignore: deprecated_member_use
+        keyExchangeMode: stored.apkamSymmetricKey == null
+            ? EnrollmentKeyExchangeMode.pq
+            : EnrollmentKeyExchangeMode.legacy,
+        atLookUp: atLookUp,
+        particulars: preference.atClientParticulars,
+        lookUps: lookUps,
+        secondaryAddressFinder: secondaryAddressFinder);
   }
 
   /// Throws [AtKeysUnusableException] unless [keys] hold a credential for
@@ -649,7 +649,7 @@ extension AtsignLifecycle on Atsign {
               'new enrollment a keys store of its own'
           : '$this gained live keys in this store $notFiled');
     }
-    final pendingId = existing.pendingEnrollmentIds.firstOrNull;
+    final pendingId = _pendingToResume(existing);
     if (pendingId != null) {
       final info = existing.enrollmentInfo(pendingId);
       final app = info?.appName;
@@ -769,4 +769,13 @@ extension AtsignLifecycle on Atsign {
       }
     }
   }
+}
+
+/// The pending enrollment of [stored] to resume, or to name in a refusal: the
+/// one its flat enrollment id names, whose symmetric key the flat fields hold,
+/// else the first.
+String? _pendingToResume(AtKeys stored) {
+  final pending = stored.pendingEnrollmentIds.toList();
+  final flat = stored.storedEnrollmentId;
+  return pending.contains(flat) ? flat : pending.firstOrNull;
 }

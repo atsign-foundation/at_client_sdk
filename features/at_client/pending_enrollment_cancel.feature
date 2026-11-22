@@ -2,10 +2,10 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
 
   PendingEnrollment.stop() ends the wait awaitApproval or client() is in,
   which throws StoppedException, and keeps the request: its pending keys stay
-  in the store, so Atsign.resumeEnrollment picks it up again, with no names
-  when the store holds that one pending enrollment. stop() closes the
-  handshake connection it built, leaves one the app supplied open, sends
-  nothing, and does nothing once the wait has ended.
+  in the store, so Atsign.resumeEnrollment picks it up again, whatever app
+  and device it was filed under. stop() closes the handshake connection it
+  built, leaves one the app supplied open, sends nothing, and does nothing
+  once the wait has ended.
 
   PendingEnrollment.cancel() ends the wait awaitApproval or client() is in.
   The wait throws AtEnrollmentCancelledException, an AtEnrollmentException,
@@ -43,10 +43,10 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
   wait that every restart would otherwise resume into the same answer.
   Forgery and impersonation: cancel and expiry remove only this enrollment's
-  pending keys, found by atSign and enrollment id. A resume with no names
-  trusts the store it is given, as open does: a pending entry planted there
-  still needs the manager's approval, and a passcode from an enrolled app to
-  have been submitted at all.
+  pending keys, found by atSign and enrollment id. A resume trusts the store
+  it is given, as open does: a pending entry planted there still needs the
+  manager's approval, and a passcode from an enrolled app to have been
+  submitted at all.
 
   Scenario: Cancel ends a wait for approval
     Given a pending enrollment waiting in awaitApproval
@@ -132,7 +132,7 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
 
   Scenario: A stopped request resumes
     Given a pending enrollment whose wait was stopped
-    When the app calls Atsign.resumeEnrollment for its app and device
+    When the app calls Atsign.resumeEnrollment
     Then it waits again on the same enrollment id, with no new request
 
   Scenario: Stop leaves a connection the app supplied open
@@ -193,10 +193,20 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When the app calls resumeEnrollment with no app or device
     Then it gets that enrollment
 
-  Scenario: Resuming by one name refuses a store holding several requests it names
-    Given a store holding two pending requests for one app, from two devices
-    When the app calls resumeEnrollment with only the app
-    Then it throws AtEnrollmentPendingException naming both and saying to name the app and device, and naming a device as well resumes that one
+  Scenario: The one pending enrollment resumes whatever app and device are given
+    Given a store holding one pending enrollment for app wavi on device phone
+    When the app calls resumeEnrollment naming app buzz on device tablet
+    Then it gets that enrollment, with app wavi and device phone
+
+  Scenario: A store holding two pending requests resumes the one its enrollmentId field names, else the first, with a warning
+    Given a store holding two pending requests, e-one and e-two
+    When the app calls resumeEnrollment
+    Then it gets the one the store's enrollmentId field names, else e-one, and a warning says the store holds 2 pending enrollments and names the one resumed
+
+  Scenario: Cancelling each request in turn empties a store holding two
+    Given a store holding two pending requests
+    When the app resumes and cancels, and again
+    Then it cancels e-one, then e-two, and the store holds none
 
   Scenario Outline: A store already waiting on an enrollment for an Atsign refuses another, before anything is sent
     Given a store holding a pending enrollment for @alice from app wavi on device phone
@@ -226,11 +236,7 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When a program opens it
     Then the open throws at once a refusal saying the keyfile holds no credential and to enroll again, nothing is written to the keyfile, and no connection is attempted
 
-  Scenario Outline: <call> names the pending enrollment ids a keyfile records quoted and escaped
-    Given a keyfile holding <held> for @alice, one whose id holds a line feed
-    When <call> runs for @alice
+  Scenario: Atsign.open names the pending enrollment ids a keyfile records quoted and escaped
+    Given a keyfile holding two pending enrollments for @alice, one whose id holds a line feed
+    When Atsign.open runs for @alice
     Then the AtEnrollmentPendingException's message names each id in double quotes on one line, the line feed shown as \u000a
-    Examples:
-      | call                                                  | held                     |
-      | Atsign.open                                           | one pending enrollment   |
-      | Atsign.resumeEnrollment, naming neither app nor device | two pending enrollments |

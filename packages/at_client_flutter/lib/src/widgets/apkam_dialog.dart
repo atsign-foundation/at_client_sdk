@@ -23,13 +23,11 @@ import 'package:flutter/services.dart';
 /// Optional Parameters:
 /// - [keys]: where this enrollment's keys are filed and read back from, the
 ///   platform keychain by default. It is also the resume record: a request
-///   submitted earlier is waited on again rather than repeated. This app and
-///   device's own comes first, else this app's under any device name, else
-///   the store's one request whatever app name it was filed under, which
-///   the dialog adopts. One filed under another app or device name is shown
-///   with the names it records. The passcode is asked for only
-///   when the store holds no request, or several it cannot choose between,
-///   and Cancel abandons the request the dialog waits on.
+///   submitted earlier is waited on again rather than repeated. The dialog
+///   resumes the store's one pending request whatever app and device it was
+///   filed under, and shows one filed under other names with the names it
+///   records. The passcode is asked for only when the store holds no
+///   request, and Cancel abandons the request the dialog waits on.
 /// - [storage]: the client's local storage; with none, a Hive store under the
 ///   preference's `hiveStoragePath`, or the app's support directory.
 /// - [signingAlgo], [keyExchangeMode]: the request's key algorithm and how
@@ -150,18 +148,18 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
   }
 
   /// A request already in the key store is waited on again rather than asking
-  /// for a passcode it has already spent: this app and device's own, else
-  /// this app's under any device name, else the one request the store holds
-  /// under another app name, since `enroll` refuses a store that already
-  /// holds one. Adopting one filed under another app or device name is logged
-  /// as a warning.
+  /// for a passcode it has already spent: the store's one pending request,
+  /// whatever app and device it was filed under, since `enroll` refuses a
+  /// store that already holds one.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
-      pending =
-          await _resume(app: widget.appName, device: widget.deviceName) ??
-          await _resume(app: widget.appName) ??
-          await _resume();
+      pending = await widget.flows.resumeEnrollment(
+        widget.atSign,
+        keys: _keys,
+        preference: under(widget.preference, widget.rootDomain),
+        lookUps: widget.lookUps,
+      );
     } catch (e) {
       // An unreadable store is reported when the request goes out.
       return;
@@ -169,19 +167,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     if (pending == null || !mounted) return;
     final adopted =
         pending.app != widget.appName || pending.device != widget.deviceName;
-    if (adopted) {
-      String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
-      final byApp = pending.app.isEmpty ? '' : ' by app ${quoted(pending.app)}';
-      final onDevice = pending.device.isEmpty
-          ? ''
-          : ' on device ${quoted(pending.device)}';
-      final filedBy = '$byApp$onDevice';
-      _logger.warning(
-        'Adopting enrollment ${quoted(pending.enrollmentId)} of '
-        '${widget.atSign}${filedBy.isEmpty ? '' : ', filed$filedBy,'} for app '
-        '${widget.appName} on device ${widget.deviceName}',
-      );
-    }
     final filedApp = clipForMessage(pending.app);
     final filedDevice = clipForMessage(pending.device);
     final recorded =
@@ -195,16 +180,6 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
     });
     await _awaitAndOpen(pending);
   }
-
-  Future<PendingEnrollment?> _resume({String? app, String? device}) =>
-      widget.flows.resumeEnrollment(
-        widget.atSign,
-        app: app,
-        device: device,
-        keys: _keys,
-        preference: under(widget.preference, widget.rootDomain),
-        lookUps: widget.lookUps,
-      );
 
   Future<PendingEnrollment> _sendEnrollment(String otp) => widget.flows.enroll(
     widget.atSign,

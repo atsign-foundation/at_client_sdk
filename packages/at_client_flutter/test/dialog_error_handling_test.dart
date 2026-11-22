@@ -197,8 +197,6 @@ void main() {
       when(
         () => flows.resumeEnrollment(
           any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           lookUps: any(named: 'lookUps'),
@@ -268,8 +266,6 @@ void main() {
       when(
         () => flows.resumeEnrollment(
           any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           lookUps: any(named: 'lookUps'),
@@ -357,8 +353,6 @@ void main() {
       when(
         () => flows.resumeEnrollment(
           any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           lookUps: any(named: 'lookUps'),

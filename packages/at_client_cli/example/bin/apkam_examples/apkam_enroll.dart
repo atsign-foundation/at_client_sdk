@@ -7,8 +7,8 @@ import '../util/custom_arg_parser.dart';
 /// already enrolled client issued, and waits for that client to approve.
 ///
 /// The keyfile named is the resume record: run again, the wait picks up the
-/// request it holds rather than asking again, this app and device's own
-/// first, else this app's on any device, else the keyfile's one request.
+/// request it holds rather than asking again, whatever app and device it was
+/// filed under.
 Future<void> main(List<String> args) async {
   AtSignLogger.root_level = 'finer';
   final argResults = CustomArgParser(getArgParser()).parse(args);
@@ -22,19 +22,12 @@ Future<void> main(List<String> args) async {
   final secondaryAddressFinder = CacheableSecondaryAddressFinder(
       preference.rootDomain, preference.rootPort);
 
-  Future<PendingEnrollment?> resume({String? app, String? device}) =>
-      Atsign(atSign).resumeEnrollment(
-          app: app,
-          device: device,
+  // run otp:get from an enrolled client and pass the passcode
+  final pending = await Atsign(atSign).resumeEnrollment(
           keys: keys,
           preference: preference,
           lookUps: lookUps,
-          secondaryAddressFinder: secondaryAddressFinder);
-
-  // run otp:get from an enrolled client and pass the passcode
-  final pending = await resume(app: 'buzz', device: 'iphone') ??
-      await resume(app: 'buzz') ??
-      await resume() ??
+          secondaryAddressFinder: secondaryAddressFinder) ??
       await Atsign(atSign).enroll(
           otp: argResults['otp'],
           app: 'buzz',

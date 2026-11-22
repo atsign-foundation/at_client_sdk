@@ -908,10 +908,9 @@ Future<bool> enroll(ArgResults argResults,
 ///
 /// The keyfile [settings] names is the resume record: a request waiting for
 /// approval there is waited on again rather than repeated, whatever app or
-/// device it was filed under: the one for [app] on [device] first, else the
-/// one for [app] on any device, else the keyfile's one request. A request the
-/// manager denies, or that expires, is cleared from the keyfile by the next
-/// run, and a keyfile already holding live keys is refused.
+/// device it was filed under. A request the manager denies, or that expires,
+/// is cleared from the keyfile by the next run, and a keyfile already holding
+/// live keys is refused.
 @visibleForTesting
 Future<AtClient> enrolDevice({
   required String atSign,
@@ -930,18 +929,12 @@ Future<AtClient> enrolDevice({
   final preference = settings.preference;
   final atKeysFilePath = settings.atKeysFilePath;
   final keys = settings.keysFor(atSign);
-  Future<PendingEnrollment?> resume({String? app, String? device}) =>
-      Atsign(atSign).resumeEnrollment(
-          app: app,
-          device: device,
-          keys: keys,
-          preference: preference,
-          atLookUp: atLookUp,
-          lookUps: settings.lookUps,
-          secondaryAddressFinder: settings.secondaryAddressFinder);
-  var pending = await resume(app: app, device: device) ??
-      await resume(app: app) ??
-      await resume();
+  var pending = await Atsign(atSign).resumeEnrollment(
+      keys: keys,
+      preference: preference,
+      atLookUp: atLookUp,
+      lookUps: settings.lookUps,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
   if (pending != null) {
     final filedApp = clipForMessage(pending.app);
     final filedDevice = clipForMessage(pending.device);

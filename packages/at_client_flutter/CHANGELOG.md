@@ -2,9 +2,8 @@
 
 ## 2.1.0
 
-- fix: `ApkamActivationDialog`'s resume status and adoption warning show the
-  enrollment id and the names its key store records with their control
-  characters escaped.
+- fix: `ApkamActivationDialog`'s resume status shows the enrollment id and
+  the names its key store records with their control characters escaped.
 - fix: `EnrollmentRequestCard`, `AuthorisationFeedbackOverlay` and the
   approved enrollments in `EnrollmentRequestList` show a request's app and
   device names, the card its namespaces, and the key an Anchored verdict
@@ -51,11 +50,13 @@
   wrong with <atSign>: <message>", never a stack trace.
 - fix: `PkamDialog` tells the user in plain words to enroll the device again
   when its keys hold no credential, or only enrollments awaiting approval
-  that it cannot wait on, and, for a key store it can write, says why when
-  the device has asked more than once.
+  that it cannot wait on.
 - fix: `ApkamActivationDialog` resumes the request its key store already
   holds, even one filed under another device or app name, naming the app and
   device the request records when either differs.
+- fix: `AtsignFlows.resumeEnrollment`'s `app` and `device` are deprecated
+  and ignored: it returns the keys store's one pending request whatever app
+  and device it was filed under.
 
 ## 2.0.0
 

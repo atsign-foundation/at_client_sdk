@@ -31,8 +31,6 @@
   first opens the atSign at once (`references/15`).
 - `sync()` calls made while a round runs share one more round once it ends
   (`references/15`).
-- `resumeEnrollment` refusing several matching requests is in the error
-  table, with what picks one (`references/15`).
 - A cancelled wait throws once the pending keys are gone (`references/15`).
 - A collection write whose own copy fails writes no recipient's copy
   (`references/02`).

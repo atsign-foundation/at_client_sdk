@@ -815,9 +815,9 @@ Future<AtClient> enrollWith(String otp, AtClientPreference preference) async {
 }
 ```
 
-After a restart, `AtsignFlows().resumeEnrollment('@alice', app:, device:,
-keys:, preference:)` hands back the request already filed in the keys and
-awaiting approval, or null when there is none, rather than filing another.
+After a restart, `AtsignFlows().resumeEnrollment('@alice', keys:,
+preference:)` hands back the request already filed in the keys and awaiting
+approval, or null when there is none, rather than filing another.
 
 When an app passes no `storage:`, the dialogs and flows use
 `hiveStoragePath` while the app still sets it, and otherwise the app support

@@ -20,7 +20,7 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   dialog adopts only a request in the store it is given, which only programs
   on this device write; the names it shows are the ones the request was
   filed under, with their control characters escaped and each clipped at
-  180 characters, and its warning quotes them.
+  180 characters.
 
   Scenario: Leaving the waiting screen keeps the request
     Given the dialog waiting for approval
@@ -68,23 +68,12 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given a key store holding one pending enrollment <id> for @alice, filed by app "wavi-old" on device "phone"
     When ApkamActivationDialog opens @alice for app "<app>" on device "<device>"
     Then it shows "Resuming enrollment <id>, filed as wavi-old on phone.." and Cancel, without asking for a passcode
-    And it logs a warning naming wavi-old and <app>
     And once the request is approved, the dialog returns the client
 
     Examples:
       | app      | device |
       | wavi     | phone  |
       | wavi-old | tablet |
-
-  Scenario: The enrollment dialog waits on its own request when its store holds several
-    Given a key store holding two pending enrollments for @alice, one filed by this app under device name "phone" and one under "old-phone"
-    When ApkamActivationDialog opens @alice with device name "phone"
-    Then it shows "Resuming enrollment <the phone request's id>.." and Cancel, without asking for a passcode
-
-  Scenario: The enrollment dialog resumes this app's request from another device before another app's
-    Given a key store holding pending enrollments for @alice filed by app "wavi" on device "old-phone" and by app "buzz" on device "phone"
-    When ApkamActivationDialog opens @alice for app "wavi" on device "new-phone"
-    Then it shows "Resuming enrollment <id>, filed as wavi on old-phone.." and Cancel, without asking for a passcode
 
   Scenario: The enrollment dialog waits on a request filed for other namespaces
     Given a key store holding one pending enrollment <id> for @alice, filed by app "todos" on device "phone" for namespaces {todos: rw}
@@ -96,16 +85,6 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given a key store holding one pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "phone"
     When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
     Then it shows "Resuming enrollment <id>, filed as wa\u001bvi on phone.." and Cancel
-
-  Scenario: The enrollment dialog's adoption warning names the recorded app quoted and escaped
-    Given a key store holding one pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "phone"
-    When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
-    Then the warning it logs names the filed app as "wa\u001bvi", in double quotes
-
-  Scenario: The enrollment dialog's adoption warning escapes a double quote inside the recorded app name
-    Given a key store holding one pending enrollment <id> for @alice, filed by app wa"vi on device "phone"
-    When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
-    Then the warning it logs names the filed app as "wa\"vi"
 
   Scenario: PkamDialog resumes a pending keychain entry
     Given a keychain entry for an atSign holding only an enrollment awaiting approval

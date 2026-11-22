@@ -271,7 +271,6 @@ void main() {
             secondaryAddressFinder: await refusingAtDirectory(),
             storage: hiveStoreFor(Atsign(atSign), await preference())),
         throwsA(isA<AtEnrollmentPendingException>()
-            .having((e) => e.severalMatched, 'severalMatched', isFalse)
             .having((e) => e.pendingEnrollmentIds, 'pending', [enrollmentId])));
   });
 
@@ -299,43 +298,35 @@ void main() {
     expect(finder.asked, isEmpty, reason: 'no connection is attempted');
   });
 
-  test('resumeEnrollment finds the request by app and device, and only that',
+  test('The one pending enrollment resumes whatever app and device are given',
       () async {
     final store = InMemoryAtKeysIo();
     await submit(store, atServer(decide: (_) async => true));
     final pref = await preference();
 
     final resumed = await Atsign(atSign).resumeEnrollment(
-        app: 'wavi',
-        device: 'phone',
+        // ignore: deprecated_member_use_from_same_package
+        app: 'buzz',
+        // ignore: deprecated_member_use_from_same_package
+        device: 'tablet',
         keys: store,
         preference: pref,
         lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref));
     expect(resumed?.enrollmentId, enrollmentId);
+    expect((resumed?.app, resumed?.device), ('wavi', 'phone'),
+        reason: 'the names it was filed under, not the ones given');
     expect(resumed?.signingAlgo, SigningAlgoType.rsa2048);
     expect(resumed?.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
 
     expect(
         await Atsign(atSign).resumeEnrollment(
-            app: 'wavi',
-            device: 'tablet',
-            keys: store,
-            preference: pref,
-            lookUps: loopbackLookUps(),
-            secondaryAddressFinder: atDirectoryOf(pref)),
-        isNull,
-        reason: 'another device\'s request is not this one');
-    expect(
-        await Atsign(atSign).resumeEnrollment(
-            app: 'wavi',
-            device: 'phone',
             keys: InMemoryAtKeysIo(),
             preference: pref,
             lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
-        reason: 'and a store holding nothing resumes nothing');
+        reason: 'a store holding nothing resumes nothing');
   });
 
   for (final (app, device) in const [
@@ -1337,18 +1328,11 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
-    /// Resumes the request in [store] for wavi on phone, over [server].
-    /// The message of a refusal to choose between pending enrollments e-one
-    /// and e-two: it names both and says what picks one.
-    final namesBothAndAsksForNames = allOf(contains('e-one'), contains('e-two'),
-        contains('name both the app and the device'));
-
+    /// Resumes the request in [store], over [server].
     Future<PendingEnrollment?> resume(
         InMemoryAtKeysIo store, MockAtLookupImpl server) async {
       final pref = await preference();
       return Atsign(atSign).resumeEnrollment(
-          app: 'wavi',
-          device: 'phone',
           keys: store,
           preference: pref,
           atLookUp: server,
@@ -1609,53 +1593,63 @@ void main() {
     });
 
     test(
-        'Resuming by one name refuses a store holding several requests it '
-        'names', () async {
+        'A store holding two pending requests resumes the one its '
+        'enrollmentId field names, else the first, with a warning', () async {
+      final logs = RecordedLogs();
+      final handler = AtSignLogger.defaultLoggingHandler;
+      final level = AtSignLogger.root_level;
+      logs.installOn();
+      addTearDown(() {
+        AtSignLogger.defaultLoggingHandler = handler;
+        AtSignLogger.root_level = level;
+      });
       final pref = await preference();
-      Future<PendingEnrollment?> resume({String? app, String? device}) =>
-          Atsign(atSign).resumeEnrollment(
-              app: app,
-              device: device,
-              // ignore: invalid_use_of_visible_for_testing_member
-              keys: InMemoryAtKeysIo.holding(atSign, twoPending()),
-              preference: pref,
-              lookUps: loopbackLookUps(),
-              secondaryAddressFinder: atDirectoryOf(pref));
+      Future<String?> resumedFrom(AtKeys keys) async =>
+          (await Atsign(atSign).resumeEnrollment(
+                  // ignore: invalid_use_of_visible_for_testing_member
+                  keys: InMemoryAtKeysIo.holding(atSign, keys),
+                  preference: pref,
+                  lookUps: loopbackLookUps(),
+                  secondaryAddressFinder: atDirectoryOf(pref)))
+              ?.enrollmentId;
+      Iterable<String> warnings() =>
+          logs.at('WARNING').where((m) => m.contains('pending enrollments'));
 
-      await expectLater(
-          resume(app: 'wavi'),
-          throwsA(isA<AtEnrollmentPendingException>()
-              .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
-                  unorderedEquals(['e-one', 'e-two']))
-              .having((e) => e.severalMatched, 'severalMatched', isTrue)
-              .having((e) => e.message, 'message', namesBothAndAsksForNames)));
+      expect(await resumedFrom(pendingWith(['e-one'])), 'e-one');
+      expect(warnings(), isEmpty, reason: 'one pending request is the rule');
+
+      expect(await resumedFrom(twoPending()), 'e-one',
+          reason: 'with no enrollmentId field, the first');
       expect(
-          (await resume(app: 'wavi', device: 'e-two'))?.enrollmentId, 'e-two');
-      expect((await resume(device: 'e-one'))?.enrollmentId, 'e-one');
+          await resumedFrom(
+              twoPending()..fileLegacyMaterial(enrollmentId: 'e-two')),
+          'e-two',
+          reason: 'the one whose symmetric key the flat fields hold');
+      expect(warnings(), [
+        allOf(contains('holds 2 pending enrollments'), endsWith('"e-one"')),
+        allOf(contains('holds 2 pending enrollments'), endsWith('"e-two"')),
+      ]);
     });
 
-    test(
-        'Given a store holding two pending enrollments, when resumeEnrollment '
-        'is given no names, then it throws AtEnrollmentPendingException '
-        'naming both', () async {
-      final keys = twoPending();
+    test('Cancelling each request in turn empties a store holding two',
+        () async {
+      // ignore: invalid_use_of_visible_for_testing_member
+      final keys = InMemoryAtKeysIo.holding(atSign, twoPending());
       final pref = await preference();
+      final cancelled = <String>[];
+      while (cancelled.length < 3) {
+        final next = await Atsign(atSign).resumeEnrollment(
+            keys: keys,
+            preference: pref,
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref));
+        if (next == null) break;
+        cancelled.add(next.enrollmentId);
+        await next.cancel();
+      }
 
-      await expectLater(
-          Atsign(atSign).resumeEnrollment(
-              // ignore: invalid_use_of_visible_for_testing_member
-              keys: InMemoryAtKeysIo.holding(atSign, keys),
-              preference: pref,
-              lookUps: loopbackLookUps(),
-              secondaryAddressFinder: atDirectoryOf(pref)),
-          throwsA(isA<AtEnrollmentPendingException>()
-              .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
-                  unorderedEquals(['e-one', 'e-two']))
-              .having((e) => e.cause, 'cause',
-                  AtKeysUnusableCause.pendingEnrollment)
-              .having((e) => e.source, 'source', 'the keys store')
-              .having((e) => e.severalMatched, 'severalMatched', isTrue)
-              .having((e) => e.message, 'message', namesBothAndAsksForNames)));
+      expect(cancelled, ['e-one', 'e-two']);
+      expect((await keys.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
     for (final (call, ids, run) in <(
@@ -1665,22 +1659,13 @@ void main() {
     )>[
       (
         'Atsign.open',
-        ['e\n"one'],
+        ['e\n"one', 'e-two'],
         (keys, pref) async => Atsign(atSign).open(
             keys: keys,
             preference: pref,
             lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             storage: hiveStoreFor(Atsign(atSign), pref)),
-      ),
-      (
-        'Atsign.resumeEnrollment, naming neither app nor device',
-        ['e\n"one', 'e-two'],
-        (keys, pref) => Atsign(atSign).resumeEnrollment(
-            keys: keys,
-            preference: pref,
-            lookUps: loopbackLookUps(),
-            secondaryAddressFinder: atDirectoryOf(pref)),
       ),
     ]) {
       test(
