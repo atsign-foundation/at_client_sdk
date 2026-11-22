@@ -491,6 +491,8 @@ void main() {
           'The keyfile at ${defaultKeyfile()} holds only a pending enrollment '
               'request for $atSign (id e-1). Once it is approved, run the same '
               'at_activate enroll command again to finish it.',
+          '  To give it up instead: at_activate cancel -a $atSign -k '
+              '${defaultKeyfile()}',
           footer,
         ]));
     expect(run.exitCode, 1);
