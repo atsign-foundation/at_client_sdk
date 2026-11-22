@@ -710,4 +710,79 @@ void main() {
       expect(results, [null]);
     });
   }
+
+  testWidgets(
+    'Given CramDialog onboarding @alice, when its activation fails after the '
+    'user has left, then nothing beneath the dialog is popped',
+    (tester) async {
+      final activated = Completer<AtClient>();
+      when(
+        () => flows.activate(
+          any(),
+          cramSecret: any(named: 'cramSecret'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) => activated.future);
+      final pops = _PopRecorder();
+      final results = <Object?>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [pops],
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  results.add(
+                    await showDialog<Object?>(
+                      context: context,
+                      builder: (context) => CramDialog(
+                        atSign: atSign,
+                        cramKey: 'cram-secret-6d1f0b',
+                        preference: loopback(),
+                        keys: InMemoryAtKeysIo(),
+                        flows: flows,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        find.byType(CramDialog),
+        findsOneWidget,
+        reason: 'the control: CramDialog is onboarding',
+      );
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      activated.completeError(Exception('boom'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(
+        shown(tester),
+        'Something went wrong with $atSign: boom',
+        reason:
+            'the control: the failure landed while the dialog was still '
+            'there to report it',
+      );
+      expect(
+        pops.popped.whereType<PageRoute<dynamic>>(),
+        isEmpty,
+        reason: 'nothing beneath the dialog is popped',
+      );
+      expect(results, [null]);
+    },
+  );
 }
