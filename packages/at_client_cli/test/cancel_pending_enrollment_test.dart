@@ -136,6 +136,21 @@ void main() {
       };
 
   test(
+      'Given the atDirectory these tests count connections to, when an '
+      'at_activate command that connects to it runs, then its connections '
+      'are counted', () async {
+    final run = await atActivate([
+      'status', '-a', atSign, //
+      '-r', '127.0.0.1:${atDirectory.port}',
+    ]);
+
+    expect(connections, greaterThan(0),
+        reason: 'the control for "nothing is sent": at_activate status asks '
+            'the atDirectory for $atSign, so the count rises; stderr: '
+            '${run.err}');
+  });
+
+  test(
       "cancel removes the keyfile's pending request and says the manager can "
       'deny it', () async {
     await fileRequest();
@@ -268,6 +283,25 @@ void main() {
       expect(run.code, 1, reason: 'given $keyfile');
     });
   }
+
+  test(
+      'Given no --posture, when at_activate cancel runs, then it prints no '
+      'notice of a posture', () async {
+    final notice = AuthCliArgs.postureForEnroller(
+        AuthCliArgs().createCancelCommandParser().parse([])).notice;
+    expect(notice, isNotNull,
+        reason: 'the control: with no --posture, an enroller has a notice to '
+            'print');
+
+    final run = await cancel();
+
+    expect(run.err, contains('so there is nothing to cancel'),
+        reason: 'the control: cancel ran, and what it wrote to stderr is '
+            'captured');
+    expect('${run.out}${run.err}', isNot(contains(notice!)),
+        reason: 'no posture changes what cancel does, so it says nothing '
+            'about one');
+  });
 
   test('cancel needs the keyfile, as enroll does', () async {
     final run = await atActivate([
