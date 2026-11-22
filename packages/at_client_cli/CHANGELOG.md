@@ -1,5 +1,12 @@
 ## 1.1.0
 
+- feat: `at_activate cancel -a <atSign> -k <keyfile>` gives up the pending
+  enrollment request the keyfile holds, removing its keys; the request stays
+  on the atServer for the Atsign's manager to deny. A keyfile holding live
+  keys is refused. A `switch` over `AuthCliCommand` needs a `cancel` case.
+- feat: a `CLIBase` program waiting on its keyfile's pending request, and
+  at_activate's report of such a keyfile, name the `at_activate cancel`
+  command that gives it up.
 - fix: keys that cannot be read, cannot authenticate or are for another
   atSign are reported naming the keyfile as "the AtKeys store (<path>)".
 - fix: `at_activate list`, `approve` and `auto` show the ids, statuses,

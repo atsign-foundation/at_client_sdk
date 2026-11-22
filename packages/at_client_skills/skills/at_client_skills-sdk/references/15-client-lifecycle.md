@@ -49,7 +49,9 @@ final enrolled = await pending.client(preference,
 // pending keys are gone from `keys`, as a denial's are, so resumeEnrollment
 // finds nothing. It throws when `keys` cannot remove them; call it again.
 // Call it when the user confirms they give up on the request (a Cancel
-// button).
+// button). From a terminal, `at_activate cancel -a @alice -k <keyfile>` does
+// it for the keyfile `at_activate enroll` filed the request in, and refuses
+// one holding live keys.
 // pending.stop() ends the wait and keeps the request: call it from a
 // dispose() that only leaves the screen, and resumeEnrollment picks the
 // request up later. The request stays on the atServer until its manager

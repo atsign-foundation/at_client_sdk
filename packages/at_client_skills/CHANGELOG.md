@@ -2,6 +2,9 @@
 
 ## 1.4.0 — 2026-09-13
 
+- `at_activate cancel` gives up the pending request a keyfile holds, and a
+  `CLIBase` program waiting on one names it (`SKILL.md`; `references/14`,
+  `15`).
 - Keys `open` cannot use throw `AtKeysUnusableException` before it connects,
   `AtNoCredentialException` and `AtEnrollmentPendingException` among them
   (`SKILL.md`; `references/05`, `15`).

@@ -85,6 +85,7 @@ The remaining commands run on the keyfile `-k` names (that one by default):
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `status -a @alice`                                 | asks where the atSign stands; the exit code says: 0 activated, 1 atServer up but not yet activated, 2 atServer unreachable, 3 no such atSign, 4 atDirectory unreachable |
 | `enroll -a @alice --app <app> --device <device> --namespaces <ns:rw,...> --passcode <otp>` | submits an APKAM enrollment for a new app and device and waits for its approval; run on a keyfile already waiting on a request, it resumes that wait rather than submitting another, whatever app or device the request was filed under, and says which when they differ; a request the manager denies, or that expires, is cleared from the keyfile by the next run |
+| `cancel -a @alice -k <keyfile>`                    | gives up the pending enrollment request the keyfile holds and removes its keys from it, sending nothing: the request stays on the atServer, for the Atsign's manager to deny, or to revoke if they approved it meanwhile; a keyfile holding live keys is refused, and left as it is |
 | `otp` / `spp`                                      | issues a one-time passcode, or sets a semi-permanent one, that a new enrollment quotes                                    |
 | `list`, `fetch`                                    | the enrollment roster, or one enrollment's record                                                                        |
 | `approve`, `deny`, `revoke`, `unrevoke`, `delete`  | decides an enrollment by its id; `auto` listens and approves the requests that match its app and device patterns        |
@@ -170,7 +171,8 @@ online. Otherwise it stops the client and throws:
   time, the one a retry loop should catch.
 
 A keyfile still holding only its enrollment request is resumed: the program
-says it is waiting for approval of that enrollment, waits as at_activate
+says it is waiting for approval of that enrollment, naming the
+`at_activate cancel` command that gives the request up, waits as at_activate
 does, and runs once it is approved. Ctrl-C while it waits keeps the request
 for the next run.
 
