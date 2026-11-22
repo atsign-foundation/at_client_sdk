@@ -180,7 +180,7 @@ class PendingEnrollment {
           final kept = '${(e as AtException).message}; its pending keys could '
               'not be removed and stay in '
               '${theAtKeysStore(keys.describeSource(atSign))}, where the next '
-              'resume finds the request again: $failure';
+              'resume finds the request again: ${clipForMessage('$failure')}';
           Error.throwWithStackTrace(
               e is AtEnrollmentExpiredException
                   ? AtEnrollmentExpiredException(kept)

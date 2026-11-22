@@ -594,15 +594,22 @@ void main() {
   test(
       'a denial or expiry whose pending keys the store cannot remove still '
       'throws the decision, saying the keys stay', () async {
-    for (final (code, text, decision) in [
-      ('AT0025', 'Apkam Auth Denied', isA<AtEnrollmentDeniedException>()),
+    for (final (code, text, decision, said) in [
+      (
+        'AT0025',
+        'Apkam Auth Denied',
+        isA<AtEnrollmentDeniedException>(),
+        'is denied'
+      ),
       (
         'AT0028',
         'enrollment_id: $enrollmentId is expired or invalid',
-        isA<AtEnrollmentExpiredException>()
+        isA<AtEnrollmentExpiredException>(),
+        'has expired'
       ),
     ]) {
-      final store = _UpdateFailingStore();
+      final store = _UpdateFailingStore()
+        ..failure = 'Could not acquire the keyfile lock\nwithin 0:00:10';
       final pending = await submit(
           store,
           atServer(
@@ -618,10 +625,13 @@ void main() {
               (e) => (e as AtException).message,
               'message',
               allOf(
+                  contains(said),
                   contains('could not be removed and stay in the AtKeys '
                       'store (a test location)'),
-                  contains('Could not acquire the keyfile lock')))),
-          reason: '$code: the decision is thrown, saying the keys stay');
+                  contains(r'Could not acquire the keyfile lock\u000awithin'),
+                  isNot(contains('\n'))))),
+          reason: '$code: the decision is thrown, saying the keys stay and '
+              'why on one line');
       expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
           reason: '$code: the keys the store could not remove are still there');
     }
@@ -2280,15 +2290,13 @@ class _DiskPacedStore extends InMemoryAtKeysIo {
 /// held elsewhere, while [failing].
 class _UpdateFailingStore extends _DescribedStore {
   bool failing = false;
+  String failure = 'Could not acquire the keyfile lock within '
+      '0:00:10.000000. Nothing was written.';
 
   @override
   Future<void> update(
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
-    if (failing) {
-      throw FileSystemException(
-          'Could not acquire the keyfile lock within 0:00:10.000000. Nothing '
-          'was written.');
-    }
+    if (failing) throw FileSystemException(failure);
     return super.update(atsign, mutate);
   }
 }
