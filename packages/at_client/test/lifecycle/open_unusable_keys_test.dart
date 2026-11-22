@@ -722,9 +722,10 @@ void main() {
             .having(
                 (e) => e.message,
                 'message',
-                '$atSign holds no credential in this keyfile: its enrollment '
-                    'was denied, cancelled or expired, or never completed, so '
-                    'there is nothing to authenticate with; enroll again'));
+                '$atSign holds no credential in the AtKeys store ($path): its '
+                    'enrollment was denied, cancelled or expired, or never '
+                    'completed, so there is nothing to authenticate with; '
+                    'enroll again'));
     expect(
         onlyPending,
         isA<AtEnrollmentPendingException>()
@@ -734,9 +735,9 @@ void main() {
             .having(
                 (e) => e.message,
                 'message',
-                '$atSign holds no live credential, only the pending '
-                    'enrollment "e-1": resume it with resumeEnrollment rather '
-                    'than opening it')
+                '$atSign holds no live credential in the AtKeys store '
+                    '($pendingPath), only the pending enrollment "e-1": '
+                    'resume it with resumeEnrollment rather than opening it')
             .having((e) => e.pendingEnrollmentIds, 'pending', ['e-1']));
     expectNoConnection();
   });
@@ -795,8 +796,35 @@ void main() {
         throwsA(isA<AtEnrollmentException>().having(
             (e) => e.message,
             'message',
-            allOf(endsWith('give a new enrollment a keys store of its own'),
+            allOf(
+                startsWith('$atSign already holds live keys in the AtKeys '
+                    'store, and enrolling again'),
+                endsWith('give a new enrollment an AtKeys store of its own'),
                 isNot(contains('remove'))))));
     expectNoConnection();
+  });
+
+  group('Given an AtNoCredentialException for $atSign', () {
+    test(
+        "when its source is this device's keychain, then its message names "
+        'the AtKeys store with the keychain in brackets', () {
+      expect(
+          AtNoCredentialException(atSign, source: "this device's keychain")
+              .message,
+          "$atSign holds no credential in the AtKeys store (this device's "
+          'keychain): its enrollment was denied, cancelled or expired, or '
+          'never completed, so there is nothing to authenticate with; enroll '
+          'again');
+    });
+
+    test(
+        'when it has no source, then its message names the AtKeys store with '
+        'no brackets', () {
+      expect(
+          AtNoCredentialException(atSign).message,
+          '$atSign holds no credential in the AtKeys store: its enrollment '
+          'was denied, cancelled or expired, or never completed, so there is '
+          'nothing to authenticate with; enroll again');
+    });
   });
 }

@@ -610,8 +610,8 @@ class _BackupHeldOpen extends InMemoryAtKeysIo {
 /// cancelled it before the approval was filed.
 const cancelledElsewhere =
     "the atSign's manager can revoke enrollment \"enroll-1\" of @alice: it "
-    'was approved after its pending keys left its key store, so nothing is '
-    'filed';
+    'was approved after its pending keys left the AtKeys store, so nothing '
+    'is filed';
 
 /// A frame, then 400ms of them, since nothing here settles.
 Future<void> frames(WidgetTester tester) async {

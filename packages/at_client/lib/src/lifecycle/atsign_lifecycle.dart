@@ -536,8 +536,9 @@ extension AtsignLifecycle on Atsign {
     final count = stored.pendingEnrollmentIds.length;
     if (count > 1) {
       AtSignLogger('AtsignLifecycle ($this)').warning(
-          '${keys.describeSource(this)} holds $count pending enrollments of '
-          '$this, where a key store holds at most one: resuming '
+          '${theAtKeysStore(keys.describeSource(this))} holds $count pending '
+          'enrollments of $this, where an AtKeys store holds at most one: '
+          'resuming '
           '"${clipForMessage(enrollmentId, quote: '"')}"');
     }
     final info = stored.enrollmentInfo(enrollmentId);
@@ -633,13 +634,15 @@ extension AtsignLifecycle on Atsign {
     } on AtKeysSourceAbsentException {
       return;
     }
-    _refuseFilingOver(existing);
+    _refuseFilingOver(existing, source: keys.describeSource(this));
   }
 
-  /// Throws [AtEnrollmentException] unless [existing] holds nothing live and
-  /// nothing pending. [sent] is the enrollment already sent, when the check
-  /// is made again as it is filed.
-  void _refuseFilingOver(AtKeys existing, {String? sent}) {
+  /// Throws [AtEnrollmentException] unless [existing], read from the store
+  /// [source] describes, holds nothing live and nothing pending. [sent] is
+  /// the enrollment already sent, when the check is made again as it is
+  /// filed.
+  void _refuseFilingOver(AtKeys existing,
+      {required String source, String? sent}) {
     String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
     // NOTE: the instruction comes first, so a message clipped at 180
     // characters still says what to do.
@@ -647,11 +650,12 @@ extension AtsignLifecycle on Atsign {
         "the atSign's manager can deny enrollment ${quoted(sent!)} of $this, "
         'which is not filed: $this gained $gained while it was being sent';
     if (existing.holdsAuthenticationMaterial) {
+      final store = theAtKeysStore(source);
       throw AtEnrollmentException(sent == null
-          ? '$this already holds live keys in this store, and enrolling '
-              'again would overwrite the credential this device has: give a '
-              'new enrollment a keys store of its own'
-          : notFiled('live keys in this store'));
+          ? '$this already holds live keys in $store, and enrolling again '
+              'would overwrite the credential this device has: give a new '
+              'enrollment an AtKeys store of its own'
+          : notFiled('live keys in $store'));
     }
     final pendingId = _pendingToResume(existing);
     if (pendingId != null) {
@@ -758,7 +762,8 @@ extension AtsignLifecycle on Atsign {
     }
 
     bool refile(AtKeys stored) {
-      _refuseFilingOver(stored, sent: enrollmentId);
+      _refuseFilingOver(stored,
+          source: keys.describeSource(this), sent: enrollmentId);
       fileInto(stored);
       return true;
     }

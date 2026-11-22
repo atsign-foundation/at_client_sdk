@@ -1,5 +1,9 @@
 ## 4.1.0-rc.1
 
+- fix: keys and enrollment messages, `AtNoCredentialException`'s and
+  `AtEnrollmentPendingException`'s among them, name where the keys are as
+  "the AtKeys store (<path>)", "the AtKeys store (this device's keychain)"
+  or "the AtKeys store".
 - fix: `AtEnrollmentPendingException` names each pending enrollment id in
   double quotes, with its control characters escaped.
 - fix: `Atsign.enroll`'s refusal of a keys store already waiting on an

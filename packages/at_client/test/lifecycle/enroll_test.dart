@@ -462,8 +462,8 @@ void main() {
             allOf(
                 startsWith("the atSign's manager can deny enrollment "
                     '"$enrollmentId" of $atSign, which is not filed'),
-                contains('gained live keys in this store while it was being '
-                    'sent')))));
+                contains('gained live keys in the AtKeys store while it was '
+                    'being sent')))));
     final stored = await store.read(atSign);
     expect(stored.holdsAuthenticationMaterial, isTrue);
     expect(stored.pendingEnrollmentIds, isEmpty);
@@ -1175,8 +1175,11 @@ void main() {
       final pending = await submit(store, approvesThenHolds(opening, answer));
       final opened = expectLater(
           clientOf(pending),
-          throwsA(thrown.having((e) => e.toString(), 'message',
-              contains('after its approval was written'))));
+          throwsA(thrown.having(
+              (e) => e.toString(),
+              'message',
+              contains('after its approval was written; the approved keys '
+                  'stay in the AtKeys store'))));
       await opening.future;
 
       final reopened = call(pending).then((_) => reopen(store));
@@ -1402,8 +1405,9 @@ void main() {
           throwsA(isA<AtEnrollmentCancelledException>().having(
               (e) => e.message,
               'message',
-              startsWith("the atSign's manager can revoke enrollment "
-                  '"$enrollmentId" of $atSign: it was approved after'))));
+              "the atSign's manager can revoke enrollment "
+                  '"$enrollmentId" of $atSign: it was approved after its '
+                  'pending keys left the AtKeys store, so nothing is filed')));
       await until(() => polls >= 1);
       await other!.cancel();
       await afterCancel?.call();
@@ -1508,7 +1512,11 @@ void main() {
       final pending = await submitOwning(store, server);
       final waiting = expectLater(
           pending.awaitApproval(retryInterval: pollEvery),
-          throwsA(isA<StoppedException>()));
+          throwsA(isA<StoppedException>().having(
+              (e) => e.message,
+              'message',
+              endsWith('the request stays in the AtKeys store, for '
+                  'resumeEnrollment'))));
       await until(() => polls >= 1);
 
       await pending.stop();
@@ -1772,6 +1780,8 @@ void main() {
               ?.enrollmentId;
       Iterable<String> warnings() =>
           logs.at('WARNING').where((m) => m.contains('pending enrollments'));
+      const several = 'the AtKeys store holds 2 pending enrollments of '
+          '$atSign, where an AtKeys store holds at most one: resuming ';
 
       expect(await resumedFrom(pendingWith(['e-one'])), 'e-one');
       expect(warnings(), isEmpty, reason: 'one pending request is the rule');
@@ -1784,8 +1794,8 @@ void main() {
           'e-two',
           reason: 'the one whose symmetric key the flat fields hold');
       expect(warnings(), [
-        allOf(contains('holds 2 pending enrollments'), endsWith('"e-one"')),
-        allOf(contains('holds 2 pending enrollments'), endsWith('"e-two"')),
+        allOf(startsWith(several), endsWith('"e-one"')),
+        allOf(startsWith(several), endsWith('"e-two"')),
       ]);
     });
 

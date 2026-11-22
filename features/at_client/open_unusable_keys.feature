@@ -52,7 +52,7 @@ Feature: Atsign.open refuses keys it cannot use before connecting, and says why
   Scenario: Keys with no credential, or only a pending enrollment, are AtKeysUnusableExceptions
     Given keys for @alice that hold no credential, and keys for @alice that hold only a pending enrollment
     When an app calls Atsign.open with each
-    Then it throws AtNoCredentialException with cause noCredential, and AtEnrollmentPendingException with cause pendingEnrollment, each with its message unchanged and each caught by a catch for its own type
+    Then it throws AtNoCredentialException with cause noCredential, and AtEnrollmentPendingException with cause pendingEnrollment, each with a message naming the AtKeys store, and each caught by a catch for its own type
 
   Scenario: An atServer refusal still says the atServer refused it
     Given keys the atServer refuses, on a device that has never held @alice online
@@ -67,7 +67,7 @@ Feature: Atsign.open refuses keys it cannot use before connecting, and says why
   Scenario: Enrolling into a store that holds live keys says to give the enrollment a store of its own
     Given a keys store holding live keys for @alice
     When an app calls Atsign.enroll for @alice with that store
-    Then it throws AtEnrollmentException ending "give a new enrollment a keys store of its own", and its message does not suggest removing the keys
+    Then it throws AtEnrollmentException saying @alice already holds live keys in the AtKeys store and ending "give a new enrollment an AtKeys store of its own", and its message does not suggest removing the keys
 
   Scenario: An activation failure's message holds no stack trace
     Given an activation of @alice whose PKAM step fails

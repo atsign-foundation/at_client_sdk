@@ -25,6 +25,12 @@ AtKeysIo handshakeKeysIo(String atSign, AtKeys keys) =>
     // ignore: invalid_use_of_visible_for_testing_member
     InMemoryAtKeysIo.holding(atSign, keys);
 
+/// "the AtKeys store", with [source], where `AtKeysIo.describeSource` says
+/// the keys are kept, in brackets after it unless [source] is null or empty.
+String theAtKeysStore(String? source) => source == null || source.isEmpty
+    ? 'the AtKeys store'
+    : 'the AtKeys store ($source)';
+
 /// An enrollment this device has submitted and the atSign's manager has not
 /// yet decided.
 ///
@@ -205,8 +211,9 @@ class PendingEnrollment {
       // characters still says what to do.
       throw AtEnrollmentCancelledException("the atSign's manager can revoke "
           'enrollment "${clipForMessage(enrollmentId, quote: '"')}" of '
-          '$atSign: it was approved after its pending keys left its key '
-          'store, so nothing is filed');
+          '$atSign: it was approved after its pending keys left '
+          '${theAtKeysStore(keys.describeSource(atSign))}, so nothing is '
+          'filed');
     }
     if (found == _Filing.ended) throw await _endedOnceCancelled();
     _approved = true;
@@ -351,9 +358,10 @@ class PendingEnrollment {
   /// What a wait that [cancel] or [stop] ended throws.
   Exception _endedException() {
     final wait = 'the wait for enrollment $enrollmentId of $atSign';
+    final store = theAtKeysStore(keys.describeSource(atSign));
     if (_approved) {
       final after = 'after its approval was written; the approved keys stay '
-          'in its key store';
+          'in $store';
       return _abandoned
           ? AtEnrollmentCancelledException('$wait was cancelled $after')
           : StoppedException('$wait was stopped $after, to open the atSign '
@@ -361,8 +369,8 @@ class PendingEnrollment {
     }
     return _abandoned
         ? AtEnrollmentCancelledException('$wait was cancelled')
-        : StoppedException('$wait was stopped; the request stays in its key '
-            'store, for resumeEnrollment');
+        : StoppedException('$wait was stopped; the request stays in $store, '
+            'for resumeEnrollment');
   }
 
   /// Copies onto [stored] what the approval released into [completed]: the
@@ -495,9 +503,9 @@ class AtEnrollmentCancelledException extends AtEnrollmentException {
 class AtNoCredentialException extends AtKeysUnusableException {
   AtNoCredentialException(String atSign, {super.source})
       : super(
-            '$atSign holds no credential in this keyfile: its enrollment '
-            'was denied, cancelled or expired, or never completed, so there '
-            'is nothing to authenticate with; enroll again',
+            '$atSign holds no credential in ${theAtKeysStore(source)}: its '
+            'enrollment was denied, cancelled or expired, or never completed, '
+            'so there is nothing to authenticate with; enroll again',
             atSign: atSign,
             cause: AtKeysUnusableCause.noCredential);
 }
@@ -513,7 +521,8 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
   AtEnrollmentPendingException(String atSign, this.pendingEnrollmentIds,
       {super.source})
       : super(
-            '$atSign holds no live credential, only the pending enrollment'
+            '$atSign holds no live credential in ${theAtKeysStore(source)}, '
+            'only the pending enrollment'
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
             '${_quoted(pendingEnrollmentIds)}: resume it with '
             'resumeEnrollment rather than opening it',
