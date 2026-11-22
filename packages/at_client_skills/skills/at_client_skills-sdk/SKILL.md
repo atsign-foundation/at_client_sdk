@@ -722,7 +722,7 @@ final AtClient atClient =
   at_activate does, saying that `at_activate cancel` gives the request up,
   and throws `AtEnrollmentDeniedException` when it is denied and
   `AtEnrollmentExpiredException` when it expires, each an
-  `AtEnrollmentException`; both remove the request. A wait the atServer keeps answering with anything else, a server
+  `AtEnrollmentException`; both remove the request, unless the message says its pending keys stay because the AtKeys store could not remove them. A wait the atServer keeps answering with anything else, a server
   error included, also ends in `AtEnrollmentException` and keeps the
   request, and an atServer not reached ends it with the connection's own
   failure.
