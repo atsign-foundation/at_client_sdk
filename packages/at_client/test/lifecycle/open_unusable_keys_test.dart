@@ -798,12 +798,12 @@ void main() {
             (e) => e.message,
             'message',
             allOf(
-                startsWith('$atSign already holds live keys in the AtKeys '
-                    'store ($path), and enrolling again'),
-                endsWith('give a new enrollment an AtKeys store of its own'),
+                startsWith('Give a new enrollment an AtKeys store of its own: '
+                    '$atSign already holds live keys in the AtKeys store '
+                    '($path), and enrolling again'),
                 isNot(contains('remove'))))),
-        reason: 'the refusal names the keyfile holding the live keys, by its '
-            'path in brackets');
+        reason: 'the refusal starts with what to do, then names the keyfile '
+            'holding the live keys, by its path in brackets');
     expectNoConnection();
   });
 

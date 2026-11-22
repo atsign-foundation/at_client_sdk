@@ -67,7 +67,7 @@ Feature: Atsign.open refuses keys it cannot use before connecting, and says why
   Scenario: Enrolling into a store that holds live keys says to give the enrollment a store of its own
     Given an AtKeys store holding live keys for @alice
     When an app calls Atsign.enroll for @alice with that store
-    Then it throws AtEnrollmentException saying @alice already holds live keys in the AtKeys store and ending "give a new enrollment an AtKeys store of its own", and its message does not suggest removing the keys
+    Then it throws AtEnrollmentException starting "Give a new enrollment an AtKeys store of its own", then saying @alice already holds live keys in the AtKeys store, and its message does not suggest removing the keys
 
   Scenario: An activation failure's message holds no stack trace
     Given an activation of @alice whose PKAM step fails

@@ -663,17 +663,17 @@ extension AtsignLifecycle on Atsign {
   void _refuseFilingOver(AtKeys existing,
       {required String source, String? sent}) {
     String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
-    // NOTE: the instruction comes first, so a message clipped at 180
-    // characters still says what to do.
+    // NOTE: each refusal's instruction comes first, so a message clipped at
+    // 180 characters still says what to do.
     String notFiled(String gained) =>
         "the atSign's manager can deny enrollment ${quoted(sent!)} of $this, "
         'which is not filed: $this gained $gained while it was being sent';
     if (existing.holdsAuthenticationMaterial) {
       final store = theAtKeysStore(source);
       throw AtEnrollmentException(sent == null
-          ? '$this already holds live keys in $store, and enrolling again '
-              'would overwrite the credential this device has: give a new '
-              'enrollment an AtKeys store of its own'
+          ? 'Give a new enrollment an AtKeys store of its own: $this already '
+              'holds live keys in $store, and enrolling again would overwrite '
+              'the credential this device has'
           : notFiled('live keys in $store'));
     }
     final pendingId = _pendingToResume(existing);

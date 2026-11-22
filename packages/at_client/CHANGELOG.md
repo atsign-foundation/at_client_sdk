@@ -232,8 +232,9 @@
 - feat: `AtNoCredentialException` and `AtEnrollmentPendingException` say
   which AtKeys store they came from in `source` when `Atsign.open` throws
   them.
-- fix: `Atsign.enroll` refusing an AtKeys store that holds live keys says to
-  give the new enrollment an AtKeys store of its own.
+- fix: `Atsign.enroll` refusing an AtKeys store that holds live keys starts
+  by saying to give the new enrollment an AtKeys store of its own, so a
+  dialog that clips the message still shows it.
 - feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
   first activation in place of a minted one; a pair that does not sign under
   the activation's algorithm is refused with `AtSigningException` before
