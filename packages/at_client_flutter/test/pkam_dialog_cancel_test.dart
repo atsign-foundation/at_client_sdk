@@ -104,7 +104,11 @@ void main() {
   /// Opens PkamDialog on a keychain entry holding only `pending`, from a
   /// button, and records what `showDialog` returns and what
   /// `onAuthenticationComplete` is handed.
-  Future<(List<Object?>, List<AtClient>)> open(WidgetTester tester) async {
+  Future<(List<Object?>, List<AtClient>)> open(
+    WidgetTester tester, {
+    WrittenAtKeysIo? keys,
+    List<WrittenAtKeysIo>? backupKeys,
+  }) async {
     final results = <Object?>[];
     final completed = <AtClient>[];
     await tester.pumpWidget(
@@ -119,7 +123,8 @@ void main() {
                     context: context,
                     builder: (context) => PkamDialog(
                       atSign: '@alice',
-                      keys: InMemoryAtKeysIo(),
+                      keys: keys ?? InMemoryAtKeysIo(),
+                      backupKeys: backupKeys,
                       preference: AtClientPreference(),
                       storage: FakeAtClientStorage(),
                       onAuthenticationComplete: completed.add,
@@ -366,6 +371,7 @@ void main() {
 
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(PkamDialog), findsNothing);
+    expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
     verifyNever(() => pending.cancel());
     expect(results, [client]);
     expect(tester.takeException(), isNull);
@@ -433,7 +439,6 @@ void main() {
       'runs closes the dialog once', (tester) async {
     final opened = clientAnswers();
     stopEnds(opened);
-    // The Cancel's ending runs first and the denial's after it.
     when(() => pending.cancel()).thenAnswer((_) async {
       Timer(const Duration(milliseconds: 1), () {
         opened.completeError(
@@ -478,6 +483,45 @@ void main() {
     expect(results, [null]);
     expect(completed, isEmpty);
   });
+
+  testWidgets('Given PkamDialog backing up the keys of the client it opened, '
+      'when the user leaves, then nothing beneath the dialog is popped', (
+    tester,
+  ) async {
+    final opened = clientAnswers();
+    when(() => pending.stop()).thenAnswer((_) async {});
+    final client = MockAtClient();
+    final keys = InMemoryAtKeysIo();
+    await keys.write('@alice', AtKeys(atsign: Atsign('@alice')));
+    final backup = _BackupHeldOpen();
+    final (results, completed) = await open(
+      tester,
+      keys: keys,
+      backupKeys: [backup],
+    );
+
+    opened.complete(client);
+    await tester.pump();
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    backup.release.complete();
+    await frames(tester);
+
+    expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+    expect(completed, [client]);
+    expect(results, [null]);
+  });
+}
+
+/// A backup store whose writes wait for [release].
+class _BackupHeldOpen extends InMemoryAtKeysIo {
+  final release = Completer<void>();
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) async {
+    await release.future;
+    return super.write(atsign, atKeys);
+  }
 }
 
 /// What `PendingEnrollment` throws when another wait for the same request

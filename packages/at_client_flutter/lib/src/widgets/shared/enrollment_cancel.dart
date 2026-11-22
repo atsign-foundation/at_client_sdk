@@ -63,7 +63,9 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
   /// arrives.
   void closeConfirmation() {
     final confirming = _confirming;
-    if (confirming != null && confirming.mounted) {
+    if (confirming != null &&
+        confirming.mounted &&
+        (ModalRoute.of(confirming)?.isActive ?? true)) {
       Navigator.of(confirming).pop(false);
     }
   }
@@ -124,7 +126,7 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
         'Could not open $atSign on the approved keys of enrollment '
         '"${clipForMessage(pending.enrollmentId, quote: '"')}": $e',
       );
-      if (mounted) Navigator.of(context).pop();
+      closeDialog();
       return;
     }
     if (!showing) {

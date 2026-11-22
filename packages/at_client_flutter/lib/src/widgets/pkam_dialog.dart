@@ -166,7 +166,7 @@ class _PkamDialogState extends State<PkamDialog>
           '${client.connection.current}',
         );
       }
-      if (mounted) Navigator.of(context).pop(client);
+      if (showing) Navigator.of(context).pop(client);
     } catch (e) {
       // NOTE: a client that opened before the failure reaches nobody, and
       // while it is live the atSign cannot be opened again.

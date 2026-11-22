@@ -434,6 +434,7 @@ void main() {
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(ApkamActivationDialog), findsNothing);
+      expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
       verifyNever(() => pending.cancel());
       expect(results, [client]);
       expect(tester.takeException(), isNull);
@@ -534,6 +535,41 @@ void main() {
       await frames(tester);
 
       verify(() => approvedClient.stop()).called(1);
+      expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+      expect(results, [null]);
+    });
+
+    testWidgets('Given a confirmed Cancel after the approval was written, '
+        'when the user leaves and opening the approved keys then fails, then '
+        'nothing beneath the dialog is popped', (tester) async {
+      resumes(pending);
+      when(() => pending.approved).thenReturn(true);
+      when(() => pending.stop()).thenAnswer((_) async {});
+      final opened = clientAnswers();
+      when(() => pending.cancel()).thenAnswer((_) async {
+        opened.completeError(
+          AtEnrollmentCancelledException('cancelled after the approval'),
+        );
+      });
+      final opening = Completer<AtClient>();
+      when(
+        () => flows.open(
+          any(),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).thenAnswer((_) => opening.future);
+      final results = await open(tester);
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Abandon');
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pump();
+      opening.completeError(StateError('the keys could not be opened'));
+      await frames(tester);
+
       expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
       expect(results, [null]);
     });

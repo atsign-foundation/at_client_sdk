@@ -6,10 +6,10 @@
   `ApkamActivationDialog` does: after the user confirms, it removes the
   request's pending keys from the key store.
 - fix: `ApkamActivationDialog` and `PkamDialog` no longer close the screen
-  beneath them, or leave a client running that the app never receives, when
-  a failure, a confirmed Cancel or the user leaving lands as they close.
-  `ApkamActivationDialog` also closes its Cancel confirmation when the wait
-  fails.
+  beneath them when a failure, an approval, a confirmed Cancel or the user
+  leaving lands as they close, and they stop a client whose open completes
+  after they have closed. `ApkamActivationDialog` also closes its Cancel
+  confirmation when the wait fails.
 - fix: `ApkamActivationDialog` and `PkamDialog` show a failure when another
   wait has cancelled the request they wait on, saying the Atsign's manager
   can revoke its approval.
