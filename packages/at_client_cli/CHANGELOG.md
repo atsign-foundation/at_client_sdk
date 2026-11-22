@@ -46,9 +46,13 @@
 - fix: a `CLIBase` program whose enrollment request is denied ends with
   `AtEnrollmentDeniedException`, and one whose request has expired with
   `AtEnrollmentExpiredException`, both `AtEnrollmentException`s, and either
-  removes the request's keys. A wait for approval that ends on any other
+  removes the request's keys or, when the keyfile cannot be written, says in
+  its message that they stay. A wait for approval that ends on any other
   refusal keeps the request for the next run, even when the atServer's text
   says "denied".
+- docs: `CLIBase`'s dartdoc and the README say that an approval whose keys
+  cannot be fetched or decrypted ends with whatever doing so threw, mostly
+  not an `AtEnrollmentException`, keeping the request.
 - fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
   it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
   `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that

@@ -164,12 +164,18 @@ online. Otherwise it stops the client and throws:
   the cause, and saying when the enrollment awaits approval or was denied;
 - `AtEnrollmentDeniedException` or `AtEnrollmentExpiredException`, both
   `AtEnrollmentException`s, when the enrollment request the keyfile holds is
-  denied or expires, removing its keys;
+  denied or expires, removing its keys or, when the keyfile cannot be
+  written, saying in their message that the keys stay;
 - a plain `AtEnrollmentException` when the atServer keeps answering the wait
-  for approval with neither a decision nor "not yet", or when the request was
-  approved but its keys could not be fetched or decrypted, keeping the request
-  for the next run (it may already be approved, so run again rather than
-  cancel it);
+  for approval with neither a decision nor "not yet", keeping the request for
+  the next run;
+- whatever fetching or decrypting the keys threw when the request was
+  approved but its keys could not be collected, keeping the request: an
+  `AtException` such as `AtLookUpException` for an error reply or none, a
+  `FormatException` or `ArgumentError` for a reply that does not parse or
+  decrypt, and a plain `AtEnrollmentException` only when no conveyed key
+  decrypts them. The request may already be approved, so run again rather
+  than cancel it;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
   Atsign;
 - `SecondaryServerConnectivityException` when no atServer accepted or refused

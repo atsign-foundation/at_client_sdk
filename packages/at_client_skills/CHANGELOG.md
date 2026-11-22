@@ -2,6 +2,9 @@
 
 ## 1.4.0 — 2026-09-13
 
+- An approval whose keys cannot be collected throws whatever collecting them
+  threw, mostly not an `AtEnrollmentException`, so a final `catch` waits
+  again rather than cancelling (`references/15`).
 - A denial or expiry whose pending keys the AtKeys store cannot remove still
   throws the decision, its message saying the keys stay (`SKILL.md`;
   `references/14`, `15`).
