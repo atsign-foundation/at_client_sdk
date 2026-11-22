@@ -173,3 +173,16 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given PkamDialog waiting on a resumed enrollment
     When the user confirms Cancel, and the wait then fails with a denial as the dialog closes
     Then the dialog closes with no client, and the screen it was opened from stays
+
+  @race
+  Scenario: Leaving PkamDialog while it backs up the keys stops the client it opened
+    Given PkamDialog shown with no onAuthenticationComplete, waiting on an enrollment that is then approved
+    When the user leaves the dialog while it backs up the keys
+    Then the client it opened is stopped
+    And nothing beneath the dialog is popped
+
+  @race
+  Scenario: Leaving PkamDialog while it opens approved keys stops the client
+    Given PkamDialog shown with no onAuthenticationComplete, on keys that are already approved
+    When the user leaves the dialog before the open completes
+    Then the client it opened is stopped

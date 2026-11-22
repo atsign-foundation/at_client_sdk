@@ -153,20 +153,28 @@ class _PkamDialogState extends State<PkamDialog>
   }
 
   /// Backs up the keys [client] opened on, tells `onAuthenticationComplete`,
-  /// and closes the dialog with it.
+  /// and closes the dialog with it. When the dialog has closed already and
+  /// there is no `onAuthenticationComplete`, it stops [client] instead.
   @override
   Future<void> handBack(AtClient client) async {
     try {
       await _backUp();
-      if (widget.onAuthenticationComplete != null) {
-        widget.onAuthenticationComplete!(client);
+      final onAuthenticated = widget.onAuthenticationComplete;
+      if (onAuthenticated != null) {
+        onAuthenticated(client);
       } else {
         _logger.info(
           '${widget.atSign} opened; connection is '
           '${client.connection.current}',
         );
       }
-      if (showing) Navigator.of(context).pop(client);
+      if (showing) {
+        Navigator.of(context).pop(client);
+      } else if (onAuthenticated == null) {
+        // NOTE: nothing receives a client opened after the user left, and
+        // while it is live the atSign cannot be opened again.
+        await _stopClient(client);
+      }
     } catch (e) {
       // NOTE: a client that opened before the failure reaches nobody, and
       // while it is live the atSign cannot be opened again.

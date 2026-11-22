@@ -10,6 +10,9 @@
   leaving lands as they close, and they stop a client that an approval opens
   after they have closed. `ApkamActivationDialog` also closes its Cancel
   confirmation when the wait fails.
+- fix: leaving `PkamDialog` before it hands back its client, when no
+  `onAuthenticationComplete` was given, no longer leaves that client running,
+  so the Atsign can be opened again.
 - fix: `ApkamActivationDialog` and `PkamDialog` show a failure when the
   request they wait on is approved after another wait has cancelled it,
   saying the Atsign's manager can revoke the approval.

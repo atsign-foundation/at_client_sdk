@@ -103,11 +103,15 @@ void main() {
 
   /// Opens PkamDialog on a keychain entry holding only `pending`, from a
   /// button, and records what `showDialog` returns and what
-  /// `onAuthenticationComplete` is handed.
+  /// `onAuthenticationComplete` is handed. With [withCallback] false the
+  /// dialog is given no `onAuthenticationComplete`; with [resumes] false it
+  /// is not expected to be waiting on `pending` once open.
   Future<(List<Object?>, List<AtClient>)> open(
     WidgetTester tester, {
     WrittenAtKeysIo? keys,
     List<WrittenAtKeysIo>? backupKeys,
+    bool withCallback = true,
+    bool resumes = true,
   }) async {
     final results = <Object?>[];
     final completed = <AtClient>[];
@@ -127,7 +131,9 @@ void main() {
                       backupKeys: backupKeys,
                       preference: AtClientPreference(),
                       storage: FakeAtClientStorage(),
-                      onAuthenticationComplete: completed.add,
+                      onAuthenticationComplete: withCallback
+                          ? completed.add
+                          : null,
                       flows: flows,
                     ),
                   ),
@@ -141,12 +147,27 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await frames(tester);
-    expect(
-      find.textContaining('Waiting for approval of enrollment enroll-1'),
-      findsOneWidget,
-      reason: 'PkamDialog waits on the enrollment it resumed',
-    );
+    if (resumes) {
+      expect(
+        find.textContaining('Waiting for approval of enrollment enroll-1'),
+        findsOneWidget,
+        reason: 'PkamDialog waits on the enrollment it resumed',
+      );
+    }
     return (results, completed);
+  }
+
+  /// A client that can be stopped, whose connection PkamDialog can log.
+  MockAtClient stoppableClient() {
+    final client = MockAtClient();
+    when(() => client.stop()).thenAnswer((_) async {});
+    when(() => client.connection).thenReturn(
+      AtConnection(
+        atSign: '@alice',
+        attempt: (_) async => throw UnimplementedError(),
+      ),
+    );
+    return client;
   }
 
   Future<void> tapText(WidgetTester tester, String text) async {
@@ -490,7 +511,7 @@ void main() {
   ) async {
     final opened = clientAnswers();
     when(() => pending.stop()).thenAnswer((_) async {});
-    final client = MockAtClient();
+    final client = stoppableClient();
     final keys = InMemoryAtKeysIo();
     await keys.write('@alice', AtKeys(atsign: Atsign('@alice')));
     final backup = _BackupHeldOpen();
@@ -509,8 +530,69 @@ void main() {
 
     expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
     expect(completed, [client]);
+    verifyNever(() => client.stop());
     expect(results, [null]);
   });
+
+  testWidgets(
+    'Leaving PkamDialog while it backs up the keys stops the client it opened',
+    (tester) async {
+      final opened = clientAnswers();
+      when(() => pending.stop()).thenAnswer((_) async {});
+      final client = stoppableClient();
+      final keys = InMemoryAtKeysIo();
+      await keys.write('@alice', AtKeys(atsign: Atsign('@alice')));
+      final backup = _BackupHeldOpen();
+      final (results, _) = await open(
+        tester,
+        keys: keys,
+        backupKeys: [backup],
+        withCallback: false,
+      );
+
+      opened.complete(client);
+      await tester.pump();
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      backup.release.complete();
+      await frames(tester);
+
+      verify(() => client.stop()).called(1);
+      expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+      expect(results, [null]);
+    },
+  );
+
+  testWidgets(
+    'Leaving PkamDialog while it opens approved keys stops the client',
+    (tester) async {
+      final opened = Completer<AtClient>();
+      when(
+        () => flows.open(
+          any(),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).thenAnswer((_) => opened.future);
+      final client = stoppableClient();
+      final (results, _) = await open(
+        tester,
+        withCallback: false,
+        resumes: false,
+      );
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      opened.complete(client);
+      await frames(tester);
+
+      verify(() => client.stop()).called(1);
+      expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+      expect(results, [null]);
+    },
+  );
 }
 
 /// A backup store whose writes wait for [release].
