@@ -44,7 +44,7 @@ void reportKeysProblem(AtKeysUnusableException e,
     AtKeysUnusableCause.anotherAtsign => ['${e.message} Check -a and -k.'],
     AtKeysUnusableCause.pendingEnrollment
         when e is AtEnrollmentPendingException =>
-      [_waitForApproval(e)],
+      _waitForApproval(e),
     AtKeysUnusableCause.noCredential when e.source != null => [
         'The keyfile at ${e.source} holds no credential for ${e.atSign}: its '
             'enrollment was denied, cancelled or expired, or never completed. '
@@ -60,19 +60,28 @@ void reportKeysProblem(AtKeysUnusableException e,
   stderr.writeln(keysProblemFooter);
 }
 
-/// The line for keys holding only the pending enrollment requests [e] names:
-/// once one is approved, the enroll command that made it finishes it.
-String _waitForApproval(AtEnrollmentPendingException e) {
+/// The lines for keys holding only the pending enrollment requests [e]
+/// names: once one is approved, the enroll command that made it finishes it,
+/// and `at_activate cancel` gives it up.
+List<String> _waitForApproval(AtEnrollmentPendingException e) {
   final ids = e.pendingEnrollmentIds;
   final keyfile =
       e.source == null ? 'This keyfile' : 'The keyfile at ${e.source}';
+  final cancel =
+      'at_activate cancel -a ${e.atSign} -k ${e.source ?? '<keyfile>'}';
   return ids.length == 1
-      ? '$keyfile holds only a pending enrollment request for '
-          '${e.atSign} (id ${clipForMessage(ids.single)}). Once it is '
-          'approved, run the same at_activate enroll command again to finish '
-          'it.'
-      : '$keyfile holds only pending enrollment requests for '
-          '${e.atSign} (ids ${ids.map(clipForMessage).join(', ')}). Once one '
-          'is approved, run the at_activate enroll command that made it '
-          'again to finish it.';
+      ? [
+          '$keyfile holds only a pending enrollment request for '
+              '${e.atSign} (id ${clipForMessage(ids.single)}). Once it is '
+              'approved, run the same at_activate enroll command again to '
+              'finish it.',
+          '  To give it up instead: $cancel',
+        ]
+      : [
+          '$keyfile holds only pending enrollment requests for '
+              '${e.atSign} (ids ${ids.map(clipForMessage).join(', ')}). Once '
+              'one is approved, run the at_activate enroll command that made '
+              'it again to finish it.',
+          '  To give them up instead, one each time: $cancel',
+        ];
 }

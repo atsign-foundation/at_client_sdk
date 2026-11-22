@@ -401,6 +401,8 @@ class CLIBase {
     stderr.writeln();
     stderr.writeln(chalk.brightBlue('Waiting for approval of enrollment '
         '${request.enrollmentId} of $atSign'));
+    stderr.writeln('To give the request up instead, stop this program and '
+        'run at_activate cancel -a $atSign -k $atKeysFilePathToUse');
     try {
       await request.awaitApproval(
           retryInterval: approvalRetryInterval,

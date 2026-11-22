@@ -4,6 +4,7 @@ import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart'
     show EnrollerSettings, enrolDevice;
 import 'package:at_commons/at_builders.dart' show VerbBuilder;
+import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -222,6 +223,67 @@ void main() {
         run.err,
         contains('Argument error for command cancel: The -k option is '
             'mandatory for the "cancel" command'));
+    expect(run.code, 1);
+  });
+
+  test(
+      'a CLIBase program waiting on a pending request names at_activate '
+      'cancel', () async {
+    final wrapped = await fileRequest();
+    final server =
+        approvingAtServer(decide: (_) async => true, wrapped: wrapped);
+    when(() => server.lookUp.stopNotifications()).thenAnswer((_) async {});
+    final err = _Captured();
+
+    final cli = await IOOverrides.runZoned(
+        () => CLIBase.fromCommandLineArgs([
+              '-a', atSign, //
+              '-k', keysPath,
+              '-s', '${dir.path}/storage',
+              '-r', '127.0.0.1:${atDirectory.port}',
+              '--max-connect-attempts', '1',
+              '--never-sync',
+            ],
+                parser: CLIBase.createArgsParser(namespace: 'buzz'),
+                lookUps: (
+                        {required String atSign,
+                        required AtRootDomain rootDomain,
+                        required AtAuthenticator? authenticator,
+                        SecondaryAddressFinder? secondaryAddressFinder}) =>
+                    server.lookUp,
+                approvalRetryInterval: const Duration(milliseconds: 10)),
+        stderr: () => err);
+
+    expect(
+        err.plain.split('\n'),
+        containsAllInOrder([
+          'Waiting for approval of enrollment $approvedEnrollmentId of '
+              '$atSign',
+          'To give the request up instead, stop this program and run '
+              'at_activate cancel -a $atSign -k $keysPath',
+        ]));
+    await cli.atClient.stop();
+  });
+
+  test(
+      "at_activate's report of a keyfile waiting on a request names "
+      'at_activate cancel', () async {
+    await fileRequest();
+
+    final run = await atActivate([
+      'otp', '-a', atSign, '-k', keysPath, //
+      '-r', '127.0.0.1:${atDirectory.port}',
+    ]);
+
+    expect(
+        run.err.split('\n'),
+        containsAllInOrder([
+          'The keyfile at $keysPath holds only a pending enrollment request '
+              'for $atSign (id $approvedEnrollmentId). Once it is approved, '
+              'run the same at_activate enroll command again to finish it.',
+          '  To give it up instead: at_activate cancel -a $atSign -k '
+              '$keysPath',
+        ]));
     expect(run.code, 1);
   });
 }

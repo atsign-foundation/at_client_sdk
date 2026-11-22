@@ -33,6 +33,7 @@ void main() {
         'This keyfile holds only a pending enrollment request for $atSign '
             '(id e-1). Once it is approved, run the same at_activate enroll '
             'command again to finish it.',
+        '  To give it up instead: at_activate cancel -a $atSign -k <keyfile>',
         keysProblemFooter,
       ]);
     });
@@ -49,6 +50,8 @@ void main() {
         'This keyfile holds only pending enrollment requests for $atSign '
             '(ids e-1, e-2). Once one is approved, run the at_activate enroll '
             'command that made it again to finish it.',
+        '  To give them up instead, one each time: at_activate cancel -a '
+            '$atSign -k <keyfile>',
         keysProblemFooter,
       ]);
     });
@@ -64,6 +67,8 @@ void main() {
         'The keyfile at /keys/alice.atKeys holds only pending enrollment '
             'requests for $atSign (ids e-1, e-2). Once one is approved, run '
             'the at_activate enroll command that made it again to finish it.',
+        '  To give them up instead, one each time: at_activate cancel -a '
+            '$atSign -k /keys/alice.atKeys',
         keysProblemFooter,
       ]);
     });
