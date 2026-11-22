@@ -161,8 +161,10 @@ online. Otherwise it stops the client and throws:
   `AtEnrollmentException`s, when the enrollment request the keyfile holds is
   denied or expires, removing its keys;
 - a plain `AtEnrollmentException` when the atServer keeps answering the wait
-  for approval with neither a decision nor "not yet", keeping the request for
-  the next run;
+  for approval with neither a decision nor "not yet", or when the request was
+  approved but its keys could not be fetched or decrypted, keeping the request
+  for the next run (it may already be approved, so run again rather than
+  cancel it);
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
   Atsign;
 - `SecondaryServerConnectivityException` when no atServer accepted or refused

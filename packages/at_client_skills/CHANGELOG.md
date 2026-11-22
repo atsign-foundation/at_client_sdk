@@ -154,8 +154,9 @@
   `references/01`, `05`, `14`, `15`).
 - A denied enrollment request throws `AtEnrollmentDeniedException` and an
   expired one `AtEnrollmentExpiredException` (both at_client 4.1.0), and one
-  the atServer keeps answering without a decision, a server error included,
-  stays pending for `resumeEnrollment` (`SKILL.md`; `references/14`, `15`).
+  the atServer keeps answering without a decision, or one approved whose
+  keys cannot be collected, stays pending for `resumeEnrollment` (`SKILL.md`;
+  `references/14`, `15`).
 - An `error:` reply to a connection's `from:`, `pkam:` or `cram:` is an
   `AtAuthErrorReplyException` (at_client 4.1.0) carrying the reply's code as
   `errorCode`, and a refusal code gives the refused cause (`SKILL.md`;
