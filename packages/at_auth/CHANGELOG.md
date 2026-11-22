@@ -3,6 +3,8 @@
 - fix: keys messages name where the keys are as "the AtKeys store
   (<path>)", "the AtKeys store (this device's keychain)" or "the AtKeys
   store"; `AtKeysIo.describeSource` is empty by default.
+- feat: `theAtKeysStore(source)` names an AtKeys store as keys messages do:
+  "the AtKeys store (<source>)", or "the AtKeys store" for no source.
 - fix: activation refusing keys already in the store names the store in its
   `AtAuthenticationException`: the keyfile's path, or the store's name.
 - chore: requires at_commons 5.26.0.

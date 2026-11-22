@@ -25,12 +25,6 @@ AtKeysIo handshakeKeysIo(String atSign, AtKeys keys) =>
     // ignore: invalid_use_of_visible_for_testing_member
     InMemoryAtKeysIo.holding(atSign, keys);
 
-/// "the AtKeys store", with [source], where `AtKeysIo.describeSource` says
-/// the keys are kept, in brackets after it unless [source] is null or empty.
-String theAtKeysStore(String? source) => source == null || source.isEmpty
-    ? 'the AtKeys store'
-    : 'the AtKeys store ($source)';
-
 /// An enrollment this device has submitted and the atSign's manager has not
 /// yet decided.
 ///

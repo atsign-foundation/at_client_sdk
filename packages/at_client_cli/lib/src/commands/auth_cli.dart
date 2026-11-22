@@ -1009,7 +1009,7 @@ Future<int> cancel(ArgResults argResults,
 Future<int> cancelPending(
     {required String atSign, required EnrollerSettings settings}) async {
   final keys = settings.keysFor(atSign);
-  final store = 'AtKeys store (${settings.atKeysFilePath})';
+  final store = theAtKeysStore(keys.describeSource(atSign));
 
   final pending = await Atsign(atSign).resumeEnrollment(
       keys: keys,
@@ -1019,7 +1019,7 @@ Future<int> cancelPending(
   if (await _holdsLiveKeys(keys, atSign)) return _refuseLiveKeys(atSign, store);
   if (pending == null) {
     stderr.writeln(chalk.brightRed('$atSign has no pending enrollment request '
-        'in the $store, so there is nothing to cancel.'));
+        'in $store, so there is nothing to cancel.'));
     return 1;
   }
   await pending.cancel();
@@ -1028,7 +1028,7 @@ Future<int> cancelPending(
   if (await _holdsLiveKeys(keys, atSign)) return _refuseLiveKeys(atSign, store);
   stdout.writeln('${chalk.green('[Success]')} Enrollment '
       '${clipForMessage(pending.enrollmentId)} of $atSign is cancelled, and '
-      'its keys are removed from the $store.');
+      'its keys are removed from $store.');
   stdout.writeln('The request is still on the atServer: the manager of '
       '$atSign can deny it, or revoke it if they approved it already.');
   return 0;
@@ -1043,10 +1043,11 @@ Future<bool> _holdsLiveKeys(WrittenAtKeysIo keys, String atSign) async {
   }
 }
 
-/// Says that the [store] holds live keys for [atSign], which `cancel` leaves
-/// as they are, and answers the exit code.
+/// Says that [store] holds live keys for [atSign], which `cancel` leaves as
+/// they are, and answers the exit code.
 int _refuseLiveKeys(String atSign, String store) {
-  stderr.writeln(chalk.brightRed('The $store holds live keys for $atSign, '
+  stderr.writeln(chalk.brightRed('${store.replaceFirst('the', 'The')} holds '
+      'live keys for $atSign, '
       'which at_activate cancel never removes, so nothing is changed. The '
       "manager of $atSign can revoke this device's enrollment."));
   return 1;

@@ -1,3 +1,4 @@
+import 'package:at_auth/at_auth.dart' show theAtKeysStore;
 import 'package:at_client/at_client.dart';
 import 'package:flutter/material.dart';
 
@@ -51,7 +52,7 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
     if (abandoning == null) return null;
     return 'Could not abandon enrollment '
         '${clipForMessage(abandoning.enrollmentId)}: its keys are still in '
-        '${_theAtKeysStore(abandoning.keys.describeSource(atSign))}. Choose '
+        '${theAtKeysStore(abandoning.keys.describeSource(atSign))}. Choose '
         'Cancel to try again.';
   }
 
@@ -168,8 +169,3 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
       ).whenComplete(() => _confirming = null) ??
       false;
 }
-
-/// "the AtKeys store", with [source], where `AtKeysIo.describeSource` says
-/// the keys are kept, in brackets after it unless [source] is empty.
-String _theAtKeysStore(String source) =>
-    source.isEmpty ? 'the AtKeys store' : 'the AtKeys store ($source)';

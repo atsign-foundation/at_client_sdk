@@ -535,11 +535,12 @@ extension AtsignLifecycle on Atsign {
     if (enrollmentId == null) return null;
     final count = stored.pendingEnrollmentIds.length;
     if (count > 1) {
-      AtSignLogger('AtsignLifecycle ($this)').warning(
-          '${theAtKeysStore(keys.describeSource(this))} holds $count pending '
-          'enrollments of $this, where an AtKeys store holds at most one: '
-          'resuming '
-          '"${clipForMessage(enrollmentId, quote: '"')}"');
+      final store = theAtKeysStore(keys.describeSource(this));
+      AtSignLogger('AtsignLifecycle ($this)')
+          .warning('${store.replaceFirst('the', 'The')} holds $count pending '
+              'enrollments of $this, where an AtKeys store holds at most one: '
+              'resuming '
+              '"${clipForMessage(enrollmentId, quote: '"')}"');
     }
     final info = stored.enrollmentInfo(enrollmentId);
     final apkam = stored

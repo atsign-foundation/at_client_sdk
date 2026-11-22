@@ -96,10 +96,15 @@ Object? _withoutSource(Object? error) =>
         ? FormatException(error.message, null, error.offset)
         : error;
 
-/// Where a message says the keys are: in the AtKeys store, with [source] in
-/// brackets after it unless [source] is empty.
-String whereKeysAre(String source) =>
-    source.isEmpty ? 'in the AtKeys store' : 'in the AtKeys store ($source)';
+/// "the AtKeys store", as a message names one, with [source], where
+/// `AtKeysIo.describeSource` says the keys are kept, in brackets after it
+/// unless [source] is null or empty.
+String theAtKeysStore(String? source) => source == null || source.isEmpty
+    ? 'the AtKeys store'
+    : 'the AtKeys store ($source)';
+
+/// Where a message says the keys are: in [theAtKeysStore] for [source].
+String whereKeysAre(String source) => 'in ${theAtKeysStore(source)}';
 
 /// Why [error] leaves the keys unusable, in one line, escaped and clipped:
 /// what the error says, which names where the keys failed and quotes no

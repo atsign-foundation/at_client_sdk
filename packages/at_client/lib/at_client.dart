@@ -25,7 +25,7 @@ export 'package:at_client/src/lifecycle/atsign_lifecycle.dart'
     hide activateWithoutClient, scratchKeysIo;
 export 'package:at_client/src/lifecycle/enrollments.dart';
 export 'package:at_client/src/lifecycle/pending_enrollment.dart'
-    hide handshakeKeysIo, theAtKeysStore;
+    hide handshakeKeysIo;
 export 'package:at_client/src/listener/at_sign_change_listener.dart';
 export 'package:at_client/src/listener/switch_at_sign_event.dart';
 export 'package:at_client/src/manager/at_client_manager.dart';

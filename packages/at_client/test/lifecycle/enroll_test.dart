@@ -1797,7 +1797,7 @@ void main() {
 
       Iterable<String> warnings() =>
           logs.at('WARNING').where((m) => m.contains('pending enrollments'));
-      const several = 'the AtKeys store (a test location) holds 2 pending '
+      const several = 'The AtKeys store (a test location) holds 2 pending '
           'enrollments of $atSign, where an AtKeys store holds at most one: '
           'resuming ';
 
