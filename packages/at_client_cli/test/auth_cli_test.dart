@@ -12,6 +12,7 @@ import 'package:at_client_cli/src/commands/auth_cli_args.dart';
 import 'package:at_client_cli/src/util/at_file_util.dart';
 import 'package:test/test.dart';
 import 'keyfile_helpers.dart';
+import 'lifecycle_rig.dart' show aliceOnLoopback;
 
 void main() {
   final baseDirPath = 'test/keys';
@@ -409,6 +410,39 @@ void postureArgumentTests() {
           reason: 'nothing was defaulted, so there is nothing to tell anyone');
     });
 
+    test(
+        'Given no --posture, when at_activate enroll runs, then it prints the '
+        'notice of the posture it runs at', () async {
+      final dir = Directory.systemTemp.createTempSync('enroll_posture_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final keysPath = '${dir.path}/@alice_key.atKeys';
+      await FileAtKeysIo(filePath: (_) => keysPath)
+          .write('@alice', randomLegacyKeys());
+      final notice = AuthCliArgs.postureForEnroller(
+          args.createEnrollCommandParser().parse([])).notice;
+      expect(notice, isNotNull,
+          reason: 'the control: with no --posture, an enroller has a notice '
+              'to print');
+      final err = _Captured();
+
+      await IOOverrides.runZoned(
+          () => wrappedMain([
+                'enroll', '-a', '@alice', '-k', keysPath, //
+                '-r', '127.0.0.1:1',
+                '-s', 'ABC123', '-p', 'buzz', '-d', 'phone', '-n', 'buzz:rw',
+              ], program: 'at_activate', programVersion: null),
+          stdout: () => _Captured(),
+          stderr: () => err);
+
+      expect(err.plain, contains('already holds live keys'),
+          reason: "the control: enroll ran, and refused its keyfile's live "
+              'keys');
+      expect(err.plain, contains(notice!),
+          reason: 'a default this consequential is announced by the command '
+              'that takes it, or a caller who wanted a post-quantum '
+              'enrolment finds out when a peer cannot read something');
+    });
+
     test('an approver with no --posture runs at at_client\'s default', () {
       final parsed = args.createStatusCommandParser().parse([]);
       expect(AuthCliArgs.postureForApprover(parsed),
@@ -445,9 +479,9 @@ void postureArgumentTests() {
     test('a bare invocation runs onboard, with a warning that hides secrets',
         () {
       final implicit =
-          withImplicitOnboard(['-a', '@alice', '-c', 'cram-s3cret']);
-      expect(
-          implicit.arguments, ['onboard', '-a', '@alice', '-c', 'cram-s3cret'],
+          withImplicitOnboard([...aliceOnLoopback, '-c', 'cram-s3cret']);
+      expect(implicit.arguments,
+          ['onboard', ...aliceOnLoopback, '-c', 'cram-s3cret'],
           reason: 'as 1.x did, so instructions that omit the command still '
               'activate the atSign');
       expect(implicit.warning, contains('Deprecated'));
@@ -471,7 +505,7 @@ void postureArgumentTests() {
     test('wrappedMain inserts onboard before parsing', () async {
       // NOTE: --help stops at onboard's usage, so this needs no atServer.
       expect(
-          await wrappedMain(['-a', '@alice', '--help'],
+          await wrappedMain([...aliceOnLoopback, '--help'],
               program: 'at_activate', programVersion: null),
           0,
           reason: 'with no insertion, a leading -a reaches the top-level '
@@ -507,4 +541,25 @@ void postureArgumentTests() {
               'a silently accepted one would run the default stage');
     });
   });
+}
+
+/// Stands in for stdout or stderr, keeping what is written to it.
+class _Captured implements Stdout {
+  final List<String> written = [];
+
+  /// What was written, without colour codes.
+  String get plain =>
+      written.join().replaceAll(RegExp(r'\x1b\[[0-9;]*[A-Za-z]'), '');
+
+  @override
+  void write(Object? object) => written.add('$object');
+
+  @override
+  void writeln([Object? object = '']) => written.add('$object\n');
+
+  @override
+  bool get hasTerminal => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }

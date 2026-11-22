@@ -24,7 +24,7 @@ SecondaryAddressFinder _loopbackAtDirectory(String host, int port) {
   return CacheableSecondaryAddressFinder(host, port);
 }
 
-/// `secureSocketLookUps()` for a unit test: a connection asked for with no
+/// [secureSocketLookUps] for a unit test: a connection asked for with no
 /// `secondaryAddressFinder` asks the atDirectory its root names, and throws
 /// [StateError], before anything connects, unless that root is on the
 /// loopback interface.

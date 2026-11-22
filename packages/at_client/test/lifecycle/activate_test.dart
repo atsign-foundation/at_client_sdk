@@ -15,6 +15,7 @@ import 'package:at_client/src/passkey/enrollment_gateway.dart'
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SHA512HashingAlgo;
 import 'package:at_commons/at_builders.dart';
+import 'package:at_utils/at_utils.dart' show LoggingHandler, LogLevel;
 import 'package:at_lookup/at_lookup.dart'
     show AtAuthenticator, AtCommandExecutor, SecondaryAddress;
 import 'package:mocktail/mocktail.dart';
@@ -40,10 +41,24 @@ void main() {
   const enrollmentId = 'first-1';
   const cramSecret = 'the-one-time-secret';
   late Directory dir;
+  late _KeptLogs logs;
+  late String rootLevel;
+  late LoggingHandler handler;
 
   setUpAll(() {
     registerFallbackValue(_FakeVerbBuilder());
     registerFallbackValue((AtCommandExecutor _) async => true);
+    // NOTE: before any test; a logger binds its handler when it is made.
+    rootLevel = AtSignLogger.root_level;
+    handler = AtSignLogger.defaultLoggingHandler;
+    logs = _KeptLogs(handler, LogLevel.level[rootLevel]);
+    AtSignLogger.defaultLoggingHandler = logs;
+    AtSignLogger.root_level = 'finest';
+  });
+
+  tearDownAll(() {
+    AtSignLogger.root_level = rootLevel;
+    AtSignLogger.defaultLoggingHandler = handler;
   });
 
   setUp(() {
@@ -73,9 +88,18 @@ void main() {
     ..namespace = 'lifecycle';
 
   /// An unactivated atServer: it accepts [cramSecret] and nothing else,
-  /// approves the first enrollment on that connection, and records every
-  /// command and verb it was sent.
-  ({MockAtLookupImpl lookUp, List<String> sent}) atServer() {
+  /// approves the first enrollment on that connection, answers each PKAM
+  /// attempt after it with [onPkam] (accepting it when null), and records
+  /// every command and verb it was sent. With [stopAfterCompletion], every
+  /// PKAM after the CRAM secret is deleted throws it, as a stopped connection
+  /// does; [failPkamAfterCompletion] does the same with an ordinary error,
+  /// and [stopDuringSigningRootMint] throws on any command that touches the
+  /// signing root, so the PQ activation's mint meets a stop.
+  ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
+      {Future<bool> Function()? onPkam,
+      StoppedException? stopAfterCompletion,
+      StoppedException? stopDuringSigningRootMint,
+      Exception? failPkamAfterCompletion}) {
     final lookUp = MockAtLookupImpl();
     final sent = <String>[];
     final installed = <AtAuthenticator?>[];
@@ -87,6 +111,10 @@ void main() {
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
       sent.add(command);
+      if (stopDuringSigningRootMint != null &&
+          command.contains('pq_signing_root')) {
+        throw stopDuringSigningRootMint;
+      }
       if (command.startsWith('lookup:publickey')) return 'data:null';
       if (command.startsWith('enroll:')) {
         return 'data:${jsonEncode({
@@ -99,6 +127,10 @@ void main() {
     when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async {
       final builder = invocation.positionalArguments.first as VerbBuilder;
       sent.add(builder.buildCommand());
+      if (stopDuringSigningRootMint != null &&
+          builder.buildCommand().contains('pq_signing_root')) {
+        throw stopDuringSigningRootMint;
+      }
       if (builder is UpdateVerbBuilder || builder is DeleteVerbBuilder) {
         return 'data:1';
       }
@@ -108,10 +140,17 @@ void main() {
     // The first authenticator installed is the CRAM leg's, and it runs
     // against this atServer, which accepts the digest of cramSecret over its
     // challenge and nothing else; the PKAM legs after it are accepted.
-    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async =>
-        installed.length == 1
-            ? installed.single!(_CramAtServer(cramSecret))
-            : true);
+    when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async {
+      final completed = sent.any((c) =>
+          c.startsWith('delete:') && c.contains(AtConstants.atCramSecret));
+      if (stopAfterCompletion != null && completed) throw stopAfterCompletion;
+      if (failPkamAfterCompletion != null && completed) {
+        throw failPkamAfterCompletion;
+      }
+      return installed.length == 1
+          ? installed.single!(_CramAtServer(cramSecret))
+          : onPkam == null || await onPkam();
+    });
     when(() => lookUp.close()).thenAnswer((_) async {});
     when(() => lookUp.dropConnection()).thenAnswer((_) async {});
     when(() => lookUp.isConnectionAvailable()).thenReturn(false);
@@ -535,6 +574,126 @@ void main() {
     expect(AtClientImpl.holdsLiveClient(atSign), isFalse);
   });
 
+  /// Catalogue: features/at_client/open_unusable_keys.feature
+  test("An activation failure's message holds no stack trace", () async {
+    final records = logs.keep();
+    final server = atServer(
+        onPkam: () async => throw UnAuthenticatedException(
+            'Failed connecting to $atSign. error:{"errorCode":"AT0401",'
+            '"errorDescription":"Exception: pkam authentication failed"}'));
+
+    Object? thrown;
+    try {
+      await Atsign(atSign).activate(
+          cramSecret: cramSecret,
+          keys: InMemoryAtKeysIo(),
+          preference: await preference(),
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: await refusingAtDirectory(),
+          atLookUp: server.lookUp,
+          storage: hiveStoreFor(Atsign(atSign), await preference()));
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(
+        thrown,
+        isA<AtException>()
+            .having((e) => e.message, 'message',
+                contains('pkam auth failed for $atSign'))
+            .having(
+                (e) => e.message,
+                'stack trace',
+                allOf(isNot(contains('\n')), isNot(contains('#0')),
+                    isNot(contains('package:'))))
+            .having((e) => '$e', 'text', isNot(contains('#0'))));
+    final fine = records.where((r) =>
+        '${r.level.name}' == 'FINE' &&
+        '${r.message}'.contains('pkam auth failed for $atSign'));
+    expect(fine, isNotEmpty, reason: 'the failure is logged at fine');
+    expect(fine.first.stackTrace, isNotNull,
+        reason: 'with its stack trace beside the message');
+  });
+
+  test(
+      'Atsign.activate over a supplied connection stopped while its client '
+      'first connects throws StoppedException and leaves no client live',
+      () async {
+    final store = InMemoryAtKeysIo();
+    final stop = StoppedException('the lookup for $atSign has been stopped');
+    // The caller stops the connection once the activation has completed,
+    // so the PKAM of the client's first connect meets the stop.
+    final server = atServer(stopAfterCompletion: stop);
+
+    await expectLater(
+        () async => Atsign(atSign).activate(
+            cramSecret: cramSecret,
+            keys: store,
+            preference: await preference(),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: server.lookUp,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
+        throwsA(same(stop)),
+        reason: 'the caller stopped the connection, so the activation says '
+            'so rather than handing back a client over a stopped connection');
+    expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+        reason: 'the client the activation opened is stopped');
+  });
+
+  test(
+      'Atsign.activate over a supplied connection whose client first connect '
+      'fails with an ordinary connection error returns the offline client',
+      () async {
+    final server = atServer(
+        failPkamAfterCompletion: const SocketException('connection refused'));
+
+    final client = await Atsign(atSign).activate(
+        cramSecret: cramSecret,
+        keys: InMemoryAtKeysIo(),
+        preference: await preference(),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: server.lookUp,
+        storage: hiveStoreFor(Atsign(atSign), await preference()));
+    addTearDown(client.stop);
+
+    expect(AtClientImpl.holdsLiveClient(atSign), isTrue,
+        reason: 'an ordinary connection failure is not a stop: the activation '
+            'is complete and the client is live, offline');
+  });
+
+  test(
+      'Atsign.activate over a supplied connection stopped while its '
+      'post-quantum signing root is minted throws StoppedException and leaves '
+      'no client live', () async {
+    final stop = StoppedException('the lookup for $atSign has been stopped');
+    final server = atServer(stopDuringSigningRootMint: stop);
+    final pair = await MlDsa65KeyPair.generate();
+
+    await expectLater(
+        () async => Atsign(atSign).activate(
+            cramSecret: cramSecret,
+            keys: InMemoryAtKeysIo(),
+            signingAlgo: SigningAlgoType.mldsa65,
+            apkamKeyPair: (
+              publicKey: pair.atPublicKey.publicKey,
+              privateKey: pair.atPrivateKey.privateKey,
+            ),
+            preference: await preference(),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: server.lookUp,
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
+        throwsA(same(stop)),
+        reason: 'the caller stopped the connection, so the activation says '
+            'so rather than handing back a client over a stopped connection');
+    expect(server.sent.any((c) => c.contains('pq_signing_root')), isTrue,
+        reason: 'the control: the stop met the signing-root step');
+    expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+        reason: 'the client the activation opened is stopped');
+  });
+
   test(
       'Given an app named in its particulars, when Atsign.activate '
       'authenticates with CRAM and then PKAM, then each from: names the app '
@@ -576,6 +735,34 @@ void main() {
       expect(config['version'], atClientVersion);
     }
   });
+}
+
+/// The logging handler of every AtSignLogger this file makes: it passes each
+/// record at or above [passOnFrom] on to [passOn], and keeps every record
+/// while a test that called [keep] runs.
+class _KeptLogs implements LoggingHandler {
+  _KeptLogs(this.passOn, this.passOnFrom);
+
+  final LoggingHandler passOn;
+
+  /// The least level passed on; null passes every record on.
+  final dynamic passOnFrom;
+
+  List<dynamic>? _kept;
+
+  /// The records logged from now until the calling test ends.
+  List<dynamic> keep() {
+    final kept = <dynamic>[];
+    _kept = kept;
+    addTearDown(() => _kept = null);
+    return kept;
+  }
+
+  @override
+  void call(dynamic record) {
+    _kept?.add(record);
+    if (passOnFrom == null || record.level >= passOnFrom) passOn(record);
+  }
 }
 
 /// An atDirectory that finds every atSign.

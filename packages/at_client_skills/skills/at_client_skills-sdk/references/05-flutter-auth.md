@@ -266,8 +266,11 @@ final state = client.connection.current;   // online | offline | refused, with a
 client.connection.changes.listen((s) => setState(() => _state = s));
 ```
 
-- **offline** — the client serves its local store and syncs when the atServer
-  is reached. A 1.x app treated this as a failed login; a 2.0 app decides, and
+- **offline** (`unreachable`, `noAtServer`) — no atServer accepted or refused
+  the keys, which includes a connect attempt the atServer answers with
+  neither a challenge to sign nor a decision, such as a server error
+  (AT0011). The client serves its local store and syncs when the atServer is
+  reached. A 1.x app treated this as a failed login; a 2.0 app decides, and
   usually shows an indicator rather than blocking. Under `pqActive`, a
   device's first write in a namespace, and a share whose recipient's key the
   client holds no current copy of, need the atServer; once a device has
@@ -277,6 +280,14 @@ client.connection.changes.listen((s) => setState(() => _state = s));
   keys. Ask the user.
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
+- Keys `open` cannot use (absent, unreadable, holding no authentication
+  keypair it can use, or for another atSign) throw
+  `AtKeysUnusableException` before it connects, on any device. `PkamDialog`
+  shows the first line of its message, or its own words when the keys hold
+  no credential, or only a request it cannot wait on.
+- When the keys hold a request awaiting approval in a store it can write,
+  `PkamDialog` waits for the approval instead, and offers Cancel, which
+  removes the request's pending keys once the user confirms.
 
 See [15-client-lifecycle.md](15-client-lifecycle.md) for the full state model,
 the services and the shutdown checklist.

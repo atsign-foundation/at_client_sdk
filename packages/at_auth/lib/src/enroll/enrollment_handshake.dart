@@ -312,7 +312,7 @@ class EnrollmentHandshake {
         }
         // Error code AT0025 represents Enrollment denied. Therefore, no need to retry; throw exception.
         else if (code == 'AT0025') {
-          throw AtEnrollmentException(
+          throw AtEnrollmentDeniedException(
               'The enrollment: $enrollmentIdFromServer is denied');
         }
         // NOTE AT0028 also names a throttled request, but the atServer

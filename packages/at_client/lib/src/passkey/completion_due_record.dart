@@ -1,8 +1,7 @@
-import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:at_commons/at_builders.dart'
     show DeleteVerbBuilder, LLookupVerbBuilder, UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart'
-    show AtKey, InvalidResponseException, KeyNotFoundException;
+    show AtKey, InvalidResponseException, KeyNotFoundException, clipForMessage;
 import 'package:at_commons/atsign.dart';
 
 import 'package:at_client/src/client/remote_secondary.dart';

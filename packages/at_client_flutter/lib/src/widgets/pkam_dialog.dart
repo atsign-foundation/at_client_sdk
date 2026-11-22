@@ -4,6 +4,8 @@ import 'package:at_auth/at_auth.dart'
     show AtKeysFileOverwriteException, AtKeysIo, WrittenAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
+import 'package:at_client_flutter/src/widgets/shared/enrollment_cancel.dart';
+import 'package:at_client_flutter/src/widgets/shared/failure_message.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
 import 'package:flutter/material.dart';
 
@@ -26,16 +28,21 @@ import 'package:flutter/material.dart';
 /// - [title]: A title string for the dialog (default: "Authenticating via pkam").
 /// - [description]: A description shown while the login is in progress
 ///   (default: "Validating your atKeys...").
-/// - [onAuthenticationComplete]: invoked with the client once it is open.
+/// - [onAuthenticationComplete]: invoked with the client once it is open,
+///   even after the user has left the dialog; with none, a client opened
+///   after the user has left is stopped.
 ///
 /// The client comes back online, offline or refused, and its `connection`
 /// says which; only a refusal on a device that has never held the atSign
-/// online is a failure here.
+/// online is a failure here, beside keys `Atsign.open` cannot use. A failure
+/// shows a message chosen by what failed, and no stack trace.
 ///
 /// Keys holding only an enrollment awaiting approval, in a store that can be
 /// written, are waited on as `ApkamActivationDialog` waits: the client opens
 /// once the request is approved, and leaving stops the wait and keeps the
-/// request.
+/// request. While it waits it offers Cancel, which, once the user confirms,
+/// abandons the request (`PendingEnrollment.cancel`), as
+/// `ApkamActivationDialog`'s does.
 ///
 /// Returns:
 /// - The `AtClient`, or null if the process fails or is cancelled.
@@ -105,9 +112,28 @@ class PkamDialog extends StatefulWidget {
   State<PkamDialog> createState() => _PkamDialogState();
 }
 
-class _PkamDialogState extends State<PkamDialog> {
+class _PkamDialogState extends State<PkamDialog>
+    with CancelsEnrollment<PkamDialog> {
   final AtSignLogger _logger = AtSignLogger('PkamDialog');
   PendingEnrollment? _waitingOn;
+
+  @override
+  String get atSign => widget.atSign;
+
+  @override
+  AtSignLogger get logger => _logger;
+
+  @override
+  PendingEnrollment? get waitingOn => _waitingOn;
+
+  @override
+  Future<AtClient> openOnApprovedKeys() => widget.flows.open(
+    widget.atSign,
+    keys: widget.keys,
+    preference: under(widget.preference, widget.rootDomain),
+    storage: widget.storage,
+    lookUps: widget.lookUps,
+  );
 
   @override
   void initState() {
@@ -118,39 +144,62 @@ class _PkamDialogState extends State<PkamDialog> {
   }
 
   Future<void> _authenticate() async {
-    AtClient? client;
+    final AtClient? client;
     try {
       client = await _openOrResume();
-      if (client == null) return;
+    } catch (e) {
+      if (!endedByCancel(e)) _fail(e);
+      return;
+    }
+    if (client != null) await handBack(client);
+  }
+
+  /// Backs up the keys [client] opened on, tells `onAuthenticationComplete`,
+  /// and closes the dialog with it. When the dialog has closed already and
+  /// there is no `onAuthenticationComplete`, it stops [client] instead.
+  @override
+  Future<void> handBack(AtClient client) async {
+    try {
       await _backUp();
-      if (widget.onAuthenticationComplete != null) {
-        widget.onAuthenticationComplete!(client);
+      final onAuthenticated = widget.onAuthenticationComplete;
+      if (onAuthenticated != null) {
+        onAuthenticated(client);
       } else {
         _logger.info(
           '${widget.atSign} opened; connection is '
           '${client.connection.current}',
         );
       }
-      if (mounted) Navigator.of(context).pop(client);
+      if (showing) {
+        Navigator.of(context).pop(client);
+      } else if (onAuthenticated == null) {
+        // NOTE: nothing receives a client opened after the user left, and
+        // while it is live the atSign cannot be opened again.
+        await _stopClient(client);
+      }
     } catch (e) {
-      // Login failed or timed out. Without an error path the dialog
-      // would hang forever and PkamDialog.show() would never complete
-      // (issue #1909).
-      _logger.severe('Authentication via PKAM failed: $e');
       // NOTE: a client that opened before the failure reaches nobody, and
       // while it is live the atSign cannot be opened again.
-      if (client != null) await _stopClient(client);
-      if (!mounted) return;
-      final message = e is AtTimeoutException
-          ? 'Authentication timed out — the atServer could not be reached. '
-                'Please check your connection and try again.'
-          : 'Authentication failed. Please check your atKeys and connection, '
-                'then try again.';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-      Navigator.of(context).pop(null);
+      await _stopClient(client);
+      _fail(e);
     }
+  }
+
+  /// Shows what [error] says failed and closes the dialog with no client.
+  void _fail(Object error) {
+    _logger.severe('Authentication via PKAM failed: $error');
+    if (!mounted) return;
+    final message = failureMessage(
+      widget.atSign,
+      error,
+      timedOut:
+          'Authentication timed out — the atServer could not be reached. '
+          'Please check your connection and try again.',
+    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+    closeDialog();
   }
 
   /// The client opened on the keys, or, when they hold only an enrollment
@@ -190,7 +239,7 @@ class _PkamDialogState extends State<PkamDialog> {
     }
     setState(() => _waitingOn = pending);
     try {
-      final client = await pending.client(
+      return await pending.client(
         preference,
         storage: await storageOrDefault(
           widget.atSign,
@@ -198,18 +247,16 @@ class _PkamDialogState extends State<PkamDialog> {
           widget.storage,
         ),
       );
-      if (!mounted) {
-        // NOTE: nothing receives a client opened after the user left, and
-        // while it is live the atSign cannot be opened again.
-        await client.stop();
-        return null;
-      }
-      return client;
     } on StoppedException {
       if (!mounted) return null;
       rethrow;
     } finally {
-      _waitingOn = null;
+      if (mounted) {
+        closeConfirmation();
+        setState(() => _waitingOn = null);
+      } else {
+        _waitingOn = null;
+      }
     }
   }
 
@@ -220,7 +267,8 @@ class _PkamDialogState extends State<PkamDialog> {
       await pending.stop();
     } catch (e) {
       _logger.warning(
-        'Could not stop the wait for enrollment ${pending.enrollmentId} of '
+        'Could not stop the wait for enrollment '
+        '"${clipForMessage(pending.enrollmentId, quote: '"')}" of '
         '${widget.atSign}: $e',
       );
     }
@@ -260,16 +308,33 @@ class _PkamDialogState extends State<PkamDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final failure = abandonFailure;
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(16.0),
-        child: LoadingDialog(
-          title: widget.title ?? "Authenticating via pkam",
-          description: _waitingOn == null
-              ? widget.description ?? "Validating your atKeys..."
-              : 'Waiting for approval of enrollment '
-                    '${_waitingOn!.enrollmentId}..',
-          themeData: Theme.of(context),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (failure != null)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Text(failure),
+                ),
+              )
+            else
+              LoadingDialog(
+                title: widget.title ?? "Authenticating via pkam",
+                description: _waitingOn == null
+                    ? widget.description ?? "Validating your atKeys..."
+                    : 'Waiting for approval of enrollment '
+                          '${clipForMessage(_waitingOn!.enrollmentId)}..',
+                themeData: Theme.of(context),
+              ),
+            if (offersCancel)
+              TextButton(onPressed: onCancel, child: const Text('Cancel')),
+          ],
         ),
       ),
     );

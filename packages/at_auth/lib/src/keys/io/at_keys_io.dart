@@ -12,6 +12,14 @@ sealed class AtKeysIo {
   final passphraseCodec = const AtKeysPassphraseEnvelopeCodec();
   final assurance = const AtKeysAssurance();
   FutureOr<AtKeys> read(String atsign);
+
+  /// Where [atsign]'s keys are kept, in words a message shows in brackets
+  /// after "the AtKeys store", such as a keyfile's path or "this device's
+  /// keychain", or empty when the store has nothing more specific to say.
+  ///
+  /// It never throws, since a caller names the source while reporting another
+  /// failure, and names no key material.
+  String describeSource(String atsign) => '';
 }
 
 /// An interface that defines methods for AtKeys that can be written.
@@ -27,6 +35,13 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   /// the target already exists. Use [flush] to persist later mutations.
   //todo: futureOr & Atsign types
   Future write(String atsign, AtKeys atKeys);
+
+  /// Throws unless [write] could create [atsign]'s keys in this store now;
+  /// the default checks nothing.
+  ///
+  /// It may create what the write would need first, such as the keyfile's
+  /// directory, and leaves no keys or other file behind.
+  Future<void> checkWritable(String atsign) async {}
 
   /// Persists [atKeys] as the complete new state for [atsign].
   ///

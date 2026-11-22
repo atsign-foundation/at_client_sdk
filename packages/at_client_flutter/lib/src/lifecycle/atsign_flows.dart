@@ -1,8 +1,9 @@
-import 'package:at_auth/at_auth.dart' show RetryOptions;
+import 'package:at_auth/at_auth.dart' show AtKeysFormatException, RetryOptions;
 import 'package:at_client/at_client_io.dart';
 import 'package:at_client/at_client_mixins.dart'
     show firstEnrollmentAppName, firstEnrollmentDeviceName;
 import 'package:at_client/hive.dart';
+import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:path_provider/path_provider.dart';
@@ -66,7 +67,9 @@ class AtsignFlows {
   ///
   /// [namespace], [app], [device], [mintLegacyMaterial], [signingAlgo],
   /// [provisioningBudget], [provisioningPollInterval], [onProgress] and
-  /// [connectBudget] are as `Atsign.activate`, with its defaults.
+  /// [connectBudget] are as `Atsign.activate`, with its defaults. A keychain
+  /// whose whole document does not parse is refused saying every Atsign
+  /// stored there is affected.
   Future<AtClient> activate(
     String atSign, {
     required String cramSecret,
@@ -83,28 +86,32 @@ class AtsignFlows {
     void Function(ProgressEvent event)? onProgress,
     AtLookUpFactory? lookUps,
     Duration connectBudget = AtConnection.defaultBudget,
-  }) async => Atsign(atSign).activate(
-    cramSecret: cramSecret,
-    keys: keys,
-    preference: preference,
-    namespace: namespace,
-    storage: await storageOrDefault(atSign, preference, storage),
-    app: app,
-    device: device,
-    mintLegacyMaterial: mintLegacyMaterial,
-    signingAlgo: signingAlgo,
-    provisioningBudget: provisioningBudget,
-    provisioningPollInterval: provisioningPollInterval,
-    onProgress: onProgress,
-    lookUps: lookUps ?? secureSocketLookUps(),
-    secondaryAddressFinder: _atDirectoryOf(preference),
-    connectBudget: connectBudget,
+  }) async => _sayingWholeKeychain(
+    keys,
+    () async => Atsign(atSign).activate(
+      cramSecret: cramSecret,
+      keys: keys,
+      preference: preference,
+      namespace: namespace,
+      storage: await storageOrDefault(atSign, preference, storage),
+      app: app,
+      device: device,
+      mintLegacyMaterial: mintLegacyMaterial,
+      signingAlgo: signingAlgo,
+      provisioningBudget: provisioningBudget,
+      provisioningPollInterval: provisioningPollInterval,
+      onProgress: onProgress,
+      lookUps: lookUps ?? secureSocketLookUps(),
+      secondaryAddressFinder: _atDirectoryOf(preference),
+      connectBudget: connectBudget,
+    ),
   );
 
   /// `Atsign.open`: opens a client for [atSign] on the keys in [keys].
   ///
   /// [namespace], [serviceFactory] and [connectBudget] are as `Atsign.open`,
-  /// with its defaults.
+  /// with its defaults. A keychain whose whole document does not parse is
+  /// refused saying every Atsign stored there is affected.
   Future<AtClient> open(
     String atSign, {
     required AtKeysIo keys,
@@ -114,30 +121,39 @@ class AtsignFlows {
     AtLookUpFactory? lookUps,
     AtServiceFactory? serviceFactory,
     Duration connectBudget = AtConnection.defaultBudget,
-  }) async => Atsign(atSign).open(
-    keys: keys,
-    preference: preference,
-    namespace: namespace,
-    storage: await storageOrDefault(atSign, preference, storage),
-    lookUps: lookUps ?? secureSocketLookUps(),
-    secondaryAddressFinder: _atDirectoryOf(preference),
-    serviceFactory: serviceFactory,
-    connectBudget: connectBudget,
+  }) async => _sayingWholeKeychain(
+    keys,
+    () async => Atsign(atSign).open(
+      keys: keys,
+      preference: preference,
+      namespace: namespace,
+      storage: await storageOrDefault(atSign, preference, storage),
+      lookUps: lookUps ?? secureSocketLookUps(),
+      secondaryAddressFinder: _atDirectoryOf(preference),
+      serviceFactory: serviceFactory,
+      connectBudget: connectBudget,
+    ),
   );
 
   /// `Atsign.resumeEnrollment`: the request already filed in [keys] and
-  /// awaiting approval, or null when there is none. Each of [app] and
-  /// [device] given narrows the search; with neither, [keys] must hold one.
+  /// awaiting approval, or null when there is none. [keys] hold at most one
+  /// pending request, returned whatever app and device it was filed under.
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
+    @Deprecated(
+      'Ignored: an AtKeys store holds at most one pending enrollment, '
+      'which is returned whatever app it was filed under',
+    )
     String? app,
+    @Deprecated(
+      'Ignored: an AtKeys store holds at most one pending enrollment, '
+      'which is returned whatever device it was filed under',
+    )
     String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,
     AtLookUpFactory? lookUps,
   }) => Atsign(atSign).resumeEnrollment(
-    app: app,
-    device: device,
     keys: keys,
     preference: preference,
     lookUps: lookUps ?? secureSocketLookUps(),
@@ -175,6 +191,33 @@ class AtsignFlows {
     lookUps: lookUps ?? secureSocketLookUps(),
     secondaryAddressFinder: _atDirectoryOf(preference),
   );
+
+  /// What [verb] returns; when it refuses [keys], this device's keychain,
+  /// because the keychain's one document, which holds every Atsign stored
+  /// there, does not parse, the refusal says so.
+  Future<AtClient> _sayingWholeKeychain(
+    AtKeysIo keys,
+    Future<AtClient> Function() verb,
+  ) async {
+    try {
+      return await verb();
+    } on AtKeysUnusableException catch (e, stackTrace) {
+      final error = e.error;
+      if (keys is! KeychainAtKeysIo || error is! AtKeysFormatException) {
+        rethrow;
+      }
+      Error.throwWithStackTrace(
+        AtKeysUnusableException(
+          '${e.message} Every Atsign stored there is affected.',
+          atSign: e.atSign,
+          cause: AtKeysUnusableCause.unreadable,
+          source: e.source,
+          error: error,
+        ),
+        stackTrace,
+      );
+    }
+  }
 
   SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
       CacheableSecondaryAddressFinder(

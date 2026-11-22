@@ -42,6 +42,42 @@ class _StoreAwaitingOnce extends InMemoryAtKeysIo {
   }
 }
 
+/// An in-memory AtKeys store that runs [beforeWrite] once, ahead of its next
+/// write.
+class _StoreWrittenOnce extends InMemoryAtKeysIo {
+  Future<void> Function()? beforeWrite;
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) async {
+    final hook = beforeWrite;
+    beforeWrite = null;
+    if (hook != null) await hook();
+    return super.write(atsign, atKeys);
+  }
+}
+
+/// A keyfile that runs [beforeWrite] once, ahead of its next write.
+class _KeyfileWrittenOnce extends FileAtKeysIo {
+  _KeyfileWrittenOnce(String path) : super(filePath: (_) => path);
+
+  Future<void> Function()? beforeWrite;
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) async {
+    final hook = beforeWrite;
+    beforeWrite = null;
+    if (hook != null) await hook();
+    return super.write(atsign, atKeys);
+  }
+}
+
+/// An in-memory AtKeys store that describes where it keeps keys as
+/// `a test location`, as a keyfile names its path.
+class _DescribedStore extends InMemoryAtKeysIo {
+  @override
+  String describeSource(String atsign) => 'a test location';
+}
+
 /// `Atsign.enroll`, `PendingEnrollment` and `resumeEnrollment`: the key store
 /// named at submission is the resume record, approval completes it, and a
 /// denial empties it.
@@ -95,6 +131,9 @@ void main() {
   /// and an exception is the atServer's refusal, `AT0026` for not-yet-decided
   /// and `AT0025` for denied.
   ///
+  /// [id] is the enrollment id its answer to the request gives, and
+  /// [onEnroll] runs as the request arrives, before that answer.
+  ///
   /// [onKeyFetch] runs as the handshake fetches the last secret the approval
   /// released, and the first [keyFetchesUnanswered] of those fetches get an
   /// empty answer. A poll after [AtLookUp.stop] is refused, as a stopped
@@ -102,7 +141,9 @@ void main() {
   MockAtLookupImpl atServer(
       {required Future<bool> Function(int attempt) decide,
       void Function()? onKeyFetch,
-      int keyFetchesUnanswered = 0}) {
+      int keyFetchesUnanswered = 0,
+      String id = enrollmentId,
+      Future<void> Function()? onEnroll}) {
     final lookUp = MockAtLookupImpl();
     String? wrappedSymmetricKey;
     var attempts = 0;
@@ -131,17 +172,13 @@ void main() {
         final json = jsonDecode(command.substring(
             command.indexOf('{'), command.lastIndexOf('}') + 1));
         wrappedSymmetricKey = json['encryptedAPKAMSymmetricKey'] as String;
-        return 'data:${jsonEncode({
-              'enrollmentId': enrollmentId,
-              'status': 'pending'
-            })}';
+        await onEnroll?.call();
+        return 'data:${jsonEncode({'enrollmentId': id, 'status': 'pending'})}';
       }
-      if (command.startsWith(
-          'keys:get:keyName:$enrollmentId.default_enc_private_key')) {
+      if (command.startsWith('keys:get:keyName:$id.default_enc_private_key')) {
         return 'data:${jsonEncode(await sealed(encryptionPrivateKey))}';
       }
-      if (command
-          .startsWith('keys:get:keyName:$enrollmentId.default_self_enc_key')) {
+      if (command.startsWith('keys:get:keyName:$id.default_self_enc_key')) {
         onKeyFetch?.call();
         if (unanswered > 0) {
           unanswered--;
@@ -170,11 +207,11 @@ void main() {
   }
 
   Future<PendingEnrollment> submit(
-          InMemoryAtKeysIo store, MockAtLookupImpl server,
-          {String device = 'phone'}) async =>
+          WrittenAtKeysIo store, MockAtLookupImpl server,
+          {String app = 'wavi', String device = 'phone'}) async =>
       Atsign(atSign).enroll(
           otp: 'ABC123',
-          app: 'wavi',
+          app: app,
           device: device,
           namespaces: {'wavi': 'rw'},
           keys: store,
@@ -283,56 +320,195 @@ void main() {
     expect(finder.asked, isEmpty, reason: 'no connection is attempted');
   });
 
-  test('resumeEnrollment finds the request by app and device, and only that',
+  test('The one pending enrollment resumes whatever app and device are given',
       () async {
     final store = InMemoryAtKeysIo();
     await submit(store, atServer(decide: (_) async => true));
     final pref = await preference();
 
     final resumed = await Atsign(atSign).resumeEnrollment(
-        app: 'wavi',
-        device: 'phone',
+        // ignore: deprecated_member_use_from_same_package
+        app: 'buzz',
+        // ignore: deprecated_member_use_from_same_package
+        device: 'tablet',
         keys: store,
         preference: pref,
         lookUps: loopbackLookUps(),
         secondaryAddressFinder: atDirectoryOf(pref));
     expect(resumed?.enrollmentId, enrollmentId);
+    expect((resumed?.app, resumed?.device), ('wavi', 'phone'),
+        reason: 'the names it was filed under, not the ones given');
     expect(resumed?.signingAlgo, SigningAlgoType.rsa2048);
     expect(resumed?.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
 
     expect(
         await Atsign(atSign).resumeEnrollment(
-            app: 'wavi',
-            device: 'tablet',
-            keys: store,
-            preference: pref,
-            lookUps: loopbackLookUps(),
-            secondaryAddressFinder: atDirectoryOf(pref)),
-        isNull,
-        reason: 'another device\'s request is not this one');
-    expect(
-        await Atsign(atSign).resumeEnrollment(
-            app: 'wavi',
-            device: 'phone',
             keys: InMemoryAtKeysIo(),
             preference: pref,
             lookUps: loopbackLookUps(),
             secondaryAddressFinder: atDirectoryOf(pref)),
         isNull,
-        reason: 'and a store holding nothing resumes nothing');
+        reason: 'a store holding nothing resumes nothing');
+  });
+
+  for (final (app, device) in const [
+    ('wavi', 'phone'),
+    ('wavi', 'laptop'),
+    ('buzz', 'phone'),
+  ]) {
+    test(
+        'A store already waiting on an enrollment for an Atsign refuses '
+        'another, before anything is sent: $app on $device', () async {
+      final store = InMemoryAtKeysIo();
+      await submit(store, atServer(decide: (_) async => true));
+      final untouched = atServer(decide: (_) async => true);
+
+      await expectLater(
+          () => submit(store, untouched, app: app, device: device),
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('pending enrollment "$enrollmentId" for "wavi" on '
+                      '"phone"'),
+                  contains('resumeEnrollment')))));
+      verifyZeroInteractions(untouched);
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+          reason: 'the store keeps the one pending enrollment it held');
+    });
+  }
+
+  test('Two enrolls on one store at once file one request', () async {
+    final store = InMemoryAtKeysIo();
+    PendingEnrollment? buzz;
+    final wavi = submit(
+        store,
+        atServer(
+            decide: (_) async => true,
+            onEnroll: () async => buzz = await submit(
+                store, atServer(decide: (_) async => true, id: 'e-2'),
+                app: 'buzz')));
+
+    await expectLater(
+        wavi,
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+                startsWith("the atSign's manager can deny enrollment "
+                    '"$enrollmentId" of $atSign, which is not filed'),
+                contains('gained the pending enrollment "e-2" for "buzz" on '
+                    '"phone" while it was being sent')))));
+    expect(buzz?.enrollmentId, 'e-2');
+    final stored = await store.read(atSign);
+    expect(stored.pendingEnrollmentIds, ['e-2']);
+    expect(stored.storedEnrollmentId, 'e-2');
   });
 
   test(
-      'a second request for the same app and device is refused in favour of '
-      'resuming', () async {
-    final store = InMemoryAtKeysIo();
-    final server = atServer(decide: (_) async => true);
-    await submit(store, server);
+      'Given no keys for @alice yet, when another enroll creates them between '
+      "this filing's update and its write, then this filing is refused "
+      'naming the enrollment it sent', () async {
+    final store = _StoreWrittenOnce();
+    PendingEnrollment? buzz;
+    store.beforeWrite = () async => buzz = await submit(
+        store, atServer(decide: (_) async => true, id: 'e-2'),
+        app: 'buzz');
 
     await expectLater(
-        () => submit(store, server),
+        submit(store, atServer(decide: (_) async => true)),
         throwsA(isA<AtEnrollmentException>().having(
-            (e) => e.message, 'message', contains('resumeEnrollment'))));
+            (e) => e.message,
+            'message',
+            startsWith("the atSign's manager can deny enrollment "
+                '"$enrollmentId"'))));
+    expect(buzz?.enrollmentId, 'e-2');
+    expect((await store.read(atSign)).pendingEnrollmentIds, ['e-2']);
+  });
+
+  test(
+      'Given no keyfile for @alice yet, when another enroll creates it between '
+      "this filing's update and its write, then this filing is refused naming "
+      'the enrollment it sent, and the keyfile keeps the other request',
+      () async {
+    final store = _KeyfileWrittenOnce('${dir.path}/alice_key.atKeys');
+    PendingEnrollment? buzz;
+    store.beforeWrite = () async => buzz = await submit(
+        store, atServer(decide: (_) async => true, id: 'e-2'),
+        app: 'buzz');
+
+    await expectLater(
+        submit(store, atServer(decide: (_) async => true)),
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            startsWith("the atSign's manager can deny enrollment "
+                '"$enrollmentId"'))));
+    expect(buzz?.enrollmentId, 'e-2');
+    expect((await store.read(atSign)).pendingEnrollmentIds, ['e-2']);
+  });
+
+  test(
+      'Given no keys for @alice yet, when live keys are written while the '
+      'request is being sent, then it is not filed and the live keys stay',
+      () async {
+    final store = _DescribedStore();
+    final live = AtKeys.legacy(
+        apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
+        apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!);
+
+    await expectLater(
+        submit(
+            store,
+            atServer(
+                decide: (_) async => true,
+                onEnroll: () => store.write(atSign, live))),
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+                startsWith("the atSign's manager can deny enrollment "
+                    '"$enrollmentId" of $atSign, which is not filed'),
+                contains('gained live keys in the AtKeys store (a test '
+                    'location) while it was being sent')))),
+        reason: 'the refusal names the store the live keys are in, with its '
+            'description in brackets');
+    final stored = await store.read(atSign);
+    expect(stored.holdsAuthenticationMaterial, isTrue);
+    expect(stored.pendingEnrollmentIds, isEmpty);
+  });
+
+  group('Given a store whose pending enrollment records no app and no device',
+      () {
+    test(
+        'when another enrollment is asked for, then it is refused naming the '
+        'enrollment alone, before anything is sent', () async {
+      final filed = InMemoryAtKeysIo();
+      await submit(filed, atServer(decide: (_) async => true));
+      final json = (await filed.read(atSign)).toJson();
+      for (final entry in json['enrollments'] as List) {
+        (entry as Map)
+          ..remove('appName')
+          ..remove('deviceName');
+      }
+      final store = InMemoryAtKeysIo();
+      await store.write(atSign, AtKeys.fromJson(json));
+      final info = (await store.read(atSign)).enrollmentInfo(enrollmentId);
+      expect((info?.appName, info?.deviceName), (null, null));
+      final untouched = atServer(decide: (_) async => true);
+
+      await expectLater(
+          () => submit(store, untouched),
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('pending enrollment "$enrollmentId": resume it '
+                      'with resumeEnrollment'),
+                  isNot(contains('null'))))));
+      verifyZeroInteractions(untouched);
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId]);
+    });
   });
 
   test(
@@ -395,7 +571,7 @@ void main() {
         () async => pending.client(await preference(),
             retryInterval: const Duration(milliseconds: 10),
             storage: hiveStoreFor(pending.atSign, await preference())),
-        throwsA(isA<AtEnrollmentException>()
+        throwsA(isA<AtEnrollmentDeniedException>()
             .having((e) => e.message, 'message', contains('denied'))));
 
     final stored = await store.read(atSign);
@@ -416,23 +592,49 @@ void main() {
   });
 
   test(
-      'a denial whose pending keys the store cannot remove still throws the '
-      'denial', () async {
-    final store = _UpdateFailingStore();
-    final pending = await submit(
-        store,
-        atServer(
-            decide: (_) async => throw AtAuthErrorReplyException(
-                'Failed connecting to $atSign. error:AT0025:Apkam Auth '
-                'Denied',
-                errorCode: 'AT0025')));
-    store.failing = true;
+      'a denial or expiry whose pending keys the store cannot remove still '
+      'throws the decision, saying the keys stay', () async {
+    for (final (code, text, decision, said) in [
+      (
+        'AT0025',
+        'Apkam Auth Denied',
+        isA<AtEnrollmentDeniedException>(),
+        'is denied'
+      ),
+      (
+        'AT0028',
+        'enrollment_id: $enrollmentId is expired or invalid',
+        isA<AtEnrollmentExpiredException>(),
+        'has expired'
+      ),
+    ]) {
+      final store = _UpdateFailingStore()
+        ..failure = 'Could not acquire the keyfile lock\nwithin 0:00:10';
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw AtAuthErrorReplyException(
+                  'Failed connecting to $atSign. error:$code:$text',
+                  errorCode: code)));
+      store.failing = true;
 
-    await expectLater(
-        () => pending.awaitApproval(
-            retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentException>()
-            .having((e) => e.message, 'message', contains('denied'))));
+      await expectLater(
+          () => pending.awaitApproval(
+              retryInterval: const Duration(milliseconds: 10)),
+          throwsA(decision.having(
+              (e) => (e as AtException).message,
+              'message',
+              allOf(
+                  contains(said),
+                  contains('could not be removed and stay in the AtKeys '
+                      'store (a test location)'),
+                  contains(r'Could not acquire the keyfile lock\u000awithin'),
+                  isNot(contains('\n'))))),
+          reason: '$code: the decision is thrown, saying the keys stay and '
+              'why on one line');
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+          reason: '$code: the keys the store could not remove are still there');
+    }
   });
 
   test('a denial empties a file store too, which then takes the next request',
@@ -459,7 +661,7 @@ void main() {
     await expectLater(
         () => pending.awaitApproval(
             retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentException>()));
+        throwsA(isA<AtEnrollmentDeniedException>()));
 
     final stored = await store.read(atSign);
     expect(stored.pendingEnrollmentIds, isEmpty,
@@ -489,10 +691,10 @@ void main() {
 
     await expectLater(
         pending.awaitApproval(retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentException>()
-            .having((e) => e.message, 'message', isNot(contains('denied')))));
+        throwsA(allOf(isA<AtEnrollmentException>(),
+            isNot(isA<AtEnrollmentDeniedException>()))));
     expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
-        reason: 'only a denial removes the pending keys');
+        reason: 'only a denial or an expiry removes the pending keys');
 
     await pending.awaitApproval(
         retryInterval: const Duration(milliseconds: 10));
@@ -986,8 +1188,11 @@ void main() {
       final pending = await submit(store, approvesThenHolds(opening, answer));
       final opened = expectLater(
           clientOf(pending),
-          throwsA(thrown.having((e) => e.toString(), 'message',
-              contains('after its approval was written'))));
+          throwsA(thrown.having(
+              (e) => e.toString(),
+              'message',
+              contains('after its approval was written; the approved keys '
+                  'stay in the AtKeys store'))));
       await opening.future;
 
       final reopened = call(pending).then((_) => reopen(store));
@@ -1183,23 +1388,134 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
-    /// Resumes the request in [store] for wavi on phone, over [server].
-    /// The message of a refusal to choose between pending enrollments e-one
-    /// and e-two: it names both and says what picks one.
-    final namesBothAndAsksForNames = allOf(contains('e-one'), contains('e-two'),
-        contains('name both the app and the device'));
-
+    /// Resumes the request in [store], over [server].
     Future<PendingEnrollment?> resume(
         InMemoryAtKeysIo store, MockAtLookupImpl server) async {
       final pref = await preference();
       return Atsign(atSign).resumeEnrollment(
-          app: 'wavi',
-          device: 'phone',
           keys: store,
           preference: pref,
           atLookUp: server,
           lookUps: loopbackLookUps(),
           secondaryAddressFinder: atDirectoryOf(pref));
+    }
+
+    /// Waits on a request in [store] that a second PendingEnrollment cancels,
+    /// runs [afterCancel], then has the manager approve the request, and
+    /// checks that the wait throws AtEnrollmentCancelledException.
+    Future<void> approvedAfterCancel(_DescribedStore store,
+        {Future<void> Function()? afterCancel}) async {
+      var polls = 0;
+      var approved = false;
+      final server = atServer(decide: (_) async {
+        polls++;
+        return approved ? true : notYetDecided();
+      });
+      final waiter = await submit(store, server);
+      final other = await resume(store, server);
+      final waiting = expectLater(
+          waiter.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>().having(
+              (e) => e.message,
+              'message',
+              "the atSign's manager can revoke enrollment "
+                  '"$enrollmentId" of $atSign: it was approved after its '
+                  'pending keys left the AtKeys store (a test location), so '
+                  'nothing is filed')),
+          reason: 'the refusal names the store the pending keys left, with '
+              'its description in brackets');
+      await until(() => polls >= 1);
+      await other!.cancel();
+      await afterCancel?.call();
+      approved = true;
+      await waiting;
+      expect(waiter.approved, isFalse);
+    }
+
+    test('An approval of a request another wait has cancelled files nothing',
+        () async {
+      final store = _DescribedStore();
+      await approvedAfterCancel(store);
+
+      final stored = await store.read(atSign);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+    });
+
+    test(
+        "Given another enrollment's keys filed after a cancel, when the "
+        'cancelled request is approved, then the wait files nothing over them',
+        () async {
+      final store = _DescribedStore();
+      await approvedAfterCancel(store,
+          afterCancel: () => store.update(Atsign(atSign), (stored) {
+                stored.fileLegacyMaterial(
+                    apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
+                    apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!,
+                    enrollmentId: 'e-2');
+                return true;
+              }));
+
+      final stored = await store.read(atSign);
+      expect(stored.enrollmentToAuthenticateAs(), 'e-2');
+      expect(stored.pendingEnrollmentIds, isEmpty);
+    });
+
+    test(
+        'Given a store still naming a cancelled request and holding no keys, '
+        'when the request is approved, then the wait files nothing', () async {
+      final store = _DescribedStore();
+      await approvedAfterCancel(store,
+          afterCancel: () => store.update(Atsign(atSign), (stored) {
+                stored.fileLegacyMaterial(enrollmentId: enrollmentId);
+                return true;
+              }));
+
+      final stored = await store.read(atSign);
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+    });
+
+    for (final algo in [SigningAlgoType.rsa2048, SigningAlgoType.mldsa65]) {
+      test(
+          'Two waits on one request both end approved when the manager '
+          'approves it, for ${algo.name}', () async {
+        final release = Completer<void>();
+        var polls = 0;
+        final server = atServer(decide: (_) async {
+          polls++;
+          await release.future;
+          return true;
+        });
+        final store = InMemoryAtKeysIo();
+        final first = await Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'wavi',
+            device: 'phone',
+            namespaces: {'wavi': 'rw'},
+            keys: store,
+            preference: await preference(),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+            signingAlgo: algo,
+            atLookUp: server);
+        final second = (await resume(store, server))!;
+        final waits = [
+          first.awaitApproval(retryInterval: pollEvery),
+          second.awaitApproval(retryInterval: pollEvery),
+        ];
+        await until(() => polls == 2);
+
+        release.complete();
+        await Future.wait(waits);
+
+        expect((first.approved, second.approved), (true, true));
+        final stored = await store.read(atSign);
+        expect(stored.pendingEnrollmentIds, isEmpty);
+        expect(stored.enrollmentToAuthenticateAs(), enrollmentId);
+        expect(stored.authenticationKeyPairFor(enrollmentId)?.algorithm, algo);
+      });
     }
 
     test('Stop ends a wait and keeps the request', () async {
@@ -1208,11 +1524,17 @@ void main() {
         polls++;
         notYetDecided();
       });
-      final store = InMemoryAtKeysIo();
+      final store = _DescribedStore();
       final pending = await submitOwning(store, server);
       final waiting = expectLater(
           pending.awaitApproval(retryInterval: pollEvery),
-          throwsA(isA<StoppedException>()));
+          throwsA(isA<StoppedException>().having(
+              (e) => e.message,
+              'message',
+              endsWith('the request stays in the AtKeys store (a test '
+                  'location), for resumeEnrollment'))),
+          reason: 'the stopped wait names the store the request stays in, '
+              'with its description in brackets');
       await until(() => polls >= 1);
 
       await pending.stop();
@@ -1343,6 +1665,46 @@ void main() {
           thrown: isA<StoppedException>());
     });
 
+    test(
+        'A wait the atServer refuses for another reason keeps the request, '
+        'even when its text says denied', () async {
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw AtAuthErrorReplyException(
+                  'Failed connecting to $atSign. error:AT0011:access denied',
+                  errorCode: 'AT0011')));
+
+      await expectLater(
+          pending.awaitApproval(
+              retryInterval: const Duration(milliseconds: 1), maxRetries: 1),
+          throwsA(allOf(
+              isA<AtEnrollmentException>().having(
+                  (e) => e.message, 'message', contains('access denied')),
+              isNot(isA<AtEnrollmentDeniedException>()))));
+      expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+          reason: 'only the atServer\'s AT0025 removes the pending keys');
+    });
+
+    test(
+        'An AT0025 denial ends the wait with AtEnrollmentDeniedException and '
+        'removes the pending keys', () async {
+      final store = InMemoryAtKeysIo();
+      final pending = await submit(
+          store,
+          atServer(
+              decide: (_) async => throw AtAuthErrorReplyException(
+                  'Failed connecting to $atSign. error:AT0025:Apkam Auth '
+                  'Denied',
+                  errorCode: 'AT0025')));
+
+      await expectLater(pending.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentDeniedException>()));
+
+      expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
     test("An expired request's keys go, as a denial's do", () async {
       for (final code in ['AT0028', 'AT0029']) {
         final store = InMemoryAtKeysIo();
@@ -1384,12 +1746,13 @@ void main() {
       expect((await store.read(atSign)).pendingEnrollmentIds, isEmpty);
     });
 
-    /// A store holding two pending requests for app `wavi`, from devices named
-    /// after their enrollment ids, `e-one` and `e-two`.
-    AtKeys twoPending() {
+    /// A store holding a pending request for [app] under each of [ids], from
+    /// [device], else from a device named after its enrollment id.
+    AtKeys pendingWith(List<String> ids,
+        {String app = 'wavi', String? device}) {
       final keys = AtKeys(atsign: Atsign(atSign));
       final keyPair = RsaKeyPair.generate();
-      for (final id in ['e-one', 'e-two']) {
+      for (final id in ids) {
         for (final (role, key) in [
           (
             CryptographicMaterialRole.privateAuthentication,
@@ -1409,10 +1772,15 @@ void main() {
               createdAt: DateTime.now().toUtc(),
               status: CryptographicMaterialStatus.pending));
         }
-        keys.recordEnrollmentSnapshot(id, appName: 'wavi', deviceName: id);
+        keys.recordEnrollmentSnapshot(id,
+            appName: app, deviceName: device ?? id);
       }
       return keys;
     }
+
+    /// A store holding two pending requests for app `wavi`, from devices named
+    /// after their enrollment ids, `e-one` and `e-two`.
+    AtKeys twoPending() => pendingWith(['e-one', 'e-two']);
 
     test('The one pending enrollment resumes with no names', () async {
       final store = InMemoryAtKeysIo();
@@ -1431,48 +1799,162 @@ void main() {
     });
 
     test(
-        'Resuming by one name refuses a store holding several requests it '
-        'names', () async {
+        'A store holding two pending requests resumes the one its '
+        'enrollmentId field names, else the first, with a warning', () async {
+      final logs = RecordedLogs();
+      final handler = AtSignLogger.defaultLoggingHandler;
+      final level = AtSignLogger.root_level;
+      logs.installOn();
+      addTearDown(() {
+        AtSignLogger.defaultLoggingHandler = handler;
+        AtSignLogger.root_level = level;
+      });
       final pref = await preference();
-      Future<PendingEnrollment?> resume({String? app, String? device}) =>
-          Atsign(atSign).resumeEnrollment(
-              app: app,
-              device: device,
-              // ignore: invalid_use_of_visible_for_testing_member
-              keys: InMemoryAtKeysIo.holding(atSign, twoPending()),
-              preference: pref,
-              lookUps: loopbackLookUps(),
-              secondaryAddressFinder: atDirectoryOf(pref));
+      Future<String?> resumedFrom(AtKeys keys) async {
+        final store = _DescribedStore();
+        await store.write(atSign, keys);
+        return (await Atsign(atSign).resumeEnrollment(
+                keys: store,
+                preference: pref,
+                lookUps: loopbackLookUps(),
+                secondaryAddressFinder: atDirectoryOf(pref)))
+            ?.enrollmentId;
+      }
 
-      await expectLater(
-          resume(app: 'wavi'),
-          throwsA(isA<AtEnrollmentPendingException>()
-              .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
-                  unorderedEquals(['e-one', 'e-two']))
-              .having((e) => e.message, 'message', namesBothAndAsksForNames)));
+      Iterable<String> warnings() =>
+          logs.at('WARNING').where((m) => m.contains('pending enrollments'));
+      const several = 'The AtKeys store (a test location) holds 2 pending '
+          'enrollments of $atSign, where an AtKeys store holds at most one: '
+          'resuming ';
+
+      expect(await resumedFrom(pendingWith(['e-one'])), 'e-one');
+      expect(warnings(), isEmpty, reason: 'one pending request is the rule');
+
+      expect(await resumedFrom(twoPending()), 'e-one',
+          reason: 'with no enrollmentId field, the first');
       expect(
-          (await resume(app: 'wavi', device: 'e-two'))?.enrollmentId, 'e-two');
-      expect((await resume(device: 'e-one'))?.enrollmentId, 'e-one');
+          await resumedFrom(
+              twoPending()..fileLegacyMaterial(enrollmentId: 'e-two')),
+          'e-two',
+          reason: 'the one whose symmetric key the flat fields hold');
+      expect(
+          warnings(),
+          [
+            allOf(startsWith(several), endsWith('"e-one"')),
+            allOf(startsWith(several), endsWith('"e-two"')),
+          ],
+          reason: 'each warning names the store it read, with its '
+              'description in brackets');
     });
 
-    test(
-        'Given a store holding two pending enrollments, when resumeEnrollment '
-        'is given no names, then it throws AtEnrollmentPendingException '
-        'naming both', () async {
-      final keys = twoPending();
+    test('Cancelling each request in turn empties a store holding two',
+        () async {
+      // ignore: invalid_use_of_visible_for_testing_member
+      final keys = InMemoryAtKeysIo.holding(atSign, twoPending());
       final pref = await preference();
+      final cancelled = <String>[];
+      while (cancelled.length < 3) {
+        final next = await Atsign(atSign).resumeEnrollment(
+            keys: keys,
+            preference: pref,
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: atDirectoryOf(pref));
+        if (next == null) break;
+        cancelled.add(next.enrollmentId);
+        await next.cancel();
+      }
 
-      await expectLater(
-          Atsign(atSign).resumeEnrollment(
+      expect(cancelled, ['e-one', 'e-two']);
+      expect((await keys.read(atSign)).pendingEnrollmentIds, isEmpty);
+    });
+
+    /// What resumeEnrollment resumes from [keys]: its enrollment id, or null.
+    Future<String?> resumedFrom(AtKeys keys) async {
+      final pref = await preference();
+      return (await Atsign(atSign).resumeEnrollment(
               // ignore: invalid_use_of_visible_for_testing_member
               keys: InMemoryAtKeysIo.holding(atSign, keys),
               preference: pref,
               lookUps: loopbackLookUps(),
-              secondaryAddressFinder: atDirectoryOf(pref)),
-          throwsA(isA<AtEnrollmentPendingException>()
-              .having((e) => e.pendingEnrollmentIds, 'pendingEnrollmentIds',
-                  unorderedEquals(['e-one', 'e-two']))
-              .having((e) => e.message, 'message', namesBothAndAsksForNames)));
+              secondaryAddressFinder: atDirectoryOf(pref)))
+          ?.enrollmentId;
+    }
+
+    test(
+        'Given live keys under an enrollmentId field and nothing pending, '
+        'when resumeEnrollment is called, then it returns null', () async {
+      final live = AtKeys.legacy(
+          apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
+          apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!,
+          enrollmentId: 'e-live');
+
+      expect(await resumedFrom(live), isNull);
+    });
+
+    test(
+        'Given one pending request beside an enrollmentId field naming '
+        'another, when resumeEnrollment is called, then it resumes the '
+        'pending one', () async {
+      expect(
+          await resumedFrom(pendingWith(['e-one'])
+            ..fileLegacyMaterial(enrollmentId: 'e-old')),
+          'e-one');
+    });
+
+    test(
+        'Given a store holding two pending requests, when enroll is called, '
+        'then its refusal names the one resumeEnrollment resumes', () async {
+      Future<void> refusedNaming(AtKeys keys, String id) => expectLater(
+          // ignore: invalid_use_of_visible_for_testing_member
+          submit(InMemoryAtKeysIo.holding(atSign, keys),
+              atServer(decide: (_) async => true)),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', contains('the pending enrollment "$id"'))));
+
+      await refusedNaming(twoPending(), 'e-one');
+      await refusedNaming(
+          twoPending()..fileLegacyMaterial(enrollmentId: 'e-two'), 'e-two');
+    });
+
+    test(
+        'Atsign.open names the pending enrollment ids a keyfile records quoted '
+        'and escaped', () async {
+      final pref = await preference();
+      await expectLater(
+          Atsign(atSign).open(
+              // ignore: invalid_use_of_visible_for_testing_member
+              keys: InMemoryAtKeysIo.holding(
+                  atSign, pendingWith(['e\n"one', 'e-two'])),
+              preference: pref,
+              lookUps: loopbackLookUps(),
+              secondaryAddressFinder: await refusingAtDirectory(),
+              storage: hiveStoreFor(Atsign(atSign), pref)),
+          throwsA(isA<AtEnrollmentPendingException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains(r'"e\u000a\"one"'), contains('"e-two"'),
+                  isNot(contains('\n'))))));
+    });
+
+    test(
+        'A refusal to enroll into a waiting store names what it holds quoted '
+        'and escaped', () async {
+      final store = InMemoryAtKeysIo();
+      await store.write(
+          atSign, pendingWith(['e\n"one'], app: 'wa\u001bvi', device: 'phone'));
+      final untouched = atServer(decide: (_) async => true);
+
+      await expectLater(
+          () => submit(store, untouched, app: 'buzz', device: 'tablet'),
+          throwsA(isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains(r'pending enrollment "e\u000a\"one" for '
+                      r'"wa\u001bvi" on "phone"'),
+                  isNot(contains('\n')),
+                  isNot(contains('\u001b'))))));
+      verifyZeroInteractions(untouched);
     });
 
     test('A connection the app supplied is left open', () async {
@@ -1806,17 +2288,15 @@ class _DiskPacedStore extends InMemoryAtKeysIo {
 
 /// An in-memory store whose updates fail as a keyfile's do when its lock is
 /// held elsewhere, while [failing].
-class _UpdateFailingStore extends InMemoryAtKeysIo {
+class _UpdateFailingStore extends _DescribedStore {
   bool failing = false;
+  String failure = 'Could not acquire the keyfile lock within '
+      '0:00:10.000000. Nothing was written.';
 
   @override
   Future<void> update(
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
-    if (failing) {
-      throw FileSystemException(
-          'Could not acquire the keyfile lock within 0:00:10.000000. Nothing '
-          'was written.');
-    }
+    if (failing) throw FileSystemException(failure);
     return super.update(atsign, mutate);
   }
 }

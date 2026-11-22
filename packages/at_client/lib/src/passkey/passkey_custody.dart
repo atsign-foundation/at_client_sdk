@@ -9,7 +9,7 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_auth/passkey.dart';
 import 'package:at_commons/at_commons.dart'
-    show AtException, InvalidAtSignException;
+    show AtException, InvalidAtSignException, clipForMessage;
 import 'package:at_commons/atsign.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show visibleForTesting;

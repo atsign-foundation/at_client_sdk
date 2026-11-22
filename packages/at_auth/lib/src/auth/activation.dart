@@ -14,12 +14,17 @@ import 'package:at_utils/at_progress.dart';
 /// mints into [keys]: the atSign's first enrollment, which the atServer
 /// grants everything.
 ///
-/// The steps, in order: wait for the atServer to be reachable and in its
-/// unactivated state, authenticate with the secret, mint the key material,
-/// submit the first enrollment (auto-approved on a CRAM connection),
-/// authenticate again as that enrollment, write [keys], and unless
-/// [completeActivation] is false publish the encryption public key and
-/// delete the secret from the atServer. Returns the enrollment id.
+/// The steps, in order: read [keys], which must hold nothing for [atSign],
+/// wait for the atServer to be reachable and in its unactivated state,
+/// authenticate with the secret, mint the key material, submit the first
+/// enrollment (auto-approved on a CRAM connection), authenticate again as
+/// that enrollment, write [keys], and unless [completeActivation] is false
+/// publish the encryption public key and delete the secret from the
+/// atServer. Returns the enrollment id.
+///
+/// Nothing is sent before the read: keys already in [keys] are refused, and
+/// any failure to read them other than [AtKeysSourceAbsentException] throws
+/// [AtKeysUnusableException] with cause [AtKeysUnusableCause.unreadable].
 ///
 /// [signingAlgo] is the APKAM algorithm the atSign authenticates with from
 /// now on: `rsa2048` for a legacy activation, `mldsa65` for a post-quantum
@@ -48,7 +53,10 @@ import 'package:at_utils/at_progress.dart';
 /// caller that has not yet reached the atServer on it, which is where a newly
 /// registered atSign may still be starting. A caller that stops [atLookUp]
 /// during the activation ends it with [StoppedException]; during the
-/// provisioning wait, only once the atDirectory has answered.
+/// provisioning wait, only once the atDirectory has answered. A stop after
+/// the PKAM has succeeded leaves [keys] written and the activation
+/// incomplete: `completeActivationOf` over a connection authenticated with
+/// those keys finishes it, rather than a second activation.
 ///
 /// Every `from:` the activation sends carries [clientConfig], its four values
 /// as `clientConfigFor` fills and cuts them; empty, it names this program and

@@ -92,7 +92,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, isNull, reason: 'the dialog popped with no client');
-      expect(find.textContaining('Authentication failed'), findsOneWidget);
+      expect(
+        find.text(
+          'Something went wrong with @alice: the atServer refused this device',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('PkamDialog stops the client it opened when the backup then '
@@ -126,7 +131,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, isNull, reason: 'the dialog popped with no client');
-      expect(find.textContaining('Authentication failed'), findsOneWidget);
+      expect(
+        find.text(
+          'Something went wrong with @alice: @alice not found in memory',
+        ),
+        findsOneWidget,
+      );
       verify(() => client.stop()).called(1);
     });
 
@@ -162,7 +172,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, isNull);
-      expect(find.textContaining('Onboarding failed'), findsOneWidget);
+      expect(
+        find.text(
+          'Something went wrong with @alice: Registrar authentication failed',
+        ),
+        findsOneWidget,
+      );
       // The registrar's spelling of the key is unwrapped to the bare secret.
       verify(
         () => flows.activate(
@@ -182,8 +197,6 @@ void main() {
       when(
         () => flows.resumeEnrollment(
           any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           lookUps: any(named: 'lookUps'),
@@ -239,7 +252,10 @@ void main() {
       // retry, so `result` is still unset only because showDialog hasn't
       // returned — not because of a pop(null).
       expect(result, 'unset');
-      expect(find.textContaining('Activation failed'), findsOneWidget);
+      expect(
+        find.text('Something went wrong with @alice: invalid otp'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('ApkamActivationDialog enrols towards the caller\'s keys and '
@@ -250,8 +266,6 @@ void main() {
       when(
         () => flows.resumeEnrollment(
           any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           lookUps: any(named: 'lookUps'),
@@ -339,14 +353,14 @@ void main() {
       when(
         () => flows.resumeEnrollment(
           any(),
-          app: any(named: 'app'),
-          device: any(named: 'device'),
           keys: any(named: 'keys'),
           preference: any(named: 'preference'),
           lookUps: any(named: 'lookUps'),
         ),
       ).thenAnswer((_) async => pending);
       when(() => pending.enrollmentId).thenReturn('enroll-1');
+      when(() => pending.app).thenReturn('app');
+      when(() => pending.device).thenReturn('device');
       when(() => pending.progress).thenAnswer((_) => const Stream.empty());
       when(
         () => pending.client(any(), storage: any(named: 'storage')),

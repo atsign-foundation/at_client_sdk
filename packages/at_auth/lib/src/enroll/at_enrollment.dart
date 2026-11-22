@@ -143,9 +143,9 @@ abstract class AtEnrollment {
   /// request, on their own schedule, so polling continues until the atServer
   /// reports approval or denial — for as long as that takes. An enrollment
   /// that has expired, or that the atServer has no record of, ends the wait
-  /// at once with an `AtEnrollmentException` carrying its answer. No parameter
-  /// here shortens it; a caller that needs to give up must race this against
-  /// its own timer.
+  /// at once with an `AtEnrollmentExpiredException` carrying its answer. No
+  /// parameter here shortens it; a caller that needs to give up must race
+  /// this against its own timer.
   ///
   /// [maxRetries] is a budget for **consecutive failures to reach the
   /// atServer**, and nothing else — the exit from an atServer that is
@@ -184,6 +184,9 @@ abstract class AtEnrollment {
   /// Once [cancelled] completes, with a value or an error, no further poll
   /// starts and the wait throws [StoppedException]; a connection that is
   /// stopped ends it the same way.
+  ///
+  /// Throws [AtEnrollmentDeniedException] when the atServer denies the
+  /// enrollment (AT0025).
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = defaultLogProgress,

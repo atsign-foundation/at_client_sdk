@@ -13,7 +13,6 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
     show ApskSigningKey, apskSigningKeys, publicKeyKid, publicKeyKidOfBase64;
-import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:collection/collection.dart' show ListEquality;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, RsaSignatureAlgo, SigningAlgoType;
@@ -22,7 +21,8 @@ import 'package:at_commons/at_commons.dart'
     show
         AtSigningVerificationException,
         EnrollmentConstants,
-        InvalidAtSignException;
+        InvalidAtSignException,
+        clipForMessage;
 import 'package:at_commons/atsign.dart' show Atsign, AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 

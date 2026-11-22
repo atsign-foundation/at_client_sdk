@@ -1,0 +1,74 @@
+Feature: The onboarding dialogs say what failed
+
+  PkamDialog, CramDialog, ApkamDialog and RegistrarCramDialog show a message
+  chosen by what failed: a keys problem its own message, keys holding no
+  credential or an enrollment PkamDialog cannot wait on what to do next in
+  plain words, an atServer refusal its cause in plain words, a network
+  failure the advice to check the connection, and anything else that
+  something went wrong with the exception's message. No dialog shows a stack
+  trace. PkamDialog's contract is unchanged: only a refusal on a device that
+  has never held the atSign online is a failure.
+
+  Races: each dialog shows one outcome of one attempt; a client CramDialog's
+  activation opens after the user has left goes to onOnboardingComplete when
+  one is given, and is stopped when none is.
+  Replay: none arise; nothing new is sent.
+  DoS: none arise.
+  Forgery: none arise; a message names only the atSign, the keys source and
+  the cause.
+  Impersonation: none arise; authentication is unchanged.
+
+  Scenario: A dialog with no keys shows the keys message
+    Given no keys for @alice in this device's keychain
+    When PkamDialog opens @alice
+    Then it shows "No keys for @alice in the AtKeys store (this device's keychain), so this device cannot authenticate as @alice. Activate @alice, enroll this device, or use the keyfile it already has." and returns no client
+
+  Scenario Outline: Keys with no credential, or an enrollment PkamDialog cannot wait on, say what to do in plain words
+    Given keys for @alice that <hold>
+    When PkamDialog opens @alice
+    Then it shows "<message>" and returns no client
+    Examples:
+      | hold               | message                                                                                                                                |
+      | hold no credential | This device's enrollment for @alice was denied, cancelled or expired, or never completed. Enroll this device again to use @alice here. |
+
+  Scenario Outline: An atServer refusal shows its cause in plain words
+    Given keys for @alice the atServer refuses with cause <cause>, on a device that has never held @alice online
+    When PkamDialog opens @alice
+    Then it shows "<message>" and returns no client
+    Examples:
+      | cause                 | message                                                   |
+      | revoked               | This device's access to @alice has been revoked.          |
+      | enrollmentNotApproved | This device's enrollment for @alice has not been approved yet. |
+      | enrollmentDenied      | This device's enrollment for @alice was denied.           |
+      | noAtServer            | @alice is not in the atDirectory.                         |
+
+  Scenario: A network failure still says to check the connection
+    Given an activation whose atServer cannot be reached
+    When CramDialog or ApkamActivationDialog runs
+    Then it shows "… could not be reached. Please check your connection and try again."
+
+  Scenario: Activation with a keychain it cannot read says so
+    Given this device's keychain cannot be read
+    When CramDialog activates @alice with its CRAM secret
+    Then it shows the activation's refusal naming this device's keychain, not "Please check your connection"
+
+  Scenario Outline: Anything else shows the exception's message and no stack trace
+    Given <dialog> whose operation fails with an exception of no type above, message "boom"
+    When the dialog runs for @alice
+    Then it shows "Something went wrong with @alice: boom", with no type prefix and no stack trace
+    Examples:
+      | dialog              |
+      | PkamDialog          |
+      | CramDialog          |
+      | ApkamDialog         |
+      | RegistrarCramDialog |
+
+  Scenario: Anything else shows the exception's message escaped and clipped
+    Given PkamDialog whose operation fails with an exception of no type above, its message an escape character, a right-to-left override and 500 more characters
+    When the dialog runs for @alice
+    Then it shows the message after "Something went wrong with @alice: " with those two characters written as \u001b and \u202e, clipped, and ending "..."
+
+  Scenario: Leaving CramDialog before it hands back its client, with no onOnboardingComplete, stops that client
+    Given CramDialog onboarding @alice with no onOnboardingComplete
+    When the user leaves before the client is handed back
+    Then that client is stopped, so @alice can be opened again, and nothing beneath the dialog is popped

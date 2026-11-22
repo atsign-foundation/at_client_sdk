@@ -43,7 +43,7 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).colorScheme.primary,
                       ),
-                      text: widget.request.appName,
+                      text: clipForMessage(widget.request.appName ?? ''),
                       children: [
                         TextSpan(
                           text: ' | ',
@@ -54,7 +54,7 @@ class _EnrollmentRequestCardState extends State<EnrollmentRequestCard> {
                           ),
                         ),
                         TextSpan(
-                          text: widget.request.deviceName,
+                          text: clipForMessage(widget.request.deviceName ?? ''),
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.onSurface,
                           ),

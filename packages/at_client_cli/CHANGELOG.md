@@ -1,5 +1,30 @@
 ## 1.1.0-rc.1
 
+- feat: `at_activate cancel -a <atSign> -k <keyfile>` gives up the pending
+  enrollment request the keyfile holds, removing its keys; the request stays
+  on the atServer for the Atsign's manager to deny. A keyfile holding live
+  keys is refused. A `switch` over `AuthCliCommand` needs a `cancel` case.
+- feat: a `CLIBase` program waiting on its keyfile's pending request,
+  `at_activate enroll` waiting on the request it filed or resumed, and
+  at_activate's report of such a keyfile, name the `at_activate cancel`
+  command that gives it up, quoting the keyfile's path where a shell needs
+  it, with `-P <passphrase>` when the keyfile was opened with one.
+- fix: `at_activate cancel` and `enroll` say what is wrong with a keyfile
+  they cannot read, or one recorded for another Atsign, and `enroll` no
+  longer waits on that other Atsign's request.
+- fix: at_activate and programs built on `CLIBase` name the keyfile as "the
+  AtKeys store (<path>)" when its keys cannot be read for a reason other
+  than a wrong or missing passphrase, hold no keypair to authenticate with,
+  or are recorded for another Atsign.
+- fix: `at_activate list`, `approve` and `auto` show the ids, statuses,
+  names and namespaces a request carries, and the keys and senders `auto`
+  names as it passes a notification over, with their control characters
+  escaped.
+- fix: `at_activate enroll`'s resume message shows the enrollment id and the
+  names a keyfile records with their control characters escaped.
+- fix: `at_activate enroll` resumes the request its keyfile already holds,
+  even one filed under another app or device name, and says which names
+  the request records.
 - feat: `at_activate` and `at_register` name themselves, at at_client_cli's
   version, on every `from:` their clients send to authenticate, and
   `createAtClient` takes optional `appName` and `appVersion` to name yours.
@@ -9,7 +34,7 @@
   named is `unknown`.
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
-- chore: requires at_client 4.1.0-rc.1.
+- chore: requires at_client 4.1.0-rc.1, at_auth 4.1.0-rc.1 and at_commons 5.26.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
 - fix: `at_activate status` asks the atDirectory once, prints no posture
   notice, and says a refused atServer connection is unreachable rather than
@@ -18,11 +43,39 @@
   error, such as AT0011, or with no challenge to sign, retries as it does
   for an atServer not reached, and ends with
   `SecondaryServerConnectivityException`, not `AtCredentialRefusedException`.
+- fix: a `CLIBase` program whose enrollment request is denied ends with
+  `AtEnrollmentDeniedException`, and one whose request has expired with
+  `AtEnrollmentExpiredException`, both `AtEnrollmentException`s, and either
+  removes the request's keys or, when the keyfile cannot be written, says in
+  its message that they stay. A wait for approval that ends on any other
+  refusal keeps the request for the next run, even when the atServer's text
+  says "denied".
+- docs: `CLIBase`'s dartdoc and the README say that an approval whose keys
+  cannot be fetched or decrypted ends with whatever doing so threw, mostly
+  not an `AtEnrollmentException`, keeping the request.
 - fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0-rc.1, which sends
   it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
   `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that
   reached a proxy without a `proxy:<host>` root must make it the root.
   Requires at_lookup 4.1.0-rc.1.
+- fix: at_activate and programs built on `CLIBase` report a keys problem
+  once, naming the keyfile and the next step to take where there is one.
+- feat: when an Atsign's keys are absent, at_activate looks up its public
+  key, for up to 5 seconds, to say whether to activate it or enroll this
+  machine. The activate command it gives, and the one programs built on
+  `CLIBase` give, names the root they were given with `-r`, and a lookup
+  still running after 5 seconds is stopped, closing its connection.
+- fix: a passphrase-protected keyfile is reported as having a wrong or
+  missing passphrase only when the passphrase was refused; any other reason
+  it cannot be opened, such as an envelope version this build has no code
+  for, is reported as itself.
+- fix: at_activate and programs built on `CLIBase` name the keyfile that
+  holds no credential; at_activate also names one holding only a pending
+  enrollment request, and says to run the enroll command again once the
+  request is approved.
+- fix: `CLIBase` (for a missing keyfile) and `createAtClient` (for keys it
+  cannot use) throw `AtKeysUnusableException`, which is neither an
+  `ArgumentError` nor an `UnAuthenticatedException`; catch it for those cases.
 
 ## 1.0.0
 

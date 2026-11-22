@@ -2,6 +2,24 @@
 
 ## 1.4.0 — 2026-09-13
 
+- An approval whose keys cannot be collected throws whatever collecting them
+  threw, mostly not an `AtEnrollmentException`, so a final `catch` waits
+  again rather than cancelling (`references/15`).
+- A denial or expiry whose pending keys the AtKeys store cannot remove still
+  throws the decision, its message saying the keys stay (`SKILL.md`;
+  `references/14`, `15`).
+- `at_activate cancel` gives up the pending request a keyfile holds, and a
+  `CLIBase` program waiting on one names it (`SKILL.md`; `references/14`,
+  `15`).
+- Keys `open` cannot use throw `AtKeysUnusableException` before it connects,
+  `AtNoCredentialException` and `AtEnrollmentPendingException` among them
+  (`SKILL.md`; `references/05`, `15`).
+- `enroll` refuses an AtKeys store that already holds live keys or a pending
+  request (`references/15`).
+- `resumeEnrollment` throws `AtKeysUnusableException`, as `open` does, for
+  keys it cannot read or that record another Atsign (`references/15`).
+- `PkamDialog` waits on a pending request in a store it can write and offers
+  Cancel, and says what it shows for keys it cannot use (`references/05`).
 - The package map says the browser platform package, `at_client_web`, is
   still being built and is not published (`references/06`).
 - An `AtCollection` item id is folded to lower case, and one holding `.`, `:`,
@@ -28,9 +46,12 @@
   first opens the atSign at once (`references/15`).
 - `sync()` calls made while a round runs share one more round once it ends
   (`references/15`).
-- `resumeEnrollment` refusing several matching requests is in the error
-  table, with what picks one (`references/15`).
-- A cancelled wait throws once the pending keys are gone (`references/15`).
+- A cancelled wait throws once the pending keys are gone, and so does a wait
+  whose request another wait cancelled before its approval was filed
+  (`references/15`).
+- `resumeEnrollment` is called without an app or device, which are
+  deprecated and ignored: it resumes the one pending enrollment an AtKeys
+  store holds (`SKILL.md`; `references/15`).
 - A collection write whose own copy fails writes no recipient's copy
   (`references/02`).
 - A write waits up to 30 seconds in all for start-up to ask for its namespace
@@ -148,6 +169,19 @@
 - An agent approves only the enrollment it expects and denies the rest, a
   subscriber keeps only the sender it trusts, and the receive sample matches
   what the send sample sends (`SKILL.md` §13; `references/05`, `10`, `14`).
+- A connect attempt the atServer answers with a server error such as
+  AT0011, or with no challenge, reads as offline (`unreachable`), not
+  refused, and `CLIBase` reports it as an outage when it opens (`SKILL.md`;
+  `references/01`, `05`, `14`, `15`).
+- A denied enrollment request throws `AtEnrollmentDeniedException` and an
+  expired one `AtEnrollmentExpiredException` (both at_client 4.1.0), and one
+  the atServer keeps answering without a decision, or one approved whose
+  keys cannot be collected, stays pending for `resumeEnrollment` (`SKILL.md`;
+  `references/14`, `15`).
+- An `error:` reply to a connection's `from:`, `pkam:` or `cram:` is an
+  `AtAuthErrorReplyException` (at_client 4.1.0) carrying the reply's code as
+  `errorCode`, and a refusal code gives the refused cause (`SKILL.md`;
+  `references/15`).
 
 ## 1.3.0 — 2026-07-31
 
