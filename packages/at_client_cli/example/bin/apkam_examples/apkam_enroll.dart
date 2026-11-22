@@ -8,7 +8,7 @@ import '../util/custom_arg_parser.dart';
 ///
 /// The keyfile named is the resume record: run again, the wait picks up the
 /// request it holds rather than asking again, whatever app and device it was
-/// filed under.
+/// filed under, and `at_activate cancel` on it gives the request up.
 Future<void> main(List<String> args) async {
   AtSignLogger.root_level = 'finer';
   final argResults = CustomArgParser(getArgParser()).parse(args);
@@ -37,7 +37,9 @@ Future<void> main(List<String> args) async {
           preference: preference,
           lookUps: lookUps,
           secondaryAddressFinder: secondaryAddressFinder);
-  print('enrollment ${pending.enrollmentId} awaits approval');
+  print('enrollment ${pending.enrollmentId} awaits approval; to give it up '
+      'instead, stop this program and run at_activate cancel -a $atSign -k '
+      '${keys.describeSource(atSign)}');
   pending.progress.listen((event) => print('${event.group}: ${event.msg}'));
 
   final client = await pending.client(preference,

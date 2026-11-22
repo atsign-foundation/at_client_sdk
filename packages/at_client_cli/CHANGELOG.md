@@ -4,7 +4,8 @@
   enrollment request the keyfile holds, removing its keys; the request stays
   on the atServer for the Atsign's manager to deny. A keyfile holding live
   keys is refused. A `switch` over `AuthCliCommand` needs a `cancel` case.
-- feat: a `CLIBase` program waiting on its keyfile's pending request, and
+- feat: a `CLIBase` program waiting on its keyfile's pending request,
+  `at_activate enroll` waiting on the request it filed or resumed, and
   at_activate's report of such a keyfile, name the `at_activate cancel`
   command that gives it up, quoting the keyfile's path where a shell needs
   it, with `-P <passphrase>` when the keyfile was opened with one.

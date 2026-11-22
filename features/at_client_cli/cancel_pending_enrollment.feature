@@ -72,3 +72,8 @@ Feature: at_activate cancel removes the request its keyfile is waiting on
     Given a CLIBase program started for @alice with -P, on a keyfile whose path holds a space and that holds a pending enrollment
     When it waits for the approval
     Then the at_activate cancel command it names, and the one at_activate's report of that keyfile names, each quote the path and carry -P <passphrase>, never the passphrase itself
+
+  Scenario: at_activate enroll waiting on its request names at_activate cancel
+    Given at_activate enroll for @alice on a keyfile, waiting on enrollment <id>
+    When it waits for the approval
+    Then it says at_activate cancel -a @alice -k <keyfile> gives the request up

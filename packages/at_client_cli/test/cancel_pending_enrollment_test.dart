@@ -540,6 +540,48 @@ void main() {
             'approved, or at_activate cancel to give it up');
     expect(run.code, 1, reason: 'it exits 1');
   });
+
+  test('at_activate enroll waiting on its request names at_activate cancel',
+      () async {
+    final err = _Captured();
+    String? saidWhileWaiting;
+    final server = approvingAtServer(
+        decide: (_) async {
+          saidWhileWaiting ??= err.plain;
+          return true;
+        },
+        wrapped: []);
+    final preference = AuthCliArgs.preferenceUnder(PqPosture.legacy)
+      ..rootDomain = InternetAddress.loopbackIPv4.address
+      ..rootPort = await refusedPort()
+      ..namespace = 'at_activate';
+
+    final client = await IOOverrides.runZoned(
+        () => enrolDevice(
+            atSign: atSign,
+            settings: EnrollerSettings(preference,
+                atKeysFilePath: keysPath, storagePath: '${dir.path}/storage'),
+            app: 'buzz',
+            device: 'phone',
+            otp: 'ABC123',
+            namespaces: {'buzz': 'rw'},
+            signingAlgo: SigningAlgoType.rsa2048,
+            retryInterval: const Duration(milliseconds: 10),
+            atLookUp: server.lookUp),
+        stdout: () => _Captured(),
+        stderr: () => err);
+
+    expect(client.enrollmentId, approvedEnrollmentId,
+        reason: 'the control: it waited on enrollment $approvedEnrollmentId '
+            'until its approval');
+    expect(
+        saidWhileWaiting?.split('\n'),
+        contains('To give the request up instead, stop this program and run '
+            'at_activate cancel -a $atSign -k $keysPath'),
+        reason: 'while it waits, it says at_activate cancel with its keyfile '
+            'gives the request up; stderr: $saidWhileWaiting');
+    await client.stop();
+  });
 }
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}

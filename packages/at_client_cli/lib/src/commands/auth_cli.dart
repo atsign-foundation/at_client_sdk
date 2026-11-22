@@ -986,6 +986,11 @@ Future<AtClient> enrolDevice({
         secondaryAddressFinder: settings.secondaryAddressFinder);
   }
   stdout.writeln('Enrollment ID: ${pending.enrollmentId}');
+  final giveUp = cancelCommand(atSign,
+      keyfile: atKeysFilePath,
+      passphraseGiven: settings.passPhrase?.isNotEmpty ?? false);
+  stderr.writeln('To give the request up instead, stop this program and '
+      'run $giveUp');
   final narration = pending.progress.listen(printProgress);
   try {
     final client = await pending.client(preference,
