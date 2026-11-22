@@ -40,9 +40,10 @@ final owner = await Atsign('@alice').activate(
 // throws AtEnrollmentException when `keys` already holds live keys or a
 // pending request, whatever its app and device: resume that one, or cancel
 // it, first. Keys it cannot read, or that record another atSign, throw
-// AtKeysUnusableException as open's do, before anything is sent. A request
-// it sent but could not file in `keys` throws AtEnrollmentException naming
-// the enrollment, for the atSign's manager to deny.
+// AtKeysUnusableException as open's do, and a keyfile it cannot create is
+// refused, before anything is sent. A request it sent but could not file in
+// `keys` throws AtEnrollmentException naming the enrollment, for the
+// atSign's manager to deny.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);

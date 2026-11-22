@@ -382,16 +382,19 @@ extension AtsignLifecycle on Atsign {
   /// app and device, is refused with [AtEnrollmentException] naming it,
   /// before anything is sent, in favour of resuming it. [keys] are read as
   /// [open] reads them, so keys that cannot be read, or that record another
-  /// atSign, throw [AtKeysUnusableException] before anything is sent, and a
-  /// store holding nothing yet that cannot be written throws its
-  /// [WrittenAtKeysIo.checkWritable] refusal. The check is made
-  /// again inside the store's [WrittenAtKeysIo.update] as the request is
-  /// filed, so of two enrolls into one store at once only one is filed
+  /// atSign, throw [AtKeysUnusableException] before anything is sent. A
+  /// store holding nothing yet is checked with
+  /// [WrittenAtKeysIo.checkWritable] first, and its refusal thrown before
+  /// anything is sent: a keyfile store refuses a keyfile it cannot create,
+  /// and a store that does not override it checks nothing. The check is
+  /// made again inside the store's [WrittenAtKeysIo.update] as the request
+  /// is filed, so of two enrolls into one store at once only one is filed
   /// wherever that update is one operation, as a keyfile's is across
   /// processes and a keychain's within one isolate; the other throws
   /// [AtEnrollmentException] naming the enrollment it sent, which the
-  /// atSign's manager can deny. So does a request sent and then not filed
-  /// for any other reason, with that reason.
+  /// atSign's manager can deny. A failure of the filing itself throws
+  /// [AtEnrollmentException] naming the sent enrollment too, with the
+  /// failure's first line.
   ///
   /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
   /// and [keyExchangeMode] how its symmetric key travels; both default to the

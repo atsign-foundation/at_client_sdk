@@ -17,9 +17,9 @@
   keychain from one isolate, only one files its request. The other throws
   `AtEnrollmentException` naming the enrollment it sent, which the Atsign's
   manager can deny.
-- fix: `Atsign.enroll` refuses keys it cannot read or that are recorded for
-  another Atsign (`AtKeysUnusableException`), and an empty AtKeys store it
-  cannot write, before it sends anything.
+- fix: `Atsign.enroll` now throws `AtKeysUnusableException`, as `Atsign.open`
+  does, for keys it cannot read or that are recorded for another Atsign, and
+  refuses a keyfile it cannot create, before it sends anything.
 - fix: a request `Atsign.enroll` sent but could not file throws
   `AtEnrollmentException` naming the enrollment, for the Atsign's manager to
   deny.
