@@ -564,8 +564,13 @@ void main() {
       ('a namespace key private', nskeyAtKeys),
     ]) {
       test('$name is rejected before any dial', () async {
-        await expectLater(open(keys: keys()),
-            throwsA(isA<UnsupportedKeyMaterialException>()));
+        await expectLater(
+            open(keys: keys()),
+            throwsA(isA<UnsupportedKeyMaterialException>().having(
+                (e) => e.toString(),
+                'message',
+                endsWith('a session with an in-memory AtKeys store cannot '
+                    'hold'))));
 
         expect(wire.dials, 0);
         expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);

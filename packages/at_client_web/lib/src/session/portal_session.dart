@@ -50,7 +50,7 @@ class UnsupportedKeyMaterialException implements Exception {
   @override
   String toString() => 'UnsupportedKeyMaterialException: the keys for $atSign '
       'carry ML-DSA-65 signing or namespace key material, which a session '
-      'with an in-memory key store cannot hold';
+      'with an in-memory AtKeys store cannot hold';
 }
 
 /// The key store of a [portalSession]: [keys] for [atSign], in memory, and
