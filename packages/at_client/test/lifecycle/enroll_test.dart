@@ -71,6 +71,13 @@ class _KeyfileWrittenOnce extends FileAtKeysIo {
   }
 }
 
+/// An in-memory AtKeys store that describes where it keeps keys as
+/// `a test location`, as a keyfile names its path.
+class _DescribedStore extends InMemoryAtKeysIo {
+  @override
+  String describeSource(String atsign) => 'a test location';
+}
+
 /// `Atsign.enroll`, `PendingEnrollment` and `resumeEnrollment`: the key store
 /// named at submission is the resume record, approval completes it, and a
 /// denial empties it.
@@ -445,7 +452,7 @@ void main() {
       'Given no keys for @alice yet, when live keys are written while the '
       'request is being sent, then it is not filed and the live keys stay',
       () async {
-    final store = InMemoryAtKeysIo();
+    final store = _DescribedStore();
     final live = AtKeys.legacy(
         apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
         apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!);
@@ -462,8 +469,10 @@ void main() {
             allOf(
                 startsWith("the atSign's manager can deny enrollment "
                     '"$enrollmentId" of $atSign, which is not filed'),
-                contains('gained live keys in the AtKeys store while it was '
-                    'being sent')))));
+                contains('gained live keys in the AtKeys store (a test '
+                    'location) while it was being sent')))),
+        reason: 'the refusal names the store the live keys are in, with its '
+            'description in brackets');
     final stored = await store.read(atSign);
     expect(stored.holdsAuthenticationMaterial, isTrue);
     expect(stored.pendingEnrollmentIds, isEmpty);
@@ -1390,7 +1399,7 @@ void main() {
     /// Waits on a request in [store] that a second PendingEnrollment cancels,
     /// runs [afterCancel], then has the manager approve the request, and
     /// checks that the wait throws AtEnrollmentCancelledException.
-    Future<void> approvedAfterCancel(InMemoryAtKeysIo store,
+    Future<void> approvedAfterCancel(_DescribedStore store,
         {Future<void> Function()? afterCancel}) async {
       var polls = 0;
       var approved = false;
@@ -1407,7 +1416,10 @@ void main() {
               'message',
               "the atSign's manager can revoke enrollment "
                   '"$enrollmentId" of $atSign: it was approved after its '
-                  'pending keys left the AtKeys store, so nothing is filed')));
+                  'pending keys left the AtKeys store (a test location), so '
+                  'nothing is filed')),
+          reason: 'the refusal names the store the pending keys left, with '
+              'its description in brackets');
       await until(() => polls >= 1);
       await other!.cancel();
       await afterCancel?.call();
@@ -1418,7 +1430,7 @@ void main() {
 
     test('An approval of a request another wait has cancelled files nothing',
         () async {
-      final store = InMemoryAtKeysIo();
+      final store = _DescribedStore();
       await approvedAfterCancel(store);
 
       final stored = await store.read(atSign);
@@ -1430,7 +1442,7 @@ void main() {
         "Given another enrollment's keys filed after a cancel, when the "
         'cancelled request is approved, then the wait files nothing over them',
         () async {
-      final store = InMemoryAtKeysIo();
+      final store = _DescribedStore();
       await approvedAfterCancel(store,
           afterCancel: () => store.update(Atsign(atSign), (stored) {
                 stored.fileLegacyMaterial(
@@ -1448,7 +1460,7 @@ void main() {
     test(
         'Given a store still naming a cancelled request and holding no keys, '
         'when the request is approved, then the wait files nothing', () async {
-      final store = InMemoryAtKeysIo();
+      final store = _DescribedStore();
       await approvedAfterCancel(store,
           afterCancel: () => store.update(Atsign(atSign), (stored) {
                 stored.fileLegacyMaterial(enrollmentId: enrollmentId);
@@ -1508,15 +1520,17 @@ void main() {
         polls++;
         notYetDecided();
       });
-      final store = InMemoryAtKeysIo();
+      final store = _DescribedStore();
       final pending = await submitOwning(store, server);
       final waiting = expectLater(
           pending.awaitApproval(retryInterval: pollEvery),
           throwsA(isA<StoppedException>().having(
               (e) => e.message,
               'message',
-              endsWith('the request stays in the AtKeys store, for '
-                  'resumeEnrollment'))));
+              endsWith('the request stays in the AtKeys store (a test '
+                  'location), for resumeEnrollment'))),
+          reason: 'the stopped wait names the store the request stays in, '
+              'with its description in brackets');
       await until(() => polls >= 1);
 
       await pending.stop();
@@ -1770,18 +1784,22 @@ void main() {
         AtSignLogger.root_level = level;
       });
       final pref = await preference();
-      Future<String?> resumedFrom(AtKeys keys) async =>
-          (await Atsign(atSign).resumeEnrollment(
-                  // ignore: invalid_use_of_visible_for_testing_member
-                  keys: InMemoryAtKeysIo.holding(atSign, keys),
-                  preference: pref,
-                  lookUps: loopbackLookUps(),
-                  secondaryAddressFinder: atDirectoryOf(pref)))
-              ?.enrollmentId;
+      Future<String?> resumedFrom(AtKeys keys) async {
+        final store = _DescribedStore();
+        await store.write(atSign, keys);
+        return (await Atsign(atSign).resumeEnrollment(
+                keys: store,
+                preference: pref,
+                lookUps: loopbackLookUps(),
+                secondaryAddressFinder: atDirectoryOf(pref)))
+            ?.enrollmentId;
+      }
+
       Iterable<String> warnings() =>
           logs.at('WARNING').where((m) => m.contains('pending enrollments'));
-      const several = 'the AtKeys store holds 2 pending enrollments of '
-          '$atSign, where an AtKeys store holds at most one: resuming ';
+      const several = 'the AtKeys store (a test location) holds 2 pending '
+          'enrollments of $atSign, where an AtKeys store holds at most one: '
+          'resuming ';
 
       expect(await resumedFrom(pendingWith(['e-one'])), 'e-one');
       expect(warnings(), isEmpty, reason: 'one pending request is the rule');
@@ -1793,10 +1811,14 @@ void main() {
               twoPending()..fileLegacyMaterial(enrollmentId: 'e-two')),
           'e-two',
           reason: 'the one whose symmetric key the flat fields hold');
-      expect(warnings(), [
-        allOf(startsWith(several), endsWith('"e-one"')),
-        allOf(startsWith(several), endsWith('"e-two"')),
-      ]);
+      expect(
+          warnings(),
+          [
+            allOf(startsWith(several), endsWith('"e-one"')),
+            allOf(startsWith(several), endsWith('"e-two"')),
+          ],
+          reason: 'each warning names the store it read, with its '
+              'description in brackets');
     });
 
     test('Cancelling each request in turn empties a store holding two',

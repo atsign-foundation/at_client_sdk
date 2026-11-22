@@ -781,6 +781,7 @@ void main() {
   test(
       'Enrolling into a store that holds live keys says to give the '
       'enrollment a store of its own', () async {
+    await FileAtKeysIo(filePath: (_) => path).write(atSign, liveKeys());
     final pref = await preference();
 
     await expectLater(
@@ -789,7 +790,7 @@ void main() {
             app: 'wavi',
             device: 'phone',
             namespaces: const {'wavi': 'rw'},
-            keys: InMemoryAtKeysIo.holding(atSign, liveKeys()),
+            keys: FileAtKeysIo(filePath: (_) => path),
             preference: pref,
             lookUps: recordingLookUps,
             secondaryAddressFinder: atDirectory),
@@ -798,9 +799,11 @@ void main() {
             'message',
             allOf(
                 startsWith('$atSign already holds live keys in the AtKeys '
-                    'store, and enrolling again'),
+                    'store ($path), and enrolling again'),
                 endsWith('give a new enrollment an AtKeys store of its own'),
-                isNot(contains('remove'))))));
+                isNot(contains('remove'))))),
+        reason: 'the refusal names the keyfile holding the live keys, by its '
+            'path in brackets');
     expectNoConnection();
   });
 
