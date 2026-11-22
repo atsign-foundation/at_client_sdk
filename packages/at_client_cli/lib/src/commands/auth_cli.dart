@@ -417,6 +417,10 @@ Future<int> wrappedMain(List<String> arguments,
         await enroll(commandArgResults,
             program: program, programVersion: programVersion);
 
+      case AuthCliCommand.cancel:
+        return await cancel(commandArgResults,
+            program: program, programVersion: programVersion);
+
       case AuthCliCommand.unrevoke:
         await unrevoke(
             commandArgResults,
@@ -978,6 +982,66 @@ Future<AtClient> enrolDevice({
   }
 }
 
+/// `at_activate cancel`: gives up the pending enrollment request the keyfile
+/// `-k` names holds, removing its keys from that keyfile, and answers the
+/// exit code: 0 once the request is gone, 1 when the keyfile holds none or
+/// holds live keys, which it never removes.
+///
+/// It sends nothing, so the request stays on the atServer for the atSign's
+/// manager to deny, or to revoke if it was approved meanwhile.
+@visibleForTesting
+Future<int> cancel(ArgResults argResults,
+    {required String program, required String? programVersion}) async {
+  if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
+    throw ArgumentError('The -k option is mandatory for the "cancel" command');
+  }
+  final settings = enrollerSettingsFrom(argResults,
+      program: program, programVersion: programVersion, announcePosture: false);
+  final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
+  final keys = settings.keysFor(atSign);
+  final store = 'AtKeys store (${settings.atKeysFilePath})';
+
+  final pending = await Atsign(atSign).resumeEnrollment(
+      keys: keys,
+      preference: settings.preference,
+      lookUps: settings.lookUps,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
+  if (await _holdsLiveKeys(keys, atSign)) return _refuseLiveKeys(atSign, store);
+  if (pending == null) {
+    stderr.writeln(chalk.brightRed('$atSign has no pending enrollment request '
+        'in the $store, so there is nothing to cancel.'));
+    return 1;
+  }
+  await pending.cancel();
+  // NOTE: read again: an approval another process filed after the first read
+  // is kept, and cancel does not say so.
+  if (await _holdsLiveKeys(keys, atSign)) return _refuseLiveKeys(atSign, store);
+  stdout.writeln('${chalk.green('[Success]')} Enrollment '
+      '${clipForMessage(pending.enrollmentId)} of $atSign is cancelled, and '
+      'its keys are removed from the $store.');
+  stdout.writeln('The request is still on the atServer: the manager of '
+      '$atSign can deny it, or revoke it if they approved it already.');
+  return 0;
+}
+
+/// Whether [keys] hold live keys for [atSign]; an absent keyfile holds none.
+Future<bool> _holdsLiveKeys(WrittenAtKeysIo keys, String atSign) async {
+  try {
+    return (await keys.read(atSign)).holdsAuthenticationMaterial;
+  } on AtKeysSourceAbsentException {
+    return false;
+  }
+}
+
+/// Says that the [store] holds live keys for [atSign], which `cancel` leaves
+/// as they are, and answers the exit code.
+int _refuseLiveKeys(String atSign, String store) {
+  stderr.writeln(chalk.brightRed('The $store holds live keys for $atSign, '
+      'which at_activate cancel never removes, so nothing is changed. The '
+      "manager of $atSign can revoke this device's enrollment."));
+  return 1;
+}
+
 @visibleForTesting
 Future<void> setSpp(ArgResults argResults, AtClient atClient) async {
   String spp = argResults[AuthCliArgs.argNameSpp];
@@ -1006,8 +1070,9 @@ Future<void> outputOtp(ArgResults argResults, AtClient atClient) async {
 }
 
 /// Only usable if there are atKeys already available.
-/// All commands available same as the CLI as a whole, except for
-/// 'onboard' and 'enroll'
+/// All commands available same as the CLI as a whole, except for those that
+/// run without the session's client: 'onboard', 'enroll', 'cancel',
+/// 'status', 'decrypt' and 'interactive' itself.
 Future<void> interactive(ArgResults argResults, AtClient atClient) async {
   const String exitHint =
       'Type "exit" or "quit" to end the interactive session.';
@@ -1075,6 +1140,7 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
         case AuthCliCommand.interactive:
         case AuthCliCommand.status:
         case AuthCliCommand.enroll:
+        case AuthCliCommand.cancel:
         case AuthCliCommand.decrypt:
           stderr.writeln('The "${cliCommand.name}" command'
               ' may not be used in interactive session');
@@ -1563,10 +1629,13 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
 
 /// What `onboard` and `enroll` are told, under the posture an enroller
 /// command runs at; the posture is final on a preference, so it is fixed at
-/// construction.
+/// construction. With [announcePosture] false, at_client's default is taken
+/// without saying so, for a command no posture changes.
 @visibleForTesting
 EnrollerSettings enrollerSettingsFrom(ArgResults ar,
-    {required String program, required String? programVersion}) {
+    {required String program,
+    required String? programVersion,
+    bool announcePosture = true}) {
   final atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -1582,7 +1651,7 @@ EnrollerSettings enrollerSettingsFrom(ArgResults ar,
   }
 
   final enroller = AuthCliArgs.postureForEnroller(ar);
-  if (enroller.notice != null) {
+  if (announcePosture && enroller.notice != null) {
     stderr.writeln('${chalk.blue('[Information]')} ${enroller.notice}');
   }
   return EnrollerSettings(
