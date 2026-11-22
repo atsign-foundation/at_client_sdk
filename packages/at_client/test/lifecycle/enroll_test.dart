@@ -416,8 +416,8 @@ void main() {
   });
 
   test(
-      'a denial whose pending keys the store cannot remove still throws the '
-      'denial', () async {
+      'a denial whose pending keys the store cannot remove throws the '
+      "store's failure, not the denial, and the keys stay", () async {
     final store = _UpdateFailingStore();
     final pending = await submit(
         store,
@@ -431,8 +431,11 @@ void main() {
     await expectLater(
         () => pending.awaitApproval(
             retryInterval: const Duration(milliseconds: 10)),
-        throwsA(isA<AtEnrollmentDeniedException>()
-            .having((e) => e.message, 'message', contains('denied'))));
+        throwsA(isA<FileSystemException>()));
+
+    store.failing = false;
+    expect((await store.read(atSign)).pendingEnrollmentIds, [enrollmentId],
+        reason: 'the keys the denial could not remove are still there');
   });
 
   test('a denial empties a file store too, which then takes the next request',

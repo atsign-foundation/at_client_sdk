@@ -107,7 +107,9 @@ class PendingEnrollment {
   /// atServer, and [retryInterval] is the pause between polls. A denial, or
   /// the request's expiry, removes this enrollment from [keys] and throws
   /// [AtEnrollmentDeniedException] or [AtEnrollmentExpiredException], both
-  /// [AtEnrollmentException]s. Any other end of the wait keeps the request.
+  /// [AtEnrollmentException]s; when [keys] cannot remove it, this throws what
+  /// [keys] threw instead, and the request stays for a later resume to find
+  /// decided again. Any other end of the wait keeps the request.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
@@ -167,9 +169,12 @@ class PendingEnrollment {
       if (decided != null) {
         try {
           await _discard(decided);
-        } catch (failure) {
+        } catch (failure, stackTrace) {
+          // The keys stay, so the decision is not reported as having removed
+          // them: the store's failure is thrown instead.
           _logger.warning('enrollment $enrollmentId of $atSign was $decided, '
               'and its pending keys could not be removed: $failure');
+          Error.throwWithStackTrace(failure, stackTrace);
         }
       }
       rethrow;
