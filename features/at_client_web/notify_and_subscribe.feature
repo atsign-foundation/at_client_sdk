@@ -13,9 +13,13 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   # Threats. Each answer names the scenario that holds it.
   #
   # Race: an echo arriving before notify returns is still suppressed ("drops an
-  #   echo that arrives before notify resolves"), and a notify interrupted by
-  #   close while polling rejects closed ("notify interrupted by close rejects
-  #   with closed").
+  #   echo that arrives before notify resolves"), a notify interrupted by close
+  #   while polling rejects closed ("notify interrupted by close rejects with
+  #   closed"), and subscribe stops delivering once close starts and cancels if
+  #   closed during startListening ("close stops delivering subscription events
+  #   and errors even if the stream emits before cancel settles", "subscribe
+  #   cancels immediately if close occurs during startListening", "bridge
+  #   subscribe drops notifications and errors after session is closed").
   # Replay: the last 1024 sent notification ids are remembered for the session's
   #   own atSign and failed sends do not evict live ids ("remembers only the last
   #   1024 sent ids", "failed notify does not evict sent echo ids").
@@ -140,3 +144,18 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Given a subscription with no onError
     When the session reports a subscription error
     Then nothing is thrown
+
+  Scenario: close stops delivering subscription events and errors even if the stream emits before cancel settles
+    Given an active subscription whose stream emits an event or error after close starts
+    When close is called
+    Then neither onEvent nor onError receives post-close deliveries
+
+  Scenario: subscribe cancels immediately if close occurs during startListening
+    Given an open session whose startListening triggers close synchronously
+    When subscribe is called
+    Then the subscription is cancelled immediately without leaking into active subscriptions
+
+  Scenario: bridge subscribe drops notifications and errors after session is closed
+    Given a BridgeSession subscription and a session marked closed
+    When the underlying session emits a notification or error
+    Then neither the JS event callback nor the JS error callback is invoked

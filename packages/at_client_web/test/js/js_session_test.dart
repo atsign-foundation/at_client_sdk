@@ -23,6 +23,12 @@ class _FakeNotifications extends Fake implements NotificationService {
   /// When set, `notify` waits for it after reporting the send.
   Completer<void>? hold;
 
+  /// When set, `subscribe` returns this stream instead of [events].
+  Stream<AtNotification>? customStream;
+
+  /// When set, called synchronously inside [startListening].
+  void Function()? onStartListening;
+
   @override
   Future<NotificationResult> notify(NotificationParams notificationParams,
       {bool waitForFinalDeliveryStatus = true,
@@ -46,11 +52,14 @@ class _FakeNotifications extends Fake implements NotificationService {
       {String? regex, bool shouldDecrypt = false}) {
     lastRegex = regex;
     lastShouldDecrypt = shouldDecrypt;
-    return events.stream;
+    return customStream ?? events.stream;
   }
 
   @override
-  void startListening() => starts++;
+  void startListening() {
+    starts++;
+    onStartListening?.call();
+  }
 }
 
 class _FakeCollection<T> extends Fake implements AtCollection<T> {
@@ -762,6 +771,58 @@ void main() {
       await pumpEventQueue();
 
       expect(received, isEmpty);
+    });
+
+    test(
+        'close stops delivering subscription events and errors even if the '
+        'stream emits before cancel settles', () async {
+      final received = <JsNotification>[];
+      final errors = <Object>[];
+      Future<void>? closing;
+      session.subscribe(
+        '.*',
+        (event) {
+          received.add(event);
+          closing ??= session.close();
+        },
+        onError: errors.add,
+      );
+
+      service.events
+        ..add(_event('e1'))
+        ..add(_event('e2'))
+        ..addError(StateError('late'));
+      await pumpEventQueue();
+      await closing;
+
+      expect(received.map((e) => e.id), ['e1']);
+      expect(errors, isEmpty);
+    });
+
+    test('subscribe cancels immediately if close occurs during startListening',
+        () async {
+      var cancelled = false;
+      final controller = StreamController<AtNotification>.broadcast(
+        onCancel: () => cancelled = true,
+      );
+      service.customStream = controller.stream;
+      Future<void>? closing;
+      service.onStartListening = () => closing = session.close();
+
+      final received = <JsNotification>[];
+      final errors = <Object>[];
+      session.subscribe('.*', received.add, onError: errors.add);
+      await pumpEventQueue();
+      await closing;
+
+      expect(cancelled, isTrue);
+      expect(controller.hasListener, isFalse);
+      controller
+        ..add(_event('late'))
+        ..addError(StateError('late'));
+      await pumpEventQueue();
+      expect(received, isEmpty);
+      expect(errors, isEmpty);
     });
   });
 }

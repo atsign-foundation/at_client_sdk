@@ -685,6 +685,32 @@ void main() {
       expect(session.listeners, isEmpty);
     });
 
+    test(
+        'bridge subscribe drops notifications and errors after session is closed',
+        () async {
+      final seen = <Object?>[];
+      final errors = <Object?>[];
+      _call(s, 'subscribe', [
+        '.*'.toJS,
+        ((JSAny? event) => seen.add(event.dartify())).toJS,
+        ((JSAny? err) => errors.add(err.dartify())).toJS,
+      ]);
+
+      await _resolved(_call(s, 'close'));
+      session.listeners.single((
+        id: 'n2',
+        from: '@bob',
+        key: 'k.tally@bob',
+        value: 'late',
+        epochMillis: 99,
+        operation: 'update',
+      ));
+      session.errorSink!(StateError('late'));
+
+      expect(seen, isEmpty);
+      expect(errors, isEmpty);
+    });
+
     group('subscribe failures', () {
       // The `{code, message}` a failed subscribe answers with, in place of
       // the unsubscribe function.

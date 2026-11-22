@@ -367,17 +367,23 @@ class BridgeSession {
       final report = _optionalFunction(onError, 'onError');
       final unsubscribe = _session.subscribe(
         pattern,
-        (n) => deliver.callAsFunction(
-            null,
-            _envelope({
-              'id': n.id,
-              'from': n.from,
-              'key': n.key,
-              'value': n.value,
-              'epochMillis': n.epochMillis,
-              'operation': n.operation,
-            })),
-        onError: (error) => _reportStreamError(report, error, 'subscription'),
+        (n) {
+          if (_session.isClosed) return;
+          deliver.callAsFunction(
+              null,
+              _envelope({
+                'id': n.id,
+                'from': n.from,
+                'key': n.key,
+                'value': n.value,
+                'epochMillis': n.epochMillis,
+                'operation': n.operation,
+              }));
+        },
+        onError: (error) {
+          if (_session.isClosed) return;
+          _reportStreamError(report, error, 'subscription');
+        },
       );
       return unsubscribe.toJS;
     } on Object catch (error) {

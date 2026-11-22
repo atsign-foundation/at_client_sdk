@@ -482,8 +482,14 @@ class AtClientJsSession implements JsSession {
         .where((e) => e != null)
         .cast<JsNotification>()
         .listen(
-          onEvent,
-          onError: (Object error) => onError(error),
+          (event) {
+            if (_closed) return;
+            onEvent(event);
+          },
+          onError: (Object error) {
+            if (_closed) return;
+            onError(error);
+          },
           onDone: () {
             done = true;
             _subscriptions.remove(subscription);
@@ -495,7 +501,13 @@ class AtClientJsSession implements JsSession {
       unawaited(subscription.cancel().catchError((Object _) {}));
       rethrow;
     }
-    if (!done) _subscriptions.add(subscription);
+    if (_closed) {
+      unawaited(subscription.cancel().catchError((Object _) {
+        _warn('Failed to cancel notification subscription on close');
+      }));
+    } else if (!done) {
+      _subscriptions.add(subscription);
+    }
     return () {
       if (_subscriptions.remove(subscription)) {
         unawaited(subscription.cancel().catchError((Object _) {
