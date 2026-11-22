@@ -40,7 +40,8 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   to deny. Only the device's own processes can race it. A second
   PendingEnrollment for the same request, in this process or another, that
   cancels it while the first waits leaves the first's approval unfiled: that
-  wait throws AtEnrollmentCancelledException.
+  wait throws AtEnrollmentCancelledException. One that files the approval
+  first leaves the first to end approved as well.
   Replay: none arises; stop and cancel send nothing, and a resume polls the
   same enrollment as before.
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
@@ -231,6 +232,12 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a pending enrollment waiting in awaitApproval, and a second PendingEnrollment for the same request from resumeEnrollment
     When the second cancels and then the manager approves the request
     Then the first wait throws AtEnrollmentCancelledException naming the enrollment and saying the manager can revoke it, and the store holds no pending keys and no live keys
+
+  @race
+  Scenario: Two waits on one request both end approved when the manager approves it
+    Given a pending enrollment waiting in awaitApproval, and a second PendingEnrollment for the same request from resumeEnrollment, also waiting
+    When the manager approves the request
+    Then both waits end approved, and the store holds the enrollment's live keys and nothing pending
 
   @race
   Scenario: Two enrolls on one store at once file one request

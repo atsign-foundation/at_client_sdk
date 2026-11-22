@@ -107,10 +107,11 @@ class PendingEnrollment {
   /// atServer, and [retryInterval] is the pause between polls. A denial, or
   /// the request's expiry, removes this enrollment from [keys] and throws
   /// [AtEnrollmentDeniedException] or [AtEnrollmentExpiredException], both
-  /// [AtEnrollmentException]s. An approval of a request whose pending keys
-  /// have already left [keys], removed by another wait or process, files
-  /// nothing and throws [AtEnrollmentCancelledException]. Any other end of the
-  /// wait keeps the request.
+  /// [AtEnrollmentException]s. When another wait or process has already filed
+  /// the approval, this wait ends approved as well; when another has removed
+  /// the pending keys instead, the approval files nothing and this throws
+  /// [AtEnrollmentCancelledException]. Any other end of the wait keeps the
+  /// request.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
@@ -184,37 +185,33 @@ class PendingEnrollment {
     // NOTE: the check that the wait has not ended and the write are one
     // update, so a stop or cancel lands either before the approval is written
     // or after it.
-    var written = false;
-    var gone = false;
+    var found = _Filing.ended;
     await keys.update(atSign, (stored) {
       // NOTE: update may run this again on a fresh read; only the last run
       // counts.
-      written = false;
-      gone = false;
-      if (_ended.isCompleted) return false;
-      if (!stored.pendingEnrollmentIds.contains(enrollmentId)) {
-        gone = true;
-        return false;
-      }
+      found = _filingIn(stored);
+      if (found != _Filing.pending) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
         _fileFlat(stored);
       } else {
         stored.activatePending(enrollmentId);
       }
-      written = true;
       return true;
     });
-    if (gone) {
+    if (found == _Filing.removed) {
       throw AtEnrollmentCancelledException('enrollment '
           '"${clipForMessage(enrollmentId, quote: '"')}" of $atSign was '
           'approved after its pending keys left its key store, so nothing is '
           "filed: the atSign's manager can revoke it");
     }
-    if (!written) throw await _endedOnceCancelled();
+    if (found == _Filing.ended) throw await _endedOnceCancelled();
     _approved = true;
-    _logger.info('enrollment $enrollmentId of $atSign is approved and its '
-        'keys are complete');
+    _logger.info(found == _Filing.filedElsewhere
+        ? 'enrollment $enrollmentId of $atSign is approved, and another wait '
+            'for it had already completed its keys'
+        : 'enrollment $enrollmentId of $atSign is approved and its keys are '
+            'complete');
   }
 
   /// Waits for the decision, then opens a client on the completed keys.
@@ -441,6 +438,18 @@ class PendingEnrollment {
   static String? _unlessFiled(AtBytes? filed, AtBytes? value) =>
       filed == null ? value?.toString() : null;
 
+  /// What [stored] holds for this enrollment as its approval is filed.
+  _Filing _filingIn(AtKeys stored) {
+    if (_ended.isCompleted) return _Filing.ended;
+    if (stored.pendingEnrollmentIds.contains(enrollmentId)) {
+      return _Filing.pending;
+    }
+    return stored.holdsAuthenticationMaterial &&
+            stored.enrollmentToAuthenticateAs() == enrollmentId
+        ? _Filing.filedElsewhere
+        : _Filing.removed;
+  }
+
   /// Removes this enrollment's pending keys from [keys], after the request
   /// was [why]: denied or cancelled. Throws what [keys] throws.
   Future<void> _discard(String why) async {
@@ -463,8 +472,14 @@ class PendingEnrollment {
   }
 }
 
+/// What an approval finds in the key store as
+/// [PendingEnrollment.awaitApproval] files it.
+enum _Filing { ended, pending, filedElsewhere, removed }
+
 /// The wait [PendingEnrollment.awaitApproval] or [PendingEnrollment.client]
-/// was in was ended by [PendingEnrollment.cancel].
+/// was in ended because its request was cancelled: by
+/// [PendingEnrollment.cancel], or by another [PendingEnrollment] for the same
+/// request, in this process or another, before the approval was filed.
 class AtEnrollmentCancelledException extends AtEnrollmentException {
   AtEnrollmentCancelledException(super.message);
 }

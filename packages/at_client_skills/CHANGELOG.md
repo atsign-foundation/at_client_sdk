@@ -31,7 +31,11 @@
   first opens the atSign at once (`references/15`).
 - `sync()` calls made while a round runs share one more round once it ends
   (`references/15`).
-- A cancelled wait throws once the pending keys are gone (`references/15`).
+- A cancelled wait throws once the pending keys are gone, and so does a wait
+  whose request another wait cancelled before its approval was filed
+  (`references/15`).
+- `resumeEnrollment` takes no app or device: it resumes the one pending
+  enrollment a keys store holds (`SKILL.md`; `references/15`).
 - A collection write whose own copy fails writes no recipient's copy
   (`references/02`).
 - A write waits up to 30 seconds in all for start-up to ask for its namespace

@@ -15,7 +15,7 @@
 - fix: when another `PendingEnrollment` for the same request has cancelled
   it, an approval that lands in a wait files nothing and throws
   `AtEnrollmentCancelledException`, saying the Atsign's manager can revoke
-  it.
+  it. When another has already filed the approval, the wait ends approved.
 - fix: `Atsign.resumeEnrollment` returns the keys store's one pending
   enrollment whatever app and device it was filed under, so its `app` and
   `device` parameters are deprecated and ignored.

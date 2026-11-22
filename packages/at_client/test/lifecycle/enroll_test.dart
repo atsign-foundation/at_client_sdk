@@ -1340,23 +1340,19 @@ void main() {
           secondaryAddressFinder: atDirectoryOf(pref));
     }
 
-    test('An approval of a request another wait has cancelled files nothing',
-        () async {
+    /// Waits on a request in [store] that a second PendingEnrollment cancels,
+    /// runs [afterCancel], then has the manager approve the request, and
+    /// checks that the wait throws AtEnrollmentCancelledException.
+    Future<void> approvedAfterCancel(InMemoryAtKeysIo store,
+        {Future<void> Function()? afterCancel}) async {
       var polls = 0;
       var approved = false;
       final server = atServer(decide: (_) async {
         polls++;
         return approved ? true : notYetDecided();
       });
-      final store = InMemoryAtKeysIo();
       final waiter = await submit(store, server);
-      final pref = await preference();
-      final other = await Atsign(atSign).resumeEnrollment(
-          keys: store,
-          preference: pref,
-          atLookUp: server,
-          lookUps: loopbackLookUps(),
-          secondaryAddressFinder: atDirectoryOf(pref));
+      final other = await resume(store, server);
       final waiting = expectLater(
           waiter.awaitApproval(retryInterval: pollEvery),
           throwsA(isA<AtEnrollmentCancelledException>().having(
@@ -1366,14 +1362,97 @@ void main() {
                   contains("the atSign's manager can revoke it")))));
       await until(() => polls >= 1);
       await other!.cancel();
+      await afterCancel?.call();
       approved = true;
       await waiting;
+      expect(waiter.approved, isFalse);
+    }
+
+    test('An approval of a request another wait has cancelled files nothing',
+        () async {
+      final store = InMemoryAtKeysIo();
+      await approvedAfterCancel(store);
 
       final stored = await store.read(atSign);
       expect(stored.pendingEnrollmentIds, isEmpty);
       expect(stored.holdsAuthenticationMaterial, isFalse);
-      expect(waiter.approved, isFalse);
     });
+
+    test(
+        "Given another enrollment's keys filed after a cancel, when the "
+        'cancelled request is approved, then the wait files nothing over them',
+        () async {
+      final store = InMemoryAtKeysIo();
+      await approvedAfterCancel(store,
+          afterCancel: () => store.update(Atsign(atSign), (stored) {
+                stored.fileLegacyMaterial(
+                    apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
+                    apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!,
+                    enrollmentId: 'e-2');
+                return true;
+              }));
+
+      final stored = await store.read(atSign);
+      expect(stored.enrollmentToAuthenticateAs(), 'e-2');
+      expect(stored.pendingEnrollmentIds, isEmpty);
+    });
+
+    test(
+        'Given a store still naming a cancelled request and holding no keys, '
+        'when the request is approved, then the wait files nothing', () async {
+      final store = InMemoryAtKeysIo();
+      await approvedAfterCancel(store,
+          afterCancel: () => store.update(Atsign(atSign), (stored) {
+                stored.fileLegacyMaterial(enrollmentId: enrollmentId);
+                return true;
+              }));
+
+      final stored = await store.read(atSign);
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+    });
+
+    for (final algo in [SigningAlgoType.rsa2048, SigningAlgoType.mldsa65]) {
+      test(
+          'Two waits on one request both end approved when the manager '
+          'approves it, for ${algo.name}', () async {
+        final release = Completer<void>();
+        var polls = 0;
+        final server = atServer(decide: (_) async {
+          polls++;
+          await release.future;
+          return true;
+        });
+        final store = InMemoryAtKeysIo();
+        final first = await Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'wavi',
+            device: 'phone',
+            namespaces: {'wavi': 'rw'},
+            keys: store,
+            preference: await preference(),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+            signingAlgo: algo,
+            atLookUp: server);
+        final second = (await resume(store, server))!;
+        final waits = [
+          first.awaitApproval(retryInterval: pollEvery),
+          second.awaitApproval(retryInterval: pollEvery),
+        ];
+        await until(() => polls == 2);
+
+        release.complete();
+        await Future.wait(waits);
+
+        expect((first.approved, second.approved), (true, true));
+        final stored = await store.read(atSign);
+        expect(stored.pendingEnrollmentIds, isEmpty);
+        expect(stored.enrollmentToAuthenticateAs(), enrollmentId);
+        expect(stored.authenticationKeyPairFor(enrollmentId)?.algorithm, algo);
+      });
+    }
 
     test('Stop ends a wait and keeps the request', () async {
       var polls = 0;
