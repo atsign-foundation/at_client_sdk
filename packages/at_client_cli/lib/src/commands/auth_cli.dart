@@ -983,21 +983,31 @@ Future<AtClient> enrolDevice({
 }
 
 /// `at_activate cancel`: gives up the pending enrollment request the keyfile
-/// `-k` names holds, removing its keys from that keyfile, and answers the
-/// exit code: 0 once the request is gone, 1 when the keyfile holds none or
-/// holds live keys, which it never removes.
-///
-/// It sends nothing, so the request stays on the atServer for the atSign's
-/// manager to deny, or to revoke if it was approved meanwhile.
+/// `-k` names holds, as [cancelPending] does, and answers the exit code.
 @visibleForTesting
 Future<int> cancel(ArgResults argResults,
     {required String program, required String? programVersion}) async {
   if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
     throw ArgumentError('The -k option is mandatory for the "cancel" command');
   }
-  final settings = enrollerSettingsFrom(argResults,
-      program: program, programVersion: programVersion, announcePosture: false);
-  final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
+  return cancelPending(
+      atSign: AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]),
+      settings: enrollerSettingsFrom(argResults,
+          program: program,
+          programVersion: programVersion,
+          announcePosture: false));
+}
+
+/// Gives up the pending enrollment request the keyfile [settings] names holds
+/// for [atSign], removing its keys from that keyfile, and answers the exit
+/// code: 0 once the request is gone, 1 when the keyfile holds none or holds
+/// live keys, which it never removes.
+///
+/// It sends nothing, so the request stays on the atServer for the atSign's
+/// manager to deny, or to revoke if it was approved meanwhile.
+@visibleForTesting
+Future<int> cancelPending(
+    {required String atSign, required EnrollerSettings settings}) async {
   final keys = settings.keysFor(atSign);
   final store = 'AtKeys store (${settings.atKeysFilePath})';
 

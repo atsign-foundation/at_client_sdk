@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart'
-    show EnrollerSettings, enrolDevice;
+    show EnrollerSettings, cancelPending, enrolDevice;
 import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
@@ -21,7 +22,9 @@ import 'lifecycle_rig.dart';
 /// is a loopback port that counts each connection made to it, so a command
 /// that sends anything fails the test that says it sends nothing. The
 /// atServer an enrollment request goes to is a mocked lookup answering by
-/// verb.
+/// verb. An approval another process files is filed here through a second
+/// store on the same keyfile, which takes the keyfile's lock as a process
+/// does.
 void main() {
   const atSign = approvingAtSign;
   late Directory dir;
@@ -105,6 +108,27 @@ void main() {
     return wrapped;
   }
 
+  /// Files the approval of the request the keyfile at [keysPath] holds,
+  /// through a store of its own on that keyfile, as another process waiting
+  /// on the request does once the manager approves it; [wrapped] is the
+  /// symmetric key the request wrapped.
+  Future<void> approveFromAnotherStore(List<String> wrapped) async {
+    final rootPort = await refusedPort();
+    final approving =
+        approvingAtServer(decide: (_) async => true, wrapped: wrapped);
+    final waiting = await Atsign(atSign).resumeEnrollment(
+        keys: FileAtKeysIo(filePath: (_) => keysPath),
+        preference: AtClientPreference()
+          ..rootDomain = InternetAddress.loopbackIPv4.address
+          ..rootPort = rootPort,
+        atLookUp: approving.lookUp,
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: CacheableSecondaryAddressFinder(
+            InternetAddress.loopbackIPv4.address, rootPort));
+    await waiting!
+        .awaitApproval(retryInterval: const Duration(milliseconds: 10));
+  }
+
   /// Every file under [dir], by path, with its bytes.
   Map<String, List<int>> filesIn(Directory dir) => {
         for (final file in dir.listSync(recursive: true).whereType<File>())
@@ -124,12 +148,15 @@ void main() {
     expect(
         run.out,
         contains('Enrollment $approvedEnrollmentId of $atSign is cancelled, '
-            'and its keys are removed from the AtKeys store ($keysPath).'));
+            'and its keys are removed from the AtKeys store ($keysPath).'),
+        reason: 'it says the enrollment is cancelled, and where its keys '
+            'were removed from');
     expect(
         run.out,
         contains('The request is still on the atServer: the manager of '
-            '$atSign can deny it, or revoke it if they approved it already.'));
-    expect(run.code, 0, reason: 'stderr: ${run.err}');
+            '$atSign can deny it, or revoke it if they approved it already.'),
+        reason: 'it says the manager can deny it, or revoke it');
+    expect(run.code, 0, reason: 'it exits 0; stderr: ${run.err}');
   });
 
   test('enroll files a new request on a keyfile cancel emptied', () async {
@@ -174,19 +201,48 @@ void main() {
   });
 
   test('cancel refuses a keyfile holding live keys', () async {
+    const refusal = 'holds live keys for $atSign, which at_activate cancel '
+        'never removes, so nothing is changed. The manager of $atSign can '
+        "revoke this device's enrollment.";
+
     await FileAtKeysIo(filePath: (_) => keysPath)
         .write(atSign, randomLegacyKeys());
     final before = filesIn(dir);
 
     final run = await cancel();
 
-    expect(filesIn(dir), before, reason: 'the keyfile is unchanged');
-    expect(
-        run.err,
-        contains('The AtKeys store ($keysPath) holds live keys for $atSign, '
-            'which at_activate cancel never removes, so nothing is changed. '
-            "The manager of $atSign can revoke this device's enrollment."));
-    expect(run.code, 1);
+    expect(filesIn(dir), before,
+        reason: 'given live keys before it runs: the keyfile is unchanged');
+    expect(run.err, contains('The AtKeys store ($keysPath) $refusal'),
+        reason: 'given live keys before it runs: it says the keyfile holds '
+            'live keys, which cancel never removes, and that the manager can '
+            'revoke');
+    expect(run.code, 1, reason: 'given live keys before it runs: it exits 1');
+
+    File(keysPath).deleteSync();
+    final wrapped = await fileRequest();
+    List<int>? approved;
+    final err = _Captured();
+
+    final code = await IOOverrides.runZoned(
+        () => cancelPending(
+            atSign: atSign,
+            settings: _ApprovalFiledFirst(keysPath, () async {
+              await approveFromAnotherStore(wrapped);
+              approved = File(keysPath).readAsBytesSync();
+            })),
+        stderr: () => err);
+
+    expect(approved, isNotNull,
+        reason: 'the control: the approval was filed after cancel first '
+            'read the keyfile, before cancel took its lock');
+    expect(File(keysPath).readAsBytesSync(), approved,
+        reason: 'given live keys filed as it cancels: the keyfile is '
+            'unchanged by cancel');
+    expect(err.plain, contains('The AtKeys store ($keysPath) $refusal'),
+        reason: 'given live keys filed as it cancels: it says the keyfile '
+            'holds live keys, not that the request is cancelled');
+    expect(code, 1, reason: 'given live keys filed as it cancels: it exits 1');
   });
 
   for (final (keyfile, given) in <(String, Future<void> Function())>[
@@ -222,8 +278,9 @@ void main() {
     expect(
         run.err,
         contains('Argument error for command cancel: The -k option is '
-            'mandatory for the "cancel" command'));
-    expect(run.code, 1);
+            'mandatory for the "cancel" command'),
+        reason: 'it says -k is mandatory for cancel');
+    expect(run.code, 1, reason: 'it exits 1');
   });
 
   test(
@@ -261,7 +318,9 @@ void main() {
               '$atSign',
           'To give the request up instead, stop this program and run '
               'at_activate cancel -a $atSign -k $keysPath',
-        ]));
+        ]),
+        reason: 'it says it is waiting, then that at_activate cancel with its '
+            'keyfile gives the request up');
     await cli.atClient.stop();
   });
 
@@ -283,12 +342,50 @@ void main() {
               'run the same at_activate enroll command again to finish it.',
           '  To give it up instead: at_activate cancel -a $atSign -k '
               '$keysPath',
-        ]));
-    expect(run.code, 1);
+        ]),
+        reason: 'the report says to run enroll again once the request is '
+            'approved, or at_activate cancel to give it up');
+    expect(run.code, 1, reason: 'it exits 1');
   });
 }
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
+
+/// Settings for the keyfile at a path, whose store is an [_ApprovedFirst].
+class _ApprovalFiledFirst extends EnrollerSettings {
+  _ApprovalFiledFirst(String path, this.approve)
+      : super(
+            AtClientPreference()
+              ..rootDomain = '127.0.0.1'
+              ..rootPort = 1,
+            atKeysFilePath: path);
+
+  final Future<void> Function() approve;
+
+  @override
+  FileAtKeysIo keysFor(String atSign) =>
+      _ApprovedFirst(atKeysFilePath, approve);
+}
+
+/// The store on the keyfile at a path, whose first [update] waits for
+/// [approve] to file the approval of the request the keyfile holds before it
+/// takes the keyfile's lock.
+class _ApprovedFirst extends FileAtKeysIo {
+  _ApprovedFirst(String path, this.approve) : super(filePath: (_) => path);
+
+  final Future<void> Function() approve;
+  bool _approved = false;
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    if (!_approved) {
+      _approved = true;
+      await approve();
+    }
+    return super.update(atsign, mutate);
+  }
+}
 
 /// Stands in for stdout or stderr, keeping what is written to it.
 class _Captured implements Stdout {
