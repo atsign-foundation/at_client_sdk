@@ -373,9 +373,10 @@ void main() {
             (e) => e.message,
             'message',
             allOf(
-                contains('pending enrollment "e-2" for "buzz" on "phone" '
-                    'while enrollment "$enrollmentId" was being sent'),
-                contains("the atSign's manager can deny it")))));
+                startsWith("the atSign's manager can deny enrollment "
+                    '"$enrollmentId" of $atSign, which is not filed'),
+                contains('gained the pending enrollment "e-2" for "buzz" on '
+                    '"phone" while it was being sent')))));
     expect(buzz?.enrollmentId, 'e-2');
     final stored = await store.read(atSign);
     expect(stored.pendingEnrollmentIds, ['e-2']);
@@ -394,8 +395,11 @@ void main() {
 
     await expectLater(
         submit(store, atServer(decide: (_) async => true)),
-        throwsA(isA<AtEnrollmentException>().having((e) => e.message, 'message',
-            contains('enrollment "$enrollmentId" was being sent'))));
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            startsWith("the atSign's manager can deny enrollment "
+                '"$enrollmentId"'))));
     expect(buzz?.enrollmentId, 'e-2');
     expect((await store.read(atSign)).pendingEnrollmentIds, ['e-2']);
   });
@@ -418,8 +422,11 @@ void main() {
         throwsA(isA<AtEnrollmentException>().having(
             (e) => e.message,
             'message',
-            contains('gained live keys in this store while enrollment '
-                '"$enrollmentId" was being sent'))));
+            allOf(
+                startsWith("the atSign's manager can deny enrollment "
+                    '"$enrollmentId" of $atSign, which is not filed'),
+                contains('gained live keys in this store while it was being '
+                    'sent')))));
     final stored = await store.read(atSign);
     expect(stored.holdsAuthenticationMaterial, isTrue);
     expect(stored.pendingEnrollmentIds, isEmpty);
@@ -1358,8 +1365,8 @@ void main() {
           throwsA(isA<AtEnrollmentCancelledException>().having(
               (e) => e.message,
               'message',
-              allOf(contains('"$enrollmentId"'),
-                  contains("the atSign's manager can revoke it")))));
+              startsWith("the atSign's manager can revoke enrollment "
+                  '"$enrollmentId" of $atSign: it was approved after'))));
       await until(() => polls >= 1);
       await other!.cancel();
       await afterCancel?.call();

@@ -200,10 +200,12 @@ class PendingEnrollment {
       return true;
     });
     if (found == _Filing.removed) {
-      throw AtEnrollmentCancelledException('enrollment '
-          '"${clipForMessage(enrollmentId, quote: '"')}" of $atSign was '
-          'approved after its pending keys left its key store, so nothing is '
-          "filed: the atSign's manager can revoke it");
+      // NOTE: the instruction comes first, so a message clipped at 180
+      // characters still says what to do.
+      throw AtEnrollmentCancelledException("the atSign's manager can revoke "
+          'enrollment "${clipForMessage(enrollmentId, quote: '"')}" of '
+          '$atSign: it was approved after its pending keys left its key '
+          'store, so nothing is filed');
     }
     if (found == _Filing.ended) throw await _endedOnceCancelled();
     _approved = true;

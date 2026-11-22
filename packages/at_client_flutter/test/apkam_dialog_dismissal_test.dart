@@ -553,7 +553,9 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(SnackBar),
-        matching: find.textContaining("the atSign's manager can revoke it"),
+        matching: find.textContaining(
+          "the atSign's manager can revoke enrollment",
+        ),
       ),
       findsOneWidget,
       reason: 'the failure is shown',
@@ -778,9 +780,9 @@ void main() {
 /// What `PendingEnrollment` throws when another wait for the same request
 /// cancelled it before the approval was filed.
 const cancelledElsewhere =
-    'enrollment "enroll-1" of @alice was approved after its pending keys '
-    "left its key store, so nothing is filed: the atSign's manager can "
-    'revoke it';
+    "the atSign's manager can revoke enrollment \"enroll-1\" of @alice: it "
+    'was approved after its pending keys left its key store, so nothing is '
+    'filed';
 
 /// A frame, then 400ms of them, since nothing here settles.
 Future<void> frames(WidgetTester tester) async {

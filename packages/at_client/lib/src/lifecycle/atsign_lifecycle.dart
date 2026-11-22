@@ -638,16 +638,17 @@ extension AtsignLifecycle on Atsign {
   /// is made again as it is filed.
   void _refuseFilingOver(AtKeys existing, {String? sent}) {
     String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
-    final notFiled = sent == null
-        ? null
-        : 'while enrollment ${quoted(sent)} was being sent, so it is not '
-            "filed: the atSign's manager can deny it";
+    // NOTE: the instruction comes first, so a message clipped at 180
+    // characters still says what to do.
+    String notFiled(String gained) =>
+        "the atSign's manager can deny enrollment ${quoted(sent!)} of $this, "
+        'which is not filed: $this gained $gained while it was being sent';
     if (existing.holdsAuthenticationMaterial) {
-      throw AtEnrollmentException(notFiled == null
+      throw AtEnrollmentException(sent == null
           ? '$this already holds live keys in this store, and enrolling '
               'again would overwrite the credential this device has: give a '
               'new enrollment a keys store of its own'
-          : '$this gained live keys in this store $notFiled');
+          : notFiled('live keys in this store'));
     }
     final pendingId = _pendingToResume(existing);
     if (pendingId != null) {
@@ -657,10 +658,10 @@ extension AtsignLifecycle on Atsign {
       final held = 'the pending enrollment ${quoted(pendingId)}'
           '${app == null ? '' : ' for ${quoted(app)}'}'
           '${device == null ? '' : ' on ${quoted(device)}'}';
-      throw AtEnrollmentException(notFiled == null
+      throw AtEnrollmentException(sent == null
           ? '$this already holds $held: resume it with resumeEnrollment '
               'rather than submitting another'
-          : '$this gained $held $notFiled');
+          : notFiled(held));
     }
   }
 
