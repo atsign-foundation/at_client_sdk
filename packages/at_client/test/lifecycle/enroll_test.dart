@@ -42,6 +42,20 @@ class _StoreAwaitingOnce extends InMemoryAtKeysIo {
   }
 }
 
+/// An in-memory key store that runs [beforeWrite] once, ahead of its next
+/// write.
+class _StoreWrittenOnce extends InMemoryAtKeysIo {
+  Future<void> Function()? beforeWrite;
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) async {
+    final hook = beforeWrite;
+    beforeWrite = null;
+    if (hook != null) await hook();
+    return super.write(atsign, atKeys);
+  }
+}
+
 /// `Atsign.enroll`, `PendingEnrollment` and `resumeEnrollment`: the key store
 /// named at submission is the resume record, approval completes it, and a
 /// denial empties it.
@@ -95,6 +109,9 @@ void main() {
   /// and an exception is the atServer's refusal, `AT0026` for not-yet-decided
   /// and `AT0025` for denied.
   ///
+  /// [id] is the enrollment id its answer to the request gives, and
+  /// [onEnroll] runs as the request arrives, before that answer.
+  ///
   /// [onKeyFetch] runs as the handshake fetches the last secret the approval
   /// released, and the first [keyFetchesUnanswered] of those fetches get an
   /// empty answer. A poll after [AtLookUp.stop] is refused, as a stopped
@@ -102,7 +119,9 @@ void main() {
   MockAtLookupImpl atServer(
       {required Future<bool> Function(int attempt) decide,
       void Function()? onKeyFetch,
-      int keyFetchesUnanswered = 0}) {
+      int keyFetchesUnanswered = 0,
+      String id = enrollmentId,
+      Future<void> Function()? onEnroll}) {
     final lookUp = MockAtLookupImpl();
     String? wrappedSymmetricKey;
     var attempts = 0;
@@ -131,17 +150,13 @@ void main() {
         final json = jsonDecode(command.substring(
             command.indexOf('{'), command.lastIndexOf('}') + 1));
         wrappedSymmetricKey = json['encryptedAPKAMSymmetricKey'] as String;
-        return 'data:${jsonEncode({
-              'enrollmentId': enrollmentId,
-              'status': 'pending'
-            })}';
+        await onEnroll?.call();
+        return 'data:${jsonEncode({'enrollmentId': id, 'status': 'pending'})}';
       }
-      if (command.startsWith(
-          'keys:get:keyName:$enrollmentId.default_enc_private_key')) {
+      if (command.startsWith('keys:get:keyName:$id.default_enc_private_key')) {
         return 'data:${jsonEncode(await sealed(encryptionPrivateKey))}';
       }
-      if (command
-          .startsWith('keys:get:keyName:$enrollmentId.default_self_enc_key')) {
+      if (command.startsWith('keys:get:keyName:$id.default_self_enc_key')) {
         onKeyFetch?.call();
         if (unanswered > 0) {
           unanswered--;
@@ -349,6 +364,75 @@ void main() {
           reason: 'the store keeps the one pending enrollment it held');
     });
   }
+
+  test('Two enrolls on one store at once file one request', () async {
+    final store = InMemoryAtKeysIo();
+    PendingEnrollment? buzz;
+    final wavi = submit(
+        store,
+        atServer(
+            decide: (_) async => true,
+            onEnroll: () async => buzz = await submit(
+                store, atServer(decide: (_) async => true, id: 'e-2'),
+                app: 'buzz')));
+
+    await expectLater(
+        wavi,
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+                contains('pending enrollment "e-2" for "buzz" on "phone" '
+                    'while enrollment "$enrollmentId" was being sent'),
+                contains("the atSign's manager can deny it")))));
+    expect(buzz?.enrollmentId, 'e-2');
+    final stored = await store.read(atSign);
+    expect(stored.pendingEnrollmentIds, ['e-2']);
+    expect(stored.storedEnrollmentId, 'e-2');
+  });
+
+  test(
+      'Given no keys for @alice yet, when another enroll creates them between '
+      "this filing's update and its write, then this filing is refused "
+      'naming the enrollment it sent', () async {
+    final store = _StoreWrittenOnce();
+    PendingEnrollment? buzz;
+    store.beforeWrite = () async => buzz = await submit(
+        store, atServer(decide: (_) async => true, id: 'e-2'),
+        app: 'buzz');
+
+    await expectLater(
+        submit(store, atServer(decide: (_) async => true)),
+        throwsA(isA<AtEnrollmentException>().having((e) => e.message, 'message',
+            contains('enrollment "$enrollmentId" was being sent'))));
+    expect(buzz?.enrollmentId, 'e-2');
+    expect((await store.read(atSign)).pendingEnrollmentIds, ['e-2']);
+  });
+
+  test(
+      'Given no keys for @alice yet, when live keys are written while the '
+      'request is being sent, then it is not filed and the live keys stay',
+      () async {
+    final store = InMemoryAtKeysIo();
+    final live = AtKeys.legacy(
+        apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
+        apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!);
+
+    await expectLater(
+        submit(
+            store,
+            atServer(
+                decide: (_) async => true,
+                onEnroll: () => store.write(atSign, live))),
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            contains('gained live keys in this store while enrollment '
+                '"$enrollmentId" was being sent'))));
+    final stored = await store.read(atSign);
+    expect(stored.holdsAuthenticationMaterial, isTrue);
+    expect(stored.pendingEnrollmentIds, isEmpty);
+  });
 
   group('Given a store whose pending enrollment records no app and no device',
       () {

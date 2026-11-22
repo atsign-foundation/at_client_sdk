@@ -32,9 +32,12 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   removes the keys; cancel then stop changes nothing. An approval written first
   stands, and if a stop or a cancel lands before client() returns, the
   client it opened is stopped before the stop or cancel returns. A cancel and
-  a denial at once both remove the pending keys, once. Two enroll calls into
-  one store at once can both pass the check and both file; only the device's
-  own processes can race it.
+  a denial at once both remove the pending keys, once. Of two enroll calls
+  into one store at once, one is filed: the check is repeated where the
+  request is filed, in the store's one update, or in a create-only write when
+  the store has no document yet. The losing call has already sent its
+  request, and its message names that enrollment id for the atSign's manager
+  to deny. Only the device's own processes can race it.
   Replay: none arises; stop and cancel send nothing, and a resume polls the
   same enrollment as before.
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
@@ -209,6 +212,14 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a store holding a pending enrollment for @alice whose id holds a line feed, filed by app "wa<ESC>vi" on device "phone"
     When app buzz on device tablet asks to enroll @alice into that store
     Then enroll throws AtEnrollmentException naming the id, the app and the device in double quotes on one line, the line feed shown as \u000a and the ESC as \u001b, and nothing is sent to the atServer
+
+  @race
+  Scenario: Two enrolls on one store at once file one request
+    Given keys for @alice that do not exist yet
+    When the device enrolls @alice as "wavi" and as "buzz" at once
+    Then one enroll returns its pending enrollment
+    And the other throws AtEnrollmentException naming the enrollment id it sent, for the atSign's manager to deny
+    And the keys hold only the returned enrollment's request
 
   Scenario: A keyfile left empty by a denial or a cancel is refused at once
     Given a keyfile whose enrollment request was denied, or cancelled, and so holds no credential

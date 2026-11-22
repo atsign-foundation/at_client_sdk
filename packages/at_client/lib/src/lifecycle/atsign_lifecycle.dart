@@ -379,7 +379,10 @@ extension AtsignLifecycle on Atsign {
   /// in [keys]. [keys] must hold nothing live and nothing pending for this
   /// atSign: a store that already holds a pending enrollment, whatever its
   /// app and device, is refused with [AtEnrollmentException] naming it,
-  /// before anything is sent, in favour of resuming it.
+  /// before anything is sent, in favour of resuming it. The check is made
+  /// again where the request is filed, so of two enrolls into one store at
+  /// once only one is filed; the other throws [AtEnrollmentException] naming
+  /// the enrollment it sent, which the atSign's manager can deny.
   ///
   /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
   /// and [keyExchangeMode] how its symmetric key travels; both default to the
@@ -627,22 +630,37 @@ extension AtsignLifecycle on Atsign {
     } on AtKeysSourceAbsentException {
       return;
     }
+    _refuseFilingOver(existing);
+  }
+
+  /// Throws [AtEnrollmentException] unless [existing] holds nothing live and
+  /// nothing pending. [sent] is the enrollment already sent, when the check
+  /// is made again as it is filed.
+  void _refuseFilingOver(AtKeys existing, {String? sent}) {
+    String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
+    final notFiled = sent == null
+        ? null
+        : 'while enrollment ${quoted(sent)} was being sent, so it is not '
+            "filed: the atSign's manager can deny it";
     if (existing.holdsAuthenticationMaterial) {
-      throw AtEnrollmentException('$this already holds live keys in this '
-          'store, and enrolling again would overwrite the credential this '
-          'device has: give a new enrollment a keys store of its own');
+      throw AtEnrollmentException(notFiled == null
+          ? '$this already holds live keys in this store, and enrolling '
+              'again would overwrite the credential this device has: give a '
+              'new enrollment a keys store of its own'
+          : '$this gained live keys in this store $notFiled');
     }
     final pendingId = existing.pendingEnrollmentIds.firstOrNull;
     if (pendingId != null) {
       final info = existing.enrollmentInfo(pendingId);
       final app = info?.appName;
       final device = info?.deviceName;
-      String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
-      throw AtEnrollmentException('$this already holds the pending '
-          'enrollment ${quoted(pendingId)}'
+      final held = 'the pending enrollment ${quoted(pendingId)}'
           '${app == null ? '' : ' for ${quoted(app)}'}'
-          '${device == null ? '' : ' on ${quoted(device)}'}: resume it with '
-          'resumeEnrollment rather than submitting another');
+          '${device == null ? '' : ' on ${quoted(device)}'}';
+      throw AtEnrollmentException(notFiled == null
+          ? '$this already holds $held: resume it with resumeEnrollment '
+              'rather than submitting another'
+          : '$this gained $held $notFiled');
     }
   }
 
@@ -655,6 +673,11 @@ extension AtsignLifecycle on Atsign {
   /// accepted the enrollment. The flat fields the approval will need are
   /// carried: the encryption public key, the symmetric key a legacy request
   /// wraps, and the enrollment id.
+  ///
+  /// The filing is the store's one update, which refuses as
+  /// [_refuseFilingOver] does whatever was filed while the request was being
+  /// sent; a store with no document yet is created by a write, which refuses
+  /// one created meanwhile.
   Future<void> _fileAsPending(
     WrittenAtKeysIo keys, {
     required AtKeys minted,
@@ -664,70 +687,86 @@ extension AtsignLifecycle on Atsign {
     required String device,
     required Map<String, String> namespaces,
   }) async {
-    final pending = AtKeys(atsign: this)
-      ..fileLegacyMaterial(
-          apkamSymmetricKey: minted.enrollmentSymmetricKey?.key,
-          enrollmentId: enrollmentId);
-    for (final material in minted.keysForEnrollment(enrollmentId)) {
-      pending.addKey(material.withStatus(CryptographicMaterialStatus.pending));
-    }
-    // NOTE: the atSign's encryption public key rides here typed, not in its
-    // flat field: a file store self-encrypts that field under a key this
-    // device is only given at approval, so a flat copy cannot be written yet.
-    // The completion copies it into the flat field for legacy readers.
-    // ignore: deprecated_member_use
-    final encryptionPublicKey = minted.defaultEncryptionPublicKey;
-    if (encryptionPublicKey != null) {
-      pending.addKey(CryptographicMaterial(
-          keyId:
-              '${AtKeys.keyIdPrefix('enc', CryptographicMaterialAlgorithm.rsa2048)}1',
-          enrollmentId: enrollmentId,
-          role: CryptographicMaterialRole.publicEncryption,
-          algorithm: CryptographicMaterialAlgorithm.rsa2048,
-          bytes: encryptionPublicKey,
-          createdAt: DateTime.now().toUtc(),
-          status: CryptographicMaterialStatus.pending));
-    }
-    final apkamFiled = pending
-        .keysForEnrollment(enrollmentId)
-        .any((m) => m.role == CryptographicMaterialRole.privateAuthentication);
-    if (!apkamFiled) {
-      // An rsa2048 keypair rides the flat fields of what the submission
-      // minted; it is filed typed here so that pending has one shape.
-      final materialAlgorithm =
-          CryptographicMaterialAlgorithm.of(algorithm.name);
-      final keyId = '${AtKeys.keyIdPrefix('auth', materialAlgorithm)}1';
-      final now = DateTime.now().toUtc();
-      final mintedPair = minted.authenticationKeyPairFor(null)!;
-      for (final (role, bytes) in [
-        (
-          CryptographicMaterialRole.privateAuthentication,
-          AtBytes.fromString(mintedPair.privateKey)
-        ),
-        (
-          CryptographicMaterialRole.publicAuthentication,
-          AtBytes.fromString(mintedPair.publicKey)
-        ),
-      ]) {
+    AtKeys fileInto(AtKeys pending) {
+      // NOTE: both flat fields are set, null included: they name this
+      // request, whatever the document held before.
+      // ignore: deprecated_member_use
+      pending.enrollmentId = enrollmentId;
+      // ignore: deprecated_member_use
+      pending.apkamSymmetricKey = switch (minted.enrollmentSymmetricKey?.key) {
+        final String key => AtBytes.fromString(key),
+        null => null,
+      };
+      for (final material in minted.keysForEnrollment(enrollmentId)) {
+        pending
+            .addKey(material.withStatus(CryptographicMaterialStatus.pending));
+      }
+      // NOTE: the atSign's encryption public key rides here typed, not in its
+      // flat field: a file store self-encrypts that field under a key this
+      // device is only given at approval, so a flat copy cannot be written
+      // yet. The completion copies it into the flat field for legacy readers.
+      // ignore: deprecated_member_use
+      final encryptionPublicKey = minted.defaultEncryptionPublicKey;
+      if (encryptionPublicKey != null) {
         pending.addKey(CryptographicMaterial(
-            keyId: keyId,
+            keyId:
+                '${AtKeys.keyIdPrefix('enc', CryptographicMaterialAlgorithm.rsa2048)}1',
             enrollmentId: enrollmentId,
-            role: role,
-            algorithm: materialAlgorithm,
-            bytes: bytes,
-            createdAt: now,
+            role: CryptographicMaterialRole.publicEncryption,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
+            bytes: encryptionPublicKey,
+            createdAt: DateTime.now().toUtc(),
             status: CryptographicMaterialStatus.pending));
       }
+      final apkamFiled = pending.keysForEnrollment(enrollmentId).any(
+          (m) => m.role == CryptographicMaterialRole.privateAuthentication);
+      if (!apkamFiled) {
+        // An rsa2048 keypair rides the flat fields of what the submission
+        // minted; it is filed typed here so that pending has one shape.
+        final materialAlgorithm =
+            CryptographicMaterialAlgorithm.of(algorithm.name);
+        final keyId = '${AtKeys.keyIdPrefix('auth', materialAlgorithm)}1';
+        final now = DateTime.now().toUtc();
+        final mintedPair = minted.authenticationKeyPairFor(null)!;
+        for (final (role, bytes) in [
+          (
+            CryptographicMaterialRole.privateAuthentication,
+            AtBytes.fromString(mintedPair.privateKey)
+          ),
+          (
+            CryptographicMaterialRole.publicAuthentication,
+            AtBytes.fromString(mintedPair.publicKey)
+          ),
+        ]) {
+          pending.addKey(CryptographicMaterial(
+              keyId: keyId,
+              enrollmentId: enrollmentId,
+              role: role,
+              algorithm: materialAlgorithm,
+              bytes: bytes,
+              createdAt: now,
+              status: CryptographicMaterialStatus.pending));
+        }
+      }
+      pending.recordEnrollmentSnapshot(enrollmentId,
+          namespaces: namespaces, appName: app, deviceName: device);
+      return pending;
     }
-    pending.recordEnrollmentSnapshot(enrollmentId,
-        namespaces: namespaces, appName: app, deviceName: device);
+
+    bool refile(AtKeys stored) {
+      _refuseFilingOver(stored, sent: enrollmentId);
+      fileInto(stored);
+      return true;
+    }
 
     try {
-      await keys.write(this, pending);
-    } on AtKeysFileOverwriteException {
-      // The store holds a document with nothing live in it (checked before
-      // the request went out), so this pending enrollment goes over it.
-      await keys.flush(this, pending);
+      await keys.update(this, refile);
+    } on AtKeysSourceAbsentException {
+      try {
+        await keys.write(this, fileInto(AtKeys(atsign: this)));
+      } on AtKeysFileOverwriteException {
+        await keys.update(this, refile);
+      }
     }
   }
 }

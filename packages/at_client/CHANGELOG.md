@@ -9,6 +9,9 @@
   enrollment for the Atsign, whatever that enrollment's app and device,
   before anything is sent, and names it: resume it with `resumeEnrollment`.
   at_client_flutter 2.1.0's `ApkamActivationDialog` resumes such a request.
+- fix: of two `Atsign.enroll` calls into one keys store at once, only one
+  files its request. The other throws `AtEnrollmentException` naming the
+  enrollment it sent, which the Atsign's manager can deny.
 - feat: `AtKeysPassphraseException` is exported: it is an unreadable
   keyfile's `error` when its passphrase is missing or does not open it.
 - fix: a pending enrollment's keys are removed when the atServer denies it (`AtEnrollmentDeniedException`, now exported), it has expired or the app calls `cancel()`; a wait that ends on another refusal keeps the request for `resumeEnrollment`, even when the atServer's error text contains "denied".
