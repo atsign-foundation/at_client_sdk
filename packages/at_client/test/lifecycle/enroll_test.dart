@@ -56,6 +56,21 @@ class _StoreWrittenOnce extends InMemoryAtKeysIo {
   }
 }
 
+/// A keyfile that runs [beforeWrite] once, ahead of its next write.
+class _KeyfileWrittenOnce extends FileAtKeysIo {
+  _KeyfileWrittenOnce(String path) : super(filePath: (_) => path);
+
+  Future<void> Function()? beforeWrite;
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) async {
+    final hook = beforeWrite;
+    beforeWrite = null;
+    if (hook != null) await hook();
+    return super.write(atsign, atKeys);
+  }
+}
+
 /// `Atsign.enroll`, `PendingEnrollment` and `resumeEnrollment`: the key store
 /// named at submission is the resume record, approval completes it, and a
 /// denial empties it.
@@ -185,7 +200,7 @@ void main() {
   }
 
   Future<PendingEnrollment> submit(
-          InMemoryAtKeysIo store, MockAtLookupImpl server,
+          WrittenAtKeysIo store, MockAtLookupImpl server,
           {String app = 'wavi', String device = 'phone'}) async =>
       Atsign(atSign).enroll(
           otp: 'ABC123',
@@ -388,6 +403,28 @@ void main() {
       "this filing's update and its write, then this filing is refused "
       'naming the enrollment it sent', () async {
     final store = _StoreWrittenOnce();
+    PendingEnrollment? buzz;
+    store.beforeWrite = () async => buzz = await submit(
+        store, atServer(decide: (_) async => true, id: 'e-2'),
+        app: 'buzz');
+
+    await expectLater(
+        submit(store, atServer(decide: (_) async => true)),
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            startsWith("the atSign's manager can deny enrollment "
+                '"$enrollmentId"'))));
+    expect(buzz?.enrollmentId, 'e-2');
+    expect((await store.read(atSign)).pendingEnrollmentIds, ['e-2']);
+  });
+
+  test(
+      'Given no keyfile for @alice yet, when another enroll creates it between '
+      "this filing's update and its write, then this filing is refused naming "
+      'the enrollment it sent, and the keyfile keeps the other request',
+      () async {
+    final store = _KeyfileWrittenOnce('${dir.path}/alice_key.atKeys');
     PendingEnrollment? buzz;
     store.beforeWrite = () async => buzz = await submit(
         store, atServer(decide: (_) async => true, id: 'e-2'),
