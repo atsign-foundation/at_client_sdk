@@ -7,7 +7,7 @@
   request's pending keys from the key store.
 - fix: `ApkamActivationDialog` and `PkamDialog` no longer close the screen
   beneath them when a failure, an approval, a confirmed Cancel or the user
-  leaving lands as they close, and they stop a client whose open completes
+  leaving lands as they close, and they stop a client that an approval opens
   after they have closed. `ApkamActivationDialog` also closes its Cancel
   confirmation when the wait fails.
 - fix: `ApkamActivationDialog` and `PkamDialog` show a failure when another
