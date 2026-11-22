@@ -538,18 +538,18 @@ Future<void> approveWhatIsPending(AtClient client) async {
 catches it. Its `reason` is the JSON parser's own wording and its `position`
 the 1-based character where the parser stopped; its `source` is always null.
 A keyfile holding JSON that is not an object throws it too, where it used to
-fail as a `TypeError`, with `isJson` true and a null `position`. So does a
+fail as a `TypeError`, with `parsed` true and a null `position`. So does a
 keychain entry whose header is a JSON object of the wrong shape, such as one
 with no usable segment count, or a legacy header whose count is not a whole
 number from 0 to 2560; `reason` says what was found. A
 passphrase-protected
 keyfile whose decrypted content does not parse fails as
 `AtKeysPassphraseException`, an `AtDecryptionException`. An app that built its message from the old
-exception's `source` or `offset` reads `isJson`, `reason` and `position`
+exception's `source` or `offset` reads `parsed`, `reason` and `position`
 instead:
 
 ```dart after
-String unreadableKeyfile(AtKeysFormatException e) => e.isJson
+String unreadableKeyfile(AtKeysFormatException e) => e.parsed
     ? 'The atKeys file is ${e.reason}'
     : 'The atKeys file is not valid JSON: ${e.reason}'
         '${e.position == null ? '' : ' at character ${e.position}'}';

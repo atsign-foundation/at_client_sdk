@@ -45,7 +45,7 @@ class AtKeysParseException extends AtException {
 ///
 /// It holds none of the document's text, in its fields or its message.
 class AtKeysFormatException extends FormatException {
-  /// Why the document is refused: the parser's words, or, when [isJson],
+  /// Why the document is refused: the parser's words, or, when [parsed],
   /// what the document is, such as "not a JSON object".
   final String reason;
 
@@ -56,11 +56,11 @@ class AtKeysFormatException extends FormatException {
   /// Whether the document parsed, as JSON that is not an object or not one
   /// of the shape it must have, or as the other kind of data
   /// [AtKeysFormatException.badField] was given, such as a legacy header.
-  final bool isJson;
+  final bool parsed;
 
   // NOTE: source stays null; the parser's source is the document's text.
   AtKeysFormatException._(
-      String message, this.reason, this.position, this.isJson)
+      String message, this.reason, this.position, this.parsed)
       : super(message, null, position == null ? null : position - 1);
 
   /// [what] did not parse: [parserError] is the JSON parser's own exception.

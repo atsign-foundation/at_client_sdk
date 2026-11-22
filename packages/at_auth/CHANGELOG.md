@@ -113,7 +113,7 @@
 - fix: `AtKeysUnusableException` shows the Atsign a keyfile records, and why
   reading the keys or finding their keypair failed, with their control
   characters escaped, clipped at 180 characters.
-- feat: `AtKeysFormatException.isJson` says whether the document parsed, as
+- feat: `AtKeysFormatException.parsed` says whether the document parsed, as
   JSON that is not an object or not one of the shape it must have, or as the
   `kind` of data `badField` was given.
 - fix: `AtAuth.onboard`, and so `activateAtSign`, throws before sending
