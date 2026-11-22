@@ -381,9 +381,12 @@ extension AtsignLifecycle on Atsign {
   /// atSign: a store that already holds a pending enrollment, whatever its
   /// app and device, is refused with [AtEnrollmentException] naming it,
   /// before anything is sent, in favour of resuming it. The check is made
-  /// again where the request is filed, so of two enrolls into one store at
-  /// once only one is filed; the other throws [AtEnrollmentException] naming
-  /// the enrollment it sent, which the atSign's manager can deny.
+  /// again inside the store's [WrittenAtKeysIo.update] as the request is
+  /// filed, so of two enrolls into one store at once only one is filed
+  /// wherever that update is one operation, as a keyfile's is across
+  /// processes and a keychain's within one isolate; the other throws
+  /// [AtEnrollmentException] naming the enrollment it sent, which the
+  /// atSign's manager can deny.
   ///
   /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
   /// and [keyExchangeMode] how its symmetric key travels; both default to the

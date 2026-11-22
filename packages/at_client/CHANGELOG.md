@@ -9,9 +9,10 @@
   enrollment for the Atsign, whatever that enrollment's app and device,
   before anything is sent, and names it: resume it with `resumeEnrollment`.
   at_client_flutter 2.1.0's `ApkamActivationDialog` resumes such a request.
-- fix: of two `Atsign.enroll` calls into one keys store at once, only one
-  files its request. The other throws `AtEnrollmentException` naming the
-  enrollment it sent, which the Atsign's manager can deny.
+- fix: of two `Atsign.enroll` calls into one keyfile at once, or into one
+  keychain from one isolate, only one files its request. The other throws
+  `AtEnrollmentException` naming the enrollment it sent, which the Atsign's
+  manager can deny.
 - fix: when another `PendingEnrollment` for the same request has cancelled
   it, an approval that lands in a wait files nothing and throws
   `AtEnrollmentCancelledException`, saying the Atsign's manager can revoke

@@ -339,7 +339,8 @@ void main() {
   );
 
   group('On Windows', () {
-    test('Opening with that entry logs and keeps none of its text', () async {
+    test('On Windows, opening with that entry held in segments logs and keeps '
+        'none of its text', () async {
       KeychainStorage.isWindows = true;
       addTearDown(() => KeychainStorage.isWindows = false);
 

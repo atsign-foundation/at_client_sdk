@@ -96,8 +96,6 @@ Object? _withoutSource(Object? error) =>
 
 /// [source] with the preposition a message puts before it: `in` before a
 /// name, which begins "the" or "this", and `at` before a path.
-///
-/// Internal to at_auth: `package:at_auth/at_auth.dart` hides it.
 String whereKeysAre(String source) =>
     source.startsWith('the ') || source.startsWith('this ')
         ? 'in $source'
