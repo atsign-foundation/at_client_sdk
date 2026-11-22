@@ -111,10 +111,12 @@
 - feat: `AtKeysFormatException.isJson` says whether the document parsed, as
   JSON that is not an object or not one of the shape it must have, or as the
   `kind` of data `badField` was given.
-- fix: `activateAtSign` throws before sending anything when `keys` holds keys
-  it cannot read (`AtKeysUnusableException`, naming the store and why) or
-  when a `FileAtKeysIo` keyfile cannot be written there
-  (`FileSystemException` naming its path).
+- fix: `AtAuth.onboard`, and so `activateAtSign`, throws before sending
+  anything when its keys store holds keys it cannot read
+  (`AtKeysUnusableException`, naming the store and why) or when a
+  `FileAtKeysIo` keyfile cannot be written there (`FileSystemException`
+  naming its path). The check creates the keyfile's directory if it is
+  missing.
 - fix: `AtAuth.onboard` refuses a request with no `atKeysIo`, or a read-only
   one, before it sends anything to the atServer.
 - fix: a message about an atKeys date that does not parse gives the

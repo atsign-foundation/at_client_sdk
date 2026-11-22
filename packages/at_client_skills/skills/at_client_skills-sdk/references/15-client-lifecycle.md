@@ -36,7 +36,10 @@ final owner = await Atsign('@alice').activate(
     lookUps: lookUps, secondaryAddressFinder: finder);
 
 // Enroll this app with an atSign whose keys another device holds. The
-// request is filed in `keys` as pending, so a restart resumes it.
+// request is filed in `keys` as pending, so a restart resumes it. enroll
+// throws AtEnrollmentException when `keys` already holds live keys or a
+// pending request, whatever its app and device: resume that one, or cancel
+// it, first.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);

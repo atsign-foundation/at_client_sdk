@@ -282,8 +282,12 @@ client.connection.changes.listen((s) => setState(() => _state = s));
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
 - Keys `open` cannot use (absent, unreadable, holding no authentication
   keypair it can use, or for another atSign) throw
-  `AtKeysUnusableException` before it connects, on any device, and
-  `PkamDialog` shows its message.
+  `AtKeysUnusableException` before it connects, on any device. `PkamDialog`
+  shows the first line of its message, or its own words when the keys hold
+  no credential, or only a request it cannot wait on.
+- When the keys hold a request awaiting approval in a store it can write,
+  `PkamDialog` waits for the approval instead, and offers Cancel, which
+  removes the request's pending keys once the user confirms.
 
 See [15-client-lifecycle.md](15-client-lifecycle.md) for the full state model,
 the services and the shutdown checklist.

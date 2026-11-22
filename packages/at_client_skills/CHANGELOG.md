@@ -5,6 +5,10 @@
 - Keys `open` cannot use throw `AtKeysUnusableException` before it connects,
   `AtNoCredentialException` and `AtEnrollmentPendingException` among them
   (`SKILL.md`; `references/05`, `15`).
+- `enroll` refuses a keys store that already holds live keys or a pending
+  request (`references/15`).
+- `PkamDialog` waits on a pending request in a store it can write and offers
+  Cancel, and says what it shows for keys it cannot use (`references/05`).
 - The package map says the browser platform package, `at_client_web`, is
   still being built and is not published (`references/06`).
 - An `AtCollection` item id is folded to lower case, and one holding `.`, `:`,

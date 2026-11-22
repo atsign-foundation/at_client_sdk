@@ -38,7 +38,7 @@
   key, for up to 5 seconds, to say whether to activate it or enroll this
   machine. The activate command it gives, and the one programs built on
   `CLIBase` give, names the root they were given with `-r`, and a lookup
-  still running after 5 seconds has its connections closed.
+  still running after 5 seconds is stopped, closing its connection.
 - fix: a passphrase-protected keyfile is reported as having a wrong or
   missing passphrase only when the passphrase was refused; any other reason
   it cannot be opened, such as an envelope version this build has no code

@@ -10,18 +10,18 @@
   leaving lands as they close, and they stop a client that an approval opens
   after they have closed. `ApkamActivationDialog` also closes its Cancel
   confirmation when the wait fails.
-- fix: `ApkamActivationDialog` and `PkamDialog` show a failure when another
-  wait has cancelled the request they wait on, saying the Atsign's manager
-  can revoke its approval.
+- fix: `ApkamActivationDialog` and `PkamDialog` show a failure when the
+  request they wait on is approved after another wait has cancelled it,
+  saying the Atsign's manager can revoke the approval.
 - fix: `ApkamActivationDialog`'s resume status shows the enrollment id and
   the names its key store records with their control characters escaped, and
   both dialogs' Cancel texts and `PkamDialog`'s waiting status show the
   enrollment id the same way.
 - fix: `EnrollmentRequestCard`, `AuthorisationFeedbackOverlay` and the
   approved enrollments in `EnrollmentRequestList` show a request's app and
-  device names, the card its namespaces, and the key an Anchored verdict
-  names, with their control and format characters escaped, each clipped at 180
-  characters.
+  device names, the card its namespaces, and the list the key an Anchored
+  verdict names, with their control and format characters escaped, each
+  clipped at 180 characters.
 - fix: the onboarding dialogs show an error's own text, when they have no
   plainer words for it, with its control characters escaped, clipped at 180
   characters.
