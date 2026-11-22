@@ -82,14 +82,16 @@ void main() {
   }
 
   /// An atServer that accepts each request as [id], recording in [sent] each
-  /// `enroll:` command it is sent.
-  MockAtLookupImpl acceptingAtServer(List<String> sent, {String id = 'e-1'}) {
+  /// `enroll:` command it is sent and running [onEnroll] before it answers.
+  MockAtLookupImpl acceptingAtServer(List<String> sent,
+      {String id = 'e-1', Future<void> Function()? onEnroll}) {
     final lookUp = MockAtLookupImpl();
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
         .thenAnswer((invocation) async {
       final command = invocation.positionalArguments.first as String;
       if (command.startsWith('enroll:')) {
         sent.add(command);
+        await onEnroll?.call();
         return 'data:${jsonEncode({'enrollmentId': id, 'status': 'pending'})}';
       }
       throw StateError('the atServer double has no answer for: $command');
@@ -273,6 +275,7 @@ void main() {
                   startsWith('the atSign\'s manager can deny enrollment "e-1" '
                       'of $atSign, which is not filed: filing it in the '
                       'AtKeys store ($path) failed: '),
+                  contains('Cannot create the lock'),
                   isNot(contains('\n'))))),
           reason: 'the refusal names the enrollment it sent');
       expect(sent, hasLength(1), reason: 'the request was sent');
@@ -299,5 +302,33 @@ void main() {
           () => keys.read(atSign), throwsA(isA<AtKeysSourceAbsentException>()),
           reason: 'the store is unchanged');
     });
+  });
+
+  test(
+      'Given no keys for @alice yet, when live keys are written while the '
+      'request is being sent, then it is not filed and the live keys stay',
+      () async {
+    final keys = InMemoryAtKeysIo();
+    final live = AtKeys.legacy(
+        apkamPublicKey: demo.pkamPublicKeyMap[atSign]!,
+        apkamPrivateKey: demo.pkamPrivateKeyMap[atSign]!);
+    final sent = <String>[];
+
+    await expectLater(
+        enroll(atSign, keys,
+            atLookUp: acceptingAtServer(sent,
+                onEnroll: () => keys.write(atSign, live))),
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            'the atSign\'s manager can deny enrollment "e-1" of $atSign, '
+                'which is not filed: $atSign gained live keys in the AtKeys '
+                'store while it was being sent')),
+        reason: 'the refusal reaches the caller as it is, not wrapped as a '
+            'failure of the filing');
+    expect(sent, hasLength(1), reason: 'the request was sent');
+    final stored = await keys.read(atSign);
+    expect(stored.holdsAuthenticationMaterial, isTrue);
+    expect(stored.pendingEnrollmentIds, isEmpty);
   });
 }
