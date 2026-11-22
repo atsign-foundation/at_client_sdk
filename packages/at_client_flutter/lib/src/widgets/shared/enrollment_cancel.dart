@@ -101,8 +101,8 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
       SnackBar(
         content: Text(
           'Enrollment ${clipForMessage(pending.enrollmentId)} abandoned. Ask '
-          'the manager of '
-          '$atSign to deny it.',
+          'the manager of $atSign to deny it, or to revoke it if they '
+          'approved it already.',
         ),
       ),
     );

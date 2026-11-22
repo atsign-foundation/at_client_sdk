@@ -45,7 +45,7 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   Scenario: A confirmed Cancel abandons
     Given that confirmation
     When the user confirms
-    Then cancel runs and the pending keys go, the user is told to ask the atSign's manager to deny that enrollment id, and the dialog closes with no client
+    Then cancel runs and the pending keys go, the user is told to ask the atSign's manager to deny that enrollment id, or to revoke it if they approved it already, and the dialog closes with no client
 
   @race
   Scenario: A confirmed Cancel after the approval was written lets the approval stand
@@ -132,7 +132,7 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   Scenario: A confirmed Cancel in PkamDialog abandons
     Given that confirmation
     When the user confirms
-    Then cancel runs and the pending keys go, the user is told to ask the atSign's manager to deny that enrollment id, no failure is shown, and the dialog closes with no client
+    Then cancel runs and the pending keys go, the user is told to ask the atSign's manager to deny that enrollment id, or to revoke it if they approved it already, no failure is shown, and the dialog closes with no client
 
   @race
   Scenario: A confirmed Cancel in PkamDialog after the approval was written lets the approval stand

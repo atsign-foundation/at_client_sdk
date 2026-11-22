@@ -263,7 +263,7 @@ void main() {
       expect(
         find.text(
           'Enrollment enroll-1 abandoned. Ask the manager of @alice to deny '
-          'it.',
+          'it, or to revoke it if they approved it already.',
         ),
         findsOneWidget,
       );
@@ -758,7 +758,7 @@ void main() {
         of: find.byType(SnackBar),
         matching: find.text(
           r'Enrollment enr\u001boll-1 abandoned. Ask the manager of @alice '
-          'to deny it.',
+          'to deny it, or to revoke it if they approved it already.',
         ),
       ),
       findsOneWidget,
