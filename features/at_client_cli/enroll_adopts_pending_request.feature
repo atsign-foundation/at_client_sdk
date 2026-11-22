@@ -35,3 +35,8 @@ Feature: at_activate enroll resumes the request its keyfile already holds
     Given a keyfile holding a pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "pho<CR>ne"
     When at_activate enroll runs for @alice with app "buzz" on device "tablet" on that keyfile
     Then it says "Resuming enrollment <id>, filed as wa\u001bvi on pho\u000dne", and nothing it prints, apart from its own colour and line-redraw codes, holds an ESC or a carriage return
+
+  Scenario: enroll refuses a keyfile recorded for another Atsign
+    Given a keyfile holding @alice's pending enrollment
+    When at_activate enroll runs for @bob on that keyfile
+    Then it resumes nothing, sends nothing, says the keys are for @alice, not @bob, and to check -a and -k, and exits 1

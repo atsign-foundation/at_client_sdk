@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart'
     show EnrollerSettings, cancelPending, enrolDevice;
+import 'package:at_client_cli/src/util/keys_problem.dart'
+    show keysProblemFooter;
 import 'package:at_commons/at_builders.dart' show VerbBuilder;
 import 'package:at_lookup/at_lookup.dart' show AtAuthenticator;
 import 'package:mocktail/mocktail.dart';
@@ -14,9 +16,11 @@ import 'lifecycle_rig.dart';
 
 /// `at_activate cancel` gives up the pending enrollment request its keyfile
 /// holds and sends nothing, and the programs that wait on such a request name
-/// it.
+/// it. `at_activate enroll` refuses, as cancel does, a keyfile recorded for
+/// another Atsign.
 ///
 /// Catalogue: features/at_client_cli/cancel_pending_enrollment.feature
+/// Catalogue: features/at_client_cli/enroll_adopts_pending_request.feature
 ///
 /// at_activate runs in this process. The atDirectory its command lines name
 /// is a loopback port that counts each connection made to it, so a command
@@ -73,11 +77,14 @@ void main() {
         '-r', '127.0.0.1:${atDirectory.port}',
       ]);
 
-  /// Files a request for [atSign] in the keyfile at [keysPath], as
-  /// `at_activate enroll` run by app "buzz" on device "phone" does, against
-  /// an atServer that has not decided it, and returns the symmetric key it
-  /// wrapped for [approvingAtServer].
-  Future<List<String>> fileRequest() async {
+  /// Files a request for [atSign] in the keyfile at [keysPath], or at [path],
+  /// encrypted with [passPhrase] when one is given, as `at_activate enroll`
+  /// run by app "buzz" on device "phone" does, against an atServer that has
+  /// not decided it, and returns the symmetric key it wrapped for
+  /// [approvingAtServer].
+  Future<List<String>> fileRequest({String? path, String? passPhrase}) async {
+    final keyfile =
+        FileAtKeysIo(filePath: (_) => path ?? keysPath, passPhrase: passPhrase);
     final wrapped = <String>[];
     final undecided = approvingAtServer(
         decide: (_) async => throw AtAuthErrorReplyException(
@@ -90,7 +97,7 @@ void main() {
         app: 'buzz',
         device: 'phone',
         namespaces: {'buzz': 'rw'},
-        keys: FileAtKeysIo(filePath: (_) => keysPath),
+        keys: keyfile,
         preference: AtClientPreference()
           ..rootDomain = InternetAddress.loopbackIPv4.address
           ..rootPort = rootPort
@@ -99,9 +106,9 @@ void main() {
         lookUps: loopbackLookUps(),
         secondaryAddressFinder: CacheableSecondaryAddressFinder(
             InternetAddress.loopbackIPv4.address, rootPort));
-    final info = (await FileAtKeysIo(filePath: (_) => keysPath).read(atSign))
-        .enrollmentInfo(approvedEnrollmentId);
-    expect(await pendingIn(keysPath, atSign), [approvedEnrollmentId],
+    final filed = await keyfile.read(atSign);
+    final info = filed.enrollmentInfo(approvedEnrollmentId);
+    expect(filed.pendingEnrollmentIds, [approvedEnrollmentId],
         reason: 'the precondition: the keyfile holds the request');
     expect((info?.appName, info?.deviceName), ('buzz', 'phone'),
         reason: 'the precondition: buzz filed it on phone');
@@ -301,6 +308,95 @@ void main() {
     expect('${run.out}${run.err}', isNot(contains(notice!)),
         reason: 'no posture changes what cancel does, so it says nothing '
             'about one');
+  });
+
+  for (final (keyfile, given, report)
+      in <(String, Future<void> Function(), List<Matcher> Function())>[
+    (
+      'a keyfile that is not valid JSON',
+      () async => File(keysPath)
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{"not json'),
+      () => [
+            startsWith('The keys for $atSign in the AtKeys store ($keysPath) '
+                'could not be read: it is not valid JSON'),
+            equals(keysProblemFooter),
+          ],
+    ),
+    (
+      'a keyfile that has a passphrase when no -P is given',
+      () => fileRequest(passPhrase: 'a passphrase'),
+      () => [
+            equals('Could not read the keys for $atSign at $keysPath: the '
+                'passphrase is wrong or missing.'),
+            equals('  If the keyfile has a passphrase, pass it with -P.'),
+            equals(keysProblemFooter),
+          ],
+    ),
+  ]) {
+    test(
+        'cancel reports a keyfile it cannot read as at_activate reports keys '
+        'problems', () async {
+      await given();
+      final before = filesIn(dir);
+
+      final run = await cancel();
+
+      expect(filesIn(dir), before, reason: 'given $keyfile: nothing changes');
+      expect(connections, 0, reason: 'given $keyfile: nothing is sent');
+      expect(run.err.split('\n'), containsAllInOrder(report()),
+          reason: "given $keyfile: at_activate's report for that keyfile, "
+              'ending with its footer');
+      expect(run.err, isNot(contains('contact support@atsign.com')),
+          reason: 'given $keyfile: not the generic error');
+      expect(run.code, 1, reason: 'given $keyfile: it exits 1');
+    });
+  }
+
+  test('cancel refuses a keyfile recorded for another Atsign', () async {
+    await fileRequest();
+    final before = filesIn(dir);
+
+    final run = await atActivate([
+      'cancel', '-a', '@bob', '-k', keysPath, //
+      '-r', '127.0.0.1:${atDirectory.port}',
+    ]);
+
+    expect(filesIn(dir), before, reason: 'nothing changes');
+    expect(connections, 0, reason: 'nothing is sent');
+    expect(
+        run.err,
+        contains('The keys in the AtKeys store ($keysPath) are for $atSign, '
+            'not @bob. Check -a and -k.'),
+        reason: 'it says the keys are for $atSign, not @bob, and to check -a '
+            'and -k');
+    expect(run.code, 1, reason: 'it exits 1');
+  });
+
+  test('enroll refuses a keyfile recorded for another Atsign', () async {
+    await fileRequest();
+    final before = filesIn(dir);
+
+    final run = await atActivate([
+      'enroll', '-a', '@bob', '-k', keysPath, //
+      '--app', 'buzz', '--device', 'phone', '--namespaces', 'buzz:rw',
+      '--passcode', 'ABC123',
+      '-r', '127.0.0.1:${atDirectory.port}',
+    ]).timeout(const Duration(seconds: 10),
+        onTimeout: () => fail('it resumes nothing, so it has nothing to wait '
+            'on: enroll was still running after 10 seconds'));
+
+    expect(filesIn(dir), before, reason: 'nothing changes');
+    expect(run.err, isNot(contains('Resuming enrollment')),
+        reason: 'it resumes nothing');
+    expect(connections, 0, reason: 'it sends nothing');
+    expect(
+        run.err,
+        contains('The keys in the AtKeys store ($keysPath) are for $atSign, '
+            'not @bob. Check -a and -k.'),
+        reason: 'it says the keys are for $atSign, not @bob, and to check -a '
+            'and -k');
+    expect(run.code, 1, reason: 'it exits 1');
   });
 
   test('cancel needs the keyfile, as enroll does', () async {

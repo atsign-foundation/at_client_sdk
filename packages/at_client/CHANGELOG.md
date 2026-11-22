@@ -225,8 +225,10 @@
   written; the exception names the store.
 - fix: `Atsign.open` throws `AtKeysUnusableException` before connecting, on
   every device, for keys it cannot use: absent, unreadable, holding no
-  keypair it can sign with, or for another atSign. `AtNoCredentialException`
+  keypair it can sign with, or for another Atsign. `AtNoCredentialException`
   and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
+- fix: `Atsign.resumeEnrollment` throws `AtKeysUnusableException`, as
+  `Atsign.open` does, for keys it cannot read or that record another Atsign.
 - feat: `AtNoCredentialException` and `AtEnrollmentPendingException` say
   which AtKeys store they came from in `source` when `Atsign.open` throws
   them.

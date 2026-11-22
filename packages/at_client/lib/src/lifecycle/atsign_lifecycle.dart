@@ -507,6 +507,11 @@ extension AtsignLifecycle on Atsign {
   /// `enrollmentId` field names, else the first, and logs a warning;
   /// cancelling each in turn clears the rest.
   ///
+  /// [keys] are read as [open] reads them: keys that cannot be read, or that
+  /// record another atSign, throw [AtKeysUnusableException] before any
+  /// connection is opened, and a store holding nothing for this atSign gives
+  /// null.
+  ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
   /// the enrollment opens, to the atServer [secondaryAddressFinder] finds,
   /// and [atLookUp] is one for the approval handshake,
@@ -527,7 +532,7 @@ extension AtsignLifecycle on Atsign {
   }) async {
     final AtKeys stored;
     try {
-      stored = await keys.read(this);
+      stored = await _readOwnKeys(keys);
     } on AtKeysSourceAbsentException {
       return null;
     }
@@ -576,22 +581,12 @@ extension AtsignLifecycle on Atsign {
   Future<void> _refuseUnusableKeys(AtKeysIo keys) async {
     final AtKeys stored;
     try {
-      stored = await keys.read(this);
+      stored = await _readOwnKeys(keys);
     } on AtKeysSourceAbsentException catch (e, stackTrace) {
       _refuse(
           AtKeysUnusableException.absent(this,
               source: keys.describeSource(this), error: e),
           stackTrace);
-    } catch (e, stackTrace) {
-      _refuse(
-          AtKeysUnusableException.unreadable(this,
-              source: keys.describeSource(this), error: e),
-          stackTrace);
-    }
-    final recorded = stored.atsign;
-    if (recorded != null && recorded.toAtsign() != toAtsign()) {
-      throw AtKeysUnusableException.anotherAtsign(this, recorded,
-          source: keys.describeSource(this));
     }
     if (!stored.holdsAuthenticationMaterial) {
       final pending = stored.pendingEnrollmentIds.toList();
@@ -617,6 +612,29 @@ extension AtsignLifecycle on Atsign {
               source: keys.describeSource(this), error: e),
           stackTrace);
     }
+  }
+
+  /// What [keys] hold for this atSign. Throws [AtKeysSourceAbsentException]
+  /// when they hold nothing for it, and [AtKeysUnusableException] when what
+  /// they hold cannot be read or records another atSign.
+  Future<AtKeys> _readOwnKeys(AtKeysIo keys) async {
+    final AtKeys stored;
+    try {
+      stored = await keys.read(this);
+    } on AtKeysSourceAbsentException {
+      rethrow;
+    } catch (e, stackTrace) {
+      _refuse(
+          AtKeysUnusableException.unreadable(this,
+              source: keys.describeSource(this), error: e),
+          stackTrace);
+    }
+    final recorded = stored.atsign;
+    if (recorded != null && recorded.toAtsign() != toAtsign()) {
+      throw AtKeysUnusableException.anotherAtsign(this, recorded,
+          source: keys.describeSource(this));
+    }
+    return stored;
   }
 
   /// Throws [unusable] with the [stackTrace] of what made the keys unusable.

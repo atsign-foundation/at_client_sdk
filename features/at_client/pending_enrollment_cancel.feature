@@ -212,6 +212,16 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When the app resumes and cancels, and again
     Then it cancels e-one, then e-two, and the store holds none
 
+  Scenario: A resume refuses keys it cannot read, as open does
+    Given an AtKeys store for @alice that cannot be read
+    When an app calls Atsign.resumeEnrollment for @alice
+    Then it throws AtKeysUnusableException with cause unreadable, naming the AtKeys store, and opens no connection
+
+  Scenario: A resume refuses keys recorded for another Atsign
+    Given an AtKeys store whose atsign is @bob, holding @bob's pending enrollment
+    When an app calls Atsign.resumeEnrollment for @alice
+    Then it throws AtKeysUnusableException with cause anotherAtsign, the store is unchanged, and it opens no connection
+
   Scenario Outline: A store already waiting on an enrollment for an Atsign refuses another, before anything is sent
     Given a store holding a pending enrollment for @alice from app wavi on device phone
     When app <app> on device <device> asks to enroll @alice into that store

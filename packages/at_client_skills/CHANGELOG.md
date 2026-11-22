@@ -10,6 +10,8 @@
   (`SKILL.md`; `references/05`, `15`).
 - `enroll` refuses an AtKeys store that already holds live keys or a pending
   request (`references/15`).
+- `resumeEnrollment` throws `AtKeysUnusableException`, as `open` does, for
+  keys it cannot read or that record another Atsign (`references/15`).
 - `PkamDialog` waits on a pending request in a store it can write and offers
   Cancel, and says what it shows for keys it cannot use (`references/05`).
 - The package map says the browser platform package, `at_client_web`, is

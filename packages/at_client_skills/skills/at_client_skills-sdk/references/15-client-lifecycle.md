@@ -106,6 +106,10 @@ connect attempt waits before the client comes back offline, 5 s by default).
 cannot resolve is a plain `AtEnrollmentException`; `resumeEnrollment` returns
 the request after it and null after a denial.
 
+`resumeEnrollment` reads the keys as `open` does: keys it cannot read, or that
+record another Atsign, throw `AtKeysUnusableException` before it connects, and
+an AtKeys store holding nothing for the Atsign gives null.
+
 ---
 
 ## 2. Storage

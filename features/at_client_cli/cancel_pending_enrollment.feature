@@ -44,6 +44,16 @@ Feature: at_activate cancel removes the request its keyfile is waiting on
       | a keyfile holding no request and no keys    |
       | no keyfile at the path given                |
 
+  Scenario: cancel reports a keyfile it cannot read as at_activate reports keys problems
+    Given a keyfile for @alice that is not valid JSON, or that has a passphrase when no -P is given
+    When at_activate cancel runs for @alice on that keyfile
+    Then nothing changes, nothing is sent, it prints at_activate's keys-problem report for that keyfile (for the passphrase, that -P passes it), and it exits 1
+
+  Scenario: cancel refuses a keyfile recorded for another Atsign
+    Given a keyfile holding @alice's pending enrollment
+    When at_activate cancel runs for @bob on that keyfile
+    Then nothing changes, nothing is sent, it says the keys are for @alice, not @bob, and to check -a and -k, and it exits 1
+
   Scenario: cancel needs the keyfile, as enroll does
     When at_activate cancel runs for @alice without -k
     Then it says the -k option is mandatory for the cancel command, and it exits 1

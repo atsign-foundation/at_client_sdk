@@ -7,6 +7,9 @@
 - feat: a `CLIBase` program waiting on its keyfile's pending request, and
   at_activate's report of such a keyfile, name the `at_activate cancel`
   command that gives it up.
+- fix: `at_activate cancel` and `enroll` say what is wrong with a keyfile
+  they cannot read, or one recorded for another Atsign, and `enroll` no
+  longer waits on that other Atsign's request.
 - fix: keys that cannot be read, cannot authenticate or are for another
   atSign are reported naming the keyfile as "the AtKeys store (<path>)".
 - fix: `at_activate list`, `approve` and `auto` show the ids, statuses,
