@@ -6,10 +6,10 @@
   or "the AtKeys store".
 - fix: `AtEnrollmentPendingException` names each pending enrollment id in
   double quotes, with its control characters escaped.
-- fix: `Atsign.enroll`'s refusal of a keys store already waiting on an
+- fix: `Atsign.enroll`'s refusal of an AtKeys store already waiting on an
   enrollment names its id, app and device in double quotes, with their
   control characters escaped.
-- fix: `Atsign.enroll` refuses a keys store already waiting on an
+- fix: `Atsign.enroll` refuses an AtKeys store already waiting on an
   enrollment for the Atsign, whatever that enrollment's app and device,
   before anything is sent, and names it: resume it with `resumeEnrollment`.
   at_client_flutter 2.1.0's `ApkamActivationDialog` resumes such a request.
@@ -21,7 +21,7 @@
   it, an approval that lands in a wait files nothing and throws
   `AtEnrollmentCancelledException`, saying the Atsign's manager can revoke
   it. When another has already filed the approval, the wait ends approved.
-- fix: `Atsign.resumeEnrollment` returns the keys store's one pending
+- fix: `Atsign.resumeEnrollment` returns the AtKeys store's one pending
   enrollment whatever app and device it was filed under, so its `app` and
   `device` parameters are deprecated and ignored.
   `AtEnrollmentPendingException.several` is deprecated, since nothing throws
@@ -221,17 +221,17 @@
   Conflicting duplicate IDs trigger warnings and are reported on
   `droppedEvents`.
 - fix: `Atsign.activate` and `pqNativeOnboard` throw before sending anything
-  when the keys store holds keys they cannot read, or its keyfile cannot be
+  when the AtKeys store holds keys they cannot read, or its keyfile cannot be
   written; the exception names the store.
 - fix: `Atsign.open` throws `AtKeysUnusableException` before connecting, on
   every device, for keys it cannot use: absent, unreadable, holding no
   keypair it can sign with, or for another atSign. `AtNoCredentialException`
   and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
 - feat: `AtNoCredentialException` and `AtEnrollmentPendingException` say
-  which keys store they came from in `source` when `Atsign.open` throws
+  which AtKeys store they came from in `source` when `Atsign.open` throws
   them.
-- fix: `Atsign.enroll` refusing a keys store that holds live keys says to give
-  the new enrollment a keys store of its own.
+- fix: `Atsign.enroll` refusing an AtKeys store that holds live keys says to
+  give the new enrollment an AtKeys store of its own.
 - feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
   first activation in place of a minted one; a pair that does not sign under
   the activation's algorithm is refused with `AtSigningException` before

@@ -42,7 +42,7 @@ class _StoreAwaitingOnce extends InMemoryAtKeysIo {
   }
 }
 
-/// An in-memory key store that runs [beforeWrite] once, ahead of its next
+/// An in-memory AtKeys store that runs [beforeWrite] once, ahead of its next
 /// write.
 class _StoreWrittenOnce extends InMemoryAtKeysIo {
   Future<void> Function()? beforeWrite;

@@ -5,7 +5,7 @@
 - Keys `open` cannot use throw `AtKeysUnusableException` before it connects,
   `AtNoCredentialException` and `AtEnrollmentPendingException` among them
   (`SKILL.md`; `references/05`, `15`).
-- `enroll` refuses a keys store that already holds live keys or a pending
+- `enroll` refuses an AtKeys store that already holds live keys or a pending
   request (`references/15`).
 - `PkamDialog` waits on a pending request in a store it can write and offers
   Cancel, and says what it shows for keys it cannot use (`references/05`).
@@ -39,7 +39,7 @@
   whose request another wait cancelled before its approval was filed
   (`references/15`).
 - `resumeEnrollment` takes no app or device: it resumes the one pending
-  enrollment a keys store holds (`SKILL.md`; `references/15`).
+  enrollment an AtKeys store holds (`SKILL.md`; `references/15`).
 - A collection write whose own copy fails writes no recipient's copy
   (`references/02`).
 - A write waits up to 30 seconds in all for start-up to ask for its namespace

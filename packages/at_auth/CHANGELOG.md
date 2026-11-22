@@ -115,7 +115,7 @@
   JSON that is not an object or not one of the shape it must have, or as the
   `kind` of data `badField` was given.
 - fix: `AtAuth.onboard`, and so `activateAtSign`, throws before sending
-  anything when its keys store holds keys it cannot read
+  anything when its AtKeys store holds keys it cannot read
   (`AtKeysUnusableException`, naming the store and why) or when a
   `FileAtKeysIo` keyfile cannot be written there (`FileSystemException`
   naming its path). The check creates the keyfile's directory if it is

@@ -160,10 +160,10 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
     _resumeIfPending();
   }
 
-  /// A request already in the key store is waited on again rather than asking
-  /// for a passcode it has already spent: the store's one pending request,
-  /// whatever app and device it was filed under, since `enroll` refuses a
-  /// store that already holds one.
+  /// A request already in the AtKeys store is waited on again rather than
+  /// asking for a passcode it has already spent: the store's one pending
+  /// request, whatever app and device it was filed under, since `enroll`
+  /// refuses a store that already holds one.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {

@@ -218,7 +218,7 @@ the minted keypair under the new enrollment id as `pending` typed material,
 with app, device and namespaces on the slot (the submitter already stamps
 those, `enrollment_submitter.dart:90` and `:329`). Resume finds the store's
 one pending slot, whatever its app and device (amended 2026-11-22 by Gary's
-ruling that a key store holds at most one pending enrollment; it said "the
+ruling that an AtKeys store holds at most one pending enrollment; it said "the
 pending slot for (app, device)"); approval flushes the completed keys
 and moves it to `active`; denial or expiry removes it. The CLI's
 `EnrollmentCheckpoint` file and the keychain's `EnrollmentData` go. This adds

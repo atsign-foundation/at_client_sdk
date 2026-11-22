@@ -40,8 +40,8 @@ class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   }
 }
 
-/// A keys store with no path, named [source], whose read fails with
-/// [error].
+/// An AtKeys store with no path, described by [source], whose read fails
+/// with [error].
 class _UnreadableStore extends WrittenAtKeysIo {
   _UnreadableStore(this.error, {this.source = 'a test location'});
 
@@ -58,7 +58,7 @@ class _UnreadableStore extends WrittenAtKeysIo {
   Future write(String atsign, AtKeys atKeys) async {}
 }
 
-/// A keys store that cannot be written, holding nothing.
+/// An AtKeys store that cannot be written, holding nothing.
 class _ReadOnlyStore extends GeneratedAtKeysIo {
   @override
   AtKeys read(String atsign) =>
@@ -412,7 +412,7 @@ void main() {
   });
 
   group(
-      'Activation with no keys store, or a read-only one, is refused before '
+      'Activation with no AtKeys store, or a read-only one, is refused before '
       'anything is sent', () {
     Future<AtOnboardingResponse> onboardInto(AtKeysIo? keys) => atAuth.onboard(
         AtOnboardingRequest(atSign,

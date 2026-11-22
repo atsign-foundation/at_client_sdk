@@ -27,9 +27,9 @@ class _PopRecorder extends NavigatorObserver {
       popped.add(route);
 }
 
-/// A request filed in a key store under [enrollmentId] by [app] on [device],
-/// which has not been decided, for [namespaces], what the dialog asks for by
-/// default.
+/// A request filed in an AtKeys store under [enrollmentId] by [app] on
+/// [device], which has not been decided, for [namespaces], what the dialog
+/// asks for by default.
 MockPendingEnrollment filed(
   String enrollmentId, {
   required String app,

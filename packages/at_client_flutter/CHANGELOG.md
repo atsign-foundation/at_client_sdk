@@ -7,7 +7,7 @@
   AtKeys store (this device's keychain)".
 - feat: `PkamDialog` offers Cancel while it waits on a pending enrollment, as
   `ApkamActivationDialog` does: after the user confirms, it removes the
-  request's pending keys from the key store.
+  request's pending keys from the AtKeys store.
 - fix: `ApkamActivationDialog` and `PkamDialog` no longer close the screen
   beneath them when a failure, an approval, a confirmed Cancel or the user
   leaving lands as they close, and they stop a client that an approval opens
@@ -20,8 +20,8 @@
   request they wait on is approved after another wait has cancelled it,
   saying the Atsign's manager can revoke the approval.
 - fix: `ApkamActivationDialog`'s resume status shows the enrollment id and
-  the names its key store records with their control characters escaped, and
-  both dialogs' Cancel texts and `PkamDialog`'s waiting status show the
+  the names its AtKeys store records with their control characters escaped,
+  and both dialogs' Cancel texts and `PkamDialog`'s waiting status show the
   enrollment id the same way.
 - fix: `EnrollmentRequestCard`, `AuthorisationFeedbackOverlay` and the
   approved enrollments in `EnrollmentRequestList` show a request's app and
@@ -70,11 +70,11 @@
 - fix: `PkamDialog` tells the user in plain words to enroll the device again
   when its keys hold no credential, or only enrollments awaiting approval
   that it cannot wait on.
-- fix: `ApkamActivationDialog` resumes the request its key store already
+- fix: `ApkamActivationDialog` resumes the request its AtKeys store already
   holds, even one filed under another device or app name, naming the app and
   device the request records when either differs.
 - fix: `AtsignFlows.resumeEnrollment`'s `app` and `device` are deprecated
-  and ignored: it returns the keys store's one pending request whatever app
+  and ignored: it returns the AtKeys store's one pending request whatever app
   and device it was filed under.
 
 ## 2.0.0

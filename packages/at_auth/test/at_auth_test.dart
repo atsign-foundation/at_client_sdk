@@ -154,7 +154,7 @@ void main() {
       when(() => mockPkamAuthenticator.authenticate(any(), any()))
           .thenAnswer((_) => Future.value(true));
 
-      // NOTE: a key store, so the missing-atKeysIo guard passes and the
+      // NOTE: an AtKeys store, so the missing-atKeysIo guard passes and the
       // refusal asserted is the CRAM one.
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
           signingAlgoType: SigningAlgoType.rsa2048,

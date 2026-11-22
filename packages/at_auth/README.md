@@ -80,7 +80,7 @@ Onboarding happens **exactly once per atSign** and consists of:
 4. Writing the private halves to a local `.atKeys` file (for CLI apps)
    or to the device **keychain** (for Flutter apps).
 
-Before step 1 sends anything, activation reads the keys store and, for a
+Before step 1 sends anything, activation reads the AtKeys store and, for a
 keyfile, checks that it can write there. Keys already in the store, keys it
 cannot read, or a keyfile it cannot write stop it with an exception that
 names the store.

@@ -483,7 +483,7 @@ class PendingEnrollment {
   }
 }
 
-/// What an approval finds in the key store as
+/// What an approval finds in the AtKeys store as
 /// [PendingEnrollment.awaitApproval] files it.
 enum _Filing { ended, pending, filedElsewhere, removed }
 
@@ -530,7 +530,7 @@ class AtEnrollmentPendingException extends AtKeysUnusableException {
             cause: AtKeysUnusableCause.pendingEnrollment);
 
   /// [atSign] holds the several pending enrollments [pendingEnrollmentIds].
-  @Deprecated('Nothing throws this: a key store holds at most one pending '
+  @Deprecated('Nothing throws this: an AtKeys store holds at most one pending '
       'enrollment, and Atsign.resumeEnrollment returns it')
   AtEnrollmentPendingException.several(String atSign, this.pendingEnrollmentIds,
       {super.source})

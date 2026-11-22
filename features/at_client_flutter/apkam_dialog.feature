@@ -88,7 +88,7 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Then the failure is shown and the dialog stays open
 
   Scenario Outline: The enrollment dialog adopts the request its store holds under another app or device name
-    Given a key store holding one pending enrollment <id> for @alice, filed by app "wavi-old" on device "phone"
+    Given an AtKeys store holding one pending enrollment <id> for @alice, filed by app "wavi-old" on device "phone"
     When ApkamActivationDialog opens @alice for app "<app>" on device "<device>"
     Then it shows "Resuming enrollment <id>, filed as wavi-old on phone.." and Cancel, without asking for a passcode
     And once the request is approved, the dialog returns the client
@@ -99,13 +99,13 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
       | wavi-old | tablet |
 
   Scenario: The enrollment dialog waits on a request filed for other namespaces
-    Given a key store holding one pending enrollment <id> for @alice, filed by app "todos" on device "phone" for namespaces {todos: rw}
+    Given an AtKeys store holding one pending enrollment <id> for @alice, filed by app "todos" on device "phone" for namespaces {todos: rw}
     When ApkamActivationDialog opens @alice for app "todos2" on device "phone" with namespaces {todos2: rw}
     Then it shows "Resuming enrollment <id>, filed as todos on phone.." and Cancel, without asking for a passcode
     And once the request is approved, the dialog returns the client
 
   Scenario: The enrollment dialog shows a recorded app name with its control characters escaped
-    Given a key store holding one pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "phone"
+    Given an AtKeys store holding one pending enrollment <id> for @alice, filed by app "wa<ESC>vi" on device "phone"
     When ApkamActivationDialog opens @alice for app "wavi" on device "phone"
     Then it shows "Resuming enrollment <id>, filed as wa\u001bvi on phone.." and Cancel
 

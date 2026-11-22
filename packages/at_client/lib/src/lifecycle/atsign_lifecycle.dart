@@ -501,7 +501,7 @@ extension AtsignLifecycle on Atsign {
   /// null when there is none: the way an application picks up an enrollment
   /// it submitted before a restart, to wait for its approval or cancel it.
   ///
-  /// A key store holds at most one pending enrollment, and this returns it
+  /// An AtKeys store holds at most one pending enrollment, and this returns it
   /// whatever app and device it was filed under. A store holding more, which
   /// only a merge, a restore or a hand edit makes, gives the one its
   /// `enrollmentId` field names, else the first, and logs a warning;
@@ -513,11 +513,11 @@ extension AtsignLifecycle on Atsign {
   /// for a caller that already holds one, which the client the enrollment
   /// opens takes over as [open] does.
   Future<PendingEnrollment?> resumeEnrollment({
-    @Deprecated('Ignored: a key store holds at most one pending enrollment, '
-        'which is returned whatever app it was filed under')
+    @Deprecated('Ignored: an AtKeys store holds at most one pending '
+        'enrollment, which is returned whatever app it was filed under')
     String? app,
-    @Deprecated('Ignored: a key store holds at most one pending enrollment, '
-        'which is returned whatever device it was filed under')
+    @Deprecated('Ignored: an AtKeys store holds at most one pending '
+        'enrollment, which is returned whatever device it was filed under')
     String? device,
     required WrittenAtKeysIo keys,
     required AtClientPreference preference,

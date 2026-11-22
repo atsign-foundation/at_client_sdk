@@ -141,12 +141,12 @@ class AtsignFlows {
   Future<PendingEnrollment?> resumeEnrollment(
     String atSign, {
     @Deprecated(
-      'Ignored: a key store holds at most one pending enrollment, '
+      'Ignored: an AtKeys store holds at most one pending enrollment, '
       'which is returned whatever app it was filed under',
     )
     String? app,
     @Deprecated(
-      'Ignored: a key store holds at most one pending enrollment, '
+      'Ignored: an AtKeys store holds at most one pending enrollment, '
       'which is returned whatever device it was filed under',
     )
     String? device,
