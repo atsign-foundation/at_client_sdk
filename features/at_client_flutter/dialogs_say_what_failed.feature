@@ -9,7 +9,9 @@ Feature: The onboarding dialogs say what failed
   trace. PkamDialog's contract is unchanged: only a refusal on a device that
   has never held the atSign online is a failure.
 
-  Races: none arise; each dialog shows one outcome of one attempt.
+  Races: each dialog shows one outcome of one attempt; a client CramDialog's
+  activation opens after the user has left goes to onOnboardingComplete when
+  one is given, and is stopped when none is.
   Replay: none arise; nothing new is sent.
   DoS: none arise.
   Forgery: none arise; a message names only the atSign, the keys source and
@@ -65,3 +67,8 @@ Feature: The onboarding dialogs say what failed
     Given PkamDialog whose operation fails with an exception of no type above, its message an escape character, a right-to-left override and 500 more characters
     When the dialog runs for @alice
     Then it shows the message after "Something went wrong with @alice: " with those two characters written as \u001b and \u202e, clipped, and ending "..."
+
+  Scenario: Leaving CramDialog before it hands back its client, with no onOnboardingComplete, stops that client
+    Given CramDialog onboarding @alice with no onOnboardingComplete
+    When the user leaves before the client is handed back
+    Then that client is stopped, so @alice can be opened again, and nothing beneath the dialog is popped

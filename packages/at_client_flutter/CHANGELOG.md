@@ -14,14 +14,14 @@
 - fix: a confirmed Cancel in `ApkamActivationDialog` or `PkamDialog` that an
   approval filed by another wait beat opens the Atsign on that approval,
   rather than saying the request was abandoned.
-- fix: `ApkamActivationDialog` and `PkamDialog` no longer close the screen
-  beneath them when a failure, an approval, a confirmed Cancel or the user
-  leaving lands as they close, and they stop a client that an approval opens
-  after they have closed. `ApkamActivationDialog` also closes its Cancel
-  confirmation when the wait fails.
-- fix: leaving `PkamDialog` before it hands back its client, when no
-  `onAuthenticationComplete` was given, no longer leaves that client running,
-  so the Atsign can be opened again.
+- fix: `ApkamActivationDialog`, `PkamDialog` and `CramDialog` no longer close
+  the screen beneath them when a failure, an approval, a confirmed Cancel or
+  the user leaving lands as they close. `ApkamActivationDialog` also closes
+  its Cancel confirmation when the wait fails.
+- fix: a client a dialog opens after the user has left it goes to the
+  dialog's callback (`onAuthenticationComplete`, `onOnboardingComplete`) when
+  one is given, and is stopped when none is, so the Atsign can be opened
+  again.
 - fix: `ApkamActivationDialog` and `PkamDialog` show a failure when the
   request they wait on is approved after another wait has cancelled it,
   saying the Atsign's manager can revoke the approval.

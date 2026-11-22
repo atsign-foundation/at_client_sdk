@@ -1,6 +1,7 @@
 import 'package:at_auth/at_auth.dart'
     show AtKeysSourceAbsentException, theAtKeysStore;
 import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/widgets/shared/dialog_showing.dart';
 import 'package:flutter/material.dart';
 
 /// The Cancel a dialog offers while it waits on a pending enrollment, which
@@ -19,13 +20,21 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
   Future<AtClient> openOnApprovedKeys();
 
   /// Hands back [client], opened on the approved keys, by closing the dialog
-  /// with it.
-  Future<void> handBack(AtClient client) async =>
+  /// with it; once the dialog has closed, it stops [client] instead, for a
+  /// dialog that takes no callback to give it to.
+  Future<void> handBack(AtClient client) async {
+    if (showing) {
       Navigator.of(context).pop(client);
+      return;
+    }
+    // NOTE: nothing receives a client opened after the dismissal, and while
+    // it is live the atSign cannot be opened again.
+    await client.stop();
+  }
 
   /// Whether the dialog is there to report to and to close: mounted, with its
   /// route not yet popped, by the dialog or by the user.
-  bool get showing => mounted && (ModalRoute.of(context)?.isActive ?? true);
+  bool get showing => dialogShowing(this);
 
   /// Closes the dialog, unless it has closed already.
   void closeDialog() {
@@ -164,12 +173,6 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
         '"${clipForMessage(pending.enrollmentId, quote: '"')}": $e',
       );
       closeDialog();
-      return;
-    }
-    if (!showing) {
-      // NOTE: nothing receives a client opened after the dismissal, and
-      // while it is live the atSign cannot be opened again.
-      await client.stop();
       return;
     }
     await handBack(client);

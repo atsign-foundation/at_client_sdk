@@ -226,14 +226,8 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
           widget.storage,
         ),
       );
-      if (!showing) {
-        // NOTE: nothing receives a client opened after the dismissal, and
-        // while it is live the atSign cannot be opened again.
-        await client.stop();
-        return;
-      }
       closeConfirmation();
-      Navigator.of(context).pop(client);
+      await handBack(client);
     } catch (e) {
       // The approval was refused, the atServer went away, or the request was
       // wrong. Surface it instead of leaking an unhandled exception, and keep

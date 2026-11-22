@@ -12,7 +12,8 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   Races: leaving stops the wait before the dialog goes, so a dialog reopened
   at once waits alone; an approval that lands as the user leaves is not
   written, and the next resume completes it, while a client opened on an
-  approval already written is stopped; a request another process on this
+  approval already written goes to the dialog's callback when it has one,
+  and is stopped when it has none; a request another process on this
   device completes or abandons first is found as it then is; a wait whose
   request another wait cancels ends with its failure shown, since only the
   user's own confirmed Cancel ends a wait silently; and a dialog closes
@@ -191,3 +192,8 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given PkamDialog shown with no onAuthenticationComplete, on keys that are already approved
     When the user leaves the dialog before the open completes
     Then the client it opened is stopped
+
+  Scenario: An approval landing as the user leaves PkamDialog goes to onAuthenticationComplete when one is given
+    Given PkamDialog waiting on a pending enrollment, with onAuthenticationComplete
+    When the approval lands as the user leaves the dialog
+    Then onAuthenticationComplete receives the client, the dialog does not stop it, and nothing beneath the dialog is popped

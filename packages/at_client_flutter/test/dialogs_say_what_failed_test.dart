@@ -24,6 +24,17 @@ class _FakeAtClientPreference extends Fake implements AtClientPreference {}
 
 class _FakeAtClientStorage extends Fake implements AtClientStorage {}
 
+class _MockAtClient extends Mock implements AtClient {}
+
+/// Records each route the navigator pops.
+class _PopRecorder extends NavigatorObserver {
+  final popped = <Route<dynamic>>[];
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      popped.add(route);
+}
+
 /// The onboarding dialogs say what failed, with no stack trace.
 ///
 /// Catalogue: features/at_client_flutter/dialogs_say_what_failed.feature
@@ -606,4 +617,97 @@ void main() {
       expect(message, endsWith('...'));
     },
   );
+
+  for (final withCallback in [false, true]) {
+    final title = withCallback
+        ? 'Given CramDialog onboarding @alice with onOnboardingComplete, when '
+              'the user leaves before the client is handed back, then '
+              'onOnboardingComplete receives that client, the dialog does not '
+              'stop it, and nothing beneath the dialog is popped'
+        : 'Leaving CramDialog before it hands back its client, with no '
+              'onOnboardingComplete, stops that client';
+    testWidgets(title, (tester) async {
+      final activated = Completer<AtClient>();
+      when(
+        () => flows.activate(
+          any(),
+          cramSecret: any(named: 'cramSecret'),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).thenAnswer((_) => activated.future);
+      final client = _MockAtClient();
+      var stops = 0;
+      when(() => client.stop()).thenAnswer((_) async => stops++);
+      when(() => client.enrollmentId).thenReturn('first-1');
+      final completed = <AtClient>[];
+      final pops = _PopRecorder();
+      final results = <Object?>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [pops],
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  results.add(
+                    await showDialog<Object?>(
+                      context: context,
+                      builder: (context) => CramDialog(
+                        atSign: atSign,
+                        cramKey: 'cram-secret-6d1f0b',
+                        preference: loopback(),
+                        keys: InMemoryAtKeysIo(),
+                        onOnboardingComplete: withCallback
+                            ? completed.add
+                            : null,
+                        flows: flows,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        find.byType(CramDialog),
+        findsOneWidget,
+        reason: 'the control: CramDialog is onboarding',
+      );
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      activated.complete(client);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      if (withCallback) {
+        expect(completed, [
+          client,
+        ], reason: 'onOnboardingComplete receives that client');
+        expect(stops, 0, reason: 'the dialog does not stop it');
+      } else {
+        expect(
+          stops,
+          1,
+          reason: 'that client is stopped, so @alice can be opened again',
+        );
+      }
+      expect(
+        pops.popped.whereType<PageRoute<dynamic>>(),
+        isEmpty,
+        reason: 'nothing beneath the dialog is popped',
+      );
+      expect(results, [null]);
+    });
+  }
 }

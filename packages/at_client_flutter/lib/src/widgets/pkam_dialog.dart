@@ -28,7 +28,9 @@ import 'package:flutter/material.dart';
 /// - [title]: A title string for the dialog (default: "Authenticating via pkam").
 /// - [description]: A description shown while the login is in progress
 ///   (default: "Validating your atKeys...").
-/// - [onAuthenticationComplete]: invoked with the client once it is open.
+/// - [onAuthenticationComplete]: invoked with the client once it is open,
+///   even after the user has left the dialog; with none, a client opened
+///   after the user has left is stopped.
 ///
 /// The client comes back online, offline or refused, and its `connection`
 /// says which; only a refusal on a device that has never held the atSign
@@ -237,7 +239,7 @@ class _PkamDialogState extends State<PkamDialog>
     }
     setState(() => _waitingOn = pending);
     try {
-      final client = await pending.client(
+      return await pending.client(
         preference,
         storage: await storageOrDefault(
           widget.atSign,
@@ -245,13 +247,6 @@ class _PkamDialogState extends State<PkamDialog>
           widget.storage,
         ),
       );
-      if (!showing) {
-        // NOTE: nothing receives a client opened after the user left, and
-        // while it is live the atSign cannot be opened again.
-        await client.stop();
-        return null;
-      }
-      return client;
     } on StoppedException {
       if (!mounted) return null;
       rethrow;

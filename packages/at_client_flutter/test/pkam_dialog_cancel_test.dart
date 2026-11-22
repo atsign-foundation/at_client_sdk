@@ -591,14 +591,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Given PkamDialog waiting, when the approval lands as the '
-      'dialog closes, then its client is stopped and nothing beneath the '
-      'dialog is popped', (tester) async {
+  testWidgets('Given PkamDialog waiting with no onAuthenticationComplete, '
+      'when the approval lands as the dialog closes, then its client is '
+      'stopped and nothing beneath the dialog is popped', (tester) async {
     final opened = clientAnswers();
     when(() => pending.stop()).thenAnswer((_) async {});
-    final client = MockAtClient();
-    when(() => client.stop()).thenAnswer((_) async {});
-    final (results, completed) = await open(tester);
+    final client = stoppableClient();
+    final (results, _) = await open(tester, withCallback: false);
 
     await tester.tapAt(const Offset(4, 4));
     await tester.pump();
@@ -606,10 +605,90 @@ void main() {
     await frames(tester);
 
     verify(() => client.stop()).called(1);
-    expect(pops.popped.whereType<PageRoute<dynamic>>(), isEmpty);
+    expect(
+      pops.popped.whereType<PageRoute<dynamic>>(),
+      isEmpty,
+      reason: 'nothing beneath the dialog is popped',
+    );
     expect(results, [null]);
-    expect(completed, isEmpty);
   });
+
+  testWidgets('An approval landing as the user leaves PkamDialog goes to '
+      'onAuthenticationComplete when one is given', (tester) async {
+    final opened = clientAnswers();
+    when(() => pending.stop()).thenAnswer((_) async {});
+    final client = stoppableClient();
+    var stops = 0;
+    when(() => client.stop()).thenAnswer((_) async => stops++);
+    final (results, completed) = await open(tester);
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    opened.complete(client);
+    await frames(tester);
+
+    expect(completed, [
+      client,
+    ], reason: 'onAuthenticationComplete receives the client');
+    expect(stops, 0, reason: 'the dialog does not stop it');
+    expect(
+      pops.popped.whereType<PageRoute<dynamic>>(),
+      isEmpty,
+      reason: 'nothing beneath the dialog is popped',
+    );
+    expect(results, [null]);
+  });
+
+  for (final withCallback in [true, false]) {
+    final given = withCallback
+        ? 'with onAuthenticationComplete'
+        : 'with no onAuthenticationComplete';
+    final then = withCallback
+        ? 'onAuthenticationComplete receives that client and the dialog does '
+              'not stop it'
+        : 'that client is stopped';
+    testWidgets('Given a confirmed Cancel in PkamDialog after the approval '
+        'was written, $given, when the user leaves before the approved keys '
+        'open, then $then, and nothing beneath the dialog is popped', (
+      tester,
+    ) async {
+      when(
+        () => pending.keys,
+      ).thenReturn(InMemoryAtKeysIo.holding('@alice', _liveKeys()));
+      when(() => pending.stop()).thenAnswer((_) async {});
+      final opened = clientAnswers();
+      when(() => pending.cancel()).thenAnswer((_) async {
+        opened.completeError(
+          AtEnrollmentCancelledException('cancelled after the approval'),
+        );
+      });
+      final opening = Completer<AtClient>();
+      reopens = () => opening.future;
+      final approved = stoppableClient();
+      var stops = 0;
+      when(() => approved.stop()).thenAnswer((_) async => stops++);
+      final (results, completed) = await open(
+        tester,
+        withCallback: withCallback,
+      );
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Abandon');
+
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      opening.complete(approved);
+      await frames(tester);
+
+      expect(completed, withCallback ? [approved] : isEmpty, reason: given);
+      expect(stops, withCallback ? 0 : 1, reason: '$given: $then');
+      expect(
+        pops.popped.whereType<PageRoute<dynamic>>(),
+        isEmpty,
+        reason: '$given: nothing beneath the dialog is popped',
+      );
+      expect(results, [null]);
+    });
+  }
 
   testWidgets('Given PkamDialog backing up the keys of the client it opened, '
       'when the user leaves, then nothing beneath the dialog is popped', (
