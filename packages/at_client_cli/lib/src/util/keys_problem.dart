@@ -26,7 +26,8 @@ List<String> eitherKeysHint(String atSign, String root) => [
 /// [path] as a command line takes it: as it is when no character in it is
 /// one a shell treats specially, else in single quotes, each single quote in
 /// it written `'\''`, or, when [windows], by default on Windows, in
-/// double quotes.
+/// double quotes. Double quotes do not stop cmd expanding `%NAME%`, or
+/// PowerShell expanding `$name`, in a path that holds one.
 String shellQuoted(String path, {bool? windows}) {
   final onWindows = windows ?? Platform.isWindows;
   final plain = path.isNotEmpty &&
