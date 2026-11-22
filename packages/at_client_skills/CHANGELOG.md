@@ -2,6 +2,10 @@
 
 ## 1.4.0 — 2026-09-13
 
+- `Atsign.enroll` refuses keys it cannot read, or that record another
+  Atsign, with `AtKeysUnusableException` before anything is sent, and a
+  request it sent but could not file throws `AtEnrollmentException` naming
+  it (`references/15`).
 - An approval whose keys cannot be collected throws whatever collecting them
   threw, mostly not an `AtEnrollmentException`, so a final `catch` waits
   again rather than cancelling (`references/15`).

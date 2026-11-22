@@ -174,7 +174,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
         lookUps: widget.lookUps,
       );
     } catch (e) {
-      // An unreadable store is reported when the request goes out.
+      // NOTE: enroll refuses an unreadable store before anything is sent.
       return;
     }
     if (pending == null || !mounted) return;

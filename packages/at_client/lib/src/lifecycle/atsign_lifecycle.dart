@@ -380,13 +380,18 @@ extension AtsignLifecycle on Atsign {
   /// in [keys]. [keys] must hold nothing live and nothing pending for this
   /// atSign: a store that already holds a pending enrollment, whatever its
   /// app and device, is refused with [AtEnrollmentException] naming it,
-  /// before anything is sent, in favour of resuming it. The check is made
+  /// before anything is sent, in favour of resuming it. [keys] are read as
+  /// [open] reads them, so keys that cannot be read, or that record another
+  /// atSign, throw [AtKeysUnusableException] before anything is sent, and a
+  /// store holding nothing yet that cannot be written throws its
+  /// [WrittenAtKeysIo.checkWritable] refusal. The check is made
   /// again inside the store's [WrittenAtKeysIo.update] as the request is
   /// filed, so of two enrolls into one store at once only one is filed
   /// wherever that update is one operation, as a keyfile's is across
   /// processes and a keychain's within one isolate; the other throws
   /// [AtEnrollmentException] naming the enrollment it sent, which the
-  /// atSign's manager can deny.
+  /// atSign's manager can deny. So does a request sent and then not filed
+  /// for any other reason, with that reason.
   ///
   /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
   /// and [keyExchangeMode] how its symmetric key travels; both default to the
@@ -474,13 +479,29 @@ extension AtsignLifecycle on Atsign {
 
     // ignore: deprecated_member_use
     final minted = response.atAuthKeys!;
-    await _fileAsPending(keys,
-        minted: minted,
-        enrollmentId: response.enrollmentId,
-        algorithm: algo,
-        app: app,
-        device: device,
-        namespaces: namespaces);
+    try {
+      await _fileAsPending(keys,
+          minted: minted,
+          enrollmentId: response.enrollmentId,
+          algorithm: algo,
+          app: app,
+          device: device,
+          namespaces: namespaces);
+    } on AtEnrollmentException {
+      rethrow;
+    } catch (e, stackTrace) {
+      final store = theAtKeysStore(keys.describeSource(this));
+      final reason = '$e'.split('\n').first.trim();
+      AtSignLogger('AtsignLifecycle ($this)').warning(
+          'enrollment ${_quoted(response.enrollmentId)} of $this was sent and '
+          'could not be filed in $store: ${clipForMessage(reason)}');
+      Error.throwWithStackTrace(
+          AtEnrollmentException(_notFiled(
+              response.enrollmentId,
+              'filing it in $store failed: '
+              '${clipForMessage(reason)}')),
+          stackTrace);
+    }
     return PendingEnrollment(
         atSign: this,
         enrollmentId: response.enrollmentId,
@@ -642,19 +663,31 @@ extension AtsignLifecycle on Atsign {
       Error.throwWithStackTrace(unusable, stackTrace);
 
   /// A store [enroll] may write into: one holding nothing live and nothing
-  /// pending for this atSign. Live keys are refused, since enrolling again
-  /// would overwrite the credential this device already has, and so is any
-  /// pending enrollment, whatever its app and device, which is resumed
-  /// rather than joined by another.
+  /// pending for this atSign, read as [open] reads it, and one that can be
+  /// written when it holds nothing yet. Live keys are refused, since
+  /// enrolling again would overwrite the credential this device already has,
+  /// and so is any pending enrollment, whatever its app and device, which is
+  /// resumed rather than joined by another.
   Future<void> _refuseUnlessEnrollable(WrittenAtKeysIo keys) async {
     final AtKeys existing;
     try {
-      existing = await keys.read(this);
+      existing = await _readOwnKeys(keys);
     } on AtKeysSourceAbsentException {
+      await keys.checkWritable(this);
       return;
     }
     _refuseFilingOver(existing, source: keys.describeSource(this));
   }
+
+  /// [text] in double quotes, escaped and clipped by [clipForMessage].
+  static String _quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
+
+  /// What a refusal says of [sent], an enrollment sent and not filed because
+  /// [reason]; the instruction comes first, so a message clipped at 180
+  /// characters still says what to do.
+  String _notFiled(String sent, String reason) =>
+      "the atSign's manager can deny enrollment ${_quoted(sent)} of $this, "
+      'which is not filed: $reason';
 
   /// Throws [AtEnrollmentException] unless [existing], read from the store
   /// [source] describes, holds nothing live and nothing pending. [sent] is
@@ -662,12 +695,8 @@ extension AtsignLifecycle on Atsign {
   /// filed.
   void _refuseFilingOver(AtKeys existing,
       {required String source, String? sent}) {
-    String quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
-    // NOTE: each refusal's instruction comes first, so a message clipped at
-    // 180 characters still says what to do.
     String notFiled(String gained) =>
-        "the atSign's manager can deny enrollment ${quoted(sent!)} of $this, "
-        'which is not filed: $this gained $gained while it was being sent';
+        _notFiled(sent!, '$this gained $gained while it was being sent');
     if (existing.holdsAuthenticationMaterial) {
       final store = theAtKeysStore(source);
       throw AtEnrollmentException(sent == null
@@ -681,9 +710,9 @@ extension AtsignLifecycle on Atsign {
       final info = existing.enrollmentInfo(pendingId);
       final app = info?.appName;
       final device = info?.deviceName;
-      final held = 'the pending enrollment ${quoted(pendingId)}'
-          '${app == null ? '' : ' for ${quoted(app)}'}'
-          '${device == null ? '' : ' on ${quoted(device)}'}';
+      final held = 'the pending enrollment ${_quoted(pendingId)}'
+          '${app == null ? '' : ' for ${_quoted(app)}'}'
+          '${device == null ? '' : ' on ${_quoted(device)}'}';
       throw AtEnrollmentException(sent == null
           ? '$this already holds $held: resume it with resumeEnrollment '
               'rather than submitting another'
