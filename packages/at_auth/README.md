@@ -28,6 +28,7 @@ on those, rather than consuming `at_auth` directly.
 | APKAM enrollment (approve side) | `AtEnrollment.approve(...)`                                                                   |
 | The `.atKeys` store             | `AtKeys`, `AtKeysIo` and its file and in-memory implementations (keychain: at_client_flutter) |
 | Free atSign registration        | `RegistrarService` (fetches CRAM key by email)                                                |
+| Atsign registration/deletion under a super API key | `RegistrarAdminService` (admin/backend use only, never a client app) |
 
 Logging in is at_client's: `Atsign('@alice').open(keys: ..., preference: ...)`
 builds the client and authenticates on the client's own connection, and
@@ -404,7 +405,7 @@ final pending = await Atsign(atSign).enroll(
     namespaces: {'my_app': 'rw'}, keys: keys, preference: preference,
     lookUps: lookUps, secondaryAddressFinder: atDirectory);
 final client = await pending.client(preference,
-    storage: storage);                             // throws AtEnrollmentException on a denial
+    storage: storage);                             // throws AtEnrollmentDeniedException on a denial (4.1.0)
 ```
 
 **Approve, deny, revoke; passcodes**

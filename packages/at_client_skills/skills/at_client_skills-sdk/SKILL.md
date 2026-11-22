@@ -84,7 +84,10 @@ An app imports `package:at_client_cli/at_client_cli.dart` or
 SDK beyond any feature package it adds (`at_contact`, `at_policy`,
 `at_telemetry`). An app never imports `at_auth`: `at_client` owns onboarding,
 login and enrollment (see §11), and both platform packages re-export the one
-at_auth type an app may want, `RegistrarService`.
+at_auth type an app may want, `RegistrarService`. `RegistrarAdminService`
+(super-API-key registration and deletion) is admin/backend tooling, never a
+client app; its `registerAtsign` returns a `RegisteredAtsign`, and callers
+activate as `registeredAtsign`.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
 the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
@@ -494,15 +497,24 @@ await client.connection.awaitOnline(budget: const Duration(seconds: 30));
 await client.connection.attempt();                  // try again now
 ```
 
-- **offline** (`unreachable`, `noAtServer`): the client serves its local store;
-  writes queue and sync when the atServer is reached. Under `pqActive`, a
-  device's first write in a namespace needs the atServer, which seeds or
-  conveys that namespace's key, and a share needs it whenever the client
-  holds no current copy of the recipient's key. Once a device has written in
-  a namespace, it goes on writing there offline, across restarts.
+- **offline** (`unreachable`, `noAtServer`): no atServer accepted or refused
+  the keys. A connect attempt the atServer answers with neither a challenge
+  to sign nor a decision, such as a server error (AT0011), also ends
+  `unreachable`, and the state's `error` says what it answered; a server
+  error that a verb meets later does not make the client offline. The
+  client serves its local store; writes queue and sync when the atServer is
+  reached. Under `pqActive`, a device's first write in a namespace needs the
+  atServer, which seeds or conveys that namespace's key, and a share needs it
+  whenever the client holds no current copy of the recipient's key. Once a
+  device has written in a namespace, it goes on writing there offline,
+  across restarts.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
   `enrollmentNotApproved`, `enrollmentDenied`): the atServer rejected the keys
-  — the app decides.
+  — the app decides. An `error:` reply to a connection's `from:`, `pkam:` or
+  `cram:` is an `AtAuthErrorReplyException` (exported by at_client 4.1.0)
+  whose `errorCode` is the reply's code, or null when it names none: a
+  refusal code gives the cause and no code gives `unauthenticated`. A verb
+  sent through `getRemoteSecondary()` that meets one throws it.
   The one refusal that **throws** (`AtOpenRefusedException`) is the first open
   of these keys on a device: nothing is held locally, so there is nothing to
   serve. Keys holding only a pending enrollment throw
@@ -696,14 +708,21 @@ final AtClient atClient =
         .atClient;
 ```
 
-- **`CLIBase` tells a refusal from an outage.** It throws
-  `AtCredentialRefusedException` when the atServer refuses the keys,
+- **`CLIBase` tells a refusal from an outage.** Opening the client, it
+  throws `AtCredentialRefusedException` when the atServer refuses the keys,
   `SecondaryNotFoundException` when the atDirectory has no atServer for the
-  atSign, and `SecondaryServerConnectivityException` only for an outage — the
-  one exception a retry loop should catch. A keyfile holding only an
-  enrollment request is resumed: `CLIBase` waits for its approval, as
-  at_activate does, and throws `AtEnrollmentException` when it is denied or
-  expires.
+  Atsign, and `SecondaryServerConnectivityException` only when no atServer
+  accepted or refused the keys: an outage, or an atServer that answers with
+  a server error such as AT0011 or no challenge to sign. That is the one
+  exception a retry loop around opening should catch. A keyfile holding only
+  an enrollment request is resumed: `CLIBase` waits for its approval, as
+  at_activate does, and throws `AtEnrollmentDeniedException` when it is
+  denied and `AtEnrollmentExpiredException` when it expires (both at_client
+  4.1.0; 4.0 throws a plain `AtEnrollmentException` for each), each an
+  `AtEnrollmentException`; both remove the request. A wait the atServer
+  keeps answering with anything else, a server error included, also ends in
+  `AtEnrollmentException` and keeps the request, and an atServer not
+  reached ends it with the connection's own failure.
 - **Every process needs its own storage** (`CliKeys.storageFor(atSign,
   program:, path:)`, a `HiveAtClientStorage(atSign:, storagePath:)`, or
   `CLIBase`'s `-s` flag) — one store is held by one live client and a second

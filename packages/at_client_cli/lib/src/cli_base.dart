@@ -306,9 +306,14 @@ class CLIBase {
   /// credential, as a denial, a cancel or an expiry leaves it,
   /// [AtStorageInUseException] when another process holds the store open,
   /// [AtCredentialRefusedException] when the atServer refuses the
-  /// keys, [AtEnrollmentException] when the request is denied or expires,
-  /// which removes its keys, [SecondaryNotFoundException] when the
-  /// atDirectory has no atServer for the atSign, and the failure when the
+  /// keys, [AtEnrollmentDeniedException] when the request is denied,
+  /// [AtEnrollmentExpiredException] when it expires, both removing its keys,
+  /// a plain [AtEnrollmentException], keeping them, when the atServer keeps
+  /// answering the wait with neither a decision nor "not yet", or when the
+  /// request was approved but its keys could not be fetched or decrypted (so
+  /// it may already be approved; run again rather than cancel it),
+  /// [SecondaryNotFoundException] when the atDirectory has no atServer for the
+  /// atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or
   /// at_activate's retries while waiting for approval
   /// ([SecondaryServerConnectivityException] for the first, naming the

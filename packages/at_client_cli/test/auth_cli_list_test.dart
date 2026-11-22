@@ -6,6 +6,8 @@ import 'package:at_client_cli/src/commands/auth_cli_args.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'lifecycle_rig.dart' show aliceOnLoopback;
+
 class _MockAtClient extends Mock implements AtClient {}
 
 class _MockEnrollmentService extends Mock implements EnrollmentService {}
@@ -54,8 +56,7 @@ void main() {
               })
                 ..enrollmentId = b
             ]);
-    final args =
-        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final args = AuthCliArgs().createListCommandParser().parse(aliceOnLoopback);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.list(args, client),
@@ -94,7 +95,7 @@ void main() {
     // against a lower-case-initial deviceName.
     final args = AuthCliArgs()
         .createListCommandParser()
-        .parse(['-a', '@alice', '-A', 'wavi', '-D', 'PHONE']);
+        .parse([...aliceOnLoopback, '-A', 'wavi', '-D', 'PHONE']);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.list(args, client),
@@ -126,7 +127,7 @@ void main() {
             ]);
     final args = AuthCliArgs()
         .createListCommandParser()
-        .parse(['-a', '@alice', '-A', r'^\D+$']);
+        .parse([...aliceOnLoopback, '-A', r'^\D+$']);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.list(args, client),
@@ -147,7 +148,7 @@ void main() {
         .thenAnswer((_) async => []);
     final args = AuthCliArgs()
         .createListCommandParser()
-        .parse(['-a', '@alice', '-A', '[abc']);
+        .parse([...aliceOnLoopback, '-A', '[abc']);
 
     await expectLater(
         IOOverrides.runZoned(() => auth_cli.list(args, client),
@@ -167,7 +168,7 @@ void main() {
         .thenAnswer((_) async => []);
     final args = AuthCliArgs()
         .createListCommandParser()
-        .parse(['-a', '@alice', '-D', '[abc']);
+        .parse([...aliceOnLoopback, '-D', '[abc']);
 
     await expectLater(
         IOOverrides.runZoned(() => auth_cli.list(args, client),
@@ -214,8 +215,7 @@ void main() {
       };
     }
 
-    final args =
-        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final args = AuthCliArgs().createListCommandParser().parse(aliceOnLoopback);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(
@@ -258,8 +258,7 @@ void main() {
         ? throw AtClientException.message('the record cannot be read')
         : ChainResult(ChainVerdict.anchored, [id], null);
 
-    final args =
-        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final args = AuthCliArgs().createListCommandParser().parse(aliceOnLoopback);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(
@@ -299,8 +298,7 @@ void main() {
             any(that: predicate<AtKey>((k) => '$k'.contains('.r.__e'))),
             getRequestOptions: any(named: 'getRequestOptions')))
         .thenAnswer((_) async => AtValue()..value = 'withdrawn');
-    final args =
-        AuthCliArgs().createListCommandParser().parse(['-a', '@alice']);
+    final args = AuthCliArgs().createListCommandParser().parse(aliceOnLoopback);
     final out = _CapturedStdout();
 
     await IOOverrides.runZoned(() => auth_cli.list(args, client),

@@ -1,5 +1,6 @@
 ## 4.1.0-rc.1
 
+- fix: a pending enrollment's wait that the atServer denies throws `AtEnrollmentDeniedException`, now exported, and removes the pending keys; a wait that ends on any other refusal keeps the request for `resumeEnrollment`, even when the atServer's error text contains "denied".
 - docs: the names of the passkey records on the atServer (the `atkeys.<enrollmentId>.a.__e` document, the `_<lookupHex>.<ns>` pointer, the `atkeys-lock.<enrollmentId>.a.__e` lock and the `completion-due.<enrollmentId>.a.__e` record) are promised from the first stable release, as at_auth's passkey HKDF labels and record layout are: after it they change only with a compatibility path.
 - fix: passkey errors show an unexpected atServer reply or a refused Atsign in quotes, with its control and format characters escaped, so each stays on one line. An unexpected reply to a read of the sealed `@keys` document is named by its length, not shown. A sealed record or document that holds a newline or a carriage return is refused without showing it.
 - fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (after the first, from the document it last read, with no atServer round trip), and never stores the private half in the `@keys` document, nor the public half as typed authentication material. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `close()` zeroes the private key and a read after it throws. A write still running at `close()` finishes whole; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its Atsign and type, and accepts only an Atsign with one leading `@` (`alice` and `left@right` are refused as invalid).
@@ -54,7 +55,11 @@
   hands back its client, and `Atsign.authenticatesAs` throws the error.
 - fix: `Atsign.activate` over an `atLookUp` of your own that you stop while
   it authenticates by PKAM throws `StoppedException`, not
-  `AtAuthenticationException`.
+  `AtAuthenticationException`; stopped while its client first connects, it
+  stops that client and throws `StoppedException` rather than returning it.
+  A post-quantum activation stopped while it mints its signing root does the
+  same, and `mintSigningRootAfterActivation` rethrows a `StoppedException`
+  instead of logging it, as it still logs every other error.
 - feat: a PKAM the atServer refuses with AT0028 reports the connection
   refused with cause `invalidEnrollment`, as AT0029 does, and
   `PendingEnrollment` removes an expired request's pending keys on either

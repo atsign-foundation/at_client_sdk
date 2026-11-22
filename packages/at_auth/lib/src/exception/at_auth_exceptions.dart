@@ -23,6 +23,14 @@ class AtEnrollmentExpiredException extends AtEnrollmentException
   AtEnrollmentExpiredException(super.message);
 }
 
+/// The atServer denied the enrollment an enrollment wait was waiting on
+/// (AT0025), so no approval can follow.
+///
+/// No other end of the wait throws this type.
+class AtEnrollmentDeniedException extends AtEnrollmentException {
+  AtEnrollmentDeniedException(super.message);
+}
+
 class AtKeysFileOverwriteException extends AtException {
   AtKeysFileOverwriteException(super.message);
 }
