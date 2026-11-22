@@ -36,7 +36,10 @@ final owner = await Atsign('@alice').activate(
     lookUps: lookUps, secondaryAddressFinder: finder);
 
 // Enroll this app with an atSign whose keys another device holds. The
-// request is filed in `keys` as pending, so a restart resumes it.
+// request is filed in `keys` as pending, so a restart resumes it. enroll
+// throws AtEnrollmentException when `keys` already holds live keys or a
+// pending request, whatever its app and device: resume that one, or cancel
+// it, first.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
@@ -46,7 +49,9 @@ final enrolled = await pending.client(preference,
 // pending keys are gone from `keys`, as a denial's are, so resumeEnrollment
 // finds nothing. It throws when `keys` cannot remove them; call it again.
 // Call it when the user confirms they give up on the request (a Cancel
-// button).
+// button). From a terminal, `at_activate cancel -a @alice -k <keyfile>` does
+// it for the keyfile `at_activate enroll` filed the request in, and refuses
+// one holding live keys.
 // pending.stop() ends the wait and keeps the request: call it from a
 // dispose() that only leaves the screen, and resumeEnrollment picks the
 // request up later. The request stays on the atServer until its manager
@@ -56,10 +61,11 @@ final enrolled = await pending.client(preference,
 // would then revoke. Both return once any client the wait opened has
 // stopped: when pending.approved says the approval landed first, open the
 // atSign on `keys` at once.
-final resumed = await Atsign('@alice').resumeEnrollment(
-    app: 'my_app', device: 'phone', keys: keys, preference: preference,
-    lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending
-// With no app or device, it resumes the one pending enrollment `keys` holds.
+final resumed = await Atsign('@alice').resumeEnrollment(keys: keys,
+    preference: preference, lookUps: lookUps,
+    secondaryAddressFinder: finder);                  // null: none pending
+// It resumes the one pending enrollment `keys` holds, whatever app and
+// device it was filed under.
 
 // Which enrollment a keys store authenticates as, without building a client.
 final principal = await Atsign('@alice').authenticatesAs(keys: keys,
@@ -80,28 +86,36 @@ connect attempt waits before the client comes back offline, 5 s by default).
 
 **What can refuse:**
 
-| Thrown                          | When                                                                                                     | Do                                                            |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
-| `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
-| `AtEnrollmentPendingException`  | `resumeEnrollment` found several pending enrollments matching what it was given                          | Name both `app` and `device`                                  |
-| `AtNoCredentialException`       | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                 | Enroll again                                                  |
-| `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |
-| `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
-| `AtEnrollmentExpiredException` (at_client 4.1.0) | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed | Tell the user; a new `enroll` is a new request              |
-| `AtEnrollmentDeniedException` (at_client 4.1.0) | `pending.client(...)`: the request was denied; its pending keys are removed                               | Tell the user; a new `enroll` is a new request                |
-| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
-| `AtEnrollmentException`         | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included, or the request was approved but its keys could not be fetched or decrypted; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
-| `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
-| `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
+| Thrown                           | When                                                                                                                                                         | Do                                                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `AtKeysUnusableException`        | The keys are absent, cannot be read, hold no keypair it can use, or record another atSign; thrown before connecting, on any device                           | Show its message; `cause` says which                                                                            |
+| `AtOpenRefusedException`         | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none)                                                     | Show the cause; nothing local to serve                                                                          |
+| `AtEnrollmentPendingException`   | The keys hold only an enrollment awaiting approval (an `AtKeysUnusableException`)                                                                            | `resumeEnrollment`                                                                                              |
+| `AtNoCredentialException`        | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                                                                     | Enroll again                                                                                                    |
+| `AtStorageInUseException`        | Another process holds the Hive store at this location open                                                                                                   | Give each process a location of its own                                                                         |
+| `StateError` "already live"      | A client for this atSign as the same enrollment, or on the same storage, is live in this process                                                             | `stop()` it first; another enrollment opens beside it                                                           |
+| `AtEnrollmentExpiredException` (at_client 4.1.0) | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
+| `AtEnrollmentDeniedException` (at_client 4.1.0) | `pending.client(...)`: the request was denied; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
+| `AtEnrollmentException`          | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included; its pending keys stay            | Show the message; a person decides whether to wait again (`resumeEnrollment` returns the request) or `cancel()` |
+| Any other error, `AtEnrollmentException` included | `pending.client(...)`: the request was approved but its keys could not be fetched or decrypted: an `AtException` such as `AtLookUpException` for an error reply or none, errors such as `FormatException` or `ArgumentError` for a reply that does not parse or decrypt, and a plain `AtEnrollmentException` only when no conveyed key decrypts them; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
+| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`, or another wait for the same request cancelled it before its approval was filed | Nothing after a cancel of its own; otherwise show the message, since an approval may have landed                |
+| `StoppedException`               | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                                                                    | `resumeEnrollment` later; the request is kept                                                                   |
+| `AtCredentialRefusedException`   | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal                                                                 | Show the cause                                                                                                  |
 
 `AtEnrollmentExpiredException`, `AtEnrollmentDeniedException` and
 `AtEnrollmentCancelledException` are also `AtEnrollmentException`s, so their
-`catch` goes first. An answer that waiting cannot resolve, and an approval
-whose keys cannot be collected, are plain `AtEnrollmentException`s;
-`resumeEnrollment` returns the request after either and null after a denial.
+`catch` goes first. An answer that waiting cannot resolve is a plain
+`AtEnrollmentException`. An approval whose keys cannot be collected throws
+whatever collecting them threw, mostly not an `AtEnrollmentException`, so a
+final `catch` of any other error goes after these and waits again rather than
+cancelling. `resumeEnrollment` returns the request after either of these,
+and null after a denial or expiry whose pending keys were removed.
 at_client 4.0 throws a plain `AtEnrollmentException` for a denial and an
 expiry too.
+
+`resumeEnrollment` reads the keys as `open` does: keys it cannot read, or that
+record another Atsign, throw `AtKeysUnusableException` before it connects, and
+an AtKeys store holding nothing for the Atsign gives null.
 
 ---
 

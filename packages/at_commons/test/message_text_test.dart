@@ -1,21 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:at_auth/passkey.dart';
-import 'package:at_auth/src/passkey/passkey_record.dart'
-    show PasskeyRecordCodec;
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
-
-class _Sealer implements RecordSealer {
-  @override
-  Future<Uint8List> seal(Uint8List iv, List<int> plaintext, List<int> aad) =>
-      throw UnimplementedError();
-  @override
-  Future<Uint8List> open(Uint8List iv, Uint8List ciphertext, List<int> aad) =>
-      throw UnimplementedError();
-  @override
-  void close() {}
-}
 
 void main() {
   group(
@@ -24,7 +10,7 @@ void main() {
     test(
         'when it is clipped for an exception message, then each such '
         'character, and each backslash, is shown as an escape and the message '
-        'stays on one line', () async {
+        'stays on one line', () {
       for (final (text, shown) in [
         ('a\nb', r'a\u000ab'),
         ('a\r\nb', r'a\u000d\u000ab'),
@@ -46,30 +32,6 @@ void main() {
       ]) {
         expect(clipForMessage(text), shown, reason: jsonEncode(text));
       }
-
-      await expectLater(
-          PasskeyRecordCodec.open(_Sealer(), '@alice', PasskeyRecordType.eid,
-              jsonEncode({'v': 'x\ny\u2028"z'})),
-          throwsA(isA<UnsupportedPasskeyRecordException>().having(
-              (e) => e.message,
-              'message',
-              allOf(contains(r'unknown version "x\u000ay\u2028\"z"'),
-                  isNot(contains('\n')), isNot(contains('\u2028'))))));
-      await expectLater(
-          PasskeyRecordCodec.open(
-              _Sealer(),
-              '@alice',
-              PasskeyRecordType.eid,
-              jsonEncode({
-                'v': 2,
-                'alg': 'A256GCM',
-                'kdf': 'HKDF-SHA256',
-                'typ': 'eid',
-                'iv': 'x\ny"z',
-                'ct': 'AAAA',
-              })),
-          throwsA(isA<UnsupportedPasskeyRecordException>()
-              .having((e) => e.message, 'message', 'iv is not base64')));
     });
 
     test(

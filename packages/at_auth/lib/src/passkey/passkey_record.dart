@@ -5,7 +5,6 @@ import 'dart:math';
 
 import 'package:at_commons/at_commons.dart';
 
-import '../util/message_text.dart';
 import 'passkey_derivation.dart';
 
 /// Thrown when a passkey record is malformed or of an unknown version,

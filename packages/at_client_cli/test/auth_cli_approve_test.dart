@@ -37,6 +37,7 @@ class _CapturedStdout extends Fake implements Stdout {
 /// Catalogue: features/enrollment/approver_sees_expiry.feature
 /// Catalogue: features/at_client_cli/auto_approve_keeps_listening.feature
 /// Catalogue: features/enrollment/auto_approve_from_own_atsign.feature
+/// Catalogue: features/enrollment/approver_sees_names_escaped.feature
 void main() {
   const b = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
   late _MockAtClient client;
@@ -216,6 +217,62 @@ void main() {
     expect(out.text, isNot(contains('expires')));
   });
 
+  /// Runs `at_activate approve` over B, filed under [names], and hands back
+  /// what it printed.
+  Future<String> approvingB(Map<String, String> names) async {
+    serveB(request: names);
+    final args = AuthCliArgs().createApproveCommandParser().parse([
+      '-a',
+      '@alice',
+      '-r',
+      '127.0.0.1:1',
+      '--${AuthCliArgs.argNameAppNameRegex}',
+      '^wa'
+    ]);
+    final out = _CapturedStdout();
+    await IOOverrides.runZoned(() => auth_cli.approve(args, client),
+        stdout: () => out);
+    return out.text;
+  }
+
+  /// Runs `at_activate auto` as B, filed under [names], is announced, and
+  /// hands back what it printed.
+  Future<String> autoApprovingB(Map<String, String> names) async {
+    serveB();
+    final (out, _) = await autoApproveFrom([
+      AtNotification('n-1', '$b.new.enrollments.__manage@alice', '@alice',
+          '@alice', DateTime.now().millisecondsSinceEpoch, 'key', false)
+        ..value = jsonEncode(names)
+    ], untilDone: false);
+    return out.text;
+  }
+
+  const filedNames = {'appName': 'wa\u001bvi', 'deviceName': 'pho\rne'};
+  final handlingB = [
+    ('at_activate approve', approvingB),
+    ('at_activate auto', autoApprovingB),
+  ];
+
+  for (final (command, run) in handlingB) {
+    test(
+        "$command names the request's app and device in double quotes, "
+        'escaped', () async {
+      expect(await run(filedNames),
+          allOf(contains(r'"wa\u001bvi"'), contains(r'"pho\u000dne"')));
+    }, timeout: const Timeout(Duration(seconds: 5)));
+  }
+
+  for (final (command, run) in handlingB) {
+    test(
+        '$command escapes a double quote inside the app and device names it '
+        'quotes', () async {
+      expect(await run({'appName': 'wa"vi', 'deviceName': 'pho"ne'}),
+          allOf(contains(r'"wa\"vi"'), contains(r'"pho\"ne"')),
+          reason: 'the app and device names in double quotes, the quote '
+              'inside each escaped');
+    }, timeout: const Timeout(Duration(seconds: 5)));
+  }
+
   test('auto_approve matches --arx and --drx case-insensitively', () async {
     serveB();
 
@@ -295,6 +352,29 @@ void main() {
     expect(err.text.split('\n'),
         contains(allOf(contains(key), contains('from "@bob"'))),
         reason: 'a warning names the sender and the key');
+  }, timeout: const Timeout(Duration(seconds: 5)));
+
+  test(
+      'at_activate auto escapes the key and sender of a notification from '
+      'another atSign', () async {
+    serveB();
+
+    final (out, err) = await autoApproveFrom([
+      sentBy('@bob', '@alice:b0b0\u001bb0b0.new.enrollments.__manage@bob'),
+    ], untilDone: false);
+
+    expect(
+        err.text.split('\n'),
+        contains(allOf(
+            contains(r'@alice:b0b0\u001bb0b0.new.enrollments.__manage@bob'),
+            contains('from "@bob"'))),
+        reason: 'one warning line names the key, its ESC written as \\u001b, '
+            'and the sender in double quotes');
+    expect(err.text, isNot(contains('\u001b')),
+        reason: 'nothing on stderr holds an ESC');
+    expect(out.text, isNot(contains('Got enrollment request ID')),
+        reason: 'auto does not act on a notification from another atSign');
+    expect(approvals, isEmpty);
   }, timeout: const Timeout(Duration(seconds: 5)));
 
   group('Given at_activate auto_approve', () {

@@ -1,5 +1,22 @@
 ## 4.1.0-rc.1
 
+- fix: keys messages name where the keys are as "the AtKeys store
+  (<path>)", "the AtKeys store (this device's keychain)" or "the AtKeys
+  store"; `AtKeysIo.describeSource` is empty by default.
+- feat: `theAtKeysStore(source)` names an AtKeys store as keys messages do:
+  "the AtKeys store (<source>)", or "the AtKeys store" for no source.
+- fix: activation refusing keys already in the store names the store in its
+  `AtAuthenticationException`: the keyfile's path, or the store's name.
+- chore: requires at_commons 5.26.0.
+- feat: `AtKeysFormatException.badField` reports a JSON object, or the
+  `kind` of data it is given, whose field is missing or not what it must be.
+- feat: a passphrase envelope refused for its passphrase, missing or one
+  that does not open it, throws `AtKeysPassphraseException`, an
+  `AtDecryptionException`; every other refusal of an envelope is still a
+  plain `AtDecryptionException` saying what is wrong.
+- fix: where there is no home directory, `FileAtKeysIo`'s default keyfile
+  path throws an `AtException` saying so, which activation and open report
+  as unreadable keys (`AtKeysUnusableException`); give it a `filePath`.
 - feat: an enrollment's wait for approval that the atServer denies (AT0025) throws `AtEnrollmentDeniedException`, an `AtEnrollmentException`, so a caller can tell a denial from a wait that ended for another reason without reading the message.
 - docs: the passkey HKDF labels (`at_auth/custody/<name>/v1`) and the sealed passkey record layout (`v: 2`) are promised from the first stable release: after it they change only with a compatibility path, since a changed label or layout locks out every Atsign onboarded with a passkey.
 - docs: `WrittenAtKeysIo.update` says an implementation may run its mutate more than once, each time on a fresh read, keeping only the last run's changes.
@@ -11,7 +28,7 @@
 - feat: a sealed passkey record is bound to its atSign and record type, so it opens only for the atSign and type it was sealed for. `PasskeyVault` takes a required `atSign`, and its `seal` and `open` take the record type.
 - feat: `PasskeyVault` holds its Atsign in canonical form, so a record sealed for `@Alice` opens for `@alice`.
 - feat: `PasskeyVault.wipeAuthSeed()` zeroes the auth seed, immediately or when the last in-flight use ends. Afterwards `withAuthSeed` throws `StateError`, while `seal` and `open` keep working until `close()`.
-- feat: passkey error messages show text read from the wire quoted, escaped and clipped, so each stays on one line: the text is in double quotes, each quote, backslash and control, format or line-separator character in it is escaped, and it is cut after 180 characters, escapes included. A sealed record's `iv` or `ct` that is not base64 is named, not shown. `clipForMessage` in `package:at_auth/passkey.dart` does the escaping and clipping, and escapes the quote character it is given.
+- feat: passkey error messages show text read from the wire quoted, escaped and clipped, so each stays on one line: the text is in double quotes, each quote, backslash and control, format or line-separator character in it is escaped, and it is cut after 180 characters, escapes included. A sealed record's `iv` or `ct` that is not base64 is named, not shown. `clipForMessage` in `package:at_commons/at_commons.dart` does the escaping and clipping, and escapes the quote character it is given.
 - feat: `UnknownCredentialSignal` is a capability interface in `package:at_auth/passkey.dart` for a `PasskeyPort` that can tell the platform a passkey no longer belongs to an account. `PasskeyPrf.signalUnknownCredential` calls it when the port implements it, does nothing otherwise, and ignores a failing signal.
 - feat: `package:at_auth/passkey.dart` is a new library for passkey-held keys.
   It runs the passkey PRF ceremonies (register, then unlock) and keeps a
@@ -37,7 +54,7 @@
 - fix: an `error:` answer to the `from:` of a PKAM or a CRAM activation ends
   it with that exception, and nothing is signed or digested.
 - fix: a failed PKAM during onboarding says what failed, with no stack
-  trace in its message.
+  trace in its message; the trace is logged at fine.
 - feat: an enrollment's wait for approval ends at once with
   `AtEnrollmentExpiredException`, both an `AtEnrollmentException` and an
   `AtInvalidEnrollmentException`, when the atServer refuses its PKAM with
@@ -86,6 +103,33 @@
   in canonical form.
 - fix: `fileRetrofitSerializer` waits up to 3 minutes for the keyfile lock,
   up from 30 seconds, so the wait outlasts the 2-minute staleness threshold.
+- feat: `AtKeysIo.describeSource` says where an Atsign's keys are kept (for
+  `FileAtKeysIo`, the keyfile path), and `WrittenAtKeysIo.checkWritable`
+  throws when the store could not take new keys now (`FileAtKeysIo` checks;
+  by default it checks nothing). A class that implements `WrittenAtKeysIo`
+  rather than extending it must add both.
+- feat: `AtKeysUnusableException` says why an Atsign's keys cannot be used
+  (`cause`) and where they were looked for (`source`).
+- fix: `AtKeysUnusableException` shows the Atsign a keyfile records, and why
+  reading the keys or finding their keypair failed, with their control
+  characters escaped, clipped at 180 characters.
+- feat: `AtKeysFormatException.isJson` says whether the document parsed, as
+  JSON that is not an object or not one of the shape it must have, or as the
+  `kind` of data `badField` was given.
+- fix: `AtAuth.onboard`, and so `activateAtSign`, throws before sending
+  anything when its AtKeys store holds keys it cannot read
+  (`AtKeysUnusableException`, naming the store and why) or when a
+  `FileAtKeysIo` keyfile cannot be written there (`FileSystemException`
+  naming its path). The check creates the keyfile's directory if it is
+  missing.
+- fix: `AtAuth.onboard` refuses a request with no `atKeysIo`, or a read-only
+  one, before it sends anything to the atServer.
+- fix: a message about an atKeys date that does not parse gives the
+  parser's reason and holds none of the date's text.
+- fix: a message about an atKeys file that cannot be read quotes none of
+  its values. A passphrase-protected file whose hashing algorithm is
+  unknown, or whose key derivation cannot run, says so rather than that
+  the passphrase may be incorrect.
 - feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
   activation enrolls in place of a freshly minted APKAM keypair, as
   `AtEnrollmentRequest` does. A pair that does not sign for its public half, or

@@ -1,5 +1,8 @@
 ## 5.26.0
 
+- feat: `clipForMessage` escapes text from outside the process so it stays
+  on one line of a message, clipped at 180 characters
+  (`maxMessageTextLength`).
 - feat: `UpdateVerbBuilder.omitMetadata`, an opt-in that leaves the metadata
   fragment out of the non-JSON `update:` command. Default output is
   unchanged. Two builders that differ in it are not equal.

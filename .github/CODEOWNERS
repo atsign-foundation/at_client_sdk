@@ -24,6 +24,7 @@ CLAUDE.md                                 @gkc @cconstab
 /packages/at_chops/test/wire_literal_pins_test.dart              @gkc
 /packages/at_client/test/acceptance/architecture_guard_test.dart @gkc
 /packages/at_client/test/import_topology_test.dart               @gkc
+/packages/at_client/test/lifecycle/enroll_test.dart              @gkc
 /packages/at_client/test/public_api_surface_test.dart            @gkc
 /packages/at_client/test/rollout_axis_pinning_test.dart          @gkc
 /packages/at_client/test/storage/                                @gkc

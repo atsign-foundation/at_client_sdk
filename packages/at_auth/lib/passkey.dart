@@ -12,4 +12,3 @@ export 'src/passkey/passkey_vault.dart';
 export 'src/passkey/prf_support.dart';
 export 'src/passkey/setup_lock.dart';
 export 'src/passkey/prf_secret.dart' show PrfSecret;
-export 'src/util/message_text.dart' show clipForMessage;

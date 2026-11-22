@@ -1,6 +1,34 @@
 ## 4.1.0-rc.1
 
-- fix: a pending enrollment's wait that the atServer denies throws `AtEnrollmentDeniedException`, now exported, and removes the pending keys; a wait that ends on any other refusal keeps the request for `resumeEnrollment`, even when the atServer's error text contains "denied".
+- fix: keys and enrollment messages, `AtNoCredentialException`'s and
+  `AtEnrollmentPendingException`'s among them, name where the keys are as
+  "the AtKeys store (<path>)", "the AtKeys store (this device's keychain)"
+  or "the AtKeys store".
+- fix: `AtEnrollmentPendingException` names each pending enrollment id in
+  double quotes, with its control characters escaped.
+- fix: `Atsign.enroll`'s refusal of an AtKeys store already waiting on an
+  enrollment names its id, app and device in double quotes, with their
+  control characters escaped.
+- fix: `Atsign.enroll` refuses an AtKeys store already waiting on an
+  enrollment for the Atsign, whatever that enrollment's app and device,
+  before anything is sent, and names it: resume it with `resumeEnrollment`.
+  at_client_flutter 2.1.0's `ApkamActivationDialog` resumes such a request.
+- fix: of two `Atsign.enroll` calls into one keyfile at once, or into one
+  keychain from one isolate, only one files its request. The other throws
+  `AtEnrollmentException` naming the enrollment it sent, which the Atsign's
+  manager can deny.
+- fix: when another `PendingEnrollment` for the same request has cancelled
+  it, an approval that lands in a wait files nothing and throws
+  `AtEnrollmentCancelledException`, saying the Atsign's manager can revoke
+  it. When another has already filed the approval, the wait ends approved.
+- fix: `Atsign.resumeEnrollment` returns the AtKeys store's one pending
+  enrollment whatever app and device it was filed under, so its `app` and
+  `device` parameters are deprecated and ignored.
+  `AtEnrollmentPendingException.several` is deprecated, since nothing throws
+  it.
+- feat: `AtKeysPassphraseException` is exported: it is an unreadable
+  keyfile's `error` when its passphrase is missing or does not open it.
+- fix: a pending enrollment's wait that the atServer denies throws `AtEnrollmentDeniedException`, now exported, and removes the pending keys; when the AtKeys store cannot remove them after a denial or expiry, the exception's message says they stay; a wait that ends on any other refusal keeps the request for `resumeEnrollment`, even when the atServer's error text contains "denied".
 - docs: the names of the passkey records on the atServer (the `atkeys.<enrollmentId>.a.__e` document, the `_<lookupHex>.<ns>` pointer, the `atkeys-lock.<enrollmentId>.a.__e` lock and the `completion-due.<enrollmentId>.a.__e` record) are promised from the first stable release, as at_auth's passkey HKDF labels and record layout are: after it they change only with a compatibility path.
 - fix: passkey errors show an unexpected atServer reply or a refused Atsign in quotes, with its control and format characters escaped, so each stays on one line. An unexpected reply to a read of the sealed `@keys` document is named by its length, not shown. A sealed record or document that holds a newline or a carriage return is refused without showing it.
 - fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (after the first, from the document it last read, with no atServer round trip), and never stores the private half in the `@keys` document, nor the public half as typed authentication material. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `close()` zeroes the private key and a read after it throws. A write still running at `close()` finishes whole; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its Atsign and type, and accepts only an Atsign with one leading `@` (`alice` and `left@right` are refused as invalid).
@@ -192,6 +220,21 @@
   after a reconnect (latest 1024 ids capped per millisecond watermark).
   Conflicting duplicate IDs trigger warnings and are reported on
   `droppedEvents`.
+- fix: `Atsign.activate` and `pqNativeOnboard` throw before sending anything
+  when the AtKeys store holds keys they cannot read, or its keyfile cannot be
+  written; the exception names the store.
+- fix: `Atsign.open` throws `AtKeysUnusableException` before connecting, on
+  every device, for keys it cannot use: absent, unreadable, holding no
+  keypair it can sign with, or for another Atsign. `AtNoCredentialException`
+  and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
+- fix: `Atsign.resumeEnrollment` throws `AtKeysUnusableException`, as
+  `Atsign.open` does, for keys it cannot read or that record another Atsign.
+- feat: `AtNoCredentialException` and `AtEnrollmentPendingException` say
+  which AtKeys store they came from in `source` when `Atsign.open` throws
+  them.
+- fix: `Atsign.enroll` refusing an AtKeys store that holds live keys starts
+  by saying to give the new enrollment an AtKeys store of its own, so a
+  dialog that clips the message still shows it.
 - feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
   first activation in place of a minted one; a pair that does not sign under
   the activation's algorithm is refused with `AtSigningException` before

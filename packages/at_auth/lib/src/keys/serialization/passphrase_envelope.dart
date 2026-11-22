@@ -132,6 +132,12 @@ class AtKeysPassphraseEnvelopeCodec {
 
   /// Decrypts a passphrase envelope back to the JSON object it wraps.
   /// Returns [json] unchanged when it is not an envelope.
+  ///
+  /// Throws [AtKeysPassphraseException] when [passPhrase] is missing or does
+  /// not open the envelope, and a plain [AtDecryptionException] saying what
+  /// is wrong for any other envelope it cannot open. Content corrupted in
+  /// transit or at rest, opened with the right passphrase, throws
+  /// [AtKeysPassphraseException] too, since the cipher is unauthenticated.
   Future<Map<String, dynamic>> decode(
     Map<String, dynamic> json, {
     String? passPhrase,
@@ -140,7 +146,7 @@ class AtKeysPassphraseEnvelopeCodec {
       return json;
     }
     if (passPhrase.isNullOrEmpty) {
-      throw AtDecryptionException(
+      throw AtKeysPassphraseException(
           'Pass Phrase is required for password protected atKeys file');
     }
 
@@ -165,10 +171,26 @@ class AtKeysPassphraseEnvelopeCodec {
     // cipher.
     decodeBase64Field(content, 'content', AtDecryptionException.new);
 
+    final HashingAlgoType hashingAlgoType;
     try {
-      final aes = await _encryptorForPassphrase(
-          passPhrase!, HashingAlgoType.fromString(hashingAlgoName),
+      hashingAlgoType = HashingAlgoType.fromString(hashingAlgoName);
+    } on AtException {
+      throw AtDecryptionException('this atKeys file names a hashingAlgoType '
+          'this build has no code for');
+    }
+
+    // NOTE: no refusal below carries an error's own text, but an
+    // AtKeysFormatException's, which holds none of what was read.
+    final StringAESEncryptor aes;
+    try {
+      aes = await _encryptorForPassphrase(passPhrase!, hashingAlgoType,
           hashParams: readParams);
+    } catch (_) {
+      throw AtDecryptionException(
+          'this atKeys file asks for a key derivation this device could not '
+          'run');
+    }
+    try {
       final plaintext = aes.decrypt(content, iv: InitialisationVector(ivBytes));
       // jsonDecode must stay inside the try: the cipher is unauthenticated,
       // so an incorrect passphrase usually fails decrypt() on its padding but
@@ -185,9 +207,12 @@ class AtKeysPassphraseEnvelopeCodec {
         throw AtKeysFormatException.notAnObject('the decrypted atKeys file');
       }
       return decodedJson;
-    } catch (e) {
-      throw AtDecryptionException(
+    } on AtKeysFormatException catch (e) {
+      throw AtKeysPassphraseException(
           'Failed to decrypt atKeys file - passphrase may be incorrect: $e');
+    } catch (_) {
+      throw AtKeysPassphraseException(
+          'Failed to decrypt atKeys file - passphrase may be incorrect');
     }
   }
 
@@ -205,9 +230,9 @@ class AtKeysPassphraseEnvelopeCodec {
     }
     if (version != currentVersion) {
       throw AtDecryptionException(
-          'this atKeys file declares envelope version $version, which this '
-          'build has no code for — refusing rather than guessing at how its '
-          'key was derived');
+          'this atKeys file declares an envelope version this build has no '
+          'code for — refusing rather than guessing at how its key was '
+          'derived');
     }
 
     final salt = json['salt'];
@@ -227,11 +252,17 @@ class AtKeysPassphraseEnvelopeCodec {
     // the legacy ones, so leaving any of these to fall through would derive a
     // different key and surface as an incorrect passphrase.
     for (final name in const ['memory', 'iterations', 'parallelism']) {
-      if (kdfParams[name] is! int) {
+      final cost = kdfParams[name];
+      if (cost is! int || cost < 1) {
         throw AtDecryptionException(
-            'a version $currentVersion atKeys envelope must carry an integer '
-            'kdfParams.$name');
+            'a version $currentVersion atKeys envelope must carry a positive '
+            'integer kdfParams.$name');
       }
+    }
+    if ((kdfParams['memory'] as int) < 8 * (kdfParams['parallelism'] as int)) {
+      throw AtDecryptionException(
+          'a version $currentVersion atKeys envelope must carry a '
+          'kdfParams.memory of at least 8 times its kdfParams.parallelism');
     }
     return params
       ..memory = kdfParams['memory'] as int

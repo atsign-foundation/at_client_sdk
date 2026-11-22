@@ -338,11 +338,11 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
             ListTile(
               key: ValueKey('approved-${row.enrollment.enrollmentId}'),
               title: Text(
-                '${row.enrollment.appName ?? ''} · '
-                '${row.enrollment.deviceName ?? ''}',
+                '${clipForMessage(row.enrollment.appName ?? '')} · '
+                '${clipForMessage(row.enrollment.deviceName ?? '')}',
               ),
               subtitle: Text(row.enrollment.enrollmentId!),
-              trailing: Text(row.anchored),
+              trailing: Text(clipForMessage(row.anchored)),
             ),
         ],
       ],

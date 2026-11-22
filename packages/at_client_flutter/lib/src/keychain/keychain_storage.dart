@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysSourceAbsentException;
+import 'package:at_auth/at_auth.dart'
+    show AtKeys, AtKeysFormatException, AtKeysSourceAbsentException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -21,6 +22,13 @@ part 'keychain_store.dart';
 
 const int _kWindowSegmentDataLength =
     2560; //CREDENTIALA structure (wincred.h) - CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512) bytes.
+
+/// The most segments a Windows keychain entry is read or cleared in, far more
+/// than any entry needs.
+///
+/// A header that records more is refused, and no search for segments to
+/// delete looks at one at or past this index.
+const int _kMaxWindowSegments = 2560;
 
 /// Service to manage keychain CRUD operations for Atsigns and SPPs
 class KeychainStorage {
@@ -48,14 +56,65 @@ class KeychainStorage {
   /// Read all stored Atsign keys data from the keychain
   ///
   /// Returns [AtKeysData] containing all persisted [AtKeys] entries, or `null`
-  /// if no key data has been stored yet
+  /// if no key data has been stored yet. A stored entry that is not a JSON
+  /// object throws [AtKeysFormatException], and a store the platform refuses
+  /// to read throws the platform's error.
   Future<AtKeysData?> readAtKeysData() async {
     final data = await _readAtKeysDataRaw();
     if (data != null) {
-      final json = jsonDecode(data);
-      return AtKeysData.fromJson(json);
+      return _decodeAtKeysData(data);
     }
     return null;
+  }
+
+  /// [text], a stored atKeys entry, as [AtKeysData].
+  static AtKeysData _decodeAtKeysData(String text) =>
+      AtKeysData.fromJson(_decodeObject(text, 'the keychain atKeys entry'));
+
+  /// [text], a stored [what], as the JSON object it must be.
+  ///
+  /// Text that is not a JSON object throws [AtKeysFormatException], which
+  /// holds none of it.
+  static Map<String, dynamic> _decodeObject(String text, String what) {
+    final Object? json;
+    try {
+      json = jsonDecode(text);
+    } on FormatException catch (e) {
+      throw AtKeysFormatException.notJson(what, e);
+    }
+    if (json is! Map<String, dynamic>) {
+      throw AtKeysFormatException.notAnObject(what);
+    }
+    return json;
+  }
+
+  /// The segment count a Windows store's header [text] records: a legacy
+  /// header, one not starting with `{`, is the count, and any other holds it
+  /// as a JSON object's `segmentCount`.
+  ///
+  /// A count that is not a whole number from zero to [_kMaxWindowSegments],
+  /// or a header starting with `{` that is not a JSON object, throws
+  /// [AtKeysFormatException].
+  static int _segmentCountIn(String text) {
+    const what = 'the keychain atKeys entry header';
+    const requirement = 'a whole number from 0 to $_kMaxWindowSegments';
+    if (!text.startsWith('{')) {
+      final legacy = int.tryParse(text);
+      if (legacy == null || legacy < 0 || legacy > _kMaxWindowSegments) {
+        throw AtKeysFormatException.badField(
+          what,
+          'segmentCount',
+          requirement,
+          kind: 'a legacy segment header',
+        );
+      }
+      return legacy;
+    }
+    final count = _decodeObject(text, what)['segmentCount'];
+    if (count is! int || count < 0 || count > _kMaxWindowSegments) {
+      throw AtKeysFormatException.badField(what, 'segmentCount', requirement);
+    }
+    return count;
   }
 
   // Current behaviour:
@@ -78,16 +137,12 @@ class KeychainStorage {
     // See migration sequencing comment above.
     // 2.x.x: only copy `_` to `:`, leave `_` in place.
 
+    // NOTE: a refused read of the legacy store is thrown, as one of the
+    // current store is; it is not a keychain holding nothing.
     final keychainStorageImproperName = await _getImproperAtKeysStoreName();
-    String? improperDataString;
-    try {
-      improperDataString = await _read(
-        keychainStoreName: keychainStorageImproperName,
-      );
-    } catch (e, s) {
-      _logger.info('No legacy atKeysData found in keychain.', e, s);
-      return null;
-    }
+    final improperDataString = await _read(
+      keychainStoreName: keychainStorageImproperName,
+    );
     if (improperDataString == null) {
       return null;
     }
@@ -105,9 +160,10 @@ class KeychainStorage {
         'Migrating AtKeysData from legacy keychain store '
         '"$keychainStorageImproperName" to "$currentName"',
       );
-      await _write(
-        biometricStoreName: currentName,
-        keychainData: AtKeysData.fromJson(jsonDecode(legacyData)),
+      await _replaceEntry(
+        name: currentName,
+        previous: null,
+        keychainData: _decodeAtKeysData(legacyData),
       );
       return legacyData;
     });
@@ -165,27 +221,25 @@ class KeychainStorage {
   ///
   /// Writes in this isolate take turns; one from another isolate still wins
   /// over this, or loses to it, whole, since the keychain offers no
-  /// compare-and-swap.
+  /// compare-and-swap. On Windows, where the entry is written in parts, a
+  /// write that fails partway is undone before it is thrown, unless undoing
+  /// it fails too, which is logged.
   Future<void> updateAtKeysInKeychain({
     required String atSign,
     required AtKeys keys,
     void Function(AtKeys existing)? assureUpdate,
     bool requireExisting = false,
   }) => _writes.synchronized(() async {
-    final atKeysData = await readAtKeysData();
-    final index = atKeysData == null ? -1 : _indexOf(atKeysData, atSign);
+    final previous = await _readAtKeysDataRaw();
+    final atKeysData = previous == null
+        ? AtKeysData(keys: [])
+        : _decodeAtKeysData(previous);
+    final index = _indexOf(atKeysData, atSign);
     if (index == -1 && requireExisting) {
       throw AtKeysSourceAbsentException(
         'The keychain no longer holds keys for $atSign, so nothing was '
         'written',
       );
-    }
-    if (atKeysData == null) {
-      await _write(
-        biometricStoreName: (await AtKeysStore.getName()),
-        keychainData: AtKeysData(keys: [keys]),
-      );
-      return;
     }
     if (index == -1) {
       atKeysData.keys.add(keys);
@@ -193,8 +247,9 @@ class KeychainStorage {
       assureUpdate?.call(atKeysData.keys[index]);
       atKeysData.keys[index] = keys;
     }
-    await _write(
-      biometricStoreName: (await AtKeysStore.getName()),
+    await _replaceEntry(
+      name: await AtKeysStore.getName(),
+      previous: previous,
       keychainData: atKeysData,
     );
   });
@@ -237,30 +292,24 @@ class KeychainStorage {
   ///   [keys] - [AtKeys] instance to persist
   ///
   /// Note: the Atsign must be included in the [AtKeys.metadata] field
+  ///
+  /// A failure to read or write the keychain, its legacy-named store
+  /// included, is thrown, and a stored entry that is not a JSON object throws
+  /// [AtKeysFormatException], with nothing written. On Windows, where the
+  /// entry is written in parts, a write that fails partway is undone before
+  /// it is thrown, unless undoing it fails too, which is logged.
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) =>
       _writes.synchronized(() => _append(keys));
 
   Future<void> _append(AtKeys keys) async {
-    String? existingData;
-    try {
-      existingData = await _readAtKeysDataRaw();
-    } catch (e) {
-      _logger.info(
-        'No existing atKeysData found in keychain. A new one will be created.',
-      );
-    }
-    if (existingData == null) {
-      final atKeysData = AtKeysData(keys: [keys]);
-      await _write(
-        biometricStoreName: (await AtKeysStore.getName()),
-        keychainData: atKeysData,
-      );
-      return;
-    }
-    final atKeysData = AtKeysData.fromJson(jsonDecode(existingData));
+    final existingData = await _readAtKeysDataRaw();
+    final atKeysData = existingData == null
+        ? AtKeysData(keys: [])
+        : _decodeAtKeysData(existingData);
     atKeysData.keys.add(keys);
-    await _write(
-      biometricStoreName: (await AtKeysStore.getName()),
+    await _replaceEntry(
+      name: await AtKeysStore.getName(),
+      previous: existingData,
       keychainData: atKeysData,
     );
   }
@@ -268,29 +317,30 @@ class KeychainStorage {
   /// Remove a stored Atsign entry from the keychain
   ///
   ///   [atSign] - Atsign whose persisted keys should be removed
+  ///
+  /// A failure to read or write the keychain, its legacy-named store
+  /// included, is thrown, and a stored entry that is not a JSON object throws
+  /// [AtKeysFormatException], with nothing written. On Windows, where the
+  /// entry is written in parts, a write that fails partway is undone before
+  /// it is thrown, unless undoing it fails too, which is logged. An empty
+  /// keychain is left as it is. [deleteAllAtKeysData] is how a keychain whose
+  /// entry does not parse is cleared, removing every Atsign stored there.
   Future<void> removeAtsignFromKeychain(String atSign) =>
       _writes.synchronized(() => _remove(atSign));
 
   Future<void> _remove(String atSign) async {
-    try {
-      final data = await _readAtKeysDataRaw();
-      if (data != null) {
-        final atKeysData = AtKeysData.fromJson(jsonDecode(data));
-        final wanted = _normalized(atSign);
-        atKeysData.keys.removeWhere(
-          (element) => _normalized(_atSignOf(element)) == wanted,
-        );
-        await _write(
-          biometricStoreName: (await AtKeysStore.getName()),
-          keychainData: atKeysData,
-        );
-      } else {
-        throw Exception('Unexpected data type found in keychain');
-      }
-    } catch (e, s) {
-      _logger.info('_getAtClientData', e, s);
-      print(s);
-    }
+    final data = await _readAtKeysDataRaw();
+    if (data == null) return;
+    final atKeysData = _decodeAtKeysData(data);
+    final wanted = _normalized(atSign);
+    atKeysData.keys.removeWhere(
+      (element) => _normalized(_atSignOf(element)) == wanted,
+    );
+    await _replaceEntry(
+      name: await AtKeysStore.getName(),
+      previous: data,
+      keychainData: atKeysData,
+    );
   }
 
   /// Delete all persisted Atsign key data from the keychain, including any
@@ -429,7 +479,11 @@ class KeychainStorage {
       } else {
         // log('READ: _readDataFromStore called', true);
         String? storedData = await store.read();
-        log('  => READ: Fetched $storedData from $keychainStoreName', false);
+        log(
+          '  => READ: Fetched length ${storedData?.length}'
+          ' from $keychainStoreName',
+          false,
+        );
         if (storedData == null || storedData.isEmpty) {
           return null;
         }
@@ -448,7 +502,6 @@ class KeychainStorage {
             ' from $segmentPrefix',
             false,
           );
-          // log('  => READ: segmentValue was $segmentValue', false);
           results.add(segmentValue ?? '');
         }
         value = _combineString(results);
@@ -472,44 +525,141 @@ class KeychainStorage {
       return;
     }
 
-    final segmentNames = <String>[];
+    // NOTE: a segment that cannot be deleted is logged and the header deleted
+    // regardless, so the entry reads as absent; the segments left under the
+    // current prefix start at 0, where the next delete or write finds them.
+    final currentPrefix = '${keychainStoreName}_segment';
+    var currentCount = 0;
+    String? legacyPrefix;
+    int? legacyCount;
     try {
-      final storedData = await store.read();
-      if (storedData != null && storedData.isNotEmpty) {
-        final layout = await _segmentLayout(keychainStoreName, storedData);
-        for (int i = 0; i < layout.count; i++) {
-          segmentNames.add('${layout.prefix}_$i');
+      final header = await store.read();
+      if (header != null && header.isNotEmpty) {
+        if (!header.startsWith('{')) {
+          legacyPrefix = await _legacySegmentPrefix();
+        }
+        final layout = await _segmentLayout(keychainStoreName, header);
+        if (legacyPrefix == null) {
+          currentCount = layout.count;
+        } else {
+          legacyCount = layout.count;
         }
       }
     } catch (e, s) {
-      _logger.warning(
-        'Failed to read Windows keychain segment metadata for deletion',
+      _logger.severe(
+        'Failed to read the Windows keychain header of "$keychainStoreName" '
+        'for deletion; deleting the segments found',
+        e,
+        s,
+      );
+    }
+    try {
+      await _deleteSegmentsFrom(currentPrefix, 0, atLeast: currentCount);
+      // NOTE: every store's legacy header names the same segments, so one
+      // whose count can be read has only those deleted.
+      if (legacyPrefix != null) {
+        if (legacyCount == null) {
+          await _deleteSegmentsFrom(legacyPrefix, 0);
+        } else {
+          await _deleteSegmentRange(legacyPrefix, 0, legacyCount);
+        }
+      }
+    } catch (e, s) {
+      _logger.severe(
+        'Failed to delete the Windows keychain segments of '
+        '"$keychainStoreName"',
         e,
         s,
       );
     }
 
-    for (final segmentName in segmentNames) {
-      try {
-        final segmentStore = await _getBiometricStorageFile(segmentName);
-        await segmentStore.delete();
-      } catch (e, s) {
-        _logger.warning(
-          'Failed to delete Windows keychain segment "$segmentName"',
-          e,
-          s,
-        );
-      }
-    }
-
     await store.delete();
+  }
+
+  /// Deletes the Windows segments `<prefix>_<first>` upward: each below
+  /// [atLeast], stored or not, then each stored one, an empty one included,
+  /// up to the first absent, never reaching [_kMaxWindowSegments].
+  ///
+  /// They are deleted from the top down, throwing on the first that cannot be
+  /// read or deleted or stays stored, so those left run unbroken from
+  /// [first], where a later search from there finds them.
+  Future<void> _deleteSegmentsFrom(
+    String prefix,
+    int first, {
+    int atLeast = 0,
+  }) async {
+    var end = first;
+    while (end < _kMaxWindowSegments &&
+        (end < atLeast || await _isStored('${prefix}_$end'))) {
+      end++;
+    }
+    await _deleteSegmentRange(prefix, first, end);
+  }
+
+  /// Deletes the Windows segments `<prefix>_<first>` to `<prefix>_<end - 1>`,
+  /// stored or not, from the top down, throwing on the first that cannot be
+  /// deleted or stays stored.
+  Future<void> _deleteSegmentRange(String prefix, int first, int end) async {
+    for (var i = end - 1; i >= first; i--) {
+      await _deleteSegment('${prefix}_$i');
+    }
+  }
+
+  /// Writes [keychainData] to the keys entry named [name], which held
+  /// [previous], or nothing when it is null.
+  ///
+  /// On Windows the entry is a header and segments written one at a time, so
+  /// a write to the store that fails partway is undone before the failure is
+  /// rethrown: [previous] is written back, or the entry deleted when it held
+  /// nothing, and the segments the failed write added past it are deleted. A
+  /// failure to undo it is logged, and the write's own failure thrown. The
+  /// undo is a write too, so it overwrites a write another isolate made
+  /// since [previous] was read. A write that succeeds deletes the segments
+  /// [previous] had past its own.
+  Future<void> _replaceEntry({
+    required String name,
+    required String? previous,
+    required KeychainData keychainData,
+  }) async {
+    final data = jsonEncode(keychainData.toJson());
+    try {
+      await _writeText(biometricStoreName: name, data: data);
+    } catch (e, s) {
+      if (isWindows) await _undoWrite(name, previous);
+      Error.throwWithStackTrace(e, s);
+    }
+  }
+
+  /// Puts the entry named [name] back as [previous] after a failed write.
+  Future<void> _undoWrite(String name, String? previous) async {
+    try {
+      if (previous == null) {
+        await _delete(keychainStoreName: name);
+      } else {
+        await _writeText(biometricStoreName: name, data: previous);
+      }
+    } catch (e, s) {
+      _logger.severe(
+        'Undoing a failed write of keychain entry "$name" failed; it may be '
+        'left partly written',
+        e,
+        s,
+      );
+    }
   }
 
   Future<void> _write({
     required String biometricStoreName,
     required KeychainData keychainData,
+  }) => _writeText(
+    biometricStoreName: biometricStoreName,
+    data: jsonEncode(keychainData.toJson()),
+  );
+
+  Future<void> _writeText({
+    required String biometricStoreName,
+    required String data,
   }) async {
-    final data = jsonEncode(keychainData.toJson());
     BiometricStorageFile store = await _getBiometricStorageFile(
       biometricStoreName,
     );
@@ -558,26 +708,21 @@ class KeychainStorage {
         await segmentStore.write(dataList[i]);
       }
 
-      // NOTE: stale segments are deleted from the top down, stopping at the
-      // first that stays, so any left over sit directly above the live ones
-      // where the next write looks for them. A failure is logged, not thrown:
-      // the new document is already written.
+      // NOTE: a failure here is logged, not thrown: the new document is
+      // already written.
       try {
+        // NOTE: every store's legacy header names the same segments, so only
+        // the old header's own are deleted.
         if (legacyLayout != null) {
-          for (int i = 0; i < legacyLayout.count; i++) {
-            await _deleteSegment('${legacyLayout.prefix}_$i');
-          }
+          await _deleteSegmentRange(legacyLayout.prefix, 0, legacyLayout.count);
         }
-        int end = dataList.length;
-        while (end < oldSegmentCount ||
-            await _isStored('${segmentPrefix}_$end')) {
-          end++;
-        }
-        for (int i = end - 1; i >= dataList.length; i--) {
-          await _deleteSegment('${segmentPrefix}_$i');
-        }
+        await _deleteSegmentsFrom(
+          segmentPrefix,
+          dataList.length,
+          atLeast: oldSegmentCount,
+        );
       } catch (e, s) {
-        _logger.warning(
+        _logger.severe(
           'Failed to delete stale Windows keychain segments of'
           ' "$biometricStoreName": $e',
           e,
@@ -601,23 +746,25 @@ class KeychainStorage {
 
   /// Parses the Windows header [storedData] of [keychainStoreName] into the
   /// number of segments it points at and the name prefix they use.
+  ///
+  /// A header whose count [_segmentCountIn] refuses throws
+  /// [AtKeysFormatException].
   Future<({int count, String prefix})> _segmentLayout(
     String keychainStoreName,
     String storedData,
-  ) async {
-    if (storedData.startsWith('{')) {
-      final Map metadata = jsonDecode(storedData);
-      return (
-        count: metadata['segmentCount'] as int,
-        prefix: '${keychainStoreName}_segment',
-      );
-    }
-    // legacy
-    return (
-      count: int.tryParse(storedData) ?? 0,
-      prefix: '${await getPackageName()}_data',
-    );
-  }
+  ) async => (
+    count: _segmentCountIn(storedData),
+    prefix: storedData.startsWith('{')
+        ? '${keychainStoreName}_segment'
+        : await _legacySegmentPrefix(),
+  );
+
+  /// The name prefix of the segments a legacy Windows header points at.
+  ///
+  /// It is the app's package name and not the store's, so every legacy header
+  /// the app wrote points at the same segment names.
+  static Future<String> _legacySegmentPrefix() async =>
+      '${await getPackageName()}_data';
 
   Future<BiometricStorageFile> _getBiometricStorageFile(
     String storeName,

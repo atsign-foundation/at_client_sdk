@@ -522,4 +522,8 @@ void main() {
     await keychain.removeAtsignFromKeychain('@colinconstable');
     expect(entryCount(), 0, reason: 'removal matches the same way');
   });
+
+  test('describeSource names this device\'s keychain', () {
+    expect(io.describeSource('@alice'), "this device's keychain");
+  });
 }

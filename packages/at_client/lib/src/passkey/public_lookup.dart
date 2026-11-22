@@ -1,7 +1,6 @@
-import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:at_commons/at_builders.dart' show LookupVerbBuilder;
 import 'package:at_commons/at_commons.dart'
-    show AtRootDomain, InvalidResponseException;
+    show AtRootDomain, InvalidResponseException, clipForMessage;
 import 'package:at_commons/atsign.dart';
 import 'package:at_lookup/at_lookup.dart'
     show AtLookUpException, AtLookUpFactory, SecondaryAddressFinder;

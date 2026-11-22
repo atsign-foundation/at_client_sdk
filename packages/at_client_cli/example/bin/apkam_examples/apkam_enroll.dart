@@ -6,8 +6,9 @@ import '../util/custom_arg_parser.dart';
 /// Enrols this device as the `buzz` app, quoting a one-time passcode an
 /// already enrolled client issued, and waits for that client to approve.
 ///
-/// The keyfile named is the resume record: run again for the same app and
-/// device, the wait picks up where it left off rather than asking again.
+/// The keyfile named is the resume record: run again, the wait picks up the
+/// request it holds rather than asking again, whatever app and device it was
+/// filed under, and `at_activate cancel` on it gives the request up.
 Future<void> main(List<String> args) async {
   AtSignLogger.root_level = 'finer';
   final argResults = CustomArgParser(getArgParser()).parse(args);
@@ -23,8 +24,6 @@ Future<void> main(List<String> args) async {
 
   // run otp:get from an enrolled client and pass the passcode
   final pending = await Atsign(atSign).resumeEnrollment(
-          app: 'buzz',
-          device: 'iphone',
           keys: keys,
           preference: preference,
           lookUps: lookUps,
@@ -38,7 +37,9 @@ Future<void> main(List<String> args) async {
           preference: preference,
           lookUps: lookUps,
           secondaryAddressFinder: secondaryAddressFinder);
-  print('enrollment ${pending.enrollmentId} awaits approval');
+  print('enrollment ${pending.enrollmentId} awaits approval; to give it up '
+      'instead, stop this program and run at_activate cancel -a $atSign -k '
+      '${keys.describeSource(atSign)}');
   pending.progress.listen((event) => print('${event.group}: ${event.msg}'));
 
   final client = await pending.client(preference,

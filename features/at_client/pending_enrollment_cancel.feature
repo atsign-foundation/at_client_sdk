@@ -2,10 +2,10 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
 
   PendingEnrollment.stop() ends the wait awaitApproval or client() is in,
   which throws StoppedException, and keeps the request: its pending keys stay
-  in the store, so Atsign.resumeEnrollment picks it up again, with no names
-  when the store holds that one pending enrollment. stop() closes the
-  handshake connection it built, leaves one the app supplied open, sends
-  nothing, and does nothing once the wait has ended.
+  in the store, so Atsign.resumeEnrollment picks it up again, whatever app
+  and device it was filed under. stop() closes the handshake connection it
+  built, leaves one the app supplied open, sends nothing, and does nothing
+  once the wait has ended.
 
   PendingEnrollment.cancel() ends the wait awaitApproval or client() is in.
   The wait throws AtEnrollmentCancelledException, an AtEnrollmentException,
@@ -22,12 +22,27 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   by Atsign.open at once with AtNoCredentialException, which says to enroll
   again, before it writes anything or opens a connection.
 
+  AtEnrollmentPendingException's message names each pending enrollment id the
+  keyfile records in double quotes, its control characters escaped and each
+  clipped at 180 characters, so the message stays on one line. The
+  AtEnrollmentException enroll throws for a store already waiting names the
+  id, app and device it holds the same way.
+
   Races: a stop or a cancel and an approval resolve at the write to the
   store. One that lands first leaves nothing written. stop then cancel
   removes the keys; cancel then stop changes nothing. An approval written first
   stands, and if a stop or a cancel lands before client() returns, the
   client it opened is stopped before the stop or cancel returns. A cancel and
-  a denial at once both remove the pending keys, once.
+  a denial at once both remove the pending keys, once. Of two enroll calls
+  into one store at once, one is filed: the check is repeated where the
+  request is filed, in the store's one update, or in a create-only write when
+  the store has no document yet. The losing call has already sent its
+  request, and its message names that enrollment id for the atSign's manager
+  to deny. Only the device's own processes can race it. A second
+  PendingEnrollment for the same request, in this process or another, that
+  cancels it while the first waits leaves the first's approval unfiled: that
+  wait throws AtEnrollmentCancelledException. One that files the approval
+  first leaves the first to end approved as well.
   Replay: none arises; stop and cancel send nothing, and a resume polls the
   same enrollment as before.
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
@@ -37,9 +52,9 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   Forgery and impersonation: cancel, a denial and expiry remove only this
   enrollment's pending keys, found by atSign and enrollment id. Only the
   atServer the wait polls answers AT0025, and it already decides the
-  request. A resume with no names trusts the store it is given, as open
-  does: a pending entry planted there still needs the manager's approval,
-  and a passcode from an enrolled app to have been submitted at all.
+  request. A resume trusts the store it is given, as open does: a pending
+  entry planted there still needs the manager's approval, and a passcode
+  from an enrolled app to have been submitted at all.
 
   Scenario: Cancel ends a wait for approval
     Given a pending enrollment waiting in awaitApproval
@@ -125,7 +140,7 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
 
   Scenario: A stopped request resumes
     Given a pending enrollment whose wait was stopped
-    When the app calls Atsign.resumeEnrollment for its app and device
+    When the app calls Atsign.resumeEnrollment
     Then it waits again on the same enrollment id, with no new request
 
   Scenario: Stop leaves a connection the app supplied open
@@ -186,12 +201,72 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     When the app calls resumeEnrollment with no app or device
     Then it gets that enrollment
 
-  Scenario: Resuming by one name refuses a store holding several requests it names
-    Given a store holding two pending requests for one app, from two devices
-    When the app calls resumeEnrollment with only the app
-    Then it throws AtEnrollmentPendingException naming both and saying to name the app and device, and naming a device as well resumes that one
+  Scenario: The one pending enrollment resumes whatever app and device are given
+    Given a store holding one pending enrollment for app wavi on device phone
+    When the app calls resumeEnrollment naming app buzz on device tablet
+    Then it gets that enrollment, with app wavi and device phone
+
+  Scenario: A store holding two pending requests resumes the one its enrollmentId field names, else the first, with a warning
+    Given a store holding two pending requests, e-one and e-two
+    When the app calls resumeEnrollment
+    Then it gets the one the store's enrollmentId field names, else e-one, and a warning says the store holds 2 pending enrollments and names the one resumed
+
+  Scenario: Cancelling each request in turn empties a store holding two
+    Given a store holding two pending requests
+    When the app resumes and cancels, and again
+    Then it cancels e-one, then e-two, and the store holds none
+
+  Scenario: A resume refuses keys it cannot read, as open does
+    Given an AtKeys store for @alice that cannot be read
+    When an app calls Atsign.resumeEnrollment for @alice
+    Then it throws AtKeysUnusableException with cause unreadable, naming the AtKeys store, and opens no connection
+
+  Scenario: A resume refuses keys recorded for another Atsign
+    Given an AtKeys store whose atsign is @bob, holding @bob's pending enrollment
+    When an app calls Atsign.resumeEnrollment for @alice
+    Then it throws AtKeysUnusableException with cause anotherAtsign, the store is unchanged, and it opens no connection
+
+  Scenario Outline: A store already waiting on an enrollment for an Atsign refuses another, before anything is sent
+    Given a store holding a pending enrollment for @alice from app wavi on device phone
+    When app <app> on device <device> asks to enroll @alice into that store
+    Then enroll throws AtEnrollmentException naming that enrollment, wavi and phone, and nothing is sent to the atServer
+    Examples:
+      | app  | device |
+      | wavi | phone  |
+      | wavi | laptop |
+      | buzz | phone  |
+
+  Scenario: A refusal to enroll into a waiting store names what it holds quoted and escaped
+    Given a store holding a pending enrollment for @alice whose id holds a line feed, filed by app "wa<ESC>vi" on device "phone"
+    When app buzz on device tablet asks to enroll @alice into that store
+    Then enroll throws AtEnrollmentException naming the id, the app and the device in double quotes on one line, the line feed shown as \u000a and the ESC as \u001b, and nothing is sent to the atServer
+
+  @race
+  Scenario: An approval of a request another wait has cancelled files nothing
+    Given a pending enrollment waiting in awaitApproval, and a second PendingEnrollment for the same request from resumeEnrollment
+    When the second cancels and then the manager approves the request
+    Then the first wait throws AtEnrollmentCancelledException naming the enrollment and saying the manager can revoke it, and the store holds no pending keys and no live keys
+
+  @race
+  Scenario: Two waits on one request both end approved when the manager approves it
+    Given a pending enrollment waiting in awaitApproval, and a second PendingEnrollment for the same request from resumeEnrollment, also waiting
+    When the manager approves the request
+    Then both waits end approved, and the store holds the enrollment's live keys and nothing pending
+
+  @race
+  Scenario: Two enrolls on one store at once file one request
+    Given keys for @alice that do not exist yet
+    When the device enrolls @alice as "wavi" and as "buzz" at once
+    Then one enroll returns its pending enrollment
+    And the other throws AtEnrollmentException naming the enrollment id it sent, for the atSign's manager to deny
+    And the keys hold only the returned enrollment's request
 
   Scenario: A keyfile left empty by a denial or a cancel is refused at once
     Given a keyfile whose enrollment request was denied, or cancelled, and so holds no credential
     When a program opens it
     Then the open throws at once a refusal saying the keyfile holds no credential and to enroll again, nothing is written to the keyfile, and no connection is attempted
+
+  Scenario: Atsign.open names the pending enrollment ids a keyfile records quoted and escaped
+    Given a keyfile holding two pending enrollments for @alice, one whose id holds a line feed
+    When Atsign.open runs for @alice
+    Then the AtEnrollmentPendingException's message names each id in double quotes on one line, the line feed shown as \u000a
