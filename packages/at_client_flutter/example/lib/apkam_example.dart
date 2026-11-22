@@ -26,8 +26,12 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
 
   @override
   Widget build(BuildContext context) {
-    final currentAtSign = AtClientManager.getInstance().atClient
-        .getCurrentAtSign();
+    final atClient = AtClientManager.getInstance().atClient;
+    final currentAtSign = atClient.getCurrentAtSign();
+    final preferences = atClient.getPreferences();
+    final root = preferences == null
+        ? ''
+        : ' -r ${preferences.rootDomain}:${preferences.rootPort}';
     final passcode = _passcode;
 
     return Scaffold(
@@ -84,8 +88,8 @@ class _ApkamExamplePageState extends State<ApkamExamplePage> {
                       ),
                       const SizedBox(height: 8),
                       SelectableText(
-                        'at_activate enroll -a $currentAtSign --app <app> '
-                        '--device <device> --namespaces <ns:rw> '
+                        'at_activate enroll -a $currentAtSign$root '
+                        '--app <app> --device <device> --namespaces <ns:rw> '
                         '--passcode ${passcode.value} -k <keyfile>',
                         style: const TextStyle(fontFamily: 'monospace'),
                       ),

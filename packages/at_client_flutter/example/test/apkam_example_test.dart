@@ -94,11 +94,14 @@ void main() {
       );
       expect(
         find.text(
-          'at_activate enroll -a $atSign --app <app> --device <device> '
-          '--namespaces <ns:rw> --passcode ABC123 -k <keyfile>',
+          'at_activate enroll -a $atSign -r 127.0.0.1:${atDirectory.port} '
+          '--app <app> --device <device> --namespaces <ns:rw> '
+          '--passcode ABC123 -k <keyfile>',
         ),
         findsOneWidget,
-        reason: 'it gives the at_activate enroll command that quotes it',
+        reason:
+            'it gives the at_activate enroll command that quotes it, at the '
+            "client's own root",
       );
       expect(tester.takeException(), isNull);
     },
