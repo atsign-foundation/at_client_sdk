@@ -91,15 +91,19 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtEnrollmentExpiredException` (at_client 4.1.0) | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed | Tell the user; a new `enroll` is a new request              |
 | `AtEnrollmentDeniedException` (at_client 4.1.0) | `pending.client(...)`: the request was denied; its pending keys are removed                               | Tell the user; a new `enroll` is a new request                |
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
-| `AtEnrollmentException`         | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included, or the request was approved but its keys could not be fetched or decrypted; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
+| `AtEnrollmentException`         | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included; its pending keys stay | Show the message; a person decides whether to wait again (`resumeEnrollment` returns the request) or `cancel()` |
+| Any other error, `AtEnrollmentException` included | `pending.client(...)`: the request was approved but its keys could not be fetched or decrypted: an `AtException` such as `AtLookUpException` for an error reply, a `FormatException` or `ArgumentError` for a reply that does not parse or decrypt, a plain `AtEnrollmentException` only for an empty reply or no conveyed key that decrypts; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
 | `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
 | `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
 
 `AtEnrollmentExpiredException`, `AtEnrollmentDeniedException` and
 `AtEnrollmentCancelledException` are also `AtEnrollmentException`s, so their
-`catch` goes first. An answer that waiting cannot resolve, and an approval
-whose keys cannot be collected, are plain `AtEnrollmentException`s;
-`resumeEnrollment` returns the request after either and null after a denial.
+`catch` goes first. An answer that waiting cannot resolve is a plain
+`AtEnrollmentException`. An approval whose keys cannot be collected throws
+whatever collecting them threw, mostly not an `AtEnrollmentException`, so a
+final `catch` of any other error goes after these and waits again rather than
+cancelling. `resumeEnrollment` returns the request after either and null
+after a denial.
 at_client 4.0 throws a plain `AtEnrollmentException` for a denial and an
 expiry too.
 

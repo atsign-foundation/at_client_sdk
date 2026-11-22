@@ -309,9 +309,14 @@ class CLIBase {
   /// keys, [AtEnrollmentDeniedException] when the request is denied,
   /// [AtEnrollmentExpiredException] when it expires, both removing its keys,
   /// a plain [AtEnrollmentException], keeping them, when the atServer keeps
-  /// answering the wait with neither a decision nor "not yet", or when the
-  /// request was approved but its keys could not be fetched or decrypted (so
-  /// it may already be approved; run again rather than cancel it),
+  /// answering the wait with neither a decision nor "not yet",
+  /// whatever fetching or decrypting the keys threw when the request was
+  /// approved but they could not be collected, keeping them: mostly not an
+  /// [AtEnrollmentException] (an [AtException] for an error reply,
+  /// [FormatException] or [ArgumentError] for a reply that does not parse or
+  /// decrypt), and a plain one only for an empty reply or no conveyed key
+  /// that decrypts (the request may already be approved; run again rather
+  /// than cancel it),
   /// [SecondaryNotFoundException] when the atDirectory has no atServer for the
   /// atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or
