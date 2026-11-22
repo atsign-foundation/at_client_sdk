@@ -37,7 +37,10 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
   request is filed, in the store's one update, or in a create-only write when
   the store has no document yet. The losing call has already sent its
   request, and its message names that enrollment id for the atSign's manager
-  to deny. Only the device's own processes can race it.
+  to deny. Only the device's own processes can race it. A second
+  PendingEnrollment for the same request, in this process or another, that
+  cancels it while the first waits leaves the first's approval unfiled: that
+  wait throws AtEnrollmentCancelledException.
   Replay: none arises; stop and cancel send nothing, and a resume polls the
   same enrollment as before.
   DoS: no poll runs after stop or cancel, on any connection; expiry ends a
@@ -222,6 +225,12 @@ Feature: An app ends a pending enrollment's wait with stop() or cancel()
     Given a store holding a pending enrollment for @alice whose id holds a line feed, filed by app "wa<ESC>vi" on device "phone"
     When app buzz on device tablet asks to enroll @alice into that store
     Then enroll throws AtEnrollmentException naming the id, the app and the device in double quotes on one line, the line feed shown as \u000a and the ESC as \u001b, and nothing is sent to the atServer
+
+  @race
+  Scenario: An approval of a request another wait has cancelled files nothing
+    Given a pending enrollment waiting in awaitApproval, and a second PendingEnrollment for the same request from resumeEnrollment
+    When the second cancels and then the manager approves the request
+    Then the first wait throws AtEnrollmentCancelledException naming the enrollment and saying the manager can revoke it, and the store holds no pending keys and no live keys
 
   @race
   Scenario: Two enrolls on one store at once file one request

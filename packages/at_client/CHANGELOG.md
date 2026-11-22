@@ -12,6 +12,10 @@
 - fix: of two `Atsign.enroll` calls into one keys store at once, only one
   files its request. The other throws `AtEnrollmentException` naming the
   enrollment it sent, which the Atsign's manager can deny.
+- fix: when another `PendingEnrollment` for the same request has cancelled
+  it, an approval that lands in a wait files nothing and throws
+  `AtEnrollmentCancelledException`, saying the Atsign's manager can revoke
+  it.
 - fix: `Atsign.resumeEnrollment` returns the keys store's one pending
   enrollment whatever app and device it was filed under, so its `app` and
   `device` parameters are deprecated and ignored.

@@ -1340,6 +1340,41 @@ void main() {
           secondaryAddressFinder: atDirectoryOf(pref));
     }
 
+    test('An approval of a request another wait has cancelled files nothing',
+        () async {
+      var polls = 0;
+      var approved = false;
+      final server = atServer(decide: (_) async {
+        polls++;
+        return approved ? true : notYetDecided();
+      });
+      final store = InMemoryAtKeysIo();
+      final waiter = await submit(store, server);
+      final pref = await preference();
+      final other = await Atsign(atSign).resumeEnrollment(
+          keys: store,
+          preference: pref,
+          atLookUp: server,
+          lookUps: loopbackLookUps(),
+          secondaryAddressFinder: atDirectoryOf(pref));
+      final waiting = expectLater(
+          waiter.awaitApproval(retryInterval: pollEvery),
+          throwsA(isA<AtEnrollmentCancelledException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('"$enrollmentId"'),
+                  contains("the atSign's manager can revoke it")))));
+      await until(() => polls >= 1);
+      await other!.cancel();
+      approved = true;
+      await waiting;
+
+      final stored = await store.read(atSign);
+      expect(stored.pendingEnrollmentIds, isEmpty);
+      expect(stored.holdsAuthenticationMaterial, isFalse);
+      expect(waiter.approved, isFalse);
+    });
+
     test('Stop ends a wait and keeps the request', () async {
       var polls = 0;
       final server = atServer(decide: (_) async {

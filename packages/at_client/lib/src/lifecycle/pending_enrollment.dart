@@ -107,7 +107,10 @@ class PendingEnrollment {
   /// atServer, and [retryInterval] is the pause between polls. A denial, or
   /// the request's expiry, removes this enrollment from [keys] and throws
   /// [AtEnrollmentDeniedException] or [AtEnrollmentExpiredException], both
-  /// [AtEnrollmentException]s. Any other end of the wait keeps the request.
+  /// [AtEnrollmentException]s. An approval of a request whose pending keys
+  /// have already left [keys], removed by another wait or process, files
+  /// nothing and throws [AtEnrollmentCancelledException]. Any other end of the
+  /// wait keeps the request.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
@@ -182,11 +185,17 @@ class PendingEnrollment {
     // update, so a stop or cancel lands either before the approval is written
     // or after it.
     var written = false;
+    var gone = false;
     await keys.update(atSign, (stored) {
       // NOTE: update may run this again on a fresh read; only the last run
       // counts.
       written = false;
+      gone = false;
       if (_ended.isCompleted) return false;
+      if (!stored.pendingEnrollmentIds.contains(enrollmentId)) {
+        gone = true;
+        return false;
+      }
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
         _fileFlat(stored);
@@ -196,6 +205,12 @@ class PendingEnrollment {
       written = true;
       return true;
     });
+    if (gone) {
+      throw AtEnrollmentCancelledException('enrollment '
+          '"${clipForMessage(enrollmentId, quote: '"')}" of $atSign was '
+          'approved after its pending keys left its key store, so nothing is '
+          "filed: the atSign's manager can revoke it");
+    }
     if (!written) throw await _endedOnceCancelled();
     _approved = true;
     _logger.info('enrollment $enrollmentId of $atSign is approved and its '
