@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' show FileSystemException;
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
 import 'package:flutter/material.dart';
@@ -53,7 +52,7 @@ void main() {
     flows = MockAtsignFlows();
     pending = MockPendingEnrollment();
     when(() => pending.enrollmentId).thenReturn('enroll-1');
-    when(() => pending.keys).thenReturn(KeychainAtKeysIo());
+    when(() => pending.keys).thenReturn(_KeychainInMemory());
     when(() => pending.progress).thenAnswer((_) => const Stream.empty());
     when(() => pending.approved).thenReturn(false);
     reopens = () => Future.error(StateError('no second open expected'));
@@ -238,6 +237,9 @@ void main() {
   testWidgets('A confirmed Cancel in PkamDialog after the approval was '
       'written lets the approval stand', (tester) async {
     when(() => pending.approved).thenReturn(true);
+    when(
+      () => pending.keys,
+    ).thenReturn(InMemoryAtKeysIo.holding('@alice', _liveKeys()));
     when(() => pending.stop()).thenAnswer((_) async {});
     final ended = Completer<void>();
     final waitEnded = Completer<void>();
@@ -306,6 +308,108 @@ void main() {
     expect(completed, [
       second,
     ], reason: 'onAuthenticationComplete is handed the client returned');
+  });
+
+  testWidgets('A confirmed Cancel after another wait filed the approval lets '
+      'the approval stand', (tester) async {
+    final keys = _KeychainInMemory();
+    when(() => pending.keys).thenReturn(keys);
+    when(() => pending.stop()).thenAnswer((_) async {});
+    final opened = clientAnswers();
+    // As cancel() does once another wait has filed the approval: nothing is
+    // pending any more, so it removes nothing, and this wait, which never
+    // saw the approval, ends cancelled.
+    when(() => pending.cancel()).thenAnswer((_) async {
+      opened.completeError(AtEnrollmentCancelledException('cancelled'));
+    });
+    final second = MockAtClient();
+    reopens = () async => second;
+    final (results, completed) = await open(tester, keys: keys);
+    await keys.write('@alice', _liveKeys());
+
+    await tapText(tester, 'Cancel');
+    await tapText(tester, 'Abandon');
+
+    expect(
+      pending.approved,
+      isFalse,
+      reason: 'the control: this wait never saw the approval',
+    );
+    expect(
+      (await keys.read('@alice')).holdsAuthenticationMaterial,
+      isTrue,
+      reason: 'the keys stay',
+    );
+    expect(
+      find.text(
+        'The approval of enrollment enroll-1 landed before the Cancel took '
+        'effect, so it stands.',
+      ),
+      findsOneWidget,
+      reason: 'the dialog says the approval stands',
+    );
+    expect(
+      find.textContaining('abandoned'),
+      findsNothing,
+      reason: 'the dialog does not say the request was abandoned',
+    );
+    expect(
+      verify(
+        () => flows.open(
+          '@alice',
+          keys: keys,
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).callCount,
+      2,
+      reason:
+          'it opens @alice on the approved keys, after the first open found '
+          'only the pending enrollment',
+    );
+    expect(results, [
+      second,
+    ], reason: 'the dialog returns the client opened on the approved keys');
+    expect(completed, [second]);
+  });
+
+  testWidgets('Given a confirmed Cancel in PkamDialog whose AtKeys store '
+      'cannot then be read, when the cancel returns, then the dialog says it '
+      'could not tell whether the request was abandoned and closes with no '
+      'client', (tester) async {
+    when(() => pending.keys).thenReturn(_Unreadable());
+    final opened = clientAnswers();
+    stopEnds(opened);
+    when(() => pending.cancel()).thenAnswer((_) async {
+      opened.completeError(AtEnrollmentCancelledException('cancelled'));
+    });
+    final (results, completed) = await open(tester);
+
+    await tapText(tester, 'Cancel');
+    await tapText(tester, 'Abandon');
+
+    expect(
+      find.text(
+        'Could not tell whether enrollment enroll-1 was abandoned: the AtKeys '
+        "store (this device's keychain) could not be read after the Cancel.",
+      ),
+      findsOneWidget,
+      reason: 'it says what it does not know, and why',
+    );
+    expect(
+      find.textContaining('abandoned. Ask'),
+      findsNothing,
+      reason: 'it does not say the request was abandoned',
+    );
+    expect(
+      find.textContaining('so it stands'),
+      findsNothing,
+      reason: 'it does not say an approval stands',
+    );
+    expect(find.byType(PkamDialog), findsNothing);
+    expect(results, [null], reason: 'the dialog closes with no client');
+    expect(completed, isEmpty);
   });
 
   testWidgets('A declined Cancel in PkamDialog changes nothing', (
@@ -595,6 +699,23 @@ void main() {
       expect(results, [null]);
     },
   );
+}
+
+/// An in-memory AtKeys store that describes itself as the keychain does.
+class _KeychainInMemory extends InMemoryAtKeysIo {
+  @override
+  String describeSource(String atsign) => "this device's keychain";
+}
+
+/// Keys an approval leaves live, their halves stand-ins in base64.
+AtKeys _liveKeys() =>
+    AtKeys.legacy(apkamPublicKey: 'cHVibGlj', apkamPrivateKey: 'cHJpdmF0ZQ==');
+
+/// The keychain's store, which cannot be read.
+class _Unreadable extends _KeychainInMemory {
+  @override
+  Future<AtKeys> read(String atsign) async =>
+      throw const FileSystemException('the keychain cannot be read');
 }
 
 /// A backup store whose writes wait for [release].

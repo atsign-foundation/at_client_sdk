@@ -1,4 +1,5 @@
-import 'package:at_auth/at_auth.dart' show theAtKeysStore;
+import 'package:at_auth/at_auth.dart'
+    show AtKeysSourceAbsentException, theAtKeysStore;
 import 'package:at_client/at_client.dart';
 import 'package:flutter/material.dart';
 
@@ -93,7 +94,30 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
       return;
     }
     if (!mounted) return;
-    if (pending.approved) {
+    final bool approvalStands;
+    try {
+      approvalStands = await _holdsLiveKeys(pending);
+    } catch (e) {
+      logger.warning(
+        'Could not read the AtKeys store after cancelling enrollment '
+        '"${clipForMessage(pending.enrollmentId, quote: '"')}" of $atSign: $e',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not tell whether enrollment '
+            '${clipForMessage(pending.enrollmentId)} was abandoned: '
+            '${theAtKeysStore(pending.keys.describeSource(atSign))} could not '
+            'be read after the Cancel.',
+          ),
+        ),
+      );
+      closeDialog();
+      return;
+    }
+    if (!mounted) return;
+    if (approvalStands) {
       await _openApproved(pending);
       return;
     }
@@ -107,6 +131,17 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
       ),
     );
     closeDialog();
+  }
+
+  /// Whether [pending]'s AtKeys store holds live keys for [atSign], as an
+  /// approval filed before the Cancel took effect leaves it, by this wait or
+  /// another; a store holding nothing for [atSign] holds none.
+  Future<bool> _holdsLiveKeys(PendingEnrollment pending) async {
+    try {
+      return (await pending.keys.read(atSign)).holdsAuthenticationMaterial;
+    } on AtKeysSourceAbsentException {
+      return false;
+    }
   }
 
   /// Hands back a client on the keys whose approval was written before the

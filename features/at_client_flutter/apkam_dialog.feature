@@ -53,6 +53,11 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     When the user confirms
     Then the user is told the approval landed before the Cancel took effect, so it stands, and the dialog returns the client opened on the approved keys
 
+  Scenario: A confirmed Cancel after another wait filed the approval lets the approval stand
+    Given either dialog waiting on a pending enrollment whose approval another wait on the same AtKeys store has filed
+    When the user confirms Cancel
+    Then the keys stay, the dialog says the approval stands, and it opens @alice on the approved keys
+
   Scenario: A declined Cancel changes nothing
     Given that confirmation
     When the user declines

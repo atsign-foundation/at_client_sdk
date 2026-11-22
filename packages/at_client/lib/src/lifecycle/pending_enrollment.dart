@@ -260,8 +260,11 @@ class PendingEnrollment {
   /// have left [keys], as a denial's do. When [keys] cannot remove them, this
   /// throws what it threw, and a later call tries again.
   ///
-  /// An approval already written to [keys] stays there. A [client] call in
-  /// flight has ended before this returns, having stopped any client it
+  /// An approval already written to [keys], by this wait or another, stays
+  /// there, and [approved] says so only of one this wait saw: a caller that
+  /// must know whether an approval was filed first reads [keys] afterwards,
+  /// which then hold live keys. A [client] call in flight has ended before
+  /// this returns, having stopped any client it
   /// opened, so the atSign can be opened again at once; a call made inside
   /// the work that [client] awaits, such as a key store or connection it was
   /// given, does not wait for it. A connection the caller supplied is left

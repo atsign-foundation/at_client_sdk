@@ -11,6 +11,9 @@
 - fix: after a confirmed Cancel, `ApkamActivationDialog` and `PkamDialog` say
   the Atsign's manager can deny the request, or revoke it if they approved it
   already.
+- fix: a confirmed Cancel in `ApkamActivationDialog` or `PkamDialog` that an
+  approval filed by another wait beat opens the Atsign on that approval,
+  rather than saying the request was abandoned.
 - fix: `ApkamActivationDialog` and `PkamDialog` no longer close the screen
   beneath them when a failure, an approval, a confirmed Cancel or the user
   leaving lands as they close, and they stop a client that an approval opens

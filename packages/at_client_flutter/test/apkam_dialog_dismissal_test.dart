@@ -102,12 +102,14 @@ void main() {
   ).thenAnswer((_) async => request);
 
   /// Opens the dialog for [appName] on [deviceName], asking for [namespaces],
-  /// from a button and records what `showDialog` returns.
+  /// on [keys], an empty store by default, from a button and records what
+  /// `showDialog` returns.
   Future<List<Object?>> open(
     WidgetTester tester, {
     String appName = 'app',
     String deviceName = 'device',
     Map<String, String> namespaces = const {'*': 'rw'},
+    WrittenAtKeysIo? keys,
   }) async {
     final results = <Object?>[];
     await tester.pumpWidget(
@@ -127,7 +129,7 @@ void main() {
                       deviceName: deviceName,
                       namespaces: namespaces,
                       preference: AtClientPreference(),
-                      keys: InMemoryAtKeysIo(),
+                      keys: keys ?? InMemoryAtKeysIo(),
                       storage: FakeAtClientStorage(),
                       themeData: ThemeData(),
                       flows: flows,
@@ -280,6 +282,9 @@ void main() {
         'approval stand', (tester) async {
       resumes(pending);
       when(() => pending.approved).thenReturn(true);
+      when(
+        () => pending.keys,
+      ).thenReturn(InMemoryAtKeysIo.holding('@alice', _liveKeys()));
       when(() => pending.stop()).thenAnswer((_) async {});
       final ended = Completer<void>();
       final waitEnded = Completer<void>();
@@ -354,6 +359,111 @@ void main() {
       expect(results, [
         second,
       ], reason: 'the dialog returns the client opened on the approved keys');
+    });
+
+    testWidgets('A confirmed Cancel after another wait filed the approval '
+        'lets the approval stand', (tester) async {
+      final keys = InMemoryAtKeysIo();
+      when(() => pending.keys).thenReturn(keys);
+      resumes(pending);
+      when(() => pending.stop()).thenAnswer((_) async {});
+      final opened = clientAnswers();
+      // As cancel() does once another wait has filed the approval: nothing
+      // is pending any more, so it removes nothing, and this wait, which
+      // never saw the approval, ends cancelled.
+      when(() => pending.cancel()).thenAnswer((_) async {
+        opened.completeError(AtEnrollmentCancelledException('cancelled'));
+      });
+      final approvedClient = MockAtClient();
+      when(
+        () => flows.open(
+          any(),
+          keys: any(named: 'keys'),
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).thenAnswer((_) async => approvedClient);
+      final results = await open(tester, keys: keys);
+      await keys.write('@alice', _liveKeys());
+
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Abandon');
+
+      expect(
+        pending.approved,
+        isFalse,
+        reason: 'the control: this wait never saw the approval',
+      );
+      expect(
+        (await keys.read('@alice')).holdsAuthenticationMaterial,
+        isTrue,
+        reason: 'the keys stay',
+      );
+      expect(
+        find.text(
+          'The approval of enrollment enroll-1 landed before the Cancel took '
+          'effect, so it stands.',
+        ),
+        findsOneWidget,
+        reason: 'the dialog says the approval stands',
+      );
+      expect(
+        find.textContaining('abandoned'),
+        findsNothing,
+        reason: 'the dialog does not say the request was abandoned',
+      );
+      verify(
+        () => flows.open(
+          '@alice',
+          keys: keys,
+          preference: any(named: 'preference'),
+          storage: any(named: 'storage'),
+          lookUps: any(named: 'lookUps'),
+        ),
+      ).called(1);
+      expect(results, [
+        approvedClient,
+      ], reason: 'the dialog opens @alice on the approved keys and returns it');
+    });
+
+    testWidgets('Given a confirmed Cancel whose AtKeys store cannot then be '
+        'read, when the cancel returns, then the dialog says it could not '
+        'tell whether the request was abandoned and closes with no client', (
+      tester,
+    ) async {
+      when(() => pending.keys).thenReturn(_Unreadable());
+      resumes(pending);
+      final opened = clientAnswers();
+      stopEnds(opened);
+      when(() => pending.cancel()).thenAnswer((_) async {
+        opened.completeError(AtEnrollmentCancelledException('cancelled'));
+      });
+      final results = await open(tester);
+
+      await tapText(tester, 'Cancel');
+      await tapText(tester, 'Abandon');
+
+      expect(
+        find.text(
+          'Could not tell whether enrollment enroll-1 was abandoned: the '
+          'AtKeys store could not be read after the Cancel.',
+        ),
+        findsOneWidget,
+        reason: 'it says what it does not know, and why',
+      );
+      expect(
+        find.textContaining('abandoned. Ask'),
+        findsNothing,
+        reason: 'it does not say the request was abandoned',
+      );
+      expect(
+        find.textContaining('so it stands'),
+        findsNothing,
+        reason: 'it does not say an approval stands',
+      );
+      expect(find.byType(ApkamActivationDialog), findsNothing);
+      expect(results, [null], reason: 'the dialog closes with no client');
     });
 
     testWidgets('A declined Cancel changes nothing', (tester) async {
@@ -510,6 +620,9 @@ void main() {
     ) async {
       resumes(pending);
       when(() => pending.approved).thenReturn(true);
+      when(
+        () => pending.keys,
+      ).thenReturn(InMemoryAtKeysIo.holding('@alice', _liveKeys()));
       when(() => pending.stop()).thenAnswer((_) async {});
       final opened = clientAnswers();
       when(() => pending.cancel()).thenAnswer((_) async {
@@ -548,6 +661,9 @@ void main() {
         'nothing beneath the dialog is popped', (tester) async {
       resumes(pending);
       when(() => pending.approved).thenReturn(true);
+      when(
+        () => pending.keys,
+      ).thenReturn(InMemoryAtKeysIo.holding('@alice', _liveKeys()));
       when(() => pending.stop()).thenAnswer((_) async {});
       final opened = clientAnswers();
       when(() => pending.cancel()).thenAnswer((_) async {
@@ -815,6 +931,17 @@ void main() {
       ], reason: 'a dismissed dialog hands back no client');
     });
   });
+}
+
+/// Keys an approval leaves live, their halves stand-ins in base64.
+AtKeys _liveKeys() =>
+    AtKeys.legacy(apkamPublicKey: 'cHVibGlj', apkamPrivateKey: 'cHJpdmF0ZQ==');
+
+/// An AtKeys store that cannot be read.
+class _Unreadable extends InMemoryAtKeysIo {
+  @override
+  Future<AtKeys> read(String atsign) async =>
+      throw const FileSystemException('the AtKeys store cannot be read');
 }
 
 /// What `PendingEnrollment` throws when another wait for the same request
