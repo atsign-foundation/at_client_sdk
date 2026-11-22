@@ -2,6 +2,9 @@
 
 ## 2.1.0
 
+- fix: the dialogs' keys messages, and the one a confirmed Cancel that
+  cannot remove the keys shows, name where the keys are, such as "the
+  AtKeys store (this device's keychain)".
 - feat: `PkamDialog` offers Cancel while it waits on a pending enrollment, as
   `ApkamActivationDialog` does: after the user confirms, it removes the
   request's pending keys from the key store.

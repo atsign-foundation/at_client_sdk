@@ -38,6 +38,7 @@ MockPendingEnrollment filed(
 }) {
   final request = MockPendingEnrollment();
   when(() => request.enrollmentId).thenReturn(enrollmentId);
+  when(() => request.keys).thenReturn(InMemoryAtKeysIo());
   when(() => request.app).thenReturn(app);
   when(() => request.device).thenReturn(device);
   when(() => request.namespaces).thenReturn(namespaces);
@@ -390,7 +391,10 @@ void main() {
       await tapText(tester, 'Abandon');
 
       expect(
-        find.textContaining('Could not abandon enrollment enroll-1'),
+        find.text(
+          'Could not abandon enrollment enroll-1: its keys are still in the '
+          'AtKeys store. Choose Cancel to try again.',
+        ),
         findsOneWidget,
       );
       expect(find.byType(ApkamActivationDialog), findsOneWidget);

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show FileSystemException;
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
 import 'package:at_client_flutter/src/widgets/pkam_dialog.dart';
 import 'package:flutter/material.dart';
@@ -52,6 +53,7 @@ void main() {
     flows = MockAtsignFlows();
     pending = MockPendingEnrollment();
     when(() => pending.enrollmentId).thenReturn('enroll-1');
+    when(() => pending.keys).thenReturn(KeychainAtKeysIo());
     when(() => pending.progress).thenAnswer((_) => const Stream.empty());
     when(() => pending.approved).thenReturn(false);
     reopens = () => Future.error(StateError('no second open expected'));
@@ -348,7 +350,7 @@ void main() {
     expect(
       find.text(
         'Could not abandon enrollment enroll-1: its keys are still in the '
-        'key store. Choose Cancel to try again.',
+        "AtKeys store (this device's keychain). Choose Cancel to try again.",
       ),
       findsOneWidget,
     );

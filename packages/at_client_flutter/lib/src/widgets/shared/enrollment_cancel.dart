@@ -50,8 +50,9 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
     final abandoning = _abandoning;
     if (abandoning == null) return null;
     return 'Could not abandon enrollment '
-        '${clipForMessage(abandoning.enrollmentId)}: its keys are still in the '
-        'key store. Choose Cancel to try again.';
+        '${clipForMessage(abandoning.enrollmentId)}: its keys are still in '
+        '${_theAtKeysStore(abandoning.keys.describeSource(atSign))}. Choose '
+        'Cancel to try again.';
   }
 
   /// Whether [error], which ended the wait, comes from a Cancel the user
@@ -167,3 +168,8 @@ mixin CancelsEnrollment<T extends StatefulWidget> on State<T> {
       ).whenComplete(() => _confirming = null) ??
       false;
 }
+
+/// "the AtKeys store", with [source], where `AtKeysIo.describeSource` says
+/// the keys are kept, in brackets after it unless [source] is empty.
+String _theAtKeysStore(String source) =>
+    source.isEmpty ? 'the AtKeys store' : 'the AtKeys store ($source)';
