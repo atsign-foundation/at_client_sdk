@@ -311,7 +311,9 @@ class CLIBase {
   /// [AtStorageInUseException] when another process holds the store open,
   /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentDeniedException] when the request is denied,
-  /// [AtEnrollmentExpiredException] when it expires, both removing its keys,
+  /// [AtEnrollmentExpiredException] when it expires, both removing its keys
+  /// or, when the keyfile cannot be written, saying in their message that the
+  /// keys stay, so the next [init] resumes the request again,
   /// [SecondaryNotFoundException] when the atDirectory has no atServer for the
   /// atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or

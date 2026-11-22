@@ -2,6 +2,8 @@
 
 ## 1.4.0 — 2026-09-13
 
+- A denial or expiry whose pending keys the AtKeys store cannot remove still
+  throws the decision, its message saying the keys stay (`references/15`).
 - `at_activate cancel` gives up the pending request a keyfile holds, and a
   `CLIBase` program waiting on one names it (`SKILL.md`; `references/14`,
   `15`).

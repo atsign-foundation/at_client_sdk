@@ -103,16 +103,18 @@ class PendingEnrollment {
   /// [keys] and moves them to active.
   ///
   /// The wait for a decision has no bound: somebody decides on their own
-  /// schedule. [maxRetries] budgets consecutive failures to reach the
-  /// atServer, and [retryInterval] is the pause between polls. A denial, or
-  /// the request's expiry, removes this enrollment from [keys] and throws
+  /// schedule. [maxRetries] budgets consecutive failures to reach the atServer,
+  /// and [retryInterval] is the pause between polls. A denial, or the request's
+  /// expiry, removes this enrollment from [keys] and throws
   /// [AtEnrollmentDeniedException] or [AtEnrollmentExpiredException], both
-  /// [AtEnrollmentException]s. When the approval lands after another wait or
-  /// process has filed it, this wait ends approved as well; when another has
+  /// [AtEnrollmentException]s; when [keys] cannot remove it, the same type is
+  /// thrown, its message saying the pending keys stay and why, and the next
+  /// resume finds the request again. When the approval lands after another wait
+  /// or process has filed it, this wait ends approved as well; when another has
   /// removed the pending keys instead, the approval files nothing and this
-  /// throws [AtEnrollmentCancelledException]. A wait begun once the request
-  /// is no longer pending throws [AtEnrollmentException] at once. Any other
-  /// end of the wait keeps the request.
+  /// throws [AtEnrollmentCancelledException]. A wait begun once the request is
+  /// no longer pending throws [AtEnrollmentException] at once. Any other end of
+  /// the wait keeps the request.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
@@ -162,7 +164,7 @@ class PendingEnrollment {
           maxRetries: maxRetries,
           atLookup: handshake,
           cancelled: _ended.future);
-    } on Exception catch (e) {
+    } on Exception catch (e, stackTrace) {
       if (_ended.isCompleted) throw await _endedOnceCancelled();
       final decided = e is AtEnrollmentExpiredException
           ? 'expired'
@@ -175,6 +177,15 @@ class PendingEnrollment {
         } catch (failure) {
           _logger.warning('enrollment $enrollmentId of $atSign was $decided, '
               'and its pending keys could not be removed: $failure');
+          final kept = '${(e as AtException).message}; its pending keys could '
+              'not be removed and stay in '
+              '${theAtKeysStore(keys.describeSource(atSign))}, where the next '
+              'resume finds the request again: $failure';
+          Error.throwWithStackTrace(
+              e is AtEnrollmentExpiredException
+                  ? AtEnrollmentExpiredException(kept)
+                  : AtEnrollmentDeniedException(kept),
+              stackTrace);
         }
       }
       rethrow;
