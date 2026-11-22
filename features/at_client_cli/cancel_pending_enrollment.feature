@@ -67,3 +67,8 @@ Feature: at_activate cancel removes the request its keyfile is waiting on
     Given a keyfile holding only a pending enrollment <id> for @alice
     When an at_activate command that needs live keys runs for @alice on that keyfile
     Then its report says to run the same at_activate enroll command again once the request is approved, or at_activate cancel to give it up
+
+  Scenario: the at_activate cancel command a wait names works as printed
+    Given a CLIBase program started for @alice with -P, on a keyfile whose path holds a space and that holds a pending enrollment
+    When it waits for the approval
+    Then the at_activate cancel command it names, and the one at_activate's report of that keyfile names, each quote the path and carry -P <passphrase>, never the passphrase itself

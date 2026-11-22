@@ -6,7 +6,8 @@
   keys is refused. A `switch` over `AuthCliCommand` needs a `cancel` case.
 - feat: a `CLIBase` program waiting on its keyfile's pending request, and
   at_activate's report of such a keyfile, name the `at_activate cancel`
-  command that gives it up.
+  command that gives it up, quoting the keyfile's path where a shell needs
+  it, with `-P <passphrase>` when the keyfile was opened with one.
 - fix: `at_activate cancel` and `enroll` say what is wrong with a keyfile
   they cannot read, or one recorded for another Atsign, and `enroll` no
   longer waits on that other Atsign's request.

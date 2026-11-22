@@ -27,7 +27,9 @@ void main() {
         () {
       final lines = stderrOf(() => reportKeysProblem(
           AtEnrollmentPendingException(atSign, ['e-1']),
-          absentHint: const []));
+          absentHint: const [],
+          keyfile: null,
+          passphraseGiven: false));
 
       expect(lines, [
         'This keyfile holds only a pending enrollment request for $atSign '
@@ -44,7 +46,9 @@ void main() {
         'approved', () {
       final lines = stderrOf(() => reportKeysProblem(
           AtEnrollmentPendingException(atSign, ['e-1', 'e-2']),
-          absentHint: const []));
+          absentHint: const [],
+          keyfile: null,
+          passphraseGiven: false));
 
       expect(lines, [
         'This keyfile holds only pending enrollment requests for $atSign '
@@ -61,7 +65,9 @@ void main() {
       final lines = stderrOf(() => reportKeysProblem(
           AtEnrollmentPendingException(atSign, ['e-1', 'e-2'],
               source: '/keys/alice.atKeys'),
-          absentHint: const []));
+          absentHint: const [],
+          keyfile: '/keys/alice.atKeys',
+          passphraseGiven: false));
 
       expect(lines, [
         'The keyfile at /keys/alice.atKeys holds only pending enrollment '
@@ -74,11 +80,78 @@ void main() {
     });
   });
 
+  group('Given the keyfile a program used, and whether it was given -P', () {
+    test(
+        'when a passphrase was given, then the at_activate cancel command '
+        'the report names carries -P <passphrase>, never the passphrase', () {
+      final lines = stderrOf(() => reportKeysProblem(
+          AtEnrollmentPendingException(atSign, ['e-1'],
+              source: '/keys/alice.atKeys'),
+          absentHint: const [],
+          keyfile: '/keys/alice.atKeys',
+          passphraseGiven: true));
+
+      expect(
+          lines,
+          contains('  To give it up instead: at_activate cancel -a $atSign -k '
+              '/keys/alice.atKeys -P <passphrase>'),
+          reason: 'the command carries -P and the placeholder');
+    });
+
+    test(
+        'when its path holds only characters no shell treats specially, then '
+        'the command names it unquoted, on POSIX shells and on Windows', () {
+      expect(
+          cancelCommand(atSign,
+              keyfile: '/keys/@alice_key.atKeys',
+              passphraseGiven: false,
+              windows: false),
+          'at_activate cancel -a $atSign -k /keys/@alice_key.atKeys',
+          reason: 'on a POSIX shell the path is as it is');
+      expect(
+          cancelCommand(atSign,
+              keyfile: r'C:\keys\@alice_key.atKeys',
+              passphraseGiven: false,
+              windows: true),
+          r'at_activate cancel -a @alice -k C:\keys\@alice_key.atKeys',
+          reason: 'on Windows the path is as it is');
+    });
+
+    test(
+        'when its path holds a space and a single quote, then a POSIX shell '
+        'is given it in single quotes, the quote closed, escaped and reopened',
+        () {
+      expect(
+          cancelCommand(atSign,
+              keyfile: "/keys/it's mine/@alice_key.atKeys",
+              passphraseGiven: false,
+              windows: false),
+          "at_activate cancel -a $atSign -k "
+          r"'/keys/it'\''s mine/@alice_key.atKeys'",
+          reason: 'single quotes, with the quote written as a shell reads it');
+    });
+
+    test(
+        'when its path holds a space, then Windows is given it in double '
+        'quotes', () {
+      expect(
+          cancelCommand(atSign,
+              keyfile: r'C:\my keys\@alice_key.atKeys',
+              passphraseGiven: true,
+              windows: true),
+          r'at_activate cancel -a @alice -k "C:\my keys\@alice_key.atKeys" '
+          '-P <passphrase>',
+          reason: 'double quotes, as cmd.exe takes them');
+    });
+  });
+
   group('Given keys holding no credential', () {
     test('when reported with their keyfile, then the report names it', () {
       final lines = stderrOf(() => reportKeysProblem(
           AtNoCredentialException(atSign, source: '/keys/alice.atKeys'),
-          absentHint: const []));
+          absentHint: const [],
+          keyfile: '/keys/alice.atKeys',
+          passphraseGiven: false));
 
       expect(lines, [
         'The keyfile at /keys/alice.atKeys holds no credential for $atSign: '
@@ -92,8 +165,8 @@ void main() {
         () {
       final noCredential = AtNoCredentialException(atSign);
 
-      final lines =
-          stderrOf(() => reportKeysProblem(noCredential, absentHint: const []));
+      final lines = stderrOf(() => reportKeysProblem(noCredential,
+          absentHint: const [], keyfile: null, passphraseGiven: false));
 
       expect(lines, [noCredential.message, keysProblemFooter]);
     });
@@ -110,7 +183,9 @@ void main() {
               error: AtKeysPassphraseException(
                   'Failed to decrypt atKeys file - passphrase may be '
                   'incorrect')),
-          absentHint: const []));
+          absentHint: const [],
+          keyfile: keyfile,
+          passphraseGiven: false));
 
       expect(lines, [
         'Could not read the keys for $atSign at $keyfile: the passphrase is '
@@ -129,8 +204,8 @@ void main() {
           error: AtDecryptionException('this atKeys file declares an envelope '
               'version this build has no code for'));
 
-      final lines =
-          stderrOf(() => reportKeysProblem(unusable, absentHint: const []));
+      final lines = stderrOf(() => reportKeysProblem(unusable,
+          absentHint: const [], keyfile: keyfile, passphraseGiven: false));
 
       expect(lines, [unusable.message, keysProblemFooter]);
       expect(lines.first, contains('envelope version this build has no code'));

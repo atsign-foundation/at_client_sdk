@@ -356,7 +356,9 @@ class CLIBase {
       } on AtKeysUnusableException catch (e) {
         reportKeysProblem(e,
             absentHint: eitherKeysHint(
-                atSign, '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'));
+                atSign, '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'),
+            keyfile: atKeysFilePathToUse,
+            passphraseGiven: _passphraseGiven);
         rethrow;
       }
     }
@@ -401,8 +403,10 @@ class CLIBase {
     stderr.writeln();
     stderr.writeln(chalk.brightBlue('Waiting for approval of enrollment '
         '${request.enrollmentId} of $atSign'));
+    final cancel = cancelCommand(atSign,
+        keyfile: atKeysFilePathToUse, passphraseGiven: _passphraseGiven);
     stderr.writeln('To give the request up instead, stop this program and '
-        'run at_activate cancel -a $atSign -k $atKeysFilePathToUse');
+        'run $cancel');
     try {
       await request.awaitApproval(
           retryInterval: approvalRetryInterval,
@@ -411,6 +415,9 @@ class CLIBase {
       throw _reported(e);
     }
   }
+
+  /// Whether the keyfile is opened with a passphrase.
+  bool get _passphraseGiven => passPhrase?.isNotEmpty ?? false;
 
   SecondaryAddressFinder _atDirectory() => CacheableSecondaryAddressFinder(
       atRootDomain.rootDomain, atRootDomain.rootPort);

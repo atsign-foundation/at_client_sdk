@@ -469,7 +469,9 @@ Future<int> wrappedMain(List<String> arguments,
         absentHint: e.cause == AtKeysUnusableCause.absent
             ? await absentKeysHint(
                 e.atSign, commandArgResults[AuthCliArgs.argNameRootServer])
-            : const []);
+            : const [],
+        keyfile: _keyfileIn(commandArgResults),
+        passphraseGiven: _passphraseIn(commandArgResults));
     return 1;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
@@ -485,6 +487,23 @@ Future<int> wrappedMain(List<String> arguments,
 
   return 0;
 }
+
+/// The keyfile a command run with [args] reads: the one -k names, else the
+/// default one for the atSign -a names, or null when there is no home
+/// directory to find that in.
+String? _keyfileIn(ArgResults args) {
+  final String? named = args[AuthCliArgs.argNameAtKeys];
+  if (named != null) return named;
+  final home = getHomeDirectory();
+  return home == null
+      ? null
+      : getDefaultAtKeysFilePath(
+          home, AtUtils.fixAtSign(args[AuthCliArgs.argNameAtSign]));
+}
+
+/// Whether a command run with [args] was given a passphrase with -P.
+bool _passphraseIn(ArgResults args) =>
+    (args[AuthCliArgs.argNamePassPhrase] as String?)?.isNotEmpty ?? false;
 
 /// Check the status of an atSign - returns
 ///  - 4 if the atDirectory cannot be reached

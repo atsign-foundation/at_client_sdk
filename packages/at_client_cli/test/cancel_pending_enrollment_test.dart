@@ -454,6 +454,69 @@ void main() {
     await cli.atClient.stop();
   });
 
+  test('the at_activate cancel command a wait names works as printed',
+      () async {
+    const passPhrase = 'a secret phrase';
+    final spaced = '${dir.path}/my keys/${atSign}_key.atKeys';
+    final wrapped = await fileRequest(path: spaced, passPhrase: passPhrase);
+    await expectLater(FileAtKeysIo(filePath: (_) => spaced).read(atSign),
+        throwsA(isA<AtKeysPassphraseException>()),
+        reason: 'the control: the keyfile has a passphrase');
+    final command = "at_activate cancel -a $atSign -k '$spaced' "
+        '-P <passphrase>';
+
+    final report = await atActivate([
+      'otp', '-a', atSign, '-k', spaced, '-P', passPhrase, //
+      '-r', '127.0.0.1:${atDirectory.port}',
+    ]);
+
+    expect(
+        report.err.split('\n'), contains('  To give it up instead: $command'),
+        reason: "the command at_activate's report names quotes the path and "
+            'carries -P <passphrase>; stderr: ${report.err}');
+    expect('${report.out}${report.err}', isNot(contains(passPhrase)),
+        reason: "at_activate's report never prints the passphrase itself");
+
+    final server =
+        approvingAtServer(decide: (_) async => true, wrapped: wrapped);
+    when(() => server.lookUp.stopNotifications()).thenAnswer((_) async {});
+    final out = _Captured();
+    final err = _Captured();
+    final cli = await IOOverrides.runZoned(
+        () => CLIBase.fromCommandLineArgs([
+              '-a', atSign, //
+              '-k', spaced,
+              '-P', passPhrase,
+              '-s', '${dir.path}/storage',
+              '-r', '127.0.0.1:${atDirectory.port}',
+              '--max-connect-attempts', '1',
+              '--never-sync',
+            ],
+                parser: CLIBase.createArgsParser(namespace: 'buzz'),
+                lookUps: (
+                        {required String atSign,
+                        required AtRootDomain rootDomain,
+                        required AtAuthenticator? authenticator,
+                        SecondaryAddressFinder? secondaryAddressFinder}) =>
+                    server.lookUp,
+                approvalRetryInterval: const Duration(milliseconds: 10)),
+        stdout: () => out,
+        stderr: () => err);
+
+    expect(
+        err.plain.split('\n'),
+        contains('To give the request up instead, stop this program and run '
+            '$command'),
+        reason: 'the command CLIBase names quotes the path and carries -P '
+            '<passphrase>; stderr: ${err.plain}');
+    expect('${out.plain}${err.plain}', isNot(contains(passPhrase)),
+        reason: 'CLIBase never prints the passphrase itself');
+    await cli.atClient.stop();
+  },
+      skip: Platform.isWindows
+          ? 'the path is quoted as a POSIX shell takes it'
+          : false);
+
   test(
       "at_activate's report of a keyfile waiting on a request names "
       'at_activate cancel', () async {
