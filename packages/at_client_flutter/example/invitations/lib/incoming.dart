@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart'
+    show MissingPluginException, PlatformException;
 import 'package:path_provider/path_provider.dart'
     show getApplicationSupportDirectory;
 import 'package:play_install_referrer/play_install_referrer.dart';
@@ -60,16 +62,26 @@ class Incoming extends ValueNotifier<InvitationLink?> {
       '${(await getApplicationSupportDirectory()).path}/referrer_opened',
     );
     if (opened.existsSync()) return;
+    final ReferrerDetails details;
     try {
-      final details = await PlayInstallReferrer.installReferrer;
-      final referrer = Uri.splitQueryString(details.installReferrer ?? '');
-      final invitation = referrer['invitation'];
-      if (invitation != null && offer(invitation)) {
-        _referrerOpened = opened;
-        _referrerId = value!.id;
-      }
-    } catch (_) {
+      details = await PlayInstallReferrer.installReferrer;
+    } on PlatformException {
       // NOTE: a sideloaded or emulator install has no Play referrer.
+      return;
+    } on MissingPluginException {
+      return;
+    }
+    final Map<String, String> referrer;
+    try {
+      referrer = Uri.splitQueryString(details.installReferrer ?? '');
+    } on ArgumentError {
+      // NOTE: the referrer is whatever the install link carried.
+      return;
+    }
+    final invitation = referrer['invitation'];
+    if (invitation != null && offer(invitation)) {
+      _referrerOpened = opened;
+      _referrerId = value!.id;
     }
   }
 }
