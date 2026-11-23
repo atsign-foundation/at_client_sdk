@@ -8,7 +8,8 @@ Feature: Atsign.enroll checks the AtKeys store before it sends the request
   before the request goes out, since the request spends the passcode. A
   request that has gone out and then cannot be filed throws
   AtEnrollmentException naming the enrollment it sent, for the Atsign's
-  manager to deny, and why it could not be filed.
+  manager to deny, and why it could not be filed. An Error while filing it, a
+  defect, is rethrown as it is, and logged naming the enrollment.
 
   Races: the read before sending is a snapshot. The request is filed in the
   store's one update, which checks again, as now; a store another process
@@ -52,3 +53,8 @@ Feature: Atsign.enroll checks the AtKeys store before it sends the request
       | store                                                                                |
       | a keyfile for @alice that a denial left empty, in a directory that cannot be written |
       | an AtKeys store for @alice whose write fails                                         |
+
+  Scenario: An Error while filing a sent request is rethrown, and logged naming the enrollment
+    Given an AtKeys store for @alice whose write throws an Error
+    When an app enrolls @alice into that store and the atServer accepts the request as e-1
+    Then enroll rethrows that Error, and logs at severe that e-1 was sent and is not filed

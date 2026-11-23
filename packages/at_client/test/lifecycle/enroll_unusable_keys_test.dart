@@ -10,6 +10,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import '../test_utils/recorded_logs.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -29,6 +30,15 @@ class _RecordingAtDirectory implements SecondaryAddressFinder {
 class _WriteRefused implements Exception {
   @override
   String toString() => 'the platform refused the write\u001b[0m\nsecond line';
+}
+
+/// An in-memory AtKeys store whose every write fails with [error], an
+/// [Error].
+class _StoreFailingWithError extends InMemoryAtKeysIo {
+  final error = StateError('the store has a defect');
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) async => throw error;
 }
 
 /// An in-memory AtKeys store whose every write fails with [_WriteRefused].
@@ -56,8 +66,12 @@ void main() {
   late String path;
   late List<String> built;
   late _RecordingAtDirectory atDirectory;
+  final logs = RecordedLogs();
 
-  setUpAll(() => registerFallbackValue(_FakeVerbBuilder()));
+  setUpAll(() {
+    registerFallbackValue(_FakeVerbBuilder());
+    logs.installOn(level: 'warning');
+  });
 
   setUp(() {
     dir = Directory.systemTemp.createTempSync('enroll_unusable_keys_');
@@ -302,6 +316,27 @@ void main() {
           () => keys.read(atSign), throwsA(isA<AtKeysSourceAbsentException>()),
           reason: 'the store is unchanged');
     });
+  });
+
+  test(
+      'An Error while filing a sent request is rethrown, and logged naming the '
+      'enrollment', () async {
+    final keys = _StoreFailingWithError();
+    final sent = <String>[];
+
+    await expectLater(enroll(atSign, keys, atLookUp: acceptingAtServer(sent)),
+        throwsA(same(keys.error)),
+        reason: 'the Error is rethrown as it is');
+    expect(sent, hasLength(1), reason: 'the request was sent');
+    expect(
+        logs.at('SEVERE'),
+        contains('enrollment "e-1" of $atSign was sent and is not filed in '
+            'the AtKeys store, because of a defect: Bad state: the store has '
+            'a defect'),
+        reason: 'the severe log names the sent enrollment');
+    await expectLater(
+        () => keys.read(atSign), throwsA(isA<AtKeysSourceAbsentException>()),
+        reason: 'the store is unchanged');
   });
 
   test(

@@ -392,9 +392,10 @@ extension AtsignLifecycle on Atsign {
   /// wherever that update is one operation, as a keyfile's is across
   /// processes and a keychain's within one isolate; the other throws
   /// [AtEnrollmentException] naming the enrollment it sent, which the
-  /// atSign's manager can deny. A failure of the filing itself throws
-  /// [AtEnrollmentException] naming the sent enrollment too, with the
-  /// failure's first line.
+  /// atSign's manager can deny. An [Exception] from the filing itself
+  /// throws [AtEnrollmentException] naming the sent enrollment too, with the
+  /// exception's first line; an [Error] from it is rethrown as it is, after
+  /// a severe log naming the sent enrollment.
   ///
   /// [signingAlgo] is the APKAM algorithm the enrollment authenticates with
   /// and [keyExchangeMode] how its symmetric key travels; both default to the
@@ -492,9 +493,9 @@ extension AtsignLifecycle on Atsign {
           namespaces: namespaces);
     } on AtEnrollmentException {
       rethrow;
-    } catch (e, stackTrace) {
+    } on Exception catch (e, stackTrace) {
       final store = theAtKeysStore(keys.describeSource(this));
-      final reason = '$e'.split('\n').first.trim();
+      final reason = _firstLine(e);
       AtSignLogger('AtsignLifecycle ($this)').warning(
           'enrollment ${_quoted(response.enrollmentId)} of $this was sent and '
           'could not be filed in $store: ${clipForMessage(reason)}');
@@ -504,6 +505,13 @@ extension AtsignLifecycle on Atsign {
               'filing it in $store failed: '
               '${clipForMessage(reason)}')),
           stackTrace);
+    } on Error catch (e) {
+      final store = theAtKeysStore(keys.describeSource(this));
+      AtSignLogger('AtsignLifecycle ($this)').severe(
+          'enrollment ${_quoted(response.enrollmentId)} of $this was sent and '
+          'is not filed in $store, because of a defect: '
+          '${clipForMessage(_firstLine(e))}');
+      rethrow;
     }
     return PendingEnrollment(
         atSign: this,
@@ -681,6 +689,10 @@ extension AtsignLifecycle on Atsign {
     }
     _refuseFilingOver(existing, source: keys.describeSource(this));
   }
+
+  /// The first line of [failure]'s text, trimmed.
+  static String _firstLine(Object failure) =>
+      '$failure'.split('\n').first.trim();
 
   /// [text] in double quotes, escaped and clipped by [clipForMessage].
   static String _quoted(String text) => '"${clipForMessage(text, quote: '"')}"';
