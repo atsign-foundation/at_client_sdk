@@ -61,26 +61,20 @@ while (( $# > 0 )); do
   esac
 done
 
-if (( target_set )); then
-  case "$target" in
-    dart2js | dart2wasm) ;;
-    *) refuse "unknown target '$target'; expected dart2js or dart2wasm" ;;
-  esac
-elif (( no_arguments )); then
-  target=both
-else
-  target=dart2js
+if (( ! target_set )); then
+  if (( no_arguments )); then target=both; else target=dart2js; fi
 fi
 
-if [[ "$target" == dart2wasm ]]; then
-  export WASM_REQUIRED=1
-fi
-
-# build_entry takes the compiler-level target name.
-case "$target" in
-  dart2js) targets=js ;;
-  dart2wasm) targets=wasm ;;
-  *) targets=both ;;
+# One mapping from the target to the compiler-level name build_entry takes.
+# `both` is only the internal no-argument default, never a given value.
+case "$target:$target_set" in
+  dart2js:*) targets=js ;;
+  dart2wasm:*)
+    targets=wasm
+    export WASM_REQUIRED=1
+    ;;
+  both:0) targets=both ;;
+  *) refuse "unknown target '$target'; expected dart2js or dart2wasm" ;;
 esac
 
 # Compiles web/$1.dart as build/$2 for the requested target(s): js, wasm, or

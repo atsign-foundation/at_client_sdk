@@ -27,20 +27,6 @@ Directory _repoRoot() {
 
 late String _workflow;
 
-/// The `subject-path` lines of the attest step named [step].
-List<String> _subjects(String step) {
-  final lines = _workflow.split('\n');
-  final at = lines.indexWhere((l) => l.contains('- name: $step'));
-  expect(at, isNonNegative, reason: step);
-  final start = lines.indexWhere((l) => l.contains('subject-path:'), at);
-  return [
-    for (var i = start + 1;
-        i < lines.length && lines[i].startsWith('            ');
-        i++)
-      lines[i].trim(),
-  ];
-}
-
 void main() {
   setUpAll(() {
     _workflow = File(
@@ -67,6 +53,20 @@ void main() {
     expect(_workflow, contains('tag="\${prefix}\${GITHUB_SHA::12}"'));
   });
 
+  test('The release job derives its own asset list from the target', () {
+    final release = _workflow.substring(_workflow.indexOf('\n  release:\n'));
+    expect(release, contains('case "\$TARGET" in'));
+    expect(release, contains('assets=(at_client_web.js)'));
+    expect(release, contains('assets=(at_client_web.wasm at_client_web.mjs)'));
+    expect(release, contains('exit 1'));
+    expect(_workflow, isNot(contains('needs.build.outputs.assets')));
+    expect(
+      RegExp(r'^      assets:', multiLine: true).hasMatch(_workflow),
+      isFalse,
+      reason: 'the build job exposes no asset list',
+    );
+  });
+
   test('One checksum file covers every asset and the manifest', () {
     expect(
       _workflow,
@@ -76,6 +76,7 @@ void main() {
     expect(
         _workflow, contains('assets=(at_client_web.wasm at_client_web.mjs)'));
     expect(_workflow, contains('sha256sum -c SHA256SUMS'));
+    expect(_workflow, contains('assets+=(bridge-manifest.json SHA256SUMS)'));
     expect(_workflow, contains('sha256sum -c at_client_web.js.sha256'));
     expect(
       _workflow,
@@ -86,22 +87,24 @@ void main() {
   test('Attestation covers the same files as the checksum file', () {
     expect(
       RegExp('uses: actions/attest-build-provenance').allMatches(_workflow),
-      hasLength(2),
+      hasLength(1),
     );
-    expect(_subjects('Attest the dart2js bundle'), [
-      'bridge/at_client_web.js',
-      'bridge/at_client_web.js.sha256',
-      'bridge/bridge-manifest.json',
-      'bridge/SHA256SUMS',
-    ]);
-    expect(_subjects('Attest the dart2wasm bundle'), [
-      'bridge/at_client_web.wasm',
-      'bridge/at_client_web.mjs',
-      'bridge/bridge-manifest.json',
-      'bridge/SHA256SUMS',
-    ]);
-    expect(_workflow, contains("env.TARGET == 'dart2js'"));
-    expect(_workflow, contains("env.TARGET == 'dart2wasm'"));
+    expect(
+      RegExp('uses: actions/(upload|download)-artifact').allMatches(_workflow),
+      hasLength(2),
+      reason: 'one upload and one download, not one per target',
+    );
+    expect(
+        _workflow, contains(r'name: at_client_web-bridge-${{ env.TARGET }}'));
+    // The attested directory is the one the verify step proved holds exactly
+    // the target's assets, bridge-manifest.json and SHA256SUMS.
+    final verify = _workflow.indexOf('Verify the bundle and checksums');
+    final attest = _workflow.indexOf('uses: actions/attest-build-provenance');
+    expect(verify, isNonNegative);
+    expect(verify, lessThan(attest));
+    expect(_workflow, contains('subject-path: bridge/*'));
+    expect(_workflow, contains(r'expected=$(printf'));
+    expect(_workflow, contains(r'"$expected" != "$found"'));
   });
 
   test('The release build compares its manifest with the committed one', () {
@@ -115,9 +118,9 @@ void main() {
     );
     expect(
       'bridge-manifest.json'.allMatches(_workflow).length,
-      greaterThanOrEqualTo(6),
+      greaterThanOrEqualTo(5),
     );
     expect(_workflow, contains('assets+=(at_client_web.js.sha256)'));
-    expect(_workflow, contains('assets+=(bridge-manifest.json)'));
+    expect(_workflow, contains('cp "\${assets[@]}" bridge-manifest.json'));
   });
 }

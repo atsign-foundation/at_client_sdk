@@ -10,8 +10,9 @@ name: at_client_web_bridge_release
 # at_client_web.wasm and at_client_web.mjs. The manifest is the same for both.
 # It is started by hand from trunk; nothing triggers it automatically.
 # Two jobs: `build` runs the toolchain with read-only permissions and uploads the
-# bundle; `release` has the write scopes, takes no checkout or toolchain, verifies
-# the checksums, attests the bundle and creates the prerelease.
+# bundle; `release` has the write scopes, takes no checkout or toolchain, derives
+# the target's file list itself, verifies the bundle holds exactly those files and
+# their checksums, attests the bundle and creates the prerelease.
 on:
   workflow_dispatch:
     inputs:
@@ -42,7 +43,6 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.name }}
       exists: ${{ steps.tag.outputs.exists }}
-      assets: ${{ steps.assets.outputs.assets }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,13 +54,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           case "$TARGET" in
-            dart2js) prefix=at_client_web-bridge- ;;
-            dart2wasm) prefix=at_client_web-bridge-wasm- ;;
+            dart2js)
+              prefix=at_client_web-bridge-
+              assets=(at_client_web.js)
+              absent=(at_client_web.wasm at_client_web.mjs)
+              ;;
+            dart2wasm)
+              prefix=at_client_web-bridge-wasm-
+              assets=(at_client_web.wasm at_client_web.mjs)
+              absent=(at_client_web.js at_client_web.js.sha256)
+              ;;
             *)
               echo "unknown target '$TARGET'; expected dart2js or dart2wasm" >&2
               exit 1
               ;;
           esac
+          echo "ASSETS=${assets[*]}" >> "$GITHUB_ENV"
+          echo "ABSENT=${absent[*]}" >> "$GITHUB_ENV"
           tag="${prefix}${GITHUB_SHA::12}"
           echo "name=$tag" >> "$GITHUB_OUTPUT"
           set +e
@@ -94,25 +104,12 @@ jobs:
           tool/build.sh at_client_bridge_entry --target "$TARGET"
           cmp build/bridge-manifest.json bridge-manifest.json
 
-      - name: List the release assets
-        id: assets
+      - name: Stage the release assets
         if: steps.tag.outputs.exists != 'true'
         working-directory: packages/at_client_web/build
         run: |
-          case "$TARGET" in
-            dart2js)
-              assets=(at_client_web.js)
-              absent=(at_client_web.wasm at_client_web.mjs)
-              ;;
-            dart2wasm)
-              assets=(at_client_web.wasm at_client_web.mjs)
-              absent=(at_client_web.js at_client_web.js.sha256)
-              ;;
-            *)
-              echo "unknown target '$TARGET'; expected dart2js or dart2wasm" >&2
-              exit 1
-              ;;
-          esac
+          read -r -a assets <<< "$ASSETS"
+          read -r -a absent <<< "$ABSENT"
           for file in "${absent[@]}"; do
             if [ -e "$file" ]; then
               echo "unexpected file for $TARGET: $file" >&2
@@ -130,32 +127,15 @@ jobs:
             sha256sum at_client_web.js > at_client_web.js.sha256
             assets+=(at_client_web.js.sha256)
           fi
-          assets+=(bridge-manifest.json)
-          echo "assets=${assets[*]}" >> "$GITHUB_OUTPUT"
+          mkdir release
+          cp "${assets[@]}" bridge-manifest.json SHA256SUMS release/
 
-      - name: Upload the dart2js bundle
-        if: steps.tag.outputs.exists != 'true' && env.TARGET == 'dart2js'
+      - name: Upload the bundle
+        if: steps.tag.outputs.exists != 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: at_client_web-bridge-dart2js
-          path: |
-            packages/at_client_web/build/SHA256SUMS
-            packages/at_client_web/build/at_client_web.js
-            packages/at_client_web/build/at_client_web.js.sha256
-            packages/at_client_web/build/bridge-manifest.json
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Upload the dart2wasm bundle
-        if: steps.tag.outputs.exists != 'true' && env.TARGET == 'dart2wasm'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: at_client_web-bridge-dart2wasm
-          path: |
-            packages/at_client_web/build/SHA256SUMS
-            packages/at_client_web/build/at_client_web.wasm
-            packages/at_client_web/build/at_client_web.mjs
-            packages/at_client_web/build/bridge-manifest.json
+          name: at_client_web-bridge-${{ env.TARGET }}
+          path: packages/at_client_web/build/release
           if-no-files-found: error
           retention-days: 1
 
@@ -171,61 +151,56 @@ jobs:
     env:
       TARGET: ${{ inputs.target }}
     steps:
-      - name: Download the dart2js bundle
-        if: env.TARGET == 'dart2js'
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: at_client_web-bridge-dart2js
+          name: at_client_web-bridge-${{ env.TARGET }}
           path: bridge
 
-      - name: Download the dart2wasm bundle
-        if: env.TARGET == 'dart2wasm'
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: at_client_web-bridge-dart2wasm
-          path: bridge
-
-      - name: Verify the checksums
+      - name: Verify the bundle and checksums
         working-directory: bridge
         run: |
+          case "$TARGET" in
+            dart2js) assets=(at_client_web.js) ;;
+            dart2wasm) assets=(at_client_web.wasm at_client_web.mjs) ;;
+            *)
+              echo "unknown target '$TARGET'; expected dart2js or dart2wasm" >&2
+              exit 1
+              ;;
+          esac
+          if [ "$TARGET" = dart2js ]; then
+            assets+=(at_client_web.js.sha256)
+          fi
+          assets+=(bridge-manifest.json SHA256SUMS)
+          expected=$(printf '%s\n' "${assets[@]}" | LC_ALL=C sort)
+          found=$(find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' | LC_ALL=C sort)
+          if [ "$expected" != "$found" ]; then
+            echo "bundle for $TARGET holds the wrong files:" >&2
+            printf '%s\n' "$found" >&2
+            exit 1
+          fi
           sha256sum -c SHA256SUMS
           if [ "$TARGET" = dart2js ]; then
             sha256sum -c at_client_web.js.sha256
           fi
+          echo "ASSETS=${assets[*]}" >> "$GITHUB_ENV"
 
-      - name: Attest the dart2js bundle
-        if: env.TARGET == 'dart2js'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      # The step above proved bridge/ holds exactly this target's files.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: |
-            bridge/at_client_web.js
-            bridge/at_client_web.js.sha256
-            bridge/bridge-manifest.json
-            bridge/SHA256SUMS
-
-      - name: Attest the dart2wasm bundle
-        if: env.TARGET == 'dart2wasm'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: |
-            bridge/at_client_web.wasm
-            bridge/at_client_web.mjs
-            bridge/bridge-manifest.json
-            bridge/SHA256SUMS
+          subject-path: bridge/*
 
       - name: Create the prerelease
         working-directory: bridge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.build.outputs.tag }}
-          ASSETS: ${{ needs.build.outputs.assets }}
         run: |
           notes="Bridge bundle for the ${TARGET} target built from commit ${GITHUB_SHA}. Verify with SHA256SUMS and the build provenance attestation."
           if [ "$TARGET" = "dart2wasm" ]; then
             notes="$notes This dart2wasm bundle is advisory only, per OQ-16: dart2js remains the primary JS/TS target."
           fi
           read -r -a assets <<< "$ASSETS"
-          gh release create "$TAG" "${assets[@]}" SHA256SUMS \
+          gh release create "$TAG" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --prerelease --latest=false \
             --target "$GITHUB_SHA" \
