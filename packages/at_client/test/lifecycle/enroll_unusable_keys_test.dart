@@ -33,9 +33,9 @@ class _WriteRefused implements Exception {
 }
 
 /// An in-memory AtKeys store whose every write fails with [error], an
-/// [Error].
+/// [Error] whose text has a control character and a second line.
 class _StoreFailingWithError extends InMemoryAtKeysIo {
-  final error = StateError('the store has a defect');
+  final error = StateError('the store has a defect\u001b[0m\nsecond line');
 
   @override
   Future<void> write(String atsign, AtKeys atKeys) async => throw error;
@@ -332,8 +332,9 @@ void main() {
         logs.at('SEVERE'),
         contains('enrollment "e-1" of $atSign was sent and is not filed in '
             'the AtKeys store, because of a defect: Bad state: the store has '
-            'a defect'),
-        reason: 'the severe log names the sent enrollment');
+            r'a defect\u001b[0m'),
+        reason: "the severe log names the sent enrollment, and the first line "
+            "of the Error's text, escaped");
     await expectLater(
         () => keys.read(atSign), throwsA(isA<AtKeysSourceAbsentException>()),
         reason: 'the store is unchanged');
