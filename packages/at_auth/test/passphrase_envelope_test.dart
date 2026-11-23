@@ -111,6 +111,12 @@ void main() {
       'no kdfParams': (e) => e.remove('kdfParams'),
       'a kdfParams cost below one': (e) =>
           (e['kdfParams'] as Map)['memory'] = 0,
+      'a kdfParams cost that is a string': (e) =>
+          (e['kdfParams'] as Map)['iterations'] = '3',
+      'a kdfParams cost that is not a whole number': (e) =>
+          (e['kdfParams'] as Map)['parallelism'] = 1.5,
+      'a kdfParams with no memory': (e) =>
+          (e['kdfParams'] as Map).remove('memory'),
       'a kdfParams memory below eight times its parallelism': (e) =>
           (e['kdfParams'] as Map)
             ..['memory'] = 8

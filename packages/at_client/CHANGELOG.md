@@ -12,7 +12,7 @@
 - fix: `Atsign.enroll` refuses an AtKeys store already waiting on an
   enrollment for the Atsign, whatever that enrollment's app and device,
   before anything is sent, and names it: resume it with `resumeEnrollment`.
-  at_client_flutter 2.1.0's `ApkamActivationDialog` resumes such a request.
+  at_client_flutter 2.1.0-rc.1's `ApkamActivationDialog` resumes such a request.
 - fix: of two `Atsign.enroll` calls into one keyfile at once, or into one
   keychain from one isolate, only one files its request. The other throws
   `AtEnrollmentException` naming the enrollment it sent, which the Atsign's
@@ -203,7 +203,8 @@
 - fix: a refusal that quotes an envelope's enrollment id or namespace, a
   record's key id or Atsign, or the `_apsk` value `verifyEnvelopeSignature`
   fetched shows it escaped and cut to 80 characters.
-- chore: requires at_auth 4.1.0-rc.1.
+- chore: requires at_auth 4.1.0-rc.1, at_chops 3.8.0-rc.1, at_lookup
+  4.1.0-rc.1 and at_commons 5.26.0.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata
@@ -223,6 +224,7 @@
 - fix: `Atsign.activate` and `pqNativeOnboard` throw before sending anything
   when the AtKeys store holds keys they cannot read, or its keyfile cannot be
   written; the exception names the store.
+- feat: `AtKeysUnusableException` and `AtKeysUnusableCause` are exported.
 - fix: `Atsign.open` throws `AtKeysUnusableException` before connecting, on
   every device, for keys it cannot use: absent, unreadable, holding no
   keypair it can sign with, or for another Atsign. `AtNoCredentialException`

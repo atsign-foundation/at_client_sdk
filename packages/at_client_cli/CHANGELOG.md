@@ -1,4 +1,4 @@
-## 1.1.0
+## 1.1.0-rc.1
 
 - feat: `at_activate cancel -a <atSign> -k <keyfile>` gives up the pending
   enrollment request the keyfile holds, removing its keys; the request stays
@@ -34,7 +34,7 @@
   named is `unknown`.
 - feat: `package:at_client_cli/testing.dart` re-exports at_client's
   experimental `TestEnvelopeSigner`, for tests that verify signed envelopes.
-- chore: requires at_client 4.1.0, at_auth 4.1.0 and at_commons 5.26.0.
+- chore: requires at_client 4.1.0-rc.1, at_auth 4.1.0-rc.1 and at_commons 5.26.0.
 - fix: `at_activate auto_approve` acts only on requests from its own atSign.
 - fix: `at_activate status` asks the atDirectory once, prints no posture
   notice, and says a refused atServer connection is unreachable rather than
@@ -53,11 +53,11 @@
 - docs: `CLIBase`'s dartdoc and the README say that an approval whose keys
   cannot be fetched or decrypted ends with whatever doing so threw, mostly
   not an `AtEnrollmentException`, keeping the request.
-- fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0, which sends
+- fix: a proxy root's `from:<atSign>` comes from at_lookup 4.1.0-rc.1, which sends
   it itself, and only for a `proxy:<host>` root domain. `proxyLookUps()` and
   `lookUpsFor()` are deprecated for `secureSocketLookUps()`; a caller that
   reached a proxy without a `proxy:<host>` root must make it the root.
-  Requires at_lookup 4.1.0.
+  Requires at_lookup 4.1.0-rc.1.
 - fix: at_activate and programs built on `CLIBase` report a keys problem
   once, naming the keyfile and the next step to take where there is one.
 - feat: when an Atsign's keys are absent, at_activate looks up its public

@@ -37,6 +37,11 @@ Feature: A lookup reads an atServer's error reply as its code, in every form
     When errorResponseCode reads it and errorResponseException builds the exception for it
     Then both give the code the reply names, and a reply naming none reads as no code and is thrown as AT0014
 
+  Scenario: An authenticator's refusal reaches a verb's caller as a failed authentication
+    Given a lookup whose authenticator throws an UnAuthenticatedException of any subtype
+    When a caller runs executeVerb with a command that needs authentication
+    Then it fails with an AtLookUpException whose code is AT0401 and whose cause is the authenticator's exception
+
   Scenario: A JSON reply is read whole
     Given a reply error:{"errorCode":"AT0015","errorDescription":"x"} followed by other text, or cut short
     When errorResponseCode reads it

@@ -7,7 +7,7 @@
   "the AtKeys store (<source>)", or "the AtKeys store" for no source.
 - fix: activation refusing keys already in the store names the store in its
   `AtAuthenticationException`: the keyfile's path, or the store's name.
-- chore: requires at_commons 5.26.0.
+- chore: requires at_commons 5.26.0 and at_chops 3.8.0-rc.1.
 - feat: `AtKeysFormatException.badField` reports a JSON object, or the
   `kind` of data it is given, whose field is missing or not what it must be.
 - feat: a passphrase envelope refused for its passphrase, missing or one
@@ -108,9 +108,10 @@
   throws when the store could not take new keys now (`FileAtKeysIo` checks;
   by default it checks nothing). A class that implements `WrittenAtKeysIo`
   rather than extending it must add both.
-- feat: `AtKeysUnusableException` says why an Atsign's keys cannot be used
-  (`cause`) and where they were looked for (`source`).
-- fix: `AtKeysUnusableException` shows the Atsign a keyfile records, and why
+- feat: `AtKeysUnusableException`, with an `AtKeysUnusableCause`, says why an
+  Atsign's keys cannot be used (`cause`) and where they were looked for
+  (`source`).
+- feat: `AtKeysUnusableException` shows the Atsign a keyfile records, and why
   reading the keys or finding their keypair failed, with their control
   characters escaped, clipped at 180 characters.
 - feat: `AtKeysFormatException.isJson` says whether the document parsed, as
@@ -130,6 +131,9 @@
   its values. A passphrase-protected file whose hashing algorithm is
   unknown, or whose key derivation cannot run, says so rather than that
   the passphrase may be incorrect.
+- fix: a passphrase envelope whose `kdfParams` `memory`, `iterations` or
+  `parallelism` is not a positive integer, or whose `memory` is under 8 times
+  its `parallelism`, is refused with an `AtDecryptionException` saying which.
 - feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
   activation enrolls in place of a freshly minted APKAM keypair, as
   `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
