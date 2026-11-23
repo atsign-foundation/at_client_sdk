@@ -635,11 +635,13 @@ land. Until then no adapter operation validates data against a schema.
 | `enrollment_conveyance_failed` | `EnrollmentConveyanceException`: the server-side `enroll:approve` succeeded and the enrollment is live on the atServer, but key conveyance failed |
 | `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending |
 | `enrollment_in_flight` | `EnrollmentInFlightException`: `approve` or `deny` names an enrollment id that already has a decision in flight; nothing is sent for the second call |
-| `closed` | `StoppedException`: a call on a session or its collection after `close`; the message is `the session is closed` |
+| `closed` | `SessionClosedException`, or at_client's `StoppedException` from a call already in flight when the session closed: a call on a session or its collection after `close`; the message is `the session is closed` |
 | `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, or an invalid `address.owner`; the message names the parameter and never its value, at most 128 characters on one line |
 | `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessException` (a pairing call on a session without `__manage`); or `UnsupportedError`, such as `create` on a page that is not a secure context |
 | `bad_key` | `BadKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or non-JSON `keys`), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
 | `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error` |
+
+When `create()` gets several bad inputs, the first error reported follows this order: type checks and key decoding, then options validation.
 
 ---
 

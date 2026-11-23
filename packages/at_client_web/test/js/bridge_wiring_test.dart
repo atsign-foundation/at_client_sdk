@@ -13,6 +13,7 @@ import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/at_error_code.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/js/js_session.dart';
+import 'package:at_client_web/src/session/session_opener.dart';
 import 'package:test/test.dart';
 
 import '../session/wire_fakes.dart';
@@ -91,12 +92,7 @@ void main() {
     bridge = createJSInteropWrapper(AtClientWebBridge(
       isSecureContext: () => true,
       open: (o) async {
-        final AtKeys keys;
-        try {
-          keys = AtKeys.fromJson(o.keys);
-        } on Object {
-          throw BadKeyException('keys is not a usable .atKeys document');
-        }
+        final keys = (o as KeysSessionOptions).keys;
         final root = o.rootDomain ?? AtRootDomain.atsignDomain;
         client = await portalSession(
           atSign: o.atSign,

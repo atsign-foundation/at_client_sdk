@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 
 import '../exceptions.dart';
+import '../log_text.dart';
 
 /// An item address: the item's id and the Atsign that owns it.
 typedef JsItemAddress = ({String id, Atsign owner});
@@ -56,32 +56,10 @@ bool nestsTooDeep(Object? value) {
   return false;
 }
 
-final _logControlChars =
-    RegExp(r'[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
-
-/// Escapes control and bidirectional formatting characters in [value] as a
-/// single-line JSON string literal, bounded to [maxLength] UTF-16 code units.
-String sanitizeLogText(String value, {int maxLength = 256}) =>
-    jsonEncode(_truncateText(value, maxLength)).replaceAllMapped(
-      _logControlChars,
-      (m) => '\\u${m[0]!.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}',
-    );
-
-String _truncateText(String value, int maxLength) {
-  if (value.length <= maxLength) return value;
-  var cut = maxLength > 3 ? maxLength - 3 : maxLength;
-  if (cut > 0 &&
-      cut < value.length &&
-      (value.codeUnitAt(cut - 1) & 0xFC00) == 0xD800) {
-    cut--;
-  }
-  return '${value.substring(0, cut)}...';
-}
-
 String _boundedToken(String value) => sanitizeLogText(value, maxLength: 64);
 
 String _boundedMessage(String value, {int maxLength = 128}) =>
-    _truncateText(value.replaceAll(_logControlChars, ' '), maxLength);
+    truncateText(singleLine(value), maxLength);
 
 /// The error for an item whose data nests deeper than [maxItemDataDepth].
 CollectionException itemTooDeep({String? id, String? owner}) =>

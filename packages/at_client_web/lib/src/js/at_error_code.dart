@@ -1,6 +1,7 @@
 import 'package:at_client/at_client.dart';
 
 import '../exceptions.dart';
+import '../log_text.dart';
 
 // The one place an exception becomes an error code and a message for JS.
 // Both are pure functions of the thrown type: no exception's own text ever
@@ -11,9 +12,6 @@ const _closedMessage = 'the session is closed';
 
 /// The longest message an `invalid_argument` rejection carries.
 const _maxMessageLength = 128;
-
-final _controlChars =
-    RegExp(r'[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
 
 /// The `AtError.code` for [error]: one string per typed exception the
 /// session layer throws, a `COLLECTION_*` code for a collection failure, and
@@ -77,18 +75,12 @@ String atErrorMessage(Object error) => switch (error) {
         'the keys carry unsupported cryptographic material',
       ManageAccessException() => 'this session cannot manage enrollments',
       UnsupportedError(:final message) =>
-        _oneLine(message ?? 'unsupported operation'),
+        singleLine(message ?? 'unsupported operation'),
       BadKeyException(:final reason) => reason,
       AtNoCredentialException() => 'keys hold no usable credential',
       InvalidAtSignException() => 'atSign is not valid',
       _ => 'internal error',
     };
 
-String _oneLine(String value) => value.replaceAll(_controlChars, ' ');
-
-String _bounded(String value) {
-  final line = _oneLine(value);
-  return line.length <= _maxMessageLength
-      ? line
-      : line.substring(0, _maxMessageLength);
-}
+String _bounded(String value) =>
+    truncateText(singleLine(value), _maxMessageLength);

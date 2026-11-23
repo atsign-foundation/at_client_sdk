@@ -4,19 +4,10 @@ import 'package:at_client/at_client.dart';
 
 import '../collections/js_collections_adapter.dart';
 import '../exceptions.dart';
+import '../log_text.dart';
+import '../session/session_namespace.dart';
 
-final _sessionNamespacePattern = RegExp('^${Regexes.charsInNamespace}\$');
-
-/// Returns [namespace] folded to lower case, or throws an
-/// [InvalidArgumentException] naming `namespace` without its value when it
-/// is empty or invalid.
-String normalizeSessionNamespace(String namespace) {
-  if (!_sessionNamespacePattern.hasMatch(namespace)) {
-    throw InvalidArgumentException(
-        'namespace must be a non-empty valid segment');
-  }
-  return namespace.toLowerCase();
-}
+export '../session/session_namespace.dart' show normalizeSessionNamespace;
 
 /// A key as the JS bridge names it: [key] under [namespace] (the session's
 /// own when null), shared with [sharedWith] when that is set, by [sharedBy]
@@ -124,19 +115,22 @@ abstract interface class JsSession {
 /// A [JsSession] on an [AtClient], keying each value as
 /// `<key>.<namespace>@<sharedBy>` with the namespace folded to lower case.
 class AtClientJsSession implements JsSession {
-  /// [warn] receives the warnings the session raises, by default through the
-  /// atSign logger; [isNavigatorOnline] tells a [JsSession.status] of
-  /// `waiting:network` from `waiting:server`, by default always online, and
-  /// [networkChanges] says when it may have changed (each event re-reads it;
-  /// by default there are none).
+  /// [stop] ends what opened the client, by default the client's own stop;
+  /// [close] awaits it. [warn] receives the warnings the session raises, by
+  /// default through the atSign logger; [isNavigatorOnline] tells a
+  /// [JsSession.status] of `waiting:network` from `waiting:server`, by
+  /// default always online, and [networkChanges] says when it may have
+  /// changed (each event re-reads it; by default there are none).
   AtClientJsSession(this._client,
       {required String namespace,
       void Function(String message)? warn,
       bool Function()? isNavigatorOnline,
-      Stream<void>? networkChanges})
+      Stream<void>? networkChanges,
+      Future<void> Function()? stop})
       : _namespace = normalizeSessionNamespace(namespace),
         _warn = warn ?? _logger.warning,
-        _isNavigatorOnline = isNavigatorOnline ?? (() => true) {
+        _isNavigatorOnline = isNavigatorOnline ?? (() => true),
+        _stop = stop ?? _client.stop {
     _status = _statusOf(_client.connection.current) ?? 'connecting';
     _connection =
         _client.connection.changes.listen((state) => _reportStatusOf(state));
@@ -168,6 +162,7 @@ class AtClientJsSession implements JsSession {
   final _adapters = <String, Future<JsCollectionsAdapter>>{};
   final void Function(String message) _warn;
   final bool Function() _isNavigatorOnline;
+  final Future<void> Function() _stop;
   final _statusListeners = <void Function(String)>{};
   late StreamSubscription<AtConnectionState> _connection;
   StreamSubscription<void>? _network;
@@ -628,7 +623,7 @@ class AtClientJsSession implements JsSession {
       }
     }
     _watchCancels.clear();
-    await _client.stop();
+    await _stop();
   }
 }
 

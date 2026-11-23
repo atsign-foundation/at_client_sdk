@@ -12,13 +12,13 @@ import 'package:at_client/at_client.dart'
         AtEnrollmentException,
         AtNoCredentialException,
         AtOpenRefusedException,
-        Atsign,
-        StoppedException;
+        Atsign;
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/at_error_code.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/js/js_session.dart';
+import 'package:at_client_web/src/session/session_opener.dart';
 import 'package:test/test.dart';
 
 /// A [JsCollection] that records each call and answers what it is
@@ -133,11 +133,18 @@ class _FakeSession implements JsSession {
       {required void Function(Object error) onError}) {
     _call('subscribe');
     subscribedRegex = regex;
-    errorSink = onError;
-    listeners.add(onEvent);
+    // Like AtClientJsSession, deliver nothing once the session is closed.
+    void deliver(JsNotification n) {
+      if (!closed) onEvent(n);
+    }
+
+    errorSink = (error) {
+      if (!closed) onError(error);
+    };
+    listeners.add(deliver);
     return () {
       unsubscribed++;
-      listeners.remove(onEvent);
+      listeners.remove(deliver);
     };
   }
 
@@ -259,7 +266,7 @@ JSAny _jsConstruct(String ctor, [List<JSAny?> args = const []]) => _reflectClass
 
 void main() {
   late _FakeSession session;
-  late List<BridgeOptions> opened;
+  late List<SessionOptions> opened;
   late bool secure;
   late Object? openFailure;
   late JSObject api;
@@ -304,9 +311,7 @@ void main() {
 
       final o = opened.single;
       expect((o.atSign, o.namespace, o.rootDomain), ('@alice', 'tally', null));
-      expect(o.keys, {
-        '@alice': {'k': 'v'}
-      });
+      expect((o as KeysSessionOptions).keys.toJson()['@alice'], {'k': 'v'});
       for (final method in [
         'notify',
         'subscribe',
@@ -326,9 +331,8 @@ void main() {
         }
       }));
 
-      expect(opened.single.keys, {
-        '@alice': {'k': 'v'}
-      });
+      expect((opened.single as KeysSessionOptions).keys.toJson()['@alice'],
+          {'k': 'v'});
     });
 
     test('rootDomain host:port and host pass through', () async {

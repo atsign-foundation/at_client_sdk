@@ -719,6 +719,30 @@ void main() {
     });
 
     test(
+        'collection operations and watch reject with closed after session close',
+        () async {
+      final todos =
+          await session.collection('todos', type: 'Todo', eventSource: 'data');
+      await session.close();
+      final address = (id: 'i1', owner: Atsign('@alice'));
+
+      for (final (name, call) in <(String, Future<Object?> Function())>[
+        ('create', () => todos.create({'a': 1})),
+        ('get', () => todos.get(address)),
+        ('list', () => todos.list()),
+        ('query', () => todos.query(const [])),
+        ('update', () => todos.update(address, {'a': 2})),
+        ('share', () => todos.share(address, ['@bob'])),
+        ('remove', () => todos.remove(address)),
+      ]) {
+        await expectLater(call(), throwsA(isA<SessionClosedException>()),
+            reason: name);
+      }
+      expect(() => todos.watch((_) {}, onError: (_) {}),
+          throwsA(isA<SessionClosedException>()));
+    });
+
+    test(
         'qualifies the name with the namespace and rejects a bad expiration '
         'with the adapter code', () async {
       await expectLater(

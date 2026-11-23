@@ -4,63 +4,35 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
-    show
-        AtKeys,
-        AtRootDomain,
-        AtSignLogger,
-        Atsign,
-        InvalidAtSignException,
-        StoppedException;
+    show AtRootDomain, AtSignLogger, Atsign, InvalidAtSignException;
 import 'package:web/web.dart' as web;
 
 import '../collections/js_collections_adapter.dart';
 import '../exceptions.dart';
-import '../session/portal_session.dart';
-import '../session/session_transport.dart';
-import '../session/session_transport_options.dart';
+import '../session/session_opener.dart';
+import '../session/web_session_openers.dart';
 import 'at_error_code.dart';
 import 'js_session.dart';
 
-/// What a caller says about the client it wants: the atSign, the client's
-/// [namespace] (also the enrollment's app name), the decoded `.atKeys`
-/// document [keys] and, when not the production atDirectory, the
-/// [rootDomain].
-class BridgeOptions {
-  const BridgeOptions(
-      {required this.atSign,
-      required this.namespace,
-      required this.keys,
-      this.rootDomain});
-
-  final String atSign;
-  final String namespace;
-  final Map<String, dynamic> keys;
-  final AtRootDomain? rootDomain;
-}
-
-/// Opens an atSign's session from its keys.
-typedef SessionOpener = Future<JsSession> Function(BridgeOptions options);
+/// Opens the session of a caller's [SessionOptions].
+typedef OpenJsSession = Future<JsSession> Function(SessionOptions options);
 
 final _logger = AtSignLogger('AtClientWebBridge');
 
-Future<JsSession> _openSession(BridgeOptions o) async {
-  final AtKeys keys;
-  try {
-    keys = AtKeys.fromJson(o.keys);
-  } on Object {
-    throw BadKeyException('keys is not a usable .atKeys document');
-  }
-  final client = await portalSession(
-      atSign: o.atSign,
-      app: o.namespace,
-      keys: keys,
-      transport: sessionTransport(SessionTransportOptions(root: o.rootDomain)));
-  return AtClientJsSession(client,
-      namespace: o.namespace,
-      isNavigatorOnline: () => web.window.navigator.onLine,
-      networkChanges: _networkChanges(),
-      warn: _logger.warning);
-}
+/// The browser's [OpenJsSession]: opens through [webSessionOpener] and wraps
+/// the client; a failure to wrap stops what was opened.
+Future<JsSession> _openSession(SessionOptions options) =>
+    openWrapped<JsSession>(
+        _opener,
+        options,
+        (opened) => AtClientJsSession(opened.client,
+            namespace: options.namespace,
+            isNavigatorOnline: () => web.window.navigator.onLine,
+            networkChanges: _networkChanges(),
+            warn: _logger.warning,
+            stop: opened.stop));
+
+final SessionOpener _opener = webSessionOpener();
 
 /// An event each time the browser goes online or offline, so a session's
 /// `waiting:network` and `waiting:server` follow it.
@@ -86,12 +58,8 @@ Stream<void> _networkChanges() {
 /// never the value.
 AtRootDomain parseRootDomain(String value) {
   try {
-    final parsed = AtRootDomain.parse(value);
-    SessionTransportOptions(root: parsed);
-    return parsed;
-  } on ArgumentError {
-    throw _expected('rootDomain', 'host or host:port');
-  } on Exception {
+    return AtRootDomain.parse(value);
+  } on Object {
     throw _expected('rootDomain', 'host or host:port');
   }
 }
@@ -351,7 +319,6 @@ class BridgeSession {
       final unsubscribe = _session.subscribe(
         pattern,
         (n) {
-          if (_session.isClosed) return;
           deliver.callAsFunction(
               null,
               _envelope({
@@ -364,7 +331,6 @@ class BridgeSession {
               }));
         },
         onError: (error) {
-          if (_session.isClosed) return;
           _reportStreamError(report, error, 'subscription');
         },
       );
@@ -404,11 +370,8 @@ class BridgeSession {
             expirationMs: expiration == null || expiration.isUndefinedOrNull
                 ? null
                 : _wholeNumber(expiration, 'expiration'));
-        return createJSInteropWrapper(BridgeCollection(
-          adapter,
-          _session.atSign,
-          isClosed: () => _session.isClosed,
-        ));
+        return createJSInteropWrapper(
+            BridgeCollection(adapter, _session.atSign));
       });
 
   /// A one-time passcode for a new device to enroll with.
@@ -455,19 +418,10 @@ int _wholeNumber(JSAny? value, String name) {
 /// atSign when left out.
 @JSExport()
 class BridgeCollection {
-  BridgeCollection(
-    this._adapter,
-    this._self, {
-    bool Function()? isClosed,
-  }) : _isClosed = isClosed ?? (() => false);
+  BridgeCollection(this._adapter, this._self);
 
   final JsCollection _adapter;
   final String _self;
-  final bool Function() _isClosed;
-
-  void _open() {
-    if (_isClosed()) throw SessionClosedException();
-  }
 
   JsItemAddress _address(JSAny? value) {
     final object = _object(value, 'address');
@@ -517,7 +471,6 @@ class BridgeCollection {
   /// Creates an item from `data`; `opts` may name its `id` and who it is
   /// `sharedWith`.
   JSPromise<JSObject> create(JSAny? data, [JSAny? opts]) => _promise(() async {
-        _open();
         final options = _optionalObject(opts, 'opts');
         return _item(await _adapter.create(_data(data),
             id: options == null ? null : _field(options, 'id'),
@@ -528,21 +481,18 @@ class BridgeCollection {
 
   /// The item at `address`, or null.
   JSPromise<JSAny?> get(JSAny? address) => _promise(() async {
-        _open();
         final item = await _adapter.get(_address(address));
         return item == null ? null : _item(item);
       });
 
   /// `{items, unreadable}`: every readable item.
   JSPromise<JSObject> list() => _promise(() async {
-        _open();
         return _listing(await _adapter.list());
       });
 
   /// `{items, unreadable}`: the items matching every `{path, op, value}` of
   /// `where`.
   JSPromise<JSObject> query(JSAny? where) => _promise(() async {
-        _open();
         if (where == null || !where.isA<JSArray>()) {
           throw _expected('where', 'an array');
         }
@@ -562,21 +512,18 @@ class BridgeCollection {
 
   /// Replaces the data of the item at `address`.
   JSPromise<JSObject> update(JSAny? address, JSAny? data) => _promise(() async {
-        _open();
         return _item(await _adapter.update(_address(address), _data(data)));
       });
 
   /// Adds the atSigns of `atSigns` to the item's recipients.
   JSPromise<JSObject> share(JSAny? address, JSAny? atSigns) =>
       _promise(() async {
-        _open();
         return _item(await _adapter.share(
             _address(address), _strings(atSigns, 'atSigns')));
       });
 
   /// Deletes the item at `address`; `opts.cascade` removes its sub-items too.
   JSPromise<JSAny?> remove(JSAny? address, [JSAny? opts]) => _promise(() async {
-        _open();
         final options = _optionalObject(opts, 'opts');
         await _adapter.remove(_address(address),
             cascade: options != null && _flag(options, 'cascade'));
@@ -589,16 +536,13 @@ class BridgeCollection {
   /// cannot start.
   JSAny watch(JSAny? onEvent, [JSAny? onError]) {
     try {
-      _open();
       final deliver = _function(onEvent, 'onEvent');
       final report = _optionalFunction(onError, 'onError');
       final cancel = _adapter.watch(
         (event) {
-          if (_isClosed()) return;
           deliver.callAsFunction(null, _envelope(event));
         },
         onError: (error) {
-          if (_isClosed()) return;
           _reportStreamError(report, error, 'watch');
         },
       );
@@ -619,11 +563,11 @@ class BridgeCollection {
 /// this browser's.
 @JSExport()
 class AtClientWebBridge {
-  AtClientWebBridge({SessionOpener? open, bool Function()? isSecureContext})
+  AtClientWebBridge({OpenJsSession? open, bool Function()? isSecureContext})
       : _open = open ?? _openSession,
         _isSecureContext = isSecureContext ?? _pageIsSecure;
 
-  final SessionOpener _open;
+  final OpenJsSession _open;
   final bool Function() _isSecureContext;
 
   static bool _pageIsSecure() => web.window.isSecureContext;
@@ -639,28 +583,27 @@ class AtClientWebBridge {
         return createJSInteropWrapper(BridgeSession(session));
       });
 
-  BridgeOptions _options(JSAny? opts) {
+  /// The [SessionOptions] [opts] names. The options validate their own
+  /// fields; the bridge words what it says of each.
+  SessionOptions _options(JSAny? opts) {
     final object = _object(opts, 'opts');
-    final rawAtSign = _string(_own(object, 'atSign'), 'atSign');
-    final Atsign atSign;
-    try {
-      atSign = Atsign(rawAtSign);
-    } on InvalidAtSignException {
-      throw _expected('atSign', 'a valid atSign');
-    }
-    final rawNamespace = _string(_own(object, 'namespace'), 'namespace');
-    final String namespace;
-    try {
-      namespace = normalizeSessionNamespace(rawNamespace);
-    } on InvalidArgumentException {
-      throw _expected('namespace', 'a non-empty namespace segment');
-    }
+    final atSign = _string(_own(object, 'atSign'), 'atSign');
+    final namespace = _string(_own(object, 'namespace'), 'namespace');
     final rootDomain = _field(object, 'rootDomain');
-    return BridgeOptions(
-        atSign: atSign,
-        namespace: namespace,
-        keys: _keys(_own(object, 'keys')),
-        rootDomain: rootDomain == null ? null : parseRootDomain(rootDomain));
+    final root = rootDomain == null ? null : parseRootDomain(rootDomain);
+    final keys = _keys(_own(object, 'keys'));
+    try {
+      return KeysSessionOptions(
+          atSign: atSign, namespace: namespace, keys: keys, rootDomain: root);
+    } on ArgumentError catch (e) {
+      throw switch (e.name) {
+        'atSign' => _expected('atSign', 'a valid atSign'),
+        'namespace' => _expected('namespace', 'a non-empty namespace segment'),
+        'rootDomain' => _expected('rootDomain', 'host or host:port'),
+        'keys' => BadKeyException('keys is not a usable .atKeys document'),
+        _ => e,
+      };
+    }
   }
 
   Map<String, dynamic> _keys(JSAny? value) {
