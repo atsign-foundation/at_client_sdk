@@ -164,16 +164,20 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
   /// asking for a passcode it has already spent: the store's one pending
   /// request, whatever app and device it was filed under, since `enroll`
   /// refuses a store that already holds one. A store it cannot use is logged
-  /// and shown, and the passcode form stays; an [Error] is logged and
-  /// rethrown.
+  /// and shown, and the passcode form stays; anything thrown that is not an
+  /// [Exception] is logged and rethrown.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
-      pending = await widget.flows.resumeEnrollment(
-        widget.atSign,
-        keys: _keys,
-        preference: under(widget.preference, widget.rootDomain),
-        lookUps: widget.lookUps,
+      // NOTE: a refusal thrown before the call returns must not reach
+      // ScaffoldMessenger while initState is still running.
+      pending = await Future.sync(
+        () => widget.flows.resumeEnrollment(
+          widget.atSign,
+          keys: _keys,
+          preference: under(widget.preference, widget.rootDomain),
+          lookUps: widget.lookUps,
+        ),
       );
     } on Exception catch (e) {
       _logger.warning(
@@ -185,7 +189,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
         context,
       ).showSnackBar(SnackBar(content: Text(_failureMessage(e))));
       return;
-    } on Error catch (e) {
+    } catch (e) {
       _logger.severe(
         'Checking the AtKeys store for a pending enrollment of '
         '${widget.atSign} failed with a defect: '

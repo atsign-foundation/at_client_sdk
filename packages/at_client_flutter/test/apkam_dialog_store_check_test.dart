@@ -92,6 +92,7 @@ void main() {
     WidgetTester tester, {
     required WrittenAtKeysIo keys,
     AtsignFlows flows = const AtsignFlows(),
+    String opening = atSign,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -101,7 +102,7 @@ void main() {
               onPressed: () => showDialog<Object?>(
                 context: context,
                 builder: (_) => ApkamActivationDialog(
-                  atSign: atSign,
+                  atSign: opening,
                   rootDomain: AtRootDomain.atsignDomain,
                   appName: 'app',
                   deviceName: 'device',
@@ -134,8 +135,9 @@ void main() {
     WidgetTester tester, {
     required WrittenAtKeysIo keys,
     AtsignFlows flows = const AtsignFlows(),
+    String opening = atSign,
   }) async {
-    await pumpOpener(tester, keys: keys, flows: flows);
+    await pumpOpener(tester, keys: keys, flows: flows, opening: opening);
     await open(tester);
   }
 
@@ -269,5 +271,47 @@ void main() {
     );
     expect(find.byType(SnackBar), findsNothing);
     expect(find.byType(EditableText), findsOneWidget);
+  });
+
+  testWidgets('Given an Atsign that is not valid, when ApkamActivationDialog '
+      'opens it, then the refusal is shown once the dialog is up, and the '
+      'passcode form stays', (tester) async {
+    await openDialog(tester, keys: InMemoryAtKeysIo(), opening: 'al ice');
+    await letItShow(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(
+      textStartingWith('Something went wrong with al ice: '),
+      findsOneWidget,
+    );
+    expect(logs.at('WARNING'), contains(contains('al ice')));
+    expect(find.byType(EditableText), findsOneWidget);
+  });
+
+  testWidgets('Given AtsignFlows whose resumeEnrollment fails with a value '
+      'that is no Exception, when ApkamActivationDialog opens, then it is '
+      'logged at severe and rethrown', (tester) async {
+    final flows = _MockAtsignFlows();
+    when(
+      () => flows.resumeEnrollment(
+        any(),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        lookUps: any(named: 'lookUps'),
+      ),
+    ).thenAnswer((_) => Future.error('a bare string'));
+    await pumpOpener(tester, keys: InMemoryAtKeysIo(), flows: flows);
+    final uncaught = <Object>[];
+    await runZonedGuarded(() async {
+      await open(tester);
+      await letItShow(tester);
+    }, (error, _) => uncaught.add(error));
+
+    expect(uncaught, ['a bare string']);
+    expect(
+      logs.at('SEVERE'),
+      contains(allOf(contains(atSign), contains('a bare string'))),
+    );
+    expect(find.byType(SnackBar), findsNothing);
   });
 }
